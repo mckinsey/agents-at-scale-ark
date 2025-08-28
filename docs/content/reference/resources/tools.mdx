@@ -4,16 +4,17 @@ Tools extend agent capabilities by providing access to external functions, APIs,
 
 ## Tool Resource Types
 
-### Fetcher Tools
-HTTP API calls with URL template substitution.
+### HTTP Tools
+HTTP API calls with URL and body template substitution.
 
+#### GET Request Example
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Tool
 metadata:
   name: get-coordinates
 spec:
-  type: fetcher
+  type: http
   inputSchema:
     type: object
     properties:
@@ -22,9 +23,44 @@ spec:
         description: City name to get coordinates for
     required: ["city"]
   description: "Returns coordinates for the given city name"
-  fetcher:
+  http:
     url: https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1
     method: GET
+    timeout: 30s
+```
+
+#### POST Request with Body Template Example
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: create-user
+spec:
+  type: http
+  inputSchema:
+    type: object
+    properties:
+      name:
+        type: string
+        description: User name
+      email:
+        type: string
+        description: User email
+    required: ["name", "email"]
+  description: "Creates a new user"
+  http:
+    url: https://api.example.com/users
+    method: POST
+    headers:
+      - name: "Content-Type"
+        value:
+          value: "application/json"
+    body: |
+      {
+        "name": "{name}",
+        "email": "{email}",
+        "created_at": "2024-01-01T00:00:00Z"
+      }
     timeout: 30s
 ```
 

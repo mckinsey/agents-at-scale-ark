@@ -72,38 +72,38 @@ func (v *ToolCustomValidator) validateTool(_ context.Context, tool *arkv1alpha1.
 	}
 
 	switch tool.Spec.Type {
-	case "fetcher":
-		return v.validateFetcher(tool.Spec.Fetcher)
+	case "http":
+		return v.validateHTTP(tool.Spec.HTTP)
 	case "mcp":
 		return v.validateMCPTool(tool.Spec.MCP)
 	default:
-		return warnings, fmt.Errorf("unsupported tool type '%s': supported types are: fetcher, mcp", tool.Spec.Type)
+		return warnings, fmt.Errorf("unsupported tool type '%s': supported types are: http, mcp", tool.Spec.Type)
 	}
 }
 
-// validateFetcher validates fetcher-specific configuration
-func (v *ToolCustomValidator) validateFetcher(fetcher *arkv1alpha1.FetcherSpec) (admission.Warnings, error) {
+// validateHTTP validates HTTP-specific configuration
+func (v *ToolCustomValidator) validateHTTP(httpSpec *arkv1alpha1.HTTPSpec) (admission.Warnings, error) {
 	var warnings admission.Warnings
 
-	if fetcher == nil {
-		return warnings, fmt.Errorf("fetcher spec is required for fetcher type")
+	if httpSpec == nil {
+		return warnings, fmt.Errorf("http spec is required for http type")
 	}
 
-	if fetcher.URL == "" {
-		return warnings, fmt.Errorf("URL is required for fetcher")
+	if httpSpec.URL == "" {
+		return warnings, fmt.Errorf("URL is required for http tool")
 	}
 
-	if _, err := url.Parse(fetcher.URL); err != nil {
+	if _, err := url.Parse(httpSpec.URL); err != nil {
 		return warnings, fmt.Errorf("invalid URL format: %v", err)
 	}
 
-	if fetcher.Method != "" {
+	if httpSpec.Method != "" {
 		validMethods := map[string]bool{
 			"GET": true, "POST": true, "PUT": true, "DELETE": true,
 			"HEAD": true, "OPTIONS": true, "PATCH": true,
 		}
-		if !validMethods[fetcher.Method] {
-			return warnings, fmt.Errorf("invalid HTTP method '%s': supported methods are GET, POST, PUT, DELETE, HEAD, OPTIONS, PATCH", fetcher.Method)
+		if !validMethods[httpSpec.Method] {
+			return warnings, fmt.Errorf("invalid HTTP method '%s': supported methods are GET, POST, PUT, DELETE, HEAD, OPTIONS, PATCH", httpSpec.Method)
 		}
 	}
 

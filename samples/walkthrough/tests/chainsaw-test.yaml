@@ -44,7 +44,7 @@ spec:
               metadata:
                 name: web-search
               spec:
-                type: fetcher
+                type: http
         - assert:
             resource:
               apiVersion: ark.mckinsey.com/v1alpha1

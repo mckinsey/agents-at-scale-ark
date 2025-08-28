@@ -56,7 +56,7 @@ type ToolAnnotations struct {
 
 type ToolSpec struct {
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=fetcher;mcp
+	// +kubebuilder:validation:Enum=http;mcp
 	Type string `json:"type"`
 	// Tool description
 	Description string `json:"description,omitempty"`
@@ -64,14 +64,14 @@ type ToolSpec struct {
 	InputSchema *runtime.RawExtension `json:"inputSchema,omitempty"`
 	// Optional additional tool information
 	Annotations *ToolAnnotations `json:"annotations,omitempty"`
-	// Fetcher-specific configuration for HTTP-based tools
-	Fetcher *FetcherSpec `json:"fetcher,omitempty"`
+	// HTTP-specific configuration for HTTP-based tools
+	HTTP *HTTPSpec `json:"http,omitempty"`
 	// MCP-specific configuration for MCP server tools
 	// +kubebuilder:validation:Optional
 	MCP *MCPToolRef `json:"mcp,omitempty"`
 }
 
-type FetcherSpec struct {
+type HTTPSpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:Pattern="^https?://.*"
@@ -82,6 +82,8 @@ type FetcherSpec struct {
 	Headers []Header `json:"headers,omitempty"`
 	// +kubebuilder:validation:Pattern=^[0-9]+[smh]?$
 	Timeout string `json:"timeout,omitempty"`
+	// Body template for POST/PUT/PATCH requests with parameter substitution
+	Body string `json:"body,omitempty"`
 }
 
 const (
@@ -126,9 +128,9 @@ func (in *ToolSpec) DeepCopyInto(out *ToolSpec) {
 		*out = new(ToolAnnotations)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.Fetcher != nil {
-		in, out := &in.Fetcher, &out.Fetcher
-		*out = new(FetcherSpec)
+	if in.HTTP != nil {
+		in, out := &in.HTTP, &out.HTTP
+		*out = new(HTTPSpec)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.MCP != nil {
@@ -148,4 +150,13 @@ func (in *ToolAnnotations) DeepCopyInto(out *ToolAnnotations) {
 
 func (in *MCPToolRef) DeepCopyInto(out *MCPToolRef) {
 	*out = *in
+}
+
+func (in *HTTPSpec) DeepCopyInto(out *HTTPSpec) {
+	*out = *in
+	if in.Headers != nil {
+		in, out := &in.Headers, &out.Headers
+		*out = make([]Header, len(*in))
+		copy(*out, *in)
+	}
 }

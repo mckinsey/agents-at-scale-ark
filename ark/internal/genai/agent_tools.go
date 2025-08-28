@@ -102,11 +102,11 @@ func (r *ToolRegistry) registerCustomTool(ctx context.Context, k8sClient client.
 
 func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string) (ToolExecutor, error) {
 	switch tool.Spec.Type {
-	case "fetcher":
-		if tool.Spec.Fetcher == nil {
-			return nil, fmt.Errorf("fetcher spec is required for tool %s", tool.Name)
+	case "http":
+		if tool.Spec.HTTP == nil {
+			return nil, fmt.Errorf("http spec is required for tool %s", tool.Name)
 		}
-		return &FetcherExecutor{
+		return &HTTPExecutor{
 			K8sClient:     k8sClient,
 			ToolName:      tool.Name,
 			ToolNamespace: namespace,

@@ -3,12 +3,12 @@ kind: Tool
 metadata:
   name: invalid-tool-fetcher-invalid-method
 spec:
-  type: fetcher
+  type: http
   inputSchema:
     type: object
     properties:
       param:
         type: string
-  fetcher:
+  http:
     url: https://example.com
     method: INVALID  # Invalid HTTP method - should fail admission
