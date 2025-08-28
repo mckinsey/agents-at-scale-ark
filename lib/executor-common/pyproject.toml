@@ -1,6 +1,6 @@
 [project]
 name = "executor-common"
-version = "0.1.30"
+version = "0.1.31"
 description = "Common utilities and types for execution engine services"
 authors = [
     {name = "McKinsey Agent Platform Team"}
