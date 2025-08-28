@@ -175,7 +175,7 @@ jobs:
       - name: Login to Docker Registry
         uses: docker/login-action@v3
         with:
-          registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}', github.repository_owner) }}
+          registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}
           username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
@@ -184,7 +184,7 @@ jobs:
           path: ${{ matrix.path }}
           image: ${{ matrix.image }}
           tag: ${{ github.sha }}
-          registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}', github.repository_owner) }}
+          registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}
           platforms: linux/amd64
           push: true
           prebuild: ${{ matrix.prebuild }}
@@ -287,7 +287,7 @@ jobs:
       - name: Login to Docker Registry
         uses: docker/login-action@v3
         with:
-          registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}', github.repository_owner) }}
+          registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}
           username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
@@ -299,9 +299,9 @@ jobs:
           ARK_QUICKSTART_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
           ARK_QUICKSTART_API_VERSION: 2024-12-01-preview
           ARK_QUICKSTART_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
-          ARK_QUICKSTART_CONTROLLER_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}', github.repository_owner) }}/ark-controller
+          ARK_QUICKSTART_CONTROLLER_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller
           ARK_QUICKSTART_CONTROLLER_TAG: ${{ github.sha }}
-          CACHE_ARGS: --cache-from type=registry,ref=${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}', github.repository_owner) }}/ark-controller:cache --cache-to type=registry,ref=${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}', github.repository_owner) }}/ark-controller:cache,mode=max
+          CACHE_ARGS: --cache-from type=registry,ref=${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache --cache-to type=registry,ref=${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache,mode=max
         run: |
           echo "Environment variables set:"
           echo "ARK_QUICKSTART_PROMPT_YES=$ARK_QUICKSTART_PROMPT_YES"
@@ -329,7 +329,7 @@ jobs:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "false"
           install-evaluator: "false"
-          ci-cache-registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}', github.repository_owner) }}
+          ci-cache-registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
@@ -355,7 +355,7 @@ jobs:
           helm upgrade --install ark-api services/ark-api/chart \
             --namespace default \
             --create-namespace \
-            --set app.image.repository="${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}', github.repository_owner) }}/ark-api" \
+            --set app.image.repository="${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-api" \
             --set app.image.tag="${{ github.sha }}" \
             --set app.image.pullPolicy="Always" \
             --wait \
@@ -367,7 +367,7 @@ jobs:
           helm upgrade --install ark-api-a2a services/ark-api-a2a/chart \
             --namespace default \
             --create-namespace \
-            --set app.image.repository="${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}', github.repository_owner) }}/ark-api-a2a" \
+            --set app.image.repository="${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-api-a2a" \
             --set app.image.tag="${{ github.sha }}" \
             --set app.image.pullPolicy="Always" \
             --wait \
@@ -379,7 +379,7 @@ jobs:
           helm upgrade --install ark-dashboard services/ark-dashboard/chart \
             --namespace default \
             --create-namespace \
-            --set app.image.repository="${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}', github.repository_owner) }}/ark-dashboard" \
+            --set app.image.repository="${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-dashboard" \
             --set app.image.tag="${{ github.sha }}" \
             --set app.image.pullPolicy="Always" \
             --wait \
@@ -456,7 +456,7 @@ jobs:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "true"
           install-evaluator: "false" # Standard tests don't need evaluator
-          ci-cache-registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}', github.repository_owner) }}
+          ci-cache-registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
@@ -472,7 +472,7 @@ jobs:
           E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
           E2E_TEST_AZURE_OPENAI_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
           FILESYS_IMAGE_TAG: ${{ github.sha }}
-          HOSTED_LANGCHAIN_AGENTS_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}', github.repository_owner) }}/hosted-langchain-agents
+          HOSTED_LANGCHAIN_AGENTS_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/hosted-langchain-agents
           HOSTED_LANGCHAIN_AGENTS_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
@@ -496,7 +496,7 @@ jobs:
           install-evaluator: "true" # Evaluated tests need evaluator-llm service
           azure-openai-key: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
           azure-openai-base-url: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
-          ci-cache-registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}', github.repository_owner) }}
+          ci-cache-registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
@@ -512,7 +512,7 @@ jobs:
           E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
           E2E_TEST_AZURE_OPENAI_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
           FILESYS_IMAGE_TAG: ${{ github.sha }}
-          HOSTED_LANGCHAIN_AGENTS_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}', github.repository_owner) }}/hosted-langchain-agents
+          HOSTED_LANGCHAIN_AGENTS_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/hosted-langchain-agents
           HOSTED_LANGCHAIN_AGENTS_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
