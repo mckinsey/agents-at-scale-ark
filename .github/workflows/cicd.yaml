@@ -476,13 +476,7 @@ jobs:
           HOSTED_LANGCHAIN_AGENTS_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
-          chainsaw test --selector '!evaluated' \
-            --apply-timeout 45s       \
-            --assert-timeout 45s      \
-            --cleanup-timeout 45s     \
-            --delete-timeout 45s      \
-            --error-timeout 45s       \
-            --exec-timeout 45s
+          chainsaw test --config .chainsaw.yaml --selector '!evaluated'
 
       - uses: ./.github/actions/collect-coverage-e2e
         with:
@@ -521,7 +515,7 @@ jobs:
           HOSTED_LANGCHAIN_AGENTS_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
-          chainsaw test --selector 'evaluated=true'
+          chainsaw test --config .chainsaw.yaml --selector 'evaluated=true'
 
       - uses: ./.github/actions/collect-coverage-e2e
         with:
@@ -847,7 +841,7 @@ jobs:
       - name: Trigger Deploy workflow for release
         run: |
           gh workflow run deploy.yml \
-            --field version="${{ needs.check-release.outputs.tag }}" \
+            --field ark_version="${{ needs.check-release.outputs.tag }}" \
             --field deploy_containers=true \
             --field deploy_to_pages=true \
             --field deploy_to_npm=true
