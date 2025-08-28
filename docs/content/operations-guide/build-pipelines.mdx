@@ -19,20 +19,63 @@ The Deploy pipeline is run on demand to deploy:
 
 - Documentation to GitHub Pages
 - Multi-arch Containers to the configured container registry
-- ARK CLI to NPM registry
 - Ark to the configured distribution environment
 - Ark to the configured AWS test environment
 - Ark to the configured GKE test environment
 
 The artifacts that are deployed can be selected when the pipeline is run, as well as the specific version tag to use.
 
-### CI/CD
+## Release Management
 
-The CI/CD pipeline builds and tests all ARK components on every push. The Check Release job uses [Release Please](https://github.com/googleapis/release-please) to create or update a release pull request, changelog, and version number. When the release pull request is merged, the Deploy workflow runs automatically.
+ARK uses [Release Please](https://github.com/googleapis/release-please) for automated release management based on conventional commits. The entire release process is automated and follows semantic versioning.  
+Release please will create pull requests, update the changelog, and the CI/CD pipeline wil deploy the docs and modules and create versioning tags and labels.
+
+### Release Flow
+
+1. **Continuous Commit Analysis** (On every push to main)
+   - Release Please runs after all CI checks pass (configured in `.github/workflows/cicd.yaml:716`)
+   - Analyzes all commits since the last release using conventional commit format
+   - Determines version bump based on commit types and current version:
+     - For versions < 1.0.0 (current: 0.1.30):
+       - `feat:` → Patch version bump (0.1.30 → 0.1.31) due to `bump-patch-for-minor-pre-major: true`
+       - `fix:` → Patch version bump (0.1.30 → 0.1.31)
+       - `feat!:` or `BREAKING CHANGE:` → Minor version bump (0.1.30 → 0.2.0)
+     - For versions ≥ 1.0.0:
+       - `feat:` → Minor version bump (1.0.0 → 1.1.0)
+       - `fix:` → Patch version bump (1.0.0 → 1.0.1)
+       - `feat!:` or `BREAKING CHANGE:` → Major version bump (1.0.0 → 2.0.0)
+     - Other types (`docs:`, `chore:`, `refactor:`, etc.) → No version bump but included in changelog
+
+2. **Automatic Release PR Management**
+   - If unreleased changes exist, Release Please creates or updates a PR titled "chore(main): release X.X.X"
+   - The PR contains:
+     - Updated `.github/CHANGELOG.md` with aggregated changes since last release
+     - Version updates in version files across the monorepo (defined in `.github/release-please-config.json`)
+     - Consistent version synchronization across all packages, charts, and services
+
+3. **Release Activation** (When Release PR is merged)
+   - The CI/CD pipeline re-runs fully and creates a GitHub release with the new version tag
+   - Changelog is automatically attached to the GitHub release
+   - Sets `release_created` output to trigger downstream jobs:
+      - **release-docs**: Deploys documentation to GitHub Pages
+      - **release-libs**: Attaches Python wheel files to GitHub release
+      - **release-chart**: Attaches Helm chart package to GitHub release
+      - **release-ark-cli**: Attaches ARK CLI npm package to GitHub release
+      - **run-deploy-workflow**: Triggers the Deploy workflow for production deployment
+
+### Version Synchronization
+
+Release Please updates versions in the following locations:
+- Root `version.txt`
+- Python packages (`pyproject.toml` files)
+- Helm charts (`Chart.yaml` files)
+- Node.js packages (`package.json` files)
+- Kubernetes manifests (`manager.yaml`)
+- All service and library versions
 
 ### Validate PR Title
 
-Ensures pull request titles follow conventional commit format for consistent squash merge messages.
+Ensures pull request titles follow conventional commit format described in the repository `CONTRIBUTING.md` for consistent squash merge messages.
 
 ### SonarQube Code Analysis (SCAS)
 
@@ -67,8 +110,6 @@ GitHub variables and secrets for ARK build and deployment workflows. All configu
 | `DEPLOY_CLUSTER_IDP_ISSUER_URL` | Secret | Identity provider issuer URL for cluster authentication | |
 | **Documentation Site** | | |
 | `DOCS_SITE_BASE_PATH` | Variable (Optional) | Base path for documentation site when serving from non-root URL (e.g., GitHub Pages) | |
-| **NPM Registry (CLI Deployment)** | | |
-| `NPM_TOKEN` | Secret (Optional) | NPM authentication token with publish permissions for CLI deployment | |
 | **Code Quality and Analysis** | | |
 | `SONAR_TOKEN` | Secret | SonarQube authentication token |
 | `SONAR_HOST_URL` | Secret | SonarQube server URL |
@@ -79,7 +120,7 @@ GitHub variables and secrets for ARK build and deployment workflows. All configu
 
 ### Uppercase Organization Names
 
-Unless otherwise specified, GHCR is used as the default Docker container registry, with the value `ghcr.io/<org_name>`. Docker registry names must be lowercase. If your GitHub organization name contains uppercase characters, you must explicitly set the Docker registry secrets with lowercase values. For exampole, for the organization `My-Org`, set:
+Unless otherwise specified, GHCR is used as the default Docker container registry, with the value `ghcr.io/<org_name>`. Docker registry names must be lowercase. If your GitHub organization name contains uppercase characters, you must explicitly set the Docker registry secrets with lowercase values. For example, for the organization `My-Org`, set:
 
 ```yaml
 DOCKER_REGISTRY: "ghcr.io/my-org" 

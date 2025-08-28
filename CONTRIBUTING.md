@@ -36,6 +36,18 @@ Propose new APIs and end-to-end tests showing how proposed functionality changes
 **Principle 4: Implementation**
 - Keep development focused on ticket requirements. If additional features or ideas arise, create new tickets and track as separate work to be prioritized by the team. Link to the original ticket.
 - Use PR title prefixes (`feat:`, `bug:`, `rfc:`) to ensure changelog updates, release notes generation, and semantic versioning are managed properly.
+- All pull requests must use conventional commit format in their titles. This is enforced by the `validate_pr_title` workflow and is required for Automatic version determination, Changelog generation, Semantic versioning compliance
+- Supported commit types:
+    - `feat`: New features (triggers minor version bump)
+    - `fix`: Bug fixes (triggers patch version bump)
+    - `docs`: Documentation changes
+    - `chore`: Maintenance tasks
+    - `refactor`: Code refactoring
+    - `test`: Test additions or changes
+    - `ci`: CI/CD changes
+    - `build`: Build system changes
+    - `perf`: Performance improvements
+- Breaking changes can be indicated with `!` after the type (e.g., `feat!:`) or by including `BREAKING CHANGE:` in the commit body.
 
 **Principle 5: Releasing**
 Use conventional commits and semantic versioning.
