@@ -6,7 +6,6 @@ spec:
   description: Test agent structured output with JSON schema
   timeouts:
     apply: 30s
-    assert: 120s
     cleanup: 30s
   steps:
   - name: deploy-resources

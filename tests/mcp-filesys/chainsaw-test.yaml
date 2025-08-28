@@ -7,7 +7,7 @@ spec:
   # Re-enable when issue: https://mckinsey.atlassian.net/browse/AAS-2485 is resolved.
   skip: true
   timeouts:
-    exec: 300s
+    exec: 300s  # Extended timeout for Helm operations and service deployment
   description: Test MCP Filesystem Server deployment and ARK integration using Helm chart
   steps:
   - name: deploy-mcp-server-with-helm
