@@ -12,7 +12,7 @@ spec:
   reportName: /tmp/chainsaw-report/chainsaw-report.json  # Path where the test report will be saved
   timeouts:
     apply: 45s                           # Timeout for 'apply' operations (e.g., applying manifests)
-    assert: 20s                          # Timeout for assertion checks
+    assert: 180s                         # Timeout for assertion checks (high value for LLM calls)
     cleanup: 45s                         # Timeout for cleanup steps after tests
     delete: 25s                          # Timeout for resource deletion steps
     error: 10s                           # Timeout for error handling steps

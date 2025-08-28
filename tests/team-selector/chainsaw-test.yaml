@@ -6,8 +6,6 @@ spec:
   description: Test selector team strategy with AI-driven participant selection
   # Selector strategy requires multiple AI model calls for participant selection
   # and can take longer than default timeouts, especially with maxTurns: 6
-  timeouts:
-    assert: 120s  # Allow 2 minutes for team coordination with multiple AI calls
   steps:
   - name: step-1
     try:
