@@ -476,6 +476,7 @@ jobs:
           HOSTED_LANGCHAIN_AGENTS_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
+          mkdir -p /tmp/chainsaw-report
           chainsaw test --config .chainsaw.yaml --selector '!evaluated'
 
       - uses: ./.github/actions/collect-coverage-e2e
@@ -515,6 +516,7 @@ jobs:
           HOSTED_LANGCHAIN_AGENTS_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
+          mkdir -p /tmp/chainsaw-report
           chainsaw test --config .chainsaw.yaml --selector 'evaluated=true'
 
       - uses: ./.github/actions/collect-coverage-e2e
