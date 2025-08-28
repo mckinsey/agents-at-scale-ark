@@ -841,7 +841,7 @@ jobs:
       - name: Trigger Deploy workflow for release
         run: |
           gh workflow run deploy.yml \
-            --field version="${{ needs.check-release.outputs.tag }}" \
+            --field ark_version="${{ needs.check-release.outputs.tag }}" \
             --field deploy_containers=true \
             --field deploy_to_pages=true \
             --field deploy_to_npm=true
