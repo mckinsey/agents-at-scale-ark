@@ -1,0 +1,77 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: enhanced-event-evaluation
+  labels:
+    evaluation-type: event
+    phase: "2"
+spec:
+  type: event
+  config:
+    rules:
+    # Basic event presence rules
+    - name: "events_generated"
+      expression: "events.size() > 0"
+      description: "Verify that events were generated during execution"
+      weight: 1
+      
+    # Agent execution validation with enhanced metadata
+    - name: "agent_execution_started"
+      expression: "AgentExecutionStart"
+      description: "Verify agent execution start events are recorded"
+      weight: 2
+      
+    - name: "agent_execution_completed"
+      expression: "AgentExecutionComplete"
+      description: "Verify agent execution completion events are recorded"
+      weight: 2
+      
+    # Team coordination and collaboration events
+    - name: "team_execution_started"
+      expression: "TeamExecutionStart"
+      description: "Verify team coordination start events are recorded"
+      weight: 3
+      
+    - name: "team_execution_completed"
+      expression: "TeamExecutionComplete"
+      description: "Verify team coordination completion events are recorded"  
+      weight: 3
+      
+    # Enhanced metadata validation - verify Phase 2 improvements
+    - name: "rich_metadata_present"
+      expression: "events.exists(event, event.message.contains('queryId'))"
+      description: "Verify events contain enhanced metadata like queryId"
+      weight: 2
+      
+    - name: "enhanced_agent_metadata"
+      expression: "events.exists(event, event.message.contains('agentName') && event.message.contains('namespace'))"
+      description: "Verify agent events contain enhanced metadata fields"
+      weight: 2
+      
+    - name: "sequential_execution_flow"
+      expression: "events.size() >= 3"
+      description: "Verify sequential execution flow with multiple events"
+      weight: 2
+      
+    # Performance and efficiency metrics
+    - name: "reasonable_event_count"
+      expression: "events.size() >= 3 && events.size() <= 30"
+      description: "Verify reasonable number of events generated (not too few or excessive)"
+      weight: 1
+      
+    - name: "execution_completion"
+      expression: "events.size() > 2"
+      description: "Verify execution completed with multiple completion events"
+      weight: 1
+      
+  evaluator:
+    name: enhanced-event-evaluator
+    parameters:
+    - name: query.name
+      value: "enhanced-event-query"
+    - name: query.namespace
+      value: ($namespace)
+    - name: min-score
+      value: "0.65"
+    - name: analysis_mode
+      value: "detailed"

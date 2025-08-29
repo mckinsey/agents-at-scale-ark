@@ -1,0 +1,15 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: enhanced-research-team
+  labels:
+    purpose: research
+    complexity: multi-agent
+spec:
+  description: Enhanced research team demonstrating complex multi-agent interactions and tool usage
+  strategy: sequential
+  members:
+  - type: agent
+    name: enhanced-analysis-agent
+  - type: agent
+    name: enhanced-collaboration-agent

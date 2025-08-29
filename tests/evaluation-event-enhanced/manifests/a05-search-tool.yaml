@@ -1,0 +1,29 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: enhanced-search-tool
+spec:
+  type: fetcher
+  inputSchema:
+    type: object
+    properties:
+      query:
+        type: string
+        description: Search query to execute
+      category:
+        type: string
+        description: Category of search
+        enum: ["web", "academic", "news", "images"]
+        default: "web"
+      limit:
+        type: integer
+        description: Maximum number of results
+        default: 5
+        minimum: 1
+        maximum: 20
+    required: ["query"]
+  tool:
+    name: search_web
+    description: Searches the web and returns structured results with metadata
+  fetcher:
+    url: http://httpbin.org/delay/1

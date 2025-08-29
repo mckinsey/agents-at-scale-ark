@@ -1,0 +1,23 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: enhanced-calculator-tool
+spec:
+  type: fetcher
+  inputSchema:
+    type: object
+    properties:
+      expression:
+        type: string
+        description: Mathematical expression to evaluate
+      operation:
+        type: string
+        description: Type of calculation operation
+        enum: ["basic", "advanced", "statistical"]
+        default: "basic"
+    required: ["expression"]
+  tool:
+    name: calculate_expression
+    description: Performs mathematical calculations and returns results with metadata
+  fetcher:
+    url: http://httpbin.org/delay/1

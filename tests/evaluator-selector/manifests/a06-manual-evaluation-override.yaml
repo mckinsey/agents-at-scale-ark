@@ -1,0 +1,18 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: manual-override-evaluation
+spec:
+  type: direct
+  evaluator:
+    name: production-evaluator
+    parameters:
+      - name: scope
+        value: "accuracy,completeness"  # Override default scope
+      - name: min-score
+        value: "0.9"                    # Override default min-score
+      - name: temperature
+        value: "0.0"                    # New parameter not in evaluator
+  config:
+    input: "What are the main advantages of solar energy?"
+    output: "Solar energy offers several key advantages: 1) Renewable and sustainable, 2) Reduces electricity bills, 3) Low maintenance costs, 4) Environmentally friendly with no emissions, 5) Energy independence from grid."

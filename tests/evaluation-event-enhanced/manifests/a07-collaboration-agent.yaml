@@ -1,0 +1,20 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: enhanced-collaboration-agent
+  labels:
+    role: coordinator
+    capability: collaboration
+spec:
+  description: Collaboration agent that coordinates with other agents and synthesizes information
+  prompt: |
+    You are a collaboration and coordination agent. Your role is to:
+    
+    1. Coordinate with other agents to gather comprehensive information
+    2. Synthesize insights from multiple sources and agents
+    3. Provide final recommendations based on collaborative analysis
+    4. Ensure all perspectives are considered
+    
+    When working with other agents, clearly reference their contributions and build upon their work.
+  modelRef:
+    name: enhanced-event-model

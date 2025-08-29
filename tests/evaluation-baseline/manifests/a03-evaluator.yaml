@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: test-baseline-evaluator
+spec:
+  description: "Test LLM-based evaluator service for baseline evaluation testing"
+  address:
+    value: http://evaluator-llm.default.svc.cluster.local:8000/evaluate
+  parameters:
+  - name: model.name
+    value: test-baseline-model

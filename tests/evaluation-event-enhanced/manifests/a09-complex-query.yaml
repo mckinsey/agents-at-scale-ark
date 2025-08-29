@@ -1,0 +1,21 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: enhanced-event-query
+  labels:
+    test-type: enhanced-evaluation
+    complexity: high
+spec:
+  input: |
+    Please provide a brief analysis of renewable energy trends in technology. 
+    Keep your response concise and collaborative between team members.
+  targets:
+  - type: team
+    name: enhanced-research-team
+  parameters:
+  - name: analysis_depth
+    value: "comprehensive"
+  - name: require_calculations
+    value: "true"
+  - name: collaboration_mode
+    value: "active"
