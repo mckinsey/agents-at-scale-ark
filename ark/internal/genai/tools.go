@@ -214,7 +214,7 @@ func (tr *ToolRegistry) GetToolType(toolName string) string {
 		return "builtin"
 	case *TerminateExecutor:
 		return "builtin"
-	case *FetcherExecutor:
+	case *HTTPExecutor:
 		return "custom"
 	case *MCPExecutor:
 		return "mcp"
