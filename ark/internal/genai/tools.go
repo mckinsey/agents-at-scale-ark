@@ -38,7 +38,6 @@ func (t *ToolEventEmitter) EmitEvent(ctx context.Context, eventType string, data
 
 	eventMap := data.ToMap()
 	log.Error(nil, "Tool template error", "eventType", eventType, "data", eventMap)
-
 }
 
 // HTTPExecutor executes HTTP tools
