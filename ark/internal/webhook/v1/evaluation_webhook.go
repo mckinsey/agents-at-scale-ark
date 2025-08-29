@@ -8,19 +8,15 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	"mckinsey.com/ark/internal/common"
 )
 
 type EvaluationValidator struct {
-	Client            client.Client
-	Resolver          *common.ValueSourceResolver
-	ResourceValidator *ResourceValidator
+	*ResourceValidator
 }
 
 var _ webhook.CustomValidator = &EvaluationValidator{}
@@ -192,13 +188,8 @@ func (v *EvaluationValidator) validateEvaluatorParameters(evaluation *arkv1alpha
 }
 
 func SetupEvaluationWebhookWithManager(mgr ctrl.Manager) error {
-	k8sClient := mgr.GetClient()
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&arkv1alpha1.Evaluation{}).
-		WithValidator(&EvaluationValidator{
-			Client:            k8sClient,
-			Resolver:          common.NewValueSourceResolver(k8sClient),
-			ResourceValidator: &ResourceValidator{Client: k8sClient},
-		}).
+		WithValidator(&EvaluationValidator{ResourceValidator: &ResourceValidator{Client: mgr.GetClient()}}).
 		Complete()
 }
