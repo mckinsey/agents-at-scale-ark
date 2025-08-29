@@ -55,6 +55,28 @@ func (tr *ToolRegistry) GetToolDefinitions() []ToolDefinition {
 	return definitions
 }
 
+func (tr *ToolRegistry) GetToolType(toolName string) string {
+	executor, exists := tr.executors[toolName]
+	if !exists {
+		return "unknown"
+	}
+
+	switch executor.(type) {
+	case *NoopExecutor:
+		return "builtin"
+	case *TerminateExecutor:
+		return "builtin"
+	case *FetcherExecutor:
+		return "custom"
+	case *MCPExecutor:
+		return "mcp"
+	case *FilteredToolExecutor:
+		return "filtered"
+	default:
+		return "unknown"
+	}
+}
+
 func (tr *ToolRegistry) ExecuteTool(ctx context.Context, call ToolCall) (ToolResult, error) {
 	executor, exists := tr.executors[call.Function.Name]
 	if !exists {
