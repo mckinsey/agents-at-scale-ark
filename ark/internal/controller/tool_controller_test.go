@@ -38,8 +38,8 @@ var _ = Describe("Tool Controller", func() {
 						Namespace: "default",
 					},
 					Spec: arkv1alpha1.ToolSpec{
-						Type: "fetcher",
-						Fetcher: &arkv1alpha1.FetcherSpec{
+						Type: "http",
+						HTTP: &arkv1alpha1.HTTPSpec{
 							URL:    "https://api.example.com/data",
 							Method: "GET",
 						},

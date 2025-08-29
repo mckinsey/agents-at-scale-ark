@@ -52,6 +52,14 @@ func (t *OperationTracker) Complete(result string) {
 	t.emitCompletion(t.operation+"Complete", "", TokenUsage{})
 }
 
+func (t *OperationTracker) CompleteWithMetadata(result string, additionalMetadata map[string]string) {
+	log := logf.FromContext(t.ctx)
+	if log.V(3).Enabled() && result != "" {
+		log.V(3).Info("operation response with metadata", "operation", t.operation, "name", t.name, "response", result, "metadata", additionalMetadata)
+	}
+	t.emitCompletionWithMetadata(t.operation+"Complete", "", TokenUsage{}, additionalMetadata)
+}
+
 func (t *OperationTracker) CompleteWithTokens(result string, tokenUsage TokenUsage) {
 	log := logf.FromContext(t.ctx)
 	if log.V(3).Enabled() && result != "" {
@@ -90,8 +98,16 @@ func (t *OperationTracker) CompleteWithTermination(terminationMessage string) {
 }
 
 func (t *OperationTracker) emitCompletion(eventType, errorMsg string, tokenUsage TokenUsage) {
+	t.emitCompletionWithMetadata(eventType, errorMsg, tokenUsage, nil)
+}
+
+func (t *OperationTracker) emitCompletionWithMetadata(eventType, errorMsg string, tokenUsage TokenUsage, additionalMetadata map[string]string) {
 	metadata := make(map[string]string)
 	maps.Copy(metadata, t.metadata)
+
+	if additionalMetadata != nil {
+		maps.Copy(metadata, additionalMetadata)
+	}
 
 	event := OperationEvent{
 		BaseEvent: BaseEvent{

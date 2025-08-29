@@ -234,7 +234,7 @@ metadata:
   name: get-news
   namespace: default
 spec:
-  type: fetcher
+  type: http
   description: Get latest news headlines for a specific topic
   inputSchema:
     type: object
@@ -248,7 +248,7 @@ spec:
         default: us
     required:
       - topic
-  fetcher:
+  http:
     url: https://newsapi.org/v2/everything?q={topic}&country={country}&sortBy=publishedAt&pageSize=5
     headers:
       - name: "X-API-Key"
@@ -280,7 +280,7 @@ metadata:
   name: get-quote
   namespace: default
 spec:
-  type: fetcher
+  type: http
   description: Get inspirational quotes by category
   inputSchema:
     type: object
@@ -289,7 +289,7 @@ spec:
         type: string
         description: Quote category (inspirational, motivational, success)
         default: inspirational
-  fetcher:
+  http:
     url: https://api.quotable.io/random?tags={category}
     method: GET
     headers:
@@ -347,14 +347,14 @@ Currently 16°C with partly cloudy skies. Today's high: 21°C, low: 12°C.
 
 ### Understanding Tool Patterns
 
-#### Basic Fetcher Tool Structure
+#### Basic HTTP Tool Structure
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Tool
 metadata:
   name: your-tool-name
 spec:
-  type: fetcher                    # Tool type - fetcher for HTTP calls
+  type: http                       # Tool type - http for HTTP calls
   description: "Tool description"   # What the tool does
   inputSchema:                     # JSON schema for parameters
     type: object
@@ -363,7 +363,7 @@ spec:
         type: string
         description: "Parameter description"
     required: ["param1"]
-  fetcher:
+  http:
     url: "https://api.example.com/{param1}"    # URL with parameter substitution
     method: GET                               # HTTP method (default: GET)
     headers:                                  # Optional headers (array format)
