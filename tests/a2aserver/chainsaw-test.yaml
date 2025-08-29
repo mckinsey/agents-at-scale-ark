@@ -7,7 +7,6 @@ spec:
   description: Tests LangChain weather agent A2A integration with templated queries
   timeouts:
     apply: 60s
-    assert: 180s
     cleanup: 60s
   steps:
     - name: setup-credentials-and-resources
