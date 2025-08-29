@@ -1,0 +1,39 @@
+# HTTP POST Tool
+# This tool demonstrates making HTTP POST requests using JSONPlaceholder API
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: create-post
+  labels:
+    category: testing
+    method: post
+spec:
+  type: http
+  description: "Create posts using JSONPlaceholder API"
+  inputSchema:
+    type: object
+    properties:
+      title:
+        type: string
+        description: Post title
+      body:
+        type: string
+        description: Post body content
+    required: ["title", "body"]
+  http:
+    url: https://jsonplaceholder.typicode.com/posts
+    method: POST
+    headers:
+      - name: "Content-Type"
+        value:
+          value: "application/json"
+    body: |
+      {
+        "title": "{title}",
+        "body": "{body}",
+        "userId": 1
+      }
+    timeout: 30s
+
+

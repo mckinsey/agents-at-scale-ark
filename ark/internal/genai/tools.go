@@ -386,7 +386,7 @@ func (h *HTTPExecutor) resolveHeaderValue(ctx context.Context, headerValue arkv1
 			Namespace: namespace,
 		}
 
-		if err := f.K8sClient.Get(ctx, namespacedName, secret); err != nil {
+		if err := h.K8sClient.Get(ctx, namespacedName, secret); err != nil {
 			return "", fmt.Errorf("failed to get secret %s/%s: %w", namespace, secretRef.Name, err)
 		}
 
