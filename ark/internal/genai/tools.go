@@ -343,7 +343,7 @@ func CreateToolFromCRD(toolCRD *arkv1alpha1.Tool) ToolDefinition {
 
 	if description == "" {
 		switch toolCRD.Spec.Type {
-		case "http":
+		case ToolTypeHTTP:
 			if toolCRD.Spec.HTTP != nil {
 				description = fmt.Sprintf("HTTP request to %s", toolCRD.Spec.HTTP.URL)
 			}

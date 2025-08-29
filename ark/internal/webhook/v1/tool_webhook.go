@@ -72,9 +72,9 @@ func (v *ToolCustomValidator) validateTool(_ context.Context, tool *arkv1alpha1.
 	}
 
 	switch tool.Spec.Type {
-	case "http":
+	case ToolTypeHTTP:
 		return v.validateHTTP(tool.Spec.HTTP)
-	case "mcp":
+	case ToolTypeMCP:
 		return v.validateMCPTool(tool.Spec.MCP)
 	default:
 		return warnings, fmt.Errorf("unsupported tool type '%s': supported types are: http, mcp", tool.Spec.Type)
