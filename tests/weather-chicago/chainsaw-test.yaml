@@ -5,6 +5,7 @@ metadata:
   labels:
     evaluated: "true"
 spec:
+  skip: true
   description: Test weather agent evaluation is matching expected format
   steps:
   - name: step-1

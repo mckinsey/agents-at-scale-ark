@@ -3,7 +3,7 @@ kind: Tool
 metadata:
   name: get-forecast
 spec:
-  type: fetcher
+  type: http
   inputSchema:
     type: object
     properties:
@@ -18,5 +18,5 @@ spec:
         description: "Grid Y coordinate"
     required: ["office", "gridX", "gridY"]
   description: "Get weather forecast for a specific location and time period"
-  fetcher:
+  http:
     url: https://api.weather.gov/gridpoints/{office}/{gridX},{gridY}/forecast
