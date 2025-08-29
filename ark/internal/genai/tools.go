@@ -15,7 +15,6 @@ import (
 	"github.com/openai/openai-go/shared"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"mckinsey.com/ark/internal/common"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -26,6 +25,155 @@ type ToolDefinition struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	Parameters  map[string]any `json:"parameters"`
+}
+
+// HTTPExecutor executes HTTP tools
+type HTTPExecutor struct {
+	K8sClient     client.Client
+	ToolName      string
+	ToolNamespace string
+}
+
+// Execute implements ToolExecutor interface for HTTP tools
+func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
+	// Parse arguments
+	var arguments map[string]any
+	if call.Function.Arguments != "" {
+		if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
+			return ToolResult{
+				ID:    call.ID,
+				Name:  call.Function.Name,
+				Error: fmt.Sprintf("failed to parse arguments: %v", err),
+			}, fmt.Errorf("failed to parse arguments: %w", err)
+		}
+	}
+
+	// Get tool from Kubernetes
+	tool := &arkv1alpha1.Tool{}
+	objectKey := client.ObjectKey{Name: h.ToolName}
+	if h.ToolNamespace != "" {
+		objectKey.Namespace = h.ToolNamespace
+	}
+	if err := h.K8sClient.Get(ctx, objectKey, tool); err != nil {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: fmt.Sprintf("failed to get tool %s: %v", h.ToolName, err),
+		}, fmt.Errorf("failed to get tool %s: %w", h.ToolName, err)
+	}
+
+	log := logf.FromContext(ctx).WithValues("tool", tool.Name, "toolID", call.ID)
+
+	httpSpec := tool.Spec.HTTP
+	if httpSpec == nil {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: "HTTP spec is required",
+		}, fmt.Errorf("HTTP spec is required")
+	}
+
+	// Substitute URL parameters
+	finalURL := h.substituteURLParameters(httpSpec.URL, arguments)
+
+	// Parse URL
+	parsedURL, err := url.Parse(finalURL)
+	if err != nil {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: fmt.Sprintf("invalid URL: %v", err),
+		}, fmt.Errorf("invalid URL: %w", err)
+	}
+
+	// Determine HTTP method
+	method := httpSpec.Method
+	if method == "" {
+		method = "GET"
+	}
+
+	// Handle request body for POST/PUT/PATCH requests
+	var requestBody io.Reader
+	if httpSpec.Body != "" && (method == "POST" || method == "PUT" || method == "PATCH") {
+		bodyContent, err := ResolveBodyTemplate(ctx, h.K8sClient, tool.Namespace, httpSpec.Body, httpSpec.BodyParameters, arguments)
+		if err != nil {
+			log.Error(err, "failed to resolve body template", "template", httpSpec.Body)
+			return ToolResult{
+				ID:    call.ID,
+				Name:  call.Function.Name,
+				Error: fmt.Sprintf("failed to resolve body template: %v", err),
+			}, fmt.Errorf("failed to resolve body template: %w", err)
+		}
+		requestBody = strings.NewReader(bodyContent)
+	}
+
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, method, parsedURL.String(), requestBody)
+	if err != nil {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: fmt.Sprintf("failed to create request: %v", err),
+		}, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Add headers
+	for _, header := range httpSpec.Headers {
+		value, err := h.resolveHeaderValue(ctx, header.Value, tool.Namespace)
+		if err != nil {
+			return ToolResult{
+				ID:    call.ID,
+				Name:  call.Function.Name,
+				Error: fmt.Sprintf("failed to resolve header %s: %v", header.Name, err),
+			}, fmt.Errorf("failed to resolve header %s: %w", header.Name, err)
+		}
+		req.Header.Set(header.Name, value)
+	}
+
+	// Set timeout
+	timeout := h.getTimeout(httpSpec.Timeout)
+	httpClient := &http.Client{Timeout: timeout}
+
+	// Make the request
+	log.Info("making HTTP request", "method", method, "url", parsedURL.String())
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: fmt.Sprintf("failed to fetch URL: %v", err),
+		}, fmt.Errorf("failed to fetch URL: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	// Check for HTTP errors
+	if resp.StatusCode >= 400 {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: fmt.Sprintf("HTTP error %d: %s (URL: %s)", resp.StatusCode, resp.Status, parsedURL.String()),
+		}, fmt.Errorf("HTTP error %d: %s", resp.StatusCode, resp.Status)
+	}
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: fmt.Sprintf("failed to read response: %v", err),
+		}, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	log.Info("HTTP request completed", "status", resp.StatusCode, "responseSize", len(body))
+
+	return ToolResult{
+		ID:      call.ID,
+		Name:    call.Function.Name,
+		Content: string(body),
+	}, nil
 }
 
 type ToolRegistry struct {
@@ -172,117 +320,7 @@ func GetTerminateTool() ToolDefinition {
 	}
 }
 
-type FetcherExecutor struct {
-	K8sClient     client.Client
-	ToolName      string
-	ToolNamespace string
-}
-
-func (f *FetcherExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
-	var arguments map[string]any
-	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
-		logf.Log.Info("Error parsing tool arguments", "ToolCall", call)
-		arguments = make(map[string]any)
-	}
-	tool := &arkv1alpha1.Tool{}
-	objectKey := client.ObjectKey{Name: f.ToolName}
-	if f.ToolNamespace != "" {
-		objectKey.Namespace = f.ToolNamespace
-	}
-	if err := f.K8sClient.Get(ctx, objectKey, tool); err != nil {
-		return ToolResult{
-			ID:    call.ID,
-			Name:  call.Function.Name,
-			Error: fmt.Sprintf("failed to get tool %s: %v", f.ToolName, err),
-		}, fmt.Errorf("failed to get tool %s: %w", f.ToolName, err)
-	}
-
-	if tool.Spec.Fetcher == nil {
-		return ToolResult{
-			ID:    call.ID,
-			Name:  call.Function.Name,
-			Error: "fetcher spec is required",
-		}, fmt.Errorf("fetcher spec is required for tool %s", f.ToolName)
-	}
-
-	fetcher := tool.Spec.Fetcher
-	if fetcher.URL == "" {
-		return ToolResult{
-			ID:    call.ID,
-			Name:  call.Function.Name,
-			Error: "URL is required for fetcher",
-		}, fmt.Errorf("URL is required for fetcher tool %s", f.ToolName)
-	}
-
-	httpClient := common.NewHTTPClientWithLogging(ctx)
-	httpClient.Timeout = f.getTimeout(fetcher.Timeout)
-
-	method := fetcher.Method
-	if method == "" {
-		method = "GET"
-	}
-
-	finalURL := f.substituteURLParameters(fetcher.URL, arguments)
-
-	req, err := http.NewRequestWithContext(ctx, method, finalURL, nil)
-	if err != nil {
-		return ToolResult{
-			ID:    call.ID,
-			Name:  call.Function.Name,
-			Error: fmt.Sprintf("failed to create request: %v", err),
-		}, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	for _, header := range fetcher.Headers {
-		value, err := f.resolveHeaderValue(ctx, header.Value, tool.Namespace)
-		if err != nil {
-			return ToolResult{
-				ID:    call.ID,
-				Name:  call.Function.Name,
-				Error: fmt.Sprintf("failed to resolve header %s: %v", header.Name, err),
-			}, fmt.Errorf("failed to resolve header %s: %w", header.Name, err)
-		}
-		req.Header.Set(header.Name, value)
-	}
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return ToolResult{
-			ID:    call.ID,
-			Name:  call.Function.Name,
-			Error: fmt.Sprintf("failed to fetch URL: %v", err),
-		}, fmt.Errorf("failed to fetch URL: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return ToolResult{
-			ID:    call.ID,
-			Name:  call.Function.Name,
-			Error: fmt.Sprintf("failed to read response: %v", err),
-		}, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode >= 400 {
-		return ToolResult{
-			ID:      call.ID,
-			Name:    call.Function.Name,
-			Content: string(body),
-			Error:   fmt.Sprintf("HTTP error %d: %s (URL: %s)", resp.StatusCode, resp.Status, finalURL),
-		}, fmt.Errorf("HTTP error %d: %s (URL: %s)", resp.StatusCode, resp.Status, finalURL)
-	}
-
-	return ToolResult{
-		ID:      call.ID,
-		Name:    call.Function.Name,
-		Content: string(body),
-	}, nil
-}
-
-func (f *FetcherExecutor) getTimeout(timeoutStr string) time.Duration {
+func (h *HTTPExecutor) getTimeout(timeoutStr string) time.Duration {
 	if timeoutStr == "" {
 		return 30 * time.Second
 	}
@@ -295,7 +333,7 @@ func (f *FetcherExecutor) getTimeout(timeoutStr string) time.Duration {
 	return timeout
 }
 
-func (f *FetcherExecutor) substituteURLParameters(urlTemplate string, arguments map[string]any) string {
+func (h *HTTPExecutor) substituteURLParameters(urlTemplate string, arguments map[string]any) string {
 	if arguments == nil {
 		return urlTemplate
 	}
@@ -332,9 +370,9 @@ func CreateToolFromCRD(toolCRD *arkv1alpha1.Tool) ToolDefinition {
 
 	if description == "" {
 		switch toolCRD.Spec.Type {
-		case "fetcher":
-			if toolCRD.Spec.Fetcher != nil {
-				description = fmt.Sprintf("Fetch data from %s", toolCRD.Spec.Fetcher.URL)
+		case ToolTypeHTTP:
+			if toolCRD.Spec.HTTP != nil {
+				description = fmt.Sprintf("HTTP request to %s", toolCRD.Spec.HTTP.URL)
 			}
 		default:
 			description = fmt.Sprintf("Custom tool: %s", toolCRD.Name)
@@ -355,11 +393,11 @@ func CreateToolFromCRD(toolCRD *arkv1alpha1.Tool) ToolDefinition {
 	return ToolDefinition{Name: toolCRD.Name, Description: description, Parameters: parameters}
 }
 
-func CreateFetcherTool(toolCRD *arkv1alpha1.Tool) ToolDefinition {
+func CreateHTTPTool(toolCRD *arkv1alpha1.Tool) ToolDefinition {
 	return CreateToolFromCRD(toolCRD)
 }
 
-func (f *FetcherExecutor) resolveHeaderValue(ctx context.Context, headerValue arkv1alpha1.HeaderValue, namespace string) (string, error) {
+func (h *HTTPExecutor) resolveHeaderValue(ctx context.Context, headerValue arkv1alpha1.HeaderValue, namespace string) (string, error) {
 	// If static value is provided, use it directly
 	if headerValue.Value != "" {
 		return headerValue.Value, nil
@@ -375,7 +413,7 @@ func (f *FetcherExecutor) resolveHeaderValue(ctx context.Context, headerValue ar
 			Namespace: namespace,
 		}
 
-		if err := f.K8sClient.Get(ctx, namespacedName, secret); err != nil {
+		if err := h.K8sClient.Get(ctx, namespacedName, secret); err != nil {
 			return "", fmt.Errorf("failed to get secret %s/%s: %w", namespace, secretRef.Name, err)
 		}
 

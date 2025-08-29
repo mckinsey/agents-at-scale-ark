@@ -3,11 +3,11 @@ kind: Tool
 metadata:
   name: invalid-tool-invalid-schema
 spec:
-  type: fetcher
+  type: http
   inputSchema:
     type: invalid-type  # Invalid JSON schema type - should fail admission
     properties:
       url:
         type: string
-  fetcher:
+  http:
     url: https://example.com
