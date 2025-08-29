@@ -202,3 +202,22 @@ When creating pull requests, use this simple format:
 ```
 
 DO NOT include "Test plan" sections in PR descriptions.
+
+## Pull Request Maintenance
+
+When adding commits to an existing PR that expand beyond the original scope:
+
+1. **Update PR title** to reflect the broader changes using conventional commit format
+2. **Update PR description** to summarize all changes, not just the original ones
+3. **Use `gh pr edit`** to update title and body efficiently
+
+Example:
+```bash
+# Original: "fix: increase test timeouts"
+# Updated: "fix: improve CI/CD reliability and container registry configuration"
+gh pr edit --title "fix: improve CI/CD reliability and container registry configuration" --body "## Summary
+- Increase chainsaw test timeouts for LLM operations
+- Fix container registry paths to include repository name for GHCR access control  
+- Add NPM package metadata for proper display on npmjs.com
+- Fix deploy workflow parameter naming"
+```

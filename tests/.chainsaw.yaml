@@ -14,8 +14,8 @@ spec:
     apply: 45s                           # Timeout for 'apply' operations (e.g., applying manifests)
     assert: 180s                         # Timeout for assertion checks (high value for LLM calls)
     cleanup: 45s                         # Timeout for cleanup steps after tests
-    delete: 25s                          # Timeout for resource deletion steps
-    error: 10s                           # Timeout for error handling steps
+    delete: 45s                          # Timeout for resource deletion steps
+    error: 45s                           # Timeout for error handling steps
     exec: 45s                            # Timeout for command execution steps
   failFast: false                        # If false, Chainsaw will continue running tests even after failures
   parallel: 4                            # Number of tests to run in parallel
