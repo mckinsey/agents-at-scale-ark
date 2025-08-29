@@ -1,6 +1,7 @@
 export default {
   'local-development': 'Local Development',
   'build': 'Build System and Makefile Overview',
+  'logging-and-events': 'Logging and Events',
   'design-principles': 'Design Principles',
   'crd-design-guide': 'CRD Design Guidelines',
   'cli-tools': 'CLI Tools',
