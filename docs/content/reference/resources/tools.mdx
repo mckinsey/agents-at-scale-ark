@@ -57,14 +57,56 @@ spec:
           value: "application/json"
     body: |
       {
-        "name": "{name}",
-        "email": "{email}",
-        "created_at": "2024-01-01T00:00:00Z"
+        "name": "{{.input.name}}",
+        "email": "{{.input.email}}",
+        "created_at": "{{.timestamp}}",
+        "organization": "{{.default_org}}"
       }
+    bodyParameters:
+      - name: timestamp
+        value: "2024-01-01T00:00:00Z"
+      - name: default_org
+        valueFrom:
+          configMapKeyRef:
+            name: user-config
+            key: default-organization
     timeout: 30s
 ```
 
-### MCP Tools  
+
+
+## Template Syntax
+
+HTTP tools support golang template syntax for dynamic content generation:
+
+### Template Data Structure
+Templates have access to structured data:
+- **`.input.fieldName`** - User input from the inputSchema
+- **`.parameterName`** - Values from bodyParameters
+
+### Parameter Sources
+```yaml
+bodyParameters:
+  # Direct values
+  - name: api_version
+    value: "v1.0"
+
+  # ConfigMap references
+  - name: endpoint
+    valueFrom:
+      configMapKeyRef:
+        name: api-config
+        key: base-url
+
+  # Secret references
+  - name: token
+    valueFrom:
+      secretKeyRef:
+        name: api-secrets
+        key: auth-token
+```
+
+### MCP Tools
 Tools provided by Model Context Protocol servers.
 
 ```yaml
