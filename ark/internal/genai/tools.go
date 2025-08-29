@@ -27,19 +27,6 @@ type ToolDefinition struct {
 	Parameters  map[string]any `json:"parameters"`
 }
 
-// ToolEventEmitter provides event emission for tool execution context
-type ToolEventEmitter struct {
-	toolName  string
-	namespace string
-}
-
-func (t *ToolEventEmitter) EmitEvent(ctx context.Context, eventType string, data EventData) {
-	log := logf.FromContext(ctx).WithValues("eventType", eventType, "tool", t.toolName, "namespace", t.namespace)
-
-	eventMap := data.ToMap()
-	log.Error(nil, "Tool template error", "eventType", eventType, "data", eventMap)
-}
-
 // HTTPExecutor executes HTTP tools
 type HTTPExecutor struct {
 	K8sClient     client.Client
@@ -108,14 +95,9 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 	// Handle request body for POST/PUT/PATCH requests
 	var requestBody io.Reader
 	if httpSpec.Body != "" && (method == "POST" || method == "PUT" || method == "PATCH") {
-		// Create a simple event emitter for tool execution context
-		toolEventEmitter := &ToolEventEmitter{
-			toolName:  tool.Name,
-			namespace: tool.Namespace,
-		}
-
-		bodyContent, err := ResolveBodyTemplateWithEventEmission(ctx, h.K8sClient, tool.Namespace, httpSpec.Body, httpSpec.BodyParameters, arguments, toolEventEmitter)
+		bodyContent, err := ResolveBodyTemplate(ctx, h.K8sClient, tool.Namespace, httpSpec.Body, httpSpec.BodyParameters, arguments)
 		if err != nil {
+			log.Error(err, "failed to resolve body template", "template", httpSpec.Body)
 			return ToolResult{
 				ID:    call.ID,
 				Name:  call.Function.Name,
