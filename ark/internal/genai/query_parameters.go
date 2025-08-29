@@ -126,5 +126,3 @@ func ResolveBodyTemplate(ctx context.Context, k8sClient client.Client, namespace
 
 	return buf.String(), nil
 }
-
-
