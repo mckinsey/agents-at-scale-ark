@@ -90,3 +90,111 @@ func resolveQueryValueFrom(ctx context.Context, k8sClient client.Client, namespa
 
 	return "", fmt.Errorf("no supported valueFrom source specified")
 }
+
+// ResolveBodyTemplate resolves body template with parameters and input data
+func ResolveBodyTemplate(ctx context.Context, k8sClient client.Client, namespace, bodyTemplate string, parameters []arkv1alpha1.Parameter, inputData map[string]any) (string, error) {
+	if bodyTemplate == "" {
+		return "", nil
+	}
+
+	templateData := make(map[string]any)
+
+	if inputData != nil {
+		templateData["input"] = inputData
+	}
+
+	if len(parameters) > 0 {
+		paramData, err := resolveQueryParameters(ctx, k8sClient, namespace, parameters)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve body parameters: %w", err)
+		}
+
+		for key, value := range paramData {
+			templateData[key] = value
+		}
+	}
+
+	tmpl, err := template.New("body-template").Parse(bodyTemplate)
+	if err != nil {
+		return "", fmt.Errorf("invalid template syntax in body: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, templateData); err != nil {
+		return "", fmt.Errorf("body template execution failed: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+// ResolveBodyTemplateWithEventEmission resolves body template with error event emission
+func ResolveBodyTemplateWithEventEmission(ctx context.Context, k8sClient client.Client, namespace, bodyTemplate string, parameters []arkv1alpha1.Parameter, inputData map[string]any, eventEmitter EventEmitter) (string, error) {
+	if bodyTemplate == "" {
+		return "", nil
+	}
+
+	templateData := make(map[string]any)
+
+	if inputData != nil {
+		templateData["input"] = inputData
+	}
+
+	if len(parameters) > 0 {
+		paramData, err := resolveQueryParameters(ctx, k8sClient, namespace, parameters)
+		if err != nil {
+			// Emit error event for parameter resolution failures
+			if eventEmitter != nil {
+				event := BaseEvent{
+					Name: "BodyParameterResolution",
+					Metadata: map[string]string{
+						"error":     err.Error(),
+						"namespace": namespace,
+						"cause":     "parameter_resolution_failed",
+					},
+				}
+				eventEmitter.EmitEvent(ctx, "BodyParameterResolutionError", event)
+			}
+			return "", fmt.Errorf("failed to resolve body parameters: %w", err)
+		}
+
+		for key, value := range paramData {
+			templateData[key] = value
+		}
+	}
+
+	tmpl, err := template.New("body-template").Parse(bodyTemplate)
+	if err != nil {
+		// Emit error event for template syntax errors
+		if eventEmitter != nil {
+			event := BaseEvent{
+				Name: "BodyTemplateParsing",
+				Metadata: map[string]string{
+					"error":    err.Error(),
+					"template": bodyTemplate,
+					"cause":    "invalid_template_syntax",
+				},
+			}
+			eventEmitter.EmitEvent(ctx, "BodyTemplateSyntaxError", event)
+		}
+		return "", fmt.Errorf("invalid template syntax in body: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, templateData); err != nil {
+		// Emit error event for template execution errors
+		if eventEmitter != nil {
+			event := BaseEvent{
+				Name: "BodyTemplateExecution",
+				Metadata: map[string]string{
+					"error":    err.Error(),
+					"template": bodyTemplate,
+					"cause":    "template_execution_failed",
+				},
+			}
+			eventEmitter.EmitEvent(ctx, "BodyTemplateExecutionError", event)
+		}
+		return "", fmt.Errorf("body template execution failed: %w", err)
+	}
+
+	return buf.String(), nil
+}

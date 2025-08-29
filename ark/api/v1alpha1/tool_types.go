@@ -82,10 +82,20 @@ type HTTPSpec struct {
 	Headers []Header `json:"headers,omitempty"`
 	// +kubebuilder:validation:Pattern=^[0-9]+[smh]?$
 	Timeout string `json:"timeout,omitempty"`
-	// Body template for POST/PUT/PATCH requests with parameter substitution
+	// Body template for POST/PUT/PATCH requests with golang template syntax
 	Body string `json:"body,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Parameters for body template processing
+	BodyParameters []Parameter `json:"bodyParameters,omitempty"`
 }
 
+// Tool type constants
+const (
+	ToolTypeHTTP = "http"
+	ToolTypeMCP  = "mcp"
+)
+
+// Tool state constants
 const (
 	ToolStateReady = "Ready"
 )
@@ -158,5 +168,12 @@ func (in *HTTPSpec) DeepCopyInto(out *HTTPSpec) {
 		in, out := &in.Headers, &out.Headers
 		*out = make([]Header, len(*in))
 		copy(*out, *in)
+	}
+	if in.BodyParameters != nil {
+		in, out := &in.BodyParameters, &out.BodyParameters
+		*out = make([]Parameter, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 }

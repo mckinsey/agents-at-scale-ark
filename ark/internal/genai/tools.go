@@ -28,6 +28,22 @@ type ToolDefinition struct {
 	Parameters  map[string]any `json:"parameters"`
 }
 
+// ToolEventEmitter provides event emission for tool execution context
+type ToolEventEmitter struct {
+	toolName  string
+	namespace string
+}
+
+func (t *ToolEventEmitter) EmitEvent(ctx context.Context, eventType string, data EventData) {
+	log := logf.FromContext(ctx).WithValues("eventType", eventType, "tool", t.toolName, "namespace", t.namespace)
+
+	eventMap := data.ToMap()
+	log.Error(nil, "Tool template error", "eventType", eventType, "data", eventMap)
+
+	// In a real implementation, this would emit to the event system
+	// For now, we log the error to make it visible to operators
+}
+
 type ToolRegistry struct {
 	tools     map[string]ToolDefinition
 	executors map[string]ToolExecutor
@@ -205,7 +221,20 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 	// Handle request body for POST/PUT/PATCH requests
 	var requestBody io.Reader
 	if httpSpec.Body != "" && (method == "POST" || method == "PUT" || method == "PATCH") {
-		bodyContent := h.substituteBodyParameters(httpSpec.Body, arguments)
+		// Create a simple event emitter for tool execution context
+		toolEventEmitter := &ToolEventEmitter{
+			toolName:  tool.Name,
+			namespace: tool.Namespace,
+		}
+
+		bodyContent, err := ResolveBodyTemplateWithEventEmission(ctx, h.K8sClient, tool.Namespace, httpSpec.Body, httpSpec.BodyParameters, arguments, toolEventEmitter)
+		if err != nil {
+			return ToolResult{
+				ID:    call.ID,
+				Name:  call.Function.Name,
+				Error: fmt.Sprintf("failed to resolve body template: %v", err),
+			}, fmt.Errorf("failed to resolve body template: %w", err)
+		}
 		requestBody = strings.NewReader(bodyContent)
 	}
 
@@ -307,31 +336,7 @@ func (h *HTTPExecutor) substituteURLParameters(urlTemplate string, arguments map
 	return result
 }
 
-func (h *HTTPExecutor) substituteBodyParameters(bodyTemplate string, arguments map[string]any) string {
-	if arguments == nil {
-		return bodyTemplate
-	}
 
-	paramRegex := regexp.MustCompile(`\{([^}]+)\}`)
-	result := bodyTemplate
-
-	matches := paramRegex.FindAllStringSubmatch(bodyTemplate, -1)
-	for _, match := range matches {
-		if len(match) < 2 {
-			continue
-		}
-
-		placeholder := match[0]
-		paramName := match[1]
-
-		if value, exists := arguments[paramName]; exists {
-			stringValue := fmt.Sprintf("%v", value)
-			result = strings.ReplaceAll(result, placeholder, stringValue)
-		}
-	}
-
-	return result
-}
 
 func CreateToolFromCRD(toolCRD *arkv1alpha1.Tool) ToolDefinition {
 	description := toolCRD.Spec.Description

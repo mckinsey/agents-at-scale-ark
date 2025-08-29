@@ -7,12 +7,6 @@ const (
 	ModelTypeBedrock = "bedrock"
 )
 
-// Tool type constants
-const (
-	ToolTypeHTTP = "http"
-	ToolTypeMCP  = "mcp"
-)
-
 // Agent tool type constants
 const (
 	AgentToolTypeBuiltIn = "built-in"
