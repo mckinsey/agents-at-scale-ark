@@ -38,6 +38,7 @@ rules:
   - ark.mckinsey.com
   resources:
   - a2aservers
+  - evaluations
   - evaluators
   - executionengines
   - mcpservers
@@ -58,6 +59,7 @@ rules:
   resources:
   - a2aservers/finalizers
   - agents/finalizers
+  - evaluations/finalizers
   - evaluators/finalizers
   - executionengines/finalizers
   - mcpservers/finalizers
@@ -73,6 +75,7 @@ rules:
   resources:
   - a2aservers/status
   - agents/status
+  - evaluations/status
   - evaluators/status
   - executionengines/status
   - mcpservers/status
