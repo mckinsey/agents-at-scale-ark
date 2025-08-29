@@ -15,18 +15,13 @@ import (
 	"github.com/openai/openai-go/shared"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"mckinsey.com/ark/internal/common"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
-// Tool type constants
-const (
-	ToolTypeHTTP = "http"
-	ToolTypeMCP  = "mcp"
-)
+
 
 type ToolDefinition struct {
 	Name        string         `json:"name"`
@@ -46,21 +41,6 @@ func (t *ToolEventEmitter) EmitEvent(ctx context.Context, eventType string, data
 	eventMap := data.ToMap()
 	log.Error(nil, "Tool template error", "eventType", eventType, "data", eventMap)
 
-	// In a real implementation, this would emit to the event system
-	// For now, we log the error to make it visible to operators
-}
-
-// ToolExecutor interface for executing tools
-type ToolExecutor interface {
-	Execute(ctx context.Context, call openai.ChatCompletionMessageToolCall, tool *arkv1alpha1.Tool) (ToolResult, error)
-}
-
-// ToolResult represents the result of a tool execution
-type ToolResult struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Content string `json:"content,omitempty"`
-	Error   string `json:"error,omitempty"`
 }
 
 // HTTPExecutor executes HTTP tools
@@ -71,9 +51,7 @@ type HTTPExecutor struct {
 }
 
 // Execute implements ToolExecutor interface for HTTP tools
-func (h *HTTPExecutor) Execute(ctx context.Context, call openai.ChatCompletionMessageToolCall, tool *arkv1alpha1.Tool) (ToolResult, error) {
-	log := logf.FromContext(ctx).WithValues("tool", tool.Name, "toolID", call.ID)
-
+func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
 	// Parse arguments
 	var arguments map[string]any
 	if call.Function.Arguments != "" {
@@ -85,6 +63,22 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call openai.ChatCompletionMe
 			}, fmt.Errorf("failed to parse arguments: %w", err)
 		}
 	}
+
+	// Get tool from Kubernetes
+	tool := &arkv1alpha1.Tool{}
+	objectKey := client.ObjectKey{Name: h.ToolName}
+	if h.ToolNamespace != "" {
+		objectKey.Namespace = h.ToolNamespace
+	}
+	if err := h.K8sClient.Get(ctx, objectKey, tool); err != nil {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: fmt.Sprintf("failed to get tool %s: %v", h.ToolName, err),
+		}, fmt.Errorf("failed to get tool %s: %w", h.ToolName, err)
+	}
+
+	log := logf.FromContext(ctx).WithValues("tool", tool.Name, "toolID", call.ID)
 
 	httpSpec := tool.Spec.HTTP
 	if httpSpec == nil {
@@ -146,7 +140,7 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call openai.ChatCompletionMe
 
 	// Add headers
 	for _, header := range httpSpec.Headers {
-		value, err := common.ResolveValue(ctx, h.K8sClient, h.ToolNamespace, header.Value)
+		value, err := h.resolveHeaderValue(ctx, header.Value, tool.Namespace)
 		if err != nil {
 			return ToolResult{
 				ID:    call.ID,
@@ -158,7 +152,7 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call openai.ChatCompletionMe
 	}
 
 	// Set timeout
-	timeout := h.parseTimeout(httpSpec.Timeout)
+	timeout := h.getTimeout(httpSpec.Timeout)
 	client := &http.Client{Timeout: timeout}
 
 	// Make the request
@@ -323,135 +317,7 @@ func GetTerminateTool() ToolDefinition {
 	}
 }
 
-type HTTPExecutor struct {
-	K8sClient     client.Client
-	ToolName      string
-	ToolNamespace string
-}
 
-func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
-	var arguments map[string]any
-	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
-		logf.Log.Info("Error parsing tool arguments", "ToolCall", call)
-		arguments = make(map[string]any)
-	}
-	tool := &arkv1alpha1.Tool{}
-	objectKey := client.ObjectKey{Name: h.ToolName}
-	if h.ToolNamespace != "" {
-		objectKey.Namespace = h.ToolNamespace
-	}
-	if err := h.K8sClient.Get(ctx, objectKey, tool); err != nil {
-		return ToolResult{
-			ID:    call.ID,
-			Name:  call.Function.Name,
-			Error: fmt.Sprintf("failed to get tool %s: %v", h.ToolName, err),
-		}, fmt.Errorf("failed to get tool %s: %w", h.ToolName, err)
-	}
-
-	if tool.Spec.HTTP == nil {
-		return ToolResult{
-			ID:    call.ID,
-			Name:  call.Function.Name,
-			Error: "http spec is required",
-		}, fmt.Errorf("http spec is required for tool %s", h.ToolName)
-	}
-
-	httpSpec := tool.Spec.HTTP
-	if httpSpec.URL == "" {
-		return ToolResult{
-			ID:    call.ID,
-			Name:  call.Function.Name,
-			Error: "URL is required for http tool",
-		}, fmt.Errorf("URL is required for http tool %s", h.ToolName)
-	}
-
-	httpClient := common.NewHTTPClientWithLogging(ctx)
-	httpClient.Timeout = h.getTimeout(httpSpec.Timeout)
-
-	method := httpSpec.Method
-	if method == "" {
-		method = "GET"
-	}
-
-	finalURL := h.substituteURLParameters(httpSpec.URL, arguments)
-
-	// Handle request body for POST/PUT/PATCH requests
-	var requestBody io.Reader
-	if httpSpec.Body != "" && (method == "POST" || method == "PUT" || method == "PATCH") {
-		// Create a simple event emitter for tool execution context
-		toolEventEmitter := &ToolEventEmitter{
-			toolName:  tool.Name,
-			namespace: tool.Namespace,
-		}
-
-		bodyContent, err := ResolveBodyTemplateWithEventEmission(ctx, h.K8sClient, tool.Namespace, httpSpec.Body, httpSpec.BodyParameters, arguments, toolEventEmitter)
-		if err != nil {
-			return ToolResult{
-				ID:    call.ID,
-				Name:  call.Function.Name,
-				Error: fmt.Sprintf("failed to resolve body template: %v", err),
-			}, fmt.Errorf("failed to resolve body template: %w", err)
-		}
-		requestBody = strings.NewReader(bodyContent)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, finalURL, requestBody)
-	if err != nil {
-		return ToolResult{
-			ID:    call.ID,
-			Name:  call.Function.Name,
-			Error: fmt.Sprintf("failed to create request: %v", err),
-		}, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	for _, header := range httpSpec.Headers {
-		value, err := h.resolveHeaderValue(ctx, header.Value, tool.Namespace)
-		if err != nil {
-			return ToolResult{
-				ID:    call.ID,
-				Name:  call.Function.Name,
-				Error: fmt.Sprintf("failed to resolve header %s: %v", header.Name, err),
-			}, fmt.Errorf("failed to resolve header %s: %w", header.Name, err)
-		}
-		req.Header.Set(header.Name, value)
-	}
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return ToolResult{
-			ID:    call.ID,
-			Name:  call.Function.Name,
-			Error: fmt.Sprintf("failed to fetch URL: %v", err),
-		}, fmt.Errorf("failed to fetch URL: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return ToolResult{
-			ID:    call.ID,
-			Name:  call.Function.Name,
-			Error: fmt.Sprintf("failed to read response: %v", err),
-		}, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode >= 400 {
-		return ToolResult{
-			ID:      call.ID,
-			Name:    call.Function.Name,
-			Content: string(body),
-			Error:   fmt.Sprintf("HTTP error %d: %s (URL: %s)", resp.StatusCode, resp.Status, finalURL),
-		}, fmt.Errorf("HTTP error %d: %s (URL: %s)", resp.StatusCode, resp.Status, finalURL)
-	}
-
-	return ToolResult{
-		ID:      call.ID,
-		Name:    call.Function.Name,
-		Content: string(body),
-	}, nil
-}
 
 func (h *HTTPExecutor) getTimeout(timeoutStr string) time.Duration {
 	if timeoutStr == "" {

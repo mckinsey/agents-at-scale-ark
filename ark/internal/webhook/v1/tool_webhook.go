@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/genai"
 )
 
 // nolint:unused
@@ -72,9 +73,9 @@ func (v *ToolCustomValidator) validateTool(_ context.Context, tool *arkv1alpha1.
 	}
 
 	switch tool.Spec.Type {
-	case ToolTypeHTTP:
+	case genai.ToolTypeHTTP:
 		return v.validateHTTP(tool.Spec.HTTP)
-	case ToolTypeMCP:
+	case genai.ToolTypeMCP:
 		return v.validateMCPTool(tool.Spec.MCP)
 	default:
 		return warnings, fmt.Errorf("unsupported tool type '%s': supported types are: http, mcp", tool.Spec.Type)
