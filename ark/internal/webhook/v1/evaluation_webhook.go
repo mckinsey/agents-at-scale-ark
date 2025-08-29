@@ -100,7 +100,7 @@ func (v *EvaluationValidator) validateEvaluatorReference(ctx context.Context, ev
 	}
 
 	// Validate that the evaluator exists
-	if err := v.ResourceValidator.ValidateLoadEvaluator(ctx, evaluatorName, evaluatorNamespace); err != nil {
+	if err := v.ValidateLoadEvaluator(ctx, evaluatorName, evaluatorNamespace); err != nil {
 		return fmt.Errorf("evaluator reference validation failed: %v", err)
 	}
 
