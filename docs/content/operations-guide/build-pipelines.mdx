@@ -52,11 +52,11 @@ GitHub variables and secrets for ARK build and deployment workflows. All configu
 | Name | Type | Purpose | Default Value |
 |------|------|---------|---------------|
 | **Docker Registry (Production)** | | | |
-| `DOCKER_REGISTRY` | Variable (Optional) | Main registry URL for version-tagged production/release images | `ghcr.io/{repository_owner}` |
+| `DOCKER_REGISTRY` | Variable (Optional) | Main registry URL for version-tagged production/release images | `ghcr.io/{repository_owner}/{repository_name}` |
 | `DOCKER_REGISTRY_USERNAME` | Secret (Optional) | Username for main registry authentication | `${{ github.actor }}` |
 | `DOCKER_REGISTRY_PASSWORD` | Secret (Optional) | Password/token for main registry authentication | `${{ secrets.GITHUB_TOKEN }}` |
 | **CI Cache Registry (Build Artifacts)** | | | |
-| `DOCKER_CICD_CACHE_REGISTRY` | Variable (Optional) | Registry URL for SHA-tagged intermediate images and CI/CD build cache | `ghcr.io/{repository_owner}` |
+| `DOCKER_CICD_CACHE_REGISTRY` | Variable (Optional) | Registry URL for SHA-tagged intermediate images and CI/CD build cache | `ghcr.io/{repository_owner}/{repository_name}` |
 | `DOCKER_CICD_CACHE_REGISTRY_USERNAME` | Secret (Optional) | Username for CI cache registry authentication | `${{ github.actor }}` |
 | `DOCKER_CICD_CACHE_REGISTRY_PASSWORD` | Secret (Optional) | Password/token for CI cache registry authentication | `${{ secrets.GITHUB_TOKEN }}` |
 | **Azure OpenAI (Testing)** | | |
