@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -57,44 +56,18 @@ func (r *ToolRegistry) getToolCRD(ctx context.Context, k8sClient client.Client, 
 	return obj, nil
 }
 
-func (r *ToolRegistry) getToolsBySelector(ctx context.Context, k8sClient client.Client, labelSelector *labels.Selector, namespace string) ([]arkv1alpha1.Tool, error) {
-	toolList := &arkv1alpha1.ToolList{}
-
-	if err := k8sClient.List(ctx, toolList, client.InNamespace(namespace), client.MatchingLabelsSelector{Selector: *labelSelector}); err != nil {
-		return nil, fmt.Errorf("failed to list tools with label selector: %w", err)
-	}
-
-	return toolList.Items, nil
-}
-
 func (r *ToolRegistry) registerCustomTool(ctx context.Context, k8sClient client.Client, agentTool arkv1alpha1.AgentTool, namespace string) error {
-	var tools []arkv1alpha1.Tool
-
-	switch {
-	case agentTool.Name != "":
-		tool, err := r.getToolCRD(ctx, k8sClient, agentTool.Name, namespace)
-		if err != nil {
-			return err
-		}
-		tools = []arkv1alpha1.Tool{*tool}
-	case agentTool.LabelSelector != nil:
-		selector, err := labels.ValidatedSelectorFromSet(agentTool.LabelSelector.MatchLabels)
-		if err != nil {
-			return fmt.Errorf("invalid label selector: %w", err)
-		}
-		foundTools, err := r.getToolsBySelector(ctx, k8sClient, &selector, namespace)
-		if err != nil {
-			return err
-		}
-		tools = foundTools
-	default:
-		return fmt.Errorf("either name or labelSelector must be specified for custom tool")
+	if agentTool.Name == "" {
+		return fmt.Errorf("name must be specified for custom tool")
 	}
 
-	for _, tool := range tools {
-		if err := r.registerSingleCustomTool(ctx, k8sClient, tool, namespace, agentTool.Functions); err != nil {
-			return fmt.Errorf("failed to register tool %s: %w", tool.Name, err)
-		}
+	tool, err := r.getToolCRD(ctx, k8sClient, agentTool.Name, namespace)
+	if err != nil {
+		return err
+	}
+
+	if err := r.registerSingleCustomTool(ctx, k8sClient, *tool, namespace, agentTool.Functions); err != nil {
+		return fmt.Errorf("failed to register tool %s: %w", tool.Name, err)
 	}
 
 	return nil

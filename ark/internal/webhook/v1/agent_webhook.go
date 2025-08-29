@@ -5,7 +5,6 @@ package v1
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -110,19 +109,9 @@ func (v *AgentCustomValidator) validateAgentModel(ctx context.Context, agent *ar
 	return nil
 }
 
-func (v *AgentCustomValidator) validateToolSelectors(hasName, hasLabelSelector bool, index int) error {
-	if hasName && hasLabelSelector {
-		return fmt.Errorf("tool[%d]: name and labelSelector are mutually exclusive", index)
-	}
-	return nil
-}
-
-func (v *AgentCustomValidator) validateBuiltInTool(tool arkv1alpha1.AgentTool, hasName, hasLabelSelector bool, index int) error {
+func (v *AgentCustomValidator) validateBuiltInTool(tool arkv1alpha1.AgentTool, hasName bool, index int) error {
 	if !hasName {
 		return fmt.Errorf("tool[%d]: built-in tools must specify a name", index)
-	}
-	if hasLabelSelector {
-		return fmt.Errorf("tool[%d]: built-in tools cannot use labelSelector", index)
 	}
 	if !isValidBuiltInTool(tool.Name) {
 		return fmt.Errorf("tool[%d]: unsupported built-in tool '%s': supported built-in tools are: noop, terminate", index, tool.Name)
@@ -130,27 +119,15 @@ func (v *AgentCustomValidator) validateBuiltInTool(tool arkv1alpha1.AgentTool, h
 	return nil
 }
 
-func (v *AgentCustomValidator) validateCustomTool(ctx context.Context, namespace string, tool arkv1alpha1.AgentTool, hasName, hasLabelSelector bool, index int) (admission.Warnings, error) {
+func (v *AgentCustomValidator) validateCustomTool(ctx context.Context, namespace string, tool arkv1alpha1.AgentTool, hasName bool, index int) (admission.Warnings, error) {
 	var warnings admission.Warnings
 
-	if !hasName && !hasLabelSelector {
-		return warnings, fmt.Errorf("tool[%d]: %s tools must specify either name or labelSelector", index, tool.Type)
+	if !hasName {
+		return warnings, fmt.Errorf("tool[%d]: %s tools must specify a name", index, tool.Type)
 	}
 
-	if hasName {
-		if err := v.ValidateLoadTool(ctx, tool.Name, namespace); err != nil {
-			return warnings, fmt.Errorf("tool[%d]: %s", index, err)
-		}
-	}
-
-	if hasLabelSelector {
-		if err := v.ValidateLoadToolsByLabelSelector(ctx, tool.LabelSelector, namespace); err != nil {
-			if strings.HasPrefix(err.Error(), "warning:") {
-				warnings = append(warnings, fmt.Sprintf("tool[%d]: %s", index, err.Error()))
-			} else {
-				return warnings, fmt.Errorf("tool[%d]: %s", index, err)
-			}
-		}
+	if err := v.ValidateLoadTool(ctx, tool.Name, namespace); err != nil {
+		return warnings, fmt.Errorf("tool[%d]: %s", index, err)
 	}
 
 	return warnings, nil
@@ -159,19 +136,14 @@ func (v *AgentCustomValidator) validateCustomTool(ctx context.Context, namespace
 func (v *AgentCustomValidator) validateTool(ctx context.Context, namespace string, index int, tool arkv1alpha1.AgentTool) (admission.Warnings, error) {
 	var warnings admission.Warnings
 	hasName := tool.Name != ""
-	hasLabelSelector := tool.LabelSelector != nil
-
-	if err := v.validateToolSelectors(hasName, hasLabelSelector, index); err != nil {
-		return warnings, err
-	}
 
 	switch tool.Type {
 	case "built-in":
-		if err := v.validateBuiltInTool(tool, hasName, hasLabelSelector, index); err != nil {
+		if err := v.validateBuiltInTool(tool, hasName, index); err != nil {
 			return warnings, err
 		}
 	case "custom":
-		return v.validateCustomTool(ctx, namespace, tool, hasName, hasLabelSelector, index)
+		return v.validateCustomTool(ctx, namespace, tool, hasName, index)
 	default:
 		return warnings, fmt.Errorf("tool[%d]: unsupported tool type '%s': supported types are: built-in, custom, mcp", index, tool.Type)
 	}

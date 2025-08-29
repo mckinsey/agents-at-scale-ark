@@ -8,7 +8,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -92,33 +91,6 @@ func (v *ResourceValidator) ValidateLoadTool(ctx context.Context, name, namespac
 			return fmt.Errorf("failed to get tool '%s' in namespace '%s': %v", name, namespace, err)
 		}
 		return fmt.Errorf("tool '%s' does not exist in namespace '%s'", name, namespace)
-	}
-
-	return nil
-}
-
-func (v *ResourceValidator) ValidateLoadToolsByLabelSelector(ctx context.Context, labelSelector *metav1.LabelSelector, namespace string) error {
-	if labelSelector == nil {
-		return fmt.Errorf("labelSelector cannot be nil")
-	}
-
-	selector, err := metav1.LabelSelectorAsSelector(labelSelector)
-	if err != nil {
-		return fmt.Errorf("invalid labelSelector: %v", err)
-	}
-
-	toolList := &arkv1alpha1.ToolList{}
-	listOpts := []client.ListOption{
-		client.InNamespace(namespace),
-		client.MatchingLabelsSelector{Selector: selector},
-	}
-
-	if err := v.Client.List(ctx, toolList, listOpts...); err != nil {
-		return fmt.Errorf("failed to list tools with labelSelector: %v", err)
-	}
-
-	if len(toolList.Items) == 0 {
-		return fmt.Errorf("warning: no tools found matching labelSelector in namespace '%s'", namespace)
 	}
 
 	return nil
