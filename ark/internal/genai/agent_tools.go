@@ -102,7 +102,7 @@ func (r *ToolRegistry) registerCustomTool(ctx context.Context, k8sClient client.
 
 func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string) (ToolExecutor, error) {
 	switch tool.Spec.Type {
-	case "http":
+	case ToolTypeHTTP:
 		if tool.Spec.HTTP == nil {
 			return nil, fmt.Errorf("http spec is required for tool %s", tool.Name)
 		}
@@ -111,7 +111,7 @@ func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv
 			ToolName:      tool.Name,
 			ToolNamespace: namespace,
 		}, nil
-	case "mcp":
+	case ToolTypeMCP:
 		if tool.Spec.MCP == nil {
 			return nil, fmt.Errorf("mcp spec is required for tool %s", tool.Name)
 		}
@@ -178,7 +178,7 @@ func (r *ToolRegistry) registerSingleCustomTool(ctx context.Context, k8sClient c
 
 func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client, agentTool arkv1alpha1.AgentTool, namespace string) error {
 	switch agentTool.Type {
-	case "built-in":
+	case AgentToolTypeBuiltIn:
 		switch agentTool.Name {
 		case "noop":
 			r.RegisterTool(GetNoopTool(), &NoopExecutor{})
@@ -187,7 +187,7 @@ func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client
 		default:
 			return fmt.Errorf("unsupported built-in tool %s", agentTool.Name)
 		}
-	case "custom":
+	case AgentToolTypeCustom:
 		if err := r.registerCustomTool(ctx, k8sClient, agentTool, namespace); err != nil {
 			return err
 		}
