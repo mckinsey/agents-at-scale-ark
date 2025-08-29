@@ -26,15 +26,25 @@ CLEAN_TARGETS += $(EVALUATOR_LLM_SERVICE_DIR)/dist
 CLEAN_TARGETS += $(EVALUATOR_LLM_SERVICE_DIR)/build
 CLEAN_TARGETS += $(EVALUATOR_LLM_SERVICE_DIR)/.coverage
 CLEAN_TARGETS += $(EVALUATOR_LLM_SERVICE_DIR)/htmlcov
+# Clean up build artifacts
+CLEAN_TARGETS += $(EVALUATOR_LLM_SERVICE_DIR)/ark_sdk-*.whl
+CLEAN_TARGETS += $(EVALUATOR_LLM_SERVICE_DIR)/pyproject.toml.bak
 
 # Define phony targets
 .PHONY: $(EVALUATOR_LLM_SERVICE_NAME)-build $(EVALUATOR_LLM_SERVICE_NAME)-install $(EVALUATOR_LLM_SERVICE_NAME)-uninstall $(EVALUATOR_LLM_SERVICE_NAME)-dev $(EVALUATOR_LLM_SERVICE_NAME)-test
 
 # Dependencies
 $(EVALUATOR_LLM_SERVICE_NAME)-deps: $(EVALUATOR_LLM_STAMP_DEPS)
-$(EVALUATOR_LLM_STAMP_DEPS): $(EVALUATOR_LLM_SERVICE_DIR)/pyproject.toml | $(OUT)
+$(EVALUATOR_LLM_STAMP_DEPS): $(EVALUATOR_LLM_SERVICE_DIR)/pyproject.toml $(ARK_SDK_WHL) | $(OUT)
 	@mkdir -p $(dir $@)
-	cd $(EVALUATOR_LLM_SERVICE_DIR) && uv sync
+	# Copy wheel to service directory for Docker build
+	cp $(ARK_SDK_WHL) $(EVALUATOR_LLM_SERVICE_DIR)/
+	# Update pyproject.toml to use local wheel file 
+	cd $(EVALUATOR_LLM_SERVICE_DIR) && \
+	sed -i.bak 's|path = "../../out/ark-sdk/py-sdk/dist/ark_sdk-.*\.whl"|path = "./ark_sdk-$(shell cat $(BUILD_ROOT)/version.txt)-py3-none-any.whl"|' pyproject.toml && \
+	uv remove ark_sdk || true && \
+	uv add ./ark_sdk-$(shell cat $(BUILD_ROOT)/version.txt)-py3-none-any.whl && \
+	rm -f uv.lock && uv sync
 	@touch $@
 
 # Test target
@@ -46,7 +56,7 @@ $(EVALUATOR_LLM_STAMP_TEST): $(EVALUATOR_LLM_STAMP_DEPS)
 # Build target
 $(EVALUATOR_LLM_SERVICE_NAME)-build: $(EVALUATOR_LLM_STAMP_BUILD) # HELP: Build LLM evaluator service Docker image
 $(EVALUATOR_LLM_STAMP_BUILD): $(EVALUATOR_LLM_STAMP_DEPS)
-	cd $(EVALUATOR_LLM_SERVICE_DIR) && docker build -t $(EVALUATOR_IMAGE):$(EVALUATOR_TAG) .
+	cd $(EVALUATOR_LLM_SERVICE_DIR) && docker build -t $(EVALUATOR_IMAGE):$(EVALUATOR_TAG) -f Dockerfile .
 	@touch $@
 
 # Install target
