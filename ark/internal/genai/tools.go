@@ -21,8 +21,6 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
-
-
 type ToolDefinition struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
@@ -153,11 +151,11 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 
 	// Set timeout
 	timeout := h.getTimeout(httpSpec.Timeout)
-	client := &http.Client{Timeout: timeout}
+	httpClient := &http.Client{Timeout: timeout}
 
 	// Make the request
 	log.Info("making HTTP request", "method", method, "url", parsedURL.String())
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
@@ -165,7 +163,9 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 			Error: fmt.Sprintf("failed to fetch URL: %v", err),
 		}, fmt.Errorf("failed to fetch URL: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// Check for HTTP errors
 	if resp.StatusCode >= 400 {
@@ -317,8 +317,6 @@ func GetTerminateTool() ToolDefinition {
 	}
 }
 
-
-
 func (h *HTTPExecutor) getTimeout(timeoutStr string) time.Duration {
 	if timeoutStr == "" {
 		return 30 * time.Second
@@ -358,8 +356,6 @@ func (h *HTTPExecutor) substituteURLParameters(urlTemplate string, arguments map
 
 	return result
 }
-
-
 
 func CreateToolFromCRD(toolCRD *arkv1alpha1.Tool) ToolDefinition {
 	description := toolCRD.Spec.Description
