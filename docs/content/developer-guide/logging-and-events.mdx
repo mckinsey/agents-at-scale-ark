@@ -77,13 +77,13 @@ log.Error(err, "failed to resolve ExecutionEngine address", "executionEngine", e
 Controllers with event recording include an `EventRecorder` field:
 
 ```go
-type QueryReconciler struct {
-    client.Client
-    Scheme   *runtime.Scheme
-    Recorder record.EventRecorder
-}
+// Event level constants
+const (
+    EventLevelNormal  = "Normal"
+    EventLevelWarning = "Warning"
+)
 
-// Event recording in reconciler
-r.Recorder.Event(&query, "Normal", "LLMCallComplete", eventData)
-r.Recorder.Event(&query, "Warning", "ExecutionFailed", fmt.Sprintf("Error: %v", err))
+// Event recording in reconciler - follow {Resource}{Action}{State} convention
+r.Recorder.Event(&query, EventLevelNormal, "QueryLLMCallComplete", eventData)
+r.Recorder.Event(&query, EventLevelWarning, "QueryExecutionFailed", fmt.Sprintf("Error: %v", err))
 ```
