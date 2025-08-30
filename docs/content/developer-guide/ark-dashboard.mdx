@@ -2,9 +2,9 @@
 
 Guidelines for customizing ARK dashboard display through resource annotations.
 
-## Agent Icons
+## Resource Icons
 
-Customize agent card icons using the `ark.mckinsey.com/dashboard-icon` annotation:
+Customize dashboard icons using the `ark.mckinsey.com/dashboard-icon` annotation for A2A servers, agents, MCP servers, and tools:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -17,19 +17,12 @@ spec:
   description: "Weather forecasting agent"
 ```
 
-**Supported formats**:
-- **Public assets**: `/icons/weather.svg` (served from dashboard public folder)
-- **External URLs**: `https://example.com/icon.svg`
-- **Data URIs**: `data:image/svg+xml;base64,...`
+Supported formats:
+- Public assets: `/icons/weather.svg` (served from dashboard public folder)
+- External URLs: `https://example.com/icon.svg`
+- Data URIs: `data:image/svg+xml;base64,...`
 
-**Default**: Bot icon when no annotation specified
-
-## kubectl Example
-
-Add icon to existing agent:
-```bash
-kubectl annotate agent my-agent ark.mckinsey.com/dashboard-icon="/icons/aws.png"
-```
+Icons are optional and will fallback to default resource type icons when not specified.
 
 ## Resource Annotations
 
