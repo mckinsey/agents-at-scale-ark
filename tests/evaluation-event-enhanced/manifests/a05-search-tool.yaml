@@ -3,7 +3,8 @@ kind: Tool
 metadata:
   name: enhanced-search-tool
 spec:
-  type: fetcher
+  type: http
+  description: Searches the web and returns structured results with metadata
   inputSchema:
     type: object
     properties:
@@ -22,8 +23,7 @@ spec:
         minimum: 1
         maximum: 20
     required: ["query"]
-  tool:
-    name: search_web
-    description: Searches the web and returns structured results with metadata
-  fetcher:
+  annotations:
+    title: search_web
+  http:
     url: http://httpbin.org/delay/1

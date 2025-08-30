@@ -1,0 +1,16 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: llm-evaluator
+  namespace: default
+spec:
+  description: "LLM-as-a-Judge evaluator for comprehensive query performance assessment"
+  address:
+    valueFrom:
+      serviceRef:
+        name: evaluator-llm
+        port: "http"
+        path: "/evaluate"
+  parameters:
+    - name: model.name
+      value: default

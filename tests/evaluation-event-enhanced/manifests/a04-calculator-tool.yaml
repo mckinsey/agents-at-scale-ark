@@ -3,7 +3,8 @@ kind: Tool
 metadata:
   name: enhanced-calculator-tool
 spec:
-  type: fetcher
+  type: http
+  description: Performs mathematical calculations and returns results with metadata
   inputSchema:
     type: object
     properties:
@@ -16,8 +17,7 @@ spec:
         enum: ["basic", "advanced", "statistical"]
         default: "basic"
     required: ["expression"]
-  tool:
-    name: calculate_expression
-    description: Performs mathematical calculations and returns results with metadata
-  fetcher:
+  annotations:
+    title: calculate_expression
+  http:
     url: http://httpbin.org/delay/1

@@ -1,18 +1,20 @@
 #!/bin/bash
 set -e
 
-cd "$(dirname "$0")"
+echo "🔨 Building evaluator-llm using centralized build system..."
+echo "dynamically handles ark-sdk dependencies."
+echo ""
 
-echo "🔨 Building evaluator-llm Docker image..."
+cd "$(dirname "$0")/../../"
 
-# Build from services directory
-cd ..
-../scripts/build-and-push.sh -i evaluator-llm -c . -f evaluator-llm/Dockerfile
+# Use the centralized build system
+make evaluator-llm-build
 
+echo ""
+echo "✅ Build completed successfully!"
 echo ""
 echo "Next steps:"
-echo "  Deploy with Helm:"
-echo "    helm install evaluator-llm ./chart"
+echo "  Deploy with: make evaluator-llm-install"
+echo "  Run tests with: make evaluator-llm-test" 
+echo "  Run locally with: make evaluator-llm-dev"
 echo ""
-echo "  Test the deployment:"
-echo "    kubectl get pods -l app.kubernetes.io/name=evaluator-llm"

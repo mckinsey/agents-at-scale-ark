@@ -89,7 +89,7 @@ spec:
             # Verify numeric annotations have valid values
             (to_number(annotations."evaluation.metadata/total_examples") >= `1`): true
             (to_number(annotations."evaluation.metadata/passed_examples") >= `0`): true
-            (to_number(annotations."evaluation.metadata/failed_examples") >= `0`): true
+            (to_number(annotations."evaluation.metadata/failed_examples") == `0`): true
             (to_number(annotations."evaluation.metadata/average_score") >= `0.0`): true
             (to_number(annotations."evaluation.metadata/average_score") <= `1.0`): true
             # Verify category counts
