@@ -847,6 +847,6 @@ jobs:
             --field deploy_containers=true \
             --field deploy_to_pages=true \
             --field deploy_to_npm=true \
-            --field publish_helm_chart=true
+            --field deploy_helm_chart=true
         env:
           GH_TOKEN: ${{ github.token }}

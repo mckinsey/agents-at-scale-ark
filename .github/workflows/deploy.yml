@@ -28,8 +28,8 @@ on:
         required: false
         type: boolean
         default: false
-      publish_helm_chart:
-        description: 'Publish Helm chart to container registry'
+      deploy_helm_chart:
+        description: 'Deploy Helm chart to container registry'
         required: false
         type: boolean
         default: false
@@ -246,7 +246,7 @@ jobs:
 
   deploy-helm-chart:
     needs: [check_version]
-    if: ${{ inputs.publish_helm_chart }}
+    if: ${{ inputs.deploy_helm_chart }}
     runs-on: ubuntu-24.04
     steps:
       - name: Validate version tag exists
