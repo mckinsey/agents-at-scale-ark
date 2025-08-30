@@ -14,6 +14,7 @@ export interface MCPServer {
   discovering?: boolean
   status_message?: string
   tool_count?: number
+  annotations?: Record<string, string>
 }
 
 // MCP Server list response

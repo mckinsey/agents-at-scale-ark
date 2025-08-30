@@ -1,6 +1,5 @@
 """Main entry point for the Ark MCP server."""
 
-import asyncio
 import logging
 import sys
 from .server import create_app

@@ -46,25 +46,21 @@ Individual services can also be exposed using `kubectl port-forward` (as shown i
 ## Available Services
 
 ### Core Services
+
 - [A2A Gateway](/advanced-features/a2a-server) - Agent-to-Agent Gateway implementing A2A protocol
 - [PostgreSQL Memory](/advanced-features/postgres-memory) - Persistent memory storage using PostgreSQL
 - [Execution Engine](/advanced-features/execution-engine) - Framework adapter for Langchain and other AI frameworks
-
-### CLI Tools
-- **Fark** - Fast Agentic Runtime CLI tool for interacting with agents and teams
-- **ARK CLI** - TypeScript-based CLI for ARK management and project generation
 
 ### Execution Engines
 - **Langchain Execution Engine** - Framework adapter for Langchain workflows
 
 ### Development Tools
-- **ARK Dashboard** - Next.js-based web interface for ARK management
+- **[ARK Dashboard](./ark-dashboard)** - Next.js-based web interface for ARK management
 - **ARK API** - REST API for managing ARK resources
 
 ### Specialized Services
 - **Evaluator LLM** - AI-powered query evaluation service using LLM-as-a-Judge
 - **Evaluation Operator** - Automated evaluation and scoring of agent responses  
-- **ARK SDK Python** - Core Python SDK for Kubernetes resource management
 
 ## Service Discovery and Annotations
 
@@ -72,42 +68,18 @@ ARK services use a standardized annotation system for discovery and integration:
 
 ### Service Annotations
 
-Services can be annotated to provide metadata for discovery:
+Helm Charts can be annotated to provide metadata for discovery:
 
 ```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-service
-  annotations:
-    ar.com/service: "my-service"
-    ar.com/description: "Custom service description"
-    ar.com/version: "1.0.0"
-spec:
-  # ... service spec
+# Chart.yaml
+annotations:
+  ark.mckinsey.com/service: "my-service"
+  ark.mckinsey.com/resources: "service,deployment"
 ```
 
 ### Annotation Schema
 
 | Annotation | Description | Example |
 |------------|-------------|---------|
-| `ar.com/service` | Service identifier for ARK discovery | `ar-dashboard` |
-| `ar.com/description` | Human-readable service description | `ARK Dashboard Web Interface` |
-| `ar.com/version` | Service version | `1.0.0` |
-
-### Discovery Integration
-
-The ARK dashboard and CLI tools automatically discover services using these annotations, providing:
-- **Service listing** - Automatic discovery of available services
-- **Health monitoring** - Integration with service health endpoints
-- **Route management** - Automatic HTTPRoute creation for Gateway API
-
-## Service Architecture
-
-Services in the ARK ecosystem are designed to be:
-
-- **Modular** - Each service provides specific functionality
-- **Kubernetes-native** - Deployed as standard K8s resources
-- **Composable** - Services can be combined for complex workflows
-- **Framework-agnostic** - Support multiple AI frameworks through adapters
-- **Discoverable** - Use standard annotations for automatic discovery
+| `ark.mckinsey.com/service` | Service identifier for ARK discovery | `langfuse` |
+| `ark.mckinsey.com/resources` | Resource types created by chart | `service,a2aserver` |

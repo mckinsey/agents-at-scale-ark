@@ -5,8 +5,10 @@ import { useState, useEffect } from "react";
 import { toast } from "@/components/ui/use-toast";
 import { A2AServersService, type A2AServer } from "@/lib/services";
 import { A2AServerCard } from "@/components/cards";
+import { A2AServerRow } from "@/components/rows/a2a-server-row";
 import { useDelayedLoading } from "@/lib/hooks";
 import { InfoDialog } from "@/components/dialogs/info-dialog";
+import { ToggleSwitch, type ToggleOption } from "@/components/ui/toggle-switch";
 
 interface A2AServersSectionProps {
   namespace: string;
@@ -20,6 +22,12 @@ export const A2AServersSection: React.FC<A2AServersSectionProps> = ({
   const showLoading = useDelayedLoading(loading);
   const [selectedServer, setSelectedServer] = useState<A2AServer | null>(null);
   const [infoDialogOpen, setInfoDialogOpen] = useState(false);
+  const [showCompactView, setShowCompactView] = useState(false);
+
+  const viewOptions: ToggleOption[] = [
+    { id: "compact", label: "compact view", active: !showCompactView },
+    { id: "card", label: "card view", active: showCompactView }
+  ];
 
   useEffect(() => {
     const loadData = async () => {
@@ -59,17 +67,38 @@ export const A2AServersSection: React.FC<A2AServersSectionProps> = ({
 
   return (
     <div className="flex h-full flex-col">
-      <main className="flex-1 overflow-auto p-6">
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pb-6">
-          {a2aServers.map((server) => (
-            <A2AServerCard
-              key={server.name || server.id}
-              a2aServer={server}
-              onInfo={handleInfo}
-              namespace={namespace}
-            />
-          ))}
-        </div>
+      <div className="flex items-center justify-end px-6 py-3">
+        <ToggleSwitch
+          options={viewOptions}
+          onChange={(id) => setShowCompactView(id === "card")}
+        />
+      </div>
+
+      <main className="flex-1 overflow-auto px-6 py-0">
+        {showCompactView && (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pb-6">
+            {a2aServers.map((server) => (
+              <A2AServerCard
+                key={server.name || server.id}
+                a2aServer={server}
+                onInfo={handleInfo}
+                namespace={namespace}
+              />
+            ))}
+          </div>
+        )}
+
+        {!showCompactView && (
+          <div className="flex flex-col gap-3">
+            {a2aServers.map((server) => (
+              <A2AServerRow
+                key={server.name || server.id}
+                a2aServer={server}
+                onInfo={handleInfo}
+              />
+            ))}
+          </div>
+        )}
       </main>
 
       {selectedServer && (

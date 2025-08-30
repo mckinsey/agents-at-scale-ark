@@ -79,6 +79,7 @@ class AgentResponse(BaseModel):
     model_ref: Optional[str] = None
     prompt: Optional[str] = None
     status: Optional[str] = None
+    annotations: Optional[Dict[str, str]] = None
 
 
 class AgentListResponse(BaseModel):
@@ -121,3 +122,4 @@ class AgentDetailResponse(BaseModel):
     skills: Optional[List[Skill]] = None
     isA2A: bool = False
     status: Optional[Dict[str, Any]] = None
+    annotations: Optional[Dict[str, str]] = None

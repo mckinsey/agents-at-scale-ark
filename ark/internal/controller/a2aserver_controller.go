@@ -202,6 +202,20 @@ func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2A
 	// Build skills annotation JSON
 	skillsJSON, _ := json.Marshal(agentCard.Skills)
 
+	annotations := map[string]string{
+		"a2a.server/name":    a2aServer.Name,
+		"a2a.server/address": a2aServer.Status.LastResolvedAddress,
+		"a2a.server/skills":  string(skillsJSON),
+	}
+
+	// Inherit ark.mckinsey.com annotations from A2AServer to Agent
+	// AAS-2657: Will replace with more idiomatic K8s spec.template pattern
+	for key, value := range a2aServer.Annotations {
+		if strings.HasPrefix(key, "ark.mckinsey.com/") {
+			annotations[key] = value
+		}
+	}
+
 	agent := &arkv1alpha1.Agent{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      agentName,
@@ -209,11 +223,7 @@ func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2A
 			Labels: map[string]string{
 				"a2a.server/name": a2aServer.Name,
 			},
-			Annotations: map[string]string{
-				"a2a.server/name":    a2aServer.Name,
-				"a2a.server/address": a2aServer.Status.LastResolvedAddress,
-				"a2a.server/skills":  string(skillsJSON),
-			},
+			Annotations: annotations,
 		},
 		Spec: arkv1alpha1.AgentSpec{
 			Description: agentCard.Description,
