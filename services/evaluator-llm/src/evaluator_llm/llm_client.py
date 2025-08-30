@@ -2,7 +2,7 @@ import aiohttp
 import json
 import logging
 from typing import Dict, Any, Union, Tuple
-from .types import Model, TokenUsage
+from .types import EvaluationParameters, Model, TokenUsage
 from .model_resolver import ModelConfig
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class LLMClient:
             await self.session.close()
             self.session = None
     
-    async def evaluate(self, prompt: str, model: Union[Model, ModelConfig]) -> Tuple[str, TokenUsage]:
+    async def evaluate(self, prompt: str, model: Union[Model, ModelConfig], params: EvaluationParameters) -> Tuple[str, TokenUsage]:
         """
         Call the model to evaluate the prompt and return content with token usage
         Returns: (content, token_usage)
@@ -39,20 +39,20 @@ class LLMClient:
         if isinstance(model, ModelConfig):
             # Determine model type from base_url
             if 'azure' in model.base_url.lower():
-                return await self._call_azure_openai_config(prompt, model)
+                return await self._call_azure_openai_config(prompt, model, params)
             else:
-                return await self._call_openai_compatible_config(prompt, model)
+                return await self._call_openai_compatible_config(prompt, model, params)
         else:
             # Legacy Model object support
             model_type = model.type
             if model_type == 'openai':
-                return await self._call_openai_compatible(prompt, model)
+                return await self._call_openai_compatible(prompt, model, params)
             elif model_type == 'azure':
-                return await self._call_azure_openai(prompt, model)
+                return await self._call_azure_openai(prompt, model, params)
             else:
                 raise ValueError(f"Unsupported model type: {model_type}")
     
-    async def _call_openai_compatible(self, prompt: str, model: Model) -> Tuple[str, TokenUsage]:
+    async def _call_openai_compatible(self, prompt: str, model: Model, params: EvaluationParameters) -> Tuple[str, TokenUsage]:
         """
         Call OpenAI-compatible API
         """
@@ -73,8 +73,8 @@ class LLMClient:
             'messages': [
                 {'role': 'user', 'content': prompt}
             ],
-            'temperature': 0.1,  # Low temperature for consistent evaluation
-            'max_tokens': 1000
+            'temperature': params.temperature or 0.1,  # Low temperature for consistent evaluation
+            'max_tokens': params.max_tokens or 1000
         }
         
         logger.info(f"Calling OpenAI-compatible API: {url}")
@@ -97,7 +97,7 @@ class LLMClient:
             
             return content, token_usage
     
-    async def _call_azure_openai(self, prompt: str, model: Model) -> Tuple[str, TokenUsage]:
+    async def _call_azure_openai(self, prompt: str, model: Model, params: EvaluationParameters) -> Tuple[str, TokenUsage]:
         """
         Call Azure OpenAI API
         """
@@ -121,8 +121,8 @@ class LLMClient:
             'messages': [
                 {'role': 'user', 'content': prompt}
             ],
-            'temperature': 0.1,  # Low temperature for consistent evaluation
-            'max_tokens': 1000
+            'temperature': params.temperature or 0.1,  # Low temperature for consistent evaluation
+            'max_tokens': params.max_tokens or 1000
         }
         
         logger.info(f"Calling Azure OpenAI API: {full_url}")
@@ -145,7 +145,7 @@ class LLMClient:
             
             return content, token_usage
     
-    async def _call_openai_compatible_config(self, prompt: str, model: ModelConfig) -> Tuple[str, TokenUsage]:
+    async def _call_openai_compatible_config(self, prompt: str, model: ModelConfig, params: EvaluationParameters) -> Tuple[str, TokenUsage]:
         """
         Call OpenAI-compatible API using ModelConfig
         """
@@ -166,8 +166,8 @@ class LLMClient:
             'messages': [
                 {'role': 'user', 'content': prompt}
             ],
-            'temperature': 0.1,  # Low temperature for consistent evaluation
-            'max_tokens': 1000
+            'temperature': params.temperature or 0.1,  # Low temperature for consistent evaluation
+            'max_tokens': params.max_tokens or 1000
         }
         
         logger.info(f"Calling OpenAI-compatible API: {url} with model {model.model}")
@@ -190,7 +190,7 @@ class LLMClient:
             
             return content, token_usage
     
-    async def _call_azure_openai_config(self, prompt: str, model: ModelConfig) -> Tuple[str, TokenUsage]:
+    async def _call_azure_openai_config(self, prompt: str, model: ModelConfig, params: EvaluationParameters) -> Tuple[str, TokenUsage]:
         """
         Call Azure OpenAI API using ModelConfig
         """
@@ -212,8 +212,8 @@ class LLMClient:
             'messages': [
                 {'role': 'user', 'content': prompt}
             ],
-            'temperature': 0.1,  # Low temperature for consistent evaluation
-            'max_tokens': 1000
+            'temperature': params.temperature or 0.1,  # Low temperature for consistent evaluation
+            'max_tokens': params.max_tokens or 1000
         }
         
         logger.info(f"Calling Azure OpenAI API: {full_url} with deployment {deployment_name}")

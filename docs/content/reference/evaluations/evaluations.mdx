@@ -2,7 +2,7 @@
 
 Evaluations provide AI-powered assessment of query responses and agent performance within the Agents at Scale platform. They support both automated evaluation integration with queries and standalone evaluation scenarios for testing and quality assurance.
 
-Evaluations use the LLM-as-a-Judge approach to assess response quality across multiple criteria including relevance, accuracy, completeness, clarity, and usefulness. They support different evaluation modes and can work with golden datasets for reference-based assessment.
+Evaluations use the Ark default service that provides an LLM-as-a-Judge to assess response quality across multiple criteria including relevance, accuracy, completeness, clarity, and usefulness. They support different evaluation modes and can work with golden datasets for reference-based assessment.
 
 ## Prerequisites
 
@@ -45,7 +45,11 @@ Before using evaluations, ensure you have:
    spec:
     description: "LLM-based evaluator service for automated evaluation"
     address:
-      value: http://evaluator-llm.default.svc.cluster.local:8000
+      valueFrom: # use valueFrom when the execution service is in the same namespace 
+        serviceRef:
+          name: evaluator-llm
+          port: "http"
+          path: "/evaluate"
     modelRef:
       name: default
    ```
@@ -76,28 +80,6 @@ spec:
   output: "Paris"
 ```
 
-### Dataset Evaluation
-
-Dataset evaluation assesses multiple test cases using a golden dataset:
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Evaluation
-metadata:
-  name: dataset-eval-example
-spec:
-  mode: dataset
-  evaluator:
-    name: evaluator-llm
-    parameters:
-      - name: scope
-        value: "accuracy"
-      - name: min-score
-        value: "0.8"
-  goldenDatasetRef:
-    name: cities-reference
-```
-
 ### Query Evaluation
 
 Query evaluation assesses responses from an existing completed query:
@@ -121,7 +103,7 @@ spec:
     responseIndex: 0  # Evaluate first response (optional)
 ```
 
-### Query-Driven Evaluation (Automatic)
+### Query-Driven Evaluation (Deprecated)
 
 Query-driven evaluation is triggered automatically when a query references an evaluator. This happens after the query completes:
 
@@ -211,7 +193,7 @@ spec:
         port: "http"
         path: "/evaluate"
   parameters:
-    - name: tokens
+    - name: max-tokens
       value: "1000"
     - name: duration
       value: "2m"
@@ -229,7 +211,7 @@ spec:
   evaluator:
     name: evaluator-with-defaults
     parameters:
-      - name: tokens
+      - name: max-tokens
         value: "5000"        # Overrides evaluator's 1000
       - name: temperature
         value: "0.1"         # New parameter not in evaluator
@@ -240,31 +222,69 @@ spec:
 ```
 
 **Result**: The evaluation uses:
-- `tokens: "5000"` (overridden from evaluation)
+- `max-tokens: "5000"` (overridden from evaluation)
 - `temperature: "0.1"` (new from evaluation) 
 - `duration: "2m"` (inherited from evaluator)
 - `scope: "accuracy,clarity"` (inherited from evaluator)
 
-## Golden Datasets
+## Golden Datasets (ConfigMap Example)
 
 Golden datasets provide reference examples for evaluation. They contain test cases with expected inputs and outputs:
 
 ```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: GoldenDataset
+apiVersion: v1
+kind: ConfigMap
 metadata:
-  name: cities-reference
-spec:
-  testCases:
-    example-1:
-      input: "What is the capital of England?"
-      expectedOutput: "London"
-    example-2:
-      input: "What is the capital of France?"
-      expectedOutput: "Paris"
-    example-3:
-      input: "What is the capital of Morocco?"
-      expectedOutput: "Rabat"
+  name: golden-examples
+data:
+  examples: |
+    [
+      {
+        "input": "What is 7 + 3?",
+        "expectedOutput": "10",
+        "expectedMinScore": "0.9",
+        "difficulty": "easy",
+        "category": "arithmetic",
+        "metadata": {
+          "type": "basic-addition",
+          "concept": "addition"
+        }
+      },
+      {
+        "input": "What is 6 × 4?",
+        "expectedOutput": "24",
+        "expectedMinScore": "0.85",
+        "difficulty": "easy",
+        "category": "arithmetic",
+        "metadata": {
+          "type": "multiplication",
+          "concept": "multiplication"
+        }
+      },
+      {
+        "input": "If I buy 8 items at $3 each, how much do I spend?",
+        "expectedOutput": "$24",
+        "expectedMinScore": "0.8",
+        "difficulty": "medium",
+        "category": "word-problem",
+        "metadata": {
+          "type": "word-problem",
+          "concept": "multiplication",
+          "context": "shopping"
+        }
+      },
+      {
+        "input": "What is 1/2 + 1/4?",
+        "expectedOutput": "3/4",
+        "expectedMinScore": "0.75",
+        "difficulty": "hard",
+        "category": "fractions",
+        "metadata": {
+          "type": "fraction-addition",
+          "concept": "fractions"
+        }
+      }
+    ]
 ```
 
 ## Evaluation Parameters
@@ -312,86 +332,14 @@ parameters:
     value: "0.1"  # Low temperature for consistent evaluation
 ```
 
-## Complete Example
+### Max Token Control
 
-Here's a comprehensive evaluation setup:
+Control LLM evaluation token size:
 
 ```yaml
-# Golden dataset for reference
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: GoldenDataset
-metadata:
-  name: math-problems
-spec:
-  testCases:
-    basic-addition:
-      input: "What is 2 + 2?"
-      expectedOutput: "4"
-    simple-multiplication:
-      input: "What is 5 × 3?"
-      expectedOutput: "15"
-    word-problem:
-      input: "If I have 10 apples and give away 3, how many do I have left?"
-      expectedOutput: "7"
-
----
-# Direct evaluation
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Evaluation
-metadata:
-  name: direct-math-eval
-spec:
-  mode: direct
-  evaluator:
-    name: evaluator-llm
-    parameters:
-      - name: scope
-        value: "accuracy,clarity"
-      - name: min-score
-        value: "0.8"
-      - name: temperature
-        value: "0.0"
-  input: "What is the square root of 16?"
-  output: "The square root of 16 is 4"
-  goldenDatasetRef:
-    name: math-problems
-
----
-# Dataset evaluation
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Evaluation
-metadata:
-  name: dataset-math-eval
-spec:
-  mode: dataset
-  evaluator:
-    name: evaluator-llm
-    parameters:
-      - name: scope
-        value: "accuracy"
-      - name: min-score
-        value: "0.9"
-  goldenDatasetRef:
-    name: math-problems
-
----
-# Query evaluation (post-hoc assessment)
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Evaluation
-metadata:
-  name: query-math-eval
-spec:
-  mode: query
-  evaluator:
-    name: evaluator-llm
-    parameters:
-      - name: scope
-        value: "accuracy,usefulness"
-      - name: min-score
-        value: "0.75"
-  queryRef:
-    name: completed-math-query
-    responseIndex: 0
+parameters:
+  - name: max-tokens
+    value: "1000"
 ```
 
 ## Evaluation Flows
@@ -402,7 +350,7 @@ spec:
 3. **Scoring**: Response scored against specified criteria
 4. **Completion**: Evaluation marked as "done" with results
 
-### Dataset Evaluation Flow
+### Baseline Evaluation Flow
 1. **Dataset Loading**: Golden dataset test cases loaded
 2. **Batch Processing**: Each test case evaluated individually
 3. **Aggregation**: Results aggregated with overall statistics
@@ -558,11 +506,6 @@ spec:
 - Adjust min-score threshold
 - Validate agent responses
 
-**Golden dataset not found**:
-- Verify dataset exists: `kubectl get goldendataset`
-- Check dataset name in evaluation spec
-- Ensure dataset is in same namespace
-
 ### Service Health Checks
 
 ```bash
@@ -581,8 +524,7 @@ kubectl get evaluator evaluator-llm -o yaml
 ## Sample Resources
 
 See the [samples/evaluations](../../samples/evaluations) directory for additional examples including:
-- Manual evaluation scenarios
+- Direct evaluation scenarios
 - Dataset evaluation setups
-- Golden dataset definitions  
 - Multi-criteria evaluations
-- Production evaluation configurations
+- Production evaluation configurations    

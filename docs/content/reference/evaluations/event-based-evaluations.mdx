@@ -103,13 +103,13 @@ expression: "tools.was_called('search', scope='session')"
 expression: "agents.get_unique_agents(scope='all').length >= 3"
 ```
 
-## Creating Evaluators
+## Samples of Event Based Evaluations
 
 ### Basic Tool Evaluation
 
 ```yaml
 apiVersion: genai.qbaf.io/v1alpha1
-kind: Evaluator
+kind: Evaluation
 metadata:
   name: tool-usage-evaluator
 spec:
@@ -128,7 +128,7 @@ spec:
 
 ```yaml
 apiVersion: genai.qbaf.io/v1alpha1
-kind: Evaluator
+kind: Evaluation
 metadata:
   name: agent-performance-evaluator
 spec:
@@ -147,7 +147,7 @@ spec:
 
 ```yaml
 apiVersion: genai.qbaf.io/v1alpha1
-kind: Evaluator
+kind: Evaluation
 metadata:
   name: comprehensive-evaluator
 spec:

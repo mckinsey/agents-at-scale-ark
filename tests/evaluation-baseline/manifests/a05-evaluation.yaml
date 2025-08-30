@@ -4,7 +4,7 @@ metadata:
   name: test-baseline-evaluation
 spec:
   type: baseline
-  timeout: "10m"  # Extended timeout for transient DNS issues
+  timeout: "10m"  # Extended timeout 
   evaluator:
     name: test-baseline-evaluator
     parameters:

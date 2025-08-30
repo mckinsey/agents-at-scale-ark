@@ -43,7 +43,8 @@ class LLMEvaluator:
             # Get LLM evaluation
             evaluation_result, token_usage = await self.llm_client.evaluate(
                 prompt=evaluation_prompt,
-                model=model
+                model=model,
+                params=params
             )
             
             # Parse evaluation result
