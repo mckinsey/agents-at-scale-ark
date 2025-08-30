@@ -255,6 +255,8 @@ jobs:
             echo "Error: Version tag is required for Helm chart deployment but does not exist"
             exit 1
           fi
+
+      - uses: actions/checkout@v4
       
       - name: Install Helm
         uses: azure/setup-helm@v4
