@@ -96,6 +96,38 @@ spec:
             kind: Agent
             name: langchain-weather-reporter
 
+    # Test ark.mckinsey.com annotation inheritance from A2AServer to Agent
+    - name: test-annotation-inheritance
+      try:
+        - apply:
+            resource:
+              apiVersion: ark.mckinsey.com/v1prealpha1
+              kind: A2AServer
+              metadata:
+                name: test-annotation-server
+                annotations:
+                  ark.mckinsey.com/test-annotation: "test-value-123"
+                  ark.mckinsey.com/dashboard-icon: "/icons/test.svg"
+                  ark.mckinsey.com/team: "test-team"
+              spec:
+                address:
+                  value: "http://host.minikube.internal:2973/a2a/agent/test_agent"
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                annotations:
+                  ark.mckinsey.com/test-annotation: "test-value-123"
+                  ark.mckinsey.com/dashboard-icon: "/icons/test.svg"
+                  ark.mckinsey.com/team: "test-team"
+      catch:
+        - events: {}
+        - describe:
+            apiVersion: ark.mckinsey.com/v1prealpha1
+            kind: A2AServer
+            name: test-annotation-server
+
     - name: test-templated-weather-query
       try:
         - apply:

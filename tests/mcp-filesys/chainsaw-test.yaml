@@ -104,6 +104,39 @@ spec:
           metadata:
             name: mcp-filesys-delete-file
 
+  # Test ark.mckinsey.com annotation inheritance from MCPServer to Tool
+  - name: test-mcp-annotation-inheritance
+    try:
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: MCPServer
+          metadata:
+            name: test-annotation-mcp
+            annotations:
+              ark.mckinsey.com/test-annotation: "mcp-test-value-456"
+              ark.mckinsey.com/dashboard-icon: "/icons/mcp-test.svg"
+              ark.mckinsey.com/category: "filesystem"
+          spec:
+            address:
+              value: "stdio:///app/server"
+            command: ["/app/server"]
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            annotations:
+              ark.mckinsey.com/test-annotation: "mcp-test-value-456"
+              ark.mckinsey.com/dashboard-icon: "/icons/mcp-test.svg"
+              ark.mckinsey.com/category: "filesystem"
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: MCPServer
+        name: test-annotation-mcp
+
   - name: setup-agent-and-query
     try:
     - apply:

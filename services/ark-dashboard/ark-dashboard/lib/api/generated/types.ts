@@ -1000,6 +1000,10 @@ export interface components {
             status?: {
                 [key: string]: unknown;
             } | null;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
+            } | null;
         };
         /**
          * AgentListResponse
@@ -1028,6 +1032,10 @@ export interface components {
             prompt?: string | null;
             /** Status */
             status?: string | null;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
+            } | null;
         };
         /**
          * AgentUpdateRequest

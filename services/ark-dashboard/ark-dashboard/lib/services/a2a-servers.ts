@@ -12,6 +12,7 @@ export interface A2AServer {
   ready?: boolean;
   discovering?: boolean;
   status_message?: string;
+  annotations?: Record<string, string>;
 }
 
 // A2A Server list response

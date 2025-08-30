@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Server, Trash2, Info, Pencil } from "lucide-react";
 import { BaseCard, type BaseCardAction } from "./base-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { getCustomIcon } from "@/lib/utils/icon-resolver";
+import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import {
   MCPServerConfiguration,
   type MCPServer
@@ -25,6 +27,10 @@ export function McpServerCard({
 }: McpServerCardProps) {
   const actions: BaseCardAction[] = [];
   const [mcpEditorOpen, setMcpEditorOpen] = useState(false);
+
+  // Get custom icon or default Server icon
+  const annotations = mcpServer.annotations as Record<string, string> | undefined;
+  const IconComponent = getCustomIcon(annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], Server);
 
   if (onUpdate) {
     actions.push({
@@ -60,7 +66,7 @@ export function McpServerCard({
     <>
       <BaseCard
         title={mcpServer.name || "Unnamed Server"}
-        icon={Server}
+        icon={<IconComponent className="h-5 w-5" />}
         iconClassName="text-muted-foreground"
         actions={actions}
         footer={

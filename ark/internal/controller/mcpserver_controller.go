@@ -274,6 +274,16 @@ func (r *MCPServerReconciler) createTools(ctx context.Context, mcpServer *arkv1a
 }
 
 func (r *MCPServerReconciler) buildToolCRD(mcpServer *arkv1alpha1.MCPServer, mcpTool mcp.Tool, toolName string) *arkv1alpha1.Tool {
+	annotations := make(map[string]string)
+
+	// Inherit ark.mckinsey.com annotations from MCPServer to Tool
+	// AAS-2657: Will replace with more idiomatic K8s spec.template pattern
+	for key, value := range mcpServer.Annotations {
+		if strings.HasPrefix(key, "ark.mckinsey.com/") {
+			annotations[key] = value
+		}
+	}
+
 	tool := &arkv1alpha1.Tool{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      toolName,
@@ -281,6 +291,7 @@ func (r *MCPServerReconciler) buildToolCRD(mcpServer *arkv1alpha1.MCPServer, mcp
 			Labels: map[string]string{
 				mcpServerLabel: mcpServer.Name,
 			},
+			Annotations: annotations,
 		},
 		Spec: arkv1alpha1.ToolSpec{
 			Type:        "mcp",
