@@ -846,6 +846,7 @@ jobs:
             --field ark_version="${{ needs.check-release.outputs.tag }}" \
             --field deploy_containers=true \
             --field deploy_to_pages=true \
-            --field deploy_to_npm=true
+            --field deploy_to_npm=true \
+            --field publish_helm_chart=true
         env:
           GH_TOKEN: ${{ github.token }}

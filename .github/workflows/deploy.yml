@@ -28,6 +28,11 @@ on:
         required: false
         type: boolean
         default: false
+      publish_helm_chart:
+        description: 'Publish Helm chart to container registry'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -182,6 +187,15 @@ jobs:
           ls -la ark-${CLEAN_VERSION}.tgz
         env:
           GH_TOKEN: ${{ github.token }}
+
+      - name: Publish Helm Chart to Container Registry
+        if: ${{ inputs.publish_helm_chart }}
+        run: |
+          CLEAN_VERSION="${{ needs.check_version.outputs.clean_version }}"
+          REGISTRY="${{ vars.DOCKER_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}"
+          
+          helm registry login $REGISTRY -u "${{ secrets.DOCKER_REGISTRY_USERNAME || github.actor }}" --password-stdin <<< "${{ secrets.DOCKER_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}"
+          helm push ark-${CLEAN_VERSION}.tgz oci://${REGISTRY}/charts
 
       - name: Validate deployment secrets
         run: |
