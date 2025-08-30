@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -57,44 +56,18 @@ func (r *ToolRegistry) getToolCRD(ctx context.Context, k8sClient client.Client, 
 	return obj, nil
 }
 
-func (r *ToolRegistry) getToolsBySelector(ctx context.Context, k8sClient client.Client, labelSelector *labels.Selector, namespace string) ([]arkv1alpha1.Tool, error) {
-	toolList := &arkv1alpha1.ToolList{}
-
-	if err := k8sClient.List(ctx, toolList, client.InNamespace(namespace), client.MatchingLabelsSelector{Selector: *labelSelector}); err != nil {
-		return nil, fmt.Errorf("failed to list tools with label selector: %w", err)
-	}
-
-	return toolList.Items, nil
-}
-
 func (r *ToolRegistry) registerCustomTool(ctx context.Context, k8sClient client.Client, agentTool arkv1alpha1.AgentTool, namespace string) error {
-	var tools []arkv1alpha1.Tool
-
-	switch {
-	case agentTool.Name != "":
-		tool, err := r.getToolCRD(ctx, k8sClient, agentTool.Name, namespace)
-		if err != nil {
-			return err
-		}
-		tools = []arkv1alpha1.Tool{*tool}
-	case agentTool.LabelSelector != nil:
-		selector, err := labels.ValidatedSelectorFromSet(agentTool.LabelSelector.MatchLabels)
-		if err != nil {
-			return fmt.Errorf("invalid label selector: %w", err)
-		}
-		foundTools, err := r.getToolsBySelector(ctx, k8sClient, &selector, namespace)
-		if err != nil {
-			return err
-		}
-		tools = foundTools
-	default:
-		return fmt.Errorf("either name or labelSelector must be specified for custom tool")
+	if agentTool.Name == "" {
+		return fmt.Errorf("name must be specified for custom tool")
 	}
 
-	for _, tool := range tools {
-		if err := r.registerSingleCustomTool(ctx, k8sClient, tool, namespace, agentTool.Functions); err != nil {
-			return fmt.Errorf("failed to register tool %s: %w", tool.Name, err)
-		}
+	tool, err := r.getToolCRD(ctx, k8sClient, agentTool.Name, namespace)
+	if err != nil {
+		return err
+	}
+
+	if err := r.registerSingleCustomTool(ctx, k8sClient, *tool, namespace, agentTool.Functions); err != nil {
+		return fmt.Errorf("failed to register tool %s: %w", tool.Name, err)
 	}
 
 	return nil
@@ -102,16 +75,16 @@ func (r *ToolRegistry) registerCustomTool(ctx context.Context, k8sClient client.
 
 func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string) (ToolExecutor, error) {
 	switch tool.Spec.Type {
-	case "fetcher":
-		if tool.Spec.Fetcher == nil {
-			return nil, fmt.Errorf("fetcher spec is required for tool %s", tool.Name)
+	case ToolTypeHTTP:
+		if tool.Spec.HTTP == nil {
+			return nil, fmt.Errorf("http spec is required for tool %s", tool.Name)
 		}
-		return &FetcherExecutor{
+		return &HTTPExecutor{
 			K8sClient:     k8sClient,
 			ToolName:      tool.Name,
 			ToolNamespace: namespace,
 		}, nil
-	case "mcp":
+	case ToolTypeMCP:
 		if tool.Spec.MCP == nil {
 			return nil, fmt.Errorf("mcp spec is required for tool %s", tool.Name)
 		}
@@ -178,7 +151,7 @@ func (r *ToolRegistry) registerSingleCustomTool(ctx context.Context, k8sClient c
 
 func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client, agentTool arkv1alpha1.AgentTool, namespace string) error {
 	switch agentTool.Type {
-	case "built-in":
+	case AgentToolTypeBuiltIn:
 		switch agentTool.Name {
 		case "noop":
 			r.RegisterTool(GetNoopTool(), &NoopExecutor{})
@@ -187,7 +160,7 @@ func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client
 		default:
 			return fmt.Errorf("unsupported built-in tool %s", agentTool.Name)
 		}
-	case "custom":
+	case AgentToolTypeCustom:
 		if err := r.registerCustomTool(ctx, k8sClient, agentTool, namespace); err != nil {
 			return err
 		}

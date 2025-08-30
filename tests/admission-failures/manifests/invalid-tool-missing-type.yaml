@@ -9,5 +9,5 @@ spec:
     properties:
       url:
         type: string
-  fetcher:
+  http:
     url: https://example.com

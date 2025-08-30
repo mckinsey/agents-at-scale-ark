@@ -7,4 +7,4 @@ spec:
   modelRef:
     name: nonexistent-model
   tools:
-  - type: custom  # Missing both name and labelSelector for custom tool - should fail admission
+  - type: custom  # Missing name for custom tool - should fail admission

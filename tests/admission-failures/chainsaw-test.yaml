@@ -40,14 +40,6 @@ spec:
     try:
     - error:
         file: manifests/invalid-agent-invalid-builtin-tool.yaml
-  - name: test-agent-tool-name-and-selector
-    try:
-    - error:
-        file: manifests/invalid-agent-tool-name-and-selector.yaml
-  - name: test-agent-builtin-with-selector
-    try:
-    - error:
-        file: manifests/invalid-agent-builtin-with-selector.yaml
   - name: test-agent-missing-tool-name
     try:
     - error:
