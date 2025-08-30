@@ -253,12 +253,12 @@ func (in *BatchEvaluationItem) DeepCopyInto(out *BatchEvaluationItem) {
 	in.Evaluator.DeepCopyInto(&out.Evaluator)
 	if in.TTL != nil {
 		in, out := &in.TTL, &out.TTL
-		*out = new(v1.Duration)
+		*out = new(metav1.Duration)
 		**out = **in
 	}
 	if in.Timeout != nil {
 		in, out := &in.Timeout, &out.Timeout
-		*out = new(v1.Duration)
+		*out = new(metav1.Duration)
 		**out = **in
 	}
 }
@@ -1362,7 +1362,7 @@ func (in *QuerySelector) DeepCopyInto(out *QuerySelector) {
 	}
 	if in.MatchExpressions != nil {
 		in, out := &in.MatchExpressions, &out.MatchExpressions
-		*out = make([]v1.LabelSelectorRequirement, len(*in))
+		*out = make([]metav1.LabelSelectorRequirement, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
