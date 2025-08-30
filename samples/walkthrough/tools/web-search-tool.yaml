@@ -6,7 +6,7 @@ metadata:
     category: research
     type: web-tool
 spec:
-  type: fetcher
+  type: http
   inputSchema:
     type: object
     properties:
@@ -21,7 +21,7 @@ spec:
         maximum: 10
     required: ["query"]
   description: "Searches the web for information using DuckDuckGo search API and returns relevant results with titles, snippets, and URLs"
-  fetcher:
+  http:
     url: https://api.duckduckgo.com/?q={query}&format=json&no_html=1&skip_disambig=1&limit={num_results}
     method: GET
     timeout: 30s

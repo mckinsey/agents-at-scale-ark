@@ -235,6 +235,7 @@ func setupControllers(mgr ctrl.Manager) {
 		{"Memory", &controller.MemoryReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("memory-controller")}},
 		{"ExecutionEngine", &controller.ExecutionEngineReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("executionengine-controller")}},
 		{"Evaluator", &controller.EvaluatorReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
+		{"Evaluation", &controller.EvaluationReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("evaluation-controller")}},
 	}
 
 	for _, reconciler := range controllers {
@@ -261,6 +262,7 @@ func setupWebhooks(mgr ctrl.Manager) {
 		{"Model", webhookv1.SetupModelWebhookWithManager},
 		{"MCPServer", webhookv1.SetupMCPServerWebhookWithManager},
 		{"Evaluator", webhookv1.SetupEvaluatorWebhookWithManager},
+		{"Evaluation", webhookv1.SetupEvaluationWebhookWithManager},
 		{"A2AServer", webhookv1prealpha1.SetupA2AServerWebhookWithManager},
 		{"ExecutionEngine", webhookv1prealpha1.SetupExecutionEngineWebhookWithManager},
 	}

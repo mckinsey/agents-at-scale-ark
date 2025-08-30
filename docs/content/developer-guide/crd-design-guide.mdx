@@ -38,9 +38,94 @@ Before designing new patterns, examine how Kubernetes core resources handle simi
 // Parameters for request processing
 Parameters []Parameter `json:"parameters,omitempty"`
 
-// Selector configuration 
+// Selector configuration
 Selector *ResourceSelector `json:"selector,omitempty"`
 ```
+
+## Templating Patterns
+
+ARK uses Go template syntax for dynamic content generation across resources. This provides a consistent approach for parameter substitution and data interpolation.
+
+### Template Data Structure
+
+Templates have access to a structured data context:
+
+```go
+templateData := map[string]any{
+    "input": inputData,           // User input data accessible as .input.fieldName
+    "parameterName": "value",     // Parameters accessible as .parameterName
+}
+```
+
+### Parameter Resolution
+
+Parameters support multiple value sources following Kubernetes patterns:
+
+```yaml
+parameters:
+  # Direct values
+  - name: environment
+    value: "production"
+
+  # ConfigMap references
+  - name: api_endpoint
+    valueFrom:
+      configMapKeyRef:
+        name: app-config
+        key: api-url
+
+  # Secret references
+  - name: api_token
+    valueFrom:
+      secretKeyRef:
+        name: api-secrets
+        key: token
+```
+
+### Template Syntax Examples
+
+#### Query Input Templates
+```yaml
+spec:
+  input: |
+    Process {{.operation}} request for {{.input.customer}}
+    Environment: {{.environment}}
+    API Token: {{.api_token}}
+  parameters:
+    - name: operation
+      value: "payment"
+    - name: environment
+      valueFrom:
+        configMapKeyRef:
+          name: app-config
+          key: current-env
+```
+
+#### HTTP Tool Body Templates
+```yaml
+spec:
+  http:
+    body: |
+      {
+        "channel": "{{.incident_channel}}",
+        "text": "*{{.input.severity}}* incident: {{.input.title}}",
+        "details": "{{.input.description}}"
+      }
+    bodyParameters:
+      - name: incident_channel
+        valueFrom:
+          configMapKeyRef:
+            name: slack-config
+            key: incidents-channel
+```
+
+### Template Best Practices
+
+1. **Use `.input.fieldName`** for user-provided data
+2. **Use `.parameterName`** for configuration values
+3. **Validate templates** during resource creation
+4. **Emit events** for template errors to aid debugging
+5. **Follow Go template syntax** for consistency
 
 ## Validation
 

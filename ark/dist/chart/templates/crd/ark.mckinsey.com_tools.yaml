@@ -78,9 +78,13 @@ spec:
               description:
                 description: Tool description
                 type: string
-              fetcher:
-                description: Fetcher-specific configuration for HTTP-based tools
+              http:
+                description: HTTP-specific configuration for HTTP-based tools
                 properties:
+                  body:
+                    description: Body template for POST/PUT/PATCH requests with parameter
+                      substitution
+                    type: string
                   headers:
                     items:
                       properties:
@@ -172,7 +176,7 @@ spec:
                 type: object
               type:
                 enum:
-                - fetcher
+                - http
                 - mcp
                 type: string
             required:
