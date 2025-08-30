@@ -244,7 +244,7 @@ jobs:
           kubectl get pods -n ark-system
           kubectl get deployments -n ark-system
 
-  publish-helm-chart:
+  deploy-helm-chart:
     needs: [check_version]
     if: ${{ inputs.publish_helm_chart }}
     runs-on: ubuntu-24.04
@@ -252,11 +252,9 @@ jobs:
       - name: Validate version tag exists
         run: |
           if [ "${{ needs.check_version.outputs.has_version }}" != "true" ]; then
-            echo "Error: Version tag is required for Helm chart publishing but does not exist"
+            echo "Error: Version tag is required for Helm chart deployment but does not exist"
             exit 1
           fi
-
-      - uses: actions/checkout@v4
       
       - name: Install Helm
         uses: azure/setup-helm@v4
@@ -269,14 +267,14 @@ jobs:
           CLEAN_VERSION="${{ needs.check_version.outputs.clean_version }}"
           echo "Downloading ARK Helm chart for version: $VERSION"
           
-          gh release download "$VERSION" --pattern "ark-${CLEAN_VERSION}.tgz" --repo McK-Internal/agents-at-scale
+          gh release download "$VERSION" --pattern "ark-${CLEAN_VERSION}.tgz"
           
           echo "Downloaded chart:"
           ls -la ark-${CLEAN_VERSION}.tgz
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Publish Helm Chart to Container Registry
+      - name: Deploy Helm Chart to Container Registry
         run: |
           CLEAN_VERSION="${{ needs.check_version.outputs.clean_version }}"
           REGISTRY="${{ vars.DOCKER_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}"
