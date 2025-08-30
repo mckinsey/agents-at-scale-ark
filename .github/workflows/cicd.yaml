@@ -739,6 +739,8 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
+      - uses: actions/checkout@v4
+      
       - name: Download library artifacts
         uses: actions/download-artifact@v4
         with:
@@ -759,7 +761,7 @@ jobs:
             if [ -f "$wheel" ]; then
               filename=$(basename "$wheel")
               echo "Uploading $wheel as $filename"
-              gh release upload "$RELEASE_TAG" "$wheel" || echo "Failed to upload $wheel (may already exist)"
+              gh release upload "$RELEASE_TAG" "$wheel" || { echo "Failed to upload $wheel"; exit 1; }
             fi
           done
         env:
