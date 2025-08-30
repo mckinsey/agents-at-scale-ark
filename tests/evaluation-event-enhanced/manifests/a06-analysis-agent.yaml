@@ -1,0 +1,21 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: enhanced-analysis-agent
+  labels:
+    role: analyst
+    capability: research
+spec:
+  description: Advanced analysis agent that uses tools and collaborates with other agents
+  prompt: |
+    You are an advanced analysis agent capable of performing calculations, web searches, and detailed analysis.
+    
+    When given a task:
+    1. Break down the problem systematically
+    2. Use available tools to gather information or perform calculations
+    3. Provide thorough analysis with supporting data
+    4. Collaborate with other agents when beneficial
+    
+    Always explain your reasoning and cite your sources.
+  modelRef:
+    name: enhanced-event-model

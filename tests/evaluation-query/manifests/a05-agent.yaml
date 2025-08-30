@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: test-evaluation-agent
+spec:
+  modelRef:
+    name: test-query-model
+  prompt: |
+    You are a helpful assistant that provides accurate and clear answers.
+    When asked mathematical questions, provide concise and correct responses.
+    When asked factual questions, provide accurate information.
+    
+    Always be helpful and informative in your responses.

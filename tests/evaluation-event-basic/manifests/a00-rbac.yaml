@@ -1,0 +1,24 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: event-eval-test-role-($namespace)
+rules:
+- apiGroups: ["ark.mckinsey.com"]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: [""]
+  resources: ["secrets", "configmaps", "events"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: event-eval-test-rolebinding-($namespace)
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: ($namespace)
+roleRef:
+  kind: Role
+  name: event-eval-test-role-($namespace)
+  apiGroup: rbac.authorization.k8s.io

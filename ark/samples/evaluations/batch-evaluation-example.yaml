@@ -1,0 +1,152 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: mixed-batch-eval
+  namespace: default
+spec:
+  type: batch
+  config:
+    # Explicit list of evaluations with different types and evaluators
+    items:
+      # Direct evaluation with accuracy evaluator
+      - name: math-accuracy-test
+        type: direct
+        evaluator:
+          name: accuracy-evaluator
+          parameters:
+            - name: strict_mode
+              value: "true"
+        config:
+          input: "What is 15 * 23?"
+          output: "345"
+        timeout: 30s
+      
+      # Query-based evaluation with LLM evaluator  
+      - name: weather-query-test
+        type: query
+        evaluator:
+          name: evaluator-llm
+          parameters:
+            - name: model
+              value: gpt-4
+        config:
+          queryRef:
+            name: weather-ny-query
+            namespace: default
+        timeout: 5m
+      
+      # Direct evaluation with cost evaluator
+      - name: response-cost-test
+        type: direct
+        evaluator:
+          name: cost-evaluator
+        config:
+          input: "Generate a 500-word essay about climate change"
+          output: "Climate change represents one of the most pressing challenges..."
+        
+      # Query evaluation with different LLM evaluator
+      - name: agent-performance-test
+        type: query
+        evaluator:
+          name: performance-evaluator
+          parameters:
+            - name: metrics
+              value: "latency,accuracy,cost"
+        config:
+          queryRef:
+            name: complex-math-query
+            namespace: default
+        ttl: 12h
+    
+    # Execution settings
+    concurrency: 2  # Run max 2 evaluations concurrently
+    continueOnFailure: true  # Continue even if some evaluations fail
+    
+  ttl: 24h
+  timeout: 30m
+
+---
+# Example combining explicit items with template-based dynamic creation
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: hybrid-batch-eval
+  namespace: default
+spec:
+  type: batch
+  config:
+    # Explicit evaluations (high priority, specific configs)
+    items:
+      - name: critical-accuracy-test
+        type: direct
+        evaluator:
+          name: strict-evaluator
+          parameters:
+            - name: threshold
+              value: "0.95"
+        config:
+          input: "What is the capital of France?"
+          output: "Paris"
+      
+      - name: performance-baseline
+        type: query
+        evaluator:
+          name: performance-evaluator
+        config:
+          queryRef:
+            name: baseline-query
+    
+    # Template for dynamic creation from query selector
+    template:
+      namePrefix: auto-eval
+      evaluator:
+        name: standard-evaluator
+      type: query
+      config:
+        queryRef:
+          name: ""  # Will be filled dynamically
+    
+    # Select additional queries to evaluate using the template
+    querySelector:
+      matchLabels:
+        category: "regression-test"
+        priority: "medium"
+      matchExpressions:
+        - key: status
+          operator: In
+          values: ["completed", "ready"]
+    
+    concurrency: 3
+    continueOnFailure: true
+
+---
+# Pure template-based approach (like the old design)
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: template-batch-eval
+  namespace: default  
+spec:
+  type: batch
+  config:
+    # Only template - all evaluations will be identical except for target queries
+    template:
+      namePrefix: weather-eval
+      evaluator:
+        name: weather-evaluator
+        parameters:
+          - name: model
+            value: gpt-3.5-turbo
+      type: query
+      config:
+        queryRef:
+          name: ""  # Dynamically set
+    
+    # Select all weather-related queries
+    querySelector:
+      matchLabels:
+        category: weather
+        environment: test
+    
+    concurrency: 5
+    continueOnFailure: true

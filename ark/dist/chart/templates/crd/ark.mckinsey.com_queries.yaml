@@ -24,6 +24,9 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
+    - jsonPath: .status.duration
+      name: Duration
+      type: string
     - jsonPath: .status.evaluations.length
       name: Evaluations
       type: integer
@@ -133,8 +136,6 @@ spec:
               parameters:
                 description: Parameters for template processing in the input field
                 items:
-                  description: Parameter defines a parameter for template processing
-                    in prompts and inputs
                   properties:
                     name:
                       description: Name of the parameter (used as template variable)
@@ -148,7 +149,7 @@ spec:
                         with value)
                       properties:
                         configMapKeyRef:
-                          description: Reference to a key in a ConfigMap
+                          description: Selects a key from a ConfigMap.
                           properties:
                             key:
                               description: The key to select.
@@ -171,7 +172,7 @@ spec:
                           type: object
                           x-kubernetes-map-type: atomic
                         secretKeyRef:
-                          description: Reference to a key in a Secret
+                          description: SecretKeySelector selects a key of a Secret.
                           properties:
                             key:
                               description: The key of the secret to select from.  Must
@@ -194,6 +195,27 @@ spec:
                           - key
                           type: object
                           x-kubernetes-map-type: atomic
+                        serviceRef:
+                          properties:
+                            name:
+                              description: Name of the service
+                              type: string
+                            namespace:
+                              description: Namespace of the service. Defaults to the
+                                namespace as the resource.
+                              type: string
+                            path:
+                              description: Optional path to append to the service
+                                address. For models might be 'v1', for gemini might
+                                be 'v1beta/openai', for mcp servers might be 'mcp'.
+                              type: string
+                            port:
+                              description: Port name to use. If not specified, uses
+                                the service's only port or first port.
+                              type: string
+                          required:
+                          - name
+                          type: object
                       type: object
                   required:
                   - name
@@ -284,6 +306,8 @@ spec:
             type: object
           status:
             properties:
+              duration:
+                type: string
               evaluations:
                 items:
                   properties:

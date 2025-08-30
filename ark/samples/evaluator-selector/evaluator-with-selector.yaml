@@ -1,0 +1,82 @@
+# Evaluator with selector for automatic query evaluation
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: production-quality-evaluator
+  namespace: default
+spec:
+  description: "Automatically evaluates production queries for quality assurance"
+  address:
+    valueFrom:
+      serviceRef:
+        name: evaluator-llm
+        port: "http"
+        path: "/evaluate"
+  selector:
+    resourceType: "Query"
+    apiGroup: "ark.mckinsey.com"
+    matchLabels:
+      environment: "production"
+      model: "gpt-4"
+    matchExpressions:
+      - key: evaluation_required
+        operator: In
+        values: ["true"]
+      - key: status
+        operator: In
+        values: ["done"]
+  parameters:
+    - name: scope
+      value: "accuracy,clarity,usefulness"
+    - name: min-score
+      value: "0.8"
+    - name: temperature
+      value: "0.1"
+
+---
+# ConfigMap for parameter values
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: evaluation-config
+  namespace: default
+data:
+  tokens: "5000"
+  duration: "3m"
+  detailed_scoring: "true"
+
+---
+# Evaluator using ConfigMap parameters
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: configmap-based-evaluator
+  namespace: default
+spec:
+  description: "Evaluator using ConfigMap for parameters"
+  address:
+    valueFrom:
+      serviceRef:
+        name: evaluator-llm
+        port: "http"
+        path: "/evaluate"
+  selector:
+    resourceType: "Query"
+    matchLabels:
+      team: "research"
+      priority: "high"
+  parameters:
+    - name: tokens
+      valueFrom:
+        configMapKeyRef:
+          name: evaluation-config
+          key: tokens
+          optional: false
+    - name: duration
+      valueFrom:
+        configMapKeyRef:
+          name: evaluation-config
+          key: duration
+          optional: true
+    - name: scope
+      value: "accuracy,relevance"  # Direct value mixed with ConfigMap

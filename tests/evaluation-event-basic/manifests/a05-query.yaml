@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-event-query
+spec:
+  input: "What is 2 + 2?"
+  targets:
+  - type: agent
+    name: test-event-agent
