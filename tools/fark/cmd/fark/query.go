@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/annotations"
 )
 
 func parseEvaluatorSelector(selectorStrings []string) (*metav1.LabelSelector, error) {
@@ -169,7 +170,7 @@ func createTriggerQuery(existingQuery *arkv1alpha1.Query, input string, params [
 		Name:      queryName,
 		Namespace: existingQuery.Namespace,
 		Labels: map[string]string{
-			"ark.mckinsey.com/triggered-from": existingQuery.Name,
+			annotations.TriggeredFrom: existingQuery.Name,
 		},
 	}
 
