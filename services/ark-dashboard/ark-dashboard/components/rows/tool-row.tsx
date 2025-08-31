@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Info, Trash2 } from "lucide-react";
+import { Bot, Trash2, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -55,7 +55,7 @@ export function ToolRow(props: ToolRowProps) {
                     className="h-8 w-8 p-0"
                     onClick={handleInfo}
                   >
-                    <Info className="h-4 w-4" />
+                    <ChevronRight className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>View tool details</TooltipContent>

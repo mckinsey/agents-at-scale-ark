@@ -1,4 +1,4 @@
-import { Wrench, Trash2, Info } from "lucide-react"
+import { Wrench, Trash2, ChevronRight } from "lucide-react"
 import { BaseCard, type BaseCardAction } from "./base-card"
 import type { Tool } from "@/lib/services/tools"
 
@@ -15,7 +15,7 @@ export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisable
 
   if (onInfo) {
     actions.push({
-      icon: Info,
+      icon: ChevronRight,
       label: "View tool details",
       onClick: () => onInfo(tool)
     })
