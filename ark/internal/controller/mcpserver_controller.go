@@ -20,13 +20,13 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/genai"
+	"mckinsey.com/ark/internal/labels"
 )
 
 const (
-	mcpServerLabel = "mcp/server"
-
 	// Condition types
 	MCPServerReady       = "Ready"
 	MCPServerDiscovering = "Discovering"
@@ -85,7 +85,7 @@ func (r *MCPServerReconciler) getResolver() *common.ValueSourceResolver {
 func (r *MCPServerReconciler) listAllMCPTools(ctx context.Context, mcpServerNamespace, mcpServerName string) ([]arkv1alpha1.Tool, error) {
 	listOpts := []client.ListOption{
 		client.InNamespace(mcpServerNamespace),
-		client.MatchingLabels{mcpServerLabel: mcpServerName},
+		client.MatchingLabels{labels.MCPServerLabel: mcpServerName},
 	}
 
 	var toolList arkv1alpha1.ToolList
@@ -98,7 +98,7 @@ func (r *MCPServerReconciler) listAllMCPTools(ctx context.Context, mcpServerName
 func (r *MCPServerReconciler) deleteAllMCPTools(ctx context.Context, mcpServerNamespace, mcpServerName string) error {
 	deleteOpts := []client.DeleteAllOfOption{
 		client.InNamespace(mcpServerNamespace),
-		client.MatchingLabels{mcpServerLabel: mcpServerName},
+		client.MatchingLabels{labels.MCPServerLabel: mcpServerName},
 	}
 
 	return r.DeleteAllOf(ctx, &arkv1alpha1.Tool{}, deleteOpts...)
@@ -274,13 +274,13 @@ func (r *MCPServerReconciler) createTools(ctx context.Context, mcpServer *arkv1a
 }
 
 func (r *MCPServerReconciler) buildToolCRD(mcpServer *arkv1alpha1.MCPServer, mcpTool mcp.Tool, toolName string) *arkv1alpha1.Tool {
-	annotations := make(map[string]string)
+	toolAnnotations := make(map[string]string)
 
 	// Inherit ark.mckinsey.com annotations from MCPServer to Tool
 	// AAS-2657: Will replace with more idiomatic K8s spec.template pattern
 	for key, value := range mcpServer.Annotations {
-		if strings.HasPrefix(key, "ark.mckinsey.com/") {
-			annotations[key] = value
+		if strings.HasPrefix(key, annotations.ARKPrefix) {
+			toolAnnotations[key] = value
 		}
 	}
 
@@ -289,9 +289,9 @@ func (r *MCPServerReconciler) buildToolCRD(mcpServer *arkv1alpha1.MCPServer, mcp
 			Name:      toolName,
 			Namespace: mcpServer.Namespace,
 			Labels: map[string]string{
-				mcpServerLabel: mcpServer.Name,
+				labels.MCPServerLabel: mcpServer.Name,
 			},
-			Annotations: annotations,
+			Annotations: toolAnnotations,
 		},
 		Spec: arkv1alpha1.ToolSpec{
 			Type:        "mcp",
