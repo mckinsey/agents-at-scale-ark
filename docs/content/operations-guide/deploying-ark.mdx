@@ -53,11 +53,9 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/downloa
 Deploy using the published chart from the container registry:
 
 ```bash
-# If you have the code locally, you can use the local chart:
-# helm upgrade --install ark-controller ./ark/dist/chart \
-
-# Deploy from registry (recommended)
-helm upgrade --install ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark --version 0.1.31 \
+helm upgrade --install \
+  ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark \
+  --version 0.1.31 \
   --namespace ark-system \
   --create-namespace \
   --set controllerManager.container.image.repository=your-registry.com/ark-controller \
@@ -69,7 +67,7 @@ helm upgrade --install ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark
   --set rbac.enable=true
 ```
 
-### Container Transfer (Optional)
+If you have the code locally, you can use the local chart at `./ark/dist/chart`.
 
 If you need to transfer containers between registries, use the transfer script:
 

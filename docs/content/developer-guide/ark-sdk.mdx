@@ -9,25 +9,27 @@ The ARK Python SDK provides programmatic access to ARK Kubernetes resources.
 
 ## Installation
 
-**With uv:**
+Install via `uv` or `pip`:
+
 ```bash
+# Install via uv:
 uv add "ark-sdk @ https://github.com/mckinsey/agents-at-scale-ark/releases/download/v0.1.31/ark_sdk-0.1.31-py3-none-any.whl"
+
+# or pip:
+pip install https://github.com/mckinsey/agents-at-scale-ark/releases/download/v0.1.31/ark_sdk-0.1.31-py3-none-any.whl
 ```
 
-Or in `pyproject.toml`:
+Or directory add to your `pyproject.toml`:
+
 ```toml
 [tool.uv.sources]
 ark-sdk = { url = "https://github.com/mckinsey/agents-at-scale-ark/releases/download/v0.1.31/ark_sdk-0.1.31-py3-none-any.whl" }
 ```
 
-**With requirements.txt:**
+Or `requirements.txt`:
+
 ```
 ark-sdk @ https://github.com/mckinsey/agents-at-scale-ark/releases/download/v0.1.31/ark_sdk-0.1.31-py3-none-any.whl
-```
-
-**With pip:**
-```bash
-pip install https://github.com/mckinsey/agents-at-scale-ark/releases/download/v0.1.31/ark_sdk-0.1.31-py3-none-any.whl
 ```
 
 ## Usage
