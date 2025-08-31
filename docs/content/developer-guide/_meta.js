@@ -1,5 +1,4 @@
 export default {
-  'local-development': 'Local Development',
   'build': 'Build System and Makefile Overview',
   'design-principles': 'Design Principles',
   'crd-design-guide': 'CRD Design Guidelines',
