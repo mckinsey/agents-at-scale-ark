@@ -41,5 +41,7 @@ const (
 
 // General annotations
 const (
-	Finalizer = ARKPrefix + "finalizer"
+	Finalizer            = ARKPrefix + "finalizer"
+	TriggeredFrom        = ARKPrefix + "triggered-from"
+	LocalhostGatewayPort = ARKPrefix + "localhost-gateway-port"
 )
