@@ -1,5 +1,6 @@
 export default {
   'build': 'Build System and Makefile Overview',
+  'ark-sdk': 'ARK SDK',
   'design-principles': 'Design Principles',
   'crd-design-guide': 'CRD Design Guidelines',
   'cli-tools': 'CLI Tools',
