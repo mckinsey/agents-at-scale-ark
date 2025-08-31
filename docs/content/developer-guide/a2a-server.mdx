@@ -144,7 +144,7 @@ kind: Agent
 metadata:
   name: my-langchain-agents-research-agent
   labels:
-    a2a.server/name: "my-langchain-agents"
+    a2a/server: "my-langchain-agents"
   ownerReferences:
   - apiVersion: ark.mckinsey.com/v1prealpha1
     kind: A2AServer
@@ -172,8 +172,9 @@ See the [samples/agent-hosting](../../samples/agent-hosting) directory for compl
 ## A2A Annotations
 
 Created agents include these annotations:
-- **`a2a.server/address`**: The resolved address of the A2A server
-- **`a2a.server/skills`**: JSON representation of agent skills discovered from the A2A server
+- **`ark.mckinsey.com/a2a-server-name`**: The name of the A2A server that created this agent
+- **`ark.mckinsey.com/a2a-server-address`**: The resolved address of the A2A server
+- **`ark.mckinsey.com/a2a-server-skills`**: JSON representation of agent skills discovered from the A2A server
 
 ## Next Steps
 

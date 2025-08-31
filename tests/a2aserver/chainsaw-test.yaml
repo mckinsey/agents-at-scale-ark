@@ -78,9 +78,9 @@ spec:
               metadata:
                 name: langchain-weather-reporter
                 annotations:
-                  a2a.server/address: (not_null(@))
-                  a2a.server/name: (not_null(@))
-                  a2a.server/skills: (not_null(@))
+                  ark.mckinsey.com/a2a-server-address: (not_null(@))
+                  ark.mckinsey.com/a2a-server-name: (not_null(@))
+                  ark.mckinsey.com/a2a-server-skills: (not_null(@))
                 ownerReferences:
                   - apiVersion: ark.mckinsey.com/v1prealpha1
                     kind: A2AServer
