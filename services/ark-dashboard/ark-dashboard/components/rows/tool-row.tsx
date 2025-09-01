@@ -1,6 +1,6 @@
 "use client";
 
-import { Info, Trash2, MessageCircle } from "lucide-react";
+import { Info, Trash2, Wrench, MessageCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { getCustomIcon } from "@/lib/utils/icon-resolver";
