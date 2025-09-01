@@ -7,6 +7,7 @@ import (
 	"maps"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -39,7 +40,7 @@ func NewOperationTracker(emitter EventEmitter, ctx context.Context, operation, n
 			Metadata: metadata,
 		},
 	}
-	emitter.EmitEvent(ctx, operation+"Start", startEvent)
+	emitter.EmitEvent(ctx, corev1.EventTypeNormal, operation+"Start", startEvent)
 
 	return tracker
 }
@@ -94,7 +95,7 @@ func (t *OperationTracker) CompleteWithTermination(terminationMessage string) {
 		Duration:   time.Since(t.startTime).String(),
 		TokenUsage: TokenUsage{},
 	}
-	t.emitter.EmitEvent(t.ctx, t.operation+"Complete", event)
+	t.emitter.EmitEvent(t.ctx, corev1.EventTypeNormal, t.operation+"Complete", event)
 }
 
 func (t *OperationTracker) emitCompletion(eventType, errorMsg string, tokenUsage TokenUsage) {
@@ -118,5 +119,11 @@ func (t *OperationTracker) emitCompletionWithMetadata(eventType, errorMsg string
 		Duration:   time.Since(t.startTime).String(),
 		TokenUsage: tokenUsage,
 	}
-	t.emitter.EmitEvent(t.ctx, eventType, event)
+	// Determine Kubernetes event type based on whether this is an error
+	kubernetesEventType := corev1.EventTypeNormal
+	if errorMsg != "" {
+		kubernetesEventType = corev1.EventTypeWarning
+	}
+	
+	t.emitter.EmitEvent(t.ctx, kubernetesEventType, eventType, event)
 }

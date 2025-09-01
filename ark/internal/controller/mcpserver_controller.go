@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -224,7 +225,7 @@ func (r *MCPServerReconciler) finalizeMCPServerProcessing(ctx context.Context, m
 		return ctrl.Result{}, err
 	}
 
-	r.Recorder.Event(&mcpServer, "Normal", "ToolDiscovery", fmt.Sprintf("tools discovered: %d", toolCount))
+	r.Recorder.Event(&mcpServer, corev1.EventTypeNormal, "ToolDiscovery", fmt.Sprintf("tools discovered: %d", toolCount))
 	logf.FromContext(ctx).Info("mcp tools discovered", "server", mcpServer.Name, "namespace", mcpServer.Namespace, "count", toolCount)
 
 	// fetch tools according to polling interval or default interval

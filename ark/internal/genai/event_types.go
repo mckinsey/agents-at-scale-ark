@@ -4,15 +4,9 @@ package genai
 
 import "context"
 
-type EventLevel string
-
-const (
-	EventLevelNormal  EventLevel = "Normal"
-	EventLevelWarning EventLevel = "Warning"
-)
 
 type EventEmitter interface {
-	EmitEvent(ctx context.Context, eventType string, data EventData)
+	EmitEvent(ctx context.Context, kubernetesEventType, eventType string, data EventData)
 }
 
 type EventData interface {
