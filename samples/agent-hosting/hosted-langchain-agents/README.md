@@ -68,8 +68,8 @@ spec:
 
 The A2AServer automatically discovers agents from the hosted service and creates corresponding Agent resources with the reserved 'a2a' execution engine. Each agent includes:
 
-- **Labels**: `a2a.server/name` linking to the A2AServer
-- **Annotations**: `a2a.server/address` and `a2a.server/skills` with server details
+- **Labels**: `a2a/server` linking to the A2AServer
+- **Annotations**: `ark.mckinsey.com/a2a-server-name`, `ark.mckinsey.com/a2a-server-address`, and `ark.mckinsey.com/a2a-server-skills` with server details
 - **Execution Engine**: Set to 'a2a' for dedicated A2A execution routing
 
 When queries target these agents, the 'a2a' execution engine routes directly to the dedicated A2A execution module running in-cluster, which communicates with the hosted service.

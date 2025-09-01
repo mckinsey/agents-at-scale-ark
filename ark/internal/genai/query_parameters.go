@@ -90,3 +90,39 @@ func resolveQueryValueFrom(ctx context.Context, k8sClient client.Client, namespa
 
 	return "", fmt.Errorf("no supported valueFrom source specified")
 }
+
+// ResolveBodyTemplate resolves body template with parameters and input data
+func ResolveBodyTemplate(ctx context.Context, k8sClient client.Client, namespace, bodyTemplate string, parameters []arkv1alpha1.Parameter, inputData map[string]any) (string, error) {
+	if bodyTemplate == "" {
+		return "", nil
+	}
+
+	templateData := make(map[string]any)
+
+	if inputData != nil {
+		templateData["input"] = inputData
+	}
+
+	if len(parameters) > 0 {
+		paramData, err := resolveQueryParameters(ctx, k8sClient, namespace, parameters)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve body parameters: %w", err)
+		}
+
+		for key, value := range paramData {
+			templateData[key] = value
+		}
+	}
+
+	tmpl, err := template.New("body-template").Parse(bodyTemplate)
+	if err != nil {
+		return "", fmt.Errorf("invalid template syntax in body: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, templateData); err != nil {
+		return "", fmt.Errorf("body template execution failed: %w", err)
+	}
+
+	return buf.String(), nil
+}

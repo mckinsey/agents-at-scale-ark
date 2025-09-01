@@ -3,11 +3,11 @@ kind: Tool
 metadata:
   name: invalid-tool-fetcher-missing-url
 spec:
-  type: fetcher
+  type: http
   inputSchema:
     type: object
     properties:
       param:
         type: string
-  fetcher:
+  http:
     method: GET  # Missing required URL - should fail admission

@@ -2,6 +2,7 @@ package genai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/openai/openai-go"
@@ -45,7 +46,13 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 		modelName = a.Model.Model
 	}
 
-	agentTracker := NewOperationTracker(a.Recorder, ctx, "AgentExecution", a.FullName(), map[string]string{"model": modelName})
+	agentTracker := NewOperationTracker(a.Recorder, ctx, "AgentExecution", a.FullName(), map[string]string{
+		"model":     modelName,
+		"queryId":   getQueryID(ctx),
+		"sessionId": getSessionID(ctx),
+		"agentName": a.FullName(),
+		"namespace": a.Namespace,
+	})
 	defer agentTracker.Complete("")
 
 	if a.ExecutionEngine != nil {
@@ -79,7 +86,7 @@ func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Messag
 }
 
 func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message) ([]Message, error) {
-	a2aEngine := NewA2AExecutionEngine(a.client)
+	a2aEngine := NewA2AExecutionEngine(a.client, a.Recorder)
 	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, userInput)
 }
 
@@ -137,9 +144,20 @@ func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Mess
 }
 
 func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (Message, error) {
+	var params map[string]interface{}
+	if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &params); err != nil {
+		params = map[string]interface{}{"_raw": toolCall.Function.Arguments}
+	}
+
 	toolTracker := NewOperationTracker(a.Recorder, ctx, "ToolCall", toolCall.Function.Name, map[string]string{
-		"toolID": toolCall.ID,
-		"agent":  a.FullName(),
+		"toolId":     toolCall.ID,
+		"toolName":   toolCall.Function.Name,
+		"agentName":  a.FullName(),
+		"queryId":    getQueryID(ctx),
+		"sessionId":  getSessionID(ctx),
+		"parameters": toolCall.Function.Arguments,
+		"paramCount": fmt.Sprintf("%d", len(params)),
+		"toolType":   a.Tools.GetToolType(toolCall.Function.Name),
 	})
 
 	result, err := a.Tools.ExecuteTool(ctx, ToolCall(toolCall))
@@ -154,7 +172,11 @@ func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatComplet
 		return toolMessage, err
 	}
 
-	toolTracker.Complete(result.Content)
+	toolTracker.CompleteWithMetadata(result.Content, map[string]string{
+		"resultLength": fmt.Sprintf("%d", len(result.Content)),
+		"hasError":     "false",
+		"resultId":     result.ID,
+	})
 	return toolMessage, nil
 }
 

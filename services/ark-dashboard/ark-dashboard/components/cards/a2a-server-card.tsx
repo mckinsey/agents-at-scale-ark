@@ -2,6 +2,8 @@
 import { Server, Info } from "lucide-react";
 import { BaseCard, type BaseCardAction } from "./base-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { getCustomIcon } from "@/lib/utils/icon-resolver";
+import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import {
   A2AServerConfiguration,
   type A2AServer
@@ -16,6 +18,10 @@ interface A2AServerCardProps {
 
 export function A2AServerCard({ a2aServer, onInfo }: A2AServerCardProps) {
   const actions: BaseCardAction[] = [];
+
+  // Get custom icon or default Server icon
+  const annotations = a2aServer.annotations as Record<string, string> | undefined;
+  const IconComponent = getCustomIcon(annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], Server);
 
   if (onInfo) {
     actions.push({
@@ -34,7 +40,7 @@ export function A2AServerCard({ a2aServer, onInfo }: A2AServerCardProps) {
     <>
       <BaseCard
         title={a2aServer.name || "Unnamed Server"}
-        icon={Server}
+        icon={<IconComponent className="h-5 w-5" />}
         iconClassName="text-muted-foreground"
         actions={actions}
         footer={

@@ -209,9 +209,10 @@ function QueryDetailContent() {
   const router = useRouter()
   const queryId = params.id as string
   const namespace = searchParams.get("namespace") || "default"
+  const targetTool = searchParams.get("target_tool")
   const isNew = queryId === 'new'
   const mode = isNew ? 'new' : 'view'
-  
+
   const [query, setQuery] = useState<TypedQueryDetailResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [availableTargets, setAvailableTargets] = useState<Array<{name: string, type: 'agent' | 'model' | 'team' | 'tool'}>>([])
@@ -365,7 +366,7 @@ function QueryDetailContent() {
         status: null
       } as TypedQueryDetailResponse)
       setLoading(false)
-      
+
       // Load available targets and memories for new queries
       const loadResources = async () => {
         setTargetsLoading(true)
@@ -388,6 +389,14 @@ function QueryDetailContent() {
 
           setAvailableTargets(targets)
           setAvailableMemories(memories.map(m => ({ name: m.name })))
+
+          // If target_tool param is present, auto-select that tool as target
+          if (targetTool) {
+            const foundTool = targets.find(t => t.type === 'tool' && t.name === targetTool)
+            if (foundTool) {
+              setQuery(prev => prev ? { ...prev, targets: [foundTool] } : null)
+            }
+          }
         } catch (error) {
           console.error('Failed to load resources:', error)
           toast({
@@ -400,7 +409,7 @@ function QueryDetailContent() {
           setMemoriesLoading(false)
         }
       }
-      
+
       loadResources()
       return
     }
@@ -421,7 +430,7 @@ function QueryDetailContent() {
     }
 
     loadQuery()
-  }, [namespace, queryId, isNew])
+  }, [namespace, queryId, isNew, targetTool])
 
   // Fetch tool schema when exactly one tool is selected
   useEffect(() => {

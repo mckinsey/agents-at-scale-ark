@@ -210,6 +210,7 @@ export function ToolsSection({ namespace }: ToolsSectionProps) {
                             tool={tool}
                             onDelete={handleDelete}
                             onInfo={handleInfo}
+                            namespace={namespace}
                             deleteDisabled={toolData.inUse}
                             deleteDisabledReason={
                               toolData.inUse
@@ -236,6 +237,7 @@ export function ToolsSection({ namespace }: ToolsSectionProps) {
                             tool={tool}
                             onDelete={handleDelete}
                             onInfo={handleInfo}
+                            namespace={namespace}
                             inUse={toolData.inUse}
                             inUseReason={
                               toolData.inUse

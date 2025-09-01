@@ -1,0 +1,102 @@
+# Memory
+
+The `Memory` resource represents persistent storage for converations with agents. It is designed to be agnostic of the backend implementation, meaning that a database, queue or other system can be used.
+
+The backend for a memory resource is an HTTP server that implements the [Memory API Specification](#memory-api-specification).
+
+In time, this resource will also configure how operations such as compaction can be performed. A reference implementation [PostgreSQL Memory](#postgresql-memory) is available.
+
+## Specification
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Memory
+metadata:
+  name: postgres-memory
+spec:
+  # The address of the service that handles memory API calls.
+  address:
+    # A 'value' can be provided to give a specific URL, or a service ref to
+    # point to a specific service in the cluster.
+    valueFrom:
+      # In this example, we point to a deployment of the "Postgres Memory".
+      serviceRef:
+        name: postgres-memory
+        port: 8080
+```
+
+## Usage
+
+Memory can be specified in a query resource:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: chat-with-memory
+spec:
+  input: "What did we discuss earlier?"
+  targets:
+    - name: my-agent
+  memory:
+    name: postgres-memory
+```
+
+Memory can also be specified via the `fark` CLI:
+
+```bash
+fark query --input "Continue our conversation" --memory postgres-memory my-agent
+```
+
+When creating a query in the dashboard it is also possible to specify the memory resource. Note that in the dashbhoard 'chat' window, no memory is used, messages are simply stored client-side as is common for chat applications.
+
+## Session Management
+
+Memory uses session IDs to isolate conversations:
+
+| Field | Purpose |
+|-------|---------|
+| `sessionId` | Groups related queries in a conversation thread |
+| Default behavior | Uses Query UID if no sessionId specified |
+| Isolation | Each session maintains separate message history |
+
+Sessions enable persistent conversations across multiple queries while keeping different conversation threads separate.
+
+## Memory API Specification
+
+Memory is impelmented as a simple HTTP server:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| PUT | `/message/{session_id}` | Store single message |
+| GET | `/message/{session_id}` | Retrieve session messages |
+| PUT | `/messages/{session_id}` | Store multiple messages |
+| GET | `/messages/{session_id}` | Retrieve session messages |
+| GET | `/health` | Health check |
+
+Request/response format uses [OpenAI ChatCompletion message](https://platform.openai.com/docs/api-reference/chat/create) structure with `application/json` content type:
+
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is the weather like?"
+    },
+    {
+      "role": "assistant",
+      "content": "I don't have access to real-time weather data."
+    }
+  ]
+}
+```
+
+## PostgreSQL Memory
+
+The PostgreSQL memory service can be installed with:
+
+```bash
+make postgres-memory-install
+```
+
+Crunchy PGO is used to simplfy PostgresSQL management.

@@ -2,6 +2,8 @@
 
 package controller
 
+import "mckinsey.com/ark/internal/annotations"
+
 const (
 	statusPending    = "pending"
 	statusRunning    = "running"
@@ -11,5 +13,5 @@ const (
 	statusCanceled   = "canceled"
 	statusReady      = "ready"
 
-	finalizer = "ark.mckinsey.com/finalizer"
+	finalizer = annotations.Finalizer
 )
