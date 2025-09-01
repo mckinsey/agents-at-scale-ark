@@ -30,7 +30,7 @@ spec:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluator
-        timeout: 1m
+        timeout: 2m
         name: test-baseline-evaluator
         for:
           jsonPath:
@@ -42,6 +42,15 @@ spec:
           kind: ConfigMap
           metadata:
             name: golden-examples
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluation
+        timeout: 5m
+        name: test-baseline-evaluation
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'done'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

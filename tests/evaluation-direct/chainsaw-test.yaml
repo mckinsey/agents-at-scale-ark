@@ -31,7 +31,7 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluator
         timeout: 1m
-        name: evaluator-llm
+        name: test-evaluator-llm
         for:
           jsonPath:
             path: '{.status.phase}'
@@ -42,6 +42,15 @@ spec:
           kind: ConfigMap
           metadata:
             name: golden-examples
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluation
+        timeout: 5m
+        name: test-direct-evaluation
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'done'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

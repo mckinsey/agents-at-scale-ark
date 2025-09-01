@@ -79,6 +79,15 @@ spec:
     try:
     - apply:
         file: manifests/a07-evaluation.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluation
+        timeout: 5m
+        name: test-query-ref-evaluation
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'done'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

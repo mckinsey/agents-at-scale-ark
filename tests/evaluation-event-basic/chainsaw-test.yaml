@@ -49,14 +49,15 @@ spec:
             name: test-event-query
           status:
             phase: done
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Evaluation
-          metadata:
-            name: test-event-evaluation
-          status:
-            (phase == 'done' || phase == 'error'): true
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluation
+        timeout: 5m
+        name: test-event-evaluation
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'done'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

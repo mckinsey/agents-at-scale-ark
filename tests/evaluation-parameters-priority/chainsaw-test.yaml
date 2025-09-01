@@ -41,14 +41,15 @@ spec:
           kind: ConfigMap
           metadata:
             name: golden-examples
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Evaluation
-          metadata:
-            name: test-direct-evaluation
-          status:
-            (phase == 'done' || phase == 'error'): true
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluation
+        timeout: 5m
+        name: test-direct-evaluation
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'done'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
