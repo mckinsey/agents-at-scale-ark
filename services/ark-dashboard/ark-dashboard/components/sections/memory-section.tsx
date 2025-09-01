@@ -18,48 +18,47 @@ import {
 } from "@/components/ui/tooltip";
 import { toast } from "@/components/ui/use-toast";
 import {
-  eventsService,
-  type Event,
-  type EventFilters
-} from "@/lib/services/events";
+  memoryService,
+  type MemoryMessage,
+  type MemoryResource,
+  type MemoryFilters
+} from "@/lib/services/memory";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import { AlertCircle, CheckCircle, RefreshCw } from "lucide-react";
+import { Database } from "lucide-react";
 
-interface EventsSectionProps {
+interface MemorySectionProps {
   readonly namespace: string;
-  readonly initialFilters?: Partial<EventFilters>;
+  readonly initialFilters?: Partial<MemoryFilters>;
 }
 
-export function EventsSection({
+export function MemorySection({
   namespace,
   initialFilters
-}: EventsSectionProps) {
+}: MemorySectionProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [events, setEvents] = useState<Event[]>([]);
+  const [messages, setMessages] = useState<MemoryMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [availableTypes, setAvailableTypes] = useState<string[]>([]);
-  const [availableKinds, setAvailableKinds] = useState<string[]>([]);
-  const [availableNames, setAvailableNames] = useState<string[]>([]);
+  const [availableMemories, setAvailableMemories] = useState<MemoryResource[]>([]);
+  const [availableSessions, setAvailableSessions] = useState<string[]>([]);
 
   const initialPage = parseInt(searchParams.get("page") || "1", 10);
   const initialLimit = parseInt(searchParams.get("limit") || "10", 10);
-  const initialType = searchParams.get("type") || undefined;
-  const initialKind = searchParams.get("kind") || undefined;
+  const initialMemory = searchParams.get("memory") || undefined;
+  const initialSessionId = searchParams.get("sessionId") || undefined;
 
-  const [totalEvents, setTotalEvents] = useState(0);
+  const [totalMessages, setTotalMessages] = useState(0);
   const [currentPage, setCurrentPage] = useState(initialPage);
   const [itemsPerPage, setItemsPerPage] = useState(initialLimit);
-  const [filters, setFilters] = useState<EventFilters>({
+  const [filters, setFilters] = useState<MemoryFilters>({
     limit: initialLimit,
     page: initialPage,
-    type: initialType,
-    kind: initialKind,
+    memoryName: initialMemory,
+    sessionId: initialSessionId,
     ...initialFilters
   });
 
@@ -82,32 +81,35 @@ export function EventsSection({
     [pathname, router, searchParams]
   );
 
-  const loadEvents = useCallback(
-    async (showRefreshing = false) => {
-      if (showRefreshing) setRefreshing(true);
+  const loadMessages = useCallback(
+    async () => {
+      setLoading(true);
 
       try {
-        const currentFilters: EventFilters = {
+        const currentFilters: MemoryFilters = {
           ...filters,
           page: currentPage,
           limit: itemsPerPage
         };
 
-        const [eventsData, filterOptions] = await Promise.all([
-          eventsService.getAll(namespace, currentFilters),
-          eventsService.getAllFilterOptions(namespace)
+        const [messagesData, memoriesData] = await Promise.all([
+          memoryService.getAllSessions(namespace, currentFilters),
+          memoryService.getMemoryResources(namespace)
         ]);
 
-        setEvents(eventsData.items);
-        setTotalEvents(eventsData.total);
-        setAvailableTypes(filterOptions.types);
-        setAvailableKinds(filterOptions.kinds);
-        setAvailableNames(filterOptions.names);
+        setMessages(messagesData.items);
+        setTotalMessages(messagesData.total);
+        setAvailableMemories(memoriesData);
+
+        // Extract unique session IDs for filtering
+        const sessionIds = new Set(messagesData.items.map(m => m.sessionId));
+        setAvailableSessions(Array.from(sessionIds).sort());
+
       } catch (error) {
-        console.error("Failed to load events:", error);
+        console.error("Failed to load memory messages:", error);
         toast({
           variant: "destructive",
-          title: "Failed to Load Events",
+          title: "Failed to Load Memory Messages",
           description:
             error instanceof Error
               ? error.message
@@ -115,35 +117,34 @@ export function EventsSection({
         });
       } finally {
         setLoading(false);
-        if (showRefreshing) setRefreshing(false);
       }
     },
     [namespace, filters, currentPage, itemsPerPage]
   );
 
   useEffect(() => {
-    loadEvents();
-  }, [loadEvents]);
+    loadMessages();
+  }, [loadMessages]);
 
   useEffect(() => {
     const pageFromUrl = parseInt(searchParams.get("page") || "1", 10);
     const limitFromUrl = parseInt(searchParams.get("limit") || "10", 10);
-    const typeFromUrl = searchParams.get("type") || undefined;
-    const kindFromUrl = searchParams.get("kind") || undefined;
+    const memoryFromUrl = searchParams.get("memory") || undefined;
+    const sessionFromUrl = searchParams.get("sessionId") || undefined;
 
     const needsUpdate =
       pageFromUrl !== currentPage ||
       limitFromUrl !== itemsPerPage ||
-      typeFromUrl !== filters.type ||
-      kindFromUrl !== filters.kind;
+      memoryFromUrl !== filters.memoryName ||
+      sessionFromUrl !== filters.sessionId;
 
     if (needsUpdate) {
       const newFilters = {
         ...filters,
         page: pageFromUrl,
         limit: limitFromUrl,
-        type: typeFromUrl,
-        kind: kindFromUrl
+        memoryName: memoryFromUrl,
+        sessionId: sessionFromUrl
       };
 
       setCurrentPage(pageFromUrl);
@@ -153,7 +154,7 @@ export function EventsSection({
   }, [searchParams, currentPage, itemsPerPage, filters]);
 
   const handleFilterChange = (
-    key: keyof EventFilters,
+    key: keyof MemoryFilters,
     value: string | undefined
   ) => {
     const effectiveValue = value === "all" ? undefined : value;
@@ -178,9 +179,8 @@ export function EventsSection({
     updateUrlParams({
       page: 1,
       limit: itemsPerPage,
-      type: undefined,
-      kind: undefined,
-      name: undefined
+      memory: undefined,
+      sessionId: undefined
     });
   };
 
@@ -194,7 +194,7 @@ export function EventsSection({
     updateUrlParams({ page: newPage });
   };
 
-  const totalPages = Math.max(1, Math.ceil(totalEvents / itemsPerPage));
+  const totalPages = Math.max(1, Math.ceil(totalMessages / itemsPerPage));
 
   const handleItemsPerPageChange = (newLimit: number) => {
     setItemsPerPage(newLimit);
@@ -212,10 +212,6 @@ export function EventsSection({
     });
   };
 
-  const handleEventClick = (event: Event) => {
-    router.push(`/event/${event.name}?namespace=${namespace}`);
-  };
-
   const formatAge = (timestamp: string) => {
     const now = new Date();
     const eventTime = new Date(timestamp);
@@ -230,34 +226,12 @@ export function EventsSection({
     return "now";
   };
 
-  const getEventTypeIcon = (type: string) => {
-    switch (type) {
-      case "Warning":
-        return <AlertCircle className="h-4 w-4 text-yellow-500" />;
-      case "Normal":
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      default:
-        return <CheckCircle className="h-4 w-4 text-gray-500" />;
-    }
-  };
-
-  const getEventTypeBadge = (type: string) => {
-    switch (type) {
-      case "Warning":
-        return <Badge variant="destructive">{type}</Badge>;
-      case "Normal":
-        return <Badge variant="secondary">{type}</Badge>;
-      default:
-        return <Badge variant="outline">{type}</Badge>;
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-gray-400" />
-          <p className="text-gray-500">Loading events...</p>
+          <Database className="h-8 w-8 animate-pulse mx-auto mb-4 text-gray-400" />
+          <p className="text-gray-500">Loading memory messages...</p>
         </div>
       </div>
     );
@@ -267,51 +241,34 @@ export function EventsSection({
     <div className="space-y-4 p-4">
       <div className="flex flex-wrap gap-4 items-center">
         <Select
-          value={filters.type || "all"}
-          onValueChange={(value) => handleFilterChange("type", value)}
-        >
-          <SelectTrigger className="w-32">
-            <SelectValue placeholder="Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            {availableTypes.map((type) => (
-              <SelectItem key={type} value={type}>
-                {type}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={filters.kind || "all"}
-          onValueChange={(value) => handleFilterChange("kind", value)}
-        >
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Object Kind" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Kinds</SelectItem>
-            {availableKinds.map((kind) => (
-              <SelectItem key={kind} value={kind}>
-                {kind}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={filters.name || "all"}
-          onValueChange={(value) => handleFilterChange("name", value)}
+          value={filters.memoryName || "all"}
+          onValueChange={(value) => handleFilterChange("memoryName", value)}
         >
           <SelectTrigger className="w-48">
-            <SelectValue placeholder="Resource Name" />
+            <SelectValue placeholder="Memory Resource" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Names</SelectItem>
-            {availableNames.map((name) => (
-              <SelectItem key={name} value={name}>
-                {name}
+            <SelectItem value="all">All Memories</SelectItem>
+            {availableMemories.map((memory) => (
+              <SelectItem key={memory.name} value={memory.name}>
+                {memory.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={filters.sessionId || "all"}
+          onValueChange={(value) => handleFilterChange("sessionId", value)}
+        >
+          <SelectTrigger className="w-64">
+            <SelectValue placeholder="Session ID" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Sessions</SelectItem>
+            {availableSessions.map((sessionId) => (
+              <SelectItem key={sessionId} value={sessionId}>
+                {sessionId.length > 30 ? `${sessionId.substring(0, 30)}...` : sessionId}
               </SelectItem>
             ))}
           </SelectContent>
@@ -323,127 +280,111 @@ export function EventsSection({
           onClick={clearFilters}
           disabled={
             !(
-              (filters.type && filters.type !== "all") ||
-              (filters.kind && filters.kind !== "all") ||
-              (filters.name && filters.name !== "all") ||
-              (filters.limit !== undefined && filters.limit !== null)
+              (filters.memoryName && filters.memoryName !== "all") ||
+              (filters.sessionId && filters.sessionId !== "all")
             )
           }
         >
           Clear Filters
         </Button>
-
-        <div className="ml-auto">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => loadEvents(true)}
-            disabled={refreshing}
-          >
-            <RefreshCw
-              className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`}
-            />
-            Refresh
-          </Button>
-        </div>
       </div>
 
-      {/* Events Table */}
+      {/* Memory Messages Table */}
       <div className="border rounded-lg">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1200px]">
             <thead className="bg-gray-50 dark:bg-gray-900/50">
               <tr>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Query Name
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Memory Resource
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Session ID
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Input
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Age
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Type
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Reason
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Resource Kind
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Resource Name
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Resource UID
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Message
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-950 divide-y divide-gray-200 dark:divide-gray-800">
-              {events.length === 0 ? (
+              {messages.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={6}
                     className="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
                   >
-                    No events found
+                    No memory messages found
                   </td>
                 </tr>
               ) : (
-                events.map((event) => (
+                messages.map((message) => (
                   <tr
-                    key={event.id}
-                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/30 cursor-pointer transition-colors"
-                    onClick={() => handleEventClick(event)}
+                    key={message.uid}
+                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors"
                   >
                     <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                      {formatAge(event.creationTimestamp)}
-                    </td>
-                    <td className="px-3 py-3 text-sm">
-                      <div className="flex items-center gap-2">
-                        {getEventTypeIcon(event.type)}
-                        {getEventTypeBadge(event.type)}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100 font-mono">
-                      {event.reason}
-                    </td>
-                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                      <Badge variant="secondary" className="font-mono">
-                        {event.involvedObjectKind}
-                      </Badge>
-                    </td>
-                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                       <div className="font-mono font-medium">
-                        {event.involvedObjectName}
+                        {message.queryName}
                       </div>
-                      {event.involvedObjectNamespace &&
-                        event.involvedObjectNamespace !== namespace && (
-                          <div className="text-xs text-gray-500 font-mono">
-                            ns: {event.involvedObjectNamespace}
-                          </div>
-                        )}
                     </td>
-                    <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">
+                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                      <div className="flex items-center gap-2">
+                        <Database className="h-4 w-4 text-gray-500" />
+                        <Badge variant="secondary" className="font-mono">
+                          {message.memoryName}
+                        </Badge>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                       <div className="font-mono text-xs">
-                        {event.involvedObjectUid || "-"}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger className="text-left">
+                              <div className="truncate max-w-48">
+                                {message.sessionId}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="font-mono">{message.sessionId}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100 font-mono">
+                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger className="text-left">
-                            <div className="truncate max-w-md">
-                              {event.message}
+                            <div className="truncate max-w-64">
+                              {message.input}
                             </div>
                           </TooltipTrigger>
-                          {event.message && event.message.length > 50 && (
+                          {message.input.length > 50 && (
                             <TooltipContent className="max-w-md">
-                              <p className="whitespace-pre-wrap">
-                                {event.message}
+                              <p className="whitespace-pre-wrap text-sm">
+                                {message.input}
                               </p>
                             </TooltipContent>
                           )}
                         </Tooltip>
                       </TooltipProvider>
+                    </td>
+                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                      <Badge variant={message.status === "succeeded" ? "secondary" : "outline"} className="font-mono">
+                        {message.status || "unknown"}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                      {message.timestamp ? formatAge(message.timestamp) : "-"}
                     </td>
                   </tr>
                 ))

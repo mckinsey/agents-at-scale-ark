@@ -1,0 +1,66 @@
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-01T17:20:03+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-devspace-6646c9949d-xbjp4","time":"2025-09-01T17:20:05+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ports Port forwarding started on: 3000 -\u003e 3000","time":"2025-09-01T17:20:05+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-01T17:34:50+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-devspace-6646c9949d-w8jf2","time":"2025-09-01T17:34:51+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ports Port forwarding started on: 3000 -\u003e 3000","time":"2025-09-01T17:34:52+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-01T17:34:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-01T17:34:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-01T17:39:55+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-devspace-6646c9949d-zdmff","time":"2025-09-01T17:39:56+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ports Port forwarding started on: 3000 -\u003e 3000","time":"2025-09-01T17:39:56+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-01T17:40:01+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-01T17:40:01+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-01T17:48:26+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-devspace-6646c9949d-zdmff","time":"2025-09-01T17:48:26+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ports Port forwarding started on: 3000 -\u003e 3000","time":"2025-09-01T17:48:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-01T17:48:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-01T17:48:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-01T17:49:01+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-01T17:55:47+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-devspace-6646c9949d-dpvlq","time":"2025-09-01T17:55:48+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ports Port forwarding started on: 3000 -\u003e 3000","time":"2025-09-01T17:55:48+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-01T17:55:51+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-01T17:55:51+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-01T18:00:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-devspace-6646c9949d-qjgz5","time":"2025-09-01T18:00:55+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ports Port forwarding started on: 3000 -\u003e 3000","time":"2025-09-01T18:00:55+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-01T18:01:00+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-01T18:01:00+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-01T18:07:43+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-devspace-6646c9949d-8rrf7","time":"2025-09-01T18:07:43+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ports Port forwarding started on: 3000 -\u003e 3000","time":"2025-09-01T18:07:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-01T18:07:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-01T18:07:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-01T18:07:49+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Port forwarding started on: 11427 -\u003e 8022","time":"2025-09-01T18:07:49+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Use 'ssh ark-dashboard.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T18:07:50+01:00"}
+{"level":"info","msg":"dev:ark-dashboard term  Opening shell to ark-dashboard:ark-dashboard-devspace-6646c9949d-8rrf7 (pod:container)","time":"2025-09-01T18:07:50+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-01T18:11:37+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-devspace-6646c9949d-qfs7k","time":"2025-09-01T18:11:38+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ports Port forwarding started on: 3000 -\u003e 3000","time":"2025-09-01T18:11:38+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-01T18:11:41+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-01T18:11:41+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-01T18:11:43+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Port forwarding started on: 11427 -\u003e 8022","time":"2025-09-01T18:11:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Use 'ssh ark-dashboard.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T18:11:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard term  Opening shell to ark-dashboard:ark-dashboard-devspace-6646c9949d-qfs7k (pod:container)","time":"2025-09-01T18:11:45+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-01T18:19:20+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-devspace-6c4b59cbc4-4ww7d","time":"2025-09-01T18:19:21+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ports Port forwarding started on: 3000 -\u003e 3000","time":"2025-09-01T18:19:21+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-01T18:19:24+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-01T18:19:24+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-01T18:19:26+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Port forwarding started on: 11427 -\u003e 8022","time":"2025-09-01T18:19:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Use 'ssh ark-dashboard.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T18:19:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard term  Opening shell to ark-dashboard:ark-dashboard-devspace-6c4b59cbc4-4ww7d (pod:container)","time":"2025-09-01T18:19:28+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-01T19:44:21+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard DevSpace still couldn't find any Pods that match the selector. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-01T19:44:31+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard DevSpace still couldn't find any Pods that match the selector. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-01T19:44:42+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-devspace-9c8658458-8w77z","time":"2025-09-01T19:44:52+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ports Port forwarding started on: 3000 -\u003e 3000","time":"2025-09-01T19:44:52+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-01T19:44:55+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-01T19:44:55+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-01T19:44:56+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Port forwarding started on: 11427 -\u003e 8022","time":"2025-09-01T19:44:56+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Use 'ssh ark-dashboard.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T19:44:57+01:00"}

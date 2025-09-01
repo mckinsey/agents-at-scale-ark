@@ -1,0 +1,83 @@
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-01T17:20:03+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-01T17:34:50+01:00"}
+{"level":"info","msg":"dev:ark-api Selected pod ark-api-devspace-59547bbc5c-k489d","time":"2025-09-01T17:34:51+01:00"}
+{"level":"info","msg":"dev:ark-api ports Port forwarding started on: 8000 -\u003e 8000","time":"2025-09-01T17:34:52+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./services/ark-api/ark-api \u003c-\u003e /app","time":"2025-09-01T17:34:56+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-01T17:34:56+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-01T17:35:15+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Port forwarding started on: 11122 -\u003e 8022","time":"2025-09-01T17:35:16+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Use 'ssh ark-api.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T17:35:16+01:00"}
+{"level":"info","msg":"dev:ark-api term  Opening shell to ark-api:ark-api-devspace-59547bbc5c-k489d (pod:container)","time":"2025-09-01T17:35:17+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-01T17:39:55+01:00"}
+{"level":"info","msg":"dev:ark-api Selected pod ark-api-devspace-cc76bd859-dlrbt","time":"2025-09-01T17:39:56+01:00"}
+{"level":"info","msg":"dev:ark-api ports Port forwarding started on: 8000 -\u003e 8000","time":"2025-09-01T17:39:56+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./services/ark-api/ark-api \u003c-\u003e /app","time":"2025-09-01T17:39:59+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-01T17:39:59+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-01T17:40:02+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Port forwarding started on: 11122 -\u003e 8022","time":"2025-09-01T17:40:02+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Use 'ssh ark-api.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T17:40:03+01:00"}
+{"level":"info","msg":"dev:ark-api term  Opening shell to ark-api:ark-api-devspace-cc76bd859-dlrbt (pod:container)","time":"2025-09-01T17:40:03+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-01T17:48:26+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-dcf446894-2plkh: MountVolume.SetUp failed for volume \"kube-api-access-zt9v4\" : failed to fetch token: serviceaccounts \"ark-api-sa\" not found (FailedMount)","time":"2025-09-01T17:48:36+01:00"}
+{"level":"warning","msg":"dev:ark-api DevSpace still couldn't find any Pods that match the selector. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-01T17:48:36+01:00"}
+{"level":"warning","msg":"dev:ark-api DevSpace still couldn't find any Pods that match the selector. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-01T17:48:47+01:00"}
+{"level":"warning","msg":"dev:ark-api DevSpace is waiting, because Pod ark-api-devspace-cf696ff4f-vq2l7 has status: ContainerCreating","time":"2025-09-01T17:48:57+01:00"}
+{"level":"info","msg":"dev:ark-api Selected pod ark-api-devspace-cf696ff4f-vq2l7","time":"2025-09-01T17:48:58+01:00"}
+{"level":"info","msg":"dev:ark-api ports Port forwarding started on: 8000 -\u003e 8000","time":"2025-09-01T17:48:58+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./services/ark-api/ark-api \u003c-\u003e /app","time":"2025-09-01T17:49:00+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-01T17:49:00+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-01T17:49:00+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./out/ark-sdk/py-sdk/dist \u003c-\u003e /app/../../../out/ark-sdk/py-sdk/dist","time":"2025-09-01T17:49:01+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-01T17:49:01+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-01T17:49:01+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-01T17:55:47+01:00"}
+{"level":"info","msg":"dev:ark-api Selected pod ark-api-devspace-cf696ff4f-lg2fz","time":"2025-09-01T17:55:48+01:00"}
+{"level":"info","msg":"dev:ark-api ports Port forwarding started on: 8000 -\u003e 8000","time":"2025-09-01T17:55:49+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./services/ark-api/ark-api \u003c-\u003e /app","time":"2025-09-01T17:55:53+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-01T17:55:53+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-01T17:55:55+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Port forwarding started on: 11122 -\u003e 8022","time":"2025-09-01T17:55:56+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Use 'ssh ark-api.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T17:55:57+01:00"}
+{"level":"info","msg":"dev:ark-api term  Opening shell to ark-api:ark-api-devspace-cf696ff4f-lg2fz (pod:container)","time":"2025-09-01T17:55:57+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-01T18:00:54+01:00"}
+{"level":"info","msg":"dev:ark-api Selected pod ark-api-devspace-7b465b4cb9-dmvvg","time":"2025-09-01T18:00:55+01:00"}
+{"level":"info","msg":"dev:ark-api ports Port forwarding started on: 8000 -\u003e 8000","time":"2025-09-01T18:00:56+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./services/ark-api/ark-api \u003c-\u003e /app","time":"2025-09-01T18:00:58+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-01T18:00:58+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-01T18:01:00+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Port forwarding started on: 11122 -\u003e 8022","time":"2025-09-01T18:01:01+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Use 'ssh ark-api.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T18:01:01+01:00"}
+{"level":"info","msg":"dev:ark-api term  Opening shell to ark-api:ark-api-devspace-7b465b4cb9-dmvvg (pod:container)","time":"2025-09-01T18:01:02+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-01T18:07:43+01:00"}
+{"level":"info","msg":"dev:ark-api Selected pod ark-api-devspace-7b465b4cb9-b8mmb","time":"2025-09-01T18:07:44+01:00"}
+{"level":"info","msg":"dev:ark-api ports Port forwarding started on: 8000 -\u003e 8000","time":"2025-09-01T18:07:45+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./services/ark-api/ark-api \u003c-\u003e /app","time":"2025-09-01T18:07:48+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-01T18:07:48+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-01T18:07:51+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Port forwarding started on: 11122 -\u003e 8022","time":"2025-09-01T18:07:51+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Use 'ssh ark-api.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T18:07:52+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-01T18:11:37+01:00"}
+{"level":"info","msg":"dev:ark-api Selected pod ark-api-devspace-7b465b4cb9-n5vkn","time":"2025-09-01T18:11:38+01:00"}
+{"level":"info","msg":"dev:ark-api ports Port forwarding started on: 8000 -\u003e 8000","time":"2025-09-01T18:11:38+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./services/ark-api/ark-api \u003c-\u003e /app","time":"2025-09-01T18:11:43+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-01T18:11:43+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-01T18:11:45+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Port forwarding started on: 11122 -\u003e 8022","time":"2025-09-01T18:11:46+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Use 'ssh ark-api.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T18:11:46+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-01T18:19:20+01:00"}
+{"level":"info","msg":"dev:ark-api Selected pod ark-api-devspace-7b465b4cb9-wtktg","time":"2025-09-01T18:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api ports Port forwarding started on: 8000 -\u003e 8000","time":"2025-09-01T18:19:22+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./services/ark-api/ark-api \u003c-\u003e /app","time":"2025-09-01T18:19:26+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-01T18:19:26+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-01T18:19:28+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Port forwarding started on: 11122 -\u003e 8022","time":"2025-09-01T18:19:29+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Use 'ssh ark-api.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T18:19:30+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-01T19:44:21+01:00"}
+{"level":"info","msg":"dev:ark-api Selected pod ark-api-devspace-7b465b4cb9-wtktg","time":"2025-09-01T19:44:21+01:00"}
+{"level":"info","msg":"dev:ark-api ports Port forwarding started on: 8000 -\u003e 8000","time":"2025-09-01T19:44:22+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./services/ark-api/ark-api \u003c-\u003e /app","time":"2025-09-01T19:44:22+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-01T19:44:22+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-01T19:44:24+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Port forwarding started on: 11122 -\u003e 8022","time":"2025-09-01T19:44:24+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Use 'ssh ark-api.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T19:44:25+01:00"}
+{"level":"info","msg":"dev:ark-api term  Opening shell to ark-api:ark-api-devspace-7b465b4cb9-wtktg (pod:container)","time":"2025-09-01T19:44:25+01:00"}

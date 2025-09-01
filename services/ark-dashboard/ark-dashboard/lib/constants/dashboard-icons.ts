@@ -8,6 +8,7 @@ import {
   Wrench,
   Settings,
   Calendar,
+  Database,
   type LucideIcon
 } from "lucide-react";
 
@@ -56,6 +57,12 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     key: "events",
     title: "Events",
     icon: Calendar,
+    group: "operations"
+  },
+  memory: {
+    key: "memory",
+    title: "Memory",
+    icon: Database,
     group: "operations"
   },
 

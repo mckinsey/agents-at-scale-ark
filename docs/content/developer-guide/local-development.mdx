@@ -1,0 +1,38 @@
+---
+title: "Local Development"
+description: "Local development with DevSpace for ARK services"
+---
+
+# Local Development
+
+Use DevSpace for local development with hot reload on ARK services.
+
+## DevSpace Commands
+
+```bash
+# Development mode with hot reload
+devspace dev
+
+# Deploy without dev features
+devspace deploy
+
+# Check status
+devspace list deployments
+
+# View logs
+devspace logs -f
+
+# Clean up
+devspace purge
+```
+
+## Current Services
+
+DevSpace is configured for these services with live reload:
+
+- **ark-api** - FastAPI backend with Python hot reload
+- **ark-dashboard** - Next.js frontend with Node.js hot reload
+
+## How It Works
+
+`devspace dev` builds images, deploys to your cluster, and syncs local file changes to running containers. Code changes trigger automatic restarts with the updated code.

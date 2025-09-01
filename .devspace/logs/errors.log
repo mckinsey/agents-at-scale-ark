@@ -1,0 +1,38 @@
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp4 127.0.0.1:3000: use of closed network connection","time":"2025-09-01T17:20:08+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp6 [::1]:3000: use of closed network connection","time":"2025-09-01T17:20:08+01:00"}
+{"level":"error","msg":"Runtime error occurred: EOF","time":"2025-09-01T17:36:19+01:00"}
+{"level":"error","msg":"Runtime error occurred: EOF","time":"2025-09-01T17:42:04+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp4 127.0.0.1:8000: use of closed network connection","time":"2025-09-01T17:49:00+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp6 [::1]:8000: use of closed network connection","time":"2025-09-01T17:49:00+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp4 127.0.0.1:3000: use of closed network connection","time":"2025-09-01T17:49:01+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp6 [::1]:3000: use of closed network connection","time":"2025-09-01T17:49:01+01:00"}
+{"level":"error","msg":"Runtime error occurred: use of closed network connection","time":"2025-09-01T17:49:01+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp4 127.0.0.1:3000: use of closed network connection","time":"2025-09-01T18:07:52+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp4 127.0.0.1:11122: use of closed network connection","time":"2025-09-01T18:07:52+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp4 127.0.0.1:11427: use of closed network connection","time":"2025-09-01T18:07:52+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp4 127.0.0.1:8000: use of closed network connection","time":"2025-09-01T18:07:52+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp6 [::1]:3000: use of closed network connection","time":"2025-09-01T18:07:52+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp6 [::1]:11122: use of closed network connection","time":"2025-09-01T18:07:52+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp6 [::1]:11427: use of closed network connection","time":"2025-09-01T18:07:52+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp6 [::1]:8000: use of closed network connection","time":"2025-09-01T18:07:52+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp4 127.0.0.1:11122: use of closed network connection","time":"2025-09-01T18:11:46+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp6 [::1]:11122: use of closed network connection","time":"2025-09-01T18:11:46+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp4 127.0.0.1:8000: use of closed network connection","time":"2025-09-01T18:11:46+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp6 [::1]:8000: use of closed network connection","time":"2025-09-01T18:11:46+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp4 127.0.0.1:11427: use of closed network connection","time":"2025-09-01T18:14:52+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp6 [::1]:11427: use of closed network connection","time":"2025-09-01T18:14:52+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp4 127.0.0.1:3000: use of closed network connection","time":"2025-09-01T18:14:52+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp6 [::1]:3000: use of closed network connection","time":"2025-09-01T18:14:52+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp4 127.0.0.1:11427: use of closed network connection","time":"2025-09-01T18:19:30+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp6 [::1]:11427: use of closed network connection","time":"2025-09-01T18:19:30+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp4 127.0.0.1:11122: use of closed network connection","time":"2025-09-01T18:19:30+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp4 127.0.0.1:3000: use of closed network connection","time":"2025-09-01T18:19:30+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp4 127.0.0.1:8000: use of closed network connection","time":"2025-09-01T18:19:30+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp6 [::1]:3000: use of closed network connection","time":"2025-09-01T18:19:30+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp6 [::1]:11122: use of closed network connection","time":"2025-09-01T18:19:30+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp6 [::1]:8000: use of closed network connection","time":"2025-09-01T18:19:30+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp4 127.0.0.1:3000: use of closed network connection","time":"2025-09-01T19:44:57+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp6 [::1]:3000: use of closed network connection","time":"2025-09-01T19:44:57+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp4 127.0.0.1:11427: use of closed network connection","time":"2025-09-01T19:44:57+01:00"}
+{"level":"error","msg":"Runtime error occurred: io: read/write on closed pipe","time":"2025-09-01T19:44:57+01:00"}
+{"level":"error","msg":"Runtime error occurred: error closing listener: close tcp6 [::1]:11427: use of closed network connection","time":"2025-09-01T19:44:57+01:00"}

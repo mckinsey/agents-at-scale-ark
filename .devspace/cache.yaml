@@ -1,0 +1,17 @@
+varsEncrypted: true
+images:
+    ark-api:
+        imageConfigHash: 846b0a3a57c436931c4eda223bf012346760bb80776221764674f3faa0c4117b
+        dockerfileHash: cb454fb7f2fe72b804b9a2b8b6d47708a73807843ae50145d8ef6035703efede
+        contextHash: d165955a551c49011af3e15c5f2ffab9a64d1e7a17c2c1a958dbde2e536d2f31
+        imageName: ark-api
+        tag: tVyVKBX
+    ark-dashboard:
+        imageConfigHash: 581d20ff0dc19d545a43c1240ddfa17f1c9cc2d72cccf2505071397f20f21ec3
+        dockerfileHash: 4daaa9edc4c61cff282a05d2c3fb3b757022b3c55d47f7de7299bb666d8c4b8f
+        contextHash: 3d7cb8f1c17d9cdbfe0a83acb66cb814d6d95f08c1715290df97df295c1d771a
+        imageName: ark-dashboard
+        tag: fniBaYD
+lastContext:
+    namespace: default
+    context: minikube
