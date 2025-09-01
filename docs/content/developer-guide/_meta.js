@@ -1,7 +1,7 @@
 export default {
-  'local-development': 'Local Development',
   'build': 'Build System and Makefile Overview',
   'logging-and-events': 'Logging and Events',
+  'ark-sdk': 'ARK SDK',
   'design-principles': 'Design Principles',
   'crd-design-guide': 'CRD Design Guidelines',
   'cli-tools': 'CLI Tools',
