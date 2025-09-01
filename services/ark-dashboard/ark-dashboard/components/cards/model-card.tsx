@@ -9,6 +9,8 @@ import {
   TooltipTrigger
 } from "@/components/ui/tooltip";
 import { DASHBOARD_SECTIONS } from "@/lib/constants/dashboard-icons";
+import { getCustomIcon } from "@/lib/utils/icon-resolver";
+import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import { BaseCard, type BaseCardAction } from "./base-card";
 import { ModelEditor } from "@/components/editors";
 import type {
@@ -45,6 +47,9 @@ export function ModelCard({
 
   // Check if model has an error status
   const hasError = model.status?.toLowerCase() === "error";
+
+  // Get custom icon or default model icon
+  const IconComponent = getCustomIcon(model.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], DASHBOARD_SECTIONS.models.icon);
 
   const actions: BaseCardAction[] = [];
 
@@ -104,7 +109,7 @@ export function ModelCard({
     <>
       <BaseCard
         title={model.name}
-        icon={DASHBOARD_SECTIONS.models.icon}
+        icon={<IconComponent className="h-5 w-5" />}
         actions={actions}
         footer={
           <div className="flex flex-row items-end w-full justify-between">

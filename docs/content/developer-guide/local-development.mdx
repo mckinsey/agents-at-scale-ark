@@ -1,0 +1,39 @@
+---
+title: "Local Development"
+description: "Local development with DevSpace for ARK services"
+---
+
+import { Callout } from "nextra/components"
+
+# Local Development
+
+<Callout type="info">
+Local development is being migrated to DevSpace for improved developer experience with hot reload and file sync. Currently available for `ark-api` service, with the rest of the stack coming soon.
+</Callout>
+
+Use DevSpace for local development with live reload and file synchronization.
+
+## Essential Commands
+
+```bash
+# Development mode with hot reload
+devspace dev
+
+# Clean up deployment
+devspace purge
+
+# View logs
+devspace logs -f
+```
+
+## Current Services
+
+DevSpace is currently configured for:
+
+- **ark-api** - FastAPI backend with hot reload and file sync
+
+## How It Works
+
+`devspace dev` builds images, deploys to your cluster, and syncs local code changes to running containers. File changes trigger automatic application restarts with updated code.
+
+The setup uses your existing Kubernetes cluster and Helm charts, adding development features like port forwarding, file sync, and terminal access for rapid iteration.

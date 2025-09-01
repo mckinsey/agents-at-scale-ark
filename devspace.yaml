@@ -1,0 +1,69 @@
+# DevSpace configuration for local ARK services development
+# Version: v2beta1 (latest stable)
+version: v2beta1
+
+# Hooks for pre-build setup
+hooks:
+  - command: bash -c "make ark-sdk-build && mkdir -p services/ark-api/ark-api/wheels && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/wheels/"
+    events: ["before:build:ark-api"]
+
+# Deployment pipelines define the workflow for different commands
+pipelines:
+  # 'devspace deploy' - Build and deploy without development features
+  deploy: |-
+    build_images --all
+    create_deployments --all
+
+  # 'devspace dev' - Full development workflow with hot reload
+  dev: |-
+    build_images --all
+    create_deployments --all
+    start_dev --all
+
+# Image build configuration
+images:
+  # ARK API service
+  ark-api:
+    image: ark-api
+    dockerfile: ./services/ark-api/Dockerfile
+    context: ./services/ark-api
+
+# Kubernetes deployments
+deployments:
+  ark-api:
+    namespace: default
+    helm:
+      chart:
+        path: ./services/ark-api/chart
+      values:
+        app:
+          image:
+            repository: ${runtime.images.ark-api.image}
+            tag: ${runtime.images.ark-api.tag}
+
+# Development configuration - active during 'devspace dev'
+dev:
+  ark-api:
+    imageSelector: ark-api
+    namespace: default
+    # Use the built ark-api image instead of replacing it
+    # devImage: python:3.12-bookworm
+    # Port forwarding for local access
+    ports:
+      - port: 8000:8000  # FastAPI server
+    # Auto-start the API server
+    terminal:
+      command: bash -c "cd /app && echo 'Starting ARK API with hot reload...' && uv run uvicorn ark_api.main:app --host 0.0.0.0 --port 8000 --reload"
+    # File synchronization for hot reload
+    sync:
+      - path: ./services/ark-api/ark-api:/app
+        excludePaths:
+          - .venv/
+          - __pycache__/
+          - "*.pyc"
+          # Exclude dependency files - Dockerfile already configured these with wheel dependencies
+          - pyproject.toml
+          - uv.lock
+    # Enable SSH for IDE integration
+    ssh:
+      enabled: true
