@@ -47,7 +47,8 @@ export interface A2AServerSpec {
   };
   description?: string;
   headers?: Header[];
-  transport: "http" | "sse";
+  pollingInterval?: number;
+  transport?: "http" | "sse";
   timeout?: string;
 }
 

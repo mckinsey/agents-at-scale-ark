@@ -1,62 +1,90 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, forwardRef, useImperativeHandle, useCallback } from "react";
 import { toast } from "@/components/ui/use-toast";
 import { A2AServersService, type A2AServer } from "@/lib/services";
 import { A2AServerCard } from "@/components/cards";
-import { A2AServerRow } from "@/components/rows/a2a-server-row";
 import { useDelayedLoading } from "@/lib/hooks";
 import { InfoDialog } from "@/components/dialogs/info-dialog";
-import { ToggleSwitch, type ToggleOption } from "@/components/ui/toggle-switch";
+import { A2AEditor } from "@/components/editors/a2a-editor";
+import type { A2AServerConfiguration } from "@/lib/services/a2a-servers";
 
 interface A2AServersSectionProps {
   namespace: string;
 }
 
-export const A2AServersSection: React.FC<A2AServersSectionProps> = ({
-  namespace
-}) => {
+export type A2AServersSectionHandle = {
+  openAddEditor: () => void;
+};
+
+export const A2AServersSection = forwardRef<
+  A2AServersSectionHandle,
+  A2AServersSectionProps
+>(function A2AServersSection({ namespace }, ref) {
   const [a2aServers, setA2AServers] = useState<A2AServer[]>([]);
   const [loading, setLoading] = useState(true);
   const showLoading = useDelayedLoading(loading);
   const [selectedServer, setSelectedServer] = useState<A2AServer | null>(null);
   const [infoDialogOpen, setInfoDialogOpen] = useState(false);
-  const [showCompactView, setShowCompactView] = useState(false);
+  const [a2aEditorOpen, setA2aEditorOpen] = useState(false);
 
-  const viewOptions: ToggleOption[] = [
-    { id: "compact", label: "compact view", active: !showCompactView },
-    { id: "card", label: "card view", active: showCompactView }
-  ];
+  useImperativeHandle(
+    ref,
+    () => ({
+      openAddEditor: () => setA2aEditorOpen(true)
+    }),
+    []
+  );
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await A2AServersService.getAll(namespace);
+      setA2AServers(data);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to load A2A servers:", error);
+      toast({
+        variant: "destructive",
+        title: "Failed to Load A2A Servers",
+        description:
+          error instanceof Error ? error.message : "An unexpected error occurred"
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [namespace]);
 
   useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        const data = await A2AServersService.getAll(namespace);
-        setA2AServers(data);
-      } catch (error) {
-        console.error("Failed to load A2A servers:", error);
-        toast({
-          variant: "destructive",
-          title: "Failed to Load A2A Servers",
-          description:
-            error instanceof Error
-              ? error.message
-              : "An unexpected error occurred"
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
-  }, [namespace]);
+    void loadData();
+  }, [loadData]);
 
   const handleInfo = (server: A2AServer) => {
     setSelectedServer(server);
     setInfoDialogOpen(true);
   };
+
+  const handleSave = async (config: A2AServerConfiguration) => {
+    try {
+      await A2AServersService.create(namespace, config);
+      toast({
+        variant: "success",
+        title: "A2A Server Created",
+        description: `Successfully created ${config.name}`
+      });
+      await loadData();
+      setA2aEditorOpen(false);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to Create A2A Server",
+        description:
+          error instanceof Error ? error.message : "An unexpected error occurred"
+      });
+    }
+  };
+
   if (showLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -67,38 +95,17 @@ export const A2AServersSection: React.FC<A2AServersSectionProps> = ({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-end px-6 py-3">
-        <ToggleSwitch
-          options={viewOptions}
-          onChange={(id) => setShowCompactView(id === "card")}
-        />
-      </div>
-
-      <main className="flex-1 overflow-auto px-6 py-0">
-        {showCompactView && (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pb-6">
-            {a2aServers.map((server) => (
-              <A2AServerCard
-                key={server.name || server.id}
-                a2aServer={server}
-                onInfo={handleInfo}
-                namespace={namespace}
-              />
-            ))}
-          </div>
-        )}
-
-        {!showCompactView && (
-          <div className="flex flex-col gap-3">
-            {a2aServers.map((server) => (
-              <A2AServerRow
-                key={server.name || server.id}
-                a2aServer={server}
-                onInfo={handleInfo}
-              />
-            ))}
-          </div>
-        )}
+      <main className="flex-1 overflow-auto p-6">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pb-6">
+          {a2aServers.map((server) => (
+            <A2AServerCard
+              key={server.name || server.id}
+              a2aServer={server}
+              onInfo={handleInfo}
+              namespace={namespace}
+            />
+          ))}
+        </div>
       </main>
 
       {selectedServer && (
@@ -109,6 +116,13 @@ export const A2AServersSection: React.FC<A2AServersSectionProps> = ({
           data={selectedServer}
         />
       )}
+
+      <A2AEditor
+        open={a2aEditorOpen}
+        onOpenChange={setA2aEditorOpen}
+        namespace={namespace}
+        onSave={handleSave}
+      />
     </div>
   );
-};
+});
