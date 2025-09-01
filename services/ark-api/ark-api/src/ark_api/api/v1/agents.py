@@ -15,6 +15,7 @@ from ...models.agents import (
     AgentUpdateRequest,
     AgentDetailResponse
 )
+from ...constants.annotations import A2A_SERVER_ADDRESS_ANNOTATION
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,8 @@ def agent_to_response(agent: dict) -> AgentResponse:
         description=spec.get("description"),
         model_ref=model_ref,
         prompt=spec.get("prompt"),
-        status=status.get("phase")
+        status=status.get("phase"),
+        annotations=metadata.get("annotations", {})
     )
 
 SKILLS_ANNOTATION_REGEX = re.compile(r'a2a\..*\/skills$')
@@ -53,7 +55,7 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
     status = agent.get("status", {})
     annotations = metadata.get("annotations", {})
     
-    is_a2a = "a2a.server/address" in annotations
+    is_a2a = A2A_SERVER_ADDRESS_ANNOTATION in annotations
     
     skills = []
     skills_annotation_key = None
@@ -81,7 +83,8 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
         tools=spec.get("tools"),
         skills=skills,
         isA2A=is_a2a,
-        status=status
+        status=status,
+        annotations=annotations
     )
 
 

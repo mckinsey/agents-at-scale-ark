@@ -35,7 +35,7 @@ export interface BaseCardAction {
 export interface BaseCardProps {
   title: string;
   description?: React.ReactNode;
-  icon?: LucideIcon;
+  icon?: LucideIcon | React.ReactElement;
   iconClassName?: string;
   actions?: BaseCardAction[];
   children?: React.ReactNode;
@@ -83,7 +83,11 @@ export function BaseCard({
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2 pr-24">
           {Icon && (
-            <Icon className={cn("h-5 w-5 flex-shrink-0", iconClassName)} />
+            typeof Icon === 'function' ? (
+              <Icon className={cn("h-5 w-5 flex-shrink-0", iconClassName)} />
+            ) : (
+              Icon
+            )
           )}
           <div className="truncate block max-w-[220px]">
             {isTruncated ? (

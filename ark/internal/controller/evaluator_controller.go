@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/common"
 )
 
@@ -366,13 +367,13 @@ func (r *EvaluatorReconciler) createEvaluationForQuery(ctx context.Context, eval
 			Name:      evaluationName,
 			Namespace: evaluator.Namespace,
 			Labels: map[string]string{
-				"ark.mckinsey.com/evaluator": evaluator.Name,
-				"ark.mckinsey.com/query":     query.Name,
-				"ark.mckinsey.com/auto":      "true",
+				annotations.Evaluator: evaluator.Name,
+				annotations.Query:     query.Name,
+				annotations.Auto:      "true",
 			},
 			Annotations: map[string]string{
-				"ark.mckinsey.com/query-generation": fmt.Sprintf("%d", query.Generation),
-				"ark.mckinsey.com/query-phase":      query.Status.Phase,
+				annotations.QueryGeneration: fmt.Sprintf("%d", query.Generation),
+				annotations.QueryPhase:      query.Status.Phase,
 			},
 		},
 		Spec: arkv1alpha1.EvaluationSpec{
@@ -402,7 +403,7 @@ func (r *EvaluatorReconciler) createEvaluationForQuery(ctx context.Context, eval
 func (r *EvaluatorReconciler) shouldRetriggerEvaluation(evaluation *arkv1alpha1.Evaluation, query *arkv1alpha1.Query) bool {
 	// Check if query generation has changed
 	currentGeneration := fmt.Sprintf("%d", query.Generation)
-	lastGeneration := evaluation.Annotations["ark.mckinsey.com/query-generation"]
+	lastGeneration := evaluation.Annotations[annotations.QueryGeneration]
 
 	if currentGeneration != lastGeneration {
 		return true
@@ -410,7 +411,7 @@ func (r *EvaluatorReconciler) shouldRetriggerEvaluation(evaluation *arkv1alpha1.
 
 	// Check if query phase has changed to "done"
 	currentPhase := query.Status.Phase
-	lastPhase := evaluation.Annotations["ark.mckinsey.com/query-phase"]
+	lastPhase := evaluation.Annotations[annotations.QueryPhase]
 
 	return currentPhase == "done" && currentPhase != lastPhase
 }
@@ -423,8 +424,8 @@ func (r *EvaluatorReconciler) updateEvaluationForQuery(ctx context.Context, eval
 	if evaluation.Annotations == nil {
 		evaluation.Annotations = make(map[string]string)
 	}
-	evaluation.Annotations["ark.mckinsey.com/query-generation"] = fmt.Sprintf("%d", query.Generation)
-	evaluation.Annotations["ark.mckinsey.com/query-phase"] = query.Status.Phase
+	evaluation.Annotations[annotations.QueryGeneration] = fmt.Sprintf("%d", query.Generation)
+	evaluation.Annotations[annotations.QueryPhase] = query.Status.Phase
 
 	// Resolve and update parameters
 	parameters, err := r.resolveEvaluatorParameters(ctx, evaluator.Spec.Parameters, evaluator.Namespace)

@@ -61,4 +61,4 @@ uninstall: # remove resources
 
 status: # show status
 	@kubectl get a2aserver hosted-langchain-agents -o yaml 2>/dev/null || echo "A2AServer not found"
-	@kubectl get agents -l a2a.server/name=hosted-langchain-agents 2>/dev/null || echo "No agents found"
+	@kubectl get agents -l a2a/server=hosted-langchain-agents 2>/dev/null || echo "No agents found"
