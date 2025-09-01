@@ -4,7 +4,6 @@ package genai
 
 import "context"
 
-
 type EventEmitter interface {
 	EmitEvent(ctx context.Context, kubernetesEventType, eventType string, data EventData)
 }
