@@ -1,8 +1,10 @@
 "use client";
 
-import { Bot, Info, Trash2, MessageCircle } from "lucide-react";
+import { Info, Trash2, MessageCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { getCustomIcon } from "@/lib/utils/icon-resolver";
+import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import {
   Tooltip,
   TooltipContent,
@@ -25,6 +27,10 @@ export function ToolRow(props: ToolRowProps) {
   const { tool, onInfo, onDelete, inUse, inUseReason } = props;
   const router = useRouter();
   
+  // Get custom icon or default Wrench icon
+  const annotations = tool.annotations as Record<string, string> | undefined;
+  const IconComponent = getCustomIcon(annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], Wrench);
+  
   const handleInfo = () => {
     if (onInfo) {
       onInfo(tool);
@@ -38,7 +44,7 @@ export function ToolRow(props: ToolRowProps) {
   return (
       <div className="flex items-center py-3 px-4 bg-card border rounded-md shadow-sm hover:bg-accent/5 transition-colors w-full gap-4 flex-wrap">
         <div className="flex items-center gap-3 flex-grow overflow-hidden">
-          <Bot className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+          <IconComponent className="h-5 w-5 text-muted-foreground flex-shrink-0" />
           <div className="flex flex-col gap-1 min-w-0 max-w-[400px]">
             <p className="font-medium text-sm truncate" title={tool.name}>
               {tool.name}

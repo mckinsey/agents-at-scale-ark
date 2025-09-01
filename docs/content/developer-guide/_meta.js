@@ -6,6 +6,7 @@ export default {
   'crd-design-guide': 'CRD Design Guidelines',
   'cli-tools': 'CLI Tools',
   services: 'Services',
+  'ark-dashboard': 'ARK Dashboard',
   'ark-gateway': 'ARK Gateway',
   'a2a-server': 'A2A Gateway',
   'postgres-memory': 'PostgreSQL Memory',

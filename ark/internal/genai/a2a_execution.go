@@ -10,6 +10,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	arkann "mckinsey.com/ark/internal/annotations"
 )
 
 // A2AExecutionEngine handles execution for agents with the reserved 'a2a' execution engine
@@ -32,8 +33,8 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 	log.Info("executing A2A agent", "agent", agentName)
 
 	a2aTracker := NewOperationTracker(e.recorder, ctx, "A2ACall", agentName, map[string]string{
-		"a2aServer":  annotations["a2a.server/name"],
-		"serverAddr": annotations["a2a.server/address"],
+		"a2aServer":  annotations[arkann.A2AServerName],
+		"serverAddr": annotations[arkann.A2AServerAddress],
 		"queryId":    getQueryID(ctx),
 		"sessionId":  getSessionID(ctx),
 		"protocol":   "a2a-jsonrpc",
@@ -41,15 +42,15 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 	})
 
 	// Get the A2A server address from annotations
-	a2aAddress, hasAddress := annotations["a2a.server/address"]
+	a2aAddress, hasAddress := annotations[arkann.A2AServerAddress]
 	if !hasAddress {
-		return nil, fmt.Errorf("A2A agent missing a2a.server/address annotation")
+		return nil, fmt.Errorf("A2A agent missing %s annotation", arkann.A2AServerAddress)
 	}
 
 	// Get the A2AServer name from annotations
-	a2aServerName, hasServerName := annotations["a2a.server/name"]
+	a2aServerName, hasServerName := annotations[arkann.A2AServerName]
 	if !hasServerName {
-		return nil, fmt.Errorf("A2A agent missing a2a.server/name annotation")
+		return nil, fmt.Errorf("A2A agent missing %s annotation", arkann.A2AServerName)
 	}
 
 	var a2aServer arkv1prealpha1.A2AServer

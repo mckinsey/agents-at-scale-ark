@@ -1,0 +1,47 @@
+# ARK Dashboard
+
+Guidelines for customizing ARK dashboard display through resource annotations.
+
+## Resource Icons
+
+Customize dashboard icons using the `ark.mckinsey.com/dashboard-icon` annotation for A2A servers, agents, MCP servers, and tools:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: weather-agent
+  annotations:
+    ark.mckinsey.com/dashboard-icon: "https://example.com/icon.svg"
+spec:
+  description: "Weather forecasting agent"
+```
+
+Icons can be external, data URIs, or if running in the dashboard, local icons:
+
+```bash
+# Example external URI:
+https://example.com/icon.svg
+
+# Or data URI:
+data:image/svg+xml;base64,...
+
+# Bundled icon, only available when running in the dashboard:
+/icons/aws.png
+```
+
+Available bundled icons:
+
+| Icon | Dashboard Icon Address |
+|------|----------------------|
+| ![AWS](https://raw.githubusercontent.com/mckinsey/agents-at-scale-ark-dashboard-icons/main/services/ark-dashboard/ark-dashboard/public/icons/aws.png) | `/icons/aws.png` |
+| ![GCP](https://raw.githubusercontent.com/mckinsey/agents-at-scale-ark-dashboard-icons/main/services/ark-dashboard/ark-dashboard/public/icons/gcp.png) | `/icons/gcp.png` |
+
+## Resource Annotations
+
+| Resource | Annotation | Purpose | Example |
+|----------|------------|---------|---------|
+| Agent | `ark.mckinsey.com/dashboard-icon` | Custom icon URI | `/icons/weather.svg` |
+| Tool | `ark.mckinsey.com/dashboard-icon` | Custom icon URI | `/icons/database.svg` |
+| A2AServer | `ark.mckinsey.com/dashboard-icon` | Inherits to generated agents | `/icons/service.svg` |
+| MCPServer | `ark.mckinsey.com/dashboard-icon` | Inherits to generated tools | `/icons/mcp.svg` |
