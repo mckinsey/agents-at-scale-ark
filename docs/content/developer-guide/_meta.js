@@ -9,7 +9,6 @@ export default {
   'ark-dashboard': 'ARK Dashboard',
   'ark-gateway': 'ARK Gateway',
   'a2a-server': 'A2A Gateway',
-  'postgres-memory': 'PostgreSQL Memory',
   'evaluator-llm': 'Evaluator LLM Service',
   testing: 'End-to-End Testing',
   observability: 'Observability',

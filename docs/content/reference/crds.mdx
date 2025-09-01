@@ -17,7 +17,6 @@ This page provides detailed specifications for each ARK custom resource. For an 
 | [Query](#queries) | `ark.mckinsey.com/v1alpha1` | Queries to agents or teams |
 | [Tool](/reference/resources/tools) | `ark.mckinsey.com/v1alpha1` | Custom tools for agents |
 | [MCPServer](#mcp-servers) | `ark.mckinsey.com/v1alpha1` | Model Context Protocol servers |
-| [Memory](#memory) | `ark.mckinsey.com/v1alpha1` | Persistent conversation storage |
 | [Evaluator](#evaluators) | `ark.mckinsey.com/v1alpha1` | AI-powered query assessment services |
 | [Evaluation](#evaluations) | `ark.mckinsey.com/v1alpha1` | Multi-mode AI output assessments |
 | [A2AServer](#a2a-servers) | `ark.mckinsey.com/v1prealpha1` | Agent-to-Agent protocol servers |
@@ -92,11 +91,6 @@ spec:
 - **tools**: List of tools the agent can use
 - **modelRef**: Optional reference to a specific model (uses 'default' if not specified)
 
-### Tool Integration
-Agents can reference tools by name and type:
-- **custom**: User-defined tools
-- **mcp**: Tools from MCP servers
-- **builtin**: Built-in system tools
 
 ## Teams
 
@@ -165,115 +159,7 @@ spec:
 - **Evaluators**: Automatic assessment of query results
 
 
-## Memory
 
-Memory resources provide persistent storage for agent conversations and context.
-
-### Specification
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Memory
-metadata:
-  name: postgres-memory
-spec:
-  type: postgres
-  config:
-    postgres:
-      host: postgres-service
-      database: ark_memory
-      credentials:
-        valueFrom:
-          secretKeyRef:
-            name: postgres-secret
-            key: connection-string
-```
-
-### Supported Backends
-- **postgres**: PostgreSQL database storage (recommended for production)
-- **redis**: Redis in-memory storage (fast but volatile)
-- **memory**: In-process memory (development only)
-
-### Usage in Queries
-
-Memory resources are referenced in Query specifications to enable persistent conversations:
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: conversation-query
-spec:
-  input: "Remember my name is Alice"
-  targets:
-  - type: agent
-    name: assistant-agent
-  memory:
-    name: postgres-memory
-  sessionId: "user-alice-session"
-```
-
-### Session Management
-
-Memory supports session-based conversation storage:
-- **sessionId**: Groups related queries in a conversation
-- **Isolation**: Each session maintains separate conversation history
-- **Persistence**: Conversations survive pod restarts and cluster changes
-
-### Implementation
-
-Memory services typically provide HTTP APIs for:
-- **Message storage**: Store conversation messages
-- **Message retrieval**: Get conversation history
-- **Session management**: Create and manage conversation sessions
-
-## MCP Servers
-
-MCP (Model Context Protocol) Servers provide standardized tool integrations through containerized services.
-
-### Specification
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: MCPServer
-metadata:
-  name: filesystem-mcp
-spec:
-  image: "mcp-filesystem:latest"
-  config:
-    rootPath: "/workspace"
-  tools:
-    - read_file
-    - write_file
-    - list_directory
-```
-
-### Usage with Agents
-
-MCP Servers are accessed through Tool resources: **MCPServer** → **Tool** → **Agent**
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Agent
-metadata:
-  name: file-agent
-spec:
-  prompt: "You are a file management assistant with access to filesystem operations."
-  modelRef:
-    name: gpt-4-model
-  tools:
-    - type: custom
-      name: mcp-read-file  # References Tool that connects to MCP server
-```
-
-See [Tools](/reference/resources/tools) for creating Tool resources that connect to MCP servers.
-
-### Features
-- **Container-based**: Run as Kubernetes pods
-- **Tool discovery**: Automatic registration of available tools
-- **Standard protocol**: MCP-compliant tool integration
-- **Service integration**: Reference existing Kubernetes services
-- **Transport support**: HTTP and stdio transport protocols
-
-For detailed MCP server implementation and examples, see [MCP](/advanced-features/mcp) and [ARK MCP Server](/advanced-features/ark-mcp).
 
 ## Evaluators
 

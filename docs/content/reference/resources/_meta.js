@@ -1,3 +1,4 @@
 export default {
-  mcpserver: 'MCPServer'
+  mcpserver: 'MCPServer',
+  memory: 'Memory'
 }
