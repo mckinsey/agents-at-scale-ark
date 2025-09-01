@@ -98,11 +98,11 @@ func (t *OperationTracker) CompleteWithTermination(terminationMessage string) {
 	t.emitter.EmitEvent(t.ctx, corev1.EventTypeNormal, t.operation+"Complete", event)
 }
 
-func (t *OperationTracker) emitCompletion(kubernetesEventType, eventType, errorMsg string, tokenUsage TokenUsage) {
-	t.emitCompletionWithMetadata(kubernetesEventType, eventType, errorMsg, tokenUsage, nil)
+func (t *OperationTracker) emitCompletion(eventType, reason, errorMsg string, tokenUsage TokenUsage) {
+	t.emitCompletionWithMetadata(eventType, reason, errorMsg, tokenUsage, nil)
 }
 
-func (t *OperationTracker) emitCompletionWithMetadata(kubernetesEventType, eventType, errorMsg string, tokenUsage TokenUsage, additionalMetadata map[string]string) {
+func (t *OperationTracker) emitCompletionWithMetadata(eventType, reason, errorMsg string, tokenUsage TokenUsage, additionalMetadata map[string]string) {
 	metadata := make(map[string]string)
 	maps.Copy(metadata, t.metadata)
 
@@ -120,5 +120,5 @@ func (t *OperationTracker) emitCompletionWithMetadata(kubernetesEventType, event
 		TokenUsage: tokenUsage,
 	}
 
-	t.emitter.EmitEvent(t.ctx, kubernetesEventType, eventType, event)
+	t.emitter.EmitEvent(t.ctx, eventType, reason, event)
 }

@@ -14,7 +14,7 @@ type mockRecorder struct {
 	events []EventData
 }
 
-func (m *mockRecorder) EmitEvent(ctx context.Context, kubernetesEventType, eventType string, data EventData) {
+func (m *mockRecorder) EmitEvent(ctx context.Context, eventType, reason string, data EventData) {
 	m.events = append(m.events, data)
 }
 
