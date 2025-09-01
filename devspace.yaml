@@ -59,6 +59,8 @@ dev:
           # This is a temporary workaround until we publish our package to PyPI
           - pyproject.toml
           - uv.lock
+          # Don't synchronise virtual environment
+          - .venv
     # Enable SSH for IDE integration
     ssh:
       enabled: true
