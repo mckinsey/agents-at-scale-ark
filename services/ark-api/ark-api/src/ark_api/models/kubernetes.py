@@ -50,3 +50,4 @@ class SecretDetailResponse(BaseModel):
     id: str
     type: str
     secret_length: int  # Total length of all secret data in bytes
+    annotations: Optional[Dict[str, str]] = None

@@ -1666,6 +1666,10 @@ export interface components {
             status?: string | null;
             /** Resolved Address */
             resolved_address?: string | null;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
+            } | null;
         };
         /**
          * ModelListResponse
@@ -1933,6 +1937,10 @@ export interface components {
             type: string;
             /** Secret Length */
             secret_length: number;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
+            } | null;
         };
         /**
          * SecretListResponse

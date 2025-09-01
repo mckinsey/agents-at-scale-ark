@@ -79,3 +79,4 @@ class ModelDetailResponse(BaseModel):
     config: Dict[str, Dict[str, Union[str, Dict[str, Any]]]]
     status: Optional[str] = None
     resolved_address: Optional[str] = None
+    annotations: Optional[Dict[str, str]] = None

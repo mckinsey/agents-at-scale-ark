@@ -2,13 +2,13 @@ import { Lock, Pencil, Trash2 } from "lucide-react"
 import { BaseCard, type BaseCardAction } from "./base-card"
 import { getCustomIcon } from "@/lib/utils/icon-resolver"
 import { ARK_ANNOTATIONS } from "@/lib/constants/annotations"
-import type { Secret } from "@/lib/services/secrets"
+import type { SecretDetailResponse } from "@/lib/services/secrets"
 import type { Model } from "@/lib/services/models"
 
 interface SecretCardProps {
-  secret: Secret
+  secret: SecretDetailResponse
   models: Model[]
-  onEdit?: (secret: Secret) => void
+  onEdit?: (secret: SecretDetailResponse) => void
   onDelete?: (id: string) => void
 }
 
