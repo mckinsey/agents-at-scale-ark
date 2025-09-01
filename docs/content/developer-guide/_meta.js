@@ -1,5 +1,6 @@
 export default {
   'build': 'Build System and Makefile Overview',
+  'local-development': 'Local Development',
   'logging-and-events': 'Logging and Events',
   'ark-sdk': 'ARK SDK',
   'design-principles': 'Design Principles',
