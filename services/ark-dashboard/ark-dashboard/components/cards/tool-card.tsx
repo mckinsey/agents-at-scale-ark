@@ -36,7 +36,7 @@ export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisable
   actions.push({
     icon: MessageCircle,
     label: "Query tool",
-    onClick: () => router.push(`/query/new?namespace=${namespace || 'default'}`)
+    onClick: () => router.push(`/query/new?namespace=${namespace || 'default'}&target_tool=${tool.name}`)
   });
 
   return (

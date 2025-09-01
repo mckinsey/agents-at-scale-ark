@@ -32,7 +32,7 @@ export function ToolRow(props: ToolRowProps) {
   };
 
   const handleQueryTool = () => {
-    router.push(`/query/new?namespace=${props.namespace || 'default'}`);
+    router.push(`/query/new?namespace=${props.namespace || 'default'}&target_tool=${tool.name}`);
   };
 
   return (
