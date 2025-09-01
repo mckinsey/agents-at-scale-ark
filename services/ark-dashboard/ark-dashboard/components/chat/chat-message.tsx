@@ -16,9 +16,7 @@ export function ChatMessage({ role, content, status, className, viewMode = 'text
   const markdownContent = useMarkdownProcessor(content)
   const router = useRouter()
 
-  const showErrorIcon = isFailed &&
-    (content.includes("No response") || content.includes("Query failed") || content.includes("Query status unknown")) &&
-    queryName && namespace
+  const showErrorIcon = isFailed && queryName && namespace
 
   const handleErrorIconClick = () => {
     if (queryName && namespace) {

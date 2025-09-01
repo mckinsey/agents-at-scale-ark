@@ -130,12 +130,14 @@ export function EventsSection({
     const limitFromUrl = parseInt(searchParams.get("limit") || "10", 10);
     const typeFromUrl = searchParams.get("type") || undefined;
     const kindFromUrl = searchParams.get("kind") || undefined;
+    const nameFromUrl = searchParams.get("name") || undefined;
 
     const needsUpdate =
       pageFromUrl !== currentPage ||
       limitFromUrl !== itemsPerPage ||
       typeFromUrl !== filters.type ||
-      kindFromUrl !== filters.kind;
+      kindFromUrl !== filters.kind ||
+      nameFromUrl !== filters.name;
 
     if (needsUpdate) {
       const newFilters = {
@@ -143,7 +145,8 @@ export function EventsSection({
         page: pageFromUrl,
         limit: limitFromUrl,
         type: typeFromUrl,
-        kind: kindFromUrl
+        kind: kindFromUrl,
+        name: nameFromUrl
       };
 
       setCurrentPage(pageFromUrl);
