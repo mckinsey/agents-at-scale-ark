@@ -78,7 +78,7 @@ class BaselineEvaluationProvider(EvaluationProvider):
                 
                 # Generate model response for this example's input
                 generated_response, example_token_usage = await self._generate_model_response(
-                    llm_client, model, example.input
+                    llm_client, model, example.input, eval_params
                 )
                 
                 # Accumulate token usage
@@ -147,7 +147,7 @@ class BaselineEvaluationProvider(EvaluationProvider):
         
         return response
     
-    async def _generate_model_response(self, llm_client: LLMClient, model, input_text: str) -> tuple[str, TokenUsage]:
+    async def _generate_model_response(self, llm_client: LLMClient, model, input_text: str, params: EvaluationParameters) -> tuple[str, TokenUsage]:
         """
         Generate model response for a given input using the configured model.
         Returns: (response_text, token_usage)
@@ -160,7 +160,7 @@ Input: {input_text}
 
 Response:"""
             
-            response, token_usage = await llm_client.evaluate(prompt=prompt, model=model)
+            response, token_usage = await llm_client.evaluate(prompt=prompt, model=model, params=params)
             return response.strip(), token_usage
             
         except Exception as e:

@@ -27,15 +27,15 @@ spec:
             name: test-baseline-model
           status:
             phase: ready
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Evaluator
-          metadata:
-            name: test-baseline-evaluator
-          status:
-            phase: ready
-
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluator
+        timeout: 1m
+        name: test-baseline-evaluator
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'ready'
     - assert:
         resource:
           apiVersion: v1
