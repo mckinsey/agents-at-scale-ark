@@ -1,4 +1,4 @@
-from typing import Dict, Type
+from typing import Dict, List, Type
 import logging
 
 from .base import EvaluationProvider
@@ -53,7 +53,7 @@ class EvaluationProviderFactory:
         return provider_class(shared_session=shared_session)
     
     @classmethod
-    def get_registered_types(cls) -> list[str]:
+    def get_registered_types(cls) -> List[str]:
         """
         Get list of all registered evaluation types.
         

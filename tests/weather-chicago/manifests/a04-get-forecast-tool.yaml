@@ -19,4 +19,4 @@ spec:
         description: "Grid Y coordinate"
     required: ["office", "gridX", "gridY"]
   http:
-    url: https://api.weather.gov/gridpoints/{office}/{gridX},{gridY}/forecast
+    url: ($azure.mock_url)/gridpoints/{office}/{gridX},{gridY}/forecast

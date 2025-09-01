@@ -5,7 +5,7 @@ metadata:
 spec:
   address:
     value: http://evaluator-llm.default.svc.cluster.local:8000/evaluate
-#  parameters: TODO: Re-enable parameters once CI/CD pipeline updates CRDs
-#    - name: model.name
-#      value: default
+  parameters: 
+   - name: model.name
+     value: default
   description: LLM-based evaluator service for automated evaluation

@@ -53,7 +53,7 @@ class EvaluationParameters(BaseModel):
     # Extensible parameters
     max_tokens: Optional[int] = Field(default=None, gt=0, description="Maximum tokens for evaluation")
     temperature: Optional[float] = Field(default=0.0, ge=0.0, le=2.0, description="LLM temperature")
-    evaluation_criteria: Optional[list[str]] = Field(default=None, description="Specific criteria to evaluate")
+    evaluation_criteria: Optional[List[str]] = Field(default=None, description="Specific criteria to evaluate")
     custom_metadata: Optional[Dict[str, Any]] = Field(default=None, description="Custom metadata")
     
     @field_validator('scope')

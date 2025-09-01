@@ -1,5 +1,5 @@
-apiVersion: genai.qbaf.io/v1alpha1
-kind: Evaluator
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
 metadata:
   name: semantic-sequence-validation-evaluator
   namespace: default

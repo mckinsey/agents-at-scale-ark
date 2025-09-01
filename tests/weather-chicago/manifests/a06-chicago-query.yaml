@@ -7,5 +7,3 @@ spec:
   targets:
   - type: agent
     name: chicago-weather-agent
-  evaluators:
-  - name: evaluator-llm

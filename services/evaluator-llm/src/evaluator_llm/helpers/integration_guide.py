@@ -207,6 +207,7 @@ class EvaluationIntegration:
             expression = await self._replace_helper_calls(expression)
             
             # Safely evaluate the final boolean expression
+            # TODO: replace with domain specific eval
             return bool(eval(expression))
             
         except Exception as e:

@@ -207,6 +207,7 @@ class EventEvaluationProvider(EvaluationProvider):
             expression = await self._replace_helper_calls(expression)
             
             # Evaluate the final boolean expression
+            # TODO: replace with domain specific eval
             return eval(expression)
             
         except Exception as e:
