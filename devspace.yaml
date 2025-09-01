@@ -1,5 +1,4 @@
 # DevSpace configuration for local ARK services development
-# Version: v2beta1 (latest stable)
 version: v2beta1
 
 # Hooks for pre-build setup
@@ -46,22 +45,18 @@ dev:
   ark-api:
     imageSelector: ark-api
     namespace: default
-    # Use the built ark-api image instead of replacing it
-    # devImage: python:3.12-bookworm
     # Port forwarding for local access
     ports:
       - port: 8000:8000  # FastAPI server
     # Auto-start the API server
     terminal:
-      command: bash -c "cd /app && echo 'Starting ARK API with hot reload...' && uv run uvicorn ark_api.main:app --host 0.0.0.0 --port 8000 --reload"
+      command: bash -c "cd /app && uv run uvicorn ark_api.main:app --host 0.0.0.0 --port 8000 --reload"
     # File synchronization for hot reload
     sync:
       - path: ./services/ark-api/ark-api:/app
         excludePaths:
-          - .venv/
-          - __pycache__/
-          - "*.pyc"
-          # Exclude dependency files - Dockerfile already configured these with wheel dependencies
+          # Exclude dependency files - pyproject.toml is patched at build time with wheel dependencies
+          # This is a temporary workaround until we publish our package to PyPI
           - pyproject.toml
           - uv.lock
     # Enable SSH for IDE integration
