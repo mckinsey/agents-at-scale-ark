@@ -1,5 +1,6 @@
-import { Wrench, Trash2, Info } from "lucide-react"
+import { Wrench, Trash2, Info, MessageCircle } from "lucide-react"
 import { BaseCard, type BaseCardAction } from "./base-card"
+import { useRouter } from "next/navigation"
 import type { Tool } from "@/lib/services/tools"
 
 interface ToolCardProps {
@@ -8,9 +9,11 @@ interface ToolCardProps {
   onInfo?: (tool: Tool) => void
   deleteDisabled?: boolean
   deleteDisabledReason?: string
+  namespace?: string
 }
 
-export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisabledReason }: ToolCardProps) {
+export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisabledReason, namespace }: ToolCardProps) {
+  const router = useRouter();
   const actions: BaseCardAction[] = []
 
   if (onInfo) {
@@ -29,6 +32,12 @@ export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisable
       disabled: deleteDisabled
     })
   }
+
+  actions.push({
+    icon: MessageCircle,
+    label: "Query tool",
+    onClick: () => router.push(`/query/new?namespace=${namespace || 'default'}`)
+  });
 
   return (
     <BaseCard

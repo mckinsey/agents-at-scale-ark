@@ -1,6 +1,7 @@
 "use client";
 
-import { Bot, Info, Trash2 } from "lucide-react";
+import { Bot, Info, Trash2, MessageCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -17,15 +18,21 @@ type ToolRowProps = {
     readonly onDelete?: (id: string) => void;
     readonly inUse?: boolean;
     readonly inUseReason?: string;
+    readonly namespace?: string;
 };
 
 export function ToolRow(props: ToolRowProps) {
   const { tool, onInfo, onDelete, inUse, inUseReason } = props;
+  const router = useRouter();
   
   const handleInfo = () => {
     if (onInfo) {
       onInfo(tool);
     }
+  };
+
+  const handleQueryTool = () => {
+    router.push(`/query/new?namespace=${props.namespace || 'default'}`);
   };
 
   return (
@@ -87,6 +94,22 @@ export function ToolRow(props: ToolRowProps) {
               </Tooltip>
             </TooltipProvider>
           )}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={handleQueryTool}
+                  aria-label="Query tool"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Query tool</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
   );
