@@ -24,6 +24,7 @@ class SecretResponse(BaseModel):
     """Kubernetes secret response model."""
     name: str
     id: str
+    annotations: Optional[Dict[str, str]] = None
 
 
 class SecretListResponse(BaseModel):

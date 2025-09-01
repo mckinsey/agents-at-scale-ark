@@ -32,7 +32,8 @@ def model_to_response(model: dict) -> ModelResponse:
         namespace=metadata.get("namespace", ""),
         type=spec.get("type", ""),
         model=spec.get("model", {}).get("value", "") if isinstance(spec.get("model"), dict) else "",
-        status=status.get("phase")
+        status=status.get("phase"),
+        annotations=metadata.get("annotations", {})
     )
 
 

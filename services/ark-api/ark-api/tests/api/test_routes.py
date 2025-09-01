@@ -67,10 +67,12 @@ class TestSecretsEndpoint(unittest.TestCase):
         mock_secret1 = Mock()
         mock_secret1.metadata.name = "my-secret"
         mock_secret1.metadata.uid = "uuid-1234-5678"
+        mock_secret1.metadata.annotations = {}
         
         mock_secret2 = Mock()
         mock_secret2.metadata.name = "app-config"
         mock_secret2.metadata.uid = "uuid-abcd-efgh"
+        mock_secret2.metadata.annotations = {}
         
         # Mock the API response
         mock_api_instance = mock_v1_api.return_value

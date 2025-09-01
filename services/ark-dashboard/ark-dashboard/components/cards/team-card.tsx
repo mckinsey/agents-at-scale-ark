@@ -83,7 +83,7 @@ export function TeamCard({
       <BaseCard
         title={team.name}
         description={team.description}
-        icon={DASHBOARD_SECTIONS.teams.icon}
+        icon={<Users className="h-5 w-5" />}
         actions={
           team.members.length === 0
             ? actions.filter((a) => a.label !== "Chat with team")

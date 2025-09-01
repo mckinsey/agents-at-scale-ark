@@ -111,7 +111,8 @@ async def list_secrets(namespace: str) -> SecretListResponse:
             secret_list.append(
                 SecretResponse(
                     name=secret.metadata.name,
-                    id=str(secret.metadata.uid)
+                    id=str(secret.metadata.uid),
+                    annotations=secret.metadata.annotations or {}
                 )
             )
         

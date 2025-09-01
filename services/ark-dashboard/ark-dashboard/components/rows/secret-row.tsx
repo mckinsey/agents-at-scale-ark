@@ -1,4 +1,6 @@
-import { Lock, Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, Lock } from "lucide-react";
+import { getCustomIcon } from "@/lib/utils/icon-resolver";
+import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -56,12 +58,15 @@ export function SecretRow({
   const usageCount = modelsUsingSecret.length;
   const isInUse = usageCount > 0;
 
+  // Get custom icon or default Lock icon
+  const IconComponent = getCustomIcon(secret.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], Lock);
+
   const obfuscatedSecret = "••••••••••••";
 
   return (
     <div className="flex items-center py-3 px-4 bg-card border rounded-md shadow-sm hover:bg-accent/5 transition-colors xl:w-[49%] w-full gap-4">
       <div className="flex items-center gap-3 flex-grow overflow-hidden">
-        <Lock className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+        <IconComponent className="h-5 w-5 text-muted-foreground flex-shrink-0" />
 
         <div className="flex flex-col gap-1 min-w-0">
           <p className="font-medium text-sm truncate" title={secret.name}>

@@ -48,6 +48,7 @@ class ModelResponse(BaseModel):
     type: Literal["openai", "azure", "bedrock"]
     model: str
     status: Optional[str] = None
+    annotations: Optional[Dict[str, str]] = None
 
 
 class ModelListResponse(BaseModel):

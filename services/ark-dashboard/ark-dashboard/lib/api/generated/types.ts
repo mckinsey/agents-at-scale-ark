@@ -1709,6 +1709,10 @@ export interface components {
             model: string;
             /** Status */
             status?: string | null;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
+            } | null;
         };
         /**
          * ModelUpdateRequest
@@ -1961,6 +1965,10 @@ export interface components {
             name: string;
             /** Id */
             id: string;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
+            } | null;
         };
         /**
          * SecretUpdateRequest
