@@ -48,7 +48,6 @@ export interface A2AServerSpec {
   description?: string;
   headers?: Header[];
   pollingInterval?: number;
-  transport?: "http" | "sse";
   timeout?: string;
 }
 
