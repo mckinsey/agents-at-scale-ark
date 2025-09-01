@@ -139,34 +139,6 @@ spec:
     - weather-tool
 ```
 
-### Memory-Enabled Workflow Pattern
-Persistent context across interactions:
-
-```yaml
-# Memory configuration
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Memory
-metadata:
-  name: postgres-memory
-spec:
-  type: postgres
-  config:
-    postgres:
-      host: postgres-service
-      database: ark_memory
-
----
-# Agent with memory
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Agent
-metadata:
-  name: assistant-agent
-spec:
-  model: gpt-4-model
-  memory:
-    enabled: true
-    provider: postgres-memory
-```
 
 ## Query Execution Flow
 
@@ -327,32 +299,3 @@ kubectl get memory
 # Solution: Check database connectivity and credentials
 ```
 
-## Best Practices
-
-### Resource Organization
-- **Use consistent naming** across related resources
-- **Group by namespace** for logical separation
-- **Apply labels** for easy selection and management
-- **Document relationships** in annotations
-
-### Dependency Management
-- **Create dependencies first** before dependent resources
-- **Use health checks** to verify resource readiness
-- **Implement retry logic** for transient failures
-- **Monitor resource status** continuously
-
-### Performance Optimization
-- **Minimize dependencies** where possible
-- **Use resource limits** to prevent resource exhaustion
-- **Implement caching** for frequently accessed data
-- **Monitor resource usage** and optimize as needed
-
-### Security
-- **Isolate sensitive resources** in separate namespaces
-- **Use RBAC** to control access to resources
-- **Encrypt communication** between components
-- **Audit resource access** and modifications
-
----
-
-**Next**: Ready to explore advanced capabilities? Check out [Advanced Features](/advanced-features).
