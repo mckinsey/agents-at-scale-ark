@@ -103,7 +103,7 @@ expression: "tools.was_called('search', scope='session')"
 expression: "agents.get_unique_agents(scope='all').length >= 3"
 ```
 
-## Samples of Event Based Evaluations
+## Creating Evaluations
 
 ### Basic Tool Evaluation
 
@@ -111,7 +111,7 @@ expression: "agents.get_unique_agents(scope='all').length >= 3"
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Evaluation
 metadata:
-  name: tool-usage-evaluator
+  name: tool-usage-evaluation
 spec:
   type: event
   config:
@@ -130,7 +130,7 @@ spec:
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Evaluation
 metadata:
-  name: agent-performance-evaluator
+  name: agent-performance-evaluation
 spec:
   type: event
   config:
@@ -149,7 +149,7 @@ spec:
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Evaluation
 metadata:
-  name: comprehensive-evaluator
+  name: comprehensive-evaluation
 spec:
   type: event
   config:
@@ -166,6 +166,31 @@ spec:
       - name: "proper_sequence"
         expression: "sequence.was_completed(['ResolveStart', 'AgentExecutionStart', 'ResolveComplete'])"
         weight: 2
+```
+
+### Attach an Evaluator
+
+Each `Evaluation` references an existing `Evaluator` service via `spec.evaluator`:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: tool-usage-evaluation
+spec:
+  type: event
+  config:
+    rules:
+      - name: "tools_used"
+        expression: "tool.was_called()"
+        weight: 1
+  evaluator:
+    name: tool-usage-evaluator
+    parameters:
+    - name: query.name
+      value: my-query
+    - name: query.namespace
+      value: default
 ```
 
 ## Backward Compatibility
