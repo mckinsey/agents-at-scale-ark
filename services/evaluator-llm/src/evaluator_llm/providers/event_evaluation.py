@@ -238,37 +238,145 @@ class EventEvaluationProvider(EvaluationProvider):
     
     async def _replace_tool_calls(self, expression: str) -> str:
         """Replace tool helper calls with results"""
-        # tool.was_called() or tools.was_called()
+        # tools.was_called('tool-name', scope='session') - parameterized with scope
+        tool_was_called_scope_pattern = r"\btool[s]?\.was_called\(\s*['\"]([^'\"]+)['\"]\s*,\s*scope\s*=\s*['\"]([^'\"]+)['\"]\s*\)"
+        match = re.search(tool_was_called_scope_pattern, expression, re.IGNORECASE)
+        if match:
+            tool_name = match.group(1)
+            scope_str = match.group(2)
+            scope = self._parse_scope(scope_str)
+            result = await self.tool_helper.was_tool_called(tool_name=tool_name, scope=scope)
+            expression = re.sub(tool_was_called_scope_pattern, str(result), expression, flags=re.IGNORECASE)
+        
+        # tools.was_called('tool-name') - parameterized version
+        else:
+            tool_was_called_pattern = r"\btool[s]?\.was_called\(\s*['\"]([^'\"]+)['\"]\s*\)"
+            match = re.search(tool_was_called_pattern, expression, re.IGNORECASE)
+            if match:
+                tool_name = match.group(1)
+                result = await self.tool_helper.was_tool_called(tool_name=tool_name)
+                expression = re.sub(tool_was_called_pattern, str(result), expression, flags=re.IGNORECASE)
+        
+        # tool.was_called() or tools.was_called() - parameterless version
         if re.search(r'\btool[s]?\.was_called\(\)', expression, re.IGNORECASE):
             result = await self.tool_helper.was_tool_called()
             expression = re.sub(r'\btool[s]?\.was_called\(\)', str(result), expression, flags=re.IGNORECASE)
         
-        # tool.get_success_rate()
-        if re.search(r'\btool[s]?\.get_success_rate\(\)', expression, re.IGNORECASE):
+        # tools.get_execution_metrics('tool-name').call_count
+        execution_metrics_pattern = r"\btool[s]?\.get_execution_metrics\(\s*['\"]([^'\"]+)['\"]\s*\)\.call_count"
+        match = re.search(execution_metrics_pattern, expression, re.IGNORECASE)
+        if match:
+            tool_name = match.group(1)
+            result = await self.tool_helper.get_tool_call_count(tool_name=tool_name)
+            logger.info(f"DEBUG: get_execution_metrics for tool '{tool_name}' returned call_count: {result}")
+            expression = re.sub(execution_metrics_pattern, str(result), expression, flags=re.IGNORECASE)
+        
+        # tools.had_error('tool-name')
+        tool_had_error_pattern = r"\btool[s]?\.had_error\(\s*['\"]([^'\"]+)['\"]\s*\)"
+        match = re.search(tool_had_error_pattern, expression, re.IGNORECASE)
+        if match:
+            tool_name = match.group(1)
+            # Check if tool had errors by comparing successful vs total calls
+            successful_calls = await self.tool_helper.get_successful_tool_calls(tool_name=tool_name)
+            failed_calls = await self.tool_helper.get_failed_tool_calls(tool_name=tool_name)
+            result = len(failed_calls) > 0
+            expression = re.sub(tool_had_error_pattern, str(result), expression, flags=re.IGNORECASE)
+        
+        # tools.get_success_rate('tool-name') - parameterized version
+        tool_success_rate_pattern = r"\btool[s]?\.get_success_rate\(\s*['\"]([^'\"]+)['\"]\s*\)"
+        match = re.search(tool_success_rate_pattern, expression, re.IGNORECASE)
+        if match:
+            tool_name = match.group(1)
+            result = await self.tool_helper.get_tool_success_rate(tool_name=tool_name)
+            expression = re.sub(tool_success_rate_pattern, str(result), expression, flags=re.IGNORECASE)
+        
+        # tool.get_success_rate() - parameterless version
+        elif re.search(r'\btool[s]?\.get_success_rate\(\)', expression, re.IGNORECASE):
             result = await self.tool_helper.get_tool_success_rate()
             expression = re.sub(r'\btool[s]?\.get_success_rate\(\)', str(result), expression, flags=re.IGNORECASE)
         
-        # tool.get_call_count()
-        if re.search(r'\btool[s]?\.get_call_count\(\)', expression, re.IGNORECASE):
+        # tools.get_call_count('tool-name') - parameterized version
+        tool_call_count_pattern = r"\btool[s]?\.get_call_count\(\s*['\"]([^'\"]+)['\"]\s*\)"
+        match = re.search(tool_call_count_pattern, expression, re.IGNORECASE)
+        if match:
+            tool_name = match.group(1)
+            result = await self.tool_helper.get_tool_call_count(tool_name=tool_name)
+            expression = re.sub(tool_call_count_pattern, str(result), expression, flags=re.IGNORECASE)
+        
+        # tool.get_call_count() - parameterless version
+        elif re.search(r'\btool[s]?\.get_call_count\(\)', expression, re.IGNORECASE):
             result = await self.tool_helper.get_tool_call_count()
             expression = re.sub(r'\btool[s]?\.get_call_count\(\)', str(result), expression, flags=re.IGNORECASE)
+        
+        # tools.get_parameters('tool-name')
+        tool_parameters_pattern = r"\btool[s]?\.get_parameters\(\s*['\"]([^'\"]+)['\"]\s*\)"
+        match = re.search(tool_parameters_pattern, expression, re.IGNORECASE)
+        if match:
+            tool_name = match.group(1)
+            result = await self.tool_helper.get_tool_parameters(tool_name=tool_name)
+            # Convert to string representation for evaluation
+            expression = re.sub(tool_parameters_pattern, str(result), expression, flags=re.IGNORECASE)
+        
+        # tools.parameter_contains('tool-name', 'key', 'value') - check if parameter contains specific key/value
+        param_contains_pattern = r"\btool[s]?\.parameter_contains\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]\s*\)"
+        match = re.search(param_contains_pattern, expression, re.IGNORECASE)
+        if match:
+            tool_name = match.group(1)
+            param_key = match.group(2)
+            param_value = match.group(3)
+            result = await self._check_tool_parameter_contains(tool_name, param_key, param_value)
+            expression = re.sub(param_contains_pattern, str(result), expression, flags=re.IGNORECASE)
+        
+        # tools.parameter_type('tool-name', 'key', 'expected_type') - check parameter type
+        param_type_pattern = r"\btool[s]?\.parameter_type\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]\s*\)"
+        match = re.search(param_type_pattern, expression, re.IGNORECASE)
+        if match:
+            tool_name = match.group(1)
+            param_key = match.group(2)
+            expected_type = match.group(3)
+            result = await self._check_tool_parameter_type(tool_name, param_key, expected_type)
+            expression = re.sub(param_type_pattern, str(result), expression, flags=re.IGNORECASE)
         
         return expression
     
     async def _replace_agent_calls(self, expression: str) -> str:
         """Replace agent helper calls with results"""
-        # agent.was_executed() or agents.was_executed()
-        if re.search(r'\bagent[s]?\.was_executed\(\)', expression, re.IGNORECASE):
+        # agents.was_executed('agent-name') - parameterized version
+        agent_was_executed_pattern = r"\bagent[s]?\.was_executed\(\s*['\"]([^'\"]+)['\"]\s*\)"
+        match = re.search(agent_was_executed_pattern, expression, re.IGNORECASE)
+        if match:
+            agent_name = match.group(1)
+            result = await self.agent_helper.was_agent_executed(agent_name=agent_name)
+            expression = re.sub(agent_was_executed_pattern, str(result), expression, flags=re.IGNORECASE)
+        
+        # agent.was_executed() or agents.was_executed() - parameterless version
+        elif re.search(r'\bagent[s]?\.was_executed\(\)', expression, re.IGNORECASE):
             result = await self.agent_helper.was_agent_executed()
             expression = re.sub(r'\bagent[s]?\.was_executed\(\)', str(result), expression, flags=re.IGNORECASE)
         
-        # agent.get_success_rate()
-        if re.search(r'\bagent[s]?\.get_success_rate\(\)', expression, re.IGNORECASE):
+        # agents.get_success_rate('agent-name') - parameterized version
+        agent_success_rate_pattern = r"\bagent[s]?\.get_success_rate\(\s*['\"]([^'\"]+)['\"]\s*\)"
+        match = re.search(agent_success_rate_pattern, expression, re.IGNORECASE)
+        if match:
+            agent_name = match.group(1)
+            result = await self.agent_helper.get_agent_success_rate(agent_name=agent_name)
+            expression = re.sub(agent_success_rate_pattern, str(result), expression, flags=re.IGNORECASE)
+        
+        # agent.get_success_rate() - parameterless version
+        elif re.search(r'\bagent[s]?\.get_success_rate\(\)', expression, re.IGNORECASE):
             result = await self.agent_helper.get_agent_success_rate()
             expression = re.sub(r'\bagent[s]?\.get_success_rate\(\)', str(result), expression, flags=re.IGNORECASE)
         
-        # agent.get_execution_count()
-        if re.search(r'\bagent[s]?\.get_execution_count\(\)', expression, re.IGNORECASE):
+        # agents.get_execution_count('agent-name') - parameterized version
+        agent_execution_count_pattern = r"\bagent[s]?\.get_execution_count\(\s*['\"]([^'\"]+)['\"]\s*\)"
+        match = re.search(agent_execution_count_pattern, expression, re.IGNORECASE)
+        if match:
+            agent_name = match.group(1)
+            result = await self.agent_helper.get_agent_execution_count(agent_name=agent_name)
+            expression = re.sub(agent_execution_count_pattern, str(result), expression, flags=re.IGNORECASE)
+        
+        # agent.get_execution_count() - parameterless version
+        elif re.search(r'\bagent[s]?\.get_execution_count\(\)', expression, re.IGNORECASE):
             result = await self.agent_helper.get_agent_execution_count()
             expression = re.sub(r'\bagent[s]?\.get_execution_count\(\)', str(result), expression, flags=re.IGNORECASE)
         
@@ -276,13 +384,29 @@ class EventEvaluationProvider(EvaluationProvider):
     
     async def _replace_team_calls(self, expression: str) -> str:
         """Replace team helper calls with results"""
-        # team.was_executed() or teams.was_executed()
-        if re.search(r'\bteam[s]?\.was_executed\(\)', expression, re.IGNORECASE):
+        # teams.was_executed('team-name') - parameterized version
+        team_was_executed_pattern = r"\bteam[s]?\.was_executed\(\s*['\"]([^'\"]+)['\"]\s*\)"
+        match = re.search(team_was_executed_pattern, expression, re.IGNORECASE)
+        if match:
+            team_name = match.group(1)
+            result = await self.team_helper.was_team_executed(team_name=team_name)
+            expression = re.sub(team_was_executed_pattern, str(result), expression, flags=re.IGNORECASE)
+        
+        # team.was_executed() or teams.was_executed() - parameterless version
+        elif re.search(r'\bteam[s]?\.was_executed\(\)', expression, re.IGNORECASE):
             result = await self.team_helper.was_team_executed()
             expression = re.sub(r'\bteam[s]?\.was_executed\(\)', str(result), expression, flags=re.IGNORECASE)
         
-        # team.get_success_rate()
-        if re.search(r'\bteam[s]?\.get_success_rate\(\)', expression, re.IGNORECASE):
+        # teams.get_success_rate('team-name') - parameterized version
+        team_success_rate_pattern = r"\bteam[s]?\.get_success_rate\(\s*['\"]([^'\"]+)['\"]\s*\)"
+        match = re.search(team_success_rate_pattern, expression, re.IGNORECASE)
+        if match:
+            team_name = match.group(1)
+            result = await self.team_helper.get_team_success_rate(team_name=team_name)
+            expression = re.sub(team_success_rate_pattern, str(result), expression, flags=re.IGNORECASE)
+        
+        # team.get_success_rate() - parameterless version
+        elif re.search(r'\bteam[s]?\.get_success_rate\(\)', expression, re.IGNORECASE):
             result = await self.team_helper.get_team_success_rate()
             expression = re.sub(r'\bteam[s]?\.get_success_rate\(\)', str(result), expression, flags=re.IGNORECASE)
         
@@ -470,6 +594,85 @@ class EventEvaluationProvider(EvaluationProvider):
         
         logger.info(f"Filtered to {len(event_list)} events for session {session_id}")
         return event_list
+    
+    def _parse_scope(self, scope_str: str) -> EventScope:
+        """Parse scope string to EventScope enum"""
+        scope_str = scope_str.lower().strip()
+        if scope_str == "session":
+            return EventScope.SESSION
+        elif scope_str == "query":
+            return EventScope.QUERY
+        elif scope_str == "all":
+            return EventScope.ALL
+        else:
+            return EventScope.CURRENT
+    
+    async def _check_tool_parameter_contains(self, tool_name: str, param_key: str, param_value: str) -> bool:
+        """Check if tool parameters contain a specific key/value"""
+        import json
+        try:
+            parameters_list = await self.tool_helper.get_tool_parameters(tool_name)
+            logger.info(f"DEBUG: parameter_contains for tool '{tool_name}' - raw parameters: {parameters_list}")
+            
+            for i, params in enumerate(parameters_list):
+                logger.info(f"DEBUG: processing param set {i}: {params} (type: {type(params)})")
+                if isinstance(params, str):
+                    # Parse JSON string parameters
+                    params = json.loads(params)
+                    logger.info(f"DEBUG: parsed JSON: {params}")
+                if isinstance(params, dict) and param_key in params:
+                    actual_value = str(params[param_key])
+                    logger.info(f"DEBUG: found key '{param_key}' with value '{actual_value}', looking for '{param_value}'")
+                    if param_value.lower() in actual_value.lower():
+                        logger.info(f"DEBUG: parameter_contains MATCH found!")
+                        return True
+                else:
+                    logger.info(f"DEBUG: key '{param_key}' not found in params: {list(params.keys()) if isinstance(params, dict) else 'not a dict'}")
+            
+            logger.info(f"DEBUG: parameter_contains NO MATCH found")
+            return False
+        except Exception as e:
+            logger.error(f"DEBUG: parameter_contains ERROR: {e}")
+            return False
+    
+    async def _check_tool_parameter_type(self, tool_name: str, param_key: str, expected_type: str) -> bool:
+        """Check if tool parameter has expected type"""
+        import json
+        try:
+            parameters_list = await self.tool_helper.get_tool_parameters(tool_name)
+            logger.info(f"DEBUG: parameter_type for tool '{tool_name}' - raw parameters: {parameters_list}")
+            
+            for i, params in enumerate(parameters_list):
+                logger.info(f"DEBUG: processing param set {i}: {params} (type: {type(params)})")
+                if isinstance(params, str):
+                    # Parse JSON string parameters
+                    params = json.loads(params)
+                    logger.info(f"DEBUG: parsed JSON: {params}")
+                if isinstance(params, dict) and param_key in params:
+                    value = params[param_key]
+                    logger.info(f"DEBUG: found key '{param_key}' with value '{value}' (type: {type(value)}), expected type: '{expected_type}'")
+                    if expected_type.lower() == "string" and isinstance(value, str):
+                        logger.info(f"DEBUG: parameter_type STRING MATCH!")
+                        return True
+                    elif expected_type.lower() == "integer" and isinstance(value, int):
+                        logger.info(f"DEBUG: parameter_type INTEGER MATCH!")
+                        return True
+                    elif expected_type.lower() == "float" and isinstance(value, (int, float)):
+                        logger.info(f"DEBUG: parameter_type FLOAT MATCH!")
+                        return True
+                    elif expected_type.lower() == "boolean" and isinstance(value, bool):
+                        logger.info(f"DEBUG: parameter_type BOOLEAN MATCH!")
+                        return True
+                    else:
+                        logger.info(f"DEBUG: parameter_type NO TYPE MATCH")
+                else:
+                    logger.info(f"DEBUG: key '{param_key}' not found in params: {list(params.keys()) if isinstance(params, dict) else 'not a dict'}")
+            
+            logger.info(f"DEBUG: parameter_type NO MATCH found")
+            return False
+        except Exception as e:
+            logger.error(f"DEBUG: parameter_type ERROR: {e}")
+            return False
     
     def _event_to_dict(self, event) -> Dict[str, Any]:
         """Convert Kubernetes event to dictionary for evaluation"""

@@ -35,6 +35,15 @@ expression: "tools.was_called('search')"
 
 # Count tool calls
 expression: "tool.get_call_count() >= 2"
+
+# Validate tool parameters (NEW)
+expression: "tools.parameter_contains('get-coordinates', 'city', 'Chicago')"
+
+# Check parameter types (NEW)
+expression: "tools.parameter_type('get-forecast', 'gridX', 'integer')"
+
+# Verify exact call counts (NEW)
+expression: "tools.get_execution_metrics('search').call_count == 1"
 ```
 
 #### Agent Helper
@@ -165,6 +174,39 @@ spec:
         weight: 2
       - name: "proper_sequence"
         expression: "sequence.was_completed(['ResolveStart', 'AgentExecutionStart', 'ResolveComplete'])"
+        weight: 2
+```
+
+### Advanced Parameter Validation Example
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: weather-tools-validation
+spec:
+  type: event
+  config:
+    queryRef:
+      name: chicago-weather-query
+    rules:
+      - name: "coordinates_tool_called"
+        expression: "tools.was_called('get-coordinates')"
+        weight: 2
+      - name: "forecast_tool_called"
+        expression: "tools.was_called('get-forecast')"
+        weight: 2
+      - name: "coordinates_has_city_param"
+        expression: "tools.parameter_contains('get-coordinates', 'city', 'Chicago')"
+        weight: 1
+      - name: "forecast_has_office_param"
+        expression: "tools.parameter_type('get-forecast', 'office', 'string')"
+        weight: 1
+      - name: "forecast_has_grid_coords"
+        expression: "tools.parameter_type('get-forecast', 'gridX', 'integer')"
+        weight: 1
+      - name: "tools_called_exactly_once"
+        expression: "tools.get_execution_metrics('get-coordinates').call_count == 1 and tools.get_execution_metrics('get-forecast').call_count == 1"
         weight: 2
 ```
 

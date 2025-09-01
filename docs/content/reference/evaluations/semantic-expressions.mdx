@@ -28,7 +28,7 @@ Check if a specific tool was called.
 
 **Returns:** `boolean`
 
-**Example:**
+**Examples:**
 ```yaml
 expression: "tools.was_called('search')"
 expression: "tools.was_called('database', scope='session')"
@@ -44,14 +44,40 @@ Get total number of tool calls.
 expression: "tool.get_call_count() >= 2"
 ```
 
+### `tools.get_call_count(name)`
+Get number of calls for a specific tool.
+
+**Parameters:**
+- `name` (string): Tool name to count
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "tools.get_call_count('search') >= 1"
+```
+
 ### `tool.get_success_rate()`
-Calculate tool success rate (0.0 to 1.0).
+Calculate overall tool success rate (0.0 to 1.0).
 
 **Returns:** `number`
 
 **Example:**
 ```yaml
 expression: "tool.get_success_rate() >= 0.8"
+```
+
+### `tools.get_success_rate(name)`
+Calculate success rate for a specific tool.
+
+**Parameters:**
+- `name` (string): Tool name to analyze
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "tools.get_success_rate('search') >= 0.9"
 ```
 
 ### `tools.had_error(name)`
@@ -67,22 +93,61 @@ Check if a specific tool encountered errors.
 expression: "not tools.had_error('search')"
 ```
 
-### `tools.get_execution_metrics(name)`
-Get detailed metrics for a specific tool.
+### `tools.get_execution_metrics(name).call_count`
+Get call count from detailed metrics for a specific tool.
 
 **Parameters:**
 - `name` (string): Tool name
 
-**Returns:** `object` with fields:
-- `call_count`: Number of calls
-- `success_count`: Successful calls
-- `error_count`: Failed calls
-- `avg_duration`: Average execution time
-- `total_duration`: Total execution time
+**Returns:** `number`
 
 **Example:**
 ```yaml
-expression: "tools.get_execution_metrics('search').avg_duration <= 2.0"
+expression: "tools.get_execution_metrics('search').call_count == 1"
+```
+
+### `tools.get_parameters(name)`
+Get parameters used for tool calls.
+
+**Parameters:**
+- `name` (string): Tool name
+
+**Returns:** `array` of parameter objects
+
+**Example:**
+```yaml
+expression: "tools.get_parameters('search')"
+```
+
+### `tools.parameter_contains(name, key, value)`
+Check if tool parameters contain a specific key/value.
+
+**Parameters:**
+- `name` (string): Tool name
+- `key` (string): Parameter key to check
+- `value` (string): Value to search for (case-insensitive)
+
+**Returns:** `boolean`
+
+**Example:**
+```yaml
+expression: "tools.parameter_contains('get-coordinates', 'city', 'Chicago')"
+```
+
+### `tools.parameter_type(name, key, type)`
+Validate parameter type for tool calls.
+
+**Parameters:**
+- `name` (string): Tool name
+- `key` (string): Parameter key to check
+- `type` (string): Expected type ('string', 'integer', 'float', 'boolean')
+
+**Returns:** `boolean`
+
+**Examples:**
+```yaml
+expression: "tools.parameter_type('get-forecast', 'office', 'string')"
+expression: "tools.parameter_type('get-forecast', 'gridX', 'integer')"
 ```
 
 ## Agent Helper Methods
@@ -97,12 +162,11 @@ Check if any agent was executed.
 expression: "agent.was_executed()"
 ```
 
-### `agents.was_executed(name, [scope])`
+### `agents.was_executed(name)`
 Check if a specific agent was executed.
 
 **Parameters:**
 - `name` (string): Agent name
-- `scope` (string, optional): Event scope
 
 **Returns:** `boolean`
 
@@ -121,8 +185,21 @@ Get total number of agent executions.
 expression: "agent.get_execution_count() <= 5"
 ```
 
+### `agents.get_execution_count(name)`
+Get execution count for a specific agent.
+
+**Parameters:**
+- `name` (string): Agent name
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "agents.get_execution_count('researcher') == 1"
+```
+
 ### `agent.get_success_rate()`
-Calculate agent success rate.
+Calculate overall agent success rate.
 
 **Returns:** `number`
 
@@ -131,31 +208,19 @@ Calculate agent success rate.
 expression: "agent.get_success_rate() >= 0.9"
 ```
 
-### `agents.get_tools_used(name)`
-Get list of tools used by an agent.
+### `agents.get_success_rate(name)`
+Calculate success rate for a specific agent.
 
 **Parameters:**
 - `name` (string): Agent name
 
-**Returns:** `array` of tool names
+**Returns:** `number`
 
 **Example:**
 ```yaml
-expression: "agents.get_tools_used('researcher').length >= 2"
+expression: "agents.get_success_rate('researcher') >= 0.8"
 ```
 
-### `agents.get_execution_summary(name)`
-Get comprehensive execution summary for an agent.
-
-**Parameters:**
-- `name` (string): Agent name
-
-**Returns:** `object` with execution details
-
-**Example:**
-```yaml
-expression: "agents.get_execution_summary('researcher').status == 'completed'"
-```
 
 ## Query Helper Methods
 
@@ -189,56 +254,7 @@ Get query resolution status.
 expression: "query.get_resolution_status() == 'success'"
 ```
 
-### `query.get_query_targets()`
-Get number of resolution targets processed.
 
-**Returns:** `number`
-
-**Example:**
-```yaml
-expression: "query.get_query_targets() >= 1"
-```
-
-### `query.was_query_timeout(threshold)`
-Check if query exceeded timeout threshold.
-
-**Parameters:**
-- `threshold` (number): Timeout in seconds
-
-**Returns:** `boolean`
-
-**Example:**
-```yaml
-expression: "not query.was_query_timeout(60.0)"
-```
-
-### `query.get_session_query_count([scope])`
-Count queries in session.
-
-**Parameters:**
-- `scope` (string, optional): Event scope (typically 'session')
-
-**Returns:** `number`
-
-**Example:**
-```yaml
-expression: "query.get_session_query_count(scope='session') >= 1"
-```
-
-### `query.get_complexity_metrics()`
-Get query complexity analysis.
-
-**Returns:** `object` with fields:
-- `complexity_level`: 'simple', 'moderate', 'complex', 'highly_complex'
-- `complexity_score`: Numeric score
-- `agent_executions`: Number of agent executions
-- `tool_calls`: Number of tool calls
-- `team_executions`: Number of team executions
-
-**Example:**
-```yaml
-expression: "query.get_complexity_metrics().complexity_level != 'highly_complex'"
-```
 
 ## Sequence Helper Methods
 
@@ -318,7 +334,7 @@ Check if any team was executed.
 expression: "team.was_executed()"
 ```
 
-### `teams.was_team_executed(name)`
+### `teams.was_executed(name)`
 Check if specific team was executed.
 
 **Parameters:**
@@ -328,34 +344,32 @@ Check if specific team was executed.
 
 **Example:**
 ```yaml
-expression: "teams.was_team_executed('research-team')"
+expression: "teams.was_executed('research-team')"
 ```
 
-### `teams.get_team_agents(name)`
-Get list of agents in a team.
+### `team.get_success_rate()`
+Calculate overall team success rate.
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "team.get_success_rate() >= 0.8"
+```
+
+### `teams.get_success_rate(name)`
+Calculate success rate for a specific team.
 
 **Parameters:**
 - `name` (string): Team name
 
-**Returns:** `array` of agent names
+**Returns:** `number`
 
 **Example:**
 ```yaml
-expression: "teams.get_team_agents('research-team').length >= 2"
+expression: "teams.get_success_rate('research-team') >= 0.9"
 ```
 
-### `teams.detect_collaboration_pattern(name)`
-Detect team collaboration pattern.
-
-**Parameters:**
-- `name` (string): Team name
-
-**Returns:** `string` ('sequential', 'parallel', 'mixed')
-
-**Example:**
-```yaml
-expression: "teams.detect_collaboration_pattern('research-team') == 'parallel'"
-```
 
 ## LLM Helper Methods
 
@@ -387,6 +401,43 @@ Get total tokens used across all LLM calls.
 **Example:**
 ```yaml
 expression: "llm.get_total_tokens() <= 10000"
+```
+
+## Advanced Parameter Validation
+
+The enhanced semantic expressions support detailed parameter validation for tool calls:
+
+### Parameter Content Validation
+```yaml
+# Check if get-coordinates was called with Chicago in the city parameter
+expression: "tools.parameter_contains('get-coordinates', 'city', 'Chicago')"
+
+# Check if search tool was called with a specific query
+expression: "tools.parameter_contains('search', 'query', 'weather')"
+```
+
+### Parameter Type Validation
+```yaml
+# Validate parameter types for API calls
+expression: "tools.parameter_type('get-forecast', 'gridX', 'integer')"
+expression: "tools.parameter_type('get-forecast', 'office', 'string')"
+expression: "tools.parameter_type('calculate', 'enabled', 'boolean')"
+```
+
+### Comprehensive Tool Validation Example
+```yaml
+rules:
+  - name: "coordinates_tool_used_correctly"
+    expression: "tools.was_called('get-coordinates') and tools.parameter_contains('get-coordinates', 'city', 'Chicago')"
+    weight: 3
+  
+  - name: "forecast_parameters_valid"
+    expression: "tools.parameter_type('get-forecast', 'gridX', 'integer') and tools.parameter_type('get-forecast', 'gridY', 'integer')"
+    weight: 2
+  
+  - name: "tools_called_exactly_once"
+    expression: "tools.get_execution_metrics('get-coordinates').call_count == 1 and tools.get_execution_metrics('get-forecast').call_count == 1"
+    weight: 1
 ```
 
 ## Combining Expressions

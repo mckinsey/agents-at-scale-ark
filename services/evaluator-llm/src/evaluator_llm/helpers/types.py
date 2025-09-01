@@ -1,6 +1,9 @@
+import logging
 from typing import Dict, List, Any, Optional, Union
 from enum import Enum
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 
 class EventScope(str, Enum):
@@ -84,14 +87,39 @@ class ParsedEvent(BaseModel):
         """Create ParsedEvent from Kubernetes event dictionary"""
         # Try to parse JSON metadata from message
         metadata = None
+        message_text = event_dict.get('message', '')
         try:
             import json
-            message_data = json.loads(event_dict.get('message', '{}'))
-            if isinstance(message_data, dict) and 'Metadata' in message_data:
-                metadata_dict = message_data.get('Metadata', {})
-                metadata = EventMetadata(**metadata_dict)
-        except (json.JSONDecodeError, TypeError, ValueError):
-            # Message is not JSON or doesn't contain expected metadata
+            message_data = json.loads(message_text)
+            logger.info(f"DEBUG: Successfully parsed JSON message: {message_data}")
+            if isinstance(message_data, dict):
+                # First try to get metadata from 'Metadata' field (nested format)
+                if 'Metadata' in message_data:
+                    metadata_dict = message_data.get('Metadata', {})
+                    metadata = EventMetadata(**metadata_dict)
+                    logger.info(f"DEBUG: Parsed nested metadata: {metadata}")
+                # If no 'Metadata' field, treat the entire message as metadata (direct format)
+                elif any(key in message_data for key in ['toolName', 'agentName', 'parameters', 'duration']):
+                    # This looks like direct metadata format
+                    logger.info(f"DEBUG: Detected direct metadata format with keys: {list(message_data.keys())}")
+                    
+                    # Handle parameters field - convert JSON string to dict if needed
+                    if 'parameters' in message_data and isinstance(message_data['parameters'], str):
+                        try:
+                            message_data['parameters'] = json.loads(message_data['parameters'])
+                            logger.info(f"DEBUG: Converted parameters from string to dict: {message_data['parameters']}")
+                        except (json.JSONDecodeError, TypeError) as param_err:
+                            logger.info(f"DEBUG: Failed to parse parameters JSON: {param_err}")
+                            # Remove parameters if we can't parse it
+                            message_data.pop('parameters', None)
+                    
+                    metadata = EventMetadata(**message_data)
+                    logger.info(f"DEBUG: Parsed direct metadata: {metadata}")
+                else:
+                    logger.info(f"DEBUG: Message data doesn't contain expected metadata keys: {list(message_data.keys())}")
+        except (json.JSONDecodeError, TypeError, ValueError) as e:
+            # Log parsing failures for debugging
+            logger.info(f"DEBUG: Failed to parse event metadata from message '{message_text}': {e}")
             pass
         
         return cls(

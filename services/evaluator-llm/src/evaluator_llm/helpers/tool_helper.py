@@ -56,8 +56,19 @@ class ToolHelper:
             Number of tool calls
         """
         events = await self.event_analyzer.get_tool_events(tool_name=tool_name, scope=scope)
-        # Count only start or complete events to avoid double counting
-        call_events = [e for e in events if e.reason in [EventType.TOOL_CALL_START.value, EventType.TOOL_CALL_COMPLETE.value]]
+        logger.info(f"DEBUG: get_tool_call_count for '{tool_name}' found {len(events)} total events")
+        
+        # Log each event to debug tool name filtering
+        for i, event in enumerate(events):
+            tool_name_in_metadata = event.metadata.toolName if event.metadata else "NO_METADATA"
+            logger.info(f"DEBUG: Event {i}: reason={event.reason}, metadata_tool_name='{tool_name_in_metadata}', has_metadata={event.metadata is not None}")
+        
+        # Count only start events - each tool call begins with a start event
+        call_events = [e for e in events if e.reason == EventType.TOOL_CALL_START.value]
+        
+        logger.info(f"DEBUG: get_tool_call_count event reasons: {[e.reason for e in events]}")
+        logger.info(f"DEBUG: get_tool_call_count valid call events: {len(call_events)} (counting only {EventType.TOOL_CALL_START.value} events)")
+        
         return len(call_events)
     
     async def get_successful_tool_calls(
@@ -204,12 +215,19 @@ class ToolHelper:
             List of parameter dictionaries used for tool calls
         """
         events = await self.event_analyzer.get_tool_events(tool_name=tool_name, scope=scope)
+        logger.debug(f"DEBUG: get_tool_parameters for '{tool_name}' found {len(events)} events")
+        
         parameters = []
         
-        for event in events:
+        for i, event in enumerate(events):
+            logger.debug(f"DEBUG: event {i}: reason={event.reason}, has_metadata={event.metadata is not None}, message='{event.message}'")
+            if event.metadata:
+                logger.debug(f"DEBUG: event {i} metadata: toolName={getattr(event.metadata, 'toolName', None)}, parameters={getattr(event.metadata, 'parameters', None)}")
             if event.metadata and event.metadata.parameters:
                 parameters.append(event.metadata.parameters)
+                logger.debug(f"DEBUG: added parameters: {event.metadata.parameters}")
         
+        logger.debug(f"DEBUG: get_tool_parameters returning {len(parameters)} parameter sets: {parameters}")
         return parameters
     
     def _parse_duration(self, duration_str: str) -> float:
