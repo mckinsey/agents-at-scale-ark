@@ -47,6 +47,14 @@ deployments:
           image:
             repository: ${runtime.images.ark-api.image}
             tag: ${runtime.images.ark-api.tag}
+          # Override resources for in-cluster local development - API with live reload needs more memory and CPU than production
+          resources:
+            limits:
+              memory: "1024Mi"
+              cpu: "1000m"
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
 
   ark-dashboard:
     namespace: default
@@ -58,6 +66,14 @@ deployments:
           image:
             repository: ${runtime.images.ark-dashboard.image}
             tag: ${runtime.images.ark-dashboard.tag}
+          # Override resources for in-cluster local development - Next.js + Turbopack compilation needs 3GB+ memory and 2 CPU cores for fast builds
+          resources:
+            limits:
+              memory: "3072Mi"
+              cpu: "2000m"
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
 
 # Development configuration - active during 'devspace dev'
 dev:
