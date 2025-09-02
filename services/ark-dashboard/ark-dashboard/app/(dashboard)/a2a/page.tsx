@@ -1,8 +1,9 @@
 "use client";
 
 import { A2AServersSection } from "@/components/sections/a2a-servers-section";
+import type { A2AServersSectionHandle } from "@/components/sections/a2a-servers-section";
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useRef } from "react";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -11,12 +12,13 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-// import { Button } from "@/components/ui/button";
-// import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 
 function A2AContent() {
   const searchParams = useSearchParams();
   const namespace = searchParams.get("namespace") || "default";
+  const a2aSectionRef = useRef<A2AServersSectionHandle>(null);
 
   return (
     <>
@@ -34,14 +36,15 @@ function A2AContent() {
           </BreadcrumbList>
         </Breadcrumb>
         <div className="ml-auto">
-          {/* <Button onClick={() => mcpSectionRef.current?.openAddEditor()}>
+          <Button onClick={() => a2aSectionRef.current?.openAddEditor()}>
             <Plus className="h-4 w-4 mr-2" />
             Add A2A Server
-          </Button> */}
+          </Button>
         </div>
       </header>
+
       <div className="flex flex-1 flex-col">
-        <A2AServersSection namespace={namespace} />
+        <A2AServersSection ref={a2aSectionRef} namespace={namespace} />
       </div>
     </>
   );
