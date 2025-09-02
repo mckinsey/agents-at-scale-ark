@@ -167,39 +167,15 @@ export const memoryService = {
     sessionId: string
   ): Promise<SessionConversation | null> {
     try {
-      // First get the memory resource to find its endpoint
-      const memory = await this.getMemoryResources(namespace);
-      const memoryResource = memory.find(m => m.name === memoryName);
+      // Use the memory API proxy route
+      const apiUrl = `/api/memory/messages/${encodeURIComponent(sessionId)}?namespace=${namespace}&memoryName=${memoryName}`;
       
-      if (!memoryResource) {
-        console.warn(`Memory resource ${memoryName} not found`);
-        return null;
-      }
-
-      // Get the memory service endpoint
-      const memoryDetailUrl = `/api/v1/namespaces/${namespace}/memories/${memoryName}`;
-      const memoryDetail = await apiClient.get<{ status?: { lastResolvedAddress?: string } }>(memoryDetailUrl);
-      
-      if (!memoryDetail?.status?.lastResolvedAddress) {
-        console.warn(`No resolved address for memory ${memoryName}`);
-        return null;
-      }
-
-      // Fetch messages directly from memory service
-      const memoryServiceUrl = memoryDetail.status.lastResolvedAddress;
-      const messagesUrl = `${memoryServiceUrl}/messages/${encodeURIComponent(sessionId)}`;
-      
-      const response = await fetch(messagesUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch messages: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
+      const response = await apiClient.get<{ messages: StoredMessage[] }>(apiUrl);
       
       return {
         sessionId,
         memoryName,
-        messages: data.messages || [],
+        messages: response?.messages || [],
         lastUpdated: new Date().toISOString()
       };
     } catch (error) {
