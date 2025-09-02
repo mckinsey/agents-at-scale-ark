@@ -3,7 +3,7 @@ kind: Tool
 metadata:
   name: test-json-api
 spec:
-  type: fetcher
+  type: http
   description: "Test API tool that returns structured JSON data"
   inputSchema:
     type: object
@@ -12,6 +12,6 @@ spec:
         type: string
         description: Query parameter (unused for this test)
     required: []
-  fetcher:
+  http:
     url: https://httpbin.org/json
     method: GET

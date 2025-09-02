@@ -20,8 +20,8 @@ func NewTokenUsageCollector(recorder EventEmitter) *TokenUsageCollector {
 	}
 }
 
-func (c *TokenUsageCollector) EmitEvent(ctx context.Context, eventType string, data EventData) {
-	c.recorder.EmitEvent(ctx, eventType, data)
+func (c *TokenUsageCollector) EmitEvent(ctx context.Context, eventType, reason string, data EventData) {
+	c.recorder.EmitEvent(ctx, eventType, reason, data)
 
 	if opEvent, ok := data.(OperationEvent); ok && opEvent.TokenUsage.TotalTokens > 0 {
 		c.mu.Lock()

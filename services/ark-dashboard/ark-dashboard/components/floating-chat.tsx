@@ -304,6 +304,8 @@ export default function FloatingChat({ name, type, namespace, position, onClose 
                   content={message.content}
                   status={message.status}
                   viewMode={viewMode}
+                  queryName={message.queryName}
+                  namespace={namespace}
                 />
               ) : null
             ))}

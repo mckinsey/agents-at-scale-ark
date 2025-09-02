@@ -12,6 +12,7 @@ export interface A2AServer {
   ready?: boolean;
   discovering?: boolean;
   status_message?: string;
+  annotations?: Record<string, string>;
 }
 
 // A2A Server list response
@@ -46,7 +47,7 @@ export interface A2AServerSpec {
   };
   description?: string;
   headers?: Header[];
-  transport: "http" | "sse";
+  pollingInterval?: number;
   timeout?: string;
 }
 

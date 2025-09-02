@@ -1,5 +1,8 @@
-import { Wrench, Trash2, Info } from "lucide-react"
+import { Wrench, Trash2, ChevronRight, MessageCircle } from "lucide-react"
 import { BaseCard, type BaseCardAction } from "./base-card"
+import { useRouter } from "next/navigation"
+import { getCustomIcon } from "@/lib/utils/icon-resolver"
+import { ARK_ANNOTATIONS } from "@/lib/constants/annotations"
 import type { Tool } from "@/lib/services/tools"
 
 interface ToolCardProps {
@@ -8,14 +11,20 @@ interface ToolCardProps {
   onInfo?: (tool: Tool) => void
   deleteDisabled?: boolean
   deleteDisabledReason?: string
+  namespace?: string
 }
 
-export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisabledReason }: ToolCardProps) {
+export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisabledReason, namespace }: ToolCardProps) {
+  const router = useRouter();
   const actions: BaseCardAction[] = []
+  
+  // Get custom icon or default Wrench icon
+  const annotations = tool.annotations as Record<string, string> | undefined;
+  const IconComponent = getCustomIcon(annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], Wrench)
 
   if (onInfo) {
     actions.push({
-      icon: Info,
+      icon: ChevronRight,
       label: "View tool details",
       onClick: () => onInfo(tool)
     })
@@ -30,11 +39,17 @@ export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisable
     })
   }
 
+  actions.push({
+    icon: MessageCircle,
+    label: "Query tool",
+    onClick: () => router.push(`/query/new?namespace=${namespace || 'default'}&target_tool=${tool.name}`)
+  });
+
   return (
     <BaseCard
       title={tool.name || tool.type || "Unnamed Tool"}
       description={tool.type || "Tool"}
-      icon={Wrench}
+      icon={<IconComponent className="h-5 w-5" />}
       iconClassName="text-muted-foreground"
       actions={actions}
     >

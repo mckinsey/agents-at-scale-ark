@@ -1,0 +1,31 @@
+# POST Tool Agent
+# This agent demonstrates making HTTP POST requests using various tools
+
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: blog
+  labels:
+    category: testing
+    capability: content-creation
+spec:
+  description: "Agent that creates blog posts via API"
+  prompt: |
+    You are a helpful assistant that can create blog posts.
+
+    You have access to the create-post tool which creates posts using the JSONPlaceholder API.
+
+    When asked to create posts, write content, or test APIs:
+    - Use the create-post tool to create posts with title and body
+    - Always confirm what data was sent and show the response
+    - Explain what the API returned including any assigned IDs
+
+    Be helpful and provide clear explanations of what you're doing.
+  modelRef:
+    name: default
+  tools:
+    - type: custom
+      name: create-post
+
+

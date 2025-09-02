@@ -1,7 +1,10 @@
 "use client";
 
-import { Bot, Info, Trash2 } from "lucide-react";
+import { ChevronRight, Trash2, Wrench, MessageCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { getCustomIcon } from "@/lib/utils/icon-resolver";
+import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import {
   Tooltip,
   TooltipContent,
@@ -17,10 +20,16 @@ type ToolRowProps = {
     readonly onDelete?: (id: string) => void;
     readonly inUse?: boolean;
     readonly inUseReason?: string;
+    readonly namespace?: string;
 };
 
 export function ToolRow(props: ToolRowProps) {
   const { tool, onInfo, onDelete, inUse, inUseReason } = props;
+  const router = useRouter();
+  
+  // Get custom icon or default Wrench icon
+  const annotations = tool.annotations as Record<string, string> | undefined;
+  const IconComponent = getCustomIcon(annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], Wrench);
   
   const handleInfo = () => {
     if (onInfo) {
@@ -28,10 +37,14 @@ export function ToolRow(props: ToolRowProps) {
     }
   };
 
+  const handleQueryTool = () => {
+    router.push(`/query/new?namespace=${props.namespace || 'default'}&target_tool=${tool.name}`);
+  };
+
   return (
       <div className="flex items-center py-3 px-4 bg-card border rounded-md shadow-sm hover:bg-accent/5 transition-colors w-full gap-4 flex-wrap">
         <div className="flex items-center gap-3 flex-grow overflow-hidden">
-          <Bot className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+          <IconComponent className="h-5 w-5 text-muted-foreground flex-shrink-0" />
           <div className="flex flex-col gap-1 min-w-0 max-w-[400px]">
             <p className="font-medium text-sm truncate" title={tool.name}>
               {tool.name}
@@ -55,7 +68,7 @@ export function ToolRow(props: ToolRowProps) {
                     className="h-8 w-8 p-0"
                     onClick={handleInfo}
                   >
-                    <Info className="h-4 w-4" />
+                    <ChevronRight className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>View tool details</TooltipContent>
@@ -87,6 +100,22 @@ export function ToolRow(props: ToolRowProps) {
               </Tooltip>
             </TooltipProvider>
           )}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={handleQueryTool}
+                  aria-label="Query tool"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Query tool</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
   );

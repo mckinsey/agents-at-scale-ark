@@ -7,13 +7,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 )
 
 type mockRecorder struct {
 	events []EventData
 }
 
-func (m *mockRecorder) EmitEvent(ctx context.Context, eventType string, data EventData) {
+func (m *mockRecorder) EmitEvent(ctx context.Context, eventType, reason string, data EventData) {
 	m.events = append(m.events, data)
 }
 
@@ -28,7 +29,7 @@ func TestTokenUsageCollector(t *testing.T) {
 		BaseEvent: BaseEvent{Name: "test"},
 		Type:      "agent",
 	}
-	collector.EmitEvent(ctx, "TestEvent", normalEvent)
+	collector.EmitEvent(ctx, corev1.EventTypeNormal, "TestEvent", normalEvent)
 
 	// Test that operation event with token usage gets collected
 	tokenEvent := OperationEvent{
@@ -39,7 +40,7 @@ func TestTokenUsageCollector(t *testing.T) {
 			TotalTokens:      150,
 		},
 	}
-	collector.EmitEvent(ctx, "LLMCallComplete", tokenEvent)
+	collector.EmitEvent(ctx, corev1.EventTypeNormal, "LLMCallComplete", tokenEvent)
 
 	// Test another token event
 	tokenEvent2 := OperationEvent{
@@ -50,7 +51,7 @@ func TestTokenUsageCollector(t *testing.T) {
 			TotalTokens:      275,
 		},
 	}
-	collector.EmitEvent(ctx, "LLMCallComplete", tokenEvent2)
+	collector.EmitEvent(ctx, corev1.EventTypeNormal, "LLMCallComplete", tokenEvent2)
 
 	// Verify events were passed through to underlying recorder
 	assert.Len(t, mockRec.events, 3)

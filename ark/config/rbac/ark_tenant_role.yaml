@@ -81,6 +81,7 @@ rules:
   resources:
   - agents
   - evaluators
+  - evaluations
   - mcpservers
   - memories
   - models
@@ -90,6 +91,7 @@ rules:
   - a2aservers
   - executionengines
   - agents/status
+  - evaluations/status
   - evaluators/status
   - mcpservers/status
   - memories/status
@@ -101,6 +103,7 @@ rules:
   - executionengines/status
   - agents/finalizers
   - evaluators/finalizers
+  - evaluations/finalizers
   - mcpservers/finalizers
   - memories/finalizers
   - models/finalizers
