@@ -1,0 +1,31 @@
+---
+title: "Local Development"
+description: "Local development with DevSpace for ARK services"
+---
+
+# Local Development
+
+> [!NOTE]
+>
+> DevSpace is being integrated for improved local development experience with hot reload and file sync. Currently configured for `ark-api` and `ark-dashboard` services with full development workflow support.
+
+DevSpace builds and deploys ARK services with live reload, debugger support in IDEs, and file synchronization for rapid iteration. Currently DevSpace is enabled for:
+
+- `ark-api` - The ARK API layer with FastAPI hot reload
+- `ark-dashboard` - The ARK Dashboard with Next.js Turbopack compilation
+
+## Essential Commands
+
+```bash
+# Development mode with hot reload and file sync
+devspace dev
+
+# Build images and deploy to cluster without development features
+devspace deploy
+
+# Clean up deployment
+devspace purge
+
+# View logs
+devspace logs -f
+```

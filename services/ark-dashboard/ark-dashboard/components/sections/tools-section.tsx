@@ -23,6 +23,7 @@ import {
 import { Label } from "@radix-ui/react-label";
 import { ChevronRight } from "lucide-react";
 import { groupToolsByLabel } from "@/lib/utils/groupToolsByLabels";
+import { useRouter } from "next/navigation";
 interface ToolsSectionProps {
   namespace: string;
 }
@@ -34,6 +35,7 @@ export function ToolsSection({ namespace }: ToolsSectionProps) {
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
   const [infoDialogOpen, setInfoDialogOpen] = useState(false);
   const [showCompactView, setShowCompactView] = useState(false);
+  const router = useRouter();
   const viewOptions: ToggleOption[] = [
     { id: "compact", label: "compact view", active: !showCompactView },
     { id: "card", label: "card view", active: showCompactView }
@@ -65,6 +67,7 @@ export function ToolsSection({ namespace }: ToolsSectionProps) {
     };
     loadData();
   }, [namespace]);
+
   const toolUsageMap = useMemo(() => {
     const usageMap: Record<string, { inUse: boolean; agents: Agent[] }> = {};
     tools.forEach((tool) => {
@@ -80,6 +83,7 @@ export function ToolsSection({ namespace }: ToolsSectionProps) {
     });
     return usageMap;
   }, [tools, agents]);
+
   const handleDelete = async (identifier: string) => {
     if (toolUsageMap[identifier]?.inUse) {
       return;
@@ -104,10 +108,12 @@ export function ToolsSection({ namespace }: ToolsSectionProps) {
       });
     }
   };
+
   const handleInfo = (tool: Tool) => {
     setSelectedTool(tool);
-    setInfoDialogOpen(true);
+    router.push(`/tool/${tool.name}`);
   };
+
   const parseAnnotations = (
     annotations: unknown
   ): Record<string, unknown> | null => {

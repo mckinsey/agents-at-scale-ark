@@ -74,16 +74,14 @@ log.Error(err, "failed to resolve ExecutionEngine address", "executionEngine", e
 
 ## How to log events
 
-Controllers with event recording include an `EventRecorder` field:
+Controllers with event recording include an `EventRecorder` field. Events must be either `Normal` (informational) or `Warning` (errors/warnings) as per the [Kubernetes Event API documentation](https://kubernetes.io/docs/reference/kubernetes-api/cluster-resources/event-v1/):
 
 ```go
-// Event level constants
-const (
-    EventLevelNormal  = "Normal"
-    EventLevelWarning = "Warning"
+import (
+    corev1 "k8s.io/api/core/v1"
 )
 
 // Event recording in reconciler - follow {Resource}{Action}{State} convention
-r.Recorder.Event(&query, EventLevelNormal, "QueryLLMCallComplete", eventData)
-r.Recorder.Event(&query, EventLevelWarning, "QueryExecutionFailed", fmt.Sprintf("Error: %v", err))
+r.Recorder.Event(&query, corev1.EventTypeNormal, "QueryLLMCallComplete", eventData)
+r.Recorder.Event(&query, corev1.EventTypeWarning, "QueryExecutionFailed", fmt.Sprintf("Error: %v", err))
 ```
