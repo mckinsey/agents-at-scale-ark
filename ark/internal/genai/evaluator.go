@@ -227,9 +227,9 @@ func callEvaluatorHTTP(ctx context.Context, address string, request EvaluationRe
 }
 
 // CallUnifiedEvaluator performs evaluation using the new unified endpoint
-func CallUnifiedEvaluator(ctx context.Context, k8sClient client.Client, evaluatorRef arkv1alpha1.EvaluationEvaluatorRef, request UnifiedEvaluationRequest, namespace string) (*EvaluationResponse, error) {
+func CallUnifiedEvaluator(ctx context.Context, k8sClient client.Client, evaluatorRef arkv1alpha1.EvaluationEvaluatorRef, request UnifiedEvaluationRequest, namespace string, timeout time.Duration) (*EvaluationResponse, error) {
 	log := logf.FromContext(ctx)
-	log.Info("CallUnifiedEvaluator started", "evaluatorRef", evaluatorRef.Name, "namespace", namespace, "parameters", request.Parameters)
+	log.Info("CallUnifiedEvaluator started", "evaluatorRef", evaluatorRef.Name, "namespace", namespace, "parameters", request.Parameters, "timeout", timeout)
 
 	// Load evaluator
 	evaluator, err := loadEvaluatorByName(ctx, k8sClient, evaluatorRef.Name, evaluatorRef.Namespace, namespace)
@@ -247,10 +247,10 @@ func CallUnifiedEvaluator(ctx context.Context, k8sClient client.Client, evaluato
 		return nil, err
 	}
 
-	log.Info("Calling unified evaluator HTTP endpoint", "address", address, "requestType", request.Type, "parameters", request.Parameters)
+	log.Info("Calling unified evaluator HTTP endpoint", "address", address, "requestType", request.Type, "parameters", request.Parameters, "timeout", timeout)
 
 	// Call unified evaluator HTTP endpoint
-	response, err := callUnifiedEvaluatorHTTP(ctx, address, request)
+	response, err := callUnifiedEvaluatorHTTP(ctx, address, request, timeout)
 	if err != nil {
 		log.Error(err, "Unified evaluator HTTP call failed")
 		return nil, err
@@ -260,11 +260,13 @@ func CallUnifiedEvaluator(ctx context.Context, k8sClient client.Client, evaluato
 	return response, nil
 }
 
-func callUnifiedEvaluatorHTTP(ctx context.Context, address string, request UnifiedEvaluationRequest) (*EvaluationResponse, error) {
-	// Use longer timeout for baseline evaluations due to multiple LLM calls
-	timeout := 30 * time.Second
-	if request.Type == "baseline" {
-		timeout = 120 * time.Second // 2 minutes for baseline evaluations with multiple examples
+func callUnifiedEvaluatorHTTP(ctx context.Context, address string, request UnifiedEvaluationRequest, configuredTimeout time.Duration) (*EvaluationResponse, error) {
+	// Use configured timeout, with type-specific adjustments if needed
+	timeout := configuredTimeout
+	if request.Type == "baseline" && configuredTimeout < 120*time.Second {
+		// For baseline evaluations, ensure at least 2 minutes due to multiple LLM calls
+		timeout = 120 * time.Second
+		logf.Log.Info("Adjusted timeout for baseline evaluation", "configured", configuredTimeout, "adjusted", timeout)
 	}
 
 	resp, err := callEvaluatorHTTPEndpoint(ctx, address, "", request, timeout)
@@ -286,7 +288,7 @@ func callUnifiedEvaluatorHTTP(ctx context.Context, address string, request Unifi
 		return nil, fmt.Errorf("unified evaluator returned error: %s", response.Error)
 	}
 
-	logf.Log.Info("Unified evaluator response", "score", response.Score, "passed", response.Passed, "metadata", response.Metadata, "metadata_count", len(response.Metadata))
+	logf.Log.Info("Unified evaluator response", "score", response.Score, "passed", response.Passed, "metadata", response.Metadata, "metadata_count", len(response.Metadata), "timeout_used", timeout)
 
 	return &response, nil
 }

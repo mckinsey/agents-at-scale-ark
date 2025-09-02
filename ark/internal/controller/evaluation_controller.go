@@ -197,6 +197,16 @@ func (r *EvaluationReconciler) convertParametersToMap(ctx context.Context, param
 	return paramMap
 }
 
+// getEvaluationTimeout returns the timeout duration for an evaluation
+// If not specified, returns the default of 5 minutes
+func (r *EvaluationReconciler) getEvaluationTimeout(evaluation *arkv1alpha1.Evaluation) time.Duration {
+	if evaluation.Spec.Timeout != nil {
+		return evaluation.Spec.Timeout.Duration
+	}
+	// Default to 5 minutes if not specified
+	return 5 * time.Minute
+}
+
 // resolveModelNamespace determines the appropriate model namespace with validation and fallback logic
 func (r *EvaluationReconciler) resolveModelNamespace(ctx context.Context, modelNamespaceParam, modelNameParam *arkv1alpha1.Parameter, paramMap map[string]string, defaultNamespace string) string {
 	log := logf.FromContext(ctx)
@@ -411,8 +421,12 @@ func (r *EvaluationReconciler) processDirectEvaluation(ctx context.Context, eval
 
 	log.Info("Built unified evaluation request", "evaluation", evaluation.Name, "request", request)
 
+	// Get timeout from evaluation spec
+	timeout := r.getEvaluationTimeout(&evaluation)
+	log.Info("Using timeout for direct evaluation", "evaluation", evaluation.Name, "timeout", timeout)
+
 	// Call unified endpoint
-	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace)
+	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace, timeout)
 	if err != nil {
 		log.Error(err, "Failed to call unified evaluator", "evaluation", evaluation.Name)
 		if err := r.updateStatus(ctx, evaluation, statusError, fmt.Sprintf("Evaluator call failed: %v", err)); err != nil {
@@ -612,8 +626,12 @@ func (r *EvaluationReconciler) processQueryEvaluation(ctx context.Context, evalu
 
 	log.Info("CONTROLLER: Built request", "evaluation", evaluation.Name, "queryRefInConfig", queryRef, "queryRefName", queryRef.Name, "queryRefNamespace", queryRef.Namespace)
 
+	// Get timeout from evaluation spec
+	timeout := r.getEvaluationTimeout(&evaluation)
+	log.Info("Using timeout for query evaluation", "evaluation", evaluation.Name, "timeout", timeout)
+
 	// Call unified evaluator endpoint
-	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace)
+	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace, timeout)
 	if err != nil {
 		log.Error(err, "Failed to call unified direct evaluator for query evaluation", "evaluation", evaluation.Name)
 		if err := r.updateStatus(ctx, evaluation, statusError, fmt.Sprintf("Query evaluation failed: %v", err)); err != nil {
@@ -945,8 +963,12 @@ func (r *EvaluationReconciler) processBaselineEvaluation(ctx context.Context, ev
 
 	log.Info("Built unified evaluation request for baseline", "evaluation", evaluation.Name)
 
+	// Get timeout from evaluation spec
+	timeout := r.getEvaluationTimeout(&evaluation)
+	log.Info("Using timeout for baseline evaluation", "evaluation", evaluation.Name, "timeout", timeout)
+
 	// Call unified evaluator endpoint
-	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace)
+	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace, timeout)
 	if err != nil {
 		log.Error(err, "Failed to call unified evaluator for baseline evaluation", "evaluation", evaluation.Name)
 		if err := r.updateStatus(ctx, evaluation, statusError, fmt.Sprintf("Baseline evaluation failed: %v", err)); err != nil {
@@ -1031,8 +1053,12 @@ func (r *EvaluationReconciler) processEventEvaluation(ctx context.Context, evalu
 		"ruleCount", len(evaluation.Spec.Config.Rules),
 		"parameters", paramMap)
 
+	// Get timeout from evaluation spec
+	timeout := r.getEvaluationTimeout(&evaluation)
+	log.Info("Using timeout for event evaluation", "evaluation", evaluation.Name, "timeout", timeout)
+
 	// Call the evaluator service
-	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, unifiedRequest, evaluation.Namespace)
+	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, unifiedRequest, evaluation.Namespace, timeout)
 	if err != nil {
 		log.Error(err, "Failed to call evaluator for event evaluation")
 		if err := r.updateStatus(ctx, evaluation, statusError, fmt.Sprintf("Evaluation failed: %v", err)); err != nil {

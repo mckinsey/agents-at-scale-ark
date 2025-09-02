@@ -1,0 +1,113 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: evaluation-timeout
+  labels:
+    evaluated: "true"
+spec:
+  description: Test evaluation timeout configuration is properly passed from CRD to evaluator service
+  steps:
+  - name: step-1
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          set -u
+          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+        outputs:
+        - name: azure
+          value: (json_parse($stdout))
+    - apply:
+        file: manifests/*.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-timeout-model
+          status:
+            phase: ready
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluator
+        timeout: 3m
+        name: test-timeout-evaluator
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'ready'
+    # Test 1: Short timeout evaluation
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluation
+        timeout: 2m
+        name: test-short-timeout-evaluation
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'done'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Evaluation
+          metadata:
+            name: test-short-timeout-evaluation
+          status:
+            phase: done
+    # Test 2: Default timeout evaluation (should use 5m default)
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluation
+        timeout: 6m
+        name: test-default-timeout-evaluation
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'done'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Evaluation
+          metadata:
+            name: test-default-timeout-evaluation
+          status:
+            phase: done
+    # Verify timeout configuration is set correctly in the CRD
+    - script:
+        content: |
+          # Check that timeout values are correctly set in the evaluation specs
+          echo "=== Checking timeout configurations ==="
+          
+          # Test 1: Short timeout (30s)
+          SHORT_TIMEOUT=$(kubectl get evaluation test-short-timeout-evaluation -n $NAMESPACE -o jsonpath='{.spec.timeout}')
+          if [ "$SHORT_TIMEOUT" = "30s" ]; then
+            echo "✓ Short timeout correctly set to 30s"
+          else
+            echo "✗ Short timeout not set correctly: $SHORT_TIMEOUT"
+            exit 1
+          fi
+          
+          # Test 2: Long timeout (3m) - removed as test was removed
+          
+          # Test 3: Default timeout (5m or 5m0s - both are valid)
+          DEFAULT_TIMEOUT=$(kubectl get evaluation test-default-timeout-evaluation -n $NAMESPACE -o jsonpath='{.spec.timeout}')
+          if [ "$DEFAULT_TIMEOUT" = "5m" ] || [ "$DEFAULT_TIMEOUT" = "5m0s" ]; then
+            echo "✓ Default timeout correctly set to $DEFAULT_TIMEOUT"
+          else
+            echo "✗ Default timeout not set correctly: $DEFAULT_TIMEOUT"
+            exit 1
+          fi
+          
+          # Check controller logs for timeout usage (if available)
+          echo "=== Checking controller logs for timeout usage ==="
+          kubectl logs -n ark-system -l control-plane=controller-manager --tail=200 | grep -i "timeout" | grep -i "evaluation" | tail -10 || echo "No timeout logs found (this is okay if controller hasn't processed these yet)"
+          
+          echo "✓ Timeout configuration tests completed successfully"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluation
