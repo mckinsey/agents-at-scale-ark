@@ -7,23 +7,29 @@ description: "Local development with DevSpace for ARK services"
 
 > [!NOTE]
 >
-> Local development is being migrated to DevSpace for improved developer experience with hot reload and file sync. Currently available for `ark-api` service, with the rest of the stack coming soon.
+> We are in the process of moving to [Devspace](https://www.devspace.sh/) to improve the local development experience. This page covers the new Devspace setup but is still work-in-progress.
 
-DevSpace supports the developer experience by deploying your containers with your Helm charts, enabling live reload, debugger support in IDEs, and file synchronization. DevSpace is currently configured for `ark-api`.
+[Devspace](https://www.devspace.sh/) is used for local development in Ark. Devspace builds and deploys Ark services and enables live-reload, debugging through IDEs and so on. Currently Devspace is enabled for:
 
-## Essential Commands
+- `ark-api` - The Ark API layer
+- `ark-dashboard` - The Ark Dashboard
+
+## Local Development Commands
+
+Run in local development mode. Deploys the containers in dev mode with live-reload. This is helpful for regular day-to-day development:
 
 ```bash
-# Build images and deploy to cluster without development features
-devspace deploy
-
-# Development mode with hot reload and file sync
 devspace dev
-
-# Clean up deployment
-devspace purge
-
-# View logs
-devspace logs -f
 ```
 
+To build and deploy production containers, which is extremely useful to test before raising a final PR, run:
+
+```bash
+devspace deploy
+```
+
+To remove all devspace containers, just run:
+
+```bash
+devspace purge
+```

@@ -13689,3 +13689,8 @@
 {"level":"info","msg":"Inject devspacehelper...","time":"2025-09-02T09:05:37+01:00"}
 {"level":"error","msg":"Error restarting sync: start sync: exec: unable to upgrade connection: container not found (\"ark-dashboard\")","time":"2025-09-02T09:05:38+01:00"}
 {"level":"error","msg":"Will try again in 15 seconds","time":"2025-09-02T09:05:38+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-02T09:39:25+01:00"}
+{"level":"info","msg":"Successfully injected devspacehelper into pod default/ark-dashboard-854b4cc9bb-8xn68","time":"2025-09-02T09:39:27+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-02T09:39:27+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-02T09:39:27+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T09:39:29+01:00"}

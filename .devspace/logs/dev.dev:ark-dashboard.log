@@ -307,3 +307,65 @@
 {"level":"info","msg":"dev:ark-dashboard logs   ✓ Starting...","time":"2025-09-02T09:05:40+01:00"}
 {"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled middleware in 434ms","time":"2025-09-02T09:05:40+01:00"}
 {"level":"info","msg":"dev:ark-dashboard logs   ✓ Ready in 1147ms","time":"2025-09-02T09:05:40+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-02T09:39:23+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-854b4cc9bb-8xn68","time":"2025-09-02T09:39:24+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-02T09:39:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-02T09:39:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-02T09:39:29+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Port forwarding started on: 11427 -\u003e 8022","time":"2025-09-02T09:39:30+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Use 'ssh ark-dashboard.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-02T09:39:30+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Streaming logs of pod:container ark-dashboard-854b4cc9bb-8xn68:ark-dashboard","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e ark-dashboard@0.1.0 dev","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e next dev --turbopack","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ⚠ You are using a non-standard \"NODE_ENV\" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     ▲ Next.js 15.3.4 (Turbopack)","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Local:        http://localhost:3000","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Network:      http://10.244.0.80:3000","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Starting...","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling middleware ...","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled middleware in 542ms","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Ready in 1369ms","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling / ...","time":"2025-09-02T09:46:03+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled / in 19.1s","time":"2025-09-02T09:46:22+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 19412ms","time":"2025-09-02T09:46:22+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  (node:31) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.","time":"2025-09-02T09:46:22+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  (Use `node --trace-deprecation ...` to show where the warning was created)","time":"2025-09-02T09:46:22+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ⚠ Cross origin request detected from dashboard.default.127.0.0.1.nip.io to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure \"allowedDevOrigins\" in next.config to allow this.","time":"2025-09-02T09:46:22+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins","time":"2025-09-02T09:46:22+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling /favicon.ico ...","time":"2025-09-02T09:46:23+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 2300ms","time":"2025-09-02T09:46:24+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico?favicon.e7dae495.ico 200 in 2052ms","time":"2025-09-02T09:46:24+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 281ms","time":"2025-09-02T09:46:28+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 300ms","time":"2025-09-02T09:46:31+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 373ms","time":"2025-09-02T09:46:33+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 497ms","time":"2025-09-02T09:46:35+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 31102ms","time":"2025-09-02T09:46:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents?namespace=default 200 in 29736ms","time":"2025-09-02T09:46:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 282ms","time":"2025-09-02T09:46:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 300ms","time":"2025-09-02T09:46:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 113ms","time":"2025-09-02T09:46:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 106ms","time":"2025-09-02T09:46:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 299ms","time":"2025-09-02T09:46:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 305ms","time":"2025-09-02T09:46:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 263ms","time":"2025-09-02T09:46:56+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /teams?namespace=default 200 in 54288ms","time":"2025-09-02T09:47:24+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /teams?namespace=default 200 in 9241ms","time":"2025-09-02T09:47:24+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /models?namespace=default 200 in 52092ms","time":"2025-09-02T09:47:24+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /models?namespace=default 200 in 120ms","time":"2025-09-02T09:47:24+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /teams?namespace=default 200 in 122ms","time":"2025-09-02T09:47:24+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /tools?namespace=default 200 in 47149ms","time":"2025-09-02T09:47:24+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /tools?namespace=default 200 in 1503ms","time":"2025-09-02T09:47:25+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 449ms","time":"2025-09-02T09:47:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 205ms","time":"2025-09-02T09:47:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 574ms","time":"2025-09-02T09:47:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /secrets?namespace=default 200 in 2668ms","time":"2025-09-02T09:47:28+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /secrets?namespace=default 200 in 53972ms","time":"2025-09-02T09:47:28+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled /favicon.ico in 66.9s","time":"2025-09-02T09:47:29+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /mcp?namespace=default 200 in 20544ms","time":"2025-09-02T09:47:29+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /mcp?namespace=default 200 in 48ms","time":"2025-09-02T09:47:29+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling /a2a ...","time":"2025-09-02T09:47:34+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled /a2a in 10.7s","time":"2025-09-02T09:47:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /a2a?namespace=default 200 in 10757ms","time":"2025-09-02T09:47:44+01:00"}

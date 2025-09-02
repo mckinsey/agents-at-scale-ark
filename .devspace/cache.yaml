@@ -9,9 +9,9 @@ images:
     ark-dashboard:
         imageConfigHash: 657261d93055d87799fca78a41a2ad50d48aceded4fc8b7e967416589a826002
         dockerfileHash: 2c5329488b798d98b315105d5a948b0105640b9e84b742236a02975546d7c719
-        contextHash: df6cdcf920be6fb5381e08d47f5039f05f9dd7725c139b76db158fa75c95b0d2
+        contextHash: 975c78a348311d7ac3cdc65796c8f74ac2466456f0df20e7185262a72da0dcf6
         imageName: ark-dashboard
-        tag: repxQlA
+        tag: MuLvhRT
 lastContext:
     namespace: default
     context: minikube

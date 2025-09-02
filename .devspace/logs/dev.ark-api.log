@@ -137,3 +137,13 @@
 {"level":"info","msg":"Upstream - Upload 59 create change(s) (Uncompressed ~2833.73 KB)","time":"2025-09-02T08:55:13+01:00"}
 {"level":"info","msg":"Upstream - Successfully processed 60 change(s)","time":"2025-09-02T08:55:13+01:00"}
 {"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T08:55:14+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-02T09:39:27+01:00"}
+{"level":"info","msg":"Successfully injected devspacehelper into pod default/ark-api-6989d4db5d-gxlsk","time":"2025-09-02T09:39:30+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-02T09:39:30+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-02T09:39:30+01:00"}
+{"level":"info","msg":"Upstream - Handling 1 removes","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"Upstream - Remove 'README.md'","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"Upstream - Remove 'README.md'","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"Upstream - Upload 59 create change(s) (Uncompressed ~2833.73 KB)","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 60 change(s)","time":"2025-09-02T09:39:31+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T09:39:32+01:00"}
