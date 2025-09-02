@@ -1666,6 +1666,10 @@ export interface components {
             status?: string | null;
             /** Resolved Address */
             resolved_address?: string | null;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
+            } | null;
         };
         /**
          * ModelListResponse
@@ -1705,6 +1709,10 @@ export interface components {
             model: string;
             /** Status */
             status?: string | null;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
+            } | null;
         };
         /**
          * ModelUpdateRequest
@@ -1933,6 +1941,10 @@ export interface components {
             type: string;
             /** Secret Length */
             secret_length: number;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
+            } | null;
         };
         /**
          * SecretListResponse
@@ -1953,6 +1965,10 @@ export interface components {
             name: string;
             /** Id */
             id: string;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
+            } | null;
         };
         /**
          * SecretUpdateRequest

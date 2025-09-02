@@ -1,5 +1,7 @@
 import { Lock, Pencil, Trash2 } from "lucide-react"
 import { BaseCard, type BaseCardAction } from "./base-card"
+import { getCustomIcon } from "@/lib/utils/icon-resolver"
+import { ARK_ANNOTATIONS } from "@/lib/constants/annotations"
 import type { Secret } from "@/lib/services/secrets"
 import type { Model } from "@/lib/services/models"
 
@@ -40,6 +42,9 @@ export function SecretCard({ secret, models, onEdit, onDelete }: SecretCardProps
   const usageCount = modelsUsingSecret.length
   const isInUse = usageCount > 0
 
+  // Get custom icon or default Lock icon
+  const IconComponent = getCustomIcon(secret.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], Lock)
+
   const actions: BaseCardAction[] = []
 
   if (onEdit) {
@@ -63,7 +68,7 @@ export function SecretCard({ secret, models, onEdit, onDelete }: SecretCardProps
     <BaseCard
       title={secret.name}
       description={`Used by ${usageCount} model${usageCount !== 1 ? 's' : ''}`}
-      icon={Lock}
+      icon={<IconComponent className="h-5 w-5" />}
       iconClassName="text-muted-foreground"
       actions={actions}
     >

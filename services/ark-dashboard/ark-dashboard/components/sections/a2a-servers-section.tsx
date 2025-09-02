@@ -43,7 +43,6 @@ export const A2AServersSection = forwardRef<
       const data = await A2AServersService.getAll(namespace);
       setA2AServers(data);
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error("Failed to load A2A servers:", error);
       toast({
         variant: "destructive",

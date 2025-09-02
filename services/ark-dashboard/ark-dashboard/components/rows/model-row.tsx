@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Trash2, Server } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
+import { DASHBOARD_SECTIONS } from "@/lib/constants/dashboard-icons";
+import { getCustomIcon } from "@/lib/utils/icon-resolver";
+import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -46,6 +49,9 @@ export function ModelRow({
   // Check if model has an error status
   const hasError = model.status === "error";
 
+  // Get custom icon or default model icon
+  const IconComponent = getCustomIcon(model.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], DASHBOARD_SECTIONS.models.icon);
+
   // Determine status and its styling
   const getStatusComponent = () => {
     let bgColor = "bg-gray-100";
@@ -77,7 +83,7 @@ export function ModelRow({
     <>
       <div className="flex items-center py-3 px-4 bg-card border rounded-md shadow-sm hover:bg-accent/5 transition-colors w-full gap-4">
         <div className="flex items-center gap-3 flex-grow overflow-hidden">
-          <Server className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+          <IconComponent className="h-5 w-5 text-muted-foreground flex-shrink-0" />
 
           <div className="flex flex-col gap-1 min-w-0 max-w-[300px]">
             <p className="font-medium text-sm truncate" title={model.name}>

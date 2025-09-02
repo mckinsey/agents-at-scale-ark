@@ -24,6 +24,7 @@ class SecretResponse(BaseModel):
     """Kubernetes secret response model."""
     name: str
     id: str
+    annotations: Optional[Dict[str, str]] = None
 
 
 class SecretListResponse(BaseModel):
@@ -50,3 +51,4 @@ class SecretDetailResponse(BaseModel):
     id: str
     type: str
     secret_length: int  # Total length of all secret data in bytes
+    annotations: Optional[Dict[str, str]] = None

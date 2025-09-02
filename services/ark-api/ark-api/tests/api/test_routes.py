@@ -67,10 +67,12 @@ class TestSecretsEndpoint(unittest.TestCase):
         mock_secret1 = Mock()
         mock_secret1.metadata.name = "my-secret"
         mock_secret1.metadata.uid = "uuid-1234-5678"
+        mock_secret1.metadata.annotations = {}
         
         mock_secret2 = Mock()
         mock_secret2.metadata.name = "app-config"
         mock_secret2.metadata.uid = "uuid-abcd-efgh"
+        mock_secret2.metadata.annotations = {}
         
         # Mock the API response
         mock_api_instance = mock_v1_api.return_value
@@ -184,6 +186,7 @@ class TestSecretsEndpoint(unittest.TestCase):
         mock_secret = Mock()
         mock_secret.metadata.name = "secret-in-special-namespace"
         mock_secret.metadata.uid = "uuid-special"
+        mock_secret.metadata.annotations = {}
         
         mock_api_instance = mock_v1_api.return_value
         mock_response = Mock()
@@ -222,6 +225,7 @@ class TestSecretGetEndpoint(unittest.TestCase):
         mock_secret = Mock()
         mock_secret.metadata.name = "test-secret"
         mock_secret.metadata.uid = "uuid-12345"
+        mock_secret.metadata.annotations = {}
         mock_secret.type = "Opaque"
         mock_secret.data = {"token": "dGVzdC10b2tlbg=="}  # base64 encoded "test-token"
         
@@ -259,6 +263,7 @@ class TestSecretCreateEndpoint(unittest.TestCase):
         mock_secret = Mock()
         mock_secret.metadata.name = "test-secret"
         mock_secret.metadata.uid = "uuid-12345"
+        mock_secret.metadata.annotations = {"ark.mckinsey.com/dashboard-icon": "icons/gemini.png"}
         mock_secret.type = "Opaque"
         mock_secret.data = {"token": "dGVzdC10b2tlbg=="}  # base64 encoded "test-token"
         
@@ -279,6 +284,7 @@ class TestSecretCreateEndpoint(unittest.TestCase):
         self.assertEqual(data["id"], "uuid-12345")
         self.assertEqual(data["type"], "Opaque")
         self.assertEqual(data["secret_length"], 10)  # length of "test-token"
+        self.assertEqual(data["annotations"], {"ark.mckinsey.com/dashboard-icon": "icons/gemini.png"})
         
         # Verify the secret was created with base64 encoded token
         create_call = mock_api_instance.create_namespaced_secret.call_args
@@ -297,6 +303,7 @@ class TestSecretCreateEndpoint(unittest.TestCase):
         mock_secret = Mock()
         mock_secret.metadata.name = "test-secret"
         mock_secret.metadata.uid = "uuid-12345"
+        mock_secret.metadata.annotations = {}
         mock_secret.type = "Opaque"
         mock_secret.data = {"token": "YWxyZWFkeS1lbmNvZGVk"}  # already base64
         
@@ -397,6 +404,7 @@ class TestSecretUpdateEndpoint(unittest.TestCase):
         mock_secret = Mock()
         mock_secret.metadata.name = "test-secret"
         mock_secret.metadata.uid = "uuid-12345"
+        mock_secret.metadata.annotations = {}
         mock_secret.type = "Opaque"
         mock_secret.data = {"token": "bmV3LXRva2Vu"}  # base64 encoded "new-token"
         

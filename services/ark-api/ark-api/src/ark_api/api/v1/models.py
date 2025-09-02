@@ -32,7 +32,8 @@ def model_to_response(model: dict) -> ModelResponse:
         namespace=metadata.get("namespace", ""),
         type=spec.get("type", ""),
         model=spec.get("model", {}).get("value", "") if isinstance(spec.get("model"), dict) else "",
-        status=status.get("phase")
+        status=status.get("phase"),
+        annotations=metadata.get("annotations", {})
     )
 
 
@@ -64,7 +65,8 @@ def model_to_detail_response(model: dict) -> ModelDetailResponse:
         model=spec.get("model", {}).get("value", "") if isinstance(spec.get("model"), dict) else spec.get("model", ""),
         config=processed_config,
         status=status.get("phase"),
-        resolved_address=status.get("resolvedAddress")
+        resolved_address=status.get("resolvedAddress"),
+        annotations=metadata.get("annotations", {})
     )
 
 

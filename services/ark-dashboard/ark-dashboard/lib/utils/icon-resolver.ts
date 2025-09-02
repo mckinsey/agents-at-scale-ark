@@ -6,7 +6,7 @@ export function getCustomIcon(iconAnnotation?: string, fallbackIcon: LucideIcon 
     return fallbackIcon;
   }
   
-  return function CustomIcon({className}: {className?: string}) {
+  return function CustomIcon({ className }: { className?: string }) {
     return React.createElement('img', {
       src: iconAnnotation,
       className,
