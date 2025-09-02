@@ -11,6 +11,14 @@ def main():
     # Get concurrency settings from environment
     workers = int(os.getenv("UVICORN_WORKERS", "1"))
     worker_class = os.getenv("UVICORN_WORKER_CLASS", "uvicorn.workers.UvicornWorker")
+    # Network settings from environment (fallback to defaults if not set)
+    DEFAULT_HOST = "0.0.0.0"
+    DEFAULT_PORT = 8000
+    HOST = os.getenv("HOST", DEFAULT_HOST)
+    try:
+        PORT = int(os.getenv("PORT", str(DEFAULT_PORT)))
+    except ValueError:
+        PORT = DEFAULT_PORT
     
     if workers > 1:
         # Use gunicorn for multiple workers
@@ -30,7 +38,7 @@ def main():
                 return self.application
         
         options = {
-            'bind': '0.0.0.0:8000',
+            'bind': f'{HOST}:{PORT}',
             'workers': workers,
             'worker_class': 'uvicorn.workers.UvicornWorker',
             'worker_connections': 1000,
@@ -41,7 +49,7 @@ def main():
         StandaloneApplication(app, options).run()
     else:
         # Single worker mode
-        uvicorn.run(app, host="0.0.0.0", port=8000)
+        uvicorn.run(app, host=HOST, port=PORT)
 
 
 if __name__ == "__main__":

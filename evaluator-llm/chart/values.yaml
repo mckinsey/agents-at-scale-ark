@@ -29,6 +29,12 @@ service:
   type: ClusterIP
   port: 8000
 
+# Server runtime settings (container binds here). If server.port is not set,
+# the chart will default to service.port in the Deployment template.
+server:
+  host: "0.0.0.0"
+  # port: 8000
+
 resources:
   limits:
     cpu: 1000m

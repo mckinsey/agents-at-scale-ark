@@ -41,6 +41,10 @@ spec:
               containerPort: 8000
               protocol: TCP
           env:
+            - name: HOST
+              value: "{{ .Values.server.host }}"
+            - name: PORT
+              value: "{{ .Values.server.port | default .Values.service.port }}"
             - name: UVICORN_WORKERS
               value: "4"
             - name: UVICORN_WORKER_CLASS
