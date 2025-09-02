@@ -1,6 +1,6 @@
 # Metric Evaluator Service
 
-Evaluation service using approach for Ark platform, specially focused on asserting cost and performance.
+Evaluation service specially built to assert deterministic KPIs such as token consumption, performance.
 
 ## Overview
 

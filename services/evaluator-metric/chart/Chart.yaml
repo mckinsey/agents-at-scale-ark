@@ -1,6 +1,6 @@
 apiVersion: v2
 name: evaluator-metric
-description: Evaluation service using approach for Ark platform, specially focused on asserting cost and performance.
+description: Evaluation service specially built to assert deterministic KPIs such as token consumption, performance.
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

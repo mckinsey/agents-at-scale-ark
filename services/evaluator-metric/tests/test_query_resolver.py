@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from kubernetes import client, config
-from ark_sdk.models import QueryV1alpha1, QueryV1alpha1Status, QueryV1alpha1StatusTokenUsage
+from ark_sdk.models import QueryV1alpha1, QueryV1alpha1Status, EvaluationV1alpha1StatusTokenUsage
 
 from src.evaluator_metric.query_resolver import QueryResolver
 from src.evaluator_metric.types import QueryRef
@@ -16,6 +16,8 @@ class TestQueryResolver:
     def mock_k8s_config(self):
         """Mock Kubernetes configuration loading"""
         with patch('src.evaluator_metric.query_resolver.config') as mock_config:
+            # Ensure ConfigException is accessible on the mock
+            mock_config.ConfigException = config.ConfigException
             mock_config.load_incluster_config.side_effect = config.ConfigException("Not in cluster")
             mock_config.load_kube_config.return_value = None
             yield mock_config
@@ -78,21 +80,17 @@ class TestQueryResolver:
         with patch('src.evaluator_metric.query_resolver.client.CustomObjectsApi') as mock_api_class:
             mock_api_class.return_value = mock_custom_api
             
-            with patch('src.evaluator_metric.query_resolver.QueryV1alpha1.from_dict') as mock_from_dict:
-                mock_query = Mock(spec=QueryV1alpha1)
-                mock_from_dict.return_value = mock_query
-                
-                result = await query_resolver.resolve_query(sample_query_ref)
-                
-                assert result == mock_query
-                mock_custom_api.get_namespaced_custom_object.assert_called_once_with(
-                    group="ark.mckinsey.com",
-                    version="v1alpha1",
-                    namespace="default",
-                    plural="queries",
-                    name="test-query"
-                )
-                mock_from_dict.assert_called_once_with(sample_query_crd)
+            result = await query_resolver.resolve_query(sample_query_ref)
+            
+            # The resolver now returns the dict directly, not a QueryV1alpha1 object
+            assert result == sample_query_crd
+            mock_custom_api.get_namespaced_custom_object.assert_called_once_with(
+                group="ark.mckinsey.com",
+                version="v1alpha1",
+                namespace="default",
+                plural="queries",
+                name="test-query"
+            )
     
     @pytest.mark.asyncio
     async def test_resolve_query_not_found(self, query_resolver, sample_query_ref):
@@ -122,24 +120,26 @@ class TestQueryResolver:
     
     def test_extract_metrics_from_query_complete(self, query_resolver):
         """Test metrics extraction from complete query"""
-        # Create mock query with complete status
-        mock_query = Mock(spec=QueryV1alpha1)
-        mock_query.metadata = Mock()
-        mock_query.metadata.name = "test-query"
-        mock_query.metadata.namespace = "default"
-        mock_query.metadata.labels = {"type": "test", "priority": "high"}
-        
-        # Mock status with token usage
-        mock_query.status = Mock()
-        mock_query.status.token_usage = Mock()
-        mock_query.status.token_usage.total_tokens = 200
-        mock_query.status.token_usage.prompt_tokens = 60
-        mock_query.status.token_usage.completion_tokens = 140
-        
-        # Mock responses
-        mock_response = Mock()
-        mock_response.content = "This is a test response with some content"
-        mock_query.status.responses = [mock_response]
+        # Use dict format since the actual implementation works with dicts
+        mock_query = {
+            'metadata': {
+                'name': 'test-query',
+                'namespace': 'default',
+                'labels': {'type': 'test', 'priority': 'high'}
+            },
+            'status': {
+                'tokenUsage': {
+                    'totalTokens': 200,
+                    'promptTokens': 60,
+                    'completionTokens': 140
+                },
+                'responses': [
+                    {
+                        'content': 'This is a test response with some content'
+                    }
+                ]
+            }
+        }
         
         result = query_resolver.extract_metrics_from_query(mock_query)
         
@@ -161,11 +161,13 @@ class TestQueryResolver:
     
     def test_extract_metrics_from_query_no_status(self, query_resolver):
         """Test metrics extraction from query without status"""
-        mock_query = Mock(spec=QueryV1alpha1)
-        mock_query.metadata = Mock()
-        mock_query.metadata.name = "test-query"
-        mock_query.metadata.namespace = "default"
-        mock_query.status = None
+        # Use dict format since the actual implementation works with dicts
+        mock_query = {
+            'metadata': {
+                'name': 'test-query',
+                'namespace': 'default'
+            }
+        }
         
         result = query_resolver.extract_metrics_from_query(mock_query)
         
@@ -176,17 +178,21 @@ class TestQueryResolver:
     
     def test_extract_metrics_from_query_zero_prompt_tokens(self, query_resolver):
         """Test token efficiency calculation with zero prompt tokens"""
-        mock_query = Mock(spec=QueryV1alpha1)
-        mock_query.metadata = Mock()
-        mock_query.metadata.name = "test-query"
-        mock_query.metadata.namespace = "default"
-        
-        mock_query.status = Mock()
-        mock_query.status.token_usage = Mock()
-        mock_query.status.token_usage.total_tokens = 100
-        mock_query.status.token_usage.prompt_tokens = 0
-        mock_query.status.token_usage.completion_tokens = 100
-        mock_query.status.responses = []
+        # Use dict format since the actual implementation works with dicts
+        mock_query = {
+            'metadata': {
+                'name': 'test-query',
+                'namespace': 'default'
+            },
+            'status': {
+                'tokenUsage': {
+                    'totalTokens': 100,
+                    'promptTokens': 0,
+                    'completionTokens': 100
+                },
+                'responses': []
+            }
+        }
         
         result = query_resolver.extract_metrics_from_query(mock_query)
         

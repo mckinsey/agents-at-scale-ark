@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import Mock, patch, AsyncMock
-from ark_sdk.models import QueryV1alpha1, QueryV1alpha1Status, QueryV1alpha1StatusTokenUsage
+from ark_sdk.models import QueryV1alpha1, QueryV1alpha1Status, EvaluationV1alpha1StatusTokenUsage
 
 from src.evaluator_metric.ark_client import ArkClient
 from src.evaluator_metric.types import QueryRef
@@ -40,7 +40,7 @@ class TestArkClient:
         
         # Add status with token usage
         query.status = Mock(spec=QueryV1alpha1Status)
-        query.status.token_usage = Mock(spec=QueryV1alpha1StatusTokenUsage)
+        query.status.token_usage = Mock(spec=EvaluationV1alpha1StatusTokenUsage)
         query.status.token_usage.total_tokens = 1000
         query.status.token_usage.prompt_tokens = 100
         query.status.token_usage.completion_tokens = 900

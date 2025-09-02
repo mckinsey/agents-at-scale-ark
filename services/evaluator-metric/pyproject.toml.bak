@@ -19,7 +19,7 @@ package = true
 # ark-sdk dependency is managed by the build system
 # The build.mk will copy the wheel and update this path dynamically
 [tool.uv.sources]
-ark-sdk = { path = "ark_sdk-0.1.31-py3-none-any.whl" }
+ark-sdk = { path = "ark_sdk-0.1.25-py3-none-any.whl" }
 
 [project.optional-dependencies]
 dev = [

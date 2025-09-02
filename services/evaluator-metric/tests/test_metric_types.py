@@ -21,9 +21,12 @@ class TestQueryRef:
     
     def test_query_ref_required_fields(self):
         """Test that required fields are validated"""
-        with pytest.raises(ValidationError):
-            QueryRef(name="test-query")  # Missing namespace
+        # namespace is optional, so this should work
+        query_ref = QueryRef(name="test-query")
+        assert query_ref.name == "test-query"
+        assert query_ref.namespace is None
         
+        # name is required
         with pytest.raises(ValidationError):
             QueryRef(namespace="default")  # Missing name
 
@@ -33,26 +36,31 @@ class TestMetricEvaluationRequest:
     
     def test_metric_evaluation_request_creation(self):
         """Test basic MetricEvaluationRequest creation"""
-        query_ref = QueryRef(name="test-query", namespace="default")
         request = MetricEvaluationRequest(
-            queryRef=query_ref,
+            queryId="test-query-123",
+            input="What is 2+2?",
+            output="4",
             parameters={"maxTokens": "1000", "maxDuration": "30s"}
         )
-        assert request.queryRef.name == "test-query"
-        assert request.queryRef.namespace == "default"
+        assert request.queryId == "test-query-123"
+        assert request.input == "What is 2+2?"
+        assert request.output == "4"
         assert request.parameters["maxTokens"] == "1000"
         assert request.parameters["maxDuration"] == "30s"
     
     def test_metric_evaluation_request_defaults(self):
         """Test default values"""
-        query_ref = QueryRef(name="test-query", namespace="default")
-        request = MetricEvaluationRequest(queryRef=query_ref)
+        request = MetricEvaluationRequest(
+            queryId="test-query-123",
+            input="What is 2+2?",
+            output="4"
+        )
         assert request.parameters == {}
     
     def test_metric_evaluation_request_required_fields(self):
         """Test that required fields are validated"""
         with pytest.raises(ValidationError):
-            MetricEvaluationRequest(parameters={})  # Missing queryRef
+            MetricEvaluationRequest(parameters={})  # Missing required fields
 
 
 class TestMetricEvaluationResponse:
@@ -120,13 +128,16 @@ class TestMetricTypesSerialization:
     
     def test_request_serialization(self):
         """Test MetricEvaluationRequest JSON serialization"""
-        query_ref = QueryRef(name="test-query", namespace="default")
         request = MetricEvaluationRequest(
-            queryRef=query_ref,
+            queryId="test-query-123",
+            input="What is 2+2?",
+            output="4",
             parameters={"maxTokens": "1000"}
         )
         json_data = request.model_dump()
-        assert json_data["queryRef"]["name"] == "test-query"
+        assert json_data["queryId"] == "test-query-123"
+        assert json_data["input"] == "What is 2+2?"
+        assert json_data["output"] == "4"
         assert json_data["parameters"]["maxTokens"] == "1000"
     
     def test_response_serialization(self):
