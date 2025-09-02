@@ -81,3 +81,535 @@
 {"level":"info","msg":"dev:ark-api ssh   Port forwarding started on: 11122 -\u003e 8022","time":"2025-09-01T19:44:24+01:00"}
 {"level":"info","msg":"dev:ark-api ssh   Use 'ssh ark-api.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T19:44:25+01:00"}
 {"level":"info","msg":"dev:ark-api term  Opening shell to ark-api:ark-api-devspace-7b465b4cb9-wtktg (pod:container)","time":"2025-09-01T19:44:25+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-01T23:24:36+01:00"}
+{"level":"info","msg":"dev:ark-api Selected pod ark-api-devspace-7d5cf89c85-fdw5n","time":"2025-09-01T23:24:37+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./services/ark-api/ark-api \u003c-\u003e /app","time":"2025-09-01T23:24:41+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-01T23:24:41+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-01T23:24:44+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Port forwarding started on: 11122 -\u003e 8022","time":"2025-09-01T23:24:44+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Use 'ssh ark-api.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T23:24:45+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-01T23:26:32+01:00"}
+{"level":"info","msg":"dev:ark-api Selected pod ark-api-devspace-7d5cf89c85-fdw5n","time":"2025-09-01T23:26:32+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./services/ark-api/ark-api \u003c-\u003e /app","time":"2025-09-01T23:26:33+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-01T23:26:33+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-01T23:26:34+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Port forwarding started on: 11122 -\u003e 8022","time":"2025-09-01T23:26:34+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Use 'ssh ark-api.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T23:26:35+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-01T23:27:51+01:00"}
+{"level":"info","msg":"dev:ark-api Selected pod ark-api-devspace-7d5cf89c85-fdw5n","time":"2025-09-01T23:27:51+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./services/ark-api/ark-api \u003c-\u003e /app","time":"2025-09-01T23:27:52+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-01T23:27:52+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-01T23:27:53+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Port forwarding started on: 11122 -\u003e 8022","time":"2025-09-01T23:27:53+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Use 'ssh ark-api.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T23:27:54+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-01T23:31:56+01:00"}
+{"level":"info","msg":"dev:ark-api Selected pod ark-api-devspace-7d5cf89c85-fdw5n","time":"2025-09-01T23:31:56+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./services/ark-api/ark-api \u003c-\u003e /app","time":"2025-09-01T23:31:57+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-01T23:31:57+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-01T23:31:58+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Port forwarding started on: 11122 -\u003e 8022","time":"2025-09-01T23:31:58+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Use 'ssh ark-api.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T23:31:59+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-02T07:36:33+01:00"}
+{"level":"info","msg":"dev:ark-api Selected pod ark-api-devspace-7d5cf89c85-fdw5n","time":"2025-09-02T07:36:34+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./services/ark-api/ark-api \u003c-\u003e /app","time":"2025-09-02T07:36:34+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-02T07:36:34+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-02T07:36:35+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Port forwarding started on: 11122 -\u003e 8022","time":"2025-09-02T07:36:36+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Use 'ssh ark-api.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-02T07:36:36+01:00"}
+{"level":"info","msg":"dev:ark-api term  Opening shell to ark-api:ark-api-devspace-7d5cf89c85-fdw5n (pod:container)","time":"2025-09-02T07:36:37+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-02T07:46:46+01:00"}
+{"level":"info","msg":"dev:ark-api Selected pod ark-api-devspace-7d5cf89c85-fdw5n","time":"2025-09-02T07:46:47+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./services/ark-api/ark-api \u003c-\u003e /app","time":"2025-09-02T07:46:48+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-02T07:46:48+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-02T07:46:49+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Port forwarding started on: 11122 -\u003e 8022","time":"2025-09-02T07:46:50+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Use 'ssh ark-api.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-02T07:46:51+01:00"}
+{"level":"info","msg":"dev:ark-api term  Opening shell to ark-api:ark-api-devspace-7d5cf89c85-fdw5n (pod:container)","time":"2025-09-02T07:46:51+01:00"}
+{"level":"info","msg":"dev:ark-api Scaling up Deployment ark-api...","time":"2025-09-02T08:17:39+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-02T08:17:39+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: RunContainerError. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:17:49+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: RunContainerError. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:18:00+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: RunContainerError. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:18:10+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:18:20+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: RunContainerError. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:18:30+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:18:40+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:18:51+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:19:01+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:19:11+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: RunContainerError. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:19:21+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:19:31+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:19:42+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:19:52+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:20:02+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:20:12+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:20:22+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:20:33+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:20:43+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:20:53+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:21:03+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:21:14+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:21:24+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:21:34+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:21:45+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:21:55+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:22:05+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:22:15+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:22:26+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:22:36+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:22:46+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:22:56+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:23:07+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:23:17+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:23:27+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: RunContainerError. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:23:38+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:23:48+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:23:58+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:24:09+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:24:19+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:24:29+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:24:40+01:00"}
+{"level":"warning","msg":"dev:ark-api Pod ark-api-7c8d48b98b-szzcz has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T08:24:50+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-02T08:29:40+01:00"}
+{"level":"info","msg":"dev:ark-api Selected pod ark-api-66fd8465f5-8mkqr","time":"2025-09-02T08:29:41+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./services/ark-api/ark-api \u003c-\u003e /app","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-02T08:29:46+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Port forwarding started on: 11122 -\u003e 8022","time":"2025-09-02T08:29:47+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Use 'ssh ark-api.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-02T08:29:47+01:00"}
+{"level":"info","msg":"dev:ark-api logs  Streaming logs of pod:container ark-api-66fd8465f5-8mkqr:ark-api","time":"2025-09-02T08:29:48+01:00"}
+{"level":"info","msg":"dev:ark-api logs     Building ark-api @ file:///app","time":"2025-09-02T08:29:48+01:00"}
+{"level":"info","msg":"dev:ark-api logs        Built ark-api @ file:///app","time":"2025-09-02T08:29:48+01:00"}
+{"level":"info","msg":"dev:ark-api logs  Installed 1 package in 4ms","time":"2025-09-02T08:29:48+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Will watch for changes in these directories: ['/app']","time":"2025-09-02T08:29:48+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)","time":"2025-09-02T08:29:48+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Started reloader process [22] using StatReload","time":"2025-09-02T08:29:48+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO\t2025-09-02 07:29:50:\tCORS origins configured: ['*']","time":"2025-09-02T08:29:50+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO\t2025-09-02 07:29:50:\tARK API with DevSpace live reload is working! Updated at 17:18","time":"2025-09-02T08:29:50+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Started server process [30]","time":"2025-09-02T08:29:50+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Waiting for application startup.","time":"2025-09-02T08:29:50+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO\t2025-09-02 07:29:50:\tStarting up ARK API...","time":"2025-09-02T08:29:50+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO\t2025-09-02 07:29:50:\tLoaded in-cluster config","time":"2025-09-02T08:29:50+01:00"}
+{"level":"info","msg":"dev:ark-api logs  WARNING\t2025-09-02 07:29:50:\tConfig not found: /home/ark/.kube/config","time":"2025-09-02T08:29:50+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO\t2025-09-02 07:29:50:\tKubernetes clients initialized","time":"2025-09-02T08:29:50+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Application startup complete.","time":"2025-09-02T08:29:50+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     127.0.0.1:44480 - \"GET /v1/system-info HTTP/1.1\" 200 OK","time":"2025-09-02T08:33:28+01:00"}
+{"level":"info","msg":"dev:ark-api logs  WARNING:  StatReload detected changes in 'src/ark_api/main.py'. Reloading...","time":"2025-09-02T08:33:43+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Shutting down","time":"2025-09-02T08:33:43+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Waiting for application shutdown.","time":"2025-09-02T08:33:43+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO\t2025-09-02 07:33:43:\tShutting down ARK API...","time":"2025-09-02T08:33:43+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Application shutdown complete.","time":"2025-09-02T08:33:43+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Finished server process [30]","time":"2025-09-02T08:33:43+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO\t2025-09-02 07:33:46:\tCORS origins configured: ['*']","time":"2025-09-02T08:33:46+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO\t2025-09-02 07:33:46:\tARK API with DevSpace live reload is working! Updated at 23:40","time":"2025-09-02T08:33:46+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Started server process [98]","time":"2025-09-02T08:33:46+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Waiting for application startup.","time":"2025-09-02T08:33:46+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO\t2025-09-02 07:33:46:\tStarting up ARK API...","time":"2025-09-02T08:33:46+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO\t2025-09-02 07:33:46:\tLoaded in-cluster config","time":"2025-09-02T08:33:46+01:00"}
+{"level":"info","msg":"dev:ark-api logs  WARNING\t2025-09-02 07:33:46:\tConfig not found: /home/ark/.kube/config","time":"2025-09-02T08:33:46+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO\t2025-09-02 07:33:46:\tKubernetes clients initialized","time":"2025-09-02T08:33:46+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Application startup complete.","time":"2025-09-02T08:33:46+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     127.0.0.1:45552 - \"GET /v1/system-info HTTP/1.1\" 200 OK","time":"2025-09-02T08:33:48+01:00"}
+{"level":"info","msg":"dev:ark-api Waiting for pod to become ready...","time":"2025-09-02T08:55:04+01:00"}
+{"level":"info","msg":"dev:ark-api Selected pod ark-api-665969dbfd-tzqq6","time":"2025-09-02T08:55:06+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Sync started on: ./services/ark-api/ark-api \u003c-\u003e /app","time":"2025-09-02T08:55:11+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Waiting for initial sync to complete","time":"2025-09-02T08:55:11+01:00"}
+{"level":"info","msg":"dev:ark-api sync  Initial sync completed","time":"2025-09-02T08:55:14+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Port forwarding started on: 11122 -\u003e 8022","time":"2025-09-02T08:55:15+01:00"}
+{"level":"info","msg":"dev:ark-api ssh   Use 'ssh ark-api.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-02T08:55:15+01:00"}
+{"level":"info","msg":"dev:ark-api logs  Streaming logs of pod:container ark-api-665969dbfd-tzqq6:ark-api","time":"2025-09-02T08:55:16+01:00"}
+{"level":"info","msg":"dev:ark-api logs     Building ark-api @ file:///app","time":"2025-09-02T08:55:16+01:00"}
+{"level":"info","msg":"dev:ark-api logs        Built ark-api @ file:///app","time":"2025-09-02T08:55:16+01:00"}
+{"level":"info","msg":"dev:ark-api logs  Installed 1 package in 2ms","time":"2025-09-02T08:55:16+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Will watch for changes in these directories: ['/app']","time":"2025-09-02T08:55:16+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)","time":"2025-09-02T08:55:16+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Started reloader process [16] using StatReload","time":"2025-09-02T08:55:16+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO\t2025-09-02 07:55:15:\tCORS origins configured: ['*']","time":"2025-09-02T08:55:16+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO\t2025-09-02 07:55:15:\tARK API with DevSpace live reload is working! Updated at 23:40","time":"2025-09-02T08:55:16+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Started server process [18]","time":"2025-09-02T08:55:16+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Waiting for application startup.","time":"2025-09-02T08:55:16+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO\t2025-09-02 07:55:15:\tStarting up ARK API...","time":"2025-09-02T08:55:16+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO\t2025-09-02 07:55:15:\tLoaded in-cluster config","time":"2025-09-02T08:55:16+01:00"}
+{"level":"info","msg":"dev:ark-api logs  WARNING\t2025-09-02 07:55:15:\tConfig not found: /home/ark/.kube/config","time":"2025-09-02T08:55:16+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO\t2025-09-02 07:55:15:\tKubernetes clients initialized","time":"2025-09-02T08:55:16+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     Application startup complete.","time":"2025-09-02T08:55:16+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:51910 - \"GET /v1/system-info HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:51926 - \"GET /v1/namespaces HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:51956 - \"GET /v1/system-info HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:28+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:51942 - \"GET /v1/namespaces HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:28+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO\t2025-09-02 08:05:36:\tLoaded in-cluster Kubernetes configuration","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48154 - \"GET /v1/namespaces/default/teams HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48160 - \"GET /v1/namespaces/default/agents HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48170 - \"GET /v1/namespaces/default/models HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48194 - \"GET /v1/namespaces/default/teams/coding-team HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48182 - \"GET /v1/namespaces/default/teams HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48198 - \"GET /v1/namespaces/default/models HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48212 - \"GET /v1/namespaces/default/agents HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48232 - \"GET /v1/namespaces/default/models/claude-4-opus HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48222 - \"GET /v1/namespaces/default/models/claude-3-5-haiku HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48230 - \"GET /v1/namespaces/default/models/claude-3-5-sonnet HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48238 - \"GET /v1/namespaces/default/models/default HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48254 - \"GET /v1/namespaces/default/models/gemini-1-5-flash HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48264 - \"GET /v1/namespaces/default/models/gemini-2-5-flash-lite HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48276 - \"GET /v1/namespaces/default/agents/ark-pentester HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48284 - \"GET /v1/namespaces/default/agents/aws-operator-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48286 - \"GET /v1/namespaces/default/agents/code-reviewer HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48300 - \"GET /v1/namespaces/default/agents/deep-research HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48314 - \"GET /v1/namespaces/default/agents/idea-generation HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48302 - \"GET /v1/namespaces/default/agents/github-dev-assistant HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48330 - \"GET /v1/namespaces/default/agents/planner HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48346 - \"GET /v1/namespaces/default/agents/sample-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48356 - \"GET /v1/namespaces/default/teams/coding-team HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48368 - \"GET /v1/namespaces/default/models/claude-4-opus HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48360 - \"GET /v1/namespaces/default/models/claude-3-5-haiku HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48372 - \"GET /v1/namespaces/default/models/claude-3-5-sonnet HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48382 - \"GET /v1/namespaces/default/models/default HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48386 - \"GET /v1/namespaces/default/models/gemini-1-5-flash HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48402 - \"GET /v1/namespaces/default/agents/ark-pentester HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48426 - \"GET /v1/namespaces/default/agents/code-reviewer HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48440 - \"GET /v1/namespaces/default/agents/aws-operator-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48410 - \"GET /v1/namespaces/default/models/gemini-2-5-flash-lite HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48450 - \"GET /v1/namespaces/default/agents/deep-research HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48466 - \"GET /v1/namespaces/default/agents/github-dev-assistant HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48486 - \"GET /v1/namespaces/default/agents/planner HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48480 - \"GET /v1/namespaces/default/agents/idea-generation HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.75:48502 - \"GET /v1/namespaces/default/agents/sample-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:05:36+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59488 - \"GET /v1/system-info HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:00+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59474 - \"GET /v1/namespaces HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:00+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45772 - \"GET /v1/namespaces/default/agents HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45762 - \"GET /v1/namespaces/default/teams HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45774 - \"GET /v1/namespaces/default/models HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45784 - \"GET /v1/namespaces/default/agents HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45788 - \"GET /v1/namespaces/default/agents/ark-pentester HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45796 - \"GET /v1/namespaces/default/agents/aws-operator-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45802 - \"GET /v1/namespaces/default/agents/deep-research HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45812 - \"GET /v1/namespaces/default/agents/code-reviewer HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45816 - \"GET /v1/namespaces/default/agents/github-dev-assistant HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45824 - \"GET /v1/namespaces/default/agents/idea-generation HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:44930 - \"GET /v1/namespaces/default/agents/planner HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:44936 - \"GET /v1/namespaces/default/agents/sample-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:44948 - \"GET /v1/namespaces/default/teams/coding-team HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:44954 - \"GET /v1/namespaces/default/teams HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:44968 - \"GET /v1/namespaces/default/models HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:44994 - \"GET /v1/namespaces/default/models/claude-4-opus HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:44976 - \"GET /v1/namespaces/default/models/claude-3-5-haiku HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:44982 - \"GET /v1/namespaces/default/models/claude-3-5-sonnet HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45012 - \"GET /v1/namespaces/default/models/gemini-1-5-flash HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45006 - \"GET /v1/namespaces/default/models/default HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45026 - \"GET /v1/namespaces/default/models/gemini-2-5-flash-lite HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45042 - \"GET /v1/namespaces/default/agents/aws-operator-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45036 - \"GET /v1/namespaces/default/agents/ark-pentester HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45056 - \"GET /v1/namespaces/default/agents/deep-research HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45058 - \"GET /v1/namespaces/default/agents/code-reviewer HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45060 - \"GET /v1/namespaces/default/agents/idea-generation HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45064 - \"GET /v1/namespaces/default/agents/github-dev-assistant HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45070 - \"GET /v1/namespaces/default/agents/planner HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45086 - \"GET /v1/namespaces/default/agents/sample-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45104 - \"GET /v1/namespaces/default/models/claude-3-5-haiku HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45094 - \"GET /v1/namespaces/default/teams/coding-team HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45106 - \"GET /v1/namespaces/default/models/claude-3-5-sonnet HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45124 - \"GET /v1/namespaces/default/models/default HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45108 - \"GET /v1/namespaces/default/models/claude-4-opus HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45140 - \"GET /v1/namespaces/default/models/gemini-1-5-flash HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45154 - \"GET /v1/namespaces/default/models/gemini-2-5-flash-lite HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:11+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34226 - \"GET /v1/namespaces/default/agents HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34234 - \"GET /v1/namespaces/default/teams HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34218 - \"GET /v1/namespaces/default/models HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34240 - \"GET /v1/namespaces/default/agents HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34246 - \"GET /v1/namespaces/default/agents/code-reviewer HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34262 - \"GET /v1/namespaces/default/agents/ark-pentester HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34252 - \"GET /v1/namespaces/default/agents/aws-operator-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34284 - \"GET /v1/namespaces/default/agents/github-dev-assistant HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34276 - \"GET /v1/namespaces/default/agents/deep-research HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34298 - \"GET /v1/namespaces/default/agents/idea-generation HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34302 - \"GET /v1/namespaces/default/agents/planner HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34326 - \"GET /v1/namespaces/default/teams/coding-team HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34310 - \"GET /v1/namespaces/default/agents/sample-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34308 - \"GET /v1/namespaces/default/teams HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34336 - \"GET /v1/namespaces/default/models HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34350 - \"GET /v1/namespaces/default/models/claude-4-opus HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34362 - \"GET /v1/namespaces/default/models/default HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34344 - \"GET /v1/namespaces/default/models/claude-3-5-sonnet HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34340 - \"GET /v1/namespaces/default/models/claude-3-5-haiku HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34390 - \"GET /v1/namespaces/default/models/gemini-2-5-flash-lite HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34376 - \"GET /v1/namespaces/default/models/gemini-1-5-flash HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34412 - \"GET /v1/namespaces/default/agents/ark-pentester HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34406 - \"GET /v1/namespaces/default/agents/aws-operator-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34420 - \"GET /v1/namespaces/default/agents/code-reviewer HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34426 - \"GET /v1/namespaces/default/agents/github-dev-assistant HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34434 - \"GET /v1/namespaces/default/agents/idea-generation HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34428 - \"GET /v1/namespaces/default/agents/deep-research HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34444 - \"GET /v1/namespaces/default/agents/planner HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:21+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34460 - \"GET /v1/namespaces/default/teams/coding-team HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34450 - \"GET /v1/namespaces/default/agents/sample-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34474 - \"GET /v1/namespaces/default/models/claude-4-opus HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34514 - \"GET /v1/namespaces/default/models/default HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34490 - \"GET /v1/namespaces/default/models/claude-3-5-haiku HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34506 - \"GET /v1/namespaces/default/models/claude-3-5-sonnet HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34530 - \"GET /v1/namespaces/default/models/gemini-2-5-flash-lite HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34520 - \"GET /v1/namespaces/default/models/gemini-1-5-flash HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34540 - \"GET /v1/namespaces HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34554 - \"GET /v1/system-info HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34560 - \"GET /v1/namespaces/default/teams HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34578 - \"GET /v1/namespaces/default/models HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34562 - \"GET /v1/namespaces/default/agents HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34590 - \"GET /v1/namespaces/default/teams HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34596 - \"GET /v1/namespaces/default/teams/coding-team HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34606 - \"GET /v1/namespaces/default/models HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34614 - \"GET /v1/namespaces/default/models/claude-3-5-sonnet HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34618 - \"GET /v1/namespaces/default/models/claude-4-opus HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34608 - \"GET /v1/namespaces/default/models/claude-3-5-haiku HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34632 - \"GET /v1/namespaces/default/models/default HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34646 - \"GET /v1/namespaces/default/models/gemini-1-5-flash HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34680 - \"GET /v1/namespaces/default/agents/aws-operator-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34670 - \"GET /v1/namespaces/default/agents/ark-pentester HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34658 - \"GET /v1/namespaces/default/models/gemini-2-5-flash-lite HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34672 - \"GET /v1/namespaces/default/agents HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34696 - \"GET /v1/namespaces/default/agents/deep-research HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34692 - \"GET /v1/namespaces/default/agents/code-reviewer HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34726 - \"GET /v1/namespaces/default/agents/idea-generation HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34710 - \"GET /v1/namespaces/default/agents/planner HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34740 - \"GET /v1/namespaces/default/agents/sample-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34724 - \"GET /v1/namespaces/default/agents/github-dev-assistant HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34758 - \"GET /v1/namespaces/default/models/claude-3-5-sonnet HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34742 - \"GET /v1/namespaces/default/teams/coding-team HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34762 - \"GET /v1/namespaces/default/models/claude-4-opus HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34786 - \"GET /v1/namespaces/default/models/claude-3-5-haiku HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34782 - \"GET /v1/namespaces/default/models/default HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34774 - \"GET /v1/namespaces/default/models/gemini-1-5-flash HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34794 - \"GET /v1/namespaces/default/agents/aws-operator-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34790 - \"GET /v1/namespaces/default/models/gemini-2-5-flash-lite HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34800 - \"GET /v1/namespaces/default/agents/ark-pentester HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34802 - \"GET /v1/namespaces/default/agents/code-reviewer HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34806 - \"GET /v1/namespaces/default/agents/deep-research HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34820 - \"GET /v1/namespaces/default/agents/idea-generation HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34840 - \"GET /v1/namespaces/default/agents/planner HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34848 - \"GET /v1/namespaces/default/agents/sample-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:34836 - \"GET /v1/namespaces/default/agents/github-dev-assistant HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:27+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45522 - \"GET /v1/namespaces/default/models HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45510 - \"GET /v1/namespaces/default/agents HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45526 - \"GET /v1/namespaces/default/models/claude-3-5-sonnet HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45534 - \"GET /v1/namespaces/default/models/claude-3-5-haiku HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45546 - \"GET /v1/namespaces/default/models HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45560 - \"GET /v1/namespaces/default/models/default HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45562 - \"GET /v1/namespaces/default/models/claude-4-opus HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45564 - \"GET /v1/namespaces/default/models/gemini-1-5-flash HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45574 - \"GET /v1/namespaces/default/models/gemini-2-5-flash-lite HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45606 - \"GET /v1/namespaces/default/agents/aws-operator-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45620 - \"GET /v1/namespaces/default/agents/ark-pentester HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45590 - \"GET /v1/namespaces/default/agents HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45628 - \"GET /v1/namespaces/default/agents/code-reviewer HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45640 - \"GET /v1/namespaces/default/agents/deep-research HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45658 - \"GET /v1/namespaces/default/agents/idea-generation HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45644 - \"GET /v1/namespaces/default/agents/github-dev-assistant HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45666 - \"GET /v1/namespaces/default/agents/sample-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45672 - \"GET /v1/namespaces/default/agents/planner HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45674 - \"GET /v1/namespaces/default/models/claude-3-5-haiku HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45686 - \"GET /v1/namespaces/default/models/claude-3-5-sonnet HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45688 - \"GET /v1/namespaces/default/models/claude-4-opus HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45712 - \"GET /v1/namespaces/default/models/default HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45702 - \"GET /v1/namespaces/default/models/gemini-2-5-flash-lite HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45720 - \"GET /v1/namespaces/default/models/gemini-1-5-flash HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45722 - \"GET /v1/namespaces/default/agents/ark-pentester HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45724 - \"GET /v1/namespaces/default/agents/aws-operator-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45740 - \"GET /v1/namespaces/default/agents/code-reviewer HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45762 - \"GET /v1/namespaces/default/agents/github-dev-assistant HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45746 - \"GET /v1/namespaces/default/agents/deep-research HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45776 - \"GET /v1/namespaces/default/agents/idea-generation HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45790 - \"GET /v1/namespaces/default/agents/planner HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:45794 - \"GET /v1/namespaces/default/agents/sample-agent HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:37+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:42450 - \"GET /v1/namespaces/default/models HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:47+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:42462 - \"GET /v1/namespaces/default/secrets HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:47+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:42474 - \"GET /v1/namespaces/default/models/claude-3-5-haiku HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:47+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:42484 - \"GET /v1/namespaces/default/models/claude-4-opus HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:47+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:42496 - \"GET /v1/namespaces/default/models/claude-3-5-sonnet HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:47+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:42466 - \"GET /v1/namespaces/default/models HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:47+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:42506 - \"GET /v1/namespaces/default/models/default HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:47+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:42512 - \"GET /v1/namespaces/default/models/gemini-1-5-flash HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:47+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:42530 - \"GET /v1/namespaces/default/models/gemini-2-5-flash-lite HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:47+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:42542 - \"GET /v1/namespaces/default/models/claude-3-5-sonnet HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:47+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:42536 - \"GET /v1/namespaces/default/models/claude-3-5-haiku HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:47+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:42552 - \"GET /v1/namespaces/default/models/claude-4-opus HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:47+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:42524 - \"GET /v1/namespaces/default/secrets HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:47+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:42556 - \"GET /v1/namespaces/default/models/default HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:47+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:42564 - \"GET /v1/namespaces/default/models/gemini-1-5-flash HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:47+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:42580 - \"GET /v1/namespaces/default/models/gemini-2-5-flash-lite HTTP/1.1\" 200 OK","time":"2025-09-02T09:19:47+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:50892 - \"GET /v1/namespaces/default/queries?limit=10\u0026page=1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:50898 - \"GET /v1/namespaces/default/memories HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:50922 - \"GET /v1/namespaces/default/queries/architecture-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:50908 - \"GET /v1/namespaces/default/queries?limit=10\u0026page=1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:50930 - \"GET /v1/namespaces/default/memories HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:50928 - \"GET /v1/namespaces/default/queries/architecture-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:50932 - \"GET /v1/namespaces/default/queries/architecture-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:50948 - \"GET /v1/namespaces/default/queries/ark-20250901-214286 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:50956 - \"GET /v1/namespaces/default/queries/chat-query-2fa3bb5b-e616-4503-9249-2930ac8a8e4b HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:50966 - \"GET /v1/namespaces/default/queries/chat-query-335f3390-90cd-4ce0-bb9a-49f77e448f22 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:50982 - \"GET /v1/namespaces/default/queries/chat-query-b8712dae-3a30-44c3-a85b-2c30f2261702 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:50988 - \"GET /v1/namespaces/default/queries/chat-query-dd6a557b-c2cd-4439-bbe4-06f3fe194c1b HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51008 - \"GET /v1/namespaces/default/queries/chat-query-9e14fdce-c8c5-4ceb-b1ff-8fb0786af969 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51014 - \"GET /v1/namespaces/default/queries/code-review-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:50994 - \"GET /v1/namespaces/default/queries/chat-query-6b612c63-6aff-4e64-87d1-fae897b65356 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51022 - \"GET /v1/namespaces/default/queries/code-review-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51030 - \"GET /v1/namespaces/default/queries/code-review-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51048 - \"GET /v1/namespaces/default/queries/customer-support-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51044 - \"GET /v1/namespaces/default/queries/customer-support-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51060 - \"GET /v1/namespaces/default/queries/debug-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51062 - \"GET /v1/namespaces/default/queries/customer-support-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51068 - \"GET /v1/namespaces/default/queries/debug-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51084 - \"GET /v1/namespaces/default/queries/debug-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51092 - \"GET /v1/namespaces/default/queries/docs-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51112 - \"GET /v1/namespaces/default/queries/docs-4 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51094 - \"GET /v1/namespaces/default/queries/docs-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51116 - \"GET /v1/namespaces/default/queries/learning-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51120 - \"GET /v1/namespaces/default/queries/learning-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51098 - \"GET /v1/namespaces/default/queries/docs-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51136 - \"GET /v1/namespaces/default/queries/learning-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51148 - \"GET /v1/namespaces/default/queries/learning-4 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51162 - \"GET /v1/namespaces/default/queries/performance-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51204 - \"GET /v1/namespaces/default/queries/planning-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51188 - \"GET /v1/namespaces/default/queries/planning-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51198 - \"GET /v1/namespaces/default/queries/performance-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51174 - \"GET /v1/namespaces/default/queries/performance-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51212 - \"GET /v1/namespaces/default/queries/planning-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51214 - \"GET /v1/namespaces/default/queries/planning-4 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51244 - \"GET /v1/namespaces/default/queries/quick-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51224 - \"GET /v1/namespaces/default/queries/planning-5 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51226 - \"GET /v1/namespaces/default/queries/quick-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51238 - \"GET /v1/namespaces/default/queries/query8jkgb HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51246 - \"GET /v1/namespaces/default/queries/tech-discussion-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51250 - \"GET /v1/namespaces/default/queries/quick-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:17+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51260 - \"GET /v1/namespaces/default/queries/tech-discussion-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51276 - \"GET /v1/namespaces/default/queries/tech-discussion-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51292 - \"GET /v1/namespaces/default/queries/architecture-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51302 - \"GET /v1/namespaces/default/queries/architecture-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51314 - \"GET /v1/namespaces/default/queries/ark-20250901-214286 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51280 - \"GET /v1/namespaces/default/queries/tech-discussion-4 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51324 - \"GET /v1/namespaces/default/queries/architecture-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51328 - \"GET /v1/namespaces/default/queries/chat-query-2fa3bb5b-e616-4503-9249-2930ac8a8e4b HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51330 - \"GET /v1/namespaces/default/queries/chat-query-335f3390-90cd-4ce0-bb9a-49f77e448f22 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51350 - \"GET /v1/namespaces/default/queries/chat-query-dd6a557b-c2cd-4439-bbe4-06f3fe194c1b HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51358 - \"GET /v1/namespaces/default/queries/chat-query-9e14fdce-c8c5-4ceb-b1ff-8fb0786af969 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51366 - \"GET /v1/namespaces/default/queries/code-review-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51352 - \"GET /v1/namespaces/default/queries/chat-query-6b612c63-6aff-4e64-87d1-fae897b65356 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51346 - \"GET /v1/namespaces/default/queries/chat-query-b8712dae-3a30-44c3-a85b-2c30f2261702 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51386 - \"GET /v1/namespaces/default/queries/code-review-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51370 - \"GET /v1/namespaces/default/queries/code-review-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51388 - \"GET /v1/namespaces/default/queries/customer-support-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51408 - \"GET /v1/namespaces/default/queries/customer-support-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51414 - \"GET /v1/namespaces/default/queries/customer-support-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51398 - \"GET /v1/namespaces/default/queries/debug-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51420 - \"GET /v1/namespaces/default/queries/debug-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51416 - \"GET /v1/namespaces/default/queries/debug-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51450 - \"GET /v1/namespaces/default/queries/docs-4 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51434 - \"GET /v1/namespaces/default/queries/docs-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51464 - \"GET /v1/namespaces/default/queries/docs-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51488 - \"GET /v1/namespaces/default/queries/docs-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51498 - \"GET /v1/namespaces/default/queries/learning-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51478 - \"GET /v1/namespaces/default/queries/learning-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51500 - \"GET /v1/namespaces/default/queries/learning-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51514 - \"GET /v1/namespaces/default/queries/learning-4 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51524 - \"GET /v1/namespaces/default/queries/performance-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51534 - \"GET /v1/namespaces/default/queries/planning-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51530 - \"GET /v1/namespaces/default/queries/performance-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51540 - \"GET /v1/namespaces/default/queries/performance-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51552 - \"GET /v1/namespaces/default/queries/planning-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51568 - \"GET /v1/namespaces/default/queries/planning-4 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51542 - \"GET /v1/namespaces/default/queries/planning-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51570 - \"GET /v1/namespaces/default/queries/planning-5 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51574 - \"GET /v1/namespaces/default/queries/query8jkgb HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51598 - \"GET /v1/namespaces/default/queries/quick-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51610 - \"GET /v1/namespaces/default/queries/tech-discussion-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51588 - \"GET /v1/namespaces/default/queries/quick-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51596 - \"GET /v1/namespaces/default/queries/quick-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51640 - \"GET /v1/namespaces/default/queries/tech-discussion-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51656 - \"GET /v1/namespaces/default/queries/tech-discussion-4 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:51624 - \"GET /v1/namespaces/default/queries/tech-discussion-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:18+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59054 - \"GET /v1/namespaces/default/memories HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59042 - \"GET /v1/namespaces/default/queries?limit=10\u0026page=1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59058 - \"GET /v1/namespaces/default/memories HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59060 - \"GET /v1/namespaces/default/queries?limit=10\u0026page=1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59080 - \"GET /v1/namespaces/default/queries/architecture-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59072 - \"GET /v1/namespaces/default/queries/architecture-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59094 - \"GET /v1/namespaces/default/queries/ark-20250901-214286 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59090 - \"GET /v1/namespaces/default/queries/architecture-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59102 - \"GET /v1/namespaces/default/queries/chat-query-2fa3bb5b-e616-4503-9249-2930ac8a8e4b HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59114 - \"GET /v1/namespaces/default/queries/chat-query-335f3390-90cd-4ce0-bb9a-49f77e448f22 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59154 - \"GET /v1/namespaces/default/queries/chat-query-b8712dae-3a30-44c3-a85b-2c30f2261702 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59124 - \"GET /v1/namespaces/default/queries/chat-query-6b612c63-6aff-4e64-87d1-fae897b65356 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59158 - \"GET /v1/namespaces/default/queries/chat-query-dd6a557b-c2cd-4439-bbe4-06f3fe194c1b HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59168 - \"GET /v1/namespaces/default/queries/code-review-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59140 - \"GET /v1/namespaces/default/queries/chat-query-9e14fdce-c8c5-4ceb-b1ff-8fb0786af969 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59178 - \"GET /v1/namespaces/default/queries/code-review-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59184 - \"GET /v1/namespaces/default/queries/customer-support-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59182 - \"GET /v1/namespaces/default/queries/code-review-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59198 - \"GET /v1/namespaces/default/queries/customer-support-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59200 - \"GET /v1/namespaces/default/queries/customer-support-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59208 - \"GET /v1/namespaces/default/queries/debug-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59234 - \"GET /v1/namespaces/default/queries/debug-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59252 - \"GET /v1/namespaces/default/queries/docs-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:22+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59240 - \"GET /v1/namespaces/default/queries/docs-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59222 - \"GET /v1/namespaces/default/queries/debug-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59238 - \"GET /v1/namespaces/default/queries/docs-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59270 - \"GET /v1/namespaces/default/queries/learning-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59260 - \"GET /v1/namespaces/default/queries/docs-4 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59284 - \"GET /v1/namespaces/default/queries/learning-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59298 - \"GET /v1/namespaces/default/queries/learning-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59310 - \"GET /v1/namespaces/default/queries/learning-4 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59320 - \"GET /v1/namespaces/default/queries/performance-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59342 - \"GET /v1/namespaces/default/queries/performance-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59326 - \"GET /v1/namespaces/default/queries/performance-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59344 - \"GET /v1/namespaces/default/queries/planning-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59356 - \"GET /v1/namespaces/default/queries/planning-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59374 - \"GET /v1/namespaces/default/queries/query8jkgb HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59368 - \"GET /v1/namespaces/default/queries/planning-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59386 - \"GET /v1/namespaces/default/queries/planning-5 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59372 - \"GET /v1/namespaces/default/queries/planning-4 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59396 - \"GET /v1/namespaces/default/queries/quick-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59400 - \"GET /v1/namespaces/default/queries/quick-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59412 - \"GET /v1/namespaces/default/queries/quick-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59422 - \"GET /v1/namespaces/default/queries/tech-discussion-4 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59414 - \"GET /v1/namespaces/default/queries/tech-discussion-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59458 - \"GET /v1/namespaces/default/queries/architecture-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59440 - \"GET /v1/namespaces/default/queries/tech-discussion-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59454 - \"GET /v1/namespaces/default/queries/architecture-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59438 - \"GET /v1/namespaces/default/queries/tech-discussion-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59474 - \"GET /v1/namespaces/default/queries/ark-20250901-214286 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59478 - \"GET /v1/namespaces/default/queries/architecture-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59490 - \"GET /v1/namespaces/default/queries/chat-query-2fa3bb5b-e616-4503-9249-2930ac8a8e4b HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59504 - \"GET /v1/namespaces/default/queries/chat-query-335f3390-90cd-4ce0-bb9a-49f77e448f22 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59522 - \"GET /v1/namespaces/default/queries/chat-query-6b612c63-6aff-4e64-87d1-fae897b65356 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59506 - \"GET /v1/namespaces/default/queries/chat-query-b8712dae-3a30-44c3-a85b-2c30f2261702 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59548 - \"GET /v1/namespaces/default/queries/code-review-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59534 - \"GET /v1/namespaces/default/queries/chat-query-dd6a557b-c2cd-4439-bbe4-06f3fe194c1b HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59550 - \"GET /v1/namespaces/default/queries/chat-query-9e14fdce-c8c5-4ceb-b1ff-8fb0786af969 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59558 - \"GET /v1/namespaces/default/queries/code-review-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59574 - \"GET /v1/namespaces/default/queries/code-review-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59590 - \"GET /v1/namespaces/default/queries/customer-support-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59560 - \"GET /v1/namespaces/default/queries/customer-support-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59594 - \"GET /v1/namespaces/default/queries/debug-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59592 - \"GET /v1/namespaces/default/queries/customer-support-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59598 - \"GET /v1/namespaces/default/queries/debug-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59614 - \"GET /v1/namespaces/default/queries/docs-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59632 - \"GET /v1/namespaces/default/queries/debug-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59620 - \"GET /v1/namespaces/default/queries/docs-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59664 - \"GET /v1/namespaces/default/queries/docs-4 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59648 - \"GET /v1/namespaces/default/queries/docs-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59660 - \"GET /v1/namespaces/default/queries/learning-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59680 - \"GET /v1/namespaces/default/queries/learning-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59708 - \"GET /v1/namespaces/default/queries/learning-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59694 - \"GET /v1/namespaces/default/queries/performance-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59722 - \"GET /v1/namespaces/default/queries/learning-4 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59726 - \"GET /v1/namespaces/default/queries/performance-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59742 - \"GET /v1/namespaces/default/queries/planning-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59770 - \"GET /v1/namespaces/default/queries/query8jkgb HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59728 - \"GET /v1/namespaces/default/queries/performance-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59756 - \"GET /v1/namespaces/default/queries/planning-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59772 - \"GET /v1/namespaces/default/queries/planning-4 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59788 - \"GET /v1/namespaces/default/queries/planning-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59806 - \"GET /v1/namespaces/default/queries/quick-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59816 - \"GET /v1/namespaces/default/queries/quick-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59808 - \"GET /v1/namespaces/default/queries/quick-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59800 - \"GET /v1/namespaces/default/queries/planning-5 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59822 - \"GET /v1/namespaces/default/queries/tech-discussion-4 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59836 - \"GET /v1/namespaces/default/queries/tech-discussion-1 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59844 - \"GET /v1/namespaces/default/queries/tech-discussion-2 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}
+{"level":"info","msg":"dev:ark-api logs  INFO:     10.244.0.76:59856 - \"GET /v1/namespaces/default/queries/tech-discussion-3 HTTP/1.1\" 200 OK","time":"2025-09-02T09:21:23+01:00"}

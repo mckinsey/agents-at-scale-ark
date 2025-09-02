@@ -64,3 +64,246 @@
 {"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-01T19:44:56+01:00"}
 {"level":"info","msg":"dev:ark-dashboard ssh   Port forwarding started on: 11427 -\u003e 8022","time":"2025-09-01T19:44:56+01:00"}
 {"level":"info","msg":"dev:ark-dashboard ssh   Use 'ssh ark-dashboard.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T19:44:57+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-01T23:24:36+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-devspace-9c8658458-mh7v9","time":"2025-09-01T23:24:36+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-01T23:24:39+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-01T23:24:39+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-01T23:24:42+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Port forwarding started on: 11427 -\u003e 8022","time":"2025-09-01T23:24:42+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Use 'ssh ark-dashboard.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T23:24:43+01:00"}
+{"level":"info","msg":"dev:ark-dashboard term  Opening shell to ark-dashboard:ark-dashboard-devspace-9c8658458-mh7v9 (pod:container)","time":"2025-09-01T23:24:43+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-01T23:26:32+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-devspace-9c8658458-mh7v9","time":"2025-09-01T23:26:32+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-01T23:26:33+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-01T23:26:33+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-01T23:26:34+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Port forwarding started on: 11427 -\u003e 8022","time":"2025-09-01T23:26:34+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Use 'ssh ark-dashboard.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T23:26:35+01:00"}
+{"level":"info","msg":"dev:ark-dashboard term  Opening shell to ark-dashboard:ark-dashboard-devspace-9c8658458-mh7v9 (pod:container)","time":"2025-09-01T23:26:35+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-01T23:27:51+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-devspace-9c8658458-mh7v9","time":"2025-09-01T23:27:51+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-01T23:27:52+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-01T23:27:52+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-01T23:27:52+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Port forwarding started on: 11427 -\u003e 8022","time":"2025-09-01T23:27:53+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Use 'ssh ark-dashboard.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T23:27:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard term  Opening shell to ark-dashboard:ark-dashboard-devspace-9c8658458-mh7v9 (pod:container)","time":"2025-09-01T23:27:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-01T23:31:56+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-devspace-9c8658458-mh7v9","time":"2025-09-01T23:31:56+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-01T23:31:57+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-01T23:31:57+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-01T23:31:58+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Port forwarding started on: 11427 -\u003e 8022","time":"2025-09-01T23:31:58+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Use 'ssh ark-dashboard.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-01T23:31:59+01:00"}
+{"level":"info","msg":"dev:ark-dashboard term  Opening shell to ark-dashboard:ark-dashboard-devspace-9c8658458-mh7v9 (pod:container)","time":"2025-09-01T23:31:59+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Scaling up Deployment ark-dashboard...","time":"2025-09-02T07:36:33+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-02T07:36:33+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t: Back-off restarting failed container ark-dashboard in pod ark-dashboard-7c4d58549d-d8d5t_default(4fe3d33e-2607-4c1e-b2dd-bcebeb881574) (BackOff)","time":"2025-09-02T07:36:44+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard DevSpace is waiting, because Pod ark-dashboard-7c4d58549d-d8d5t has status: Completed","time":"2025-09-02T07:36:44+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard DevSpace is waiting, because Pod ark-dashboard-7c4d58549d-d8d5t has status: Completed","time":"2025-09-02T07:36:54+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:37:05+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:37:15+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard DevSpace is waiting, because Pod ark-dashboard-7c4d58549d-d8d5t has status: Completed","time":"2025-09-02T07:37:25+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:37:36+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:37:46+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:37:56+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:38:07+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard DevSpace is waiting, because Pod ark-dashboard-7c4d58549d-d8d5t has status: Completed","time":"2025-09-02T07:38:17+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:38:27+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:38:38+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:38:48+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:38:58+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:39:08+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:39:19+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:39:29+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:39:40+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:39:50+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:40:00+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:40:11+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:40:21+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:40:32+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:40:42+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:40:52+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:41:03+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:41:13+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:41:24+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:41:34+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:41:45+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:41:55+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:42:05+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard Pod ark-dashboard-7c4d58549d-d8d5t has critical status: CrashLoopBackOff. DevSpace will continue waiting, but this operation might timeout","time":"2025-09-02T07:42:15+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-02T07:46:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-5766f98d9d-ndn2n","time":"2025-09-02T07:46:47+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-02T07:46:50+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-02T07:46:50+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-02T07:46:52+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Port forwarding started on: 11427 -\u003e 8022","time":"2025-09-02T07:46:53+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Use 'ssh ark-dashboard.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-02T07:46:53+01:00"}
+{"level":"error","msg":"dev:ark-dashboard sync  Restarting because: Upstream Sync - connection lost to pod default/ark-dashboard-5766f98d9d-ndn2n:  command terminated with exit code 137","time":"2025-09-02T08:07:21+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard ssh   restarting ssh process because: Start ssh server on :8022\n command terminated with exit code 137","time":"2025-09-02T08:07:23+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-02T08:17:39+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-6cb69bff66-8kn8c","time":"2025-09-02T08:17:39+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-02T08:17:42+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-02T08:17:42+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-02T08:17:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Port forwarding started on: 11427 -\u003e 8022","time":"2025-09-02T08:17:45+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Use 'ssh ark-dashboard.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-02T08:17:45+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Streaming logs of pod:container ark-dashboard-6cb69bff66-8kn8c:ark-dashboard","time":"2025-09-02T08:17:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:17:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e ark-dashboard@0.1.0 dev","time":"2025-09-02T08:17:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e next dev --turbopack","time":"2025-09-02T08:17:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:17:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ⚠ You are using a non-standard \"NODE_ENV\" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env","time":"2025-09-02T08:17:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     ▲ Next.js 15.3.4 (Turbopack)","time":"2025-09-02T08:17:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Local:        http://localhost:3000","time":"2025-09-02T08:17:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Network:      http://10.244.0.69:3000","time":"2025-09-02T08:17:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:17:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Starting...","time":"2025-09-02T08:17:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling middleware ...","time":"2025-09-02T08:17:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled middleware in 1325ms","time":"2025-09-02T08:17:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Ready in 3s","time":"2025-09-02T08:17:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-02T08:29:40+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-6cb69bff66-8kn8c","time":"2025-09-02T08:29:40+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-02T08:29:41+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-02T08:29:41+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-02T08:29:41+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Port forwarding started on: 11427 -\u003e 8022","time":"2025-09-02T08:29:42+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Use 'ssh ark-dashboard.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Streaming logs of pod:container ark-dashboard-6cb69bff66-8kn8c:ark-dashboard","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e ark-dashboard@0.1.0 dev","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e next dev --turbopack","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ⚠ You are using a non-standard \"NODE_ENV\" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     ▲ Next.js 15.3.4 (Turbopack)","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Local:        http://localhost:3000","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Network:      http://10.244.0.69:3000","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Starting...","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling middleware ...","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled middleware in 1325ms","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Ready in 3s","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling / ...","time":"2025-09-02T08:31:59+01:00"}
+{"level":"error","msg":"dev:ark-dashboard sync  Restarting because: Upstream Sync - connection lost to pod default/ark-dashboard-6cb69bff66-8kn8c:  command terminated with exit code 137","time":"2025-09-02T08:32:07+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Restarting because: logs: lost connection to pod","time":"2025-09-02T08:32:07+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Streaming logs of pod:container ark-dashboard-6cb69bff66-8kn8c:ark-dashboard","time":"2025-09-02T08:32:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:32:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e ark-dashboard@0.1.0 dev","time":"2025-09-02T08:32:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e next dev --turbopack","time":"2025-09-02T08:32:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:32:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ⚠ You are using a non-standard \"NODE_ENV\" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env","time":"2025-09-02T08:32:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     ▲ Next.js 15.3.4 (Turbopack)","time":"2025-09-02T08:32:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Local:        http://localhost:3000","time":"2025-09-02T08:32:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Network:      http://10.244.0.69:3000","time":"2025-09-02T08:32:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:32:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Starting...","time":"2025-09-02T08:32:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling middleware ...","time":"2025-09-02T08:32:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled middleware in 1213ms","time":"2025-09-02T08:32:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Ready in 2.8s","time":"2025-09-02T08:32:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling / ...","time":"2025-09-02T08:32:13+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Restarting because: logs: lost connection to pod","time":"2025-09-02T08:32:21+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Streaming logs of pod:container ark-dashboard-6cb69bff66-8kn8c:ark-dashboard","time":"2025-09-02T08:32:33+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:32:33+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e ark-dashboard@0.1.0 dev","time":"2025-09-02T08:32:33+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e next dev --turbopack","time":"2025-09-02T08:32:33+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:32:33+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ⚠ You are using a non-standard \"NODE_ENV\" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env","time":"2025-09-02T08:32:33+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     ▲ Next.js 15.3.4 (Turbopack)","time":"2025-09-02T08:32:34+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Local:        http://localhost:3000","time":"2025-09-02T08:32:34+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Network:      http://10.244.0.69:3000","time":"2025-09-02T08:32:34+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:32:34+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Starting...","time":"2025-09-02T08:32:34+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling middleware ...","time":"2025-09-02T08:32:35+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled middleware in 789ms","time":"2025-09-02T08:32:35+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Ready in 2.2s","time":"2025-09-02T08:32:36+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-02T08:55:04+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-devspace-58d68bbb7-7rv7z","time":"2025-09-02T08:55:05+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-02T08:55:09+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-02T08:55:09+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-02T08:55:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Port forwarding started on: 11427 -\u003e 8022","time":"2025-09-02T08:55:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Use 'ssh ark-dashboard.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-02T08:55:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Streaming logs of pod:container ark-dashboard-devspace-58d68bbb7-7rv7z:ark-dashboard","time":"2025-09-02T08:55:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:55:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e ark-dashboard@0.1.0 dev","time":"2025-09-02T08:55:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e next dev --turbopack","time":"2025-09-02T08:55:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:55:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ⚠ You are using a non-standard \"NODE_ENV\" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env","time":"2025-09-02T08:55:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     ▲ Next.js 15.3.4 (Turbopack)","time":"2025-09-02T08:55:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Local:        http://localhost:3000","time":"2025-09-02T08:55:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Network:      http://10.244.0.73:3000","time":"2025-09-02T08:55:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:55:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Starting...","time":"2025-09-02T08:55:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling middleware ...","time":"2025-09-02T08:55:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled middleware in 1375ms","time":"2025-09-02T08:55:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Ready in 2.6s","time":"2025-09-02T08:55:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling / ...","time":"2025-09-02T08:55:16+01:00"}
+{"level":"error","msg":"dev:ark-dashboard sync  Restarting because: Upstream Sync - connection lost to pod default/ark-dashboard-devspace-58d68bbb7-7rv7z:  command terminated with exit code 137","time":"2025-09-02T08:55:24+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Restarting because: logs: lost connection to pod","time":"2025-09-02T08:55:24+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard ssh   restarting ssh process because: Start ssh server on :8022\n command terminated with exit code 137","time":"2025-09-02T08:55:26+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Streaming logs of pod:container ark-dashboard-devspace-58d68bbb7-7rv7z:ark-dashboard","time":"2025-09-02T08:55:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:55:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e ark-dashboard@0.1.0 dev","time":"2025-09-02T08:55:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e next dev --turbopack","time":"2025-09-02T08:55:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:55:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ⚠ You are using a non-standard \"NODE_ENV\" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env","time":"2025-09-02T08:55:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     ▲ Next.js 15.3.4 (Turbopack)","time":"2025-09-02T08:55:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Local:        http://localhost:3000","time":"2025-09-02T08:55:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Network:      http://10.244.0.73:3000","time":"2025-09-02T08:55:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T08:55:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Starting...","time":"2025-09-02T08:55:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling middleware ...","time":"2025-09-02T08:55:27+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard ssh   restarting ssh process because: exec /tmp/devspacehelper: text file busy\n command terminated with exit code 255","time":"2025-09-02T08:55:28+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled middleware in 1390ms","time":"2025-09-02T08:55:28+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Ready in 3s","time":"2025-09-02T08:55:29+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-02T09:02:04+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-devspace-8cdffc886-ztl7x","time":"2025-09-02T09:02:06+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-02T09:02:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-02T09:02:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-02T09:02:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Port forwarding started on: 11427 -\u003e 8022","time":"2025-09-02T09:02:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Use 'ssh ark-dashboard.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-02T09:02:13+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Streaming logs of pod:container ark-dashboard-devspace-8cdffc886-ztl7x:ark-dashboard","time":"2025-09-02T09:02:14+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T09:02:14+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e ark-dashboard@0.1.0 dev","time":"2025-09-02T09:02:14+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e next dev --turbopack","time":"2025-09-02T09:02:14+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T09:02:14+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ⚠ You are using a non-standard \"NODE_ENV\" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env","time":"2025-09-02T09:02:14+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     ▲ Next.js 15.3.4 (Turbopack)","time":"2025-09-02T09:02:14+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Local:        http://localhost:3000","time":"2025-09-02T09:02:14+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Network:      http://10.244.0.75:3000","time":"2025-09-02T09:02:14+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T09:02:14+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Starting...","time":"2025-09-02T09:02:14+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled middleware in 455ms","time":"2025-09-02T09:02:14+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Ready in 1182ms","time":"2025-09-02T09:02:14+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling / ...","time":"2025-09-02T09:05:02+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled / in 20.1s","time":"2025-09-02T09:05:22+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 20513ms","time":"2025-09-02T09:05:22+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  (node:30) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.","time":"2025-09-02T09:05:23+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  (Use `node --trace-deprecation ...` to show where the warning was created)","time":"2025-09-02T09:05:23+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ⚠ Cross origin request detected from dashboard.127.0.0.1.nip.io to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure \"allowedDevOrigins\" in next.config to allow this.","time":"2025-09-02T09:05:23+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins","time":"2025-09-02T09:05:23+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling /favicon.ico ...","time":"2025-09-02T09:05:23+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico?favicon.e7dae495.ico 200 in 2803ms","time":"2025-09-02T09:05:26+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 3042ms","time":"2025-09-02T09:05:26+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 368ms","time":"2025-09-02T09:05:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico?favicon.e7dae495.ico 200 in 315ms","time":"2025-09-02T09:05:28+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled /favicon.ico in 12.8s","time":"2025-09-02T09:05:35+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 7806ms","time":"2025-09-02T09:05:35+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico?favicon.e7dae495.ico 200 in 896ms","time":"2025-09-02T09:05:36+01:00"}
+{"level":"error","msg":"dev:ark-dashboard sync  Restarting because: Upstream Sync - connection lost to pod default/ark-dashboard-devspace-8cdffc886-ztl7x:  command terminated with exit code 137","time":"2025-09-02T09:05:37+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Restarting because: logs: lost connection to pod","time":"2025-09-02T09:05:37+01:00"}
+{"level":"warning","msg":"dev:ark-dashboard ssh   restarting ssh process because: Start ssh server on :8022\n command terminated with exit code 137","time":"2025-09-02T09:05:39+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Streaming logs of pod:container ark-dashboard-devspace-8cdffc886-ztl7x:ark-dashboard","time":"2025-09-02T09:05:40+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T09:05:40+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e ark-dashboard@0.1.0 dev","time":"2025-09-02T09:05:40+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e next dev --turbopack","time":"2025-09-02T09:05:40+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T09:05:40+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ⚠ You are using a non-standard \"NODE_ENV\" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env","time":"2025-09-02T09:05:40+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     ▲ Next.js 15.3.4 (Turbopack)","time":"2025-09-02T09:05:40+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Local:        http://localhost:3000","time":"2025-09-02T09:05:40+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Network:      http://10.244.0.75:3000","time":"2025-09-02T09:05:40+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T09:05:40+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Starting...","time":"2025-09-02T09:05:40+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled middleware in 434ms","time":"2025-09-02T09:05:40+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Ready in 1147ms","time":"2025-09-02T09:05:40+01:00"}

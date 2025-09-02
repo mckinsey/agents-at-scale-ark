@@ -1,5 +1,4 @@
 # DevSpace configuration for local ARK services development
-# Version: v2beta1 (latest stable)
 version: v2beta1
 
 # Hooks for pre-build setup
@@ -27,13 +26,14 @@ images:
     image: ark-api
     dockerfile: ./services/ark-api/Dockerfile
     context: ./services/ark-api
+    target: dev
 
   # ARK Dashboard service
   ark-dashboard:
     image: ark-dashboard
     dockerfile: ./services/ark-dashboard/Dockerfile
     context: ./services/ark-dashboard
-    target: builder
+    target: dev
 
 # Kubernetes deployments
 deployments:
@@ -47,6 +47,14 @@ deployments:
           image:
             repository: ${runtime.images.ark-api.image}
             tag: ${runtime.images.ark-api.tag}
+          # Override resources for in-cluster local development - API with live reload needs more memory and CPU than production
+          resources:
+            limits:
+              memory: "1024Mi"
+              cpu: "1000m"
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
 
   ark-dashboard:
     namespace: default
@@ -58,30 +66,36 @@ deployments:
           image:
             repository: ${runtime.images.ark-dashboard.image}
             tag: ${runtime.images.ark-dashboard.tag}
+          # Override resources for in-cluster local development - Next.js + Turbopack compilation needs 3GB+ memory and 2 CPU cores for fast builds
+          resources:
+            limits:
+              memory: "3072Mi"
+              cpu: "2000m"
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
 
 # Development configuration - active during 'devspace dev'
 dev:
   ark-api:
     imageSelector: ark-api
     namespace: default
-    # Use the built ark-api image instead of replacing it
-    # devImage: python:3.12-bookworm
-    # Port forwarding for local access
-    ports:
-      - port: 8000:8000  # FastAPI server
-    # Auto-start the API server
-    terminal:
-      command: bash -c "cd /app && echo 'Starting ARK API with hot reload...' && uv run uvicorn ark_api.main:app --host 0.0.0.0 --port 8000 --reload"
+    # Uncomment to forward ports to local host
+    # ports:
+    #   - port: 8000:8000  # FastAPI server
+    # Stream logs instead of terminal
+    logs:
+      lastLines: 50
     # File synchronization for hot reload
     sync:
       - path: ./services/ark-api/ark-api:/app
         excludePaths:
-          - .venv/
-          - __pycache__/
-          - "*.pyc"
-          # Exclude dependency files - Dockerfile already configured these with wheel dependencies
+          # Exclude dependency files - pyproject.toml is patched at build time with wheel dependencies
+          # This is a temporary workaround until we publish our package to PyPI
           - pyproject.toml
           - uv.lock
+          # Don't synchronise virtual environment
+          - .venv
     # Enable SSH for IDE integration
     ssh:
       enabled: true
@@ -89,14 +103,12 @@ dev:
   ark-dashboard:
     imageSelector: ark-dashboard
     namespace: default
-    # Use the built ark-dashboard image and override command to run dev server
-    # devImage: node:24-alpine
-    # Port forwarding for local access
-    ports:
-      - port: 3000:3000  # Next.js dev server
-    # Auto-start the dashboard
-    terminal:
-      command: sh -c "cd /app && echo 'Starting ARK Dashboard with hot reload...' && npm run dev"
+    # Uncomment to forward ports to local host
+    # ports:
+    #   - port: 3000:3000  # Next.js dev server
+    # Stream logs instead of terminal
+    logs:
+      lastLines: 50
     # File synchronization for hot reload
     sync:
       - path: ./services/ark-dashboard/ark-dashboard:/app

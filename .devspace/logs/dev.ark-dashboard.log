@@ -13602,3 +13602,90 @@
 {"level":"info","msg":"Upstream - Upload 148 create change(s) (Uncompressed ~1962.23 KB)","time":"2025-09-01T18:19:25+01:00"}
 {"level":"info","msg":"Upstream - Successfully processed 149 change(s)","time":"2025-09-01T18:19:25+01:00"}
 {"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-01T18:19:26+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-01T23:24:37+01:00"}
+{"level":"info","msg":"Successfully injected devspacehelper into pod default/ark-dashboard-devspace-9c8658458-mh7v9","time":"2025-09-01T23:24:39+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-01T23:24:39+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-01T23:24:39+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'public/.DS_Store'","time":"2025-09-01T23:24:40+01:00"}
+{"level":"info","msg":"Upstream - Upload File '.DS_Store'","time":"2025-09-01T23:24:40+01:00"}
+{"level":"info","msg":"Upstream - Upload 2 create change(s) (Uncompressed ~12.01 KB)","time":"2025-09-01T23:24:40+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 2 change(s)","time":"2025-09-01T23:24:40+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-01T23:24:42+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-01T23:26:33+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-01T23:26:33+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-01T23:26:34+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-01T23:27:52+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-01T23:27:52+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-01T23:27:52+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-01T23:31:57+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-01T23:31:57+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-01T23:31:58+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-02T07:46:48+01:00"}
+{"level":"info","msg":"Successfully injected devspacehelper into pod default/ark-dashboard-5766f98d9d-ndn2n","time":"2025-09-02T07:46:50+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-02T07:46:50+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-02T07:46:51+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T07:46:52+01:00"}
+{"level":"error","msg":"Sync Error on /Users/Dave_Kerr/repos/github/mckinsey/agents-at-scale-ark-streaming/services/ark-dashboard/ark-dashboard: Upstream Sync - connection lost to pod default/ark-dashboard-5766f98d9d-ndn2n:  command terminated with exit code 137","time":"2025-09-02T08:07:21+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-02T08:07:23+01:00"}
+{"level":"info","msg":"Successfully injected devspacehelper into pod default/ark-dashboard-5766f98d9d-ndn2n","time":"2025-09-02T08:07:25+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-02T08:07:25+01:00"}
+{"level":"info","msg":"Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-02T08:07:25+01:00"}
+{"level":"info","msg":"Waiting for initial sync to complete","time":"2025-09-02T08:07:25+01:00"}
+{"level":"info","msg":"Initial sync completed","time":"2025-09-02T08:07:25+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-02T08:17:40+01:00"}
+{"level":"info","msg":"Successfully injected devspacehelper into pod default/ark-dashboard-6cb69bff66-8kn8c","time":"2025-09-02T08:17:42+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-02T08:17:42+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-02T08:17:43+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T08:17:44+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-02T08:29:41+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-02T08:29:41+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T08:29:41+01:00"}
+{"level":"error","msg":"Sync Error on /Users/Dave_Kerr/repos/github/mckinsey/agents-at-scale-ark-streaming/services/ark-dashboard/ark-dashboard: Upstream Sync - connection lost to pod default/ark-dashboard-6cb69bff66-8kn8c:  command terminated with exit code 137","time":"2025-09-02T08:32:07+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-02T08:32:08+01:00"}
+{"level":"info","msg":"Successfully injected devspacehelper into pod default/ark-dashboard-6cb69bff66-8kn8c","time":"2025-09-02T08:32:11+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-02T08:32:11+01:00"}
+{"level":"info","msg":"Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-02T08:32:11+01:00"}
+{"level":"info","msg":"Waiting for initial sync to complete","time":"2025-09-02T08:32:11+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-02T08:32:11+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T08:32:12+01:00"}
+{"level":"info","msg":"Initial sync completed","time":"2025-09-02T08:32:12+01:00"}
+{"level":"error","msg":"Sync Error on /Users/Dave_Kerr/repos/github/mckinsey/agents-at-scale-ark-streaming/services/ark-dashboard/ark-dashboard: Downstream Sync - connection lost to pod default/ark-dashboard-6cb69bff66-8kn8c: Use inotify as watching method in container\n command terminated with exit code 137","time":"2025-09-02T08:32:21+01:00"}
+{"level":"error","msg":"Restarting because: Downstream Sync - connection lost to pod default/ark-dashboard-6cb69bff66-8kn8c: Use inotify as watching method in container\n command terminated with exit code 137","time":"2025-09-02T08:32:21+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-02T08:32:21+01:00"}
+{"level":"error","msg":"Error restarting sync: start sync: exec: unable to upgrade connection: container not found (\"ark-dashboard\")","time":"2025-09-02T08:32:21+01:00"}
+{"level":"error","msg":"Will try again in 15 seconds","time":"2025-09-02T08:32:21+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-02T08:32:37+01:00"}
+{"level":"info","msg":"Successfully injected devspacehelper into pod default/ark-dashboard-6cb69bff66-8kn8c","time":"2025-09-02T08:32:39+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-02T08:32:39+01:00"}
+{"level":"info","msg":"Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-02T08:32:39+01:00"}
+{"level":"info","msg":"Waiting for initial sync to complete","time":"2025-09-02T08:32:39+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-02T08:32:39+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T08:32:41+01:00"}
+{"level":"info","msg":"Initial sync completed","time":"2025-09-02T08:32:41+01:00"}
+{"level":"info","msg":"Downstream - Download file './test-write.txt', uncompressed: ~0.00 KB","time":"2025-09-02T08:43:12+01:00"}
+{"level":"info","msg":"Downstream - Successfully processed 1 change(s)","time":"2025-09-02T08:43:12+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-02T08:55:06+01:00"}
+{"level":"info","msg":"Successfully injected devspacehelper into pod default/ark-dashboard-devspace-58d68bbb7-7rv7z","time":"2025-09-02T08:55:09+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-02T08:55:09+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-02T08:55:09+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T08:55:11+01:00"}
+{"level":"error","msg":"Sync Error on /Users/Dave_Kerr/repos/github/mckinsey/agents-at-scale-ark-streaming/services/ark-dashboard/ark-dashboard: Upstream Sync - connection lost to pod default/ark-dashboard-devspace-58d68bbb7-7rv7z:  command terminated with exit code 137","time":"2025-09-02T08:55:24+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-02T08:55:26+01:00"}
+{"level":"info","msg":"Successfully injected devspacehelper into pod default/ark-dashboard-devspace-58d68bbb7-7rv7z","time":"2025-09-02T08:55:28+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-02T08:55:28+01:00"}
+{"level":"info","msg":"Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-02T08:55:28+01:00"}
+{"level":"info","msg":"Waiting for initial sync to complete","time":"2025-09-02T08:55:28+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-02T08:55:28+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T08:55:30+01:00"}
+{"level":"info","msg":"Initial sync completed","time":"2025-09-02T08:55:30+01:00"}
+{"level":"error","msg":"Sync Error on /Users/Dave_Kerr/repos/github/mckinsey/agents-at-scale-ark-streaming/services/ark-dashboard/ark-dashboard: Upstream Sync - connection lost to pod default/ark-dashboard-devspace-58d68bbb7-7rv7z:  command terminated with exit code 137","time":"2025-09-02T09:02:04+01:00"}
+{"level":"error","msg":"Restarting because: Upstream Sync - connection lost to pod default/ark-dashboard-devspace-58d68bbb7-7rv7z:  command terminated with exit code 137","time":"2025-09-02T09:02:04+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-02T09:02:07+01:00"}
+{"level":"info","msg":"Successfully injected devspacehelper into pod default/ark-dashboard-devspace-8cdffc886-ztl7x","time":"2025-09-02T09:02:10+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-02T09:02:10+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-02T09:02:10+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T09:02:12+01:00"}
+{"level":"error","msg":"Sync Error on /Users/Dave_Kerr/repos/github/mckinsey/agents-at-scale-ark-streaming/services/ark-dashboard/ark-dashboard: Upstream Sync - connection lost to pod default/ark-dashboard-devspace-8cdffc886-ztl7x:  command terminated with exit code 137","time":"2025-09-02T09:05:37+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-02T09:05:37+01:00"}
+{"level":"error","msg":"Error restarting sync: start sync: exec: unable to upgrade connection: container not found (\"ark-dashboard\")","time":"2025-09-02T09:05:38+01:00"}
+{"level":"error","msg":"Will try again in 15 seconds","time":"2025-09-02T09:05:38+01:00"}

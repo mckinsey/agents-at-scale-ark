@@ -85,3 +85,55 @@
 {"level":"info","msg":"Upstream - Upload File 'src/ark_api/main.py'","time":"2025-09-01T19:48:59+01:00"}
 {"level":"info","msg":"Upstream - Upload 1 create change(s) (Uncompressed ~4.32 KB)","time":"2025-09-01T19:48:59+01:00"}
 {"level":"info","msg":"Upstream - Successfully processed 1 change(s)","time":"2025-09-01T19:48:59+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-01T23:24:39+01:00"}
+{"level":"info","msg":"Successfully injected devspacehelper into pod default/ark-api-devspace-7d5cf89c85-fdw5n","time":"2025-09-01T23:24:41+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-01T23:24:41+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-01T23:24:41+01:00"}
+{"level":"info","msg":"Upstream - Handling 1 removes","time":"2025-09-01T23:24:42+01:00"}
+{"level":"info","msg":"Upstream - Remove 'README.md'","time":"2025-09-01T23:24:42+01:00"}
+{"level":"info","msg":"Upstream - Remove 'README.md'","time":"2025-09-01T23:24:42+01:00"}
+{"level":"info","msg":"Upstream - Upload 59 create change(s) (Uncompressed ~2833.73 KB)","time":"2025-09-01T23:24:42+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 60 change(s)","time":"2025-09-01T23:24:42+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-01T23:24:44+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-01T23:26:33+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-01T23:26:33+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-01T23:26:34+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-01T23:27:52+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-01T23:27:52+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-01T23:27:53+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-01T23:31:57+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-01T23:31:57+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-01T23:31:58+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-02T07:36:34+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-02T07:36:34+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T07:36:35+01:00"}
+{"level":"info","msg":"Downstream - Download 5 file(s) (Uncompressed: ~2.19 KB)","time":"2025-09-02T07:36:39+01:00"}
+{"level":"info","msg":"Downstream - Successfully processed 5 change(s)","time":"2025-09-02T07:36:39+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-02T07:46:48+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-02T07:46:48+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T07:46:49+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-02T08:29:41+01:00"}
+{"level":"info","msg":"Successfully injected devspacehelper into pod default/ark-api-66fd8465f5-8mkqr","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-02T08:29:44+01:00"}
+{"level":"info","msg":"Upstream - Handling 1 removes","time":"2025-09-02T08:29:45+01:00"}
+{"level":"info","msg":"Upstream - Remove 'README.md'","time":"2025-09-02T08:29:45+01:00"}
+{"level":"info","msg":"Upstream - Remove 'README.md'","time":"2025-09-02T08:29:45+01:00"}
+{"level":"info","msg":"Upstream - Upload 59 create change(s) (Uncompressed ~2833.73 KB)","time":"2025-09-02T08:29:45+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 60 change(s)","time":"2025-09-02T08:29:45+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T08:29:46+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api/main.py'","time":"2025-09-02T08:33:43+01:00"}
+{"level":"info","msg":"Upstream - Upload 1 create change(s) (Uncompressed ~4.32 KB)","time":"2025-09-02T08:33:43+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 1 change(s)","time":"2025-09-02T08:33:43+01:00"}
+{"level":"info","msg":"Downstream - Download file './src/ark_api/__pycache__/main.cpython-312.pyc', uncompressed: ~4.83 KB","time":"2025-09-02T08:33:44+01:00"}
+{"level":"info","msg":"Downstream - Successfully processed 1 change(s)","time":"2025-09-02T08:33:44+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-02T08:55:09+01:00"}
+{"level":"info","msg":"Successfully injected devspacehelper into pod default/ark-api-665969dbfd-tzqq6","time":"2025-09-02T08:55:11+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-02T08:55:11+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-02T08:55:11+01:00"}
+{"level":"info","msg":"Upstream - Handling 1 removes","time":"2025-09-02T08:55:13+01:00"}
+{"level":"info","msg":"Upstream - Remove 'README.md'","time":"2025-09-02T08:55:13+01:00"}
+{"level":"info","msg":"Upstream - Remove 'README.md'","time":"2025-09-02T08:55:13+01:00"}
+{"level":"info","msg":"Upstream - Upload 59 create change(s) (Uncompressed ~2833.73 KB)","time":"2025-09-02T08:55:13+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 60 change(s)","time":"2025-09-02T08:55:13+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T08:55:14+01:00"}

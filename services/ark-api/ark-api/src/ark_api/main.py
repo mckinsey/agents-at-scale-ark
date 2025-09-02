@@ -97,7 +97,7 @@ else:
     logger.info("No CORS origins configured - CORS will block all cross-origin requests")
 
 # Test live reload
-logger.info("ARK API with DevSpace live reload is working! Updated at 17:18")
+logger.info("ARK API with DevSpace live reload is working! Updated at 23:40")
 
 # Include routes
 app.include_router(router)
