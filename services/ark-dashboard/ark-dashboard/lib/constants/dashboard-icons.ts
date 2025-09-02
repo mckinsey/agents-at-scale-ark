@@ -7,6 +7,8 @@ import {
   Server,
   Wrench,
   Settings,
+  CheckCircle,
+  BarChart,
   Calendar,
   type LucideIcon
 } from "lucide-react";
@@ -44,12 +46,24 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     icon: Lock,
     group: "configurations"
   },
+  evaluators: {
+    key: "evaluators",
+    title: "Evaluators",
+    icon: CheckCircle,
+    group: "configurations"
+  },
 
   // Operations
   queries: {
     key: "queries",
     title: "Queries",
     icon: Search,
+    group: "operations"
+  },
+  evaluations: {
+    key: "evaluations",
+    title: "Evaluations",
+    icon: BarChart,
     group: "operations"
   },
   events: {

@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/tabs"
 import { simplifyDuration } from "@/lib/utils/time"
 import { useMarkdownProcessor } from "@/lib/hooks/use-markdown-processor"
+import { QueryEvaluationActions } from "@/components/query-actions"
 
 // Component for rendering response content
 function ResponseContent({ content, viewMode }: { content: string, viewMode: 'text' | 'markdown' }) {
@@ -486,6 +487,12 @@ function QueryDetailContent() {
           </BreadcrumbList>
         </Breadcrumb>
         <div className="ml-auto flex gap-2">
+          {!isNew && (
+            <QueryEvaluationActions 
+              queryName={queryId} 
+              namespace={namespace} 
+            />
+          )}
           {isNew && (
             <>
               <Button 

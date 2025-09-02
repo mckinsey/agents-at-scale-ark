@@ -60,7 +60,7 @@ export function EvaluationEditor({
   onSave,
   namespace,
   initialEvaluator,
-  initialQueryRef,
+  initialQueryRef
 }: EvaluationEditorProps) {
   const [name, setName] = useState("")
   const [mode, setMode] = useState<EvaluationType>("direct")
@@ -105,7 +105,7 @@ export function EvaluationEditor({
           toast({
             variant: "destructive",
             title: "Failed to Load Data",
-            description: error instanceof Error ? error.message : "An unexpected error occurred",
+            description: error instanceof Error ? error.message : "An unexpected error occurred"
           })
         } finally {
           setEvaluatorsLoading(false)
@@ -143,7 +143,7 @@ export function EvaluationEditor({
           toast({
             variant: "destructive",
             title: "Failed to Load Evaluation Details",
-            description: error instanceof Error ? error.message : "An unexpected error occurred",
+            description: error instanceof Error ? error.message : "An unexpected error occurred"
           })
           // Fallback to basic data
           setName(evaluation.name)
@@ -176,7 +176,7 @@ export function EvaluationEditor({
       toast({
         variant: "destructive",
         title: "Validation Error",
-        description: "Please select an evaluator",
+        description: "Please select an evaluator"
       })
       return
     }
@@ -187,7 +187,7 @@ export function EvaluationEditor({
         toast({
           variant: "destructive",
           title: "Validation Error",
-          description: "Name must be a valid Kubernetes name (lowercase letters, numbers, and hyphens only)",
+          description: "Name must be a valid Kubernetes name (lowercase letters, numbers, and hyphens only)"
         })
         return
       }
@@ -198,7 +198,7 @@ export function EvaluationEditor({
       toast({
         variant: "destructive",
         title: "Validation Error",
-        description: "Query reference is required for query and batch modes",
+        description: "Query reference is required for query and batch modes"
       })
       return
     }
@@ -208,7 +208,7 @@ export function EvaluationEditor({
       toast({
         variant: "destructive",
         title: "Validation Error",
-        description: "Target selection is required for query and batch modes",
+        description: "Target selection is required for query and batch modes"
       })
       return
     }
@@ -218,7 +218,7 @@ export function EvaluationEditor({
       toast({
         variant: "destructive",
         title: "Validation Error",
-        description: "Input and output are required for direct mode",
+        description: "Input and output are required for direct mode"
       })
       return
     }
@@ -237,13 +237,13 @@ export function EvaluationEditor({
               namespace,
               ...(targetRef && { responseTarget: `${targetType}:${targetRef}` })
             }
-          }),
+          })
         },
         evaluator: {
           name: evaluatorRef,
-          namespace,
+          namespace
         },
-        ...(isEditing && { id: evaluation.name }),
+        ...(isEditing && { id: evaluation.name })
       }
 
       onSave(evaluationData)

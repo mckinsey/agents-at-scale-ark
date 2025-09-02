@@ -138,7 +138,7 @@ export const evaluationsService = {
    */
   async getAll(namespace: string): Promise<Evaluation[]> {
     const response = await apiClient.get<EvaluationListResponse>(
-      `/v1/namespaces/${namespace}/evaluations`
+      `/api/v1/namespaces/${namespace}/evaluations`
     )
     
     // For now, just use the response items directly
@@ -151,8 +151,8 @@ export const evaluationsService = {
    */
   async getAllWithDetails(namespace: string, enhanced: boolean = false): Promise<(Evaluation | EvaluationDetailResponse | EnhancedEvaluationResponse | EnhancedEvaluationDetailResponse)[]> {
     const url = enhanced 
-      ? `/v1/namespaces/${namespace}/evaluations?enhanced=true`
-      : `/v1/namespaces/${namespace}/evaluations`
+      ? `/api/v1/namespaces/${namespace}/evaluations?enhanced=true`
+      : `/api/v1/namespaces/${namespace}/evaluations`
     
     const response = enhanced 
       ? await apiClient.get<EnhancedEvaluationListResponse>(url)
@@ -202,7 +202,7 @@ export const evaluationsService = {
   async getByName(namespace: string, name: string): Promise<Evaluation | null> {
     try {
       const response = await apiClient.get<EvaluationResponse>(
-        `/v1/namespaces/${namespace}/evaluations/${name}`
+        `/api/v1/namespaces/${namespace}/evaluations/${name}`
       )
       return response
     } catch (error) {
@@ -219,7 +219,7 @@ export const evaluationsService = {
   async getDetailsByName(namespace: string, name: string): Promise<EvaluationDetailResponse | null> {
     try {
       const response = await apiClient.get<EvaluationDetailResponse>(
-        `/v1/namespaces/${namespace}/evaluations/${name}`
+        `/api/v1/namespaces/${namespace}/evaluations/${name}`
       )
       return response
     } catch (error) {
@@ -236,7 +236,7 @@ export const evaluationsService = {
   async getEnhancedDetailsByName(namespace: string, name: string): Promise<EnhancedEvaluationDetailResponse | null> {
     try {
       const response = await apiClient.get<EnhancedEvaluationDetailResponse>(
-        `/v1/namespaces/${namespace}/evaluations/${name}?enhanced=true`
+        `/api/v1/namespaces/${namespace}/evaluations/${name}?enhanced=true`
       )
       return response
     } catch (error) {
@@ -252,7 +252,7 @@ export const evaluationsService = {
    */
   async create(namespace: string, evaluation: EvaluationCreateRequest): Promise<Evaluation> {
     const response = await apiClient.post<EvaluationResponse>(
-      `/v1/namespaces/${namespace}/evaluations`,
+      `/api/v1/namespaces/${namespace}/evaluations`,
       evaluation
     )
     
@@ -265,7 +265,7 @@ export const evaluationsService = {
   async update(namespace: string, name: string, updates: EvaluationUpdateRequest): Promise<Evaluation | null> {
     try {
       const response = await apiClient.put<EvaluationResponse>(
-        `/v1/namespaces/${namespace}/evaluations/${name}`,
+        `/api/v1/namespaces/${namespace}/evaluations/${name}`,
         updates
       )
       return response
@@ -283,7 +283,7 @@ export const evaluationsService = {
   async delete(namespace: string, name: string): Promise<boolean> {
     try {
       await apiClient.delete(
-        `/v1/namespaces/${namespace}/evaluations/${name}`
+        `/api/v1/namespaces/${namespace}/evaluations/${name}`
       )
       return true
     } catch (error) {
@@ -300,7 +300,7 @@ export const evaluationsService = {
   async cancel(namespace: string, name: string): Promise<Evaluation | null> {
     try {
       const response = await apiClient.patch<EvaluationResponse>(
-        `/v1/namespaces/${namespace}/evaluations/${name}/cancel`
+        `/api/v1/namespaces/${namespace}/evaluations/${name}/cancel`
       )
       return response
     } catch (error) {
@@ -319,7 +319,7 @@ export const evaluationsService = {
       // Fetch all evaluations and filter by query reference
       // Since the list API doesn't include spec data, we'll need to use naming patterns
       const allEvaluations = enhanced 
-        ? (await apiClient.get<EnhancedEvaluationListResponse>(`/v1/namespaces/${namespace}/evaluations?enhanced=true`)).items
+        ? (await apiClient.get<EnhancedEvaluationListResponse>(`/api/v1/namespaces/${namespace}/evaluations?enhanced=true`)).items
         : await this.getAll(namespace)
       
       // Filter evaluations that likely reference this query based on naming pattern

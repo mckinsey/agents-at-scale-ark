@@ -60,7 +60,7 @@ const DEFAULT_FILTERS: EvaluationFilters = {
   scoreMin: "",
   scoreMax: "",
   evaluationType: [],
-  enhanced: false,
+  enhanced: false
 }
 
 const STATUS_OPTIONS = [
@@ -68,14 +68,14 @@ const STATUS_OPTIONS = [
   { value: "running", label: "Running", icon: Play, color: "text-blue-600" },
   { value: "error", label: "Error", icon: AlertCircle, color: "text-red-600" },
   { value: "evaluating", label: "Evaluating", icon: Clock, color: "text-yellow-600" },
-  { value: "canceled", label: "Canceled", icon: Square, color: "text-gray-600" },
+  { value: "canceled", label: "Canceled", icon: Square, color: "text-gray-600" }
 ]
 
 const PASSED_OPTIONS = [
   { value: "all", label: "All" },
   { value: "passed", label: "Passed", icon: CheckCircle, color: "text-green-600" },
   { value: "failed", label: "Failed", icon: XCircle, color: "text-red-600" },
-  { value: "unknown", label: "Unknown", icon: Clock, color: "text-gray-600" },
+  { value: "unknown", label: "Unknown", icon: Clock, color: "text-gray-600" }
 ]
 
 export function EvaluationFilter({
@@ -83,7 +83,7 @@ export function EvaluationFilter({
   onFiltersChange,
   availableEvaluators,
   availableModes,
-  availableEvaluationTypes = [],
+  availableEvaluationTypes = []
 }: EvaluationFilterProps) {
   const [isOpen, setIsOpen] = useState(false)
 
