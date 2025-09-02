@@ -70,7 +70,7 @@ spec:
                   category: research
                   type: web-tool
               spec:
-                type: fetcher
+                type: http
                 inputSchema:
                   type: object
                   properties:

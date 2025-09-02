@@ -34,7 +34,13 @@ func (t *Team) Execute(ctx context.Context, userInput Message, history []Message
 		return nil, fmt.Errorf("team %s has no members configured", t.FullName())
 	}
 
-	teamTracker := NewOperationTracker(t.Recorder, ctx, "TeamExecution", t.FullName(), map[string]string{"strategy": t.Strategy})
+	teamTracker := NewOperationTracker(t.Recorder, ctx, "TeamExecution", t.FullName(), map[string]string{
+		"strategy":    t.Strategy,
+		"queryId":     getQueryID(ctx),
+		"sessionId":   getSessionID(ctx),
+		"teamName":    t.FullName(),
+		"memberCount": fmt.Sprintf("%d", len(t.Members)),
+	})
 
 	var execFunc func(context.Context, Message, []Message) ([]Message, error)
 	switch t.Strategy {
@@ -204,6 +210,9 @@ func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember
 		"team":       t.FullName(),
 		"memberType": member.GetType(),
 		"turn":       fmt.Sprintf("%d", turn),
+		"queryId":    getQueryID(ctx),
+		"sessionId":  getSessionID(ctx),
+		"strategy":   t.Strategy,
 	})
 
 	memberNewMessages, err := member.Execute(ctx, userInput, *messages)

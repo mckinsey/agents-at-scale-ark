@@ -3,9 +3,9 @@ kind: Tool
 metadata:
   name: web-search
 spec:
-  type: fetcher
+  type: http
   description: "Web search tool for retrieving information from the internet"
-  fetcher:
+  http:
     url: "https://api.duckduckgo.com/?q={query}&format=json&no_html=1&skip_disambig=1&limit={num_results}"
     method: "GET"
     timeout: "30s"

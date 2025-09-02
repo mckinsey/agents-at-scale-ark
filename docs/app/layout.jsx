@@ -14,7 +14,7 @@ const banner = <Banner storageKey="some-key">Nextra 4.0 is released 🎉</Banner
 const navbar = (
   <Navbar
     logo={<b>Agents at Scale</b>}
-    projectLink="https://github.com/McK-Internal/agents-at-scale"
+    projectLink="https://github.com/mckinsey/agents-at-scale-ark"
   
     // ... Your additional navbar options
   />
@@ -41,7 +41,7 @@ export default async function RootLayout({ children }) {
           banner={banner}
           navbar={navbar}
           pageMap={await getPageMap()}
-          docsRepositoryBase="https://github.com/McK-Internal/agents-at-scale/tree/main/docs"
+          docsRepositoryBase="https://github.com/mckinsey/agents-at-scale-ark/tree/main/docs"
           footer={footer}
           sidebar={{
             defaultMenuCollapseLevel: 1,

@@ -23,8 +23,6 @@ type AgentTool struct {
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name,omitempty"`
 	// +kubebuilder:validation:Optional
-	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"`
-	// +kubebuilder:validation:Optional
 	Functions []ToolFunction `json:"functions,omitempty"`
 }
 
