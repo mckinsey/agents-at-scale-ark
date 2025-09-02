@@ -167,15 +167,30 @@ export const memoryService = {
     sessionId: string
   ): Promise<SessionConversation | null> {
     try {
-      // Use the memory API proxy route
-      const apiUrl = `/api/memory/messages/${encodeURIComponent(sessionId)}?namespace=${namespace}&memoryName=${memoryName}`;
+      // First get the memory resource to find its endpoint
+      const memoryDetail = await apiClient.get<{ status?: { lastResolvedAddress?: string } }>(`/api/v1/namespaces/${namespace}/memories/${memoryName}`);
+      const memoryServiceUrl = memoryDetail?.status?.lastResolvedAddress;
       
-      const response = await apiClient.get<{ messages: StoredMessage[] }>(apiUrl);
+      if (!memoryServiceUrl) {
+        console.error(`No resolved address for memory ${memoryName}`);
+        return null;
+      }
+
+      // Call the memory service directly to get messages
+      const messagesUrl = `${memoryServiceUrl}/messages/${sessionId}`;
+      const response = await fetch(messagesUrl);
+      
+      if (!response.ok) {
+        console.error(`Memory service error: ${response.statusText}`);
+        return null;
+      }
+      
+      const data = await response.json();
       
       return {
         sessionId,
         memoryName,
-        messages: response?.messages || [],
+        messages: data?.messages || [],
         lastUpdated: new Date().toISOString()
       };
     } catch (error) {

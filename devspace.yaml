@@ -3,7 +3,7 @@ version: v2beta1
 
 # Hooks for pre-build setup
 hooks:
-  - command: bash -c "make ark-sdk-build && mkdir -p services/ark-api/ark-api/wheels && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/wheels/"
+  - command: bash -c "make ark-sdk-build && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
     events: ["before:build:ark-api"]
 
 # Deployment pipelines define the workflow for different commands

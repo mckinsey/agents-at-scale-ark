@@ -1,7 +1,8 @@
 """Kubernetes memories API endpoints."""
 import logging
+import httpx
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from ark_sdk.models.memory_v1alpha1 import MemoryV1alpha1
 
 from ark_sdk.client import with_ark_client
@@ -134,3 +135,47 @@ async def delete_memory(namespace: str, name: str) -> dict:
     async with with_ark_client(namespace, VERSION) as client:
         await client.memories.a_delete(name)
         return {"message": f"Memory {name} deleted successfully"}
+
+
+@router.get("/{name}/sessions/{session_id}/messages")
+@handle_k8s_errors(operation="get", resource_type="memory")
+async def get_memory_messages(namespace: str, name: str, session_id: str) -> dict:
+    """Get messages for a specific session from a memory resource."""
+    async with with_ark_client(namespace, VERSION) as client:
+        # First get the memory resource to find its service endpoint
+        try:
+            memory = await client.memories.a_get(name)
+            memory_dict = memory.to_dict()
+            
+            # Get the resolved address from the memory status
+            status = memory_dict.get("status", {})
+            service_url = status.get("lastResolvedAddress")
+            
+            if not service_url:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Memory service {name} is not ready or has no resolved address"
+                )
+            
+            # Proxy the request to the memory service
+            messages_url = f"{service_url}/messages/{session_id}"
+            
+            async with httpx.AsyncClient() as http_client:
+                response = await http_client.get(messages_url, timeout=30.0)
+                
+                if response.status_code == 404:
+                    raise HTTPException(status_code=404, detail=f"Session {session_id} not found in memory {name}")
+                elif not response.is_success:
+                    raise HTTPException(
+                        status_code=response.status_code,
+                        detail=f"Memory service error: {response.text}"
+                    )
+                
+                return response.json()
+                
+        except httpx.RequestError as e:
+            logger.error(f"Error connecting to memory service: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Failed to connect to memory service: {str(e)}"
+            )

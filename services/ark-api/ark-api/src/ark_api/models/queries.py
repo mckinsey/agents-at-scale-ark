@@ -68,6 +68,8 @@ class QueryResponse(BaseModel):
     name: str
     namespace: str
     input: str
+    memory: Optional[Memory] = None
+    sessionId: Optional[str] = None
     status: Optional[Dict[str, Any]] = None
     creationTimestamp: Optional[datetime] = None
 
