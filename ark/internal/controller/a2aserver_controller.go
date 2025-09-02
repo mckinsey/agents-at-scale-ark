@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -194,7 +195,7 @@ func (r *A2AServerReconciler) createAgentWithSkills(ctx context.Context, a2aServ
 	}
 
 	if created {
-		r.Recorder.Event(a2aServer, "Normal", "AgentCreated", fmt.Sprintf("Agent created: %s with %d skills", agentName, len(agentCard.Skills)))
+		r.Recorder.Event(a2aServer, corev1.EventTypeNormal, "AgentCreated", fmt.Sprintf("Agent created: %s with %d skills", agentName, len(agentCard.Skills)))
 	}
 
 	return nil
@@ -284,7 +285,7 @@ func (r *A2AServerReconciler) finalizeA2AServerProcessing(ctx context.Context, a
 		return ctrl.Result{}, err
 	}
 
-	r.Recorder.Event(&a2aServer, "Normal", "AgentDiscovery", "agent discovered")
+	r.Recorder.Event(&a2aServer, corev1.EventTypeNormal, "AgentDiscovery", "agent discovered")
 	logf.FromContext(ctx).Info("a2a agent discovered", "server", a2aServer.Name, "namespace", a2aServer.Namespace)
 
 	return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
