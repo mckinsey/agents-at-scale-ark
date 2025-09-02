@@ -67,6 +67,8 @@ interface QueryResponse {
 }
 
 interface QueryDetailResponse extends QueryResponse {
+  sessionId?: string;
+  memory?: { name: string; namespace?: string };
   spec?: {
     memory?: { name: string };
     sessionId?: string;
@@ -83,8 +85,11 @@ interface QueryDetailResponse extends QueryResponse {
 
 // Helper function to convert query to memory message
 function queryToMemoryMessage(query: QueryDetailResponse): MemoryMessage | null {
-  // Only include queries that have memory configured
-  if (!query.spec?.memory?.name || !query.spec?.sessionId) {
+  // Check for memory configuration in both top-level and spec fields
+  const memoryName = query.memory?.name || query.spec?.memory?.name;
+  const sessionId = query.sessionId || query.spec?.sessionId;
+  
+  if (!memoryName || !sessionId) {
     return null;
   }
 
@@ -93,8 +98,8 @@ function queryToMemoryMessage(query: QueryDetailResponse): MemoryMessage | null 
   return {
     queryName: query.metadata?.name || query.name,
     queryNamespace: query.metadata?.namespace || query.namespace,
-    sessionId: query.spec.sessionId,
-    memoryName: query.spec.memory.name,
+    sessionId: sessionId,
+    memoryName: memoryName,
     input: query.spec?.input || query.input,
     response: response,
     timestamp: query.metadata?.creationTimestamp || query.creationTimestamp,
