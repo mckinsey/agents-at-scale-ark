@@ -31,12 +31,12 @@ service:
 
 resources:
   limits:
-    cpu: 500m
-    memory: 512Mi
+    cpu: 1000m
+    memory: 4Gi
     ephemeral-storage: 1Gi
   requests:
-    cpu: 250m
-    memory: 256Mi
+    cpu: 500m
+    memory: 1Gi
     ephemeral-storage: 100Mi
 
 livenessProbe:
