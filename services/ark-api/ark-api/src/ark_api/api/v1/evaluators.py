@@ -9,7 +9,6 @@ from ark_sdk.models.evaluator_v1alpha1_spec_address import EvaluatorV1alpha1Spec
 from ark_sdk.models.agent_v1alpha1_spec_parameters_inner import AgentV1alpha1SpecParametersInner as EvaluatorV1alpha1SpecParametersInner
 from ark_sdk.models.agent_v1alpha1_spec_parameters_inner_value_from import AgentV1alpha1SpecParametersInnerValueFrom as EvaluatorV1alpha1SpecParametersInnerValueFrom
 from ark_sdk.models.evaluator_v1alpha1_spec_selector import EvaluatorV1alpha1SpecSelector
-from ark_sdk.models.agent_v1alpha1_spec_tools_inner_label_selector_match_expressions_inner import AgentV1alpha1SpecToolsInnerLabelSelectorMatchExpressionsInner
 
 from ...core.constants import GROUP
 from ark_sdk.client import with_ark_client
@@ -122,11 +121,11 @@ async def create_evaluator(
                 if evaluator.selector.labelSelector.matchExpressions:
                     match_expressions = []
                     for expr in evaluator.selector.labelSelector.matchExpressions:
-                        match_expressions.append(AgentV1alpha1SpecToolsInnerLabelSelectorMatchExpressionsInner.from_dict({
+                        match_expressions.append({
                             "key": expr.key,
                             "operator": expr.operator,
                             "values": expr.values
-                        }))
+                        })
                     selector_dict["matchExpressions"] = match_expressions
             spec.selector = EvaluatorV1alpha1SpecSelector.from_dict(selector_dict)
         
