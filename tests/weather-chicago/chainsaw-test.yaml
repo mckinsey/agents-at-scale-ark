@@ -161,6 +161,41 @@ spec:
             phase: done
     - apply:
         file: manifests/query-evaluation.yaml
+    # Debug evaluation immediately after creation
+    - script:
+        content: |
+          echo "=== Evaluation Created - Initial State ==="
+          sleep 2
+          kubectl get evaluation test-query-ref-evaluation -n $NAMESPACE -o yaml
+          echo "=== Evaluator Service Status ==="
+          kubectl get evaluator evaluator-llm -n $NAMESPACE -o yaml
+          echo "=== Checking for Evaluator Service Pods ==="
+          kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=evaluator-llm
+    # Monitor evaluation progress before waiting
+    - script:
+        content: |
+          echo "=== Monitoring Evaluation Progress ==="
+          for i in {1..10}; do
+            echo "--- Check $i ($(date)) ---"
+            PHASE=$(kubectl get evaluation test-query-ref-evaluation -n $NAMESPACE -o jsonpath='{.status.phase}' || echo "not-found")
+            SCORE=$(kubectl get evaluation test-query-ref-evaluation -n $NAMESPACE -o jsonpath='{.status.score}' || echo "no-score")
+            PASSED=$(kubectl get evaluation test-query-ref-evaluation -n $NAMESPACE -o jsonpath='{.status.passed}' || echo "no-passed")
+            MESSAGE=$(kubectl get evaluation test-query-ref-evaluation -n $NAMESPACE -o jsonpath='{.status.message}' || echo "no-message")
+            echo "Phase: $PHASE, Score: $SCORE, Passed: $PASSED, Message: $MESSAGE"
+            
+            if [ "$PHASE" = "done" ]; then
+              echo "Evaluation completed with phase=done"
+              break
+            elif [ "$PHASE" = "error" ] || [ "$PHASE" = "failed" ]; then
+              echo "Evaluation failed with phase=$PHASE"
+              break
+            fi
+            
+            sleep 5
+          done
+          
+          echo "=== Final Evaluation State Before Wait ==="
+          kubectl get evaluation test-query-ref-evaluation -n $NAMESPACE -o yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
@@ -190,6 +225,37 @@ spec:
             (contains(keys(annotations), 'evaluation.metadata/reasoning')): true
     - apply:
         file: manifests/weather-tools-event-evaluation.yaml
+    # Debug second evaluation
+    - script:
+        content: |
+          echo "=== Second Evaluation Created - Initial State ==="
+          sleep 2
+          kubectl get evaluation weather-tools-event-evaluation -n $NAMESPACE -o yaml
+          echo "=== Current Evaluator Pods ==="
+          kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=evaluator-llm
+          kubectl logs -l app.kubernetes.io/name=evaluator-llm -n $NAMESPACE --tail=20 || echo "No evaluator logs yet"
+    # Monitor second evaluation progress
+    - script:
+        content: |
+          echo "=== Monitoring Second Evaluation Progress ==="
+          for i in {1..8}; do
+            echo "--- Check $i ($(date)) ---"
+            PHASE=$(kubectl get evaluation weather-tools-event-evaluation -n $NAMESPACE -o jsonpath='{.status.phase}' || echo "not-found")
+            SCORE=$(kubectl get evaluation weather-tools-event-evaluation -n $NAMESPACE -o jsonpath='{.status.score}' || echo "no-score")
+            PASSED=$(kubectl get evaluation weather-tools-event-evaluation -n $NAMESPACE -o jsonpath='{.status.passed}' || echo "no-passed")
+            MESSAGE=$(kubectl get evaluation weather-tools-event-evaluation -n $NAMESPACE -o jsonpath='{.status.message}' || echo "no-message")
+            echo "Phase: $PHASE, Score: $SCORE, Passed: $PASSED, Message: $MESSAGE"
+            
+            if [ "$PHASE" = "done" ]; then
+              echo "Second evaluation completed with phase=done"
+              break
+            elif [ "$PHASE" = "error" ] || [ "$PHASE" = "failed" ]; then
+              echo "Second evaluation failed with phase=$PHASE"
+              break
+            fi
+            
+            sleep 5
+          done
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
@@ -220,7 +286,7 @@ spec:
             (to_number(annotations."evaluation.metadata/passed_rules") == `8`): true
             (to_number(annotations."evaluation.metadata/failed_rules") == `0`): true    
           status:
-            passed: true                                                                                                  
+            passed: true
     catch:
     - events: {}
     - describe:
@@ -231,3 +297,39 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
         name: test-query-ref-evaluation
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluator
+        name: evaluator-llm
+    # Check evaluator service logs
+    - script:
+        content: |
+          echo "=== Evaluator Service Logs ==="
+          kubectl logs -l app.kubernetes.io/name=evaluator-llm -n $NAMESPACE --tail=50 || echo "No evaluator service logs found"
+          
+          echo "=== ARK Controller Logs - Evaluation Related ==="
+          kubectl logs -l control-plane=controller-manager -n ark-system --tail=200 | grep -i evaluation || echo "No evaluation logs in controller"
+          
+          echo "=== ARK Controller Logs - All Recent Activity ==="
+          kubectl logs -l control-plane=controller-manager -n ark-system --tail=100
+          
+          echo "=== Evaluation Resource Details ==="
+          kubectl get evaluations test-query-ref-evaluation -n $NAMESPACE -o yaml
+          
+          echo "=== All Evaluations in Namespace ==="
+          kubectl get evaluations -n $NAMESPACE
+          
+          echo "=== Check Evaluation Finalizers ==="
+          kubectl get evaluation test-query-ref-evaluation -n $NAMESPACE -o jsonpath='{.metadata.finalizers}' | xargs -I {} echo "Finalizers: {}"
+          
+          echo "=== Check Evaluation Conditions ==="
+          kubectl get evaluation test-query-ref-evaluation -n $NAMESPACE -o jsonpath='{.status.conditions}' | xargs -I {} echo "Conditions: {}"
+          
+          echo "=== Check Controller Events ==="
+          kubectl get events -n $NAMESPACE --field-selector involvedObject.name=test-query-ref-evaluation
+          
+          echo "=== All Pods in Namespace ==="
+          kubectl get pods -n $NAMESPACE
+          
+          echo "=== Helm Releases ==="
+          helm list -n $NAMESPACE

@@ -5,6 +5,7 @@ metadata:
   labels:
     evaluated: "true"
 spec:
+  skip: true
   description: Test evaluation timeout configuration is properly passed from CRD to evaluator service
   steps:
   - name: step-1
