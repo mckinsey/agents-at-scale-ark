@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { MessageCircle, Pencil, Trash2, Users } from "lucide-react";
-import { DASHBOARD_SECTIONS } from "@/lib/constants/dashboard-icons";
 import { BaseCard, type BaseCardAction } from "./base-card";
 import {
   Tooltip,
