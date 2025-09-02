@@ -80,21 +80,6 @@ interface QueryDetailResponse extends QueryResponse {
   };
 }
 
-// Helper function to build URL parameters
-function buildQueryApiParams(filters: MemoryFilters): URLSearchParams {
-  const params = new URLSearchParams();
-
-  if (filters.limit) {
-    params.append("limit", filters.limit.toString());
-  }
-  if (filters.page !== undefined) {
-    params.append("page", filters.page.toString());
-  } else {
-    params.append("page", "1");
-  }
-
-  return params;
-}
 
 // Helper function to convert query to memory message
 function queryToMemoryMessage(query: QueryDetailResponse): MemoryMessage | null {
@@ -132,23 +117,16 @@ export const memoryService = {
     }
   },
 
-  // Get memory messages by fetching queries with memory
-  async getAllSessions(
-    namespace: string,
-    filters?: MemoryFilters
-  ): Promise<{ items: MemoryMessage[]; total: number }> {
+  // Get memory-enabled queries (used to discover sessions)
+  async getMemoryEnabledQueries(
+    namespace: string
+  ): Promise<MemoryMessage[]> {
     try {
-      const params = buildQueryApiParams(filters || {});
-      const queryString = params.toString();
-      
-      const url = `/api/v1/namespaces/${namespace}/queries${
-        queryString ? `?${queryString}` : ""
-      }`;
-      
+      const url = `/api/v1/namespaces/${namespace}/queries`;
       const response = await apiClient.get<QueryListResponse>(url);
       
       if (!response?.items) {
-        return { items: [], total: 0 };
+        return [];
       }
 
       // Get detailed info for each query to check for memory config
@@ -170,35 +148,10 @@ export const memoryService = {
         .map(query => queryToMemoryMessage(query!))
         .filter(Boolean) as MemoryMessage[];
 
-      // Apply filters
-      let filteredMessages = memoryMessages;
-
-      if (filters?.memoryName && filters.memoryName !== "all") {
-        filteredMessages = filteredMessages.filter(msg => 
-          msg.memoryName === filters.memoryName
-        );
-      }
-
-      if (filters?.sessionId && filters.sessionId !== "all") {
-        filteredMessages = filteredMessages.filter(msg => 
-          msg.sessionId === filters.sessionId
-        );
-      }
-
-      // Sort by timestamp (newest first)
-      filteredMessages.sort((a, b) => {
-        const timeA = new Date(a.timestamp || 0).getTime();
-        const timeB = new Date(b.timestamp || 0).getTime();
-        return timeB - timeA;
-      });
-
-      return {
-        items: filteredMessages,
-        total: filteredMessages.length
-      };
+      return memoryMessages;
     } catch (error) {
-      console.error("Failed to fetch memory messages:", error);
-      return { items: [], total: 0 };
+      console.error("Failed to fetch memory-enabled queries:", error);
+      return [];
     }
   },
 
@@ -254,19 +207,19 @@ export const memoryService = {
   async getAllConversations(
     namespace: string,
     filters?: MemoryFilters
-  ): Promise<SessionConversation[]> {
+  ): Promise<{ conversations: SessionConversation[]; memoryQueries: MemoryMessage[] }> {
     try {
-      // First get all memory-enabled queries to find session IDs
-      const memoryMessages = await this.getAllSessions(namespace, filters);
+      // Get all memory-enabled queries to discover sessions
+      const memoryQueries = await this.getMemoryEnabledQueries(namespace);
       
-      if (memoryMessages.items.length === 0) {
-        return [];
+      if (memoryQueries.length === 0) {
+        return { conversations: [], memoryQueries: [] };
       }
 
       // Get unique session/memory combinations
       const sessionCombinations = new Map<string, { sessionId: string; memoryName: string }>();
       
-      memoryMessages.items.forEach(msg => {
+      memoryQueries.forEach(msg => {
         const key = `${msg.memoryName}:${msg.sessionId}`;
         if (!sessionCombinations.has(key)) {
           sessionCombinations.set(key, {
@@ -276,17 +229,35 @@ export const memoryService = {
         }
       });
 
+      // Apply filters to session combinations
+      let filteredCombinations = Array.from(sessionCombinations.values());
+
+      if (filters?.memoryName && filters.memoryName !== "all") {
+        filteredCombinations = filteredCombinations.filter(combo => 
+          combo.memoryName === filters.memoryName
+        );
+      }
+
+      if (filters?.sessionId && filters.sessionId !== "all") {
+        filteredCombinations = filteredCombinations.filter(combo => 
+          combo.sessionId === filters.sessionId
+        );
+      }
+
       // Fetch conversations for each unique session
       const conversations = await Promise.all(
-        Array.from(sessionCombinations.values()).map(({ sessionId, memoryName }) =>
+        filteredCombinations.map(({ sessionId, memoryName }) =>
           this.getSessionConversation(namespace, memoryName, sessionId)
         )
       );
 
-      return conversations.filter(Boolean) as SessionConversation[];
+      return { 
+        conversations: conversations.filter(Boolean) as SessionConversation[],
+        memoryQueries: memoryQueries
+      };
     } catch (error) {
       console.error("Failed to fetch all conversations:", error);
-      return [];
+      return { conversations: [], memoryQueries: [] };
     }
   }
 };

@@ -95,19 +95,18 @@ export function MemorySection({
           limit: itemsPerPage
         };
 
-        const [messagesData, memoriesData, conversationsData] = await Promise.all([
-          memoryService.getAllSessions(namespace, currentFilters),
+        const [memoriesData, conversationsData] = await Promise.all([
           memoryService.getMemoryResources(namespace),
           memoryService.getAllConversations(namespace, currentFilters)
         ]);
 
-        setMessages(messagesData.items);
-        setTotalMessages(messagesData.total);
+        setMessages(conversationsData.memoryQueries);
+        setTotalMessages(conversationsData.memoryQueries.length);
         setAvailableMemories(memoriesData);
-        setConversations(conversationsData);
+        setConversations(conversationsData.conversations);
 
         // Extract unique session IDs for filtering
-        const sessionIds = new Set(messagesData.items.map(m => m.sessionId));
+        const sessionIds = new Set(conversationsData.memoryQueries.map(m => m.sessionId));
         setAvailableSessions(Array.from(sessionIds).sort());
 
       } catch (error) {
