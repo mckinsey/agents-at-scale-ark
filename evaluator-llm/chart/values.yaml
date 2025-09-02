@@ -29,17 +29,6 @@ service:
   type: ClusterIP
   port: 8000
 
-ingress:
-  enabled: false
-  className: ""
-  annotations: {}
-  hosts:
-    - host: chart-example.local
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
-
 resources:
   limits:
     cpu: 500m
