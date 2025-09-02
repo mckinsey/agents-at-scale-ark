@@ -48,6 +48,7 @@ class ModelResponse(BaseModel):
     type: Literal["openai", "azure", "bedrock"]
     model: str
     status: Optional[str] = None
+    annotations: Optional[Dict[str, str]] = None
 
 
 class ModelListResponse(BaseModel):
@@ -79,3 +80,4 @@ class ModelDetailResponse(BaseModel):
     config: Dict[str, Dict[str, Union[str, Dict[str, Any]]]]
     status: Optional[str] = None
     resolved_address: Optional[str] = None
+    annotations: Optional[Dict[str, str]] = None

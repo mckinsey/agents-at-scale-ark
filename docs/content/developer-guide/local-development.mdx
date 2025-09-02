@@ -1,31 +1,31 @@
 ---
-title: ARK Controller Local Development Mode
-description: Run ARK controller locally while connecting to cluster services
+title: "Local Development"
+description: "Local development with DevSpace for ARK services"
 ---
 
-import Image from 'next/image'
-import arkDevModeImage from '../images/ark-controller-dev-mode-diagram.png'
+# Local Development
 
-# ARK Controller Local Development
+> [!NOTE]
+>
+> DevSpace is being integrated for improved local development experience with hot reload and file sync. Currently configured for `ark-api` and `ark-dashboard` services with full development workflow support.
 
-Run the ARK controller on your local machine instead of in the cluster.
+DevSpace builds and deploys ARK services with live reload, debugger support in IDEs, and file synchronization for rapid iteration. Currently DevSpace is enabled for:
 
-<Image 
-  src={arkDevModeImage} 
-  alt="Ark Controller Local Development Mode" 
-  style={{ width: '400px', height: 'auto' }} 
-/>
+- `ark-api` - The ARK API layer with FastAPI hot reload
+- `ark-dashboard` - The ARK Dashboard with Next.js Turbopack compilation
 
-## Usage
+## Essential Commands
 
-Stop the cluster controller:
 ```bash
-cd ark && make eject-controller
-```
+# Development mode with hot reload and file sync
+devspace dev
 
-Run the controller locally:
-```bash
-cd ark && make dev
-```
+# Build images and deploy to cluster without development features
+devspace deploy
 
-That's it! The local controller connects to your cluster and processes ARK resources.
+# Clean up deployment
+devspace purge
+
+# View logs
+devspace logs -f
+```

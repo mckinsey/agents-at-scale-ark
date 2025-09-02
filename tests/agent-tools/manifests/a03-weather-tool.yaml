@@ -3,7 +3,7 @@ kind: Tool
 metadata:
   name: weather-tool
 spec:
-  type: fetcher
+  type: http
   inputSchema:
     type: object
     properties:
@@ -19,5 +19,5 @@ spec:
         default: true
     required: ["latitude", "longitude"]
   description: "Fetches current weather data for given coordinates"
-  fetcher:
+  http:
     url: https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current_weather=true

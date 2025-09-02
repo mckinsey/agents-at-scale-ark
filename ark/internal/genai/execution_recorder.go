@@ -5,6 +5,8 @@ package genai
 import (
 	"context"
 	"fmt"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 type ExecutionRecorder struct {
@@ -28,7 +30,7 @@ func (r *ExecutionRecorder) TeamExecution(ctx context.Context, phase, teamName, 
 		},
 		Type: "team",
 	}
-	r.emitter.EmitEvent(ctx, "Team"+phase, event)
+	r.emitter.EmitEvent(ctx, corev1.EventTypeNormal, "Team"+phase, event)
 }
 
 func (r *ExecutionRecorder) TeamMember(ctx context.Context, phase, teamName, memberType, memberName string, turn int) {
@@ -43,7 +45,7 @@ func (r *ExecutionRecorder) TeamMember(ctx context.Context, phase, teamName, mem
 		},
 		Type: memberType,
 	}
-	r.emitter.EmitEvent(ctx, "TeamMember"+phase, event)
+	r.emitter.EmitEvent(ctx, corev1.EventTypeNormal, "TeamMember"+phase, event)
 }
 
 func (r *ExecutionRecorder) TeamTurn(ctx context.Context, phase, teamName, strategy string, turn int) {
@@ -57,7 +59,7 @@ func (r *ExecutionRecorder) TeamTurn(ctx context.Context, phase, teamName, strat
 		},
 		Type: "turn",
 	}
-	r.emitter.EmitEvent(ctx, "TeamTurn"+phase, event)
+	r.emitter.EmitEvent(ctx, corev1.EventTypeNormal, "TeamTurn"+phase, event)
 }
 
 func (r *ExecutionRecorder) AgentExecution(ctx context.Context, phase, agentName, modelName string) {
@@ -70,7 +72,7 @@ func (r *ExecutionRecorder) AgentExecution(ctx context.Context, phase, agentName
 		},
 		Type: "agent",
 	}
-	r.emitter.EmitEvent(ctx, "Agent"+phase, event)
+	r.emitter.EmitEvent(ctx, corev1.EventTypeNormal, "Agent"+phase, event)
 }
 
 func (r *ExecutionRecorder) ParticipantSelected(ctx context.Context, teamName, selectedParticipant, selectionReason string) {
@@ -84,7 +86,7 @@ func (r *ExecutionRecorder) ParticipantSelected(ctx context.Context, teamName, s
 		},
 		Type: "team_selector",
 	}
-	r.emitter.EmitEvent(ctx, "ParticipantSelected", event)
+	r.emitter.EmitEvent(ctx, corev1.EventTypeNormal, "ParticipantSelected", event)
 }
 
 func (r *ExecutionRecorder) SelectorModelResponse(ctx context.Context, teamName, modelName, selectedName, availableParticipants string) {
@@ -99,5 +101,5 @@ func (r *ExecutionRecorder) SelectorModelResponse(ctx context.Context, teamName,
 		},
 		Type: "team_selector_response",
 	}
-	r.emitter.EmitEvent(ctx, "SelectorModelResponse", event)
+	r.emitter.EmitEvent(ctx, corev1.EventTypeNormal, "SelectorModelResponse", event)
 }
