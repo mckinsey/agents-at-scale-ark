@@ -1,34 +1,61 @@
 import type { ChatMessageData } from "@/lib/types/chat"
 import { useMarkdownProcessor } from "@/lib/hooks/use-markdown-processor"
+import { getResourceEventsUrl } from "@/lib/utils/events"
+import { AlertCircle } from "lucide-react"
+import { useRouter } from "next/navigation"
 
-interface ChatMessageProps extends Pick<ChatMessageData, "role" | "content" | "status"> {
+interface ChatMessageProps extends Pick<ChatMessageData, "role" | "content" | "status" | "queryName"> {
   className?: string
   viewMode?: 'text' | 'markdown'
+  namespace?: string
 }
 
-export function ChatMessage({ role, content, status, className, viewMode = 'text' }: ChatMessageProps) {
+export function ChatMessage({ role, content, status, className, viewMode = 'text', queryName, namespace }: Readonly<ChatMessageProps>) {
   const isUser = role === "user"
   const isFailed = status === "failed"
   const markdownContent = useMarkdownProcessor(content)
-  
+  const router = useRouter()
+
+  const showErrorIcon = isFailed && queryName && namespace
+
+  const handleErrorIconClick = () => {
+    if (queryName && namespace) {
+      const eventsUrl = getResourceEventsUrl(namespace, "Query", queryName)
+      router.push(eventsUrl)
+    }
+  }
+
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"} ${className || ""}`}>
       <div
         className={`max-w-[80%] rounded-lg px-3 py-2 ${
           isUser
-            ? "bg-primary text-primary-foreground" 
+            ? "bg-primary text-primary-foreground"
             : isFailed
             ? "bg-destructive/10 text-destructive"
             : "bg-muted"
         }`}
       >
-        {viewMode === 'markdown' ? (
-          <div className="text-sm">
-            {markdownContent}
+        <div className="flex items-center gap-2">
+          <div className="flex-1">
+            {viewMode === 'markdown' ? (
+              <div className="text-sm">
+                {markdownContent}
+              </div>
+            ) : (
+              <pre className="text-sm whitespace-pre-wrap font-mono bg-transparent p-0 m-0 border-0">{content}</pre>
+            )}
           </div>
-        ) : (
-          <pre className="text-sm whitespace-pre-wrap font-mono bg-transparent p-0 m-0 border-0">{content}</pre>
-        )}
+          {showErrorIcon && (
+            <button
+              onClick={handleErrorIconClick}
+              className="flex-shrink-0 p-1 rounded hover:bg-destructive/20 transition-colors"
+              title="View events for this query"
+            >
+              <AlertCircle className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

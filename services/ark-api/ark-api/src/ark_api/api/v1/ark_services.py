@@ -18,6 +18,11 @@ from ...utils.ark_services import (
     get_chart_annotations,
     get_chart_description
 )
+from ...constants.annotations import (
+    SERVICE_ANNOTATION,
+    RESOURCES_ANNOTATION,
+    LOCALHOST_GATEWAY_PORT_ANNOTATION
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +49,7 @@ async def get_gateway(custom_api: client.CustomObjectsApi, gateway_name: str, ga
     )
     
     annotations = gateway.get("metadata", {}).get("annotations", {})
-    port_str = annotations.get("ark.mckinsey.com/localhost-gateway-port")
+    port_str = annotations.get(LOCALHOST_GATEWAY_PORT_ANNOTATION)
     
     port = 80  # Default port
     if port_str:
@@ -163,10 +168,10 @@ async def list_ark_services(
         
         # Get chart annotations to check for ARK service annotation
         annotations = get_chart_annotations(release)
-        ark_service_annotation = annotations.get("ark.mckinsey.com/service")
+        ark_service_annotation = annotations.get(SERVICE_ANNOTATION)
         
         # Get resource types
-        resources_annotation = annotations.get("ark.mckinsey.com/resources", "")
+        resources_annotation = annotations.get(RESOURCES_ANNOTATION, "")
         resources = [r.strip() for r in resources_annotation.split(",") if r.strip()] if resources_annotation else []
         
         # Get the standard chart description

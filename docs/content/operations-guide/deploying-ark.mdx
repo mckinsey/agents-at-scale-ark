@@ -29,6 +29,8 @@ helm upgrade --install ark-controller ./ark/dist/chart \
 
 For remote clusters, deploy ARK using the Helm chart with registry-based container images. This approach is recommended for production, staging, and any non-local environments.
 
+Helm charts are attached to all [releases](https://github.com/mckinsey/agents-at-scale-ark/releases/) and deployed to the [charts packages](https://github.com/mckinsey/agents-at-scale-ark/pkgs/container/agents-at-scale-ark%2Fcharts%2Fark).
+
 ### Prerequisites
 
 Install prerequisites on your remote cluster:
@@ -48,10 +50,12 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/downloa
 
 ### Deploy ARK
 
-Deploy using your private registry with authentication:
+Deploy using the published chart from the container registry:
 
 ```bash
-helm upgrade --install ark-controller ./ark/dist/chart \
+helm upgrade --install \
+  ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark \
+  --version 0.1.31 \
   --namespace ark-system \
   --create-namespace \
   --set controllerManager.container.image.repository=your-registry.com/ark-controller \
@@ -63,7 +67,7 @@ helm upgrade --install ark-controller ./ark/dist/chart \
   --set rbac.enable=true
 ```
 
-### Container Transfer (Optional)
+If you have the code locally, you can use the local chart at `./ark/dist/chart`.
 
 If you need to transfer containers between registries, use the transfer script:
 

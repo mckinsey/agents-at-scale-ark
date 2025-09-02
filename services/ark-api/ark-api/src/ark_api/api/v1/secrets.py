@@ -111,7 +111,8 @@ async def list_secrets(namespace: str) -> SecretListResponse:
             secret_list.append(
                 SecretResponse(
                     name=secret.metadata.name,
-                    id=str(secret.metadata.uid)
+                    id=str(secret.metadata.uid),
+                    annotations=secret.metadata.annotations or {}
                 )
             )
         
@@ -163,7 +164,8 @@ async def _create_secret_with_name(namespace: str, secret_name: str, body: Secre
             name=created_secret.metadata.name,
             id=str(created_secret.metadata.uid),
             type=created_secret.type,
-            secret_length=calculate_secret_length(created_secret.data)
+            secret_length=calculate_secret_length(created_secret.data),
+            annotations=created_secret.metadata.annotations
         )
 
 
@@ -188,7 +190,8 @@ async def get_secret(namespace: str, secret_name: str) -> SecretDetailResponse:
             name=secret.metadata.name,
             id=str(secret.metadata.uid),
             type=secret.type,
-            secret_length=calculate_secret_length(secret.data)
+            secret_length=calculate_secret_length(secret.data),
+            annotations=secret.metadata.annotations
         )
 
 
@@ -227,7 +230,8 @@ async def update_secret(namespace: str, secret_name: str, body: SecretUpdateRequ
             name=updated_secret.metadata.name,
             id=str(updated_secret.metadata.uid),
             type=updated_secret.type,
-            secret_length=calculate_secret_length(updated_secret.data)
+            secret_length=calculate_secret_length(updated_secret.data),
+            annotations=updated_secret.metadata.annotations
         )
 
 

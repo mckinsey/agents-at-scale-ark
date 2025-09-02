@@ -56,9 +56,9 @@ func (v *EvaluatorValidator) ValidateCreate(ctx context.Context, obj runtime.Obj
 		return nil, fmt.Errorf("failed to resolve Address: %w", err)
 	}
 
-	// Validate model reference from parameters - use "default" if not specified
-	modelName := "default"
-	modelNamespace := evaluator.GetNamespace()
+	// Validate model reference from parameters - only if explicitly specified
+	var modelName, modelNamespace string
+	modelNamespace = evaluator.GetNamespace()
 
 	// Check for model parameters
 	for _, param := range evaluator.Spec.Parameters {
@@ -74,9 +74,12 @@ func (v *EvaluatorValidator) ValidateCreate(ctx context.Context, obj runtime.Obj
 		}
 	}
 
-	if err := v.ValidateLoadModel(ctx, modelName, modelNamespace); err != nil {
-		evaluatorLog.Error(err, "Failed to validate model", "evaluator", evaluator.GetName(), "model", modelName)
-		return nil, fmt.Errorf("failed to validate model '%s': %w", modelName, err)
+	// Only validate model if explicitly specified in parameters
+	if modelName != "" {
+		if err := v.ValidateLoadModel(ctx, modelName, modelNamespace); err != nil {
+			evaluatorLog.Error(err, "Failed to validate model", "evaluator", evaluator.GetName(), "model", modelName)
+			return nil, fmt.Errorf("failed to validate model '%s': %w", modelName, err)
+		}
 	}
 
 	evaluatorLog.Info("Evaluator validation complete", "name", evaluator.GetName())

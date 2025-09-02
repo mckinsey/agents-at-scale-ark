@@ -20,6 +20,7 @@ export interface ToolDetail {
   spec?: {
     inputSchema?: Record<string, unknown>
     [key: string]: unknown
+    type: string
   }
   status?: Record<string, unknown>
 }

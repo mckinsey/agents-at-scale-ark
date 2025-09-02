@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,8 +21,10 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/genai"
+	"mckinsey.com/ark/internal/labels"
 )
 
 const (
@@ -192,7 +195,7 @@ func (r *A2AServerReconciler) createAgentWithSkills(ctx context.Context, a2aServ
 	}
 
 	if created {
-		r.Recorder.Event(a2aServer, "Normal", "AgentCreated", fmt.Sprintf("Agent created: %s with %d skills", agentName, len(agentCard.Skills)))
+		r.Recorder.Event(a2aServer, corev1.EventTypeNormal, "AgentCreated", fmt.Sprintf("Agent created: %s with %d skills", agentName, len(agentCard.Skills)))
 	}
 
 	return nil
@@ -202,18 +205,28 @@ func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2A
 	// Build skills annotation JSON
 	skillsJSON, _ := json.Marshal(agentCard.Skills)
 
+	agentAnnotations := map[string]string{
+		annotations.A2AServerName:    a2aServer.Name,
+		annotations.A2AServerAddress: a2aServer.Status.LastResolvedAddress,
+		annotations.A2AServerSkills:  string(skillsJSON),
+	}
+
+	// Inherit ark.mckinsey.com annotations from A2AServer to Agent
+	// AAS-2657: Will replace with more idiomatic K8s spec.template pattern
+	for key, value := range a2aServer.Annotations {
+		if strings.HasPrefix(key, annotations.ARKPrefix) {
+			agentAnnotations[key] = value
+		}
+	}
+
 	agent := &arkv1alpha1.Agent{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      agentName,
 			Namespace: a2aServer.Namespace,
 			Labels: map[string]string{
-				"a2a.server/name": a2aServer.Name,
+				labels.A2AServerLabel: a2aServer.Name,
 			},
-			Annotations: map[string]string{
-				"a2a.server/name":    a2aServer.Name,
-				"a2a.server/address": a2aServer.Status.LastResolvedAddress,
-				"a2a.server/skills":  string(skillsJSON),
-			},
+			Annotations: agentAnnotations,
 		},
 		Spec: arkv1alpha1.AgentSpec{
 			Description: agentCard.Description,
@@ -246,7 +259,7 @@ func (r *A2AServerReconciler) createOrUpdateAgent(ctx context.Context, agent *ar
 	}
 
 	// Only update if skills annotation has changed
-	if existingAgent.Annotations["a2a.server/skills"] != agent.Annotations["a2a.server/skills"] {
+	if existingAgent.Annotations[annotations.A2AServerSkills] != agent.Annotations[annotations.A2AServerSkills] {
 		existingAgent.Spec = agent.Spec
 		existingAgent.Annotations = agent.Annotations
 		if err := r.Update(ctx, existingAgent); err != nil {
@@ -272,7 +285,7 @@ func (r *A2AServerReconciler) finalizeA2AServerProcessing(ctx context.Context, a
 		return ctrl.Result{}, err
 	}
 
-	r.Recorder.Event(&a2aServer, "Normal", "AgentDiscovery", "agent discovered")
+	r.Recorder.Event(&a2aServer, corev1.EventTypeNormal, "AgentDiscovery", "agent discovered")
 	logf.FromContext(ctx).Info("a2a agent discovered", "server", a2aServer.Name, "namespace", a2aServer.Namespace)
 
 	return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
@@ -292,7 +305,7 @@ func (r *A2AServerReconciler) listAgentByA2AServer(ctx context.Context, a2aServe
 	agentList := &arkv1alpha1.AgentList{}
 	listOpts := []client.ListOption{
 		client.InNamespace(a2aServerNamespace),
-		client.MatchingLabels{"a2a.server/name": a2aServerName},
+		client.MatchingLabels{labels.A2AServerLabel: a2aServerName},
 	}
 	err := r.List(ctx, agentList, listOpts...)
 	return agentList, err
@@ -301,7 +314,7 @@ func (r *A2AServerReconciler) listAgentByA2AServer(ctx context.Context, a2aServe
 func (r *A2AServerReconciler) deleteAgentByA2AServer(ctx context.Context, a2aServerNamespace, a2aServerName string) error {
 	deleteOpts := []client.DeleteAllOfOption{
 		client.InNamespace(a2aServerNamespace),
-		client.MatchingLabels{"a2a.server/name": a2aServerName},
+		client.MatchingLabels{labels.A2AServerLabel: a2aServerName},
 	}
 	return r.DeleteAllOf(ctx, &arkv1alpha1.Agent{}, deleteOpts...)
 }

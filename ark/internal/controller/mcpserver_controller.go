@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,13 +21,13 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/genai"
+	"mckinsey.com/ark/internal/labels"
 )
 
 const (
-	mcpServerLabel = "mcp/server"
-
 	// Condition types
 	MCPServerReady       = "Ready"
 	MCPServerDiscovering = "Discovering"
@@ -85,7 +86,7 @@ func (r *MCPServerReconciler) getResolver() *common.ValueSourceResolver {
 func (r *MCPServerReconciler) listAllMCPTools(ctx context.Context, mcpServerNamespace, mcpServerName string) ([]arkv1alpha1.Tool, error) {
 	listOpts := []client.ListOption{
 		client.InNamespace(mcpServerNamespace),
-		client.MatchingLabels{mcpServerLabel: mcpServerName},
+		client.MatchingLabels{labels.MCPServerLabel: mcpServerName},
 	}
 
 	var toolList arkv1alpha1.ToolList
@@ -98,7 +99,7 @@ func (r *MCPServerReconciler) listAllMCPTools(ctx context.Context, mcpServerName
 func (r *MCPServerReconciler) deleteAllMCPTools(ctx context.Context, mcpServerNamespace, mcpServerName string) error {
 	deleteOpts := []client.DeleteAllOfOption{
 		client.InNamespace(mcpServerNamespace),
-		client.MatchingLabels{mcpServerLabel: mcpServerName},
+		client.MatchingLabels{labels.MCPServerLabel: mcpServerName},
 	}
 
 	return r.DeleteAllOf(ctx, &arkv1alpha1.Tool{}, deleteOpts...)
@@ -224,7 +225,7 @@ func (r *MCPServerReconciler) finalizeMCPServerProcessing(ctx context.Context, m
 		return ctrl.Result{}, err
 	}
 
-	r.Recorder.Event(&mcpServer, "Normal", "ToolDiscovery", fmt.Sprintf("tools discovered: %d", toolCount))
+	r.Recorder.Event(&mcpServer, corev1.EventTypeNormal, "ToolDiscovery", fmt.Sprintf("tools discovered: %d", toolCount))
 	logf.FromContext(ctx).Info("mcp tools discovered", "server", mcpServer.Name, "namespace", mcpServer.Namespace, "count", toolCount)
 
 	// fetch tools according to polling interval or default interval
@@ -274,13 +275,24 @@ func (r *MCPServerReconciler) createTools(ctx context.Context, mcpServer *arkv1a
 }
 
 func (r *MCPServerReconciler) buildToolCRD(mcpServer *arkv1alpha1.MCPServer, mcpTool mcp.Tool, toolName string) *arkv1alpha1.Tool {
+	toolAnnotations := make(map[string]string)
+
+	// Inherit ark.mckinsey.com annotations from MCPServer to Tool
+	// AAS-2657: Will replace with more idiomatic K8s spec.template pattern
+	for key, value := range mcpServer.Annotations {
+		if strings.HasPrefix(key, annotations.ARKPrefix) {
+			toolAnnotations[key] = value
+		}
+	}
+
 	tool := &arkv1alpha1.Tool{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      toolName,
 			Namespace: mcpServer.Namespace,
 			Labels: map[string]string{
-				mcpServerLabel: mcpServer.Name,
+				labels.MCPServerLabel: mcpServer.Name,
 			},
+			Annotations: toolAnnotations,
 		},
 		Spec: arkv1alpha1.ToolSpec{
 			Type:        "mcp",

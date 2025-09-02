@@ -3,7 +3,7 @@ kind: Tool
 metadata:
   name: invalid-tool-missing-schema
 spec:
-  type: fetcher
+  type: http
   # Missing required 'inputSchema' field - should fail admission
-  fetcher:
+  http:
     url: https://example.com
