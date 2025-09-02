@@ -117,7 +117,7 @@ export function EnhancedEvaluationDetailView({ evaluationId, namespace }: Enhanc
         toast({
           variant: "destructive",
           title: "Failed to Load Evaluation",
-          description: error instanceof Error ? error.message : "An unexpected error occurred",
+          description: error instanceof Error ? error.message : "An unexpected error occurred"
         })
       } finally {
         setLoading(false)
@@ -136,7 +136,7 @@ export function EnhancedEvaluationDetailView({ evaluationId, namespace }: Enhanc
       toast({
         variant: "default",
         title: "Evaluation Canceled",
-        description: "Successfully canceled the evaluation",
+        description: "Successfully canceled the evaluation"
       })
       
       // Reload evaluation data
@@ -146,7 +146,7 @@ export function EnhancedEvaluationDetailView({ evaluationId, namespace }: Enhanc
       toast({
         variant: "destructive",
         title: "Failed to Cancel Evaluation", 
-        description: error instanceof Error ? error.message : "An unexpected error occurred",
+        description: error instanceof Error ? error.message : "An unexpected error occurred"
       })
     } finally {
       setCanceling(false)
@@ -415,7 +415,7 @@ export function EnhancedEvaluationDetailView({ evaluationId, namespace }: Enhanc
                 label: cat.category,
                 score: cat.score || 0,
                 passed: cat.passed,
-                weight: cat.weight,
+                weight: cat.weight
               }))}
               showTrend={true}
             />
@@ -430,7 +430,7 @@ export function EnhancedEvaluationDetailView({ evaluationId, namespace }: Enhanc
                 label: rule.rule_name,
                 score: rule.score || (rule.passed ? 1 : 0),
                 passed: rule.passed,
-                weight: rule.weight,
+                weight: rule.weight
               }))}
               showTrend={false}
             />
@@ -449,8 +449,8 @@ export function EnhancedEvaluationDetailView({ evaluationId, namespace }: Enhanc
                 status: result.passed ? 'completed' as const : result.failed ? 'failed' as const : 'pending' as const,
                 metadata: {
                   score: result.score,
-                  duration: result.duration,
-                },
+                  duration: result.duration
+                }
               }))}
             />
           )}

@@ -21,7 +21,7 @@ export const evaluatorsService = {
    */
   async getAll(namespace: string): Promise<Evaluator[]> {
     const response = await apiClient.get<EvaluatorListResponse>(
-      `/v1/namespaces/${namespace}/evaluators`
+      `/api/v1/namespaces/${namespace}/evaluators`
     )
     
     return response.items || []
@@ -33,7 +33,7 @@ export const evaluatorsService = {
   async getByName(namespace: string, name: string): Promise<Evaluator | null> {
     try {
       const response = await apiClient.get<EvaluatorResponse>(
-        `/v1/namespaces/${namespace}/evaluators/${name}`
+        `/api/v1/namespaces/${namespace}/evaluators/${name}`
       )
       return response
     } catch (error) {
@@ -50,7 +50,7 @@ export const evaluatorsService = {
   async getDetailsByName(namespace: string, name: string): Promise<EvaluatorDetailResponse | null> {
     try {
       const response = await apiClient.get<EvaluatorDetailResponse>(
-        `/v1/namespaces/${namespace}/evaluators/${name}`
+        `/api/v1/namespaces/${namespace}/evaluators/${name}`
       )
       return response
     } catch (error) {
@@ -66,7 +66,7 @@ export const evaluatorsService = {
    */
   async create(namespace: string, evaluator: EvaluatorCreateRequest): Promise<Evaluator> {
     const response = await apiClient.post<EvaluatorResponse>(
-      `/v1/namespaces/${namespace}/evaluators`,
+      `/api/v1/namespaces/${namespace}/evaluators`,
       evaluator
     )
     
@@ -79,7 +79,7 @@ export const evaluatorsService = {
   async update(namespace: string, name: string, updates: EvaluatorUpdateRequest): Promise<Evaluator | null> {
     try {
       const response = await apiClient.put<EvaluatorResponse>(
-        `/v1/namespaces/${namespace}/evaluators/${name}`,
+        `/api/v1/namespaces/${namespace}/evaluators/${name}`,
         updates
       )
       return response
@@ -97,7 +97,7 @@ export const evaluatorsService = {
   async delete(namespace: string, name: string): Promise<boolean> {
     try {
       await apiClient.delete(
-        `/v1/namespaces/${namespace}/evaluators/${name}`
+        `/api/v1/namespaces/${namespace}/evaluators/${name}`
       )
       return true
     } catch (error) {

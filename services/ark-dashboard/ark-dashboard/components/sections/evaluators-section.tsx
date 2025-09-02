@@ -32,7 +32,7 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }, Evalu
         toast({
           variant: "destructive",
           title: "Failed to Load Evaluators",
-          description: error instanceof Error ? error.message : "An unexpected error occurred",
+          description: error instanceof Error ? error.message : "An unexpected error occurred"
         })
       } finally {
         setLoading(false)
@@ -50,7 +50,7 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }, Evalu
         toast({
           variant: "success",
           title: "Evaluator Updated",
-          description: "Successfully updated the evaluator",
+          description: "Successfully updated the evaluator"
         })
       } else {
         const createRequest = evaluator as EvaluatorCreateRequest
@@ -58,7 +58,7 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }, Evalu
         toast({
           variant: "success",
           title: "Evaluator Created",
-          description: `Successfully created ${createRequest.name}`,
+          description: `Successfully created ${createRequest.name}`
         })
       }
       const updatedEvaluators = await evaluatorsService.getAll(namespace)
@@ -67,7 +67,7 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }, Evalu
       toast({
         variant: "destructive",
         title: evaluator.id ? "Failed to Update Evaluator" : "Failed to Create Evaluator",
-        description: error instanceof Error ? error.message : "An unexpected error occurred",
+        description: error instanceof Error ? error.message : "An unexpected error occurred"
       })
     }
   }
@@ -82,7 +82,7 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }, Evalu
       toast({
         variant: "success",
         title: "Evaluator Deleted",
-        description: `Successfully deleted ${evaluator.name}`,
+        description: `Successfully deleted ${evaluator.name}`
       })
       const updatedEvaluators = await evaluatorsService.getAll(namespace)
       setEvaluators(updatedEvaluators)
@@ -90,7 +90,7 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }, Evalu
       toast({
         variant: "destructive",
         title: "Failed to Delete Evaluator",
-        description: error instanceof Error ? error.message : "An unexpected error occurred",
+        description: error instanceof Error ? error.message : "An unexpected error occurred"
       })
     }
   }

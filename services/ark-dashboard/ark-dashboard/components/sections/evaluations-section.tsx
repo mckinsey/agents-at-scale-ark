@@ -87,7 +87,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
       scoreMin: "",
       scoreMax: "",
       evaluationType: [],
-      enhanced: false,
+      enhanced: false
     })
     const showLoading = useDelayedLoading(loading)
     const router = useRouter()
@@ -115,7 +115,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
             toast({
               variant: "destructive",
               title: "Failed to Load Evaluations",
-              description: fallbackError instanceof Error ? fallbackError.message : "An unexpected error occurred",
+              description: fallbackError instanceof Error ? fallbackError.message : "An unexpected error occurred"
             })
           }
         } finally {
@@ -456,7 +456,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
         "error",
         "running",
         "evaluating",
-        "canceled",
+        "canceled"
       ].includes(status || "")
         ? normalizedStatus
         : "default"
@@ -479,7 +479,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
         toast({
           variant: "success",
           title: "Evaluation Deleted",
-          description: "Successfully deleted evaluation",
+          description: "Successfully deleted evaluation"
         })
         // Reload evaluations
         try {
@@ -496,7 +496,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
           description:
             error instanceof Error
               ? error.message
-              : "An unexpected error occurred",
+              : "An unexpected error occurred"
         })
       }
     }
@@ -507,7 +507,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
         toast({
           variant: "success",
           title: "Evaluation Canceled",
-          description: "Successfully canceled evaluation",
+          description: "Successfully canceled evaluation"
         })
         // Reload evaluations
         try {
@@ -524,7 +524,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
           description:
             error instanceof Error
               ? error.message
-              : "An unexpected error occurred",
+              : "An unexpected error occurred"
         })
       }
     }
@@ -537,7 +537,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
           toast({
             variant: "success",
             title: "Evaluation Updated",
-            description: "Successfully updated evaluation",
+            description: "Successfully updated evaluation"
           })
         } else {
           const createRequest = evaluation as EvaluationCreateRequest
@@ -545,7 +545,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
           toast({
             variant: "success",
             title: "Evaluation Created",
-            description: "Successfully created evaluation",
+            description: "Successfully created evaluation"
           })
         }
 
@@ -564,7 +564,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
           description:
             error instanceof Error
               ? error.message
-              : "An unexpected error occurred",
+              : "An unexpected error occurred"
         })
       }
     }

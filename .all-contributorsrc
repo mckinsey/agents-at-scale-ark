@@ -15,7 +15,9 @@
       "profile": "http://www.dwmkerr.com/",
       "contributions": [
         "projectManagement",
-        "code"
+        "code",
+        "doc",
+        "bug"
       ]
     },
     {
@@ -64,7 +66,8 @@
       "profile": "https://github.com/skokaina",
       "contributions": [
         "projectManagement",
-        "code"
+        "code",
+        "doc"
       ]
     },
     {

@@ -126,7 +126,7 @@ export function EvaluationDetailView({ evaluationId, namespace, enhanced = false
         toast({
           variant: "destructive",
           title: "Failed to Load Evaluation",
-          description: error instanceof Error ? error.message : "An unexpected error occurred",
+          description: error instanceof Error ? error.message : "An unexpected error occurred"
         })
       } finally {
         setLoading(false)
@@ -145,7 +145,7 @@ export function EvaluationDetailView({ evaluationId, namespace, enhanced = false
       toast({
         variant: "success",
         title: "Evaluation Canceled",
-        description: "Successfully canceled the evaluation",
+        description: "Successfully canceled the evaluation"
       })
       
       // Reload evaluation data
@@ -155,7 +155,7 @@ export function EvaluationDetailView({ evaluationId, namespace, enhanced = false
       toast({
         variant: "destructive",
         title: "Failed to Cancel Evaluation", 
-        description: error instanceof Error ? error.message : "An unexpected error occurred",
+        description: error instanceof Error ? error.message : "An unexpected error occurred"
       })
     } finally {
       setCanceling(false)

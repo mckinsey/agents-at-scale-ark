@@ -35,13 +35,13 @@ export function RawMetadataComponent({
       toast({
         variant: "default",
         title: "Copied to Clipboard",
-        description: "Metadata has been copied to your clipboard",
+        description: "Metadata has been copied to your clipboard"
       })
     } catch {
       toast({
         variant: "destructive",
         title: "Copy Failed",
-        description: "Failed to copy metadata to clipboard",
+        description: "Failed to copy metadata to clipboard"
       })
     }
   }

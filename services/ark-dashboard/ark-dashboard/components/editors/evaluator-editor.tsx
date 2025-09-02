@@ -65,7 +65,7 @@ export function EvaluatorEditor({
   onOpenChange,
   evaluator,
   onSave,
-  namespace,
+  namespace
 }: EvaluatorEditorProps) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
@@ -90,7 +90,7 @@ export function EvaluatorEditor({
           toast({
             variant: "destructive",
             title: "Failed to Load Models",
-            description: error instanceof Error ? error.message : "An unexpected error occurred",
+            description: error instanceof Error ? error.message : "An unexpected error occurred"
           })
         } finally {
           setModelsLoading(false)
@@ -149,7 +149,7 @@ export function EvaluatorEditor({
           toast({
             variant: "destructive",
             title: "Failed to Load Evaluator Details",
-            description: error instanceof Error ? error.message : "An unexpected error occurred",
+            description: error instanceof Error ? error.message : "An unexpected error occurred"
           })
           // Fallback to basic data
           setName(evaluator.name)
@@ -245,7 +245,7 @@ export function EvaluatorEditor({
       toast({
         variant: "destructive",
         title: "Validation Error",
-        description: "Name and address are required fields",
+        description: "Name and address are required fields"
       })
       return
     }
@@ -255,7 +255,7 @@ export function EvaluatorEditor({
       toast({
         variant: "destructive",
         title: "Validation Error",
-        description: "Name must be a valid Kubernetes name (lowercase letters, numbers, and hyphens only)",
+        description: "Name must be a valid Kubernetes name (lowercase letters, numbers, and hyphens only)"
       })
       return
     }
@@ -267,7 +267,7 @@ export function EvaluatorEditor({
       toast({
         variant: "destructive",
         title: "Validation Error",
-        description: "Address must be a valid URL",
+        description: "Address must be a valid URL"
       })
       return
     }
@@ -279,7 +279,7 @@ export function EvaluatorEditor({
         toast({
           variant: "destructive",
           title: "Validation Error",
-          description: "All parameters must have names",
+          description: "All parameters must have names"
         })
         return
       }
@@ -287,7 +287,7 @@ export function EvaluatorEditor({
         toast({
           variant: "destructive",
           title: "Validation Error",
-          description: `Duplicate parameter name: ${param.name}`,
+          description: `Duplicate parameter name: ${param.name}`
         })
         return
       }
@@ -301,7 +301,7 @@ export function EvaluatorEditor({
           toast({
             variant: "destructive",
             title: "Validation Error",
-            description: "Selector labels cannot have empty keys",
+            description: "Selector labels cannot have empty keys"
           })
           return
         }
@@ -314,12 +314,12 @@ export function EvaluatorEditor({
         name,
         description: description || undefined,
         address: {
-          value: address,
+          value: address
         },
         ...(modelRef && { modelRef: { name: modelRef } }),
         ...(parameters.length > 0 && { parameters }),
         ...(selector && selector.labelSelector && Object.keys(selector.labelSelector.matchLabels || {}).some(k => k && selector.labelSelector?.matchLabels?.[k]) && { selector }),
-        ...(isEditing && { id: evaluator.name }),
+        ...(isEditing && { id: evaluator.name })
       }
 
       onSave(evaluatorData)
