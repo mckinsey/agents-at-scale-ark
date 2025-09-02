@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: memory-cooking-intro
+spec:
+  input: "Hi! I'm a beginner cook and I want to learn how to make Italian pasta dishes. I have a preference for vegetarian recipes and I'm lactose intolerant, so please keep that in mind for any recommendations."
+  targets:
+    - type: agent
+      name: amazed
+  sessionId: cooking-lessons-italian

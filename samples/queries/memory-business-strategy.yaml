@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: memory-business-strategy
+spec:
+  input: "What marketing strategies would you recommend for PayFlow given our focus on small business payment processing? Remember, customer acquisition is our main challenge right now."
+  targets:
+    - type: agent
+      name: technical-expert
+  sessionId: business-consulting-payflow

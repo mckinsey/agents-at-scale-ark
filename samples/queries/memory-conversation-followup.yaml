@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: memory-conversation-followup
+spec:
+  input: "Thanks for those suggestions! Regarding the temples you mentioned, which one would be best to visit during cherry blossom season? Also, do you remember what my main interests were for this trip?"
+  targets:
+    - type: agent
+      name: amazed
+  sessionId: travel-session-tokyo-2024

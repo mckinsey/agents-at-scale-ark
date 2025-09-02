@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: memory-test-question1
+spec:
+  input: "What is my name and what do I do for work?"
+  targets:
+    - type: agent
+      name: technical-expert
+  sessionId: memory-session-001

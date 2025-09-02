@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: standalone-math-advanced
+spec:
+  input: "Solve this quadratic equation: 2x² + 7x - 4 = 0. Show the step-by-step solution using the quadratic formula."
+  targets:
+    - type: agent
+      name: math

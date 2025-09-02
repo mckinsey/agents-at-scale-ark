@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: standalone-blog-idea
+spec:
+  input: "Write a blog post outline about the benefits of remote work for software developers. Include 5 main points and brief descriptions."
+  targets:
+    - type: agent
+      name: blog

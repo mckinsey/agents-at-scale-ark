@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: memory-business-followup
+spec:
+  input: "Those are excellent suggestions! Given our team size of 25 people, which of these marketing strategies should we prioritize first? Also, can you remind me what my company name is?"
+  targets:
+    - type: agent
+      name: technical-expert
+  sessionId: business-consulting-payflow

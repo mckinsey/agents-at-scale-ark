@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: memory-test-intro
+spec:
+  input: "Hi! I'm Sarah, a data scientist. I work on machine learning projects and my favorite programming language is Python. Please remember this information about me."
+  targets:
+    - type: agent
+      name: technical-expert
+  sessionId: memory-session-001
