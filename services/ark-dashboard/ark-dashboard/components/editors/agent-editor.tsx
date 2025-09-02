@@ -38,8 +38,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger
 } from "../ui/collapsible";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, CircleAlert, Trash2 } from "lucide-react";
 import { groupToolsByLabel } from "@/lib/utils/groupToolsByLabels";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from "@/components/ui/tooltip";
 
 interface AgentEditorProps {
   open: boolean;
@@ -74,6 +80,7 @@ export function AgentEditor({
   const [availableTools, setAvailableTools] = useState<Tool[]>([]);
   const [selectedTools, setSelectedTools] = useState<AgentTool[]>([]);
   const [toolsLoading, setToolsLoading] = useState(false);
+  const [unavailableTools, setUnavailableTools] = useState<Tool[]>([]);
 
   useEffect(() => {
     if (open) {
@@ -81,10 +88,15 @@ export function AgentEditor({
         setToolsLoading(true);
         try {
           const tools = await toolsService.getAll(namespace);
+          const missingTools = agent?.tools?.filter(
+            (agentTool) => !tools.some((t) => t.name === agentTool.name)
+          ) as Tool[];
+          setUnavailableTools(missingTools || []);
           setAvailableTools(tools);
         } catch (error) {
           console.error("Failed to load tools:", error);
           setAvailableTools([]);
+          setUnavailableTools([]);
         } finally {
           setToolsLoading(false);
         }
@@ -191,6 +203,12 @@ export function AgentEditor({
     }
   };
 
+  const onDeleteClick = (tool: Tool) => {
+    setUnavailableTools((prev) =>
+      prev.filter((unavailableTool) => unavailableTool.name !== tool.name)
+    );
+    setSelectedTools((prev) => prev.filter((t) => t.name !== tool.name));
+  };
   const isToolSelected = (toolName: string) => {
     return selectedTools.some((t) => t.name === toolName);
   };
@@ -287,6 +305,8 @@ export function AgentEditor({
               toolsLoading={toolsLoading}
               onToolToggle={handleToolToggle}
               isToolSelected={isToolSelected}
+              unavailableTools={unavailableTools}
+              onDeleteClick={onDeleteClick}
             />
           )}
         </div>
@@ -294,9 +314,27 @@ export function AgentEditor({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!isValid}>
-            {agent ? "Update" : "Create"}
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger className="text-left" tabIndex={-1} asChild>
+                <span className="inline-block">
+                  <Button
+                    onClick={handleSave}
+                    disabled={!isValid || unavailableTools.length > 0}
+                  >
+                    {agent ? "Update" : "Create"}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  {unavailableTools.length > 0
+                    ? "Delete all unavailable tools to proceed"
+                    : ""}{" "}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -306,39 +344,79 @@ export function AgentEditor({
 const ToolItem = ({
   tool,
   isSelected,
-  onToggle
+  onToggle,
+  isUnavailable,
+  onDeleteClick
 }: {
   tool: Tool;
   isSelected: boolean;
   onToggle: (tool: Tool, checked: boolean) => void;
+  isUnavailable: boolean;
+  onDeleteClick: (tool: Tool) => void;
 }) => (
-  <div key={`tool-${tool.id}`} className="flex items-start space-x-2">
-    <Checkbox
-      id={`tool-${tool.id}`}
-      checked={isSelected}
-      onCheckedChange={(checked) => onToggle(tool, checked)}
-      className="mt-1"
-    />
-    <Label
-      htmlFor={`tool-${tool.id}`}
-      className="text-sm font-normal cursor-pointer flex-1"
-    >
-      <div className="font-medium">{tool.name}</div>
-      {tool.description && (
-        <div className="text-xs text-muted-foreground">{tool.description}</div>
+  <div className="flex flex-row justify-between" key={`tool-${tool.id}`}>
+    <div className="flex items-start space-x-2 w-fit">
+      {isUnavailable ? (
+        <>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger className="text-left" tabIndex={-1}>
+                <CircleAlert className="w-4 h-4 mt-1 text-red-500" />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>This tool is unavailable in the system</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </>
+      ) : (
+        <Checkbox
+          id={`tool-${tool.id}`}
+          checked={isSelected}
+          onCheckedChange={(checked) => onToggle(tool, checked)}
+          className="mt-1"
+        />
       )}
-    </Label>
+      <Label
+        htmlFor={`tool-${tool.id}`}
+        className="text-sm font-normal cursor-pointer flex-1"
+      >
+        <div className="font-medium">{tool.name}</div>
+        {tool.description && (
+          <div className="text-xs text-muted-foreground">
+            {tool.description}
+          </div>
+        )}
+      </Label>
+    </div>
+    <div>
+      {isUnavailable && (
+        <Button
+          variant={"ghost"}
+          size="sm"
+          className="h-8 w-8 p-0 hover:text-red-500"
+          onClick={() => onDeleteClick(tool)}
+          aria-label={"Delete tool"}
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      )}
+    </div>
   </div>
 );
 
 const ToolGroup = ({
   toolGroup,
   onToggle,
-  isToolSelected
+  isToolSelected,
+  unavailableTools,
+  onDeleteClick
 }: {
   toolGroup: { groupName: string; tools: Tool[] };
   onToggle: (tool: Tool, checked: boolean) => void;
   isToolSelected: (name: string) => boolean;
+  unavailableTools: Tool[];
+  onDeleteClick: (tool: Tool) => void;
 }) => (
   <Collapsible
     defaultOpen
@@ -356,10 +434,14 @@ const ToolGroup = ({
         <div className="flex gap-y-2 flex-col pt-2">
           {toolGroup.tools?.map((tool) => (
             <ToolItem
-              key={`tool-${tool.id}`}
+              key={`tool-${tool.id ? tool.id : tool.name}`}
               tool={tool}
               isSelected={isToolSelected(tool.name)}
               onToggle={onToggle}
+              isUnavailable={unavailableTools.some(
+                (unavailableTool) => unavailableTool.name === tool.name
+              )}
+              onDeleteClick={onDeleteClick}
             />
           ))}
         </div>
@@ -373,17 +455,21 @@ interface ToolSelectionSectionProps {
   toolsLoading: boolean;
   onToolToggle: (tool: Tool, checked: boolean) => void;
   isToolSelected: (toolName: string) => boolean;
+  unavailableTools: Tool[];
+  onDeleteClick: (tool: Tool) => void;
 }
 
 function ToolSelectionSection({
   availableTools,
   toolsLoading,
   onToolToggle,
-  isToolSelected
+  isToolSelected,
+  unavailableTools,
+  onDeleteClick
 }: Readonly<ToolSelectionSectionProps>) {
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredTools = availableTools.filter(
+  const filteredTools = [...availableTools].filter(
     (tool) =>
       tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       tool?.description?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -394,18 +480,35 @@ function ToolSelectionSection({
   );
 
   const renderGroupedTools = () => {
-    return groupedTools?.map((toolGroup, index) => (
-      <ToolGroup
-        key={`${toolGroup.groupName}-${index}`}
-        toolGroup={toolGroup}
-        onToggle={onToolToggle}
-        isToolSelected={isToolSelected}
-      />
-    ));
+    return (
+      <>
+        <ToolGroup
+          key={"unavailable-tools"}
+          toolGroup={{
+            groupName: "Unavailable Tools",
+            tools: [...unavailableTools]
+          }}
+          onToggle={onToolToggle}
+          isToolSelected={isToolSelected}
+          unavailableTools={unavailableTools}
+          onDeleteClick={onDeleteClick}
+        />
+        {groupedTools?.map((toolGroup, index) => (
+          <ToolGroup
+            key={`${toolGroup.groupName}-${index}`}
+            toolGroup={toolGroup}
+            onToggle={onToolToggle}
+            isToolSelected={isToolSelected}
+            unavailableTools={unavailableTools}
+            onDeleteClick={onDeleteClick}
+          />
+        ))}
+      </>
+    );
   };
 
   const renderTools = () => {
-    if (availableTools.length === 0) {
+    if (availableTools.length === 0 && unavailableTools.length === 0) {
       return (
         <div className="text-sm text-muted-foreground">
           No tools available in this namespace
@@ -421,7 +524,7 @@ function ToolSelectionSection({
             className="text-sm"
           />
           <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-2">
-            {filteredTools.length === 0 ? (
+            {filteredTools.length === 0 && searchQuery ? (
               <div className="text-sm text-muted-foreground text-center py-2">
                 {searchQuery
                   ? `No tools found matching "${searchQuery}"`
