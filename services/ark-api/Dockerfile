@@ -1,4 +1,4 @@
-FROM python:3.12.9-slim
+FROM python:3.12.9-slim AS builder
 
 WORKDIR /app
 
@@ -45,5 +45,9 @@ USER ark
 # Expose the application port
 EXPOSE 8000
 
-
 CMD ["uv", "run", "uvicorn", "ark_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# For in-cluster local development with DevSpace
+FROM builder AS dev
+# For dev mode - run with live reload
+CMD ["uv", "run", "uvicorn", "ark_api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
