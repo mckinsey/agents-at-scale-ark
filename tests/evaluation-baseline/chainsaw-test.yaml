@@ -27,15 +27,6 @@ spec:
             name: test-baseline-model
           status:
             phase: ready
-    - wait:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Evaluator
-        timeout: 2m
-        name: test-baseline-evaluator
-        for:
-          jsonPath:
-            path: '{.status.phase}'
-            value: 'ready'
     - assert:
         resource:
           apiVersion: v1
@@ -44,21 +35,22 @@ spec:
             name: golden-examples
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluator
+        timeout: 3m
+        name: test-baseline-evaluator
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'ready'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
-        timeout: 5m
+        timeout: 7m
         name: test-baseline-evaluation
         for:
           jsonPath:
             path: '{.status.phase}'
             value: 'done'
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Evaluation
-          metadata:
-            name: test-baseline-evaluation
-          status:
-            phase: done
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

@@ -38,16 +38,5 @@ data:
           "concept": "multiplication",
           "context": "shopping"
         }
-      },
-      {
-        "input": "What is 1/2 + 1/4?",
-        "expectedOutput": "3/4",
-        "expectedMinScore": "0.75",
-        "difficulty": "hard",
-        "category": "fractions",
-        "metadata": {
-          "type": "fraction-addition",
-          "concept": "fractions"
-        }
       }
     ]

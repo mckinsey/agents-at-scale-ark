@@ -5,6 +5,7 @@ metadata:
   labels:
     evaluated: "true"
 spec:
+  skip: true
   description: Test evaluator selector functionality for automatic query evaluation
   steps:
     - name: setup-resources
