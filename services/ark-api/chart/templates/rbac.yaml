@@ -68,7 +68,7 @@ metadata:
 rules:
   # Permission to access ark.mckinsey.com resources across all namespaces
   - apiGroups: ["ark.mckinsey.com"]
-    resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories"]
+    resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories", "evaluations", "evaluators"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 ---
