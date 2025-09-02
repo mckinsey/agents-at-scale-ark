@@ -1,9 +1,7 @@
 "use client"
 
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useState , useEffect} from "react";
-import { Button } from "@/components/ui/button";
-import { ChevronRight } from "lucide-react";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -15,6 +13,7 @@ import {
 import { toolsService } from "@/lib/services";
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { ToolDetail } from "@/lib/services/tools";
 
 
 const FIELD_HEADING_STYLES = "px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 w-1/3 text-left"
@@ -22,11 +21,10 @@ const FIELD_HEADING_STYLES = "px-3 py-2 text-xs font-medium text-gray-600 dark:t
 
 export default function ToolDetailsPage() {
   const params = useParams();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const namespace = searchParams.get("namespace") || "default";
   const [loading, setLoading] = useState(true);
-  const [tool, setTool] = useState<any>(null);
+  const [tool, setTool] = useState<ToolDetail | null>(null);
   const toolName = params.name as string;
 
   useEffect(() => {
@@ -51,37 +49,6 @@ export default function ToolDetailsPage() {
   if (loading) {
     return <div className="text-center py-8">Loading...</div>;
   }
-
-  // if (!tool) {
-  //   return <div className="text-center py-8">Tool not found</div>;
-  // }
-
-  const parseAnnotations = (annotations: unknown): Record<string, unknown> | null => {
-    try {
-      if (!annotations) return null;
-      let parsed: Record<string, unknown> = annotations as Record<string, unknown>;
-      if (typeof parsed === "string") {
-        parsed = JSON.parse(parsed);
-      }
-      return parsed;
-    } catch {
-      return null;
-    }
-  };
-  
-  const extractDescriptionFromAnnotations = (annotations: unknown): string | null => {
-    const parsed = parseAnnotations(annotations);
-    if (!parsed) return null;
-    const lastApplied = parsed["kubectl.kubernetes.io/last-applied-configuration"];
-    if (!lastApplied) return null;
-    try {
-      const parsedLastApplied = JSON.parse(lastApplied as string);
-      return parsedLastApplied?.description || null;
-    } catch {
-      return null;
-    }
-  };
-  console.log(tool)
 
   return (
     <>
@@ -123,7 +90,7 @@ export default function ToolDetailsPage() {
                     Description
                   </td>
                   <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                    {tool.description ?? null}
+                    {tool?.description ?? null}
                   </td>
                 </tr>
                 <tr className="border-b border-gray-100 dark:border-gray-800">
@@ -149,7 +116,7 @@ export default function ToolDetailsPage() {
                     Status
                   </td>
                   <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                  {tool.status.state}
+                  {JSON.stringify(tool?.status?.state)}
                 </td>
               </tr>
                 <tr className="border-b border-gray-100 dark:border-gray-800">
@@ -158,7 +125,7 @@ export default function ToolDetailsPage() {
                   </td>
                   <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
                   <pre className="whitespace-pre-wrap">
-                    {JSON.stringify(tool.spec.inputSchema, null, 2)}
+                    {JSON.stringify(tool?.spec?.inputSchema, null, 2)}
                   </pre>
                 </td>
               </tr>
