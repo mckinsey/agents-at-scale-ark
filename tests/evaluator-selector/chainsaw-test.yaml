@@ -99,6 +99,17 @@ spec:
               status:
                 phase: done
             timeout: 180s
+
+        - wait:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Evaluation
+            name: manual-override-evaluation
+            timeout: 5m
+            for:
+              jsonPath:
+                path: '{.status.phase}'
+                value: 'done'
+
         - assert:
             resource:
               apiVersion: ark.mckinsey.com/v1alpha1
