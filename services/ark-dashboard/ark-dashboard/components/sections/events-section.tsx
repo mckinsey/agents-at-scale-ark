@@ -118,7 +118,7 @@ export function EventsSection({
         if (showRefreshing) setRefreshing(false);
       }
     },
-    [namespace, filters, currentPage, itemsPerPage, searchParams, pathname]
+    [namespace, filters, currentPage, itemsPerPage]
   );
 
   useEffect(() => {
@@ -150,7 +150,7 @@ export function EventsSection({
       setItemsPerPage(limitFromUrl);
       setFilters(newFilters);
     }
-  }, [searchParams]);
+  }, [searchParams, currentPage, itemsPerPage, filters]);
 
   const handleFilterChange = (
     key: keyof EventFilters,
