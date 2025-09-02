@@ -4,6 +4,7 @@ metadata:
   name: evaluation-baseline
   labels:
     evaluated: "true"
+    baseline: "true"
 spec:
   description: Test baseline evaluation functionality with ConfigMap-based golden examples
   steps:
