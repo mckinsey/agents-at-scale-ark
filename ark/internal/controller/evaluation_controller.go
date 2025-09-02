@@ -640,15 +640,10 @@ func (r *EvaluationReconciler) processQueryEvaluation(ctx context.Context, evalu
 		return ctrl.Result{}, nil
 	}
 
-	// Update evaluation status with actual results
-	if err := r.updateEvaluationResults(ctx, evaluation, response); err != nil {
-		return ctrl.Result{}, err
-	}
-
 	// Log the response metadata for debugging
 	log.Info("Evaluation response received", "evaluation", evaluation.Name, "metadata", response.Metadata, "metadata_count", len(response.Metadata))
 
-	// Complete evaluation with all results including metadata annotations
+	// Complete evaluation with all results including metadata annotations in one atomic operation
 	if err := r.updateEvaluationComplete(ctx, evaluation, response, "Query evaluation completed successfully"); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -682,33 +677,6 @@ func (r *EvaluationReconciler) updateStatus(ctx context.Context, evaluation arkv
 	return nil
 }
 
-func (r *EvaluationReconciler) updateEvaluationResults(ctx context.Context, evaluation arkv1alpha1.Evaluation, response *genai.EvaluationResponse) error {
-	log := logf.FromContext(ctx)
-
-	// Fetch the latest version to avoid resource conflicts
-	latest := &arkv1alpha1.Evaluation{}
-	if err := r.Get(ctx, client.ObjectKey{
-		Name:      evaluation.Name,
-		Namespace: evaluation.Namespace,
-	}, latest); err != nil {
-		log.Error(err, "failed to get latest Evaluation for results update", "evaluation", evaluation.Name)
-		return err
-	}
-
-	// Update results
-	latest.Status.Score = response.Score
-	latest.Status.Passed = response.Passed
-	latest.Status.TokenUsage = response.TokenUsage
-
-	if err := r.Status().Update(ctx, latest); err != nil {
-		log.Error(err, "failed to update Evaluation results", "evaluation", evaluation.Name)
-		return err
-	}
-
-	log.Info("Updated Evaluation results", "evaluation", evaluation.Name, "score", response.Score, "passed", response.Passed)
-	return nil
-}
-
 func (r *EvaluationReconciler) updateEvaluationComplete(ctx context.Context, evaluation arkv1alpha1.Evaluation, response *genai.EvaluationResponse, message string) error {
 	log := logf.FromContext(ctx)
 
@@ -722,7 +690,13 @@ func (r *EvaluationReconciler) updateEvaluationComplete(ctx context.Context, eva
 		return err
 	}
 
-	// First, update annotations if present
+	// Update all fields in one go
+	latest.Status.Score = response.Score
+	latest.Status.Passed = response.Passed
+	latest.Status.TokenUsage = response.TokenUsage
+	latest.Status.Message = message
+
+	// Add metadata as annotations if present
 	if len(response.Metadata) > 0 {
 		if latest.Annotations == nil {
 			latest.Annotations = make(map[string]string)
@@ -732,34 +706,44 @@ func (r *EvaluationReconciler) updateEvaluationComplete(ctx context.Context, eva
 			latest.Annotations[annotationKey] = value
 			log.Info("Adding metadata as annotation", "evaluation", evaluation.Name, "key", annotationKey, "value", value)
 		}
+	}
 
-		// Update annotations first
+	// Update annotations if metadata exists
+	if len(response.Metadata) > 0 {
 		if err := r.Update(ctx, latest); err != nil {
 			log.Error(err, "failed to update Evaluation annotations", "evaluation", evaluation.Name)
+			// Return the error - controller will automatically retry
 			return err
 		}
-
-		// Get latest version after annotation update for status update
-		if err := r.Get(ctx, client.ObjectKey{Name: evaluation.Name, Namespace: evaluation.Namespace}, latest); err != nil {
-			log.Error(err, "failed to get latest for status update", "evaluation", evaluation.Name)
+		// After updating annotations, we need to fetch the latest version
+		if err := r.Get(ctx, client.ObjectKey{
+			Name:      evaluation.Name,
+			Namespace: evaluation.Namespace,
+		}, latest); err != nil {
+			log.Error(err, "failed to get latest Evaluation after annotation update", "evaluation", evaluation.Name)
 			return err
 		}
 	}
 
-	// Update status
+	// Update status fields on the latest version
 	latest.Status.Score = response.Score
 	latest.Status.Passed = response.Passed
 	latest.Status.TokenUsage = response.TokenUsage
 	latest.Status.Phase = statusDone
 	latest.Status.Message = message
 
-	// Update status
+	// Update status subresource
 	if err := r.Status().Update(ctx, latest); err != nil {
-		log.Error(err, "failed to complete Evaluation status", "evaluation", evaluation.Name)
+		// Don't log as error if it's a conflict - the controller will retry automatically
+		if errors.IsConflict(err) {
+			log.Info("Status update conflict, will be retried", "evaluation", evaluation.Name)
+		} else {
+			log.Error(err, "failed to update Evaluation status", "evaluation", evaluation.Name)
+		}
 		return err
 	}
 
-	log.Info("Completed Evaluation", "evaluation", evaluation.Name, "score", response.Score, "passed", response.Passed, "phase", statusDone)
+	log.Info("Completed Evaluation atomically", "evaluation", evaluation.Name, "score", response.Score, "passed", response.Passed, "phase", statusDone)
 	return nil
 }
 
@@ -977,12 +961,7 @@ func (r *EvaluationReconciler) processBaselineEvaluation(ctx context.Context, ev
 		return ctrl.Result{}, nil
 	}
 
-	// Update evaluation status with actual results
-	if err := r.updateEvaluationResults(ctx, evaluation, response); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// Complete evaluation with all results including metadata annotations
+	// Complete evaluation with all results including metadata annotations using atomic update
 	if err := r.updateEvaluationComplete(ctx, evaluation, response, "Baseline evaluation completed successfully"); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -1067,11 +1046,6 @@ func (r *EvaluationReconciler) processEventEvaluation(ctx context.Context, evalu
 		return ctrl.Result{}, nil
 	}
 
-	// Update evaluation status with response
-	if err := r.updateEvaluationResults(ctx, evaluation, response); err != nil {
-		return ctrl.Result{}, err
-	}
-
 	// Prepare status message
 	statusMessage := fmt.Sprintf("Event evaluation completed with %d rules", len(evaluation.Spec.Config.Rules))
 	if response.Passed {
@@ -1080,7 +1054,7 @@ func (r *EvaluationReconciler) processEventEvaluation(ctx context.Context, evalu
 		statusMessage = fmt.Sprintf("%s - failed (score: %s)", statusMessage, response.Score)
 	}
 
-	// Complete evaluation with all results including metadata annotations
+	// Complete evaluation with all results including metadata annotations using atomic update
 	if err := r.updateEvaluationComplete(ctx, evaluation, response, statusMessage); err != nil {
 		return ctrl.Result{}, err
 	}
