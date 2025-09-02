@@ -7,6 +7,7 @@ import (
 	"maps"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -39,7 +40,7 @@ func NewOperationTracker(emitter EventEmitter, ctx context.Context, operation, n
 			Metadata: metadata,
 		},
 	}
-	emitter.EmitEvent(ctx, operation+"Start", startEvent)
+	emitter.EmitEvent(ctx, corev1.EventTypeNormal, operation+"Start", startEvent)
 
 	return tracker
 }
@@ -49,7 +50,7 @@ func (t *OperationTracker) Complete(result string) {
 	if log.V(3).Enabled() && result != "" {
 		log.V(3).Info("operation response", "operation", t.operation, "name", t.name, "response", result)
 	}
-	t.emitCompletion(t.operation+"Complete", "", TokenUsage{})
+	t.emitCompletion(corev1.EventTypeNormal, t.operation+"Complete", "", TokenUsage{})
 }
 
 func (t *OperationTracker) CompleteWithMetadata(result string, additionalMetadata map[string]string) {
@@ -57,7 +58,7 @@ func (t *OperationTracker) CompleteWithMetadata(result string, additionalMetadat
 	if log.V(3).Enabled() && result != "" {
 		log.V(3).Info("operation response with metadata", "operation", t.operation, "name", t.name, "response", result, "metadata", additionalMetadata)
 	}
-	t.emitCompletionWithMetadata(t.operation+"Complete", "", TokenUsage{}, additionalMetadata)
+	t.emitCompletionWithMetadata(corev1.EventTypeNormal, t.operation+"Complete", "", TokenUsage{}, additionalMetadata)
 }
 
 func (t *OperationTracker) CompleteWithTokens(result string, tokenUsage TokenUsage) {
@@ -65,7 +66,7 @@ func (t *OperationTracker) CompleteWithTokens(result string, tokenUsage TokenUsa
 	if log.V(3).Enabled() && result != "" {
 		log.V(3).Info("operation response with tokens", "operation", t.operation, "name", t.name, "response", result, "tokens", tokenUsage.TotalTokens)
 	}
-	t.emitCompletion(t.operation+"Complete", "", tokenUsage)
+	t.emitCompletion(corev1.EventTypeNormal, t.operation+"Complete", "", tokenUsage)
 }
 
 func (t *OperationTracker) Fail(err error) {
@@ -73,7 +74,7 @@ func (t *OperationTracker) Fail(err error) {
 	if err != nil {
 		errorMsg = err.Error()
 	}
-	t.emitCompletion(t.operation+"Error", errorMsg, TokenUsage{})
+	t.emitCompletion(corev1.EventTypeWarning, t.operation+"Error", errorMsg, TokenUsage{})
 }
 
 func (t *OperationTracker) CompleteWithTermination(terminationMessage string) {
@@ -94,14 +95,14 @@ func (t *OperationTracker) CompleteWithTermination(terminationMessage string) {
 		Duration:   time.Since(t.startTime).String(),
 		TokenUsage: TokenUsage{},
 	}
-	t.emitter.EmitEvent(t.ctx, t.operation+"Complete", event)
+	t.emitter.EmitEvent(t.ctx, corev1.EventTypeNormal, t.operation+"Complete", event)
 }
 
-func (t *OperationTracker) emitCompletion(eventType, errorMsg string, tokenUsage TokenUsage) {
-	t.emitCompletionWithMetadata(eventType, errorMsg, tokenUsage, nil)
+func (t *OperationTracker) emitCompletion(eventType, reason, errorMsg string, tokenUsage TokenUsage) {
+	t.emitCompletionWithMetadata(eventType, reason, errorMsg, tokenUsage, nil)
 }
 
-func (t *OperationTracker) emitCompletionWithMetadata(eventType, errorMsg string, tokenUsage TokenUsage, additionalMetadata map[string]string) {
+func (t *OperationTracker) emitCompletionWithMetadata(eventType, reason, errorMsg string, tokenUsage TokenUsage, additionalMetadata map[string]string) {
 	metadata := make(map[string]string)
 	maps.Copy(metadata, t.metadata)
 
@@ -118,5 +119,6 @@ func (t *OperationTracker) emitCompletionWithMetadata(eventType, errorMsg string
 		Duration:   time.Since(t.startTime).String(),
 		TokenUsage: tokenUsage,
 	}
-	t.emitter.EmitEvent(t.ctx, eventType, event)
+
+	t.emitter.EmitEvent(t.ctx, eventType, reason, event)
 }

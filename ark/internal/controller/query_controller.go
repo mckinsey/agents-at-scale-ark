@@ -12,6 +12,7 @@ import (
 
 	"github.com/openai/openai-go"
 	"go.opentelemetry.io/otel/attribute"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -491,7 +492,7 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 			BaseEvent: genai.BaseEvent{Name: target.Name, Metadata: metadata},
 			Type:      target.Type,
 		}
-		tokenCollector.EmitEvent(ctx, "TargetExecutionError", event)
+		tokenCollector.EmitEvent(ctx, corev1.EventTypeWarning, "TargetExecutionError", event)
 	} else {
 		// Set the final response as output at trace level
 		if len(messages) > 0 {
@@ -504,7 +505,7 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 			BaseEvent: genai.BaseEvent{Name: target.Name, Metadata: metadata},
 			Type:      target.Type,
 		}
-		tokenCollector.EmitEvent(ctx, "TargetExecutionComplete", event)
+		tokenCollector.EmitEvent(ctx, corev1.EventTypeNormal, "TargetExecutionComplete", event)
 	}
 	return messages, err
 }

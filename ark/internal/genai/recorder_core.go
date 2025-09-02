@@ -32,8 +32,8 @@ func NewModelRecorder(model *arkv1alpha1.Model, recorder record.EventRecorder) *
 	}
 }
 
-func (r *Recorder[T]) EmitEvent(ctx context.Context, eventType string, data EventData) {
-	log := logf.FromContext(ctx).WithValues("eventType", eventType)
+func (r *Recorder[T]) EmitEvent(ctx context.Context, eventType, reason string, data EventData) {
+	log := logf.FromContext(ctx).WithValues("reason", reason)
 
 	if r.recorder == nil {
 		log.V(1).Info("event recorder is nil, skipping event emission")
@@ -52,11 +52,11 @@ func (r *Recorder[T]) EmitEvent(ctx context.Context, eventType string, data Even
 		return
 	}
 
-	r.recorder.Event(r.resource, "Normal", eventType, string(eventJSON))
+	r.recorder.Event(r.resource, eventType, reason, string(eventJSON))
 	log.V(2).Info("event emitted successfully", "data", eventMap)
 
 	if log.V(3).Enabled() {
-		log.V(3).Info("event details", "eventType", eventType, "eventData", eventMap)
+		log.V(3).Info("event details", "reason", reason, "eventData", eventMap)
 	}
 }
 
