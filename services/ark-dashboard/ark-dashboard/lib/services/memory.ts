@@ -13,6 +13,21 @@ export interface MemoryMessage {
   uid: string;
 }
 
+// Stored conversation message from memory service
+export interface StoredMessage {
+  role: "user" | "assistant";
+  content: string;
+  name?: string;
+}
+
+// Session conversation data
+export interface SessionConversation {
+  sessionId: string;
+  memoryName: string;
+  messages: StoredMessage[];
+  lastUpdated?: string;
+}
+
 // Memory resource interface 
 export interface MemoryResource {
   name: string;
@@ -184,6 +199,94 @@ export const memoryService = {
     } catch (error) {
       console.error("Failed to fetch memory messages:", error);
       return { items: [], total: 0 };
+    }
+  },
+
+  // Get stored conversation messages for a specific session
+  async getSessionConversation(
+    namespace: string,
+    memoryName: string,
+    sessionId: string
+  ): Promise<SessionConversation | null> {
+    try {
+      // First get the memory resource to find its endpoint
+      const memory = await this.getMemoryResources(namespace);
+      const memoryResource = memory.find(m => m.name === memoryName);
+      
+      if (!memoryResource) {
+        console.warn(`Memory resource ${memoryName} not found`);
+        return null;
+      }
+
+      // Get the memory service endpoint
+      const memoryDetailUrl = `/api/v1/namespaces/${namespace}/memories/${memoryName}`;
+      const memoryDetail = await apiClient.get<{ status?: { lastResolvedAddress?: string } }>(memoryDetailUrl);
+      
+      if (!memoryDetail?.status?.lastResolvedAddress) {
+        console.warn(`No resolved address for memory ${memoryName}`);
+        return null;
+      }
+
+      // Fetch messages directly from memory service
+      const memoryServiceUrl = memoryDetail.status.lastResolvedAddress;
+      const messagesUrl = `${memoryServiceUrl}/messages/${encodeURIComponent(sessionId)}`;
+      
+      const response = await fetch(messagesUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch messages: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      return {
+        sessionId,
+        memoryName,
+        messages: data.messages || [],
+        lastUpdated: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error(`Failed to fetch conversation for session ${sessionId}:`, error);
+      return null;
+    }
+  },
+
+  // Get all session conversations for memory resources
+  async getAllConversations(
+    namespace: string,
+    filters?: MemoryFilters
+  ): Promise<SessionConversation[]> {
+    try {
+      // First get all memory-enabled queries to find session IDs
+      const memoryMessages = await this.getAllSessions(namespace, filters);
+      
+      if (memoryMessages.items.length === 0) {
+        return [];
+      }
+
+      // Get unique session/memory combinations
+      const sessionCombinations = new Map<string, { sessionId: string; memoryName: string }>();
+      
+      memoryMessages.items.forEach(msg => {
+        const key = `${msg.memoryName}:${msg.sessionId}`;
+        if (!sessionCombinations.has(key)) {
+          sessionCombinations.set(key, {
+            sessionId: msg.sessionId,
+            memoryName: msg.memoryName
+          });
+        }
+      });
+
+      // Fetch conversations for each unique session
+      const conversations = await Promise.all(
+        Array.from(sessionCombinations.values()).map(({ sessionId, memoryName }) =>
+          this.getSessionConversation(namespace, memoryName, sessionId)
+        )
+      );
+
+      return conversations.filter(Boolean) as SessionConversation[];
+    } catch (error) {
+      console.error("Failed to fetch all conversations:", error);
+      return [];
     }
   }
 };
