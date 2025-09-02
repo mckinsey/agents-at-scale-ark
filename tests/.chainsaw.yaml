@@ -6,10 +6,10 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Configuration                      
 metadata:
   name: test-exec-custom-config         
-
 spec:
   reportFormat: JSON                     # Output test reports in JSON format
   reportName: /tmp/chainsaw-report/chainsaw-report.json  # Path where the test report will be saved
+  delayBeforeCleanup: 10s  # Add delay before cleanup starts
   timeouts:
     apply: 45s                           # Timeout for 'apply' operations (e.g., applying manifests)
     assert: 180s                         # Timeout for assertion checks (high value for LLM calls)
@@ -18,4 +18,4 @@ spec:
     error: 45s                           # Timeout for error handling steps
     exec: 45s                            # Timeout for command execution steps
   failFast: false                        # If false, Chainsaw will continue running tests even after failures
-  parallel: 4                            # Number of tests to run in parallel
+  parallel: 1                            # Number of tests to run in parallel
