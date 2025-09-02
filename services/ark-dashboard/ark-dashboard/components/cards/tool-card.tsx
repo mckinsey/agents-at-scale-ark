@@ -1,4 +1,4 @@
-import { Wrench, Trash2, Info, MessageCircle } from "lucide-react"
+import { Wrench, Trash2, ChevronRight, MessageCircle } from "lucide-react"
 import { BaseCard, type BaseCardAction } from "./base-card"
 import { useRouter } from "next/navigation"
 import { getCustomIcon } from "@/lib/utils/icon-resolver"
@@ -24,7 +24,7 @@ export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisable
 
   if (onInfo) {
     actions.push({
-      icon: Info,
+      icon: ChevronRight,
       label: "View tool details",
       onClick: () => onInfo(tool)
     })
