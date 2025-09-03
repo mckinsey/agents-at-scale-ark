@@ -16,20 +16,6 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
 
-# For in-cluster local development with DevSpace  
-FROM base AS dev
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY ark-dashboard/ .
-
-ENV NODE_ENV=development
-ENV NEXT_TELEMETRY_DISABLED=1
-
-# Ensure we have dev dependencies
-RUN npm install
-
-EXPOSE 3000
-CMD ["npm", "run", "dev"]
 
 FROM base AS runner
 WORKDIR /app
