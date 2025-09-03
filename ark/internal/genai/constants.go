@@ -11,7 +11,7 @@ const (
 const (
 	AgentToolTypeBuiltIn = "built-in"
 	AgentToolTypeCustom  = "custom"
-	AgentToolTypeAgent = "agent"
+	AgentToolTypeAgent   = "agent"
 )
 
 // Role constants for execution engine messages

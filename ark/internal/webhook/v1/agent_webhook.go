@@ -144,7 +144,7 @@ func (v *AgentCustomValidator) validateTool(ctx context.Context, namespace strin
 	case "custom":
 		return v.validateCustomTool(ctx, namespace, tool, hasName, index)
 	case "agent":
-		return v.validateAgentTool(tool, hasName, index)
+		return v.validateAgentTool(hasName, index)
 	default:
 		return warnings, fmt.Errorf("tool[%d]: unsupported tool type '%s': supported types are: built-in, custom, mcp, agent", index, tool.Type)
 	}
@@ -152,7 +152,7 @@ func (v *AgentCustomValidator) validateTool(ctx context.Context, namespace strin
 	return warnings, nil
 }
 
-func (v *AgentCustomValidator) validateAgentTool(tool arkv1alpha1.AgentTool, hasName bool, index int) (admission.Warnings, error) {
+func (v *AgentCustomValidator) validateAgentTool(hasName bool, index int) (admission.Warnings, error) {
 	var warnings admission.Warnings
 
 	if !hasName {

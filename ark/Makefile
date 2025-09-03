@@ -117,7 +117,7 @@ run: manifests generate fmt vet
 
 .PHONY: dev
 dev:
-	ENABLE_WEBHOOKS=false go run $(LDFLAGS) ./cmd/main.go
+	ENABLE_WEBHOOKS=false SKIP_IMPERSONATION=true go run $(LDFLAGS) ./cmd/main.go
 
 
 ##@ Deployment
@@ -233,6 +233,10 @@ setup-envtest: envtest ## Download the binaries required for ENVTEST in the loca
 		exit 1; \
 	}
 
+.PHONY: install
+install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply -f -
+	
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
 $(ENVTEST): $(LOCALBIN)
