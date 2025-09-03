@@ -50,7 +50,11 @@ export function ToolEditor({
   // Additional fields state
   const [httpUrl, setHttpUrl] = useState("");
 
-  const isValid = name.trim() && type.trim() && description.trim().length > 0;
+  const isValid = 
+    name.trim() &&
+    type.trim() &&
+    description.trim().length > 0 &&
+    inputSchema.trim().length > 0;
 
   const handleSave = () => {
     let parsedInputSchema: Record<string, unknown> | undefined;
@@ -85,7 +89,7 @@ export function ToolEditor({
       annotations: parsedAnnotations,
       ...(type === "http" ? { url: httpUrl.trim() } : {})
     };
-    onSave(toolSpec);
+
     onOpenChange(false);
     setName("");
     setType("");
@@ -93,6 +97,7 @@ export function ToolEditor({
     setInputSchema("");
     setAnnotations("");
     setHttpUrl("");
+    onSave(toolSpec);
   };
 
   return (
