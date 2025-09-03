@@ -14,7 +14,6 @@ type FilteredToolExecutor struct {
 	Functions    []arkv1alpha1.ToolFunction
 }
 
-
 func (f *FilteredToolExecutor) Execute(ctx context.Context, call ToolCall, recorder EventEmitter) (ToolResult, error) {
 	result, err := f.BaseExecutor.Execute(ctx, call, recorder)
 	if err != nil {
