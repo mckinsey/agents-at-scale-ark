@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -655,96 +656,91 @@ func (r *EvaluationReconciler) processQueryEvaluation(ctx context.Context, evalu
 func (r *EvaluationReconciler) updateStatus(ctx context.Context, evaluation arkv1alpha1.Evaluation, phase, message string) error {
 	log := logf.FromContext(ctx)
 
-	// Fetch the latest version to avoid resource conflicts
-	latest := &arkv1alpha1.Evaluation{}
-	if err := r.Get(ctx, client.ObjectKey{
+	evalKey := client.ObjectKey{
 		Name:      evaluation.Name,
 		Namespace: evaluation.Namespace,
-	}, latest); err != nil {
-		log.Error(err, "failed to get latest Evaluation for status update", "evaluation", evaluation.Name)
-		return err
 	}
 
-	latest.Status.Phase = phase
-	latest.Status.Message = message
+	// Use retry logic for atomic status updates
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Fetch the latest version
+		latest := &arkv1alpha1.Evaluation{}
+		if err := r.Get(ctx, evalKey, latest); err != nil {
+			log.Error(err, "failed to get latest Evaluation for status update", "evaluation", evaluation.Name)
+			return err
+		}
 
-	if err := r.Status().Update(ctx, latest); err != nil {
-		log.Error(err, "failed to update Evaluation status", "evaluation", evaluation.Name)
-		return err
-	}
+		// Update status fields atomically
+		latest.Status.Phase = phase
+		latest.Status.Message = message
 
-	log.Info("Updated Evaluation status", "evaluation", evaluation.Name, "phase", phase, "message", message)
-	return nil
+		// Update status subresource
+		if err := r.Status().Update(ctx, latest); err != nil {
+			log.V(1).Info("Status update failed (will retry)", "evaluation", evaluation.Name, "error", err)
+			return err
+		}
+
+		log.Info("Updated Evaluation status", "evaluation", evaluation.Name, "phase", phase, "message", message)
+		return nil
+	})
 }
 
 func (r *EvaluationReconciler) updateEvaluationComplete(ctx context.Context, evaluation arkv1alpha1.Evaluation, response *genai.EvaluationResponse, message string) error {
 	log := logf.FromContext(ctx)
 
-	// Fetch the latest version to avoid resource conflicts
-	latest := &arkv1alpha1.Evaluation{}
-	if err := r.Get(ctx, client.ObjectKey{
+	evalKey := client.ObjectKey{
 		Name:      evaluation.Name,
 		Namespace: evaluation.Namespace,
-	}, latest); err != nil {
-		log.Error(err, "failed to get latest Evaluation for completion update", "evaluation", evaluation.Name)
-		return err
 	}
 
-	// Update all fields in one go
-	latest.Status.Score = response.Score
-	latest.Status.Passed = response.Passed
-	latest.Status.TokenUsage = response.TokenUsage
-	latest.Status.Message = message
-
-	// Add metadata as annotations if present
-	if len(response.Metadata) > 0 {
-		if latest.Annotations == nil {
-			latest.Annotations = make(map[string]string)
-		}
-		for key, value := range response.Metadata {
-			annotationKey := fmt.Sprintf("evaluation.metadata/%s", key)
-			latest.Annotations[annotationKey] = value
-			log.Info("Adding metadata as annotation", "evaluation", evaluation.Name, "key", annotationKey, "value", value)
-		}
-	}
-
-	// Update annotations if metadata exists
-	if len(response.Metadata) > 0 {
-		if err := r.Update(ctx, latest); err != nil {
-			log.Error(err, "failed to update Evaluation annotations", "evaluation", evaluation.Name)
-			// Return the error - controller will automatically retry
+	// Use retry logic for atomic updates
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Fetch the latest version
+		latest := &arkv1alpha1.Evaluation{}
+		if err := r.Get(ctx, evalKey, latest); err != nil {
+			log.Error(err, "failed to get latest Evaluation for completion update", "evaluation", evaluation.Name)
 			return err
 		}
-		// After updating annotations, we need to fetch the latest version
-		if err := r.Get(ctx, client.ObjectKey{
-			Name:      evaluation.Name,
-			Namespace: evaluation.Namespace,
-		}, latest); err != nil {
-			log.Error(err, "failed to get latest Evaluation after annotation update", "evaluation", evaluation.Name)
+
+		// Update annotations if metadata exists
+		if len(response.Metadata) > 0 {
+			if latest.Annotations == nil {
+				latest.Annotations = make(map[string]string)
+			}
+			for key, value := range response.Metadata {
+				annotationKey := fmt.Sprintf("evaluation.metadata/%s", key)
+				latest.Annotations[annotationKey] = value
+				log.V(1).Info("Adding metadata as annotation", "evaluation", evaluation.Name, "key", annotationKey, "value", value)
+			}
+			
+			// Update the main object with annotations
+			if err := r.Update(ctx, latest); err != nil {
+				log.V(1).Info("failed to update Evaluation annotations (will retry)", "evaluation", evaluation.Name, "error", err)
+				return err
+			}
+			
+			// Re-fetch after annotation update to ensure we have the latest version
+			if err := r.Get(ctx, evalKey, latest); err != nil {
+				return err
+			}
+		}
+
+		// Update all status fields atomically
+		latest.Status.Score = response.Score
+		latest.Status.Passed = response.Passed
+		latest.Status.TokenUsage = response.TokenUsage
+		latest.Status.Phase = statusDone
+		latest.Status.Message = message
+
+		// Update status subresource
+		if err := r.Status().Update(ctx, latest); err != nil {
+			log.V(1).Info("Status update failed (will retry)", "evaluation", evaluation.Name, "error", err)
 			return err
 		}
-	}
 
-	// Update status fields on the latest version
-	latest.Status.Score = response.Score
-	latest.Status.Passed = response.Passed
-	latest.Status.TokenUsage = response.TokenUsage
-	latest.Status.Phase = statusDone
-	latest.Status.Message = message
-
-	// Update status subresource
-	if err := r.Status().Update(ctx, latest); err != nil {
-		// Don't log as error if it's a conflict - the controller will retry automatically
-		if errors.IsConflict(err) {
-			log.Info("Status update conflict, will be retried", "evaluation", evaluation.Name)
-		} else {
-			log.Error(err, "failed to update Evaluation status", "evaluation", evaluation.Name)
-		}
-		return err
-	}
-
-	log.Info("Completed Evaluation atomically", "evaluation", evaluation.Name, "score", response.Score, "passed", response.Passed, "phase", statusDone)
-	return nil
+		log.Info("Completed Evaluation atomically", "evaluation", evaluation.Name, "score", response.Score, "passed", response.Passed, "phase", statusDone)
+		return nil
+	})
 }
 
 func (r *EvaluationReconciler) ensureChildEvaluations(ctx context.Context, parentEvaluation arkv1alpha1.Evaluation) (bool, error) {
