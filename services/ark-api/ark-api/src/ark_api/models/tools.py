@@ -45,6 +45,8 @@ class ToolSpec(BaseModel):
     tags: Optional[List[str]] = None
     implementation: Optional[Dict[str, Any]] = None
     parameters: Optional[List[ToolParameter]] = None
+    type: str
+    http: Optional[Dict[str, str]] = None
 
 
 class ToolCreateRequest(BaseModel):
