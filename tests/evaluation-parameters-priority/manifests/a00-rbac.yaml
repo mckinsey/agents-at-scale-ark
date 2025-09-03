@@ -16,8 +16,8 @@ metadata:
   name: eval-parameters-test-role-rolebinding-($namespace)
 subjects:
 - kind: ServiceAccount
-  name: default
-  namespace: ($namespace)
+  name: evaluator-llm
+  namespace: default
 roleRef:
   kind: Role
   name: eval-parameters-test-role-($namespace)

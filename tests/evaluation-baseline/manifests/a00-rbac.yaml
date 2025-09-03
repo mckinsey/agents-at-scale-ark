@@ -16,8 +16,8 @@ metadata:
   name: test-baseline-evaluator-binding-($namespace)
 subjects:
 - kind: ServiceAccount
-  name: default
-  namespace: ($namespace)
+  name: evaluator-llm
+  namespace: default
 roleRef:
   kind: ClusterRole
   name: test-baseline-evaluator-role-($namespace)

@@ -1,7 +1,7 @@
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Evaluation
 metadata:
-  name: test-query-ref-evaluation
+  name: weather-query-ref-evaluation
 spec:
   type: query
   config:

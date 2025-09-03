@@ -1,24 +1,24 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: query-test-evaluator-role-($namespace)
+  name: evaluator-llm-test-access-($namespace)
 rules:
 - apiGroups: ["ark.mckinsey.com"]
-  resources: ["*"]
+  resources: ["models", "queries", "evaluations"]
   verbs: ["get", "list", "watch"]
 - apiGroups: [""]
-  resources: ["secrets", "events"]
-  verbs: ["get", "list", "watch"]
+  resources: ["secrets", "configmaps"]
+  verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: query-test-evaluator-binding-($namespace)
+  name: evaluator-llm-test-access-($namespace)
 subjects:
 - kind: ServiceAccount
-  name: default
-  namespace: ($namespace)
+  name: evaluator-llm
+  namespace: default
 roleRef:
   kind: ClusterRole
-  name: query-test-evaluator-role-($namespace)
+  name: evaluator-llm-test-access-($namespace)
   apiGroup: rbac.authorization.k8s.io

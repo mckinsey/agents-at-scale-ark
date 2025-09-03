@@ -111,7 +111,7 @@ dependencies = [
     { name = "urllib3" },
 ]
 wheels = [
-    { filename = "ark_sdk-0.1.31-py3-none-any.whl", hash = "sha256:7d205dbea1cac273baf600b5a445a7b9b0def3c395f59320ca9d49a9ebaeb2c9" },
+    { filename = "ark_sdk-0.1.31-py3-none-any.whl", hash = "sha256:c1ad7efef918e8fe14347fe86465c3ca1b51857474306bee8bcea1adaf5e9c45" },
 ]
 
 [package.metadata]

@@ -1,7 +1,7 @@
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Model
 metadata:
-  name: default
+  name: weather-default-model
 spec:
   type: azure
   model:
@@ -13,7 +13,7 @@ spec:
       apiKey:
         valueFrom:
           secretKeyRef:
-            name: test-model-token
+            name: weather-model-token
             key: token
       apiVersion:
         value: "2024-12-01-preview"

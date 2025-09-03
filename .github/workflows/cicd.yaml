@@ -319,7 +319,7 @@ jobs:
           fark agent sample-agent "confirm you have read this message"
 
   e2e-smoke-test:
-    needs: [build-containers]
+    needs: [build-containers, e2e-quickstart]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -446,7 +446,7 @@ jobs:
 
 
   e2e-tests-standard:
-    needs: [build-containers]
+    needs: [build-containers, e2e-smoke-test]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -484,7 +484,7 @@ jobs:
           artifact-name: coverage-reports-standard
 
   e2e-tests-evaluated:
-    needs: [build-containers]
+    needs: [build-containers, e2e-tests-standard]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -516,7 +516,7 @@ jobs:
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
-          chainsaw test --config .chainsaw.yaml --selector 'evaluated=true,baseline!=true'
+          chainsaw test --config .chainsaw.yaml --selector 'evaluated=true'
 
       - uses: ./.github/actions/collect-coverage-e2e
         with:

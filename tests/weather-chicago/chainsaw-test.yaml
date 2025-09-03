@@ -20,6 +20,8 @@ spec:
     - apply:
         file: manifests/a00-mock-server.yaml
     - apply:
+        file: manifests/a00-evaluator-llm-rbac.yaml
+    - apply:
         file: manifests/a00-rbac.yaml
     - apply:
         file: manifests/a01-secret.yaml
@@ -176,7 +178,7 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
         timeout: 7m
-        name: test-query-ref-evaluation
+        name: weather-query-ref-evaluation
         for:
           jsonPath:
             path: '{.status.phase}'
@@ -186,7 +188,7 @@ spec:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Evaluation
           metadata:
-            name: test-query-ref-evaluation
+            name: weather-query-ref-evaluation
           status:
             (type(score) == 'string'): true
             (to_number(score) >= `0.0` && to_number(score) <= `1.0`): true
@@ -196,7 +198,7 @@ spec:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Evaluation
           metadata:
-            name: test-query-ref-evaluation
+            name: weather-query-ref-evaluation
             # Verify that evaluation response metadata is added as annotations
             (contains(keys(annotations), 'evaluation.metadata/reasoning')): true
     - apply:
@@ -250,40 +252,8 @@ spec:
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
-        name: test-query-ref-evaluation
+        name: weather-query-ref-evaluation
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluator
         name: evaluator-llm
-    # Check evaluator service logs
-    - script:
-        content: |
-          echo "=== Evaluator Service Logs ==="
-          kubectl logs -l app.kubernetes.io/name=evaluator-llm -n $NAMESPACE --tail=50 || echo "No evaluator service logs found"
-          
-          echo "=== ARK Controller Logs - Evaluation Related ==="
-          kubectl logs -l control-plane=controller-manager -n ark-system --tail=200 | grep -i evaluation || echo "No evaluation logs in controller"
-          
-          echo "=== ARK Controller Logs - All Recent Activity ==="
-          kubectl logs -l control-plane=controller-manager -n ark-system --tail=100
-          
-          echo "=== Evaluation Resource Details ==="
-          kubectl get evaluations test-query-ref-evaluation -n $NAMESPACE -o yaml
-          
-          echo "=== All Evaluations in Namespace ==="
-          kubectl get evaluations -n $NAMESPACE
-          
-          echo "=== Check Evaluation Finalizers ==="
-          kubectl get evaluation test-query-ref-evaluation -n $NAMESPACE -o jsonpath='{.metadata.finalizers}' | xargs -I {} echo "Finalizers: {}"
-          
-          echo "=== Check Evaluation Conditions ==="
-          kubectl get evaluation test-query-ref-evaluation -n $NAMESPACE -o jsonpath='{.status.conditions}' | xargs -I {} echo "Conditions: {}"
-          
-          echo "=== Check Controller Events ==="
-          kubectl get events -n $NAMESPACE --field-selector involvedObject.name=test-query-ref-evaluation
-          
-          echo "=== All Pods in Namespace ==="
-          kubectl get pods -n $NAMESPACE
-          
-          echo "=== Helm Releases ==="
-          helm list -n $NAMESPACE

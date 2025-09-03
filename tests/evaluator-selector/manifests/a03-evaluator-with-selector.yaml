@@ -21,3 +21,5 @@ spec:
       value: "accuracy,clarity"
     - name: min-score
       value: "0.8"
+    - name: model.name
+      value: selector-model
