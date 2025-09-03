@@ -96,7 +96,7 @@ func (m *HTTPMemory) resolveAndUpdateAddress(ctx context.Context) error {
 	return nil
 }
 
-func (m *HTTPMemory) AddMessages(ctx context.Context, messages []Message) error {
+func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages []Message) error {
 	if len(messages) == 0 {
 		return nil
 	}
@@ -109,6 +109,7 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, messages []Message) error 
 	tracker := NewOperationTracker(m.recorder, ctx, "MemoryAddMessages", m.name, map[string]string{
 		"namespace": m.namespace,
 		"sessionId": m.sessionId,
+		"queryId":   queryID,
 		"messages":  fmt.Sprintf("%d", len(messages)),
 	})
 
@@ -118,14 +119,18 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, messages []Message) error 
 		openaiMessages[i] = openai.ChatCompletionMessageParamUnion(msg)
 	}
 
-	reqBody, err := json.Marshal(MessagesRequest{Messages: openaiMessages})
+	reqBody, err := json.Marshal(MessagesRequest{
+		SessionID: m.sessionId,
+		QueryID:   queryID,
+		Messages:  openaiMessages,
+	})
 	if err != nil {
 		tracker.Fail(fmt.Errorf("failed to serialize messages: %w", err))
 		return fmt.Errorf("failed to serialize messages: %w", err)
 	}
 
-	requestURL := fmt.Sprintf("%s%s/%s", m.baseURL, MessagesEndpoint, url.QueryEscape(m.sessionId))
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, requestURL, bytes.NewReader(reqBody))
+	requestURL := fmt.Sprintf("%s%s", m.baseURL, MessagesEndpoint)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(reqBody))
 	if err != nil {
 		tracker.Fail(fmt.Errorf("failed to create request: %w", err))
 		return fmt.Errorf("failed to create request: %w", err)
@@ -162,7 +167,7 @@ func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 		"sessionId": m.sessionId,
 	})
 
-	requestURL := fmt.Sprintf("%s%s/%s", m.baseURL, MessagesEndpoint, url.QueryEscape(m.sessionId))
+	requestURL := fmt.Sprintf("%s%s?session_id=%s", m.baseURL, MessagesEndpoint, url.QueryEscape(m.sessionId))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		tracker.Fail(fmt.Errorf("failed to create request: %w", err))

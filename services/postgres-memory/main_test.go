@@ -43,15 +43,16 @@ func TestServer_AddMessage(t *testing.T) {
 
 	ctx := context.Background()
 	sessionID := "test-session"
+	queryID := "test-query"
 	message := Message(openai.UserMessage("Hello, world!"))
 
-	err := server.addMessage(ctx, sessionID, message)
+	err := server.addMessage(ctx, sessionID, queryID, message)
 	if err != nil {
 		t.Fatalf("addMessage failed: %v", err)
 	}
 
 	var count int
-	err = server.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id = $1", sessionID).Scan(&count)
+	err = server.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id = $1 AND query_id = $2", sessionID, queryID).Scan(&count)
 	if err != nil {
 		t.Fatalf("count messages: %v", err)
 	}
@@ -67,21 +68,24 @@ func TestServer_GetMessages(t *testing.T) {
 
 	ctx := context.Background()
 	sessionID := "test-session"
+	queryID := "test-query"
 
 	messages := []Message{
 		Message(openai.UserMessage("First message")),
 		Message(openai.AssistantMessage("Second message")),
 	}
 
-	for _, msg := range messages {
-		if err := server.addMessage(ctx, sessionID, msg); err != nil {
+	for i, msg := range messages {
+		testQueryID := queryID + "-" + string(rune(i+'1')) // Make unique query IDs
+		if err := server.addMessage(ctx, sessionID, testQueryID, msg); err != nil {
 			t.Fatalf("addMessage failed: %v", err)
 		}
 	}
 
-	retrieved, err := server.getMessages(ctx, sessionID)
+	// Test retrieving by session ID (should get all messages for this session)
+	retrieved, _, err := server.getAllMessages(ctx, sessionID, "", 0, 0)
 	if err != nil {
-		t.Fatalf("getMessages failed: %v", err)
+		t.Fatalf("getAllMessages failed: %v", err)
 	}
 
 	if len(retrieved) != len(messages) {
@@ -101,9 +105,8 @@ func TestServer_HTTPHandlers(t *testing.T) {
 		}{Message: Message(openai.UserMessage("Test message"))}
 
 		body, _ := json.Marshal(req)
-		httpReq := httptest.NewRequest(http.MethodPut, "/message/test-session", bytes.NewBuffer(body))
+		httpReq := httptest.NewRequest(http.MethodPut, "/messages?session_id=test-session&query_id=test-query", bytes.NewBuffer(body))
 		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq = mux.SetURLVars(httpReq, map[string]string{"uid": "test-session"})
 
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, httpReq)
@@ -114,8 +117,7 @@ func TestServer_HTTPHandlers(t *testing.T) {
 	})
 
 	t.Run("GetMessages", func(t *testing.T) {
-		httpReq := httptest.NewRequest(http.MethodGet, "/message/test-session", nil)
-		httpReq = mux.SetURLVars(httpReq, map[string]string{"uid": "test-session"})
+		httpReq := httptest.NewRequest(http.MethodGet, "/messages?session_id=test-session", nil)
 
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, httpReq)
@@ -125,7 +127,8 @@ func TestServer_HTTPHandlers(t *testing.T) {
 		}
 
 		var response struct {
-			Messages []Message `json:"messages"`
+			Messages []MessageRecord `json:"messages"`
+			Total    int             `json:"total"`
 		}
 		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 			t.Fatalf("decode response: %v", err)
@@ -149,4 +152,27 @@ func TestServer_HTTPHandlers(t *testing.T) {
 			t.Errorf("expected 'OK', got %q", w.Body.String())
 		}
 	})
+}
+
+func TestServer_Filtering(t *testing.T) {
+	server := setupTestServer(t)
+	defer server.Close()
+
+	ctx := context.Background()
+
+	// Add test messages
+	server.addMessage(ctx, "session-1", "query-1", Message(openai.UserMessage("Test 1")))
+	server.addMessage(ctx, "session-2", "query-1", Message(openai.UserMessage("Test 2")))
+
+	// Test filtering by session
+	_, total, err := server.getAllMessages(ctx, "session-1", "", 0, 0)
+	if err != nil || total != 1 {
+		t.Errorf("filter by session failed: err=%v, total=%d", err, total)
+	}
+
+	// Test filtering by query
+	_, total, err = server.getAllMessages(ctx, "", "query-1", 0, 0)
+	if err != nil || total != 2 {
+		t.Errorf("filter by query failed: err=%v, total=%d", err, total)
+	}
 }
