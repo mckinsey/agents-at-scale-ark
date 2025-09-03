@@ -48,5 +48,40 @@ export const toolsService = {
   // Delete a tool
   async delete(namespace: string, identifier: string): Promise<void> {
     await apiClient.delete(`/api/v1/namespaces/${namespace}/tools/${identifier}`)
+  },
+
+  // Create a new tool
+  async create(namespace: string, tool: {
+    name: string;
+    type: string;
+    description: string;
+    inputSchema?: Record<string, unknown> | string;
+    annotations?: Record<string, string>;
+    url?: string;
+  }): Promise<void> {
+    const { name, type, description, inputSchema, annotations, url } = tool;
+    let parsedInputSchema: Record<string, unknown> | undefined = undefined;
+    if (typeof inputSchema === "string" && inputSchema.trim()) {
+      try {
+        parsedInputSchema = JSON.parse(inputSchema);
+      } catch {
+        parsedInputSchema = undefined;
+      }
+    } else if (typeof inputSchema === "object" && inputSchema !== null) {
+      parsedInputSchema = inputSchema;
+    }
+    const spec: Record<string, unknown> = {
+      type,
+      description,
+      ...(parsedInputSchema ? { inputSchema: parsedInputSchema } : {}),
+      ...(type === "http" && url ? { http: { url } } : {})
+    };
+    const payload = {
+      name,
+      namespace,
+      annotations,
+      spec
+    };
+    await apiClient.post(`/api/v1/namespaces/${namespace}/tools`, payload);
   }
 }
