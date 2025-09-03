@@ -10,4 +10,4 @@ spec:
   input: "Test query for development purposes"
   targets:
     - type: model
-      name: default
+      name: selector-model

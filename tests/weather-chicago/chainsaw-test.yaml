@@ -30,7 +30,7 @@ spec:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Model
           metadata:
-            name: default
+            name: weather-default-model
           status:
             phase: ready
     - assert:

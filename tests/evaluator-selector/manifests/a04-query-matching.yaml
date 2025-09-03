@@ -10,4 +10,4 @@ spec:
   input: "What are the key benefits of renewable energy adoption?"
   targets:
     - type: model
-      name: default
+      name: selector-model
