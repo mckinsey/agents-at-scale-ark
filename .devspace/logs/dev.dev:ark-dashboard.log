@@ -369,3 +369,175 @@
 {"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling /a2a ...","time":"2025-09-02T09:47:34+01:00"}
 {"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled /a2a in 10.7s","time":"2025-09-02T09:47:44+01:00"}
 {"level":"info","msg":"dev:ark-dashboard logs   GET /a2a?namespace=default 200 in 10757ms","time":"2025-09-02T09:47:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-02T11:42:03+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-66db795d86-4drt4","time":"2025-09-02T11:42:04+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-02T11:42:07+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-02T11:42:07+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-02T11:42:09+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Port forwarding started on: 11427 -\u003e 8022","time":"2025-09-02T11:42:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Use 'ssh ark-dashboard.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-02T11:42:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Streaming logs of pod:container ark-dashboard-66db795d86-4drt4:ark-dashboard","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e ark-dashboard@0.1.0 dev","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e next dev --turbopack","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ⚠ You are using a non-standard \"NODE_ENV\" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     ▲ Next.js 15.3.4 (Turbopack)","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Local:        http://localhost:3000","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Network:      http://10.244.0.86:3000","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Starting...","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling middleware ...","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled middleware in 572ms","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Ready in 1339ms","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling / ...","time":"2025-09-02T12:00:49+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled / in 19.4s","time":"2025-09-02T12:01:08+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 19689ms","time":"2025-09-02T12:01:08+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  (node:31) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.","time":"2025-09-02T12:01:08+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  (Use `node --trace-deprecation ...` to show where the warning was created)","time":"2025-09-02T12:01:08+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ⚠ Cross origin request detected from dashboard.127.0.0.1.nip.io to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure \"allowedDevOrigins\" in next.config to allow this.","time":"2025-09-02T12:01:08+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins","time":"2025-09-02T12:01:08+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling /favicon.ico ...","time":"2025-09-02T12:01:09+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 2185ms","time":"2025-09-02T12:01:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled /favicon.ico in 10.7s","time":"2025-09-02T12:01:19+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 10470ms","time":"2025-09-02T12:01:19+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling /tools ...","time":"2025-09-02T12:01:24+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled /tools in 10s","time":"2025-09-02T12:01:34+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /tools?namespace=default 200 in 10057ms","time":"2025-09-02T12:01:34+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico?favicon.e7dae495.ico 200 in 734ms","time":"2025-09-02T12:01:35+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 82ms","time":"2025-09-02T12:01:58+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling /memory ...","time":"2025-09-02T12:02:09+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled /memory in 10.1s","time":"2025-09-02T12:02:18+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory?namespace=default 200 in 10151ms","time":"2025-09-02T12:02:19+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory?namespace=default\u0026memoryName=postgres-memory\u0026page=1 200 in 32ms","time":"2025-09-02T12:02:23+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 100ms","time":"2025-09-02T12:03:20+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled in 499ms","time":"2025-09-02T12:04:35+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled in 103ms","time":"2025-09-02T12:04:43+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled in 125ms","time":"2025-09-02T12:04:53+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled in 127ms","time":"2025-09-02T12:05:05+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled in 123ms","time":"2025-09-02T12:05:18+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory 200 in 352ms","time":"2025-09-02T12:40:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory?namespace=default\u0026memoryName=postgres-memory\u0026page=1 200 in 96ms","time":"2025-09-02T12:52:13+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 218ms","time":"2025-09-02T12:52:13+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico?favicon.e7dae495.ico 200 in 251ms","time":"2025-09-02T12:52:13+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory?namespace=default\u0026memoryName=postgres-memory\u0026page=1 200 in 33ms","time":"2025-09-02T12:52:16+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory?namespace=default\u0026memoryName=postgres-memory\u0026page=1 200 in 113ms","time":"2025-09-02T12:53:07+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico?favicon.e7dae495.ico 200 in 306ms","time":"2025-09-02T12:53:07+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory?namespace=default\u0026memoryName=postgres-memory\u0026page=1 200 in 28ms","time":"2025-09-02T12:55:15+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory?namespace=default\u0026memoryName=postgres-memory\u0026page=1 200 in 302ms","time":"2025-09-02T13:03:48+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 271ms","time":"2025-09-02T13:03:48+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico?favicon.e7dae495.ico 200 in 287ms","time":"2025-09-02T13:03:48+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory?namespace=default\u0026memoryName=postgres-memory\u0026page=1 200 in 106ms","time":"2025-09-02T13:04:09+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico?favicon.e7dae495.ico 200 in 260ms","time":"2025-09-02T13:04:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled middleware in 1ms","time":"2025-09-02T13:05:00+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory?namespace=default\u0026memoryName=postgres-memory\u0026page=1 200 in 181ms","time":"2025-09-02T13:05:00+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory?namespace=default\u0026memoryName=postgres-memory\u0026page=1 200 in 29ms","time":"2025-09-02T13:05:00+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled in 354ms","time":"2025-09-02T13:05:20+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 303ms","time":"2025-09-02T13:25:36+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory 200 in 176ms","time":"2025-09-02T13:25:42+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 83ms","time":"2025-09-02T13:26:47+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 241ms","time":"2025-09-02T13:26:48+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 54ms","time":"2025-09-02T13:26:48+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 93ms","time":"2025-09-02T13:46:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 217ms","time":"2025-09-02T13:46:45+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 23ms","time":"2025-09-02T13:46:45+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 123ms","time":"2025-09-02T13:50:52+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 365ms","time":"2025-09-02T13:50:52+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico?favicon.e7dae495.ico 200 in 331ms","time":"2025-09-02T13:50:52+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 124ms","time":"2025-09-02T13:51:30+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico?favicon.e7dae495.ico 200 in 264ms","time":"2025-09-02T13:51:30+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory?namespace=default 200 in 32ms","time":"2025-09-02T13:51:31+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled middleware in 0ms","time":"2025-09-02T13:52:56+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents?namespace=default 200 in 106ms","time":"2025-09-02T13:53:42+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico?favicon.e7dae495.ico 200 in 268ms","time":"2025-09-02T13:53:42+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling /models ...","time":"2025-09-02T13:53:46+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled /models in 8.6s","time":"2025-09-02T13:53:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /models?namespace=default 200 in 8613ms","time":"2025-09-02T13:53:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents?namespace=default 200 in 17ms","time":"2025-09-02T13:54:02+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Waiting for pod to become ready...","time":"2025-09-02T16:15:05+01:00"}
+{"level":"info","msg":"dev:ark-dashboard Selected pod ark-dashboard-54898c74bd-qb87h","time":"2025-09-02T16:15:05+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Sync started on: ./services/ark-dashboard/ark-dashboard \u003c-\u003e /app","time":"2025-09-02T16:15:08+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Waiting for initial sync to complete","time":"2025-09-02T16:15:08+01:00"}
+{"level":"info","msg":"dev:ark-dashboard sync  Initial sync completed","time":"2025-09-02T16:15:10+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Port forwarding started on: 11427 -\u003e 8022","time":"2025-09-02T16:15:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard ssh   Use 'ssh ark-dashboard.agents-at-scale-ark-streaming.devspace' to connect via SSH","time":"2025-09-02T16:15:11+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Streaming logs of pod:container ark-dashboard-54898c74bd-qb87h:ark-dashboard","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e ark-dashboard@0.1.0 dev","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  \u003e next dev --turbopack","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ⚠ You are using a non-standard \"NODE_ENV\" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     ▲ Next.js 15.3.4 (Turbopack)","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Local:        http://localhost:3000","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs     - Network:      http://10.244.0.95:3000","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  ","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Starting...","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling middleware ...","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled middleware in 1806ms","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Ready in 3s","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling /memory ...","time":"2025-09-02T17:03:07+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled /memory in 22.3s","time":"2025-09-02T17:03:29+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory 200 in 22596ms","time":"2025-09-02T17:03:29+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  (node:31) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.","time":"2025-09-02T17:03:30+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  (Use `node --trace-deprecation ...` to show where the warning was created)","time":"2025-09-02T17:03:30+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ⚠ Cross origin request detected from dashboard.127.0.0.1.nip.io to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure \"allowedDevOrigins\" in next.config to allow this.","time":"2025-09-02T17:03:30+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins","time":"2025-09-02T17:03:30+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling /favicon.ico ...","time":"2025-09-02T17:03:30+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled /favicon.ico in 2.2s","time":"2025-09-02T17:03:32+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 2472ms","time":"2025-09-02T17:03:32+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling /events ...","time":"2025-09-02T17:03:44+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled /events in 11.4s","time":"2025-09-02T17:03:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /events?namespace=default 200 in 11449ms","time":"2025-09-02T17:03:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /events?namespace=default 200 in 31ms","time":"2025-09-02T17:03:55+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled in 123ms","time":"2025-09-02T17:07:47+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled /memory in 19ms","time":"2025-09-02T17:10:24+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory 200 in 272ms","time":"2025-09-02T17:10:24+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 253ms","time":"2025-09-02T17:10:24+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory?page=2 200 in 30ms","time":"2025-09-02T17:12:04+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory?page=1\u0026memoryName=postgres-memory 200 in 21ms","time":"2025-09-02T17:12:07+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory?page=1\u0026memoryName=postgres-memory\u0026sessionId=architecture-session-007 200 in 19ms","time":"2025-09-02T17:12:09+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory 200 in 246ms","time":"2025-09-02T17:26:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 245ms","time":"2025-09-02T17:26:27+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /events?namespace=default 200 in 24ms","time":"2025-09-02T17:27:39+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling /queries ...","time":"2025-09-02T17:27:54+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /events?namespace=default 200 in 223ms","time":"2025-09-02T17:27:55+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled /queries in 8.2s","time":"2025-09-02T17:28:01+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /queries?namespace=default 200 in 3446ms","time":"2025-09-02T17:28:01+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /queries?namespace=default 200 in 8317ms","time":"2025-09-02T17:28:02+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /queries?namespace=default 200 in 21ms","time":"2025-09-02T17:28:36+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling / ...","time":"2025-09-03T07:14:49+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled / in 9.8s","time":"2025-09-03T07:14:58+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 107ms","time":"2025-09-03T07:15:06+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ⚠ Cross origin request detected from 127.0.0.1.nip.io to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure \"allowedDevOrigins\" in next.config to allow this.","time":"2025-09-03T07:15:06+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs  Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins","time":"2025-09-03T07:15:06+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 230ms","time":"2025-09-03T07:15:07+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico?favicon.e7dae495.ico 200 in 220ms","time":"2025-09-03T07:15:07+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ○ Compiling /agents ...","time":"2025-09-03T07:15:07+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled /agents in 8.7s","time":"2025-09-03T07:15:15+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 78ms","time":"2025-09-03T07:16:57+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /events?namespace=default 200 in 95ms","time":"2025-09-03T07:17:31+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 299ms","time":"2025-09-03T07:17:32+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico?favicon.e7dae495.ico 200 in 226ms","time":"2025-09-03T07:17:32+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory?namespace=default 200 in 77ms","time":"2025-09-03T07:17:34+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory?namespace=default\u0026sessionId=debug-session-005\u0026page=1 200 in 29ms","time":"2025-09-03T07:18:16+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /memory?namespace=default\u0026sessionId=debug-session-005\u0026page=1 200 in 282ms","time":"2025-09-03T07:21:04+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 220ms","time":"2025-09-03T07:21:04+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico?favicon.e7dae495.ico 200 in 228ms","time":"2025-09-03T07:21:04+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   ✓ Compiled in 127ms","time":"2025-09-03T07:21:20+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 84ms","time":"2025-09-03T07:26:48+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 219ms","time":"2025-09-03T07:26:48+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 19ms","time":"2025-09-03T07:26:48+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 81ms","time":"2025-09-03T07:29:51+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 221ms","time":"2025-09-03T07:29:51+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 22ms","time":"2025-09-03T07:29:51+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 80ms","time":"2025-09-03T07:30:08+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 24ms","time":"2025-09-03T07:30:08+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 74ms","time":"2025-09-03T07:31:08+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 233ms","time":"2025-09-03T07:31:08+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 23ms","time":"2025-09-03T07:31:08+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 89ms","time":"2025-09-03T07:37:43+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 221ms","time":"2025-09-03T07:37:43+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 27ms","time":"2025-09-03T07:37:43+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET / 200 in 82ms","time":"2025-09-03T07:42:37+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /favicon.ico 200 in 218ms","time":"2025-09-03T07:42:37+01:00"}
+{"level":"info","msg":"dev:ark-dashboard logs   GET /agents 200 in 20ms","time":"2025-09-03T07:42:37+01:00"}

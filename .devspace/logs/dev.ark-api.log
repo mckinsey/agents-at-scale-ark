@@ -147,3 +147,156 @@
 {"level":"info","msg":"Upstream - Upload 59 create change(s) (Uncompressed ~2833.73 KB)","time":"2025-09-02T09:39:31+01:00"}
 {"level":"info","msg":"Upstream - Successfully processed 60 change(s)","time":"2025-09-02T09:39:31+01:00"}
 {"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T09:39:32+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-02T11:42:07+01:00"}
+{"level":"info","msg":"Successfully injected devspacehelper into pod default/ark-api-84c989d9d6-ztgpt","time":"2025-09-02T11:42:09+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-02T11:42:09+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-02T11:42:09+01:00"}
+{"level":"info","msg":"Upstream - Handling 1 removes","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"Upstream - Remove 'README.md'","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"Upstream - Remove 'README.md'","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"Upstream - Upload 60 create change(s) (Uncompressed ~2838.45 KB)","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 61 change(s)","time":"2025-09-02T11:42:11+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T11:42:12+01:00"}
+{"level":"info","msg":"Inject devspacehelper...","time":"2025-09-02T16:15:08+01:00"}
+{"level":"info","msg":"Successfully injected devspacehelper into pod default/ark-api-84c989d9d6-8crg8","time":"2025-09-02T16:15:10+01:00"}
+{"level":"info","msg":"Start syncing","time":"2025-09-02T16:15:10+01:00"}
+{"level":"info","msg":"Downstream - Initial sync completed","time":"2025-09-02T16:15:10+01:00"}
+{"level":"info","msg":"Upstream - Handling 1 removes","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"Upstream - Remove 'README.md'","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"Upstream - Remove 'README.md'","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"Upstream - Upload 60 create change(s) (Uncompressed ~2838.45 KB)","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 61 change(s)","time":"2025-09-02T16:15:12+01:00"}
+{"level":"info","msg":"Upstream - Initial sync completed","time":"2025-09-02T16:15:13+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api/models/queries.py'","time":"2025-09-02T16:42:57+01:00"}
+{"level":"info","msg":"Upstream - Upload 1 create change(s) (Uncompressed ~3.70 KB)","time":"2025-09-02T16:42:57+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 1 change(s)","time":"2025-09-02T16:42:57+01:00"}
+{"level":"info","msg":"Downstream - Download file './src/ark_api/__pycache__/main.cpython-312.pyc', uncompressed: ~4.83 KB","time":"2025-09-02T16:42:58+01:00"}
+{"level":"info","msg":"Downstream - Download file './src/ark_api/models/__pycache__/queries.cpython-312.pyc', uncompressed: ~6.54 KB","time":"2025-09-02T16:42:58+01:00"}
+{"level":"info","msg":"Downstream - Successfully processed 2 change(s)","time":"2025-09-02T16:42:58+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api/api/v1/queries.py'","time":"2025-09-02T16:43:06+01:00"}
+{"level":"info","msg":"Upstream - Upload 1 create change(s) (Uncompressed ~7.54 KB)","time":"2025-09-02T16:43:06+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 1 change(s)","time":"2025-09-02T16:43:06+01:00"}
+{"level":"info","msg":"Downstream - Download file './src/ark_api/api/v1/__pycache__/queries.cpython-312.pyc', uncompressed: ~11.06 KB","time":"2025-09-02T16:43:09+01:00"}
+{"level":"info","msg":"Downstream - Successfully processed 1 change(s)","time":"2025-09-02T16:43:09+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api/api/v1/memories.py'","time":"2025-09-02T16:51:58+01:00"}
+{"level":"info","msg":"Upstream - Upload 1 create change(s) (Uncompressed ~4.79 KB)","time":"2025-09-02T16:51:58+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 1 change(s)","time":"2025-09-02T16:51:58+01:00"}
+{"level":"info","msg":"Downstream - Download file './src/ark_api/api/v1/__pycache__/memories.cpython-312.pyc', uncompressed: ~7.23 KB","time":"2025-09-02T16:52:00+01:00"}
+{"level":"info","msg":"Downstream - Successfully processed 1 change(s)","time":"2025-09-02T16:52:00+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api/api/v1/memories.py'","time":"2025-09-02T16:52:21+01:00"}
+{"level":"info","msg":"Upstream - Upload 1 create change(s) (Uncompressed ~6.70 KB)","time":"2025-09-02T16:52:21+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 1 change(s)","time":"2025-09-02T16:52:21+01:00"}
+{"level":"info","msg":"Downstream - Download file './src/ark_api/api/v1/__pycache__/memories.cpython-312.pyc', uncompressed: ~9.67 KB","time":"2025-09-02T16:52:23+01:00"}
+{"level":"info","msg":"Downstream - Successfully processed 1 change(s)","time":"2025-09-02T16:52:23+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api/models/sessions.py'","time":"2025-09-03T07:37:55+01:00"}
+{"level":"info","msg":"Upstream - Upload 1 create change(s) (Uncompressed ~0.91 KB)","time":"2025-09-03T07:37:55+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 1 change(s)","time":"2025-09-03T07:37:55+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api/api/v1/sessions.py'","time":"2025-09-03T07:38:28+01:00"}
+{"level":"info","msg":"Upstream - Upload 1 create change(s) (Uncompressed ~3.26 KB)","time":"2025-09-03T07:38:28+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 1 change(s)","time":"2025-09-03T07:38:28+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api/api/v1/memories.py'","time":"2025-09-03T07:38:52+01:00"}
+{"level":"info","msg":"Upstream - Upload 1 create change(s) (Uncompressed ~6.85 KB)","time":"2025-09-03T07:38:52+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 1 change(s)","time":"2025-09-03T07:38:52+01:00"}
+{"level":"info","msg":"Downstream - Download file './src/ark_api/api/v1/__pycache__/memories.cpython-312.pyc', uncompressed: ~9.87 KB","time":"2025-09-03T07:38:54+01:00"}
+{"level":"info","msg":"Downstream - Download file './src/ark_api/models/__pycache__/sessions.cpython-312.pyc', uncompressed: ~1.79 KB","time":"2025-09-03T07:38:54+01:00"}
+{"level":"info","msg":"Downstream - Successfully processed 2 change(s)","time":"2025-09-03T07:38:54+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api/api/v1/memories.py'","time":"2025-09-03T07:39:49+01:00"}
+{"level":"info","msg":"Upstream - Upload 1 create change(s) (Uncompressed ~12.61 KB)","time":"2025-09-03T07:39:49+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 1 change(s)","time":"2025-09-03T07:39:49+01:00"}
+{"level":"info","msg":"Downstream - Download file './src/ark_api/api/v1/__pycache__/memories.cpython-312.pyc', uncompressed: ~14.97 KB","time":"2025-09-03T07:39:51+01:00"}
+{"level":"info","msg":"Downstream - Successfully processed 1 change(s)","time":"2025-09-03T07:39:51+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api/api/v1/__init__.py'","time":"2025-09-03T07:40:04+01:00"}
+{"level":"info","msg":"Upstream - Upload 1 create change(s) (Uncompressed ~1.30 KB)","time":"2025-09-03T07:40:04+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 1 change(s)","time":"2025-09-03T07:40:04+01:00"}
+{"level":"info","msg":"Downstream - Download file './src/ark_api/api/v1/__pycache__/__init__.cpython-312.pyc', uncompressed: ~1.53 KB","time":"2025-09-03T07:40:06+01:00"}
+{"level":"info","msg":"Downstream - Download file './src/ark_api/api/v1/__pycache__/sessions.cpython-312.pyc', uncompressed: ~3.55 KB","time":"2025-09-03T07:40:06+01:00"}
+{"level":"info","msg":"Downstream - Successfully processed 2 change(s)","time":"2025-09-03T07:40:06+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api/api/v1/__init__.py'","time":"2025-09-03T07:40:11+01:00"}
+{"level":"info","msg":"Upstream - Upload 1 create change(s) (Uncompressed ~1.38 KB)","time":"2025-09-03T07:40:11+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 1 change(s)","time":"2025-09-03T07:40:11+01:00"}
+{"level":"info","msg":"Downstream - Download file './src/ark_api/api/v1/__pycache__/__init__.cpython-312.pyc', uncompressed: ~1.62 KB","time":"2025-09-03T07:40:12+01:00"}
+{"level":"info","msg":"Downstream - Successfully processed 1 change(s)","time":"2025-09-03T07:40:12+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api/api/v1/__pycache__/sessions.cpython-312.pyc'","time":"2025-09-03T07:41:58+01:00"}
+{"level":"info","msg":"Upstream - Upload 1 create change(s) (Uncompressed ~3.55 KB)","time":"2025-09-03T07:41:58+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 1 change(s)","time":"2025-09-03T07:41:58+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api/api/v1/__pycache__/memories.cpython-312.pyc'","time":"2025-09-03T07:42:05+01:00"}
+{"level":"info","msg":"Upstream - Upload 1 create change(s) (Uncompressed ~14.97 KB)","time":"2025-09-03T07:42:05+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 1 change(s)","time":"2025-09-03T07:42:05+01:00"}
+{"level":"info","msg":"Upstream - Handling 58 removes","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_20d8747e9b6abb00_openai_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'out'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'out/ark_sdk-0.1.31-py3-none-any.whl'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_1794f1fa1d225bd7___init___py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_fe4cc4837c44e896___init___py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_f39f1dbbba0605fb_query_targets_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_20d8747e9b6abb00_system_info_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/style_cb_6b508a39.css'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_20d8747e9b6abb00_exceptions_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_b3e5c08e8a831444___init___py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_a44f0ac069e85531_test_health_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/index.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_20d8747e9b6abb00_a2a_servers_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_b3e5c08e8a831444_config_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_1794f1fa1d225bd7_mcp_servers_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_1794f1fa1d225bd7_tools_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_d3ec54d32af18c1e_annotations_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_52b758d7847d4488___init___py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_20d8747e9b6abb00___init___py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_20d8747e9b6abb00_namespaces_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_fe4cc4837c44e896_main_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_1794f1fa1d225bd7_ark_services_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_1794f1fa1d225bd7_health_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_20d8747e9b6abb00_tools_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_20d8747e9b6abb00_queries_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_f39f1dbbba0605fb_query_polling_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_1794f1fa1d225bd7_kubernetes_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/.coverage'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/lcov.info'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_a44f0ac069e85531_test_query_targets_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/coverage_html_cb_6fb7b396.js'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_1794f1fa1d225bd7_agents_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_20d8747e9b6abb00_agents_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/keybd_closed_cb_ce680311.png'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_20d8747e9b6abb00_ark_services_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_20d8747e9b6abb00_memories_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_f39f1dbbba0605fb_ark_services_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/function_index.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_1794f1fa1d225bd7_models_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_20d8747e9b6abb00_models_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_1794f1fa1d225bd7_queries_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_1794f1fa1d225bd7_system_info_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_f39f1dbbba0605fb___init___py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_20d8747e9b6abb00_events_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_1794f1fa1d225bd7_events_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_1c9e6f413f6cef02___init___py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_52b758d7847d4488_test_routes_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_20d8747e9b6abb00_teams_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_1794f1fa1d225bd7_a2a_servers_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_20d8747e9b6abb00_mcp_servers_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_1c9e6f413f6cef02_health_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/favicon_32_cb_58284776.png'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_20d8747e9b6abb00_secrets_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/status.json'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_1794f1fa1d225bd7_teams_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/class_index.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Remove 'coverage/z_1794f1fa1d225bd7_memories_py.html'","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 58 change(s)","time":"2025-09-03T07:42:38+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api.egg-info/requires.txt'","time":"2025-09-03T07:43:09+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api.egg-info/PKG-INFO'","time":"2025-09-03T07:43:09+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api.egg-info/SOURCES.txt'","time":"2025-09-03T07:43:09+01:00"}
+{"level":"info","msg":"Upstream - Upload 3 create change(s) (Uncompressed ~2.21 KB)","time":"2025-09-03T07:43:09+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 3 change(s)","time":"2025-09-03T07:43:09+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api.egg-info/PKG-INFO'","time":"2025-09-03T07:43:11+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'src/ark_api.egg-info/requires.txt'","time":"2025-09-03T07:43:11+01:00"}
+{"level":"info","msg":"Upstream - Upload 2 create change(s) (Uncompressed ~0.64 KB)","time":"2025-09-03T07:43:11+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 2 change(s)","time":"2025-09-03T07:43:11+01:00"}
+{"level":"info","msg":"Upstream - Upload Folder 'coverage'","time":"2025-09-03T07:43:13+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'tests/api/__pycache__/test_routes.cpython-312.pyc'","time":"2025-09-03T07:43:13+01:00"}
+{"level":"info","msg":"Upstream - Upload 2 create change(s) (Uncompressed ~73.96 KB)","time":"2025-09-03T07:43:13+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 2 change(s)","time":"2025-09-03T07:43:13+01:00"}
+{"level":"info","msg":"Upstream - Upload 57 create change(s) (Uncompressed ~2414.33 KB)","time":"2025-09-03T07:43:28+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 57 change(s)","time":"2025-09-03T07:43:28+01:00"}
+{"level":"info","msg":"Upstream - Upload File 'openapi.json'","time":"2025-09-03T07:43:32+01:00"}
+{"level":"info","msg":"Upstream - Upload 1 create change(s) (Uncompressed ~185.84 KB)","time":"2025-09-03T07:43:32+01:00"}
+{"level":"info","msg":"Upstream - Successfully processed 1 change(s)","time":"2025-09-03T07:43:32+01:00"}

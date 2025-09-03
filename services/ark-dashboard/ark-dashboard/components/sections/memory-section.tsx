@@ -19,7 +19,6 @@ import {
 import { toast } from "@/components/ui/use-toast";
 import {
   memoryService,
-  type MemoryMessage,
   type MemoryResource,
   type MemoryFilters,
   type SessionConversation
@@ -27,7 +26,7 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import { Database, ChevronDown, ChevronRight, MessageSquare, User, Bot } from "lucide-react";
+import { Database, MessageSquare, ChevronDown, ChevronRight } from "lucide-react";
 
 interface MemorySectionProps {
   readonly namespace: string;
@@ -42,12 +41,12 @@ export function MemorySection({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [messages, setMessages] = useState<MemoryMessage[]>([]);
   const [conversations, setConversations] = useState<SessionConversation[]>([]);
+  const [memoryQueries, setMemoryQueries] = useState<MemoryMessage[]>([]);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [availableMemories, setAvailableMemories] = useState<MemoryResource[]>([]);
   const [availableSessions, setAvailableSessions] = useState<string[]>([]);
-  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
 
   const initialPage = parseInt(searchParams.get("page") || "1", 10);
   const initialLimit = parseInt(searchParams.get("limit") || "10", 10);
@@ -99,14 +98,14 @@ export function MemorySection({
           memoryService.getMemoryResources(namespace),
           memoryService.getAllConversations(namespace, currentFilters)
         ]);
-
-        setMessages(conversationsData.memoryQueries);
-        setTotalMessages(conversationsData.memoryQueries.length);
+        // Calculate total messages across all conversations
+        const totalMessages = conversationsData.conversations.reduce((total, conv) => total + conv.messages.length, 0);
+        setTotalMessages(totalMessages);
         setAvailableMemories(memoriesData);
         setConversations(conversationsData.conversations);
 
         // Extract unique session IDs for filtering
-        const sessionIds = new Set(conversationsData.memoryQueries.map(m => m.sessionId));
+        const sessionIds = new Set(conversationsData.conversations.map(c => c.sessionId));
         setAvailableSessions(Array.from(sessionIds).sort());
 
       } catch (error) {
@@ -200,6 +199,18 @@ export function MemorySection({
 
   const totalPages = Math.max(1, Math.ceil(totalMessages / itemsPerPage));
 
+  const toggleRowExpansion = (rowId: string) => {
+    setExpandedRows(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(rowId)) {
+        newSet.delete(rowId);
+      } else {
+        newSet.add(rowId);
+      }
+      return newSet;
+    });
+  };
+
   const handleItemsPerPageChange = (newLimit: number) => {
     setItemsPerPage(newLimit);
     setCurrentPage(1);
@@ -216,31 +227,7 @@ export function MemorySection({
     });
   };
 
-  const formatAge = (timestamp: string) => {
-    const now = new Date();
-    const eventTime = new Date(timestamp);
-    const diffMs = now.getTime() - eventTime.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
 
-    if (diffDays > 0) return `${diffDays}d`;
-    if (diffHours > 0) return `${diffHours}h`;
-    if (diffMins > 0) return `${diffMins}m`;
-    return "now";
-  };
-
-  const toggleSessionExpansion = (sessionKey: string) => {
-    setExpandedSessions(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(sessionKey)) {
-        newSet.delete(sessionKey);
-      } else {
-        newSet.add(sessionKey);
-      }
-      return newSet;
-    });
-  };
 
   if (loading) {
     return (
@@ -305,133 +292,80 @@ export function MemorySection({
         </Button>
       </div>
 
-      {/* Memory Sessions with Conversations */}
-      <div className="space-y-4">
-        {conversations.length === 0 ? (
-          <div className="border rounded-lg p-8 text-center">
-            <MessageSquare className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-            <p className="text-gray-500 dark:text-gray-400">No memory sessions found</p>
-            <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
-              Create queries with memory configuration to see conversation history
-            </p>
-          </div>
-        ) : (
-          conversations.map((conversation) => {
-            const sessionKey = `${conversation.memoryName}:${conversation.sessionId}`;
-            const isExpanded = expandedSessions.has(sessionKey);
-            const relatedQueries = messages.filter(
-              m => m.sessionId === conversation.sessionId && m.memoryName === conversation.memoryName
-            );
-
-            return (
-              <div key={sessionKey} className="border rounded-lg bg-white dark:bg-gray-950">
-                <div 
-                  className="p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors flex items-center justify-between"
-                  onClick={() => toggleSessionExpansion(sessionKey)}
-                >
-                  <div className="flex items-center gap-3">
-                    {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <Database className="h-4 w-4 text-gray-500" />
-                        <Badge variant="secondary" className="font-mono">
-                          {conversation.memoryName}
-                        </Badge>
-                        <MessageSquare className="h-4 w-4 text-gray-500" />
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
-                          {conversation.messages.length} messages
-                        </span>
-                      </div>
-                      <div className="font-mono text-sm text-gray-700 dark:text-gray-300">
+      {/* Messages Table */}
+      <div className="border rounded-lg">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 dark:bg-gray-900/50">
+              <tr>
+                <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Memory
+                </th>
+                <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Session
+                </th>
+                <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Query
+                </th>
+                <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Message
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white dark:bg-gray-950 divide-y divide-gray-200 dark:divide-gray-800">
+              {conversations.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={4}
+                    className="px-2 py-6 text-center text-xs text-gray-500 dark:text-gray-400"
+                  >
+                    <div className="flex flex-col items-center">
+                      <MessageSquare className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                      <p>No messages found</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                conversations.flatMap((conversation) =>
+                  conversation.messages.map((message, index) => (
+                    <tr
+                      key={`${conversation.sessionId}-${index}`}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors"
+                    >
+                      <td className="px-2 py-2 text-xs">
+                        {conversation.memoryName}
+                      </td>
+                      <td className="px-2 py-2 text-xs font-mono">
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger className="text-left">
-                              <div className="truncate max-w-96">
-                                Session: {conversation.sessionId}
+                              <div className="truncate max-w-24">
+                                {conversation.sessionId}
                               </div>
                             </TooltipTrigger>
                             <TooltipContent>
-                              <p className="font-mono">{conversation.sessionId}</p>
+                              <p className="font-mono text-xs">{conversation.sessionId}</p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-sm text-gray-500 dark:text-gray-400">
-                    {relatedQueries.length} {relatedQueries.length === 1 ? 'query' : 'queries'}
-                  </div>
-                </div>
-                
-                {isExpanded && (
-                  <div className="border-t">
-                    {/* Related Queries */}
-                    {relatedQueries.length > 0 && (
-                      <div className="p-4 bg-gray-50 dark:bg-gray-900/50">
-                        <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Related Queries</h4>
-                        <div className="space-y-2">
-                          {relatedQueries.map((query) => (
-                            <div key={query.uid} className="flex items-center justify-between text-sm">
-                              <div className="font-mono">{query.queryName}</div>
-                              <div className="flex items-center gap-2">
-                                <Badge variant={query.status === "done" ? "secondary" : "outline"} className="text-xs">
-                                  {query.status}
-                                </Badge>
-                                {query.timestamp && (
-                                  <span className="text-gray-500">{formatAge(query.timestamp)}</span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Conversation Messages */}
-                    <div className="p-4">
-                      <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Conversation History</h4>
-                      <div className="space-y-3 max-h-96 overflow-y-auto">
-                        {conversation.messages.map((message, index) => (
-                          <div key={index} className={`flex gap-3 ${
-                            message.role === 'user' ? 'justify-end' : 'justify-start'
-                          }`}>
-                            <div className={`flex gap-2 max-w-lg ${
-                              message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
-                            }`}>
-                              <div className={`p-2 rounded-lg ${
-                                message.role === 'user' 
-                                  ? 'bg-blue-100 dark:bg-blue-900/30' 
-                                  : 'bg-gray-100 dark:bg-gray-800'
-                              }`}>
-                                {message.role === 'user' ? (
-                                  <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                                ) : (
-                                  <Bot className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                                )}
-                              </div>
-                              <div className={`p-3 rounded-lg text-sm ${
-                                message.role === 'user'
-                                  ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100'
-                                  : 'bg-gray-50 dark:bg-gray-800/50 text-gray-900 dark:text-gray-100'
-                              }`}>
-                                <div className="whitespace-pre-wrap">{message.content}</div>
-                                {message.name && (
-                                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono">
-                                    {message.name}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
+                      </td>
+                      <td className="px-2 py-2 text-xs">
+                        <div className="space-y-1">
+                          <div className="font-medium text-gray-600 dark:text-gray-400">
+                            {message.role}{message.name && ` (${message.name})`}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
+                          <div className="text-gray-900 dark:text-gray-100">
+                            {message.content}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <Pagination

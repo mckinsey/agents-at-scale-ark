@@ -59,6 +59,8 @@ interface QueryResponse {
   name: string;
   namespace: string;
   input: string;
+  memory?: { name: string; namespace?: string };
+  sessionId?: string;
   status?: {
     phase?: string;
     responses?: Array<{ content: string }>;
@@ -66,47 +68,8 @@ interface QueryResponse {
   creationTimestamp?: string;
 }
 
-interface QueryDetailResponse extends QueryResponse {
-  sessionId?: string;
-  memory?: { name: string; namespace?: string };
-  spec?: {
-    memory?: { name: string };
-    sessionId?: string;
-    input: string;
-  };
-  metadata?: {
-    name: string;
-    namespace: string;
-    uid: string;
-    creationTimestamp?: string;
-  };
-}
 
 
-// Helper function to convert query to memory message
-function queryToMemoryMessage(query: QueryDetailResponse): MemoryMessage | null {
-  // Check for memory configuration in both top-level and spec fields
-  const memoryName = query.memory?.name || query.spec?.memory?.name;
-  const sessionId = query.sessionId || query.spec?.sessionId;
-  
-  if (!memoryName || !sessionId) {
-    return null;
-  }
-
-  const response = query.status?.responses?.[0]?.content || "";
-  
-  return {
-    queryName: query.metadata?.name || query.name,
-    queryNamespace: query.metadata?.namespace || query.namespace,
-    sessionId: sessionId,
-    memoryName: memoryName,
-    input: query.spec?.input || query.input,
-    response: response,
-    timestamp: query.metadata?.creationTimestamp || query.creationTimestamp,
-    status: query.status?.phase || "unknown",
-    uid: query.metadata?.uid || ""
-  };
-}
 
 export const memoryService = {
   // Get all memory resources in a namespace
@@ -134,24 +97,20 @@ export const memoryService = {
         return [];
       }
 
-      // Get detailed info for each query to check for memory config
-      const detailedQueries = await Promise.all(
-        response.items.map(async (query) => {
-          try {
-            const detailUrl = `/api/v1/namespaces/${namespace}/queries/${query.name}`;
-            return await apiClient.get<QueryDetailResponse>(detailUrl);
-          } catch (error) {
-            console.warn(`Failed to fetch details for query ${query.name}:`, error);
-            return null;
-          }
-        })
-      );
-
-      // Convert to memory messages and filter
-      const memoryMessages = detailedQueries
-        .filter(Boolean)
-        .map(query => queryToMemoryMessage(query!))
-        .filter(Boolean) as MemoryMessage[];
+      // Filter and convert queries that have memory configuration
+      const memoryMessages = response.items
+        .filter(query => query.memory && query.sessionId)
+        .map(query => ({
+          queryName: query.name,
+          queryNamespace: namespace,
+          sessionId: query.sessionId!,
+          memoryName: query.memory!.name,
+          input: query.input,
+          response: "", // We'll get this from the actual messages
+          timestamp: query.creationTimestamp,
+          status: query.status?.phase || "unknown",
+          uid: query.name // Use name as uid for now
+        })) as MemoryMessage[];
 
       return memoryMessages;
     } catch (error) {
@@ -167,30 +126,14 @@ export const memoryService = {
     sessionId: string
   ): Promise<SessionConversation | null> {
     try {
-      // First get the memory resource to find its endpoint
-      const memoryDetail = await apiClient.get<{ status?: { lastResolvedAddress?: string } }>(`/api/v1/namespaces/${namespace}/memories/${memoryName}`);
-      const memoryServiceUrl = memoryDetail?.status?.lastResolvedAddress;
-      
-      if (!memoryServiceUrl) {
-        console.error(`No resolved address for memory ${memoryName}`);
-        return null;
-      }
-
-      // Call the memory service directly to get messages
-      const messagesUrl = `${memoryServiceUrl}/messages/${sessionId}`;
-      const response = await fetch(messagesUrl);
-      
-      if (!response.ok) {
-        console.error(`Memory service error: ${response.statusText}`);
-        return null;
-      }
-      
-      const data = await response.json();
+      // Use the new ARK API endpoint for memory messages
+      const apiUrl = `/api/v1/namespaces/${namespace}/memories/${memoryName}/sessions/${sessionId}/messages`;
+      const response = await apiClient.get<{ messages: StoredMessage[] }>(apiUrl);
       
       return {
         sessionId,
         memoryName,
-        messages: data?.messages || [],
+        messages: response?.messages || [],
         lastUpdated: new Date().toISOString()
       };
     } catch (error) {
