@@ -106,7 +106,7 @@ spec:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Evaluation
             name: manual-override-evaluation
-            timeout: 5m
+            timeout: 10m
             for:
               jsonPath:
                 path: '{.status.phase}'

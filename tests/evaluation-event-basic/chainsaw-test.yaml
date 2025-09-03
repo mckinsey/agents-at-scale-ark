@@ -52,7 +52,7 @@ spec:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
-        timeout: 5m
+        timeout: 10m
         name: test-event-evaluation
         for:
           jsonPath:

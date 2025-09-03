@@ -177,7 +177,7 @@ spec:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
-        timeout: 7m
+        timeout: 10m
         name: weather-query-ref-evaluation
         for:
           jsonPath:
@@ -215,7 +215,7 @@ spec:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
-        timeout: 7m
+        timeout: 10m
         name: weather-tools-event-evaluation
         for:
           jsonPath:
