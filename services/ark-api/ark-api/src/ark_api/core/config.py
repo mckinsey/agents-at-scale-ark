@@ -8,4 +8,8 @@ def setup_logging(logger_name: Optional[str] = None) -> logging.Logger:
         format="%(levelname)s\t%(asctime)s:\t%(message)s",
         datefmt="%Y-%m-%d %H:%M:%S"
     )
+    
+    # Quiet noisy helm command logging from pyhelm3
+    logging.getLogger("pyhelm3").setLevel(logging.WARNING)
+    
     return logging.getLogger(logger_name or "ark-api")

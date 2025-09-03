@@ -6,7 +6,6 @@ metadata:
   labels:
     {{- include "postgres-memory.labels" . | nindent 4 }}
 spec:
-  type: http
   address:
     valueFrom:
       serviceRef:

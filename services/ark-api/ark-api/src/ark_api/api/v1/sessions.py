@@ -1,7 +1,7 @@
 """Sessions API endpoints."""
 import logging
 from typing import Optional
-from collections import defaultdict
+import httpx
 
 from fastapi import APIRouter, Query
 
@@ -26,67 +26,57 @@ async def list_sessions(
 ) -> SessionListResponse:
     """List all sessions in a namespace, optionally filtered by memory."""
     async with with_ark_client(namespace, VERSION) as client:
-        # Get all queries to find sessions
-        queries = await client.queries.a_list()
+        # Get memory resources to find their addresses
+        memories = await client.memories.a_list()
         
-        # Group queries by session and memory
-        sessions_data = defaultdict(lambda: {
-            "memoryName": "",
-            "queries": [],
-            "lastActivity": None
-        })
+        all_sessions = []
         
-        for query in queries:
-            query_dict = query.to_dict()
-            spec = query_dict.get("spec", {})
-            metadata = query_dict.get("metadata", {})
+        for memory_resource in memories:
+            memory_dict = memory_resource.to_dict()
+            memory_name = memory_dict.get("metadata", {}).get("name", "")
             
-            # Skip queries without memory or sessionId
-            memory_config = spec.get("memory")
-            session_id = spec.get("sessionId")
-            
-            if not memory_config or not session_id:
-                continue
-                
-            memory_name = memory_config.get("name")
-            if not memory_name:
-                continue
-                
             # Apply memory filter if specified
             if memory and memory_name != memory:
                 continue
                 
-            query_name = metadata.get("name", "")
-            creation_timestamp = metadata.get("creationTimestamp")
+            # Get memory service address
+            spec = memory_dict.get("spec", {})
+            address = spec.get("address", {}).get("value", "")
             
-            key = f"{memory_name}:{session_id}"
-            sessions_data[key]["memoryName"] = memory_name
-            sessions_data[key]["queries"].append(query_name)
-            
-            # Track latest activity timestamp
-            if creation_timestamp and (
-                not sessions_data[key]["lastActivity"] or 
-                creation_timestamp > sessions_data[key]["lastActivity"]
-            ):
-                sessions_data[key]["lastActivity"] = creation_timestamp
-        
-        # Convert to response format
-        session_responses = []
-        for session_key, data in sessions_data.items():
-            _, session_id = session_key.split(":", 1)
-            
-            session_responses.append(SessionResponse(
-                sessionId=session_id,
-                memoryName=data["memoryName"],
-                queries=sorted(data["queries"]),  # Sort for consistent ordering
-                messageCount=0,  # We don't have message count easily available
-                lastActivity=data["lastActivity"]
-            ))
-        
-        # Sort by lastActivity descending (most recent first)
-        session_responses.sort(key=lambda x: x.lastActivity or "", reverse=True)
+            if not address:
+                continue
+                
+            try:
+                # Call memory service sessions endpoint
+                async with httpx.AsyncClient() as http_client:
+                    response = await http_client.get(
+                        f"{address}/sessions",
+                        timeout=10.0
+                    )
+                    response.raise_for_status()
+                    
+                    data = response.json()
+                    sessions = data.get("sessions", [])
+                    
+                    # Handle null sessions (empty database)
+                    if sessions is None:
+                        sessions = []
+                    
+                    # Convert to our response format
+                    for session_id in sessions:
+                        all_sessions.append(SessionResponse(
+                            sessionId=session_id,
+                            memoryName=memory_name,
+                            queries=[],  # We don't track queries in memory service
+                            messageCount=0,  # Not provided by simple endpoint
+                            lastActivity=None  # Not provided by simple endpoint
+                        ))
+                        
+            except Exception as e:
+                logger.warning(f"Failed to get sessions from memory {memory_name}: {e}")
+                continue
         
         return SessionListResponse(
-            items=session_responses,
-            total=len(session_responses)
+            items=all_sessions,
+            total=len(all_sessions)
         )

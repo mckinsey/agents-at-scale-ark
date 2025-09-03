@@ -2,7 +2,7 @@
 import logging
 import httpx
 from typing import Optional
-from collections import defaultdict
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Query
 from ark_sdk.models.memory_v1alpha1 import MemoryV1alpha1
@@ -161,7 +161,7 @@ async def get_memory_messages(namespace: str, name: str, session_id: str) -> dic
                 )
             
             # Proxy the request to the memory service
-            messages_url = f"{service_url}/messages/{session_id}"
+            messages_url = f"{service_url}/messages?session_id={session_id}"
             
             async with httpx.AsyncClient() as http_client:
                 response = await http_client.get(messages_url, timeout=30.0)
@@ -198,53 +198,14 @@ async def list_memory_messages(
 ) -> MemoryMessageListResponse:
     """List all memory messages with context, optionally filtered."""
     async with with_ark_client(namespace, VERSION) as client:
-        # Get all queries to find sessions and their memory mappings
-        queries = await client.queries.a_list()
-        
-        # Group queries by memory and session for efficient lookups
-        query_mappings = {}  # queryId -> {memoryName, sessionId, timestamp}
-        session_queries = defaultdict(list)  # sessionId -> [queryIds]
-        
-        for query in queries:
-            query_dict = query.to_dict()
-            spec = query_dict.get("spec", {})
-            metadata = query_dict.get("metadata", {})
-            
-            # Skip queries without memory or sessionId
-            memory_config = spec.get("memory")
-            session_id = spec.get("sessionId")
-            
-            if not memory_config or not session_id:
-                continue
-                
-            memory_name = memory_config.get("name")
-            query_name = metadata.get("name", "")
-            creation_timestamp = metadata.get("creationTimestamp")
-            
-            if not memory_name or not query_name:
-                continue
-                
-            # Apply filters early
-            if memory and memory_name != memory:
-                continue
-            if session and session_id != session:
-                continue
-            if query and query_name != query:
-                continue
-                
-            query_mappings[query_name] = {
-                "memoryName": memory_name,
-                "sessionId": session_id,
-                "timestamp": creation_timestamp
-            }
-            session_queries[session_id].append(query_name)
-        
-        if not query_mappings:
-            return MemoryMessageListResponse(items=[], total=0)
-        
-        # Get all memory resources to find service endpoints
+        # Get memory resources to find service endpoints
         memories = await client.memories.a_list()
-        memory_services = {}  # memoryName -> serviceUrl
+        
+        # Apply memory filter if specified
+        if memory:
+            memories = [m for m in memories if m.to_dict().get("metadata", {}).get("name") == memory]
+        
+        all_messages = []
         
         for memory_obj in memories:
             memory_dict = memory_obj.to_dict()
@@ -254,56 +215,43 @@ async def list_memory_messages(
             memory_name = metadata.get("name", "")
             service_url = status.get("lastResolvedAddress")
             
-            if memory_name and service_url:
-                memory_services[memory_name] = service_url
-        
-        # Collect all messages
-        all_messages = []
-        
-        # Group by unique memory/session combinations to avoid duplicate API calls
-        session_combinations = set()
-        for query_name, mapping in query_mappings.items():
-            session_combinations.add((mapping["memoryName"], mapping["sessionId"]))
-        
-        for memory_name, session_id in session_combinations:
-            service_url = memory_services.get(memory_name)
             if not service_url:
                 logger.warning(f"No service URL found for memory {memory_name}")
                 continue
             
             try:
-                # Get messages for this session
-                messages_url = f"{service_url}/messages/{session_id}"
+                # Build query parameters for postgres-memory service
+                params = {}
+                if session:
+                    params["session_id"] = session
+                if query:
+                    params["query_id"] = query
+                
+                messages_url = f"{service_url}/messages"
+                if params:
+                    messages_url += f"?{urlencode(params)}"
                 
                 async with httpx.AsyncClient() as http_client:
                     response = await http_client.get(messages_url, timeout=30.0)
                     
                     if response.status_code == 404:
-                        # Session not found, skip
+                        # No messages found, skip
                         continue
                     elif not response.is_success:
-                        logger.error(f"Memory service error for {memory_name}/{session_id}: {response.text}")
+                        logger.error(f"Memory service error for {memory_name}: {response.text}")
                         continue
                     
                     data = response.json()
                     messages = data.get("messages", [])
                     
-                    # Find the first query for this session (for timestamp)
-                    session_query_ids = session_queries.get(session_id, [])
-                    first_query_id = session_query_ids[0] if session_query_ids else None
-                    query_timestamp = None
-                    
-                    if first_query_id and first_query_id in query_mappings:
-                        query_timestamp = query_mappings[first_query_id]["timestamp"]
-                    
-                    # Add each message with context
-                    for message in messages:
+                    # Convert each database record to response format
+                    for msg_record in messages:
                         all_messages.append(MemoryMessageResponse(
-                            timestamp=query_timestamp,
+                            timestamp=msg_record.get("created_at"),
                             memoryName=memory_name,
-                            sessionId=session_id,
-                            queryId=first_query_id,  # We don't have per-message query mapping
-                            message=message
+                            sessionId=msg_record.get("session_id"),
+                            queryId=msg_record.get("query_id"),
+                            message=msg_record.get("message")
                         ))
             
             except httpx.RequestError as e:

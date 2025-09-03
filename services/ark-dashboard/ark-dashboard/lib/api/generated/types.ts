@@ -725,6 +725,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/namespaces/{namespace}/memories/{name}/sessions/{session_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Memory Messages
+         * @description Get messages for a specific session from a memory resource.
+         */
+        get: operations["get_memory_messages_v1_namespaces__namespace__memories__name__sessions__session_id__messages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/namespaces/{namespace}/memory-messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Memory Messages
+         * @description List all memory messages with context, optionally filtered.
+         */
+        get: operations["list_memory_messages_v1_namespaces__namespace__memory_messages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/namespaces/{namespace}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Sessions
+         * @description List all sessions in a namespace, optionally filtered by memory.
+         */
+        get: operations["list_sessions_v1_namespaces__namespace__sessions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/system-info": {
         parameters: {
             query?: never;
@@ -1588,6 +1648,34 @@ export interface components {
             items: components["schemas"]["MemoryResponse"][];
         };
         /**
+         * MemoryMessageListResponse
+         * @description Response model for listing memory messages.
+         */
+        MemoryMessageListResponse: {
+            /** Items */
+            items: components["schemas"]["MemoryMessageResponse"][];
+            /** Total */
+            total?: number | null;
+        };
+        /**
+         * MemoryMessageResponse
+         * @description Response model for a memory message with context.
+         */
+        MemoryMessageResponse: {
+            /** Timestamp */
+            timestamp?: string | null;
+            /** Memoryname */
+            memoryName: string;
+            /** Sessionid */
+            sessionId: string;
+            /** Queryid */
+            queryId?: string | null;
+            /** Message */
+            message: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * MemoryResponse
          * @description Response model for memory list items.
          */
@@ -1853,6 +1941,9 @@ export interface components {
             namespace: string;
             /** Input */
             input: string;
+            memory?: components["schemas"]["Memory"] | null;
+            /** Sessionid */
+            sessionId?: string | null;
             /** Status */
             status?: {
                 [key: string]: unknown;
@@ -1989,6 +2080,32 @@ export interface components {
             model?: string | null;
             /** Selectorprompt */
             selectorPrompt?: string | null;
+        };
+        /**
+         * SessionListResponse
+         * @description Response model for listing sessions.
+         */
+        SessionListResponse: {
+            /** Items */
+            items: components["schemas"]["SessionResponse"][];
+            /** Total */
+            total?: number | null;
+        };
+        /**
+         * SessionResponse
+         * @description Response model for a session.
+         */
+        SessionResponse: {
+            /** Sessionid */
+            sessionId: string;
+            /** Memoryname */
+            memoryName: string;
+            /** Queries */
+            queries: string[];
+            /** Messagecount */
+            messageCount: number;
+            /** Lastactivity */
+            lastActivity?: string | null;
         };
         /**
          * Skill
@@ -3772,6 +3889,113 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_memory_messages_v1_namespaces__namespace__memories__name__sessions__session_id__messages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+                name: string;
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_memory_messages_v1_namespaces__namespace__memory_messages_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by memory name */
+                memory?: string | null;
+                /** @description Filter by session ID */
+                session?: string | null;
+                /** @description Filter by query ID */
+                query?: string | null;
+            };
+            header?: never;
+            path: {
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryMessageListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sessions_v1_namespaces__namespace__sessions_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by memory name */
+                memory?: string | null;
+            };
+            header?: never;
+            path: {
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionListResponse"];
                 };
             };
             /** @description Validation Error */

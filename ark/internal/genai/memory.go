@@ -21,7 +21,7 @@ const (
 )
 
 type MemoryInterface interface {
-	AddMessages(ctx context.Context, messages []Message) error
+	AddMessages(ctx context.Context, queryID string, messages []Message) error
 	GetMessages(ctx context.Context) ([]Message, error)
 	Close() error
 }
@@ -34,7 +34,9 @@ type Config struct {
 }
 
 type MessagesRequest struct {
-	Messages []openai.ChatCompletionMessageParamUnion `json:"messages"`
+	SessionID string                                   `json:"session_id"`
+	QueryID   string                                   `json:"query_id"`
+	Messages  []openai.ChatCompletionMessageParamUnion `json:"messages"`
 }
 
 type MessagesResponse struct {
