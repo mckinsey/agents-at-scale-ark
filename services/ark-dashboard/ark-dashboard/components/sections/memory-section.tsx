@@ -1,6 +1,5 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/ui/pagination";
 import {
@@ -20,13 +19,12 @@ import { toast } from "@/components/ui/use-toast";
 import {
   memoryService,
   type MemoryResource,
-  type MemoryFilters,
-  type SessionConversation
+  type MemoryFilters
 } from "@/lib/services/memory";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import { Database, MessageSquare, ChevronDown, ChevronRight } from "lucide-react";
+import { Database, MessageSquare } from "lucide-react";
 
 interface MemorySectionProps {
   readonly namespace: string;
@@ -41,9 +39,12 @@ export function MemorySection({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [conversations, setConversations] = useState<SessionConversation[]>([]);
-  const [memoryQueries, setMemoryQueries] = useState<MemoryMessage[]>([]);
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [memoryMessages, setMemoryMessages] = useState<{
+    memoryName: string;
+    sessionId: string;
+    queryId: string;
+    message: { role: string; content: string; name?: string };
+  }[]>([]);
   const [loading, setLoading] = useState(true);
   const [availableMemories, setAvailableMemories] = useState<MemoryResource[]>([]);
   const [availableSessions, setAvailableSessions] = useState<string[]>([]);
@@ -88,24 +89,26 @@ export function MemorySection({
       setLoading(true);
 
       try {
-        const currentFilters: MemoryFilters = {
-          ...filters,
-          page: currentPage,
-          limit: itemsPerPage
-        };
-
-        const [memoriesData, conversationsData] = await Promise.all([
+        const [memoriesData, sessionsData, messagesData] = await Promise.all([
           memoryService.getMemoryResources(namespace),
-          memoryService.getAllConversations(namespace, currentFilters)
+          memoryService.getSessions(namespace),
+          memoryService.getAllMemoryMessages(namespace, {
+            memory: filters.memoryName && filters.memoryName !== "all" ? filters.memoryName : undefined,
+            session: filters.sessionId && filters.sessionId !== "all" ? filters.sessionId : undefined
+          })
         ]);
-        // Calculate total messages across all conversations
-        const totalMessages = conversationsData.conversations.reduce((total, conv) => total + conv.messages.length, 0);
-        setTotalMessages(totalMessages);
+        
+        // Sort messages by timestamp (newest first)
+        const sortedMessages = messagesData.sort((a, b) => 
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        
+        setTotalMessages(sortedMessages.length);
         setAvailableMemories(memoriesData);
-        setConversations(conversationsData.conversations);
+        setMemoryMessages(sortedMessages);
 
         // Extract unique session IDs for filtering
-        const sessionIds = new Set(conversationsData.conversations.map(c => c.sessionId));
+        const sessionIds = new Set(sessionsData.map(s => s.sessionId));
         setAvailableSessions(Array.from(sessionIds).sort());
 
       } catch (error) {
@@ -122,7 +125,7 @@ export function MemorySection({
         setLoading(false);
       }
     },
-    [namespace, filters, currentPage, itemsPerPage]
+    [namespace, filters]
   );
 
   useEffect(() => {
@@ -135,26 +138,23 @@ export function MemorySection({
     const memoryFromUrl = searchParams.get("memory") || undefined;
     const sessionFromUrl = searchParams.get("sessionId") || undefined;
 
-    const needsUpdate =
+    // Only update if URL params actually changed
+    if (
       pageFromUrl !== currentPage ||
       limitFromUrl !== itemsPerPage ||
       memoryFromUrl !== filters.memoryName ||
-      sessionFromUrl !== filters.sessionId;
-
-    if (needsUpdate) {
-      const newFilters = {
-        ...filters,
+      sessionFromUrl !== filters.sessionId
+    ) {
+      setCurrentPage(pageFromUrl);
+      setItemsPerPage(limitFromUrl);
+      setFilters({
         page: pageFromUrl,
         limit: limitFromUrl,
         memoryName: memoryFromUrl,
         sessionId: sessionFromUrl
-      };
-
-      setCurrentPage(pageFromUrl);
-      setItemsPerPage(limitFromUrl);
-      setFilters(newFilters);
+      });
     }
-  }, [searchParams, currentPage, itemsPerPage, filters]);
+  }, [searchParams, currentPage, itemsPerPage, filters.memoryName, filters.sessionId]);
 
   const handleFilterChange = (
     key: keyof MemoryFilters,
@@ -162,13 +162,7 @@ export function MemorySection({
   ) => {
     const effectiveValue = value === "all" ? undefined : value;
 
-    setFilters((prev) => ({
-      ...prev,
-      [key]: effectiveValue,
-      page: 1
-    }));
-    setCurrentPage(1);
-
+    // Update URL params immediately
     updateUrlParams({
       [key]: effectiveValue,
       page: 1
@@ -176,51 +170,62 @@ export function MemorySection({
   };
 
   const clearFilters = () => {
-    setFilters({ limit: itemsPerPage, page: 1 });
-    setCurrentPage(1);
-
+    // Only update URL - let the useEffect handle state updates
     updateUrlParams({
       page: 1,
       limit: itemsPerPage,
-      memory: undefined,
+      memoryName: undefined,
       sessionId: undefined
     });
   };
 
   const handlePageChange = (newPage: number) => {
-    setCurrentPage(newPage);
-    setFilters((prev) => ({
-      ...prev,
-      page: newPage
-    }));
-
+    // Only update URL - let the useEffect handle state updates
     updateUrlParams({ page: newPage });
   };
 
   const totalPages = Math.max(1, Math.ceil(totalMessages / itemsPerPage));
-
-  const toggleRowExpansion = (rowId: string) => {
-    setExpandedRows(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(rowId)) {
-        newSet.delete(rowId);
-      } else {
-        newSet.add(rowId);
-      }
-      return newSet;
-    });
+  
+  // Apply client-side pagination to the sorted messages
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedMessages = memoryMessages.slice(startIndex, startIndex + itemsPerPage);
+  
+  // Format timestamp for display
+  const formatTimestamp = (timestamp: string) => {
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: '2-digit', 
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+    } catch {
+      return timestamp;
+    }
+  };
+  
+  // Get role badge styling
+  const getRoleBadge = (role: string) => {
+    const baseClasses = "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium";
+    
+    switch (role.toLowerCase()) {
+      case 'user':
+        return `${baseClasses} bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200`;
+      case 'assistant':
+        return `${baseClasses} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200`;
+      case 'system':
+        return `${baseClasses} bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200`;
+      default:
+        return `${baseClasses} bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200`;
+    }
   };
 
+
   const handleItemsPerPageChange = (newLimit: number) => {
-    setItemsPerPage(newLimit);
-    setCurrentPage(1);
-
-    setFilters((prev) => ({
-      ...prev,
-      limit: newLimit,
-      page: 1
-    }));
-
+    // Only update URL - let the useEffect handle state updates
     updateUrlParams({
       limit: newLimit,
       page: 1
@@ -244,8 +249,8 @@ export function MemorySection({
     <div className="space-y-4 p-4">
       <div className="flex flex-wrap gap-4 items-center">
         <Select
-          value={filters.memoryName || "all"}
-          onValueChange={(value) => handleFilterChange("memoryName", value)}
+          value={searchParams.get("memory") || "all"}
+          onValueChange={(value) => updateUrlParams({ memory: value === "all" ? undefined : value, page: 1 })}
         >
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Memory Resource" />
@@ -261,7 +266,7 @@ export function MemorySection({
         </Select>
 
         <Select
-          value={filters.sessionId || "all"}
+          value={searchParams.get("sessionId") || "all"}
           onValueChange={(value) => handleFilterChange("sessionId", value)}
         >
           <SelectTrigger className="w-64">
@@ -295,86 +300,112 @@ export function MemorySection({
       {/* Messages Table */}
       <div className="border rounded-lg">
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
             <thead className="bg-gray-50 dark:bg-gray-900/50">
               <tr>
-                <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Timestamp
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Memory
                 </th>
-                <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Session
                 </th>
-                <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Query
                 </th>
-                <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Message
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-950 divide-y divide-gray-200 dark:divide-gray-800">
-              {conversations.length === 0 ? (
+              {paginatedMessages.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={4}
-                    className="px-2 py-6 text-center text-xs text-gray-500 dark:text-gray-400"
+                    colSpan={5}
+                    className="px-3 py-8 text-center text-xs text-gray-500 dark:text-gray-400"
                   >
                     <div className="flex flex-col items-center">
                       <MessageSquare className="h-8 w-8 mx-auto mb-2 text-gray-400" />
                       <p>No messages found</p>
+                      {totalMessages > 0 && (
+                        <p className="mt-1 text-xs text-gray-400">
+                          Try adjusting your filters or page selection
+                        </p>
+                      )}
                     </div>
                   </td>
                 </tr>
               ) : (
-                conversations.flatMap((conversation) =>
-                  conversation.messages.map((message, index) => (
-                    <tr
-                      key={`${conversation.sessionId}-${index}`}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors"
-                    >
-                      <td className="px-2 py-2 text-xs">
-                        {conversation.memoryName}
-                      </td>
-                      <td className="px-2 py-2 text-xs font-mono">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger className="text-left">
-                              <div className="truncate max-w-24">
-                                {conversation.sessionId}
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="font-mono text-xs">{conversation.sessionId}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </td>
-                      <td className="px-2 py-2 text-xs">
-                        <div className="space-y-1">
-                          <div className="font-medium text-gray-600 dark:text-gray-400">
-                            {message.role}{message.name && ` (${message.name})`}
-                          </div>
-                          <div className="text-gray-900 dark:text-gray-100">
-                            {message.content}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )
+                paginatedMessages.map((messageRecord, index) => (
+                  <tr
+                    key={`${messageRecord.sessionId}-${messageRecord.queryId}-${index}`}
+                    className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors"
+                  >
+                    <td className="px-3 py-3 text-xs font-mono text-gray-600 dark:text-gray-300">
+                      {formatTimestamp(messageRecord.timestamp)}
+                    </td>
+                    <td className="px-3 py-3 text-xs font-mono">
+                      <div className="truncate max-w-20">
+                        {messageRecord.memoryName}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-xs font-mono">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger className="text-left">
+                            <div className="truncate max-w-24">
+                              {messageRecord.sessionId}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="font-mono text-xs">{messageRecord.sessionId}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </td>
+                    <td className="px-3 py-3 text-xs font-mono">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger className="text-left">
+                            <div className="truncate max-w-24">
+                              {messageRecord.queryId}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="font-mono text-xs">{messageRecord.queryId}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </td>
+                    <td className="px-3 py-3 text-xs font-mono">
+                      <pre className="text-xs text-gray-900 dark:text-gray-100 whitespace-pre-wrap">
+                        {JSON.stringify(messageRecord.message, null, 2)}
+                      </pre>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      <Pagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        itemsPerPage={itemsPerPage}
-        onPageChange={handlePageChange}
-        onItemsPerPageChange={handleItemsPerPageChange}
-      />
+      {/* Summary and Pagination */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div className="text-sm text-gray-600 dark:text-gray-400">
+          Showing {paginatedMessages.length > 0 ? startIndex + 1 : 0} to {Math.min(startIndex + itemsPerPage, totalMessages)} of {totalMessages} messages
+        </div>
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          itemsPerPage={itemsPerPage}
+          onPageChange={handlePageChange}
+          onItemsPerPageChange={handleItemsPerPageChange}
+        />
+      </div>
     </div>
   );
 }
