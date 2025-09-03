@@ -24,7 +24,7 @@ spec:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Model
           metadata:
-            name: test-evaluation-model
+            name: direct-evaluation-model
           status:
             phase: ready
     - wait:

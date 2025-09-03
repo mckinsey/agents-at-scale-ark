@@ -8,7 +8,7 @@ spec:
     value: http://evaluator-llm.default.svc.cluster.local:8000/evaluate
   parameters:
   - name: model.name
-    value: test-evaluation-model
+    value: priority-evaluation-model
   - name: min-score
     value: "0.8"
   - name: scope

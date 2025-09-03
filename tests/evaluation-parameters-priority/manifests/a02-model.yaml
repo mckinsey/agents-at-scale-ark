@@ -1,7 +1,7 @@
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Model
 metadata:
-  name: test-evaluation-model
+  name: priority-evaluation-model
 spec:
   type: azure
   model:
@@ -13,7 +13,7 @@ spec:
       apiKey:
         valueFrom:
           secretKeyRef:
-            name: test-evaluation-model-token
+            name: priority-evaluation-model-token
             key: token
       apiVersion:
         value: "2024-12-01-preview"
