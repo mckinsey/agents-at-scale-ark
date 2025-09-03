@@ -15,4 +15,4 @@ spec:
     error: 360s                           # Longer error handling
     exec: 360s                           # 2 minutes for scripts with LLM calls
   failFast: false                        
-  parallel: 1                            # Run evaluated tests sequentially to avoid resource contention
+  parallel: 4                            # Run evaluated tests sequentially to avoid resource contention
