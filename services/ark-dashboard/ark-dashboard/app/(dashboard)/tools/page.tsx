@@ -2,7 +2,7 @@
 
 import { ToolsSection } from "@/components/sections/tools-section"
 import { useSearchParams } from "next/navigation"
-import { Suspense } from "react"
+import { Suspense, useRef } from "react"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -11,10 +11,13 @@ import {
 } from "@/components/ui/breadcrumb"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
+import { Plus } from "lucide-react"
 
 function ToolsContent() {
   const searchParams = useSearchParams()
   const namespace = searchParams.get("namespace") || "default"
+  const toolsSectionRef = useRef<{ openAddEditor: () => void }>(null)
 
   return (
     <>
@@ -28,9 +31,15 @@ function ToolsContent() {
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
+        <div className="ml-auto">
+          <Button onClick={() => toolsSectionRef.current?.openAddEditor()}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Tool
+          </Button>
+        </div>
       </header>
       <div className="flex flex-1 flex-col">
-        <ToolsSection namespace={namespace} />
+        <ToolsSection ref={toolsSectionRef} namespace={namespace} />
       </div>
     </>
   )
