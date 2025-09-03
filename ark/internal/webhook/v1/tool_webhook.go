@@ -77,6 +77,8 @@ func (v *ToolCustomValidator) validateTool(_ context.Context, tool *arkv1alpha1.
 		return v.validateHTTP(tool.Spec.HTTP)
 	case genai.ToolTypeMCP:
 		return v.validateMCPTool(tool.Spec.MCP)
+	case "agent":
+		return v.validateAgentTool(tool.Spec.Agent)
 	default:
 		return warnings, fmt.Errorf("unsupported tool type '%s': supported types are: http, mcp", tool.Spec.Type)
 	}
@@ -127,6 +129,15 @@ func (v *ToolCustomValidator) validateMCPTool(mcp *arkv1alpha1.MCPToolRef) (admi
 		return warnings, fmt.Errorf("MCP tool name is required")
 	}
 
+	return warnings, nil
+}
+
+//validateAgentTool validates Agent-specific configuration
+func (v *ToolCustomValidator) validateAgentTool(agent string) (admission.Warnings, error) {
+	var warnings admission.Warnings
+	if(agent == "") {
+		return warnings, fmt.Errorf("Agent field is required for agent type")
+	}
 	return warnings, nil
 }
 
