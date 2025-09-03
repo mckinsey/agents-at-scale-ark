@@ -132,12 +132,13 @@ func (v *ToolCustomValidator) validateMCPTool(mcp *arkv1alpha1.MCPToolRef) (admi
 	return warnings, nil
 }
 
-//validateAgentTool validates Agent-specific configuration
+// validateAgentTool validates Agent-specific configuration
 func (v *ToolCustomValidator) validateAgentTool(agent string) (admission.Warnings, error) {
 	var warnings admission.Warnings
-	if(agent == "") {
-		return warnings, fmt.Errorf("Agent field is required for agent type")
+	if agent == "" {
+		return warnings, fmt.Errorf("agent field is required for agent type")
 	}
+
 	return warnings, nil
 }
 
