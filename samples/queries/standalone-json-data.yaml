@@ -1,9 +1,0 @@
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: standalone-json-data
-spec:
-  input: "Generate a JSON object representing a user profile with fields for name, email, age, and an array of hobbies. Make it for a fictional character."
-  targets:
-    - type: agent
-      name: json-output-agent

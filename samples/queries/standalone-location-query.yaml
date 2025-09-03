@@ -1,9 +1,0 @@
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: standalone-location-query
-spec:
-  input: "What are the top 5 tourist attractions in Barcelona, Spain?"
-  targets:
-    - type: agent
-      name: location

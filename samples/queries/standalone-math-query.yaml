@@ -1,9 +1,0 @@
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: standalone-math-query
-spec:
-  input: "Calculate the area of a circle with radius 7.5 meters. Show your work."
-  targets:
-    - type: agent
-      name: math

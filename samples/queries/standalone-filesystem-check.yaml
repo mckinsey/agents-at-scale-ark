@@ -1,9 +1,0 @@
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: standalone-filesystem-check
-spec:
-  input: "List the contents of the /tmp directory and show me the file sizes."
-  targets:
-    - type: agent
-      name: filesystem

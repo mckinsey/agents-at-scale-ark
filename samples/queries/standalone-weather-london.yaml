@@ -1,9 +1,0 @@
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: standalone-weather-london
-spec:
-  input: "What's the current weather forecast for London, UK this weekend?"
-  targets:
-    - type: agent
-      name: weather

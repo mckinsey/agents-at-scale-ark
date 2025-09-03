@@ -148,3 +148,6 @@ node_modules/
 
 # Local documentation files
 *.local.md
+
+# DevSpace runtime files
+**/.devspace/
