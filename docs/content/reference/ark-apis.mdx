@@ -45,6 +45,8 @@ Standard REST APIs for managing ARK resources:
 - **Teams**: `/v1/namespaces/{namespace}/teams` 
 - **Queries**: `/v1/namespaces/{namespace}/queries`
 - **Models**: `/v1/namespaces/{namespace}/models`
+- **Evaluators**: `/v1/namespaces/{namespace}/evaluators`
+- **Evaluations**: `/v1/namespaces/{namespace}/evaluations`
 - **Secrets**: `/v1/namespaces/{namespace}/secrets`
 - **Namespaces**: `/v1/namespaces`
 
@@ -81,6 +83,38 @@ curl -X POST http://localhost:8000/openai/v1/chat/completions \
     "messages": [{"role": "user", "content": "Hello"}]
   }'
 ```
+
+### Evaluators and Evaluations (v1)
+
+- Base: `/v1`
+- Evaluators:
+  - GET/POST `/namespaces/{namespace}/evaluators`
+  - GET/PUT/PATCH/DELETE `/namespaces/{namespace}/evaluators/{name}`
+- Evaluations:
+  - GET/POST `/namespaces/{namespace}/evaluations`
+  - GET/PUT/PATCH/DELETE `/namespaces/{namespace}/evaluations/{name}`
+  - PATCH `/namespaces/{namespace}/evaluations/{name}/cancel`
+
+Examples:
+
+List evaluators:
+```bash
+curl -s http://localhost:8000/v1/namespaces/default/evaluators
+```
+
+Create a direct evaluation (minimal):
+```bash
+curl -s -X POST http://localhost:8000/v1/namespaces/default/evaluations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "direct-example",
+    "type": "direct",
+    "evaluator": {"name": "my-evaluator"},
+    "config": {"input": "2+2?", "output": "4"}
+  }'
+```
+
+For full request and response schemas, use the service OpenAPI UI at `/docs` when ark-api is running.
 
 ### Using OpenAI SDK
 
