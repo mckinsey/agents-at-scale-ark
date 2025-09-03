@@ -18,4 +18,4 @@ spec:
     error: 45s                           # Timeout for error handling steps
     exec: 45s                            # Timeout for command execution steps
   failFast: false                        # If false, Chainsaw will continue running tests even after failures
-  parallel: 1                            # Number of tests to run in parallel
+  parallel: 7                            # Number of tests to run in parallel
