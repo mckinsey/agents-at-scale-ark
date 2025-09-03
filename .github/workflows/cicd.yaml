@@ -506,49 +506,6 @@ jobs:
             tar xz -C /tmp
           sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
           sudo chmod +x /usr/local/bin/chainsaw
-
-      - name: Debug evaluator-llm service status
-        run: |
-          echo "=== Checking evaluator-llm deployment status ==="
-          echo "Pods in default namespace:"
-          kubectl get pods -n default -o wide | grep evaluator || echo "No evaluator pods in default"
-          
-          echo -e "\n=== Checking evaluator-llm service and endpoints ==="
-          kubectl get svc evaluator-llm -n default -o yaml || echo "Service not found"
-          kubectl get endpoints evaluator-llm -n default || echo "Endpoints not found"
-          
-          echo -e "\n=== Checking evaluator-llm pod logs (if exists) ==="
-          POD=$(kubectl get pods -n default -l app.kubernetes.io/name=evaluator-llm -o name | head -1)
-          if [ -n "$POD" ]; then
-            kubectl logs -n default $POD --tail=50
-          else
-            echo "No evaluator-llm pod found"
-          fi
-          
-          echo -e "\n=== Checking Evaluator CRs ==="
-          kubectl get evaluators -A
-          
-          echo -e "\n=== Checking RBAC for evaluator-llm ==="
-          kubectl get clusterrolebinding | grep evaluator-llm || echo "No evaluator-llm ClusterRoleBinding"
-          kubectl get clusterrole | grep evaluator-llm || echo "No evaluator-llm ClusterRole"
-          
-          echo -e "\n=== Checking evaluator-llm service account ==="
-          kubectl get sa evaluator-llm -n default -o yaml || echo "Service account not found"
-          
-          echo -e "\n=== Test evaluator-llm service connectivity ==="
-          kubectl run test-curl --image=curlimages/curl:latest --rm -it --restart=Never -- \
-            curl -s -m 5 http://evaluator-llm.default.svc.cluster.local:8000/health || \
-            echo "Failed to connect to evaluator-llm service"
-          
-          echo -e "\n=== Waiting for evaluator-llm to be fully ready ==="
-          # Give the service a moment to stabilize after all checks
-          sleep 10
-          
-          # Final readiness check
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=evaluator-llm -n default --timeout=30s || {
-            echo "Warning: evaluator-llm pod not ready after waiting"
-            kubectl get pods -n default -l app.kubernetes.io/name=evaluator-llm
-          }
       - name: Run evaluated E2E tests
         env:
           E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
