@@ -1,0 +1,29 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: test-event-evaluation
+spec:
+  type: event
+  config:
+    rules:
+    - name: "query_was_resolved"
+      expression: "query.was_resolved()"
+      description: "Check that the query was successfully resolved"
+      weight: 2
+    - name: "agent_was_executed"
+      expression: "agent.was_executed()"
+      description: "Verify agent execution occurred during query processing"
+      weight: 2
+    - name: "events_generated"
+      expression: "events.size() > 0"
+      description: "Check that events were generated during query execution (backward compatibility)"
+      weight: 1
+  evaluator:
+    name: test-event-evaluator
+    parameters:
+    - name: query.name
+      value: "test-event-query"
+    - name: query.namespace
+      value: ($namespace)
+    - name: min-score
+      value: "0.6"

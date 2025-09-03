@@ -1,0 +1,82 @@
+replicaCount: 1
+
+image:
+  repository: evaluator-llm
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+rbac:
+  create: true
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 8000
+
+# Server runtime settings (container binds here). If server.port is not set,
+# the chart will default to service.port in the Deployment template.
+server:
+  host: "0.0.0.0"
+  # port: 8000
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 4Gi
+    ephemeral-storage: 1Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+    ephemeral-storage: 100Mi
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  failureThreshold: 60
+
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+
+volumes: []
+
+volumeMounts: []
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+evaluator:
+  name: evaluator-llm
+  description: "LLM-as-a-Judge evaluator for query performance assessment"

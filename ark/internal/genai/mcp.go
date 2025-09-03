@@ -46,9 +46,11 @@ func createSSEClient(baseURL string, headers map[string]string) (*mcpclient.Clie
 
 func createHTTPClient(baseURL string, headers map[string]string) (*mcpclient.Client, error) {
 	var opts []transport.StreamableHTTPCOption
+
 	if len(headers) > 0 {
 		opts = append(opts, transport.WithHTTPHeaders(headers))
 	}
+
 	mcpClient, err := mcpclient.NewStreamableHttpClient(baseURL, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create MCP client for %s: %w", baseURL, err)

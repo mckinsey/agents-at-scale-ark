@@ -1,0 +1,121 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: evaluation-query
+  labels:
+    evaluated: "true"
+spec:
+  description: Test query-ref evaluation functionality with post-hoc evaluation of query responses
+  steps:
+  - name: step-1-setup-and-query
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          set -u
+          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+        outputs:
+        - name: azure
+          value: (json_parse($stdout))
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a00-evaluator-llm-rbac.yaml
+    - apply:
+        file: manifests/a01-secret.yaml
+    - apply:
+        file: manifests/a02-model.yaml
+    - apply:
+        file: manifests/a03-evaluator.yaml
+    - apply:
+        file: manifests/a04-golden-examples-configmap.yaml
+    - apply:
+        file: manifests/a05-agent.yaml
+    - apply:
+        file: manifests/a06-query.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-query-model
+          status:
+            phase: ready
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Evaluator
+          metadata:
+            name: test-query-evaluator
+          status:
+            phase: ready
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: query-golden-examples
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: test-evaluation-agent
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-evaluated-query
+          status:
+            phase: done
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-evaluated-query
+          status:
+            (length(responses)): 1
+  - name: step-2-post-hoc-evaluation
+    try:
+    - apply:
+        file: manifests/a07-evaluation.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluation
+        timeout: 5m
+        name: test-query-ref-evaluation
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'done'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Evaluation
+          metadata:
+            name: test-query-ref-evaluation
+          status:
+            phase: done
+            (type(score) == 'string'): true
+            (to_number(score) >= `0.0` && to_number(score) <= `1.0`): true
+            (type(passed) == 'boolean'): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Evaluation
+          metadata:
+            name: test-query-ref-evaluation
+            # Verify that evaluation response metadata is added as annotations
+            (contains(keys(annotations), 'evaluation.metadata/reasoning')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-evaluated-query
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluation
+        name: test-query-ref-evaluation

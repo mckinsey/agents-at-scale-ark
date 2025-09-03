@@ -1,0 +1,22 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: test-baseline-evaluation
+spec:
+  type: baseline
+  timeout: "10m"  # Extended timeout 
+  evaluator:
+    name: test-baseline-evaluator
+    parameters:
+    - name: scope
+      value: "accuracy,completeness"
+    - name: min-score
+      value: "0.8"
+    - name: temperature
+      value: "0.0"
+    - name: golden-examples
+      valueFrom:
+        configMapKeyRef:
+          name: golden-examples
+          key: examples
+  config: {}

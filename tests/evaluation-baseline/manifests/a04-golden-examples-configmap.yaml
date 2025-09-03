@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: golden-examples
+data:
+  examples: |
+    [
+      {
+        "input": "What is 7 + 3?",
+        "expectedOutput": "10",
+        "expectedMinScore": "0.9",
+        "difficulty": "easy",
+        "category": "arithmetic",
+        "metadata": {
+          "type": "basic-addition",
+          "concept": "addition"
+        }
+      },
+      {
+        "input": "What is 6 × 4?",
+        "expectedOutput": "24",
+        "expectedMinScore": "0.85",
+        "difficulty": "easy",
+        "category": "arithmetic",
+        "metadata": {
+          "type": "multiplication",
+          "concept": "multiplication"
+        }
+      },
+      {
+        "input": "If I buy 8 items at $3 each, how much do I spend?",
+        "expectedOutput": "$24",
+        "expectedMinScore": "0.8",
+        "difficulty": "medium",
+        "category": "word-problem",
+        "metadata": {
+          "type": "word-problem",
+          "concept": "multiplication",
+          "context": "shopping"
+        }
+      }
+    ]

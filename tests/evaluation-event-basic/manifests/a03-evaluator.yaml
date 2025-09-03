@@ -1,0 +1,15 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: test-event-evaluator
+spec:
+  description: "Event-based evaluator for testing basic event evaluation"
+  address:
+    value: http://evaluator-llm.default.svc.cluster.local:8000/evaluate
+  parameters:
+  - name: model.name
+    value: "test-event-model"
+  - name: model.namespace
+    value: ($namespace)
+  - name: min-score
+    value: "0.5"

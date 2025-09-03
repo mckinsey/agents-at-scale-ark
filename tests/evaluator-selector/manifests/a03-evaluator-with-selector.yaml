@@ -1,0 +1,25 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: production-evaluator
+spec:
+  description: "Test evaluator with selector for automatic query evaluation"
+  address:
+    value: http://evaluator-llm.default.svc.cluster.local:8000/evaluate
+  selector:
+    resourceType: "Query"
+    apiGroup: "ark.mckinsey.com"
+    matchLabels:
+      environment: "production"
+      model: "gpt-4"
+    matchExpressions:
+      - key: evaluation_required
+        operator: In
+        values: ["true"]
+  parameters:
+    - name: scope
+      value: "accuracy,clarity"
+    - name: min-score
+      value: "0.8"
+    - name: model.name
+      value: selector-model

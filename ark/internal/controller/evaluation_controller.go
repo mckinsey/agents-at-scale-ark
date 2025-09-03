@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -195,6 +196,16 @@ func (r *EvaluationReconciler) convertParametersToMap(ctx context.Context, param
 	log.Info("Final parameter map", "paramMap", paramMap)
 
 	return paramMap
+}
+
+// getEvaluationTimeout returns the timeout duration for an evaluation
+// If not specified, returns the default of 5 minutes
+func (r *EvaluationReconciler) getEvaluationTimeout(evaluation *arkv1alpha1.Evaluation) time.Duration {
+	if evaluation.Spec.Timeout != nil {
+		return evaluation.Spec.Timeout.Duration
+	}
+	// Default to 5 minutes if not specified
+	return 5 * time.Minute
 }
 
 // resolveModelNamespace determines the appropriate model namespace with validation and fallback logic
@@ -411,8 +422,12 @@ func (r *EvaluationReconciler) processDirectEvaluation(ctx context.Context, eval
 
 	log.Info("Built unified evaluation request", "evaluation", evaluation.Name, "request", request)
 
+	// Get timeout from evaluation spec
+	timeout := r.getEvaluationTimeout(&evaluation)
+	log.Info("Using timeout for direct evaluation", "evaluation", evaluation.Name, "timeout", timeout)
+
 	// Call unified endpoint
-	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace)
+	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace, timeout)
 	if err != nil {
 		log.Error(err, "Failed to call unified evaluator", "evaluation", evaluation.Name)
 		if err := r.updateStatus(ctx, evaluation, statusError, fmt.Sprintf("Evaluator call failed: %v", err)); err != nil {
@@ -612,8 +627,12 @@ func (r *EvaluationReconciler) processQueryEvaluation(ctx context.Context, evalu
 
 	log.Info("CONTROLLER: Built request", "evaluation", evaluation.Name, "queryRefInConfig", queryRef, "queryRefName", queryRef.Name, "queryRefNamespace", queryRef.Namespace)
 
+	// Get timeout from evaluation spec
+	timeout := r.getEvaluationTimeout(&evaluation)
+	log.Info("Using timeout for query evaluation", "evaluation", evaluation.Name, "timeout", timeout)
+
 	// Call unified evaluator endpoint
-	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace)
+	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace, timeout)
 	if err != nil {
 		log.Error(err, "Failed to call unified direct evaluator for query evaluation", "evaluation", evaluation.Name)
 		if err := r.updateStatus(ctx, evaluation, statusError, fmt.Sprintf("Query evaluation failed: %v", err)); err != nil {
@@ -622,15 +641,10 @@ func (r *EvaluationReconciler) processQueryEvaluation(ctx context.Context, evalu
 		return ctrl.Result{}, nil
 	}
 
-	// Update evaluation status with actual results
-	if err := r.updateEvaluationResults(ctx, evaluation, response); err != nil {
-		return ctrl.Result{}, err
-	}
-
 	// Log the response metadata for debugging
 	log.Info("Evaluation response received", "evaluation", evaluation.Name, "metadata", response.Metadata, "metadata_count", len(response.Metadata))
 
-	// Complete evaluation with all results including metadata annotations
+	// Complete evaluation with all results including metadata annotations in one atomic operation
 	if err := r.updateEvaluationComplete(ctx, evaluation, response, "Query evaluation completed successfully"); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -642,107 +656,91 @@ func (r *EvaluationReconciler) processQueryEvaluation(ctx context.Context, evalu
 func (r *EvaluationReconciler) updateStatus(ctx context.Context, evaluation arkv1alpha1.Evaluation, phase, message string) error {
 	log := logf.FromContext(ctx)
 
-	// Fetch the latest version to avoid resource conflicts
-	latest := &arkv1alpha1.Evaluation{}
-	if err := r.Get(ctx, client.ObjectKey{
+	evalKey := client.ObjectKey{
 		Name:      evaluation.Name,
 		Namespace: evaluation.Namespace,
-	}, latest); err != nil {
-		log.Error(err, "failed to get latest Evaluation for status update", "evaluation", evaluation.Name)
-		return err
 	}
 
-	latest.Status.Phase = phase
-	latest.Status.Message = message
+	// Use retry logic for atomic status updates
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Fetch the latest version
+		latest := &arkv1alpha1.Evaluation{}
+		if err := r.Get(ctx, evalKey, latest); err != nil {
+			log.Error(err, "failed to get latest Evaluation for status update", "evaluation", evaluation.Name)
+			return err
+		}
 
-	if err := r.Status().Update(ctx, latest); err != nil {
-		log.Error(err, "failed to update Evaluation status", "evaluation", evaluation.Name)
-		return err
-	}
+		// Update status fields atomically
+		latest.Status.Phase = phase
+		latest.Status.Message = message
 
-	log.Info("Updated Evaluation status", "evaluation", evaluation.Name, "phase", phase, "message", message)
-	return nil
-}
+		// Update status subresource
+		if err := r.Status().Update(ctx, latest); err != nil {
+			log.V(1).Info("Status update failed (will retry)", "evaluation", evaluation.Name, "error", err)
+			return err
+		}
 
-func (r *EvaluationReconciler) updateEvaluationResults(ctx context.Context, evaluation arkv1alpha1.Evaluation, response *genai.EvaluationResponse) error {
-	log := logf.FromContext(ctx)
-
-	// Fetch the latest version to avoid resource conflicts
-	latest := &arkv1alpha1.Evaluation{}
-	if err := r.Get(ctx, client.ObjectKey{
-		Name:      evaluation.Name,
-		Namespace: evaluation.Namespace,
-	}, latest); err != nil {
-		log.Error(err, "failed to get latest Evaluation for results update", "evaluation", evaluation.Name)
-		return err
-	}
-
-	// Update results
-	latest.Status.Score = response.Score
-	latest.Status.Passed = response.Passed
-	latest.Status.TokenUsage = response.TokenUsage
-
-	if err := r.Status().Update(ctx, latest); err != nil {
-		log.Error(err, "failed to update Evaluation results", "evaluation", evaluation.Name)
-		return err
-	}
-
-	log.Info("Updated Evaluation results", "evaluation", evaluation.Name, "score", response.Score, "passed", response.Passed)
-	return nil
+		log.Info("Updated Evaluation status", "evaluation", evaluation.Name, "phase", phase, "message", message)
+		return nil
+	})
 }
 
 func (r *EvaluationReconciler) updateEvaluationComplete(ctx context.Context, evaluation arkv1alpha1.Evaluation, response *genai.EvaluationResponse, message string) error {
 	log := logf.FromContext(ctx)
 
-	// Fetch the latest version to avoid resource conflicts
-	latest := &arkv1alpha1.Evaluation{}
-	if err := r.Get(ctx, client.ObjectKey{
+	evalKey := client.ObjectKey{
 		Name:      evaluation.Name,
 		Namespace: evaluation.Namespace,
-	}, latest); err != nil {
-		log.Error(err, "failed to get latest Evaluation for completion update", "evaluation", evaluation.Name)
-		return err
 	}
 
-	// First, update annotations if present
-	if len(response.Metadata) > 0 {
-		if latest.Annotations == nil {
-			latest.Annotations = make(map[string]string)
-		}
-		for key, value := range response.Metadata {
-			annotationKey := fmt.Sprintf("evaluation.metadata/%s", key)
-			latest.Annotations[annotationKey] = value
-			log.Info("Adding metadata as annotation", "evaluation", evaluation.Name, "key", annotationKey, "value", value)
-		}
-
-		// Update annotations first
-		if err := r.Update(ctx, latest); err != nil {
-			log.Error(err, "failed to update Evaluation annotations", "evaluation", evaluation.Name)
+	// Use retry logic for atomic updates
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Fetch the latest version
+		latest := &arkv1alpha1.Evaluation{}
+		if err := r.Get(ctx, evalKey, latest); err != nil {
+			log.Error(err, "failed to get latest Evaluation for completion update", "evaluation", evaluation.Name)
 			return err
 		}
 
-		// Get latest version after annotation update for status update
-		if err := r.Get(ctx, client.ObjectKey{Name: evaluation.Name, Namespace: evaluation.Namespace}, latest); err != nil {
-			log.Error(err, "failed to get latest for status update", "evaluation", evaluation.Name)
+		// Update annotations if metadata exists
+		if len(response.Metadata) > 0 {
+			if latest.Annotations == nil {
+				latest.Annotations = make(map[string]string)
+			}
+			for key, value := range response.Metadata {
+				annotationKey := fmt.Sprintf("evaluation.metadata/%s", key)
+				latest.Annotations[annotationKey] = value
+				log.V(1).Info("Adding metadata as annotation", "evaluation", evaluation.Name, "key", annotationKey, "value", value)
+			}
+			
+			// Update the main object with annotations
+			if err := r.Update(ctx, latest); err != nil {
+				log.V(1).Info("failed to update Evaluation annotations (will retry)", "evaluation", evaluation.Name, "error", err)
+				return err
+			}
+			
+			// Re-fetch after annotation update to ensure we have the latest version
+			if err := r.Get(ctx, evalKey, latest); err != nil {
+				return err
+			}
+		}
+
+		// Update all status fields atomically
+		latest.Status.Score = response.Score
+		latest.Status.Passed = response.Passed
+		latest.Status.TokenUsage = response.TokenUsage
+		latest.Status.Phase = statusDone
+		latest.Status.Message = message
+
+		// Update status subresource
+		if err := r.Status().Update(ctx, latest); err != nil {
+			log.V(1).Info("Status update failed (will retry)", "evaluation", evaluation.Name, "error", err)
 			return err
 		}
-	}
 
-	// Update status
-	latest.Status.Score = response.Score
-	latest.Status.Passed = response.Passed
-	latest.Status.TokenUsage = response.TokenUsage
-	latest.Status.Phase = statusDone
-	latest.Status.Message = message
-
-	// Update status
-	if err := r.Status().Update(ctx, latest); err != nil {
-		log.Error(err, "failed to complete Evaluation status", "evaluation", evaluation.Name)
-		return err
-	}
-
-	log.Info("Completed Evaluation", "evaluation", evaluation.Name, "score", response.Score, "passed", response.Passed, "phase", statusDone)
-	return nil
+		log.Info("Completed Evaluation atomically", "evaluation", evaluation.Name, "score", response.Score, "passed", response.Passed, "phase", statusDone)
+		return nil
+	})
 }
 
 func (r *EvaluationReconciler) ensureChildEvaluations(ctx context.Context, parentEvaluation arkv1alpha1.Evaluation) (bool, error) {
@@ -945,8 +943,12 @@ func (r *EvaluationReconciler) processBaselineEvaluation(ctx context.Context, ev
 
 	log.Info("Built unified evaluation request for baseline", "evaluation", evaluation.Name)
 
+	// Get timeout from evaluation spec
+	timeout := r.getEvaluationTimeout(&evaluation)
+	log.Info("Using timeout for baseline evaluation", "evaluation", evaluation.Name, "timeout", timeout)
+
 	// Call unified evaluator endpoint
-	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace)
+	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace, timeout)
 	if err != nil {
 		log.Error(err, "Failed to call unified evaluator for baseline evaluation", "evaluation", evaluation.Name)
 		if err := r.updateStatus(ctx, evaluation, statusError, fmt.Sprintf("Baseline evaluation failed: %v", err)); err != nil {
@@ -955,12 +957,7 @@ func (r *EvaluationReconciler) processBaselineEvaluation(ctx context.Context, ev
 		return ctrl.Result{}, nil
 	}
 
-	// Update evaluation status with actual results
-	if err := r.updateEvaluationResults(ctx, evaluation, response); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// Complete evaluation with all results including metadata annotations
+	// Complete evaluation with all results including metadata annotations using atomic update
 	if err := r.updateEvaluationComplete(ctx, evaluation, response, "Baseline evaluation completed successfully"); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -1031,19 +1028,18 @@ func (r *EvaluationReconciler) processEventEvaluation(ctx context.Context, evalu
 		"ruleCount", len(evaluation.Spec.Config.Rules),
 		"parameters", paramMap)
 
+	// Get timeout from evaluation spec
+	timeout := r.getEvaluationTimeout(&evaluation)
+	log.Info("Using timeout for event evaluation", "evaluation", evaluation.Name, "timeout", timeout)
+
 	// Call the evaluator service
-	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, unifiedRequest, evaluation.Namespace)
+	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, unifiedRequest, evaluation.Namespace, timeout)
 	if err != nil {
 		log.Error(err, "Failed to call evaluator for event evaluation")
 		if err := r.updateStatus(ctx, evaluation, statusError, fmt.Sprintf("Evaluation failed: %v", err)); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
-	}
-
-	// Update evaluation status with response
-	if err := r.updateEvaluationResults(ctx, evaluation, response); err != nil {
-		return ctrl.Result{}, err
 	}
 
 	// Prepare status message
@@ -1054,7 +1050,7 @@ func (r *EvaluationReconciler) processEventEvaluation(ctx context.Context, evalu
 		statusMessage = fmt.Sprintf("%s - failed (score: %s)", statusMessage, response.Score)
 	}
 
-	// Complete evaluation with all results including metadata annotations
+	// Complete evaluation with all results including metadata annotations using atomic update
 	if err := r.updateEvaluationComplete(ctx, evaluation, response, statusMessage); err != nil {
 		return ctrl.Result{}, err
 	}

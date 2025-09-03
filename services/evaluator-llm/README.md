@@ -41,7 +41,7 @@ The service evaluates responses on:
 4. **Clarity** (0-1): Readability and understanding
 5. **Usefulness** (0-1): Practical value to the user
 
-Responses with scores ≥70 are marked as "passed".
+Responses with scores ≥0.7 are marked as "passed".
 ## Notes
 - Requires Python with uv package manager
 - Evaluates responses across multiple quality dimensions

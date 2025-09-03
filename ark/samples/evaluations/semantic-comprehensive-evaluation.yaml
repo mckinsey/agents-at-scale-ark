@@ -1,0 +1,66 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: semantic-comprehensive-evaluator
+  namespace: default
+spec:
+  description: "Comprehensive evaluation using multiple semantic helper expressions"
+  type: event
+  config:
+    rules:
+      # Query Resolution Rules
+      - name: "query_success"
+        expression: "query.was_resolved() and query.get_resolution_status() == 'success'"
+        description: "Query completed successfully"
+        weight: 3
+      
+      - name: "query_performance"
+        expression: "query.get_execution_time() <= 45.0"
+        description: "Query completed within performance threshold"
+        weight: 2
+      
+      # Agent Execution Rules
+      - name: "agent_reliability"
+        expression: "agent.was_executed() and agent.get_success_rate() >= 0.85"
+        description: "Agents executed with high success rate"
+        weight: 2
+      
+      - name: "agent_efficiency"
+        expression: "agent.get_execution_count() <= 3"
+        description: "No excessive agent retries"
+        weight: 1
+      
+      # Tool Usage Rules
+      - name: "tool_utilization"
+        expression: "tool.was_called() and tool.get_call_count() >= 1"
+        description: "Tools were properly utilized"
+        weight: 1
+      
+      - name: "tool_reliability"
+        expression: "tool.get_success_rate() >= 0.8"
+        description: "Tools executed reliably"
+        weight: 2
+      
+      # Sequence Validation Rules
+      - name: "proper_flow"
+        expression: "sequence.was_sequence_completed(['ResolveStart', 'AgentExecutionStart', 'AgentExecutionComplete', 'ResolveComplete'])"
+        description: "Execution followed proper flow"
+        weight: 2
+      
+      # Combined Conditions
+      - name: "overall_success"
+        expression: "query.was_resolved() and agent.get_success_rate() >= 0.8 and tool.get_success_rate() >= 0.8"
+        description: "All components performed successfully"
+        weight: 3
+      
+      # Session-Level Rules (using different scopes)
+      - name: "session_consistency"
+        expression: "query.get_session_query_count(scope='session') >= 1"
+        description: "Session has completed queries"
+        weight: 1
+      
+      # Cross-Query Analysis (for evaluating patterns across queries)
+      - name: "cross_query_tool_usage"
+        expression: "tools.get_unique_tools(scope='all').length >= 2"
+        description: "Multiple different tools used across all queries"
+        weight: 1
