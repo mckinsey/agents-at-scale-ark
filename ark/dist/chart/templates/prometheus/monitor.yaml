@@ -5,7 +5,7 @@ kind: ServiceMonitor
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-    control-plane: ark-controller
+    control-plane: controller-manager
   name: ark-controller-manager-metrics-monitor
   namespace: {{ .Release.Namespace }}
 spec:
