@@ -5,7 +5,6 @@ package v1
 import (
 	"context"
 	"fmt"
-
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -144,10 +143,21 @@ func (v *AgentCustomValidator) validateTool(ctx context.Context, namespace strin
 		}
 	case "custom":
 		return v.validateCustomTool(ctx, namespace, tool, hasName, index)
+	case "agent":
+		return v.validateAgentTool(tool, hasName, index)
 	default:
-		return warnings, fmt.Errorf("tool[%d]: unsupported tool type '%s': supported types are: built-in, custom, mcp", index, tool.Type)
+		return warnings, fmt.Errorf("tool[%d]: unsupported tool type '%s': supported types are: built-in, custom, mcp, agent", index, tool.Type)
 	}
 
+	return warnings, nil
+}
+
+func (v *AgentCustomValidator) validateAgentTool(tool arkv1alpha1.AgentTool, hasName bool, index int) (admission.Warnings, error) {
+	var warnings admission.Warnings
+
+	if !hasName {
+		return warnings, fmt.Errorf("tool[%d]: agent tools must specify a name", index)
+	}
 	return warnings, nil
 }
 

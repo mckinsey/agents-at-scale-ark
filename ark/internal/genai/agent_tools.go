@@ -2,10 +2,11 @@ package genai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
@@ -20,6 +21,7 @@ func NewMCPClientPool() *MCPClientPool {
 		clients: make(map[string]*MCPClient),
 	}
 }
+
 
 // GetOrCreateClient returns an existing MCP client or creates a new one for the given server
 func (p *MCPClientPool) GetOrCreateClient(ctx context.Context, serverName, serverNamespace, serverURL string, headers map[string]string, transport string) (*MCPClient, error) {
@@ -164,8 +166,126 @@ func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client
 		if err := r.registerCustomTool(ctx, k8sClient, agentTool, namespace); err != nil {
 			return err
 		}
+	case AgentToolTypeAgent:
+		if err := r.registerAgentTool(ctx, k8sClient, agentTool, namespace); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("unsupported tool type %s %s", agentTool.Type, agentTool.Name)
 	}
 	return nil
+}
+
+// AgentToolExecutor executes agent tools by calling other agents via MCP
+type AgentToolExecutor struct {
+	AgentName string
+	Namespace string
+	AgentCRD  *arkv1alpha1.Agent
+	k8sClient client.Client
+}
+
+func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall, recorder EventEmitter) (ToolResult, error) {
+    var arguments map[string]any
+    if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
+        log := logf.FromContext(ctx)
+        log.Info("Error parsing tool arguments", "ToolCall", call)
+        arguments = make(map[string]any)
+    }
+
+    input, exists := arguments["input"]
+    if !exists {
+        return ToolResult{
+            ID:    call.ID,
+            Name:  call.Function.Name,
+            Error: "input parameter is required",
+        }, fmt.Errorf("input parameter is required for agent tool %s", a.AgentName)
+    }
+
+    inputStr, ok := input.(string)
+    if !ok {
+        return ToolResult{
+            ID:    call.ID,
+            Name:  call.Function.Name,
+            Error: "input parameter must be a string",
+        }, fmt.Errorf("input parameter must be a string for agent tool %s", a.AgentName)
+    }
+
+    // Log the agent execution
+    log := logf.FromContext(ctx)
+    log.Info("calling agent directly", "agent", a.AgentName, "namespace", a.Namespace, "input", inputStr)
+
+    // Create the Agent object using the Agent CRD and recorder
+    agent, err := MakeAgent(ctx, a.k8sClient, a.AgentCRD, recorder)
+    if err != nil {
+        return ToolResult{
+            ID:    call.ID,
+            Name:  call.Function.Name,
+            Error: fmt.Sprintf("failed to create agent %s: %v", a.AgentName, err),
+        }, err
+    }
+
+    // Prepare user input and history
+    userInput := NewSystemMessage(inputStr)
+    history := []Message{} // Provide history if applicable
+
+    // Call the agent's Execute function
+    responseMessages, err := agent.Execute(ctx, userInput, history)
+    if err != nil {
+        log.Info("agent execution error", "agent", a.AgentName, "error", err)
+        return ToolResult{
+            ID:    call.ID,
+            Name:  call.Function.Name,
+            Error: fmt.Sprintf("failed to execute agent %s: %v", a.AgentName, err),
+        }, err
+    }
+
+		lastMessage := responseMessages[len(responseMessages)-1]
+
+    log.Info("agent direct call response", "agent", a.AgentName, "response", lastMessage.OfAssistant.Content.OfString.Value)
+
+    return ToolResult{
+        ID:      call.ID,
+        Name:    call.Function.Name,
+        Content: lastMessage.OfAssistant.Content.OfString.Value,
+    }, nil
+}
+
+// registerAgentTool registers an agent as a tool
+func (r *ToolRegistry) registerAgentTool(ctx context.Context, k8sClient client.Client, agentTool arkv1alpha1.AgentTool, namespace string) error {
+    if agentTool.Name == "" {
+        return fmt.Errorf("agent name is required for agent tool")
+    }
+
+    // Create tool definition
+
+		tool, err := r.getToolCRD(ctx, k8sClient, agentTool.Name, namespace)
+		if err != nil {
+			return err
+		}
+		toolDef := CreateToolFromCRD(tool)
+		toolName := fmt.Sprintf("call_%s",  tool.Spec.Agent)
+		fmt.Println("Registering agent tool:", tool.Spec.Agent)
+
+    agentCRD := &arkv1alpha1.Agent{}
+    agentKey := types.NamespacedName{Name: tool.Spec.Agent, Namespace: namespace}
+
+    if err := k8sClient.Get(ctx, agentKey, agentCRD); err != nil {
+        return fmt.Errorf("failed to get agent %v: %w", agentKey, err)
+    }
+
+    // Create executor
+    executor := &AgentToolExecutor{
+        AgentName: toolName,
+        Namespace: namespace,
+        AgentCRD:  agentCRD,
+        k8sClient: k8sClient,
+    }
+
+    // Register the tool
+    r.RegisterTool(toolDef, executor)
+
+    log := logf.FromContext(ctx)
+    log.Info("registered agent tool", "toolName", agentTool.Name, "agentName", toolName, "namespace", namespace)
+
+    return nil
 }

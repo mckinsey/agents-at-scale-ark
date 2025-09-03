@@ -37,6 +37,8 @@ spec:
             type: object
           spec:
             properties:
+              agent:
+                type: string
               annotations:
                 description: Optional additional tool information
                 properties:
@@ -178,6 +180,7 @@ spec:
                 enum:
                 - http
                 - mcp
+                - agent
                 type: string
             required:
             - type

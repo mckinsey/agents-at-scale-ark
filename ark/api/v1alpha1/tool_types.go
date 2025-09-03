@@ -56,7 +56,7 @@ type ToolAnnotations struct {
 
 type ToolSpec struct {
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=http;mcp
+	// +kubebuilder:validation:Enum=http;mcp;agent
 	Type string `json:"type"`
 	// Tool description
 	Description string `json:"description,omitempty"`
@@ -69,6 +69,8 @@ type ToolSpec struct {
 	// MCP-specific configuration for MCP server tools
 	// +kubebuilder:validation:Optional
 	MCP *MCPToolRef `json:"mcp,omitempty"`
+
+	Agent string `json:"agent,omitempty"`
 }
 
 type HTTPSpec struct {

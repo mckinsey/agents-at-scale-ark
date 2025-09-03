@@ -131,6 +131,26 @@ spec:
     toolName: read_file
 ```
 
+### Agent as Tools  
+Agents declared as tools
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: call-research-agent
+spec:
+  type: agent
+  inputSchema:
+    type: object
+    properties:
+      input:
+        type: string
+        description: "The research query or topic that the agent should investigate and provide insights on."
+    required: ["input"]
+  agent: research-agent
+```
+
 ## Agent Tool Reference Types
 
 ### Custom Tools
@@ -155,3 +175,11 @@ tools:
     name: noop      # No-operation (testing/debugging)
 ```
 
+### Agent as  Tools
+Agent used as tools:
+
+```yaml
+tools:
+  - type: agent
+    name: call-research-agent
+```

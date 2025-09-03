@@ -46,7 +46,7 @@ type ToolResult struct {
 }
 
 type ToolExecutor interface {
-	Execute(ctx context.Context, call ToolCall) (ToolResult, error)
+	Execute(ctx context.Context, call ToolCall, recorder EventEmitter) (ToolResult, error)
 }
 
 type TerminateTeam struct{}
