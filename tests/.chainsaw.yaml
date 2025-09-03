@@ -10,6 +10,7 @@ spec:
   reportFormat: JSON                     # Output test reports in JSON format
   reportName: /tmp/chainsaw-report/chainsaw-report.json  # Path where the test report will be saved
   delayBeforeCleanup: 10s  # Add delay before cleanup starts
+  namespace: default         # Namespace to run the tests in for evaluator-llm to access resources
   timeouts:
     apply: 45s                           # Timeout for 'apply' operations (e.g., applying manifests)
     assert: 180s                         # Timeout for assertion checks (high value for LLM calls)
