@@ -5,6 +5,7 @@ package v1
 import (
 	"context"
 	"fmt"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -152,7 +153,7 @@ func (v *AgentCustomValidator) validateTool(ctx context.Context, namespace strin
 	return warnings, nil
 }
 
-func (v *AgentCustomValidator) validateAgentTool(hasName bool, index int) (admission.Warnings, error) { 
+func (v *AgentCustomValidator) validateAgentTool(hasName bool, index int) (admission.Warnings, error) {
 	var warnings admission.Warnings
 
 	if !hasName {

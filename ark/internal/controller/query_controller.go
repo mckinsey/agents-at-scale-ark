@@ -703,7 +703,7 @@ func (r *QueryReconciler) executeTool(ctx context.Context, query arkv1alpha1.Que
 	toolRegistry.RegisterTool(toolDefinition, executor)
 
 	// Execute the tool using the same ExecuteTool method agents use
-	result, err := toolRegistry.ExecuteTool(ctx, toolCall, tokenCollector )
+	result, err := toolRegistry.ExecuteTool(ctx, toolCall, tokenCollector)
 	if err != nil {
 		return nil, fmt.Errorf("tool execution failed: %w", err)
 	}
