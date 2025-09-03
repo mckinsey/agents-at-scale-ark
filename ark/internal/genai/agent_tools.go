@@ -38,6 +38,20 @@ func (p *MCPClientPool) GetOrCreateClient(ctx context.Context, serverName, serve
 	return mcpClient, nil
 }
 
+// Close closes all MCP client connections in the pool
+func (p *MCPClientPool) Close() error {
+	var lastErr error
+	for key, mcpClient := range p.clients {
+		if mcpClient != nil && mcpClient.client != nil {
+			if err := mcpClient.client.Close(); err != nil {
+				lastErr = fmt.Errorf("failed to close MCP client %s: %w", key, err)
+			}
+		}
+		delete(p.clients, key)
+	}
+	return lastErr
+}
+
 func (r *ToolRegistry) registerTools(ctx context.Context, k8sClient client.Client, agent *arkv1alpha1.Agent) error {
 	for _, agentTool := range agent.Spec.Tools {
 		if err := r.registerTool(ctx, k8sClient, agentTool, agent.Namespace); err != nil {
@@ -73,7 +87,7 @@ func (r *ToolRegistry) registerCustomTool(ctx context.Context, k8sClient client.
 	return nil
 }
 
-func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string) (ToolExecutor, error) {
+func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *MCPClientPool) (ToolExecutor, error) {
 	switch tool.Spec.Type {
 	case ToolTypeHTTP:
 		if tool.Spec.HTTP == nil {
@@ -117,9 +131,17 @@ func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv
 			headers[header.Name] = value
 		}
 
-		mcpClient, err := NewMCPClient(ctx, mcpURL, headers, mcpServerCRD.Spec.Transport)
+		// Use the MCP client pool to get or create the client
+		mcpClient, err := mcpPool.GetOrCreateClient(
+			ctx,
+			tool.Spec.MCP.MCPServerRef.Name,
+			mcpServerNamespace,
+			mcpURL,
+			headers,
+			mcpServerCRD.Spec.Transport,
+		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create MCP client for tool %s: %w", tool.Name, err)
+			return nil, fmt.Errorf("failed to get or create MCP client for tool %s: %w", tool.Name, err)
 		}
 
 		return &MCPExecutor{
@@ -133,7 +155,7 @@ func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv
 
 func (r *ToolRegistry) registerSingleCustomTool(ctx context.Context, k8sClient client.Client, tool arkv1alpha1.Tool, namespace string, functions []arkv1alpha1.ToolFunction) error {
 	toolDef := CreateToolFromCRD(&tool)
-	executor, err := CreateToolExecutor(ctx, k8sClient, &tool, namespace)
+	executor, err := CreateToolExecutor(ctx, k8sClient, &tool, namespace, r.mcpPool)
 	if err != nil {
 		return err
 	}

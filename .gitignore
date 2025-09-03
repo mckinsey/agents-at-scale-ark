@@ -149,3 +149,4 @@ node_modules/
 
 # Local documentation files
 *.local.md
+.devspace/
