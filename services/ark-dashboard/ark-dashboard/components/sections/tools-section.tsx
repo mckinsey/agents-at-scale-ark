@@ -316,6 +316,7 @@ export const ToolsSection = forwardRef<
         open={toolEditorOpen}
         onOpenChange={setToolEditorOpen}
         onSave={handleSaveTool}
+        namespace={namespace}
       />
     </>
   );
