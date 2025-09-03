@@ -18,4 +18,4 @@ spec:
     error: 60s                           # Increased timeout for error handling
     exec: 90s                            # Increased timeout for command execution (some tests run long scripts)
   failFast: false                        # If false, Chainsaw will continue running tests even after failures
-  parallel: 2                            # Reduced parallelism to minimize concurrency issues
+  parallel: 6                            # augment parallelism

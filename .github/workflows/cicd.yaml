@@ -319,7 +319,7 @@ jobs:
           fark agent sample-agent "confirm you have read this message"
 
   e2e-smoke-test:
-    needs: [build-containers, e2e-quickstart]
+    needs: [build-containers]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -446,7 +446,7 @@ jobs:
 
 
   e2e-tests-standard:
-    needs: [build-containers, e2e-smoke-test]
+    needs: [build-containers]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -484,7 +484,7 @@ jobs:
           artifact-name: coverage-reports-standard
 
   e2e-tests-evaluated:
-    needs: [build-containers, e2e-tests-standard]
+    needs: [build-containers, e2e-tests-standard, e2e-smoke-test, e2e-quickstart]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
