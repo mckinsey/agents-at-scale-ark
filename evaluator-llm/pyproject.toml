@@ -1,0 +1,105 @@
+[project]
+name = "evaluator-llm"
+version = "0.1.0"
+description = "LLM Evaluator for Ark - AI-powered query evaluation service"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "gunicorn>=21.2.0",
+    "pydantic>=2.5.0",
+    "aiohttp>=3.9.0",
+    "kubernetes>=30.1.0",
+    "ark-sdk",
+]
+
+[tool.uv]
+package = true
+
+[tool.uv.sources]
+ark-sdk = { path = "ark_sdk-0.1.25-py3-none-any.whl" }
+
+# ark-sdk dependency is managed by the build system
+# uv add $(ARK_SDK_WHL) is called in build.mk
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+    "anyio>=3.0.0",
+    "pytest-tornasync>=0.6.0",
+    "pytest-trio>=0.7.0",
+    "pytest-twisted>=1.13.0",
+]
+
+[project.scripts]
+evaluator-llm = "evaluator_llm.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/evaluator_llm"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+    "--disable-warnings"
+]
+markers = [
+    "asyncio: marks tests as async (pytest-asyncio)",
+    "unit: marks tests as unit tests",
+    "integration: marks tests as integration tests",
+    "slow: marks tests that take a long time to run",
+    "kubernetes: marks tests that require kubernetes",
+    "llm: marks tests that involve LLM calls",
+]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["*/tests/*", "*/test_*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
+    "pytest-asyncio>=0.21.0",
+    "anyio>=3.0.0",
+    "pytest-tornasync>=0.6.0",
+    "tornado>=6.0.0",
+    "pytest-trio>=0.7.0",
+    "trio>=0.20.0",
+    "pytest-twisted>=1.13.0",
+    "twisted>=22.0.0",
+]

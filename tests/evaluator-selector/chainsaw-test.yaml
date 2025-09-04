@@ -1,0 +1,124 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: evaluator-selector
+  labels:
+    evaluated: "true"
+spec:
+  description: Test evaluator selector functionality for automatic query evaluation
+  steps:
+    - name: setup-resources
+      description: Create RBAC, secret, model, and evaluator
+      try:
+        - script:
+            skipLogOutput: true
+            content: |
+              set -u
+              echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+            outputs:
+            - name: azure
+              value: (json_parse($stdout))      
+        - apply:
+            file: manifests/a00-rbac.yaml
+        - apply:
+            file: manifests/a00-evaluator-llm-rbac.yaml
+        - apply:
+            file: manifests/a01-secret.yaml
+        - apply:
+            file: manifests/a02-model.yaml
+        - apply:
+            file: manifests/a03-evaluator-with-selector.yaml
+            timeout: 30s
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Model
+              metadata:
+                name: selector-model
+              status:
+                phase: ready
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Evaluator
+              metadata:
+                name: production-evaluator
+              status:
+                phase: ready
+
+    - name: test-matching-query
+      description: Create query that matches evaluator selector
+      try:
+        - apply:
+            file: manifests/a04-query-matching.yaml
+            timeout: 60s
+        # Wait for automatic evaluation to be created
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Evaluation
+              metadata:
+                name: production-evaluator-matching-query-eval
+                labels:
+                  ark.mckinsey.com/auto: "true"
+            timeout: 30s
+
+    - name: test-non-matching-query
+      description: Create query that doesn't match evaluator selector
+      try:
+        - apply:
+            file: manifests/a05-query-non-matching.yaml
+        - assert:
+            file: manifests/a05-query-non-matching.yaml
+            timeout: 30s
+        # Verify no automatic evaluation is created
+        - error:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Evaluation
+              metadata:
+                name: production-evaluator-non-matching-query-eval
+            timeout: 15s
+
+    - name: test-manual-evaluation-override
+      description: Create manual evaluation with parameter overrides
+      try:
+        - apply:
+            file: manifests/a06-manual-evaluation-override.yaml
+        - assert:
+            file: manifests/a06-manual-evaluation-override.yaml
+            timeout: 60s
+
+    - name: verify-evaluations
+      description: Verify all evaluations have expected parameters and status
+      try:
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Evaluation
+              metadata:
+                name: production-evaluator-matching-query-eval
+              status:
+                phase: done
+            timeout: 180s
+
+        - wait:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Evaluation
+            name: manual-override-evaluation
+            timeout: 10m
+            for:
+              jsonPath:
+                path: '{.status.phase}'
+                value: 'done'
+
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Evaluation
+              metadata:
+                name: manual-override-evaluation
+                namespace: ($namespace)
+              status:
+                phase: done
+            timeout: 180s

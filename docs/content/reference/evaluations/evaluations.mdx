@@ -1,0 +1,522 @@
+# Evaluation Guide
+
+Evaluations provide AI-powered assessment of query responses and agent performance within the Agents at Scale platform. They support both automated evaluation integration with queries and standalone evaluation scenarios for testing and quality assurance.
+
+Evaluations use the Ark default service that provides an LLM-as-a-Judge to assess response quality across multiple criteria including relevance, accuracy, completeness, clarity, and usefulness. They support different evaluation modes and can work with golden datasets for reference-based assessment.
+
+## Prerequisites
+
+Before using evaluations, ensure you have:
+
+1. **Evaluator Service**: Deploy the `evaluator-llm` service
+   ```bash
+   helm install evaluator-llm ./services/evaluator-llm/chart
+   ```
+
+2. **Default Model**: Create a default model for the evaluator to use
+   ```yaml
+   apiVersion: ark.mckinsey.com/v1alpha1
+   kind: Model
+   metadata:
+     name: default
+   spec:
+     type: azure
+     model:
+       value: gpt-4.1-mini
+     config:
+       azure:
+         baseUrl:
+           value: "https://your-azure-endpoint.openai.azure.com"
+         apiKey:
+           valueFrom:
+             secretKeyRef:
+               name: azure-openai-secret
+               key: token
+         apiVersion:
+           value: "2024-12-01-preview"
+   ```
+
+3. **Evaluator Resource**: Create an evaluator that references the service
+   ```yaml
+   apiVersion: ark.mckinsey.com/v1alpha1
+   kind: Evaluator
+   metadata:
+     name: evaluator-llm
+   spec:
+    description: "LLM-based evaluator service for automated evaluation"
+    address:
+      valueFrom: # use valueFrom when the execution service is in the same namespace 
+        serviceRef:
+          name: evaluator-llm
+          port: "http"
+          path: "/evaluate"
+    modelRef:
+      name: default
+   ```
+
+## Evaluation Resource
+
+The Evaluation resource allows standalone assessment of responses and datasets independent of queries. It supports three modes: direct, dataset, and query evaluation.
+
+### Direct Evaluation
+
+Direct evaluation assesses a single input-output pair that you provide explicitly:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: direct-eval-example
+spec:
+  mode: direct
+  evaluator:
+    name: evaluator-llm
+    parameters:
+      - name: scope
+        value: "accuracy,clarity"
+      - name: min-score
+        value: "0.7"
+  input: "What is the capital of France?"
+  output: "Paris"
+```
+
+### Query Evaluation
+
+Query evaluation assesses responses from an existing completed query:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: query-eval-example
+spec:
+  mode: query
+  evaluator:
+    name: evaluator-llm
+    parameters:
+      - name: scope
+        value: "relevance,accuracy"
+      - name: min-score
+        value: "0.75"
+  queryRef:
+    name: completed-research-query
+    responseIndex: 0  # Evaluate first response (optional)
+```
+
+### Query-Driven Evaluation (Deprecated)
+
+Query-driven evaluation is triggered automatically when a query references an evaluator. This happens after the query completes:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: auto-evaluated-query
+spec:
+  input: "Analyze renewable energy trends"
+  targets:
+    - type: agent
+      name: research-agent
+  evaluator:
+    name: evaluator-llm  # Triggers automatic evaluation after query completion
+```
+
+### Selector-Based Evaluation (Automatic)
+
+Evaluators can automatically evaluate queries based on label selectors. When a query with matching labels reaches "done" status, the evaluator creates an evaluation:
+
+```yaml
+# Evaluator with selector configuration
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: production-evaluator
+spec:
+  description: "Evaluates production queries for quality assurance"
+  address:
+    valueFrom:
+      serviceRef:
+        name: evaluator-llm
+        port: "http"
+        path: "/evaluate"
+  selector:
+    resourceType: "Query"
+    apiGroup: "ark.mckinsey.com"
+    matchLabels:
+      environment: "production"
+      model: "gpt-4"
+    matchExpressions:
+      - key: evaluation_required
+        operator: In
+        values: ["true"]
+  parameters:
+    - name: scope
+      value: "accuracy,clarity,usefulness"
+    - name: min-score
+      value: "0.8"
+
+---
+# Query that will be automatically evaluated
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: production-query
+  labels:
+    environment: "production"
+    model: "gpt-4"
+    evaluation_required: "true"
+spec:
+  input: "Analyze market trends for renewable energy"
+  targets:
+    - type: agent
+      name: research-agent
+```
+
+When the query completes (status: "done"), the evaluator automatically creates an evaluation named `production-evaluator-production-query-eval`.
+
+### Parameter Override in Manual Evaluations
+
+When creating manual evaluations, you can override default evaluator parameters:
+
+```yaml
+# Evaluator with default parameters
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: evaluator-with-defaults
+spec:
+  description: "Evaluator with default parameters"
+  address:
+    valueFrom:
+      serviceRef:
+        name: evaluator-llm
+        port: "http"
+        path: "/evaluate"
+  parameters:
+    - name: max-tokens
+      value: "1000"
+    - name: duration
+      value: "2m"
+    - name: scope
+      value: "accuracy,clarity"
+
+---
+# Manual evaluation that overrides some parameters
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: manual-eval-with-overrides
+spec:
+  mode: query
+  evaluator:
+    name: evaluator-with-defaults
+    parameters:
+      - name: max-tokens
+        value: "5000"        # Overrides evaluator's 1000
+      - name: temperature
+        value: "0.1"         # New parameter not in evaluator
+      # duration: "2m" and scope: "accuracy,clarity" inherited from evaluator
+  queryRef:
+    name: completed-query
+    responseIndex: 0
+```
+
+**Result**: The evaluation uses:
+- `max-tokens: "5000"` (overridden from evaluation)
+- `temperature: "0.1"` (new from evaluation) 
+- `duration: "2m"` (inherited from evaluator)
+- `scope: "accuracy,clarity"` (inherited from evaluator)
+
+## Golden Datasets (ConfigMap Example)
+
+Golden datasets provide reference examples for evaluation. They contain test cases with expected inputs and outputs:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: golden-examples
+data:
+  examples: |
+    [
+      {
+        "input": "What is 7 + 3?",
+        "expectedOutput": "10",
+        "expectedMinScore": "0.9",
+        "difficulty": "easy",
+        "category": "arithmetic",
+        "metadata": {
+          "type": "basic-addition",
+          "concept": "addition"
+        }
+      },
+      {
+        "input": "What is 6 × 4?",
+        "expectedOutput": "24",
+        "expectedMinScore": "0.85",
+        "difficulty": "easy",
+        "category": "arithmetic",
+        "metadata": {
+          "type": "multiplication",
+          "concept": "multiplication"
+        }
+      },
+      {
+        "input": "If I buy 8 items at $3 each, how much do I spend?",
+        "expectedOutput": "$24",
+        "expectedMinScore": "0.8",
+        "difficulty": "medium",
+        "category": "word-problem",
+        "metadata": {
+          "type": "word-problem",
+          "concept": "multiplication",
+          "context": "shopping"
+        }
+      },
+      {
+        "input": "What is 1/2 + 1/4?",
+        "expectedOutput": "3/4",
+        "expectedMinScore": "0.75",
+        "difficulty": "hard",
+        "category": "fractions",
+        "metadata": {
+          "type": "fraction-addition",
+          "concept": "fractions"
+        }
+      }
+    ]
+```
+
+## Evaluation Parameters
+
+Evaluations support configurable parameters to customize assessment behavior:
+
+### Scope Parameter
+
+Controls which criteria are evaluated:
+
+```yaml
+parameters:
+  - name: scope
+    value: "accuracy,clarity,usefulness"  # Specific criteria
+  # OR
+  - name: scope
+    value: "all"  # All criteria (default)
+```
+
+Available criteria:
+- **relevance**: How well responses address the query
+- **accuracy**: Factual correctness and reliability  
+- **completeness**: Comprehensiveness of information
+- **conciseness**: Brevity and focus of responses
+- **clarity**: Readability and understanding
+- **usefulness**: Practical value to the user
+
+### Score Threshold
+
+Set minimum passing score (0.0-1.0):
+
+```yaml
+parameters:
+  - name: min-score
+    value: "0.7"  # 70% threshold (default)
+```
+
+### Temperature Control
+
+Control LLM evaluation consistency:
+
+```yaml
+parameters:
+  - name: temperature
+    value: "0.1"  # Low temperature for consistent evaluation
+```
+
+### Max Token Control
+
+Control LLM evaluation token size:
+
+```yaml
+parameters:
+  - name: max-tokens
+    value: "1000"
+```
+
+## Evaluation Flows
+
+### Direct Evaluation Flow
+1. **Submission**: Direct evaluation created with explicit input/output pair
+2. **Processing**: Evaluator analyzes response using LLM-as-a-Judge
+3. **Scoring**: Response scored against specified criteria
+4. **Completion**: Evaluation marked as "done" with results
+
+### Baseline Evaluation Flow
+1. **Dataset Loading**: Golden dataset test cases loaded
+2. **Batch Processing**: Each test case evaluated individually
+3. **Aggregation**: Results aggregated with overall statistics
+4. **Reporting**: Average scores and pass/fail counts reported
+
+### Query Evaluation Flow (Standalone)
+1. **Query Reference**: Evaluation references an existing completed query
+2. **Response Extraction**: Target response(s) extracted from query
+3. **Assessment**: Evaluator analyzes extracted responses
+4. **Scoring**: Response scored against specified criteria
+5. **Completion**: Evaluation marked as "done" with results
+
+### Query-Driven Evaluation Flow (Automatic)
+1. **Query Execution**: Query runs normally and generates responses
+2. **Evaluation Phase**: Query status transitions to "evaluating"
+3. **AI Assessment**: Evaluator automatically analyzes all responses
+4. **Quality Scoring**: Overall assessment provided
+5. **Completion**: Query marked as "done" after evaluation
+
+## Monitoring Evaluations
+
+### Check Evaluation Status
+
+```bash
+# View all evaluations
+kubectl get evaluations
+
+# Get detailed status
+kubectl get evaluation direct-math-eval -o yaml
+
+# Watch evaluation progress
+kubectl get evaluation dataset-math-eval -w
+```
+
+### View Evaluation Results
+
+```bash
+# Check evaluation logs
+kubectl logs -l app=evaluator-llm --tail=50
+
+# View evaluation details
+kubectl describe evaluation direct-math-eval
+```
+
+### Evaluation Status Fields
+
+Evaluations provide detailed status information:
+
+- **Phase**: `pending`, `running`, `done`, `error`
+- **Score**: Overall evaluation score (0.0-1.0)
+- **Passed**: Whether evaluation passed threshold
+- **Results**: Detailed criteria scores and reasoning
+
+## Advanced Configuration
+
+### Custom Evaluation Parameters
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: advanced-eval
+spec:
+  mode: direct
+  evaluator:
+    name: evaluator-llm
+    parameters:
+      - name: scope
+        value: "relevance,accuracy,usefulness"
+      - name: min-score
+        value: "0.85"
+      - name: temperature
+        value: "0.2"
+      - name: max-tokens
+        value: "1000"
+  input: "Explain quantum computing"
+  output: "Quantum computing uses quantum mechanical phenomena..."
+```
+
+### Environment-Specific Evaluations
+
+Use different evaluators for different environments:
+
+```yaml
+# Production evaluator with strict criteria
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: prod-evaluation
+spec:
+  mode: direct  # Direct evaluation in production
+  evaluator:
+    name: evaluator-llm-prod
+    parameters:
+      - name: scope
+        value: "all"
+      - name: min-score
+        value: "0.9"
+  input: "User query"
+  output: "Agent response"
+
+---
+# Development evaluator with relaxed criteria
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: dev-evaluation
+spec:
+  mode: direct  # Direct evaluation in development
+  evaluator:
+    name: evaluator-llm-dev
+    parameters:
+      - name: scope
+        value: "accuracy,clarity"
+      - name: min-score
+        value: "0.6"
+  input: "User query"
+  output: "Agent response"
+```
+
+## Best Practices
+
+### Evaluation Design
+- **Use appropriate scope** - Focus on relevant criteria for your use case
+- **Set realistic thresholds** - Balance quality requirements with practical constraints
+- **Leverage golden datasets** - Provide reference examples for consistent evaluation
+- **Test iteratively** - Start with manual evaluations before scaling to datasets
+
+### Performance Optimization
+- **Use low temperature** - Ensure consistent evaluation results (0.0-0.2)
+- **Batch dataset evaluations** - More efficient than individual evaluations
+- **Monitor evaluation costs** - LLM-as-a-Judge uses model tokens for assessment
+- **Cache evaluation results** - Avoid re-evaluating identical inputs
+
+### Quality Assurance
+- **Validate golden datasets** - Ensure reference examples are accurate and representative
+- **Review evaluation criteria** - Align scope with actual quality requirements
+- **Monitor evaluation trends** - Track scores over time to identify patterns
+- **Human validation** - Spot-check LLM evaluations with human review
+
+## Troubleshooting
+
+### Common Issues
+
+**Evaluation stuck in pending**:
+- Check evaluator service health: `kubectl get pods -l app=evaluator-llm`
+- Verify evaluator resource exists: `kubectl get evaluator evaluator-llm`
+- Check service logs: `kubectl logs -l app=evaluator-llm`
+
+**Low evaluation scores**:
+- Review evaluation criteria scope
+- Check golden dataset quality
+- Adjust min-score threshold
+- Validate agent responses
+
+### Service Health Checks
+
+```bash
+# Check evaluator service
+kubectl get service evaluator-llm
+kubectl get endpoints evaluator-llm
+
+# Test evaluator endpoint
+kubectl port-forward service/evaluator-llm 8080:8000
+curl http://localhost:8080/health
+
+# Verify evaluator resource
+kubectl get evaluator evaluator-llm -o yaml
+```

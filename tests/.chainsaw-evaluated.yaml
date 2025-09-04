@@ -1,0 +1,18 @@
+# Special configuration for evaluated tests that require more time and resources
+apiVersion: chainsaw.kyverno.io/v1alpha1  
+kind: Configuration                      
+metadata:
+  name: evaluated-test-config         
+spec:
+  reportFormat: JSON                     
+  reportName: /tmp/chainsaw-report/chainsaw-report.json
+  delayBeforeCleanup: 20s                # Extra delay for LLM-based tests
+  timeouts:
+    apply: 360s                           # Longer timeout for resource creation
+    assert: 360s                         # 6 minutes for LLM assertions
+    cleanup: 360s                         # Longer cleanup for complex resources
+    delete: 360s                          # Longer delete timeout
+    error: 360s                           # Longer error handling
+    exec: 360s                           # 2 minutes for scripts with LLM calls
+  failFast: false                        
+  parallel: 1                            # Run evaluated tests sequentially to avoid resource contention

@@ -3,37 +3,40 @@ version: v2beta1
 
 # Hooks for pre-build setup
 hooks:
-  - command: bash -c "make ark-sdk-build && mkdir -p services/ark-api/ark-api/wheels && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/wheels/"
-    events: ["before:build:ark-api"]
+  - command: ./services/ark-api/ark-api/scripts/ensure-ark-sdk-wheel.sh
+    events: ["before:dev"]
 
 # Deployment pipelines define the workflow for different commands
 pipelines:
-  # 'devspace deploy' - Build and deploy without development features
+  # 'devspace deploy' - Build and deploy production images
   deploy: |-
     build_images --all
     create_deployments --all
 
-  # 'devspace dev' - Full development workflow with hot reload
+  # 'devspace dev' - DevSpace recommended dev workflow: deploy production, override with dev images, file sync  
   dev: |-
-    build_images --all
     create_deployments --all
     start_dev --all
 
-# Image build configuration
+# Image build configuration  
 images:
-  # ARK API service
   ark-api:
     image: ark-api
     dockerfile: ./services/ark-api/Dockerfile
     context: ./services/ark-api
-    target: dev
+    target: production
 
-  # ARK Dashboard service
   ark-dashboard:
-    image: ark-dashboard
+    image: ark-dashboard  
     dockerfile: ./services/ark-dashboard/Dockerfile
     context: ./services/ark-dashboard
-    target: dev
+    target: production
+
+  ark-controller:
+    image: controller
+    dockerfile: ./ark/Dockerfile
+    context: ./ark
+    target: production
 
 # Kubernetes deployments
 deployments:
@@ -75,43 +78,91 @@ deployments:
               memory: "256Mi"
               cpu: "200m"
 
+  ark-controller:
+    namespace: ark-system
+    helm:
+      chart:
+        path: ./ark/dist/chart
+      values:
+        controllerManager:
+          container:
+            image:
+              repository: ${runtime.images.ark-controller.image}
+              tag: ${runtime.images.ark-controller.tag}
+            # Override resources for in-cluster local development - controller with live reload needs more memory and CPU than production
+            resources:
+              limits:
+                memory: "2048Mi"
+                cpu: "2000m"
+              requests:
+                memory: "256Mi"
+                cpu: "200m"
+          # Override security context for development - allow root for dev images
+          securityContext:
+            runAsNonRoot: false
+
 # Development configuration - active during 'devspace dev'
 dev:
   ark-api:
     imageSelector: ark-api
+    devImage: python:3.12-slim
+    # Install dependencies and start API server with hot reload
+    command: ["sh", "-c", "cd /app && apt-get update && apt-get install -y curl && curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash && pip install uv && uv add file://$(ls wheels/ark_sdk-*.whl) && uv sync && uv run uvicorn ark_api.main:app --host 0.0.0.0 --port 8000 --reload"]
     namespace: default
-    # Uncomment to forward ports to local host
-    # ports:
-    #   - port: 8000:8000  # FastAPI server
+    # Stream logs instead of terminal
+    logs:
+      lastLines: 50
+    # File synchronization for hot reload - pyproject.toml excluded from back-sync after uv add modifies it
+    sync:
+      - path: ./services/ark-api/ark-api:/app
+        startContainer: true
+        disableDownload: true
+        excludePaths:
+          - .venv
+          - __pycache__/
+          - "*.pyc"
+      - path: ./ark:/workspace
+        excludePaths:
+          - bin/
+          - out/
+          - .git/
+    # Enable SSH for IDE integration
+    ssh:
+      enabled: true
+
+  ark-controller:
+    imageSelector: controller
+    devImage: golang:1.24-bookworm
+    command: ["sh", "-c", "cd /workspace && go run cmd/main.go --leader-elect=false"]
+    namespace: ark-system
     # Stream logs instead of terminal
     logs:
       lastLines: 50
     # File synchronization for hot reload
     sync:
-      - path: ./services/ark-api/ark-api:/app
+      - path: ./ark:/workspace
+        startContainer: true
         excludePaths:
-          # Exclude dependency files - pyproject.toml is patched at build time with wheel dependencies
-          # This is a temporary workaround until we publish our package to PyPI
-          - pyproject.toml
-          - uv.lock
-          # Don't synchronise virtual environment
-          - .venv
+          - bin/
+          - out/
+          - .git/
+          - "*.log"
     # Enable SSH for IDE integration
     ssh:
       enabled: true
 
   ark-dashboard:
     imageSelector: ark-dashboard
+    devImage: node:24-alpine
+    command: ["sh", "-c", "cd /app && npm install -g pnpm && pnpm install && pnpm run dev"]
     namespace: default
-    # Uncomment to forward ports to local host
-    # ports:
-    #   - port: 3000:3000  # Next.js dev server
     # Stream logs instead of terminal
     logs:
       lastLines: 50
     # File synchronization for hot reload
     sync:
       - path: ./services/ark-dashboard/ark-dashboard:/app
+        startContainer: true
         excludePaths:
           - node_modules/
           - .next/

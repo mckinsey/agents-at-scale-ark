@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: test-event-agent
+spec:
+  description: Simple agent for generating events during evaluation test
+  prompt: |
+    You are a test agent. Respond briefly to any question.
+  modelRef:
+    name: test-event-model
