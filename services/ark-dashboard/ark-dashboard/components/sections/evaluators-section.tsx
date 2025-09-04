@@ -6,7 +6,9 @@ import { toast } from "@/components/ui/use-toast"
 import { EvaluatorEditor } from "@/components/editors"
 import { evaluatorsService, type Evaluator, type EvaluatorCreateRequest, type EvaluatorUpdateRequest } from "@/lib/services"
 import { EvaluatorCard } from "@/components/cards"
+import { EvaluatorRow } from "@/components/rows/evaluator-row"
 import { useDelayedLoading } from "@/lib/hooks"
+import { ToggleSwitch, type ToggleOption } from "@/components/ui/toggle-switch"
 
 interface EvaluatorsSectionProps {
   namespace: string
@@ -16,7 +18,13 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }, Evalu
   const [evaluators, setEvaluators] = useState<Evaluator[]>([])
   const [evaluatorEditorOpen, setEvaluatorEditorOpen] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [showCompactView, setShowCompactView] = useState(false)
   const showLoading = useDelayedLoading(loading)
+
+  const viewOptions: ToggleOption[] = [
+    { id: "compact", label: "compact view", active: !showCompactView },
+    { id: "card", label: "card view", active: showCompactView }
+  ]
 
   useImperativeHandle(ref, () => ({
     openAddEditor: () => setEvaluatorEditorOpen(true)
@@ -106,18 +114,41 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }, Evalu
   return (
     <>
       <div className="flex h-full flex-col">
-        <main className="flex-1 overflow-auto p-6">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pb-6">
-            {evaluators.map((evaluator) => (
-              <EvaluatorCard 
-                key={evaluator.name} 
-                evaluator={evaluator} 
-                onUpdate={handleSaveEvaluator}
-                onDelete={handleDeleteEvaluator}
-                namespace={namespace}
-              />
-            ))}
-          </div>
+        <div className="flex items-center justify-end px-6 py-3">
+          <ToggleSwitch
+            options={viewOptions}
+            onChange={(id) => setShowCompactView(id === "card")}
+          />
+        </div>
+
+        <main className="flex-1 overflow-auto px-6 py-0">
+          {showCompactView && (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pb-6">
+              {evaluators.map((evaluator) => (
+                <EvaluatorCard 
+                  key={evaluator.name} 
+                  evaluator={evaluator} 
+                  onUpdate={handleSaveEvaluator}
+                  onDelete={handleDeleteEvaluator}
+                  namespace={namespace}
+                />
+              ))}
+            </div>
+          )}
+
+          {!showCompactView && (
+            <div className="flex flex-col gap-3 pb-6">
+              {evaluators.map((evaluator) => (
+                <EvaluatorRow
+                  key={evaluator.name}
+                  evaluator={evaluator}
+                  onUpdate={handleSaveEvaluator}
+                  onDelete={handleDeleteEvaluator}
+                  namespace={namespace}
+                />
+              ))}
+            </div>
+          )}
         </main>
       </div>
       

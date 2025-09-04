@@ -21,6 +21,7 @@ import { toast } from "@/components/ui/use-toast"
 import { evaluationsService } from "@/lib/services/evaluations"
 import { useDelayedLoading } from "@/lib/hooks/use-delayed-loading"
 import { EnhancedEvaluationDetailView } from "./enhanced-evaluation-detail-view"
+import { EventMetricsDisplay } from "./event-metrics-display"
 import type { components } from "@/lib/api/generated/types"
 
 type EvaluationDetailResponse = components["schemas"]["EvaluationDetailResponse"]
@@ -199,7 +200,16 @@ export function EvaluationDetailView({ evaluationId, namespace, enhanced = false
   Object.entries(annotations).forEach(([key, value]) => {
     if (key.startsWith('evaluation.metadata/')) {
       const metadataKey = key.replace('evaluation.metadata/', '')
-      metadata[metadataKey] = value
+      // Parse JSON strings if needed
+      if (typeof value === 'string' && (value.startsWith('[') || value.startsWith('{'))) {
+        try {
+          metadata[metadataKey] = JSON.parse(value)
+        } catch {
+          metadata[metadataKey] = value
+        }
+      } else {
+        metadata[metadataKey] = value
+      }
     }
   })
 
@@ -209,6 +219,20 @@ export function EvaluationDetailView({ evaluationId, namespace, enhanced = false
   const message = status?.message as string | undefined
   const hasMetadata = metadata && typeof metadata === 'object' && Object.keys(metadata).length > 0
   const reasoning = metadata?.reasoning as string | undefined
+  
+  // Check if this is an event evaluation
+  const evaluationType = spec?.type as string || "unknown"
+  const isEventEvaluation = evaluationType === "event" || 
+    metadata?.rule_results || 
+    metadata?.total_rules !== undefined ||
+    metadata?.events_analyzed !== undefined
+  
+  // Debug logging for development
+  if (process.env.NODE_ENV === 'development') {
+    console.log('EvaluationDetailView - metadata:', metadata)
+    console.log('EvaluationDetailView - rule_results type:', typeof metadata?.rule_results)
+    console.log('EvaluationDetailView - rule_results value:', metadata?.rule_results)
+  }
 
   return (
     <div className="space-y-6">
@@ -335,8 +359,63 @@ export function EvaluationDetailView({ evaluationId, namespace, enhanced = false
         </Card>
       </div>
 
-      {/* Metrics Card */}
-      {hasMetadata && (
+      {/* Metrics Display - Use EventMetricsDisplay for event evaluations */}
+      {isEventEvaluation && hasMetadata ? (
+        <EventMetricsDisplay 
+          eventMetadata={{
+            total_rules: metadata.total_rules as number | undefined,
+            passed_rules: metadata.passed_rules as number | undefined,
+            failed_rules: metadata.failed_rules as number | undefined,
+            rule_results: (() => {
+              // First try to get structured rule_results
+              const rules = metadata.rule_results;
+              if (Array.isArray(rules)) {
+                return rules;
+              }
+              if (typeof rules === 'string') {
+                try {
+                  const parsed = JSON.parse(rules);
+                  if (Array.isArray(parsed)) return parsed;
+                } catch {
+                  // Continue to parse flattened format
+                }
+              }
+              
+              // Parse flattened rule format (rule_0_name_passed, rule_0_name_weight, etc.)
+              const flattenedRules: { [key: string]: { rule_name: string; index: number; passed?: boolean; weight?: number } } = {};
+              Object.entries(metadata).forEach(([key, value]) => {
+                const match = key.match(/^rule_(\d+)_(.+)_(passed|weight)$/);
+                if (match) {
+                  const [, ruleIndex, ruleName, attribute] = match;
+                  const ruleKey = `${ruleIndex}_${ruleName}`;
+                  if (!flattenedRules[ruleKey]) {
+                    flattenedRules[ruleKey] = {
+                      rule_name: ruleName.replace(/_/g, ' '),
+                      index: parseInt(ruleIndex)
+                    };
+                  }
+                  if (attribute === 'passed') {
+                    flattenedRules[ruleKey].passed = value === 'True' || value === true;
+                  } else if (attribute === 'weight') {
+                    flattenedRules[ruleKey].weight = typeof value === 'string' ? parseFloat(value) : (typeof value === 'number' ? value : undefined);
+                  }
+                }
+              });
+              
+              // Convert to array format
+              return Object.values(flattenedRules).sort((a, b) => a.index - b.index);
+            })(),
+            weighted_score: metadata.weighted_score as number | undefined,
+            total_weight: metadata.total_weight as number | undefined,
+            min_score_threshold: metadata.min_score_threshold as number | undefined,
+            events_analyzed: metadata.events_analyzed as number | undefined,
+            query_name: metadata.query_name as string | undefined,
+            session_id: metadata.session_id as string | undefined
+          }}
+          queryName={queryRef?.name}
+          evaluationSpec={spec}
+        />
+      ) : hasMetadata ? (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -363,7 +442,7 @@ export function EvaluationDetailView({ evaluationId, namespace, enhanced = false
             </div>
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
       {/* Reasoning Card */}
       {reasoning && (

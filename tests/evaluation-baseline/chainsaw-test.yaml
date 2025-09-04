@@ -5,7 +5,7 @@ metadata:
   labels:
     evaluated: "true"
 spec:
-  skip: true
+  skip: false
   description: Test baseline evaluation functionality with ConfigMap-based golden examples
   steps:
   - name: step-1

@@ -23,7 +23,8 @@ import {
   EnhancedEvaluationDetailResponse
 } from "@/lib/services/evaluations"
 import { useDelayedLoading } from "@/lib/hooks/use-delayed-loading"
-import { RuleResultsComponent } from "./rule-results-component"
+// import { RuleResultsComponent } from "./rule-results-component" // Alternative component for rule display
+import { EventMetricsDisplay } from "./event-metrics-display"
 import { CategoryBreakdownComponent } from "./category-breakdown-component"
 import { MetadataCardsComponent } from "./metadata-cards-component"
 import { RawMetadataComponent } from "./raw-metadata-component"
@@ -389,7 +390,12 @@ export function EnhancedEvaluationDetailView({ evaluationId, namespace }: Enhanc
 
         {hasRuleResults && (
           <TabsContent value="rules">
-            <RuleResultsComponent eventMetadata={enhancedMetadata!.event_metadata!} />
+            <EventMetricsDisplay 
+              eventMetadata={enhancedMetadata!.event_metadata!}
+              queryName={queryRef?.name}
+              sessionId={metadata?.session_id as string | undefined}
+              evaluationSpec={spec}
+            />
           </TabsContent>
         )}
 
