@@ -349,8 +349,9 @@ export function EvaluationDetailView({ evaluationId, namespace, enhanced = false
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {Object.entries(metadata).map(([key, value]) => (
-                <div key={key}>
+              {Object.keys(metadata).filter(key => !key.toLowerCase().includes('reasoning')).map((key) => {
+                const value = metadata[key]
+                return <div key={key}>
                   <p className="text-sm font-medium text-muted-foreground capitalize">
                     {key.replace(/_/g, " ")}
                   </p>
@@ -358,7 +359,7 @@ export function EvaluationDetailView({ evaluationId, namespace, enhanced = false
                     {typeof value === "string" ? value : JSON.stringify(value)}
                   </p>
                 </div>
-              ))}
+              })}
             </div>
           </CardContent>
         </Card>

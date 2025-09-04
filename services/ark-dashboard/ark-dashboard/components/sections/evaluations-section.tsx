@@ -180,7 +180,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
       const datasetRefSpec = config?.datasetRef
       
       // For dataset evaluations, check for datasetRef first
-      const mode = getModeDisplay(evaluation)
+      const mode = getTypeDisplay(evaluation)
       if (mode === 'dataset' && datasetRefSpec?.name) {
         return datasetRefSpec.name
       }
@@ -226,7 +226,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
       return "-"
     }
 
-    const getModeDisplay = (evaluation: Evaluation | EvaluationDetailResponse) => {
+    const getTypeDisplay = (evaluation: Evaluation | EvaluationDetailResponse) => {
       const spec = (evaluation as EvaluationDetailResponse)?.spec
       const specMode = spec?.type as string
       const basicMode = (evaluation as Evaluation).type
@@ -275,10 +275,10 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
       return Array.from(evaluators).sort()
     }
 
-    const getAvailableModes = () => {
+    const getAvailableTypes = () => {
       const modes = new Set<string>()
       currentEvaluations.forEach(evaluation => {
-        const mode = getModeDisplay(evaluation)
+        const mode = getTypeDisplay(evaluation)
         if (mode !== "unknown") {
           modes.add(mode)
         }
@@ -289,13 +289,13 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
 
     // Separate evaluations by type
     const standardEvaluations = evaluations.filter(evaluation => {
-      const mode = getModeDisplay(evaluation)
-      return ['direct', 'query', 'batch', 'manual'].includes(mode)
+      const mode = getTypeDisplay(evaluation)
+      return ['direct', 'query', 'batch', 'manual', 'event'].includes(mode)
     })
     
     const datasetEvaluations = evaluations.filter(evaluation => {
-      const mode = getModeDisplay(evaluation)
-      return mode === 'dataset'
+      const mode = getTypeDisplay(evaluation)
+      return mode === 'baseline'
     })
     
     // Get current evaluations based on active tab
@@ -327,7 +327,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
 
       // Mode filter
       if (filters.mode.length > 0) {
-        const mode = getModeDisplay(evaluation)
+        const mode = getTypeDisplay(evaluation)
         if (!filters.mode.includes(mode)) return false
       }
 
@@ -600,11 +600,13 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
                   Evaluator
                 </th>
                 <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
-                  Mode
+                  Type
                 </th>
-                <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {activeTab === 'dataset' ? 'Dataset Ref' : 'Query Ref'}
-                </th>
+                {activeTab !== 'dataset' && (
+                  <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
+                    Query Ref
+                  </th>
+                )}
                 <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => handleSort('score')}>
                   <div className="flex items-center">
                     Score
@@ -633,7 +635,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
               {sortedEvaluations.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={activeTab === 'dataset' ? 7 : 8}
                     className="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
                   >
                     No {activeTab === 'dataset' ? 'dataset' : 'standard'} evaluations found
@@ -647,13 +649,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
                       key={evaluation.name}
                       className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/30 cursor-pointer"
                       onClick={() => {
-                        // For dataset evaluations, we might need different handling
-                        if (activeTab === 'dataset') {
-                          // TODO: Create a specialized dataset evaluation detail view
-                          console.warn('Dataset evaluation details not yet implemented')
-                        } else {
-                          router.push(`/evaluation/${evaluation.name}?namespace=${namespace}`)
-                        }
+                        router.push(`/evaluation/${evaluation.name}?namespace=${namespace}`)
                       }}
                     >
                       <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100 font-mono">
@@ -668,12 +664,14 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
                             ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
                             : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
                         }`}>
-                          {getModeDisplay(evaluation)}
+                          {getTypeDisplay(evaluation)}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                        {getQueryRefDisplay(evaluation)}
-                      </td>
+                      {activeTab !== 'dataset' && (
+                        <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                          {getQueryRefDisplay(evaluation)}
+                        </td>
+                      )}
                       <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                         <span className="font-mono">
                           {getScoreDisplay(evaluation)}
@@ -758,7 +756,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
                 Standard ({standardEvaluations.length})
               </TabsTrigger>
               <TabsTrigger value="dataset" className="text-sm">
-                Dataset ({datasetEvaluations.length})
+                Baseline ({datasetEvaluations.length})
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -767,7 +765,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
             filters={filters}
             onFiltersChange={setFilters}
             availableEvaluators={getAvailableEvaluators()}
-            availableModes={getAvailableModes()}
+            availableTypes={getAvailableTypes()}
           />
         </div>
         

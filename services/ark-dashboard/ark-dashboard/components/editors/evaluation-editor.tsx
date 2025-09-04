@@ -81,6 +81,14 @@ export function EvaluationEditor({
   const [targetsLoading, setTargetsLoading] = useState(false)
   const isEditing = !!evaluation
 
+
+  const safe = <T,>(requestName: string, p: Promise<T>, fallback: T): Promise<T> => {
+    return p.catch((err) => {
+      console.error(`${requestName} failed:`, err);
+      return fallback;
+    });
+  } 
+
   useEffect(() => {
     if (open) {
       const loadData = async () => {
@@ -90,11 +98,11 @@ export function EvaluationEditor({
         
         try {
           const [evaluatorsData, queriesData, agentsData, teamsData, modelsData] = await Promise.all([
-            evaluatorsService.getAll(namespace),
-            queriesService.list(namespace),
-            agentsService.getAll(namespace),
-            teamsService.getAll(namespace),
-            modelsService.getAll(namespace)
+            safe("evaluatorsGetAll", evaluatorsService.getAll(namespace), []),
+            safe("queriesGetAll", queriesService.list(namespace), { items: [], count: 0 }),
+            safe("agentsGetAll", agentsService.getAll(namespace), []),
+            safe("teamsGetAll", teamsService.getAll(namespace), []),
+            safe("modelsGetAll", modelsService.getAll(namespace), [])
           ])
           setEvaluators(evaluatorsData)
           setQueries(queriesData.items)
@@ -292,17 +300,14 @@ export function EvaluationEditor({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="mode">Mode</Label>
+            <Label htmlFor="mode">Type</Label>
             <Select value={mode} onValueChange={(value) => setMode(value as EvaluationType)}>
               <SelectTrigger>
                 <SelectValue placeholder="Select evaluation mode" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="direct">Direct</SelectItem>
-                <SelectItem value="baseline">Baseline</SelectItem>
                 <SelectItem value="query">Query</SelectItem>
-                <SelectItem value="event">Event</SelectItem>
-                <SelectItem value="batch">Batch</SelectItem>
               </SelectContent>
             </Select>
           </div>
