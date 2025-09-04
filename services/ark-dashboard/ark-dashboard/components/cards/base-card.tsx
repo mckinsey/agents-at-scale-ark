@@ -134,12 +134,12 @@ export function BaseCard({
         {children}
       </div>
       {description && (
-        <div className="flex-1 flex-row flex w-full h-full px-6 py-3">
+        <div className="flex-1 flex-row flex w-full h-full px-6">
           <CardDescription>{description}</CardDescription>
         </div>
       )}
       {footer && (
-        <div className="flex-1 flex-row flex w-full h-full px-6 pt-3">
+        <div className="flex-1 flex-row flex w-full h-full px-6">
           {footer}
         </div>
       )}

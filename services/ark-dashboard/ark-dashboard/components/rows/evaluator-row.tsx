@@ -52,7 +52,7 @@ export function EvaluatorRow({
 
   return (
     <>
-      <div className="flex items-center py-3 px-4 bg-card border rounded-md shadow-sm hover:bg-accent/5 transition-colors w-full gap-4">
+      <div className="flex items-center py-3 px-4 bg-card border rounded-md hover:bg-accent/5 transition-colors w-full gap-4">
         <div className="flex items-center gap-3 flex-1">
           <div className="flex-shrink-0">
             <div className="w-10 h-10 rounded-md bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">

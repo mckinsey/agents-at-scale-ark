@@ -137,7 +137,6 @@ export function EvaluationFilter({
       {/* Enhanced Mode Toggle */}
       <Button
         variant={filters.enhanced ? "default" : "outline"}
-        size="sm"
         onClick={() => updateFilter("enhanced", !filters.enhanced)}
         className="gap-2"
       >

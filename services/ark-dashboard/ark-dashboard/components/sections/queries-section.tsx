@@ -235,10 +235,10 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
                 <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
                   Token Usage (Prompt / Completion)
                 </th>
-                <th className="px-3 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
+                <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
                   Evaluations
                 </th>
-                <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
+                <th className="px-3 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
                   Status
                 </th>
                 <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">

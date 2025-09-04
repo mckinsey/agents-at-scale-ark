@@ -121,7 +121,7 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }, Evalu
           />
         </div>
 
-        <main className="flex-1 overflow-auto px-6 py-0">
+        <main className="flex-1 overflow-auto px-6">
           {showCompactView && (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pb-6">
               {evaluators.map((evaluator) => (

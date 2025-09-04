@@ -288,7 +288,7 @@ export function EvaluationEditor({
         </DialogHeader>
 
         <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-          <div className="space-y-2">
+          <div className="space-y-2 flex flex-col">
             <Label htmlFor="name">Name</Label>
             <Input
               id="name"
@@ -299,7 +299,7 @@ export function EvaluationEditor({
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 flex flex-col">
             <Label htmlFor="mode">Type</Label>
             <Select value={mode} onValueChange={(value) => setMode(value as EvaluationType)}>
               <SelectTrigger>
@@ -312,7 +312,7 @@ export function EvaluationEditor({
             </Select>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 flex flex-col">
             <Label htmlFor="evaluator">Evaluator *</Label>
             <Select value={evaluatorRef} onValueChange={setEvaluatorRef}>
               <SelectTrigger>
@@ -335,7 +335,7 @@ export function EvaluationEditor({
           </div>
 
           {(mode === "query" || mode === "batch") && (
-            <div className="space-y-2">
+            <div className="space-y-2 flex flex-col">
               <Label htmlFor="query">Query Reference</Label>
               <Select value={queryRef || "__none__"} onValueChange={(value) => setQueryRef(value === "__none__" ? "" : value)}>
                 <SelectTrigger>
@@ -363,7 +363,7 @@ export function EvaluationEditor({
 
           {(mode === "query" || mode === "batch") && (
             <div className="space-y-4">
-              <div className="space-y-2">
+              <div className="space-y-2 flex flex-col">
                 <Label htmlFor="targetType">Target Type</Label>
                 <Select value={targetType} onValueChange={(value: "agent" | "team" | "model") => {
                   setTargetType(value)
@@ -380,7 +380,7 @@ export function EvaluationEditor({
                 </Select>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 flex flex-col">
                 <Label htmlFor="targetRef">Target</Label>
                 <Select value={targetRef || "__none__"} onValueChange={(value) => setTargetRef(value === "__none__" ? "" : value)}>
                   <SelectTrigger>
@@ -421,7 +421,7 @@ export function EvaluationEditor({
 
           {mode === "direct" && (
             <>
-              <div className="space-y-2">
+              <div className="space-y-2 flex flex-col">
                 <Label htmlFor="input">Input</Label>
                 <Textarea
                   id="input"
@@ -432,7 +432,7 @@ export function EvaluationEditor({
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 flex flex-col">
                 <Label htmlFor="output">Output</Label>
                 <Textarea
                   id="output"

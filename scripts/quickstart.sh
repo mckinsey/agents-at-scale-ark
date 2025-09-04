@@ -16,6 +16,35 @@ blue='\033[0;34m'
 purple='\033[0;35m'
 nc='\033[0m'
 
+# Detect OS and package manager
+detect_os_and_pm() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        OS="macos"
+        PM="brew"
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        OS="linux"
+        # Check for package managers in order of preference
+        if command -v snap >/dev/null 2>&1; then
+            PM="snap"
+        elif command -v apt >/dev/null 2>&1; then
+            PM="apt"
+        elif command -v yum >/dev/null 2>&1; then
+            PM="yum"
+        elif command -v dnf >/dev/null 2>&1; then
+            PM="dnf"
+        elif command -v pacman >/dev/null 2>&1; then
+            PM="pacman"
+        elif command -v zypper >/dev/null 2>&1; then
+            PM="zypper"
+        else
+            PM="curl"
+        fi
+    else
+        OS="unknown"
+        PM="curl"
+    fi
+}
+
 # Helper function for prompts with auto-confirm support
 prompt_user() {
     local message="$1"
@@ -35,7 +64,149 @@ prompt_yes_no() {
     [[ $reply =~ ^[Yy]$ ]] || [[ -z $reply ]]
 }
 
+# Get install command for a tool
+get_install_cmd() {
+    local tool="$1"
+    local fallback_url="$2"
+    
+    case "$PM" in
+        "brew")
+            case "$tool" in
+                "curl") echo "brew install curl" ;;
+                "uv") echo "brew install uv" ;;
+                "node") echo "brew install node" ;;
+                "timeout") echo "brew install coreutils" ;;
+                "ruff") echo "brew install ruff" ;;
+                "golang"|"go") echo "brew install go" ;;
+                "envsubst") echo "brew install gettext" ;;
+                "yq") echo "brew install yq" ;;
+                "kubectl") echo "brew install kubectl" ;;
+                "docker") echo "brew install --cask docker" ;;
+                "helm") echo "brew install helm" ;;
+                "npm") echo "brew install node && npm install -g typescript && npm i -D @types/node" ;;
+                "java") echo "brew install openjdk" ;;
+                "k9s") echo "brew install k9s" ;;
+                "chainsaw") echo "brew tap kyverno/chainsaw https://github.com/kyverno/chainsaw && brew install kyverno/chainsaw/chainsaw" ;;
+                "minikube") echo "brew install minikube" ;;
+                "kind") echo "brew install kind" ;;
+                *) echo "brew install $tool" ;;
+            esac
+            ;;
+        "snap")
+            case "$tool" in
+                "curl") echo "sudo snap install curl" ;;
+                "node") echo "sudo snap install node --classic" ;;
+                "golang"|"go") echo "sudo snap install go --classic" ;;
+                "kubectl") echo "sudo snap install kubectl --classic" ;;
+                "docker") echo "sudo snap install docker" ;;
+                "helm") echo "sudo snap install helm --classic" ;;
+                "yq") echo "sudo snap install yq" ;;
+                "k9s") echo "sudo snap install k9s" ;;
+                "minikube") echo "sudo snap install minikube" ;;
+                "java") echo "sudo snap install openjdk" ;;
+                "uv") echo "curl -LsSf https://astral.sh/uv/install.sh | sh && source ~/.profile" ;;
+                "ruff") echo "curl -LsSf https://astral.sh/ruff/install.sh | sh" ;;
+                "envsubst") echo "sudo snap install gettext" ;;
+                "timeout") echo "echo 'timeout available in coreutils'" ;;
+                "npm") echo "sudo snap install node --classic && npm install -g typescript && npm i -D @types/node" ;;
+                "kind") echo "curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64 && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind" ;;
+                "chainsaw") echo "curl -L https://github.com/kyverno/chainsaw/releases/latest/download/chainsaw_linux_x86_64.tar.gz | tar xz && sudo mv chainsaw /usr/local/bin/" ;;
+                *) echo "sudo snap install $tool" ;;
+            esac
+            ;;
+        "apt")
+            case "$tool" in
+                "curl") echo "sudo apt update && sudo apt install -y curl" ;;
+                "uv") echo "curl -LsSf https://astral.sh/uv/install.sh | sh && source ~/.profile" ;;
+                "node") echo "curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - && sudo apt-get install -y nodejs" ;;
+                "timeout") echo "sudo apt update && sudo apt install -y coreutils" ;;
+                "ruff") echo "curl -LsSf https://astral.sh/ruff/install.sh | sh" ;;
+                "golang"|"go") echo "sudo apt update && sudo apt install -y golang-go" ;;
+                "envsubst") echo "sudo apt update && sudo apt install -y gettext-base" ;;
+                "yq") echo "sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 && sudo chmod +x /usr/local/bin/yq" ;;
+                "kubectl") echo "curl -LO \"https://dl.k8s.io/release/\$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl\" && sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl" ;;
+                "docker") echo "curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker \$USER" ;;
+                "helm") echo "curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash" ;;
+                "npm") echo "curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - && sudo apt-get install -y nodejs && npm install -g typescript && npm i -D @types/node" ;;
+                "java") echo "sudo apt update && sudo apt install -y openjdk-17-jdk" ;;
+                "k9s") echo "curl -sS https://webinstall.dev/k9s | bash" ;;
+                "chainsaw") echo "curl -L https://github.com/kyverno/chainsaw/releases/latest/download/chainsaw_linux_x86_64.tar.gz | tar xz && sudo mv chainsaw /usr/local/bin/" ;;
+                "minikube") echo "curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 && sudo install minikube-linux-amd64 /usr/local/bin/minikube" ;;
+                "kind") echo "curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64 && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind" ;;
+                *) echo "sudo apt update && sudo apt install -y $tool" ;;
+            esac
+            ;;
+        "yum"|"dnf")
+            local pkg_mgr="$PM"
+            case "$tool" in
+                "curl") echo "sudo $pkg_mgr install -y curl" ;;
+                "uv") echo "curl -LsSf https://astral.sh/uv/install.sh | sh && source ~/.profile" ;;
+                "node") echo "curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo bash - && sudo $pkg_mgr install -y nodejs" ;;
+                "timeout") echo "sudo $pkg_mgr install -y coreutils" ;;
+                "ruff") echo "curl -LsSf https://astral.sh/ruff/install.sh | sh" ;;
+                "golang"|"go") echo "sudo $pkg_mgr install -y golang" ;;
+                "envsubst") echo "sudo $pkg_mgr install -y gettext" ;;
+                "yq") echo "sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 && sudo chmod +x /usr/local/bin/yq" ;;
+                "kubectl") echo "curl -LO \"https://dl.k8s.io/release/\$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl\" && sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl" ;;
+                "docker") echo "curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker \$USER" ;;
+                "helm") echo "curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash" ;;
+                "npm") echo "curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo bash - && sudo $pkg_mgr install -y nodejs && npm install -g typescript && npm i -D @types/node" ;;
+                "java") echo "sudo $pkg_mgr install -y java-17-openjdk" ;;
+                "k9s") echo "curl -sS https://webinstall.dev/k9s | bash" ;;
+                "chainsaw") echo "curl -L https://github.com/kyverno/chainsaw/releases/latest/download/chainsaw_linux_x86_64.tar.gz | tar xz && sudo mv chainsaw /usr/local/bin/" ;;
+                "minikube") echo "curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 && sudo install minikube-linux-amd64 /usr/local/bin/minikube" ;;
+                "kind") echo "curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64 && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind" ;;
+                *) echo "sudo $pkg_mgr install -y $tool" ;;
+            esac
+            ;;
+        "pacman")
+            case "$tool" in
+                "curl") echo "sudo pacman -S curl" ;;
+                "uv") echo "curl -LsSf https://astral.sh/uv/install.sh | sh && source ~/.profile" ;;
+                "node") echo "sudo pacman -S nodejs npm" ;;
+                "timeout") echo "sudo pacman -S coreutils" ;;
+                "ruff") echo "curl -LsSf https://astral.sh/ruff/install.sh | sh" ;;
+                "golang"|"go") echo "sudo pacman -S go" ;;
+                "envsubst") echo "sudo pacman -S gettext" ;;
+                "yq") echo "sudo pacman -S yq" ;;
+                "kubectl") echo "sudo pacman -S kubectl" ;;
+                "docker") echo "sudo pacman -S docker && sudo systemctl enable docker && sudo usermod -aG docker \$USER" ;;
+                "helm") echo "sudo pacman -S helm" ;;
+                "npm") echo "sudo pacman -S nodejs npm && npm install -g typescript && npm i -D @types/node" ;;
+                "java") echo "sudo pacman -S jdk17-openjdk" ;;
+                "k9s") echo "curl -sS https://webinstall.dev/k9s | bash" ;;
+                "chainsaw") echo "curl -L https://github.com/kyverno/chainsaw/releases/latest/download/chainsaw_linux_x86_64.tar.gz | tar xz && sudo mv chainsaw /usr/local/bin/" ;;
+                "minikube") echo "sudo pacman -S minikube" ;;
+                "kind") echo "curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64 && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind" ;;
+                *) echo "sudo pacman -S $tool" ;;
+            esac
+            ;;
+        *)
+            # Fallback to curl-based installations
+            case "$tool" in
+                "curl") echo "echo 'No install method for curl on this platform'" ;;
+                "uv") echo "curl -LsSf https://astral.sh/uv/install.sh | sh && source ~/.profile" ;;
+                "node") echo "curl -fsSL https://nodejs.org/dist/latest/node-latest-linux-x64.tar.xz | tar -xJ --strip-components=1 -C /usr/local/" ;;
+                "ruff") echo "curl -LsSf https://astral.sh/ruff/install.sh | sh" ;;
+                "kubectl") echo "curl -LO \"https://dl.k8s.io/release/\$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl\" && sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl" ;;
+                "docker") echo "curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker \$USER" ;;
+                "helm") echo "curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash" ;;
+                "yq") echo "sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 && sudo chmod +x /usr/local/bin/yq" ;;
+                "k9s") echo "curl -sS https://webinstall.dev/k9s | bash" ;;
+                "chainsaw") echo "curl -L https://github.com/kyverno/chainsaw/releases/latest/download/chainsaw_linux_x86_64.tar.gz | tar xz && sudo mv chainsaw /usr/local/bin/" ;;
+                "minikube") echo "curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 && sudo install minikube-linux-amd64 /usr/local/bin/minikube" ;;
+                "kind") echo "curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64 && chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind" ;;
+                *) echo "${fallback_url:-echo 'No install method available for $tool'}" ;;
+            esac
+            ;;
+    esac
+}
+
 quickstart() {
+    # Detect OS and package manager
+    detect_os_and_pm
+    echo -e "${blue}info${nc}: detected OS: $OS, package manager: $PM"
+
     # Check if we're in the project root
     if [ ! -f "version.txt" ]; then
         echo -e "${red}error${nc}: must run from project root directory"
@@ -56,33 +227,40 @@ quickstart() {
     [ -n "${ARK_QUICKSTART_CONTROLLER_IMAGE}" ] && echo "ARK_QUICKSTART_CONTROLLER_IMAGE: ${ARK_QUICKSTART_CONTROLLER_IMAGE} (enables image caching)"
 
     # Check essential development tools
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        check_tool "uv" "brew install uv" "uv"
-    else
-        check_tool "uv" "curl -LsSf https://astral.sh/uv/install.sh | sh && source ~/.profile" "uv"
-    fi
-
-    check_tool "node" "brew install node" "node"
-    check_tool "timeout" "brew install coreutils" 
-    check_tool "ruff" "brew install ruff"
-    check_tool "golang" "brew install go" "go"
-    check_tool "envsubst" "brew install gettext"
-    check_tool "yq" "brew install yq"
-    check_tool "kubectl" "brew install kubectl"
-    check_tool "docker" "brew install --cask docker"
-    check_tool "helm" "brew install helm"
-    check_tool "npm" "brew install node && npm install -g typescript && npm i -D @types/node"
+    check_tool "curl"
+    check_tool "uv"
+    check_tool "node"
+    check_tool "timeout"
+    check_tool "ruff"
+    check_tool "golang" "" "go"
+    check_tool "envsubst"
+    check_tool "yq"
+    check_tool "kubectl"
+    check_tool "docker"
+    check_tool "helm"
+    check_tool "npm"
     check_tool "fark" "build_and_install_fark"
     check_tool "ark" "build_and_install_ark_cli"
-    check_tool "java" "brew install openjdk"
-    check_tool "java" "brew install openjdk" "java -version"
-    check_optional_tool "k9s" "brew install k9s"
-    check_optional_tool "chainsaw" "brew tap kyverno/chainsaw https://github.com/kyverno/chainsaw && brew install kyverno/chainsaw/chainsaw"
+    check_tool "java" "" "java -version"
+    check_optional_tool "k9s"
+    check_optional_tool "chainsaw"
 
     # Check if docker daemon is running
     if ! docker info > /dev/null 2>&1; then
         echo -e "${red}error${nc}: docker daemon not running"
-        echo "start docker desktop or docker daemon"
+        if [[ "$OS" == "linux" ]]; then
+            echo "start docker with: sudo systemctl start docker"
+            if prompt_yes_no "start docker now? (Y/n): "; then
+                sudo systemctl start docker
+                # Add user to docker group if not already
+                if ! groups $USER | grep -q docker; then
+                    sudo usermod -aG docker $USER
+                    echo -e "${yellow}note${nc}: you may need to log out and back in for docker group changes to take effect"
+                fi
+            fi
+        else
+            echo "start docker desktop or docker daemon"
+        fi
         exit 1
     else
         echo -e "${green}✔${nc} docker daemon running"
@@ -98,12 +276,15 @@ quickstart() {
         # check_tool "minikube"
         if is_installed minikube; then
             echo -e "${green}✔${nc} Minikube is installed"
+            # if prompt_yes_no "start minikube? (Y/n): "; then
             minikube start
+            # fi
         # check_tool "kind"
         elif is_installed kind; then
             echo -e "${green}✔${nc} Kind is installed"
+            # if prompt_yes_no "create kind cluster? (Y/n): "; then
             kind create cluster
-
+            # fi
         else
            echo -e "${yellow}⚠${nc} Neither Minikube nor Kind is installed"
             echo "Choose the Kubernetes tool to install:"
@@ -111,14 +292,15 @@ quickstart() {
             echo "2) Kind"
 
             read -r -p "Enter choice [1/2]: " choice
-
             choice=${choice:-1}  # Default to 1 if empty
 
             if [[ "$choice" == "1" ]]; then
-                brew install minikube
+                install_cmd=$(get_install_cmd "minikube")
+                eval "$install_cmd"
                 minikube start
             elif [[ "$choice" == "2" ]]; then
-                brew install kind
+                install_cmd=$(get_install_cmd "kind")
+                eval "$install_cmd"
                 kind create cluster
             else
                 echo "Invalid choice. Exiting."
@@ -340,10 +522,17 @@ EOF
     echo -e "  run a query:   ${white}fark agent sample-agent \"what is 2+2?\"${nc}"
     echo -e "  new project:   ${white}ark generate project my-agents${nc}"
     echo -e "  ark help:      ${white}ark --help${nc}"
+    echo -e "                 ${white}# Zsh auto-complete${nc}"
     echo -e "                 ${white}fark completion zsh > ~/.fark-completion && echo 'source ~/.fark-completion' >> ~/.zshrc${nc} # install auto-complete"
+    echo -e "                 ${white}# Bash auto-complete${nc}"
+    echo -e "                 ${white}fark completion bash > ~/.fark-completion && echo 'source ~/.fark-completion' >> ~/.bashrc${nc} # install auto-complete"
     echo -e "  check cluster: ${white}k9s${nc}"
     # echo -e "  dev server:    ${white}make dev${nc}"
     # echo -e "  add services:  ${white}make services${nc}"
+    
+    if [[ "$OS" == "linux" ]] && groups $USER | grep -q docker; then
+        echo -e "\n${yellow}note${nc}: Docker group changes require logout/login to take effect"
+    fi
 }
 
 # Helper function to check tools
@@ -354,7 +543,7 @@ is_installed() {
 # Helper function to check and optionally install optional tools
 check_optional_tool() {
     local tool_name="$1"
-    local install_cmd="$2"
+    local install_cmd="${2:-$(get_install_cmd "$tool_name")}"
     local check_cmd="${3:-$tool_name}"
     
     if command -v "$check_cmd" > /dev/null 2>&1; then
@@ -383,7 +572,7 @@ check_optional_tool() {
 # Helper function to check and optionally install tools
 check_tool() {
     local tool_name="$1"
-    local install_cmd="$2"
+    local install_cmd="${2:-$(get_install_cmd "$tool_name")}"
     local check_cmd="${3:-$tool_name}"
 
     # set command_flags to have "-v" if check_cmd has no spaces
@@ -436,6 +625,15 @@ build_and_install_fark() {
                 echo ""
                 echo -e "${yellow}note${nc}: Please add $HOME/.local/bin to your PATH if not already added:"
                 echo '  export PATH="$HOME/.local/bin:$PATH"'
+                
+                # Add to appropriate shell config
+                if [[ "$SHELL" == *"zsh"* ]]; then
+                    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+                    echo -e "${green}✔${nc} Added to ~/.zshrc"
+                elif [[ "$SHELL" == *"bash"* ]]; then
+                    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+                    echo -e "${green}✔${nc} Added to ~/.bashrc"
+                fi
 
                 export PATH="$HOME/.local/bin:$PATH"
                 echo -e "${green}✔${nc} Added to PATH for this session"
