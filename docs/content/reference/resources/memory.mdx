@@ -40,55 +40,84 @@ spec:
     - name: my-agent
   memory:
     name: postgres-memory
+  # Optional: specify session ID to group related queries
+  # If not provided, the query UID is used as session ID
+  sessionId: "my-conversation-session"
 ```
 
 Memory can also be specified via the `fark` CLI:
 
 ```bash
-fark query --input "Continue our conversation" --memory postgres-memory my-agent
+fark query --input "Continue our conversation" --session-id "my-conversation-session" my-agent
 ```
 
 When creating a query in the dashboard it is also possible to specify the memory resource. Note that in the dashbhoard 'chat' window, no memory is used, messages are simply stored client-side as is common for chat applications.
 
-## Session Management
-
-Memory uses session IDs to isolate conversations:
-
-| Field | Purpose |
-|-------|---------|
-| `sessionId` | Groups related queries in a conversation thread |
-| Default behavior | Uses Query UID if no sessionId specified |
-| Isolation | Each session maintains separate message history |
-
-Sessions enable persistent conversations across multiple queries while keeping different conversation threads separate.
 
 ## Memory API Specification
 
-Memory is impelmented as a simple HTTP server:
+Memory is implemented as a simple HTTP server:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| PUT | `/message/{session_id}` | Store single message |
-| GET | `/message/{session_id}` | Retrieve session messages |
-| PUT | `/messages/{session_id}` | Store multiple messages |
-| GET | `/messages/{session_id}` | Retrieve session messages |
+| POST | `/messages` | Store multiple messages |
+| GET | `/messages` | Retrieve messages with optional filtering |
+| GET | `/sessions` | List all session IDs |
 | GET | `/health` | Health check |
 
-Request/response format uses [OpenAI ChatCompletion message](https://platform.openai.com/docs/api-reference/chat/create) structure with `application/json` content type:
+### Store Messages
+
+**POST** `/messages`
+
+Request body includes session/query context and message array:
 
 ```json
 {
+  "session_id": "uuid-string",
+  "query_id": "query-uuid", 
   "messages": [
     {
       "role": "user",
       "content": "What is the weather like?"
     },
     {
-      "role": "assistant",
+      "role": "assistant", 
       "content": "I don't have access to real-time weather data."
     }
   ]
 }
+```
+
+### Retrieve Messages
+
+**GET** `/messages?session_id={id}&query_id={id}`
+
+Returns timestamped message records:
+
+```json
+{
+  "messages": [
+    {
+      "timestamp": "2024-01-01T12:00:00Z",
+      "session_id": "uuid-string",
+      "query_id": "query-uuid",
+      "message": {
+        "role": "user",
+        "content": "What is the weather like?"
+      }
+    }
+  ]
+}
+```
+
+### List Sessions
+
+**GET** `/sessions`
+
+Returns array of session IDs:
+
+```json
+["session-1", "session-2", "session-3"]
 ```
 
 ## PostgreSQL Memory
