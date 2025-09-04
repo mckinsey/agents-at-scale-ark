@@ -180,7 +180,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
       const datasetRefSpec = config?.datasetRef
       
       // For dataset evaluations, check for datasetRef first
-      const mode = getModeDisplay(evaluation)
+      const mode = getTypeDisplay(evaluation)
       if (mode === 'dataset' && datasetRefSpec?.name) {
         return datasetRefSpec.name
       }
@@ -226,7 +226,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
       return "-"
     }
 
-    const getModeDisplay = (evaluation: Evaluation | EvaluationDetailResponse) => {
+    const getTypeDisplay = (evaluation: Evaluation | EvaluationDetailResponse) => {
       const spec = (evaluation as EvaluationDetailResponse)?.spec
       const specMode = spec?.type as string
       const basicMode = (evaluation as Evaluation).type
@@ -275,10 +275,10 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
       return Array.from(evaluators).sort()
     }
 
-    const getAvailableModes = () => {
+    const getAvailableTypes = () => {
       const modes = new Set<string>()
       currentEvaluations.forEach(evaluation => {
-        const mode = getModeDisplay(evaluation)
+        const mode = getTypeDisplay(evaluation)
         if (mode !== "unknown") {
           modes.add(mode)
         }
@@ -289,12 +289,12 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
 
     // Separate evaluations by type
     const standardEvaluations = evaluations.filter(evaluation => {
-      const mode = getModeDisplay(evaluation)
+      const mode = getTypeDisplay(evaluation)
       return ['direct', 'query', 'batch', 'manual'].includes(mode)
     })
     
     const datasetEvaluations = evaluations.filter(evaluation => {
-      const mode = getModeDisplay(evaluation)
+      const mode = getTypeDisplay(evaluation)
       return mode === 'dataset'
     })
     
@@ -327,7 +327,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
 
       // Mode filter
       if (filters.mode.length > 0) {
-        const mode = getModeDisplay(evaluation)
+        const mode = getTypeDisplay(evaluation)
         if (!filters.mode.includes(mode)) return false
       }
 
@@ -600,7 +600,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
                   Evaluator
                 </th>
                 <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
-                  Mode
+                  Type
                 </th>
                 <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
                   {activeTab === 'dataset' ? 'Dataset Ref' : 'Query Ref'}
@@ -668,7 +668,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
                             ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
                             : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
                         }`}>
-                          {getModeDisplay(evaluation)}
+                          {getTypeDisplay(evaluation)}
                         </span>
                       </td>
                       <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
@@ -758,7 +758,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
                 Standard ({standardEvaluations.length})
               </TabsTrigger>
               <TabsTrigger value="dataset" className="text-sm">
-                Dataset ({datasetEvaluations.length})
+                Baseline ({datasetEvaluations.length})
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -767,7 +767,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
             filters={filters}
             onFiltersChange={setFilters}
             availableEvaluators={getAvailableEvaluators()}
-            availableModes={getAvailableModes()}
+            availableTypes={getAvailableTypes()}
           />
         </div>
         

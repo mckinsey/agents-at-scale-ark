@@ -47,7 +47,7 @@ interface EvaluationFilterProps {
   filters: EvaluationFilters
   onFiltersChange: (filters: EvaluationFilters) => void
   availableEvaluators: string[]
-  availableModes: string[]
+  availableTypes: string[]
   availableEvaluationTypes?: string[]
 }
 
@@ -82,7 +82,7 @@ export function EvaluationFilter({
   filters,
   onFiltersChange,
   availableEvaluators,
-  availableModes,
+  availableTypes,
   availableEvaluationTypes = []
 }: EvaluationFilterProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -224,21 +224,21 @@ export function EvaluationFilter({
 
             <Separator />
 
-            {/* Mode Filter */}
+            {/* Evaluation Type Filter */}
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Mode</Label>
+              <Label className="text-sm font-medium">Evaluation Type</Label>
               <div className="flex flex-wrap gap-1">
-                {availableModes.map((mode) => {
-                  const isSelected = filters.mode.includes(mode)
+                {availableTypes.map((type) => {
+                  const isSelected = filters.mode.includes(type)
                   return (
                     <Button
-                      key={mode}
+                      key={type}
                       variant={isSelected ? "default" : "outline"}
                       size="sm"
-                      onClick={() => toggleArrayFilter("mode", mode)}
+                      onClick={() => toggleArrayFilter("mode", type)}
                       className="text-xs capitalize"
                     >
-                      {mode}
+                      {type}
                     </Button>
                   )
                 })}

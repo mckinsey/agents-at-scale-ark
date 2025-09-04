@@ -81,13 +81,13 @@ export function EvaluationEditor({
   const [targetsLoading, setTargetsLoading] = useState(false)
   const isEditing = !!evaluation
 
-  function safe<T>(requestName: string, p: Promise<T>, fallback: T) {
+
+  const safe = <T,>(requestName: string, p: Promise<T>, fallback: T): Promise<T> => {
     return p.catch((err) => {
       console.error(`${requestName} failed:`, err);
       return fallback;
     });
-  }
-  
+  } 
 
   useEffect(() => {
     if (open) {
@@ -300,17 +300,17 @@ export function EvaluationEditor({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="mode">Mode</Label>
+            <Label htmlFor="mode">Type</Label>
             <Select value={mode} onValueChange={(value) => setMode(value as EvaluationType)}>
               <SelectTrigger>
                 <SelectValue placeholder="Select evaluation mode" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="direct">Direct</SelectItem>
-                <SelectItem value="baseline">Baseline</SelectItem>
+                {/* <SelectItem value="baseline">Baseline</SelectItem> */}
                 <SelectItem value="query">Query</SelectItem>
-                <SelectItem value="event">Event</SelectItem>
-                <SelectItem value="batch">Batch</SelectItem>
+                {/* <SelectItem value="event">Event</SelectItem>
+                <SelectItem value="batch">Batch</SelectItem> */}
               </SelectContent>
             </Select>
           </div>
