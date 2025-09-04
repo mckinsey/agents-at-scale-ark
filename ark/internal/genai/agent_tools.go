@@ -103,18 +103,18 @@ func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv
 }
 
 func createAgentExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string) (ToolExecutor, error) {
-	if tool.Spec.Agent == "" {
+	if tool.Spec.Agent.Name == "" {
 		return nil, fmt.Errorf("agent spec is required for tool %s", tool.Name)
 	}
 
 	agentCRD := &arkv1alpha1.Agent{}
-	key := types.NamespacedName{Name: tool.Spec.Agent, Namespace: namespace}
+	key := types.NamespacedName{Name: tool.Spec.Agent.Name, Namespace: namespace}
 	if err := k8sClient.Get(ctx, key, agentCRD); err != nil {
 		return nil, fmt.Errorf("failed to get agent %v: %w", key, err)
 	}
 
 	return &AgentToolExecutor{
-		AgentName: tool.Spec.Agent,
+		AgentName: tool.Spec.Agent.Name,
 		Namespace: namespace,
 		AgentCRD:  agentCRD,
 		k8sClient: k8sClient,

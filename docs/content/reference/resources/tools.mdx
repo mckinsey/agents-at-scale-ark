@@ -5,9 +5,11 @@ Tools extend agent capabilities by providing access to external functions, APIs,
 ## Tool Resource Types
 
 ### HTTP Tools
+
 HTTP API calls with URL and body template substitution.
 
 #### GET Request Example
+
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Tool
@@ -30,6 +32,7 @@ spec:
 ```
 
 #### POST Request with Body Template Example
+
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Tool
@@ -73,18 +76,19 @@ spec:
     timeout: 30s
 ```
 
-
-
 ## Template Syntax
 
 HTTP tools support golang template syntax for dynamic content generation:
 
 ### Template Data Structure
+
 Templates have access to structured data:
+
 - **`.input.fieldName`** - User input from the inputSchema
 - **`.parameterName`** - Values from bodyParameters
 
 ### Parameter Sources
+
 ```yaml
 bodyParameters:
   # Direct values
@@ -107,6 +111,7 @@ bodyParameters:
 ```
 
 ### MCP Tools
+
 Tools provided by Model Context Protocol servers.
 
 ```yaml
@@ -131,7 +136,8 @@ spec:
     toolName: read_file
 ```
 
-### Agent as Tools  
+### Agent as Tools
+
 Agents declared as tools
 
 ```yaml
@@ -148,12 +154,14 @@ spec:
         type: string
         description: "The research query or topic that the agent should investigate and provide insights on."
     required: ["input"]
-  agent: research-agent
+  agent:
+    name: research-agent
 ```
 
 ## Agent Tool Reference Types
 
 ### Custom Tools
+
 Reference Tool resources by name:
 
 ```yaml
@@ -165,17 +173,19 @@ tools:
 ```
 
 ### Built-in Tools
+
 System-provided tools:
 
 ```yaml
 tools:
   - type: built-in
-    name: terminate  # End conversation with final response
+    name: terminate # End conversation with final response
   - type: built-in
-    name: noop      # No-operation (testing/debugging)
+    name: noop # No-operation (testing/debugging)
 ```
 
-### Agent as  Tools
+### Agent as Tools
+
 Agent used as tools:
 
 ```yaml

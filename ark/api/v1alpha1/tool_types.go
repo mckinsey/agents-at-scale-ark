@@ -25,6 +25,11 @@ type MCPToolRef struct {
 	ToolName string `json:"toolName"`
 }
 
+type AgentToolRef struct{
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+}
 // ToolAnnotations contains optional additional tool information
 type ToolAnnotations struct {
 	// If true, the tool may perform destructive updates to its environment. If
@@ -70,7 +75,7 @@ type ToolSpec struct {
 	// +kubebuilder:validation:Optional
 	MCP *MCPToolRef `json:"mcp,omitempty"`
 
-	Agent string `json:"agent,omitempty"`
+	Agent *AgentToolRef `json:"agent,omitempty"`
 }
 
 type HTTPSpec struct {
