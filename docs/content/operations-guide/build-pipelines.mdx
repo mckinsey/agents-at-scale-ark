@@ -116,8 +116,8 @@ GitHub variables and secrets for ARK build and deployment workflows. All configu
 | **NPM Registry (CLI Deployment)** | | |
 | `NPM_TOKEN` | Secret (Optional) | NPM authentication token with publish permissions for CLI deployment | |
 | **PyPI Registry (Python SDK Deployment)** | | |
-| `TEST_PYPI_API_TOKEN` | Secret (Optional) | TestPyPI authentication token for testing Python package deployment | |
-| `PYPI_API_TOKEN` | Secret (Optional) | PyPI authentication token with publish permissions for Python SDK deployment | |
+| `TEST_PYPI_API_TOKEN` | Secret (Required for PyPI deployment) | TestPyPI authentication token for testing Python package deployment | |
+| `PYPI_API_TOKEN` | Secret (Required for PyPI deployment) | PyPI authentication token with publish permissions for Python SDK deployment | |
 | **Code Quality and Analysis** | | |
 | `SONAR_TOKEN` | Secret | SonarQube authentication token |
 | `SONAR_HOST_URL` | Secret | SonarQube server URL |
