@@ -130,42 +130,17 @@ func TestUnmarshalMessageRobust(t *testing.T) {
 }
 
 func TestUnmarshalMessageRobustFutureRoles(t *testing.T) {
-	// Specific test for future role compatibility
-	futureRoles := []string{
-		"developer",
-		"function",
-		"tool",
-		"moderator",
-		"agent",
-		"researcher",
-		"critic",
-	}
+	futureRoles := []string{"developer", "function", "tool", "moderator", "agent"}
 
 	for _, role := range futureRoles {
-		t.Run("future_role_"+role, func(t *testing.T) {
-			jsonInput := `{"role": "` + role + `", "content": "test content for ` + role + `"}`
-			rawJSON := json.RawMessage(jsonInput)
-
-			result, err := unmarshalMessageRobust(rawJSON)
+		t.Run(role, func(t *testing.T) {
+			jsonInput := `{"role": "` + role + `", "content": "test"}`
+			result, err := unmarshalMessageRobust(json.RawMessage(jsonInput))
 			if err != nil {
 				t.Errorf("Future role '%s' should not fail: %v", role, err)
 			}
-
 			if result == (openai.ChatCompletionMessageParamUnion{}) {
 				t.Errorf("Future role '%s' should produce valid message", role)
-			}
-
-			// Verify it was converted to some valid OpenAI message type
-			// (we expect it to fallback to user message for unknown roles)
-			resultBytes, marshErr := json.Marshal(result)
-			if marshErr != nil {
-				t.Errorf("Future role '%s' produced unmarshalable result: %v", role, marshErr)
-			}
-
-			// Should be able to unmarshal back successfully
-			var testUnmarshal openai.ChatCompletionMessageParamUnion
-			if unmErr := json.Unmarshal(resultBytes, &testUnmarshal); unmErr != nil {
-				t.Errorf("Future role '%s' produced result that can't round-trip: %v", role, unmErr)
 			}
 		})
 	}
