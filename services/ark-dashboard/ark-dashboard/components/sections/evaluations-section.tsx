@@ -602,9 +602,11 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
                 <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
                   Type
                 </th>
-                <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
-                  Query Ref
-                </th>
+                {activeTab !== 'dataset' && (
+                  <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
+                    Query Ref
+                  </th>
+                )}
                 <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => handleSort('score')}>
                   <div className="flex items-center">
                     Score
@@ -633,7 +635,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
               {sortedEvaluations.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={activeTab === 'dataset' ? 7 : 8}
                     className="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
                   >
                     No {activeTab === 'dataset' ? 'dataset' : 'standard'} evaluations found
@@ -665,9 +667,11 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
                           {getTypeDisplay(evaluation)}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                        {getQueryRefDisplay(evaluation)}
-                      </td>
+                      {activeTab !== 'dataset' && (
+                        <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                          {getQueryRefDisplay(evaluation)}
+                        </td>
+                      )}
                       <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                         <span className="font-mono">
                           {getScoreDisplay(evaluation)}
