@@ -1,13 +1,17 @@
 """Sessions API endpoints."""
 import logging
 from typing import Optional
-import httpx
 
 from fastapi import APIRouter, Query
 
 from ark_sdk.client import with_ark_client
 
 from ...models.sessions import SessionResponse, SessionListResponse
+from ...utils.memory_client import (
+    get_memory_service_address,
+    fetch_memory_service_data,
+    get_all_memory_resources
+)
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
@@ -26,54 +30,38 @@ async def list_sessions(
 ) -> SessionListResponse:
     """List all sessions in a namespace, optionally filtered by memory."""
     async with with_ark_client(namespace, VERSION) as client:
-        # Get memory resources to find their addresses
-        memories = await client.memories.a_list()
+        memory_dicts = await get_all_memory_resources(client, memory)
         
         all_sessions = []
         
-        for memory_resource in memories:
-            memory_dict = memory_resource.to_dict()
+        for memory_dict in memory_dicts:
             memory_name = memory_dict.get("metadata", {}).get("name", "")
             
-            # Apply memory filter if specified
-            if memory and memory_name != memory:
-                continue
-                
-            # Get memory service address
-            spec = memory_dict.get("spec", {})
-            address = spec.get("address", {}).get("value", "")
-            
-            if not address:
-                continue
-                
             try:
-                # Call memory service sessions endpoint
-                async with httpx.AsyncClient() as http_client:
-                    response = await http_client.get(
-                        f"{address}/sessions",
-                        timeout=10.0
-                    )
-                    response.raise_for_status()
-                    
-                    data = response.json()
-                    sessions = data.get("sessions", [])
-                    
-                    # Handle null sessions (empty database)
-                    if sessions is None:
-                        sessions = []
-                    
-                    # Convert to our response format
-                    for session_id in sessions:
-                        all_sessions.append(SessionResponse(
-                            sessionId=session_id,
-                            memoryName=memory_name,
-                            queries=[],  # We don't track queries in memory service
-                            messageCount=0,  # Not provided by simple endpoint
-                            lastActivity=None  # Not provided by simple endpoint
-                        ))
+                service_url = get_memory_service_address(memory_dict)
+                
+                data = await fetch_memory_service_data(
+                    service_url,
+                    "/sessions", 
+                    memory_name=memory_name
+                )
+                
+                sessions = data.get("sessions", [])
+                
+                # Handle null sessions (empty database)
+                if sessions is None:
+                    sessions = []
+                
+                # Convert to our response format - only include actual data
+                for session_id in sessions:
+                    all_sessions.append(SessionResponse(
+                        sessionId=session_id,
+                        memoryName=memory_name
+                    ))
                         
             except Exception as e:
-                logger.warning(f"Failed to get sessions from memory {memory_name}: {e}")
+                logger.error(f"Failed to get sessions from memory {memory_name}: {e}")
+                # Continue processing other memories
                 continue
         
         return SessionListResponse(

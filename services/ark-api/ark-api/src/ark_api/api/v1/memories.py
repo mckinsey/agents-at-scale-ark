@@ -1,10 +1,9 @@
 """Kubernetes memories API endpoints."""
 import logging
-import httpx
 from typing import Optional
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from ark_sdk.models.memory_v1alpha1 import MemoryV1alpha1
 
 from ark_sdk.client import with_ark_client
@@ -17,6 +16,11 @@ from ...models.memories import (
     MemoryDetailResponse
 )
 from ...models.sessions import MemoryMessageResponse, MemoryMessageListResponse
+from ...utils.memory_client import (
+    get_memory_service_address,
+    fetch_memory_service_data,
+    get_all_memory_resources
+)
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
@@ -145,43 +149,17 @@ async def delete_memory(namespace: str, name: str) -> dict:
 async def get_memory_messages(namespace: str, name: str, session_id: str) -> dict:
     """Get messages for a specific session from a memory resource."""
     async with with_ark_client(namespace, VERSION) as client:
-        # First get the memory resource to find its service endpoint
-        try:
-            memory = await client.memories.a_get(name)
-            memory_dict = memory.to_dict()
-            
-            # Get the resolved address from the memory status
-            status = memory_dict.get("status", {})
-            service_url = status.get("lastResolvedAddress")
-            
-            if not service_url:
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"Memory service {name} is not ready or has no resolved address"
-                )
-            
-            # Proxy the request to the memory service
-            messages_url = f"{service_url}/messages?session_id={session_id}"
-            
-            async with httpx.AsyncClient() as http_client:
-                response = await http_client.get(messages_url, timeout=30.0)
-                
-                if response.status_code == 404:
-                    raise HTTPException(status_code=404, detail=f"Session {session_id} not found in memory {name}")
-                elif not response.is_success:
-                    raise HTTPException(
-                        status_code=response.status_code,
-                        detail=f"Memory service error: {response.text}"
-                    )
-                
-                return response.json()
-                
-        except httpx.RequestError as e:
-            logger.error(f"Error connecting to memory service: {e}")
-            raise HTTPException(
-                status_code=503,
-                detail=f"Failed to connect to memory service: {str(e)}"
-            )
+        memory = await client.memories.a_get(name)
+        memory_dict = memory.to_dict()
+        
+        service_url = get_memory_service_address(memory_dict)
+        
+        return await fetch_memory_service_data(
+            service_url, 
+            "/messages",
+            params={"session_id": session_id},
+            memory_name=name
+        )
 
 
 # Add this as a separate router to avoid conflicts with existing prefix
@@ -198,64 +176,45 @@ async def list_memory_messages(
 ) -> MemoryMessageListResponse:
     """List all memory messages with context, optionally filtered."""
     async with with_ark_client(namespace, VERSION) as client:
-        # Get memory resources to find service endpoints
-        memories = await client.memories.a_list()
-        
-        # Apply memory filter if specified
-        if memory:
-            memories = [m for m in memories if m.to_dict().get("metadata", {}).get("name") == memory]
+        memory_dicts = await get_all_memory_resources(client, memory)
         
         all_messages = []
         
-        for memory_obj in memories:
-            memory_dict = memory_obj.to_dict()
-            metadata = memory_dict.get("metadata", {})
-            status = memory_dict.get("status", {})
-            
-            memory_name = metadata.get("name", "")
-            service_url = status.get("lastResolvedAddress")
-            
-            if not service_url:
-                logger.warning(f"No service URL found for memory {memory_name}")
-                continue
+        for memory_dict in memory_dicts:
+            memory_name = memory_dict.get("metadata", {}).get("name", "")
             
             try:
-                # Build query parameters for postgres-memory service
+                service_url = get_memory_service_address(memory_dict)
+                
+                # Build query parameters
                 params = {}
                 if session:
                     params["session_id"] = session
                 if query:
                     params["query_id"] = query
                 
-                messages_url = f"{service_url}/messages"
-                if params:
-                    messages_url += f"?{urlencode(params)}"
+                data = await fetch_memory_service_data(
+                    service_url,
+                    "/messages",
+                    params=params,
+                    memory_name=memory_name
+                )
                 
-                async with httpx.AsyncClient() as http_client:
-                    response = await http_client.get(messages_url, timeout=30.0)
-                    
-                    if response.status_code == 404:
-                        # No messages found, skip
-                        continue
-                    elif not response.is_success:
-                        logger.error(f"Memory service error for {memory_name}: {response.text}")
-                        continue
-                    
-                    data = response.json()
-                    messages = data.get("messages", [])
-                    
-                    # Convert each database record to response format
-                    for msg_record in messages:
-                        all_messages.append(MemoryMessageResponse(
-                            timestamp=msg_record.get("created_at"),
-                            memoryName=memory_name,
-                            sessionId=msg_record.get("session_id"),
-                            queryId=msg_record.get("query_id"),
-                            message=msg_record.get("message")
-                        ))
+                messages = data.get("messages", [])
+                
+                # Convert each database record to response format
+                for msg_record in messages:
+                    all_messages.append(MemoryMessageResponse(
+                        timestamp=msg_record.get("created_at"),
+                        memoryName=memory_name,
+                        sessionId=msg_record.get("session_id"),
+                        queryId=msg_record.get("query_id"),
+                        message=msg_record.get("message")
+                    ))
             
-            except httpx.RequestError as e:
-                logger.error(f"Error connecting to memory service {memory_name}: {e}")
+            except Exception as e:
+                logger.error(f"Failed to get messages from memory {memory_name}: {e}")
+                # Continue processing other memories
                 continue
         
         # Sort by timestamp descending (most recent first)

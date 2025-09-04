@@ -8,8 +8,8 @@ class SessionResponse(BaseModel):
     """Response model for a session."""
     sessionId: str
     memoryName: str
-    queries: List[str]
-    messageCount: int
+    queries: Optional[List[str]] = None
+    messageCount: Optional[int] = None
     lastActivity: Optional[datetime] = None
 
 
