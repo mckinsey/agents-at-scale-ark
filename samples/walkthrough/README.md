@@ -56,7 +56,7 @@ samples/walkthrough/
 
 ## Prerequisites
 
-Install ARK by following the [quickstart guide](../../docs/content/developer-guide/01-quickstart.mdx):
+Install ARK by following the [quickstart guide](../../developer-guide/01-quickstart):
 
 ```bash
 # Quick installation (installs tools, sets up cluster, chainsaw, deploys controller)
@@ -78,6 +78,7 @@ The tests in this tutorial require Azure OpenAI credentials to execute queries. 
 export E2E_TEST_AZURE_OPENAI_KEY="your-azure-openai-api-key"
 export E2E_TEST_AZURE_OPENAI_BASE_URL="https://your-resource.openai.azure.com/"
 ```
+
 You can obtain these credentials from your Azure OpenAI service. If you don't have Azure OpenAI access, you can still follow the tutorial to understand the concepts, but the test execution steps will not work.
 
 ## Step 1: Create and Test Web Search Tool
@@ -181,17 +182,14 @@ chainsaw test samples/walkthrough/agents/tests/
 
 **Option 2: Test each agent individually with dedicated queries**
 ```bash
-# Navigate to the tests directory first
-cd samples/walkthrough/agents/tests/
-
 # Test researcher agent with web search functionality
-chainsaw test . --test-file chainsaw-researcher-test.yaml
+chainsaw test --test-file chainsaw-researcher-test.yaml samples/walkthrough/agents/tests/
 
 # Test analyst agent with data analysis capabilities  
-chainsaw test . --test-file chainsaw-analyst-test.yaml
+chainsaw test --test-file chainsaw-analyst-test.yaml samples/walkthrough/agents/tests/
 
 # Test creator agent with document generation (requires MCP filesystem server)
-chainsaw test . --test-file chainsaw-creator-test.yaml
+chainsaw test --test-file chainsaw-creator-test.yaml samples/walkthrough/agents/tests/
 ```
 
 Each individual test includes:
@@ -260,27 +258,33 @@ chainsaw test samples/walkthrough/teams/tests/
 
 First, set up the MCP filesystem server for document storage:
 ```bash
+# Build and load the filesys MCP server image
+cd mcp/filesys
+docker build -t mcp-filesys:latest .
+
+# Load image into cluster (choose based on your setup)
+kind load docker-image mcp-filesys:latest        # For kind
+minikube image load mcp-filesys:latest           # For minikube
+
+cd ../..
+
 # Deploy filesystem MCP server
-helm install mcp-filesys mcp/filesys/chart/
+helm install mcp-filesys mcp/filesys/chart --set image.repository=mcp-filesys --set image.tag=latest
+
+# Verify it's ready (should show READY=True)
+kubectl get mcpservers
 ```
 
-**Recommended: Deploy components in order to avoid dependency issues**
-
+Deploy all components together using Kustomize:
 ```bash
-# Deploy the complete research workflow (in dependency order):
-# 1. Deploy tools, agents, and team
-kubectl apply -f samples/walkthrough/tools/web-search-tool.yaml
-kubectl apply -f samples/walkthrough/agents/
-kubectl apply -f samples/walkthrough/teams/
-
-# 2. Wait for team to be ready, then deploy query
-kubectl apply -f samples/walkthrough/research-query.yaml
-```
-
-**Alternative (may fail due to timing issues):**
-```bash
-# This approach may fail due to dependency timing issues
+# Deploy the complete research workflow using kustomization.yaml
 kubectl apply -k samples/walkthrough/
+
+# This applies all resources defined in kustomization.yaml:
+# - Web search tool
+# - All three agents (researcher, analyst, creator)
+# - Research team with sequential strategy
+# - Sample research query
 ```
 
 ### Execute a Research Query
@@ -317,10 +321,7 @@ The complete workflow typically takes 2-3 minutes depending on research complexi
 kubectl get queries research-query -o yaml
 
 # Check response content
-kubectl get queries research-query -o jsonpath='{.status.responses[0].content}'
-
-# Or view the full response structure (JSON format)
-kubectl get queries research-query -o jsonpath='{.status.responses[0]}' | jq '.'
+kubectl get queries research-query -o jsonpath='{.status.responses[0].content}' | jq '.'
 ```
 
 ### Access Generated Documents
@@ -328,13 +329,8 @@ kubectl get queries research-query -o jsonpath='{.status.responses[0]}' | jq '.'
 # Port forward to file browser
 kubectl port-forward svc/mcp-filesys-filebrowser 8080:8080
 
-# Open in browser and check the logs for credentials
-kubectl logs deployment/mcp-filesys-filebrowser | grep "User 'admin' initialized"
+# Open in browser (admin/admin)
 open http://localhost:8080
-
-# Default credentials (check logs for actual password):
-# Username: admin
-# Password: [randomly generated - check logs above]
 ```
 
 ## Quick Start (Skip Tutorial)
@@ -342,17 +338,16 @@ open http://localhost:8080
 If you want to deploy everything at once without the step-by-step tutorial:
 
 ```bash
-# 1. Deploy MCP filesystem server
-helm install mcp-filesys mcp/filesys/chart/
+# 1. Build and deploy MCP filesystem server
+cd mcp/filesys && docker build -t mcp-filesys:latest . && cd ../..
+# Load into cluster: kind load docker-image mcp-filesys:latest OR minikube image load mcp-filesys:latest
+helm install mcp-filesys mcp/filesys/chart --set image.repository=mcp-filesys --set image.tag=latest
 
-# 2. Deploy complete workflow (two-step approach to avoid dependency issues)
-kubectl apply -f samples/walkthrough/tools/web-search-tool.yaml
-kubectl apply -f samples/walkthrough/agents/
-kubectl apply -f samples/walkthrough/teams/
+# 2. Deploy complete workflow using kustomization.yaml
+kubectl apply -k samples/walkthrough/
 
 # 3. Execute research query
 kubectl apply -f samples/walkthrough/research-query.yaml
-
 ```
 
 ## Customization
