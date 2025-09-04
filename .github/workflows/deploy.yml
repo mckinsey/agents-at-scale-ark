@@ -363,14 +363,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       
       - name: Publish to TestPyPI
-        if: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        if: ${{ secrets.TEST_PYPI_API_TOKEN != '' }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
           password: ${{ secrets.TEST_PYPI_API_TOKEN }}
       
       - name: Publish to PyPI
-        if: ${{ secrets.PYPI_API_TOKEN }}
+        if: ${{ secrets.PYPI_API_TOKEN != '' }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
