@@ -81,6 +81,14 @@ export function EvaluationEditor({
   const [targetsLoading, setTargetsLoading] = useState(false)
   const isEditing = !!evaluation
 
+  function safe<T>(requestName: string, p: Promise<T>, fallback: T) {
+    return p.catch((err) => {
+      console.error(`${requestName} failed:`, err);
+      return fallback;
+    });
+  }
+  
+
   useEffect(() => {
     if (open) {
       const loadData = async () => {
@@ -90,11 +98,11 @@ export function EvaluationEditor({
         
         try {
           const [evaluatorsData, queriesData, agentsData, teamsData, modelsData] = await Promise.all([
-            evaluatorsService.getAll(namespace),
-            queriesService.list(namespace),
-            agentsService.getAll(namespace),
-            teamsService.getAll(namespace),
-            modelsService.getAll(namespace)
+            safe("evaluatorsGetAll", evaluatorsService.getAll(namespace), []),
+            safe("queriesGetAll", queriesService.list(namespace), { items: [], count: 0 }),
+            safe("agentsGetAll", agentsService.getAll(namespace), []),
+            safe("teamsGetAll", teamsService.getAll(namespace), []),
+            safe("modelsGetAll", modelsService.getAll(namespace), [])
           ])
           setEvaluators(evaluatorsData)
           setQueries(queriesData.items)
