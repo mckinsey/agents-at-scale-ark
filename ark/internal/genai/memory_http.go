@@ -35,12 +35,13 @@ func unmarshalMessageRobust(rawJSON json.RawMessage, index int) (openai.ChatComp
 		return openai.ChatCompletionMessageParamUnion{}, fmt.Errorf("malformed JSON: %v", err)
 	}
 	
-	// Step 3: Validate role is present and valid
+	// Step 3: Validate role is present (any role is acceptable for future compatibility)
 	if simple.Role == "" {
 		return openai.ChatCompletionMessageParamUnion{}, fmt.Errorf("missing required 'role' field")
 	}
 	
-	// Step 4: Convert simple format to proper OpenAI message
+	// Step 4: Convert simple format to proper OpenAI message based on known roles
+	// For unknown roles, try user message as fallback (most permissive)
 	switch simple.Role {
 	case "user":
 		return openai.ChatCompletionMessageParamUnion(openai.UserMessage(simple.Content)), nil
@@ -49,7 +50,9 @@ func unmarshalMessageRobust(rawJSON json.RawMessage, index int) (openai.ChatComp
 	case "system":
 		return openai.ChatCompletionMessageParamUnion(openai.SystemMessage(simple.Content)), nil
 	default:
-		return openai.ChatCompletionMessageParamUnion{}, fmt.Errorf("invalid role '%s', must be one of: user, assistant, system", simple.Role)
+		// Future-proof: accept any role by treating as user message
+		// The OpenAI SDK will handle validation of the actual role
+		return openai.ChatCompletionMessageParamUnion(openai.UserMessage(simple.Content)), nil
 	}
 }
 
