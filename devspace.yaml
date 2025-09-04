@@ -9,7 +9,7 @@ version: v2beta1
 # Hooks for pre-build setup
 hooks:
   - command: ./services/ark-api/ark-api/scripts/ensure-ark-sdk-wheel.sh
-    events: ["before:dev"]
+    events: ["before:dev", "before:deploy"]
 
 # Deployment pipelines define the workflow for different commands
 pipelines:
