@@ -77,7 +77,7 @@ func (v *ToolCustomValidator) validateTool(_ context.Context, tool *arkv1alpha1.
 		return v.validateHTTP(tool.Spec.HTTP)
 	case genai.ToolTypeMCP:
 		return v.validateMCPTool(tool.Spec.MCP)
-	case "agent":
+	case genai.ToolTypeAgent:
 		return v.validateAgentTool(tool.Spec.Agent)
 	default:
 		return warnings, fmt.Errorf("unsupported tool type '%s': supported types are: http, mcp", tool.Spec.Type)
