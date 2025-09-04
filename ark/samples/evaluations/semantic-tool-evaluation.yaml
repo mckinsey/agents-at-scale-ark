@@ -1,0 +1,34 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: semantic-tool-usage-evaluator
+  namespace: default
+spec:
+  description: "Evaluates tool usage patterns using semantic expressions"
+  type: event
+  config:
+    rules:
+      - name: "tools_used"
+        expression: "tool.was_called()"
+        description: "Verifies that tools were called during execution"
+        weight: 1
+      
+      - name: "tool_success_rate"
+        expression: "tool.get_success_rate() >= 0.8"
+        description: "Ensures tool success rate is above 80%"
+        weight: 2
+      
+      - name: "tool_call_count"
+        expression: "tool.get_call_count() >= 2"
+        description: "Checks if at least 2 tool calls were made"
+        weight: 1
+      
+      - name: "specific_tool_search"
+        expression: "tools.was_called('search', scope='current')"
+        description: "Verifies search tool was called in current query"
+        weight: 1
+      
+      - name: "tool_no_errors"
+        expression: "not tools.had_error('search')"
+        description: "Ensures search tool had no errors"
+        weight: 2

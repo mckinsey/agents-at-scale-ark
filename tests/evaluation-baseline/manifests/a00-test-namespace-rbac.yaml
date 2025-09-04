@@ -1,0 +1,24 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: test-namespace-role-($namespace)
+rules:
+- apiGroups: ["ark.mckinsey.com"]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: [""]
+  resources: ["secrets", "configmaps", "events"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: test-namespace-rolebinding-($namespace)
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: ($namespace)
+roleRef:
+  kind: Role
+  name: test-namespace-role-($namespace)
+  apiGroup: rbac.authorization.k8s.io

@@ -1,6 +1,6 @@
 "use client";
 
-import { Info, Trash2, Wrench, MessageCircle } from "lucide-react";
+import { ChevronRight, Trash2, Wrench, MessageCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { getCustomIcon } from "@/lib/utils/icon-resolver";
@@ -68,7 +68,7 @@ export function ToolRow(props: ToolRowProps) {
                     className="h-8 w-8 p-0"
                     onClick={handleInfo}
                   >
-                    <Info className="h-4 w-4" />
+                    <ChevronRight className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>View tool details</TooltipContent>

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: golden-examples
+data:
+  examples: |
+    [
+      {
+        "input": "What is 2 + 2?",
+        "expectedOutput": "4"
+      },
+      {
+        "input": "What is the capital of France?",
+        "expectedOutput": "Paris"
+      },
+      {
+        "input": "What is 10 × 5?",
+        "expectedOutput": "50"
+      }
+    ]

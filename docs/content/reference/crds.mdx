@@ -18,7 +18,7 @@ This page provides detailed specifications for each ARK custom resource. For an 
 | [Tool](/reference/resources/tools) | `ark.mckinsey.com/v1alpha1` | Custom tools for agents |
 | [MCPServer](#mcp-servers) | `ark.mckinsey.com/v1alpha1` | Model Context Protocol servers |
 | [Evaluator](#evaluators) | `ark.mckinsey.com/v1alpha1` | AI-powered query assessment services |
-| [Evaluation](#evaluations) | `ark.mckinsey.com/v1alpha1` | Multi-mode AI output assessments |
+| [Evaluation](#evaluations) | `ark.mckinsey.com/v1alpha1` | Multi-type AI output assessments |
 | [A2AServer](#a2a-servers) | `ark.mckinsey.com/v1prealpha1` | Agent-to-Agent protocol servers |
 | [ExecutionEngine](#execution-engines) | `ark.mckinsey.com/v1prealpha1` | External execution engines |
 
@@ -272,21 +272,76 @@ metadata:
   name: baseline-eval
 spec:
   type: baseline
+  timeout: "10m"  # Extended timeout to keep the controller connection open until all samples get processed
   evaluator:
     name: llm-judge
     parameters:
-      - name: dataset.serviceRef.name
-        value: postgres-memory
-      - name: dataset.datasetId
-        value: weather-test-suite-v2
-      - name: dataset.testCaseIds
-        value: "test-nyc-001,test-la-002"
-  config:
-    baseline: {}
+    - name: golden-examples # reference dataset with test cases to baseline the evaluator performance
+      valueFrom:
+        configMapKeyRef:
+          name: golden-examples
+          key: examples
+  config: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: golden-examples
+data:
+  examples: |
+    [
+      {
+        "input": "What is 7 + 3?",
+        "expectedOutput": "10",
+        "expectedMinScore": "0.9",
+        "difficulty": "easy",
+        "category": "arithmetic",
+        "metadata": {
+          "type": "basic-addition",
+          "concept": "addition"
+        }
+      },
+      {
+        "input": "What is 6 × 4?",
+        "expectedOutput": "24",
+        "expectedMinScore": "0.85",
+        "difficulty": "easy",
+        "category": "arithmetic",
+        "metadata": {
+          "type": "multiplication",
+          "concept": "multiplication"
+        }
+      },
+      {
+        "input": "If I buy 8 items at $3 each, how much do I spend?",
+        "expectedOutput": "$24",
+        "expectedMinScore": "0.8",
+        "difficulty": "medium",
+        "category": "word-problem",
+        "metadata": {
+          "type": "word-problem",
+          "concept": "multiplication",
+          "context": "shopping"
+        }
+      },
+      {
+        "input": "What is 1/2 + 1/4?",
+        "expectedOutput": "3/4",
+        "expectedMinScore": "0.75",
+        "difficulty": "hard",
+        "category": "fractions",
+        "metadata": {
+          "type": "fraction-addition",
+          "concept": "fractions"
+        }
+      }
+    ]
 ```
 
 #### Query type evaluation
+
 Evaluate existing query results:
+
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Evaluation
@@ -296,13 +351,6 @@ spec:
   type: query
   evaluator:
     name: accuracy-evaluator
-    parameters: # optional
-    - name: dataset.serviceRef.name
-      value: dataset-service
-    - name: dataset.serviceRef.namespace
-      value: default
-    - name: dataset.datasetId
-      value: expected-results-v1
   config:
     queryRef:
       name: weather-query-123
@@ -323,22 +371,60 @@ spec:
                           └─────────────┘  └─────────────┘  └─────────────┘
 ```
 
-Aggregate results from multiple evaluations:
+Example combining explicit items with template-based dynamic creation
 ```yaml
+
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Evaluation
 metadata:
-  name: batch-eval
+  name: hybrid-batch-eval
+  namespace: default
 spec:
   type: batch
-  evaluator:
-    name: aggregator-evaluator
   config:
-    evaluations:
-     - name: weather-eval
-       namespace: default  # optional
-     - name: agent-eval  
-     - name: tool-eval
+    # Explicit evaluations (high priority, specific configs)
+    items:
+      - name: critical-accuracy-test
+        type: direct
+        evaluator:
+          name: strict-evaluator
+          parameters:
+            - name: threshold
+              value: "0.95"
+        config:
+          input: "What is the capital of France?"
+          output: "Paris"
+      
+      - name: performance-baseline
+        type: query
+        evaluator:
+          name: performance-evaluator
+        config:
+          queryRef:
+            name: baseline-query
+    
+    # Template for dynamic creation from query selector
+    template:
+      namePrefix: auto-eval
+      evaluator:
+        name: standard-evaluator
+      type: query
+      config:
+        queryRef:
+          name: ""  # Will be filled dynamically
+    
+    # Select additional queries to evaluate using the template
+    querySelector:
+      matchLabels:
+        category: "regression-test"
+        priority: "medium"
+      matchExpressions:
+        - key: status
+          operator: In
+          values: ["completed", "ready"]
+    
+    concurrency: 3
+    continueOnFailure: true
 ```
 
 #### Event/Rule based evaluation
@@ -356,16 +442,12 @@ spec:
   config:
     rules:
       - name: "weather-tool-called"
-        expression: 'event.type == "tool_call" && event.tool_name == "get-weather"'
-        description: "Validates weather tool was called"
+        expression: 'tools.was_called('get-weather')'
+        description: "Validates get-weather tool was called"
         weight: 1
-      - name: "response-contains-temperature"
-        expression: 'response.content.contains("°F") || response.content.contains("°C")'
-        description: "Ensures temperature is in response"
-        weight: 2
 ```
 
-### Using Evaluators in Queries
+### Using Evaluators in Queries (DEPRECATED)
 
 Reference an evaluator in your query to enable automatic assessment:
 
@@ -401,7 +483,7 @@ status:
   evaluations:
   - evaluatorName: llm-evaluator
     passed: true
-    score: "85"
+    score: "0.85"
     metadata:
       reasoning: "Response provides comprehensive analysis with supporting data"
       criteria:

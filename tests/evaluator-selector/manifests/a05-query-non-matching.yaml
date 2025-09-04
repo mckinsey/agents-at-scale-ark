@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: non-matching-query
+  labels:
+    environment: "development"
+    model: "gpt-3.5-turbo"
+    evaluation_required: "false"
+spec:
+  input: "Test query for development purposes"
+  targets:
+    - type: model
+      name: selector-model

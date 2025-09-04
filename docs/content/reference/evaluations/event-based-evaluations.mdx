@@ -1,0 +1,261 @@
+---
+title: Event-Based Evaluations
+description: Evaluate AI agent execution using Kubernetes events and semantic expressions
+---
+
+# Event-Based Evaluations
+
+Event-based evaluations analyze Kubernetes events generated during AI agent execution to assess performance, reliability, and behavior patterns.
+
+## Overview
+
+ARK generates events throughout the execution lifecycle:
+- Query resolution events (`ResolveStart`, `ResolveComplete`)
+- Agent execution events (`AgentExecutionStart`, `AgentExecutionComplete`)
+- Tool call events (`ToolCallStart`, `ToolCallComplete`)
+- Team coordination events (`TeamExecutionStart`, `TeamExecutionComplete`)
+- LLM interaction events (`LLMCallStart`, `LLMCallComplete`)
+
+## Semantic Helper Library
+
+The semantic helper library simplifies event-based evaluations by abstracting complex event patterns behind intuitive methods.
+
+### Available Helpers
+
+#### Tool Helper
+```yaml
+# Check if tools were used
+expression: "tool.was_called()"
+
+# Check tool success rate
+expression: "tool.get_success_rate() >= 0.8"
+
+# Check specific tool usage
+expression: "tools.was_called('search')"
+
+# Count tool calls
+expression: "tool.get_call_count() >= 2"
+
+# Validate tool parameters (NEW)
+expression: "tools.parameter_contains('get-coordinates', 'city', 'Chicago')"
+
+# Check parameter types (NEW)
+expression: "tools.parameter_type('get-forecast', 'gridX', 'integer')"
+
+# Verify exact call counts (NEW)
+expression: "tools.get_execution_metrics('search').call_count == 1"
+```
+
+#### Agent Helper
+```yaml
+# Check agent execution
+expression: "agent.was_executed()"
+
+# Check agent performance
+expression: "agent.get_success_rate() >= 0.9"
+
+# Check specific agent
+expression: "agents.was_executed('researcher')"
+
+# Get tools used by agent
+expression: "agents.get_tools_used('researcher').length >= 2"
+```
+
+#### Query Helper
+```yaml
+# Check query resolution
+expression: "query.was_resolved()"
+
+# Check execution time
+expression: "query.get_execution_time() <= 30.0"
+
+# Check resolution status
+expression: "query.get_resolution_status() == 'success'"
+
+# Check for timeouts
+expression: "not query.was_query_timeout(60.0)"
+```
+
+#### Sequence Helper
+```yaml
+# Validate execution sequence
+expression: "sequence.was_completed(['ResolveStart', 'AgentExecutionStart', 'ResolveComplete'])"
+
+# Check execution order
+expression: "sequence.check_execution_order(['ToolCallStart', 'ToolCallComplete'])"
+
+# Measure time between events
+expression: "sequence.get_time_between_events('ResolveStart', 'ResolveComplete') <= 60.0"
+```
+
+## Event Scoping
+
+Control which events are analyzed using scope parameters:
+
+### Scope Levels
+
+1. **CURRENT** - Events from current query only (default)
+2. **SESSION** - Events from entire session
+3. **QUERY** - Events from specific query ID
+4. **ALL** - All events in namespace
+
+### Using Scopes
+
+```yaml
+# Current query scope (default)
+expression: "tool.was_called()"
+
+# Session-wide analysis
+expression: "tools.was_called('search', scope='session')"
+
+# Cross-query patterns
+expression: "agents.get_unique_agents(scope='all').length >= 3"
+```
+
+## Creating Evaluations
+
+### Basic Tool Evaluation
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: tool-usage-evaluation
+spec:
+  type: event
+  config:
+    rules:
+      - name: "tools_used"
+        expression: "tool.was_called()"
+        weight: 1
+      - name: "tool_success"
+        expression: "tool.get_success_rate() >= 0.8"
+        weight: 2
+```
+
+### Agent Performance Evaluation
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: agent-performance-evaluation
+spec:
+  type: event
+  config:
+    rules:
+      - name: "agent_executed"
+        expression: "agent.was_executed()"
+        weight: 1
+      - name: "agent_reliable"
+        expression: "agent.get_success_rate() >= 0.9"
+        weight: 3
+```
+
+### Comprehensive Evaluation
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: comprehensive-evaluation
+spec:
+  type: event
+  config:
+    rules:
+      - name: "query_success"
+        expression: "query.was_resolved() and query.get_resolution_status() == 'success'"
+        weight: 3
+      - name: "agent_reliability"
+        expression: "agent.was_executed() and agent.get_success_rate() >= 0.85"
+        weight: 2
+      - name: "tool_utilization"
+        expression: "tool.was_called() and tool.get_success_rate() >= 0.8"
+        weight: 2
+      - name: "proper_sequence"
+        expression: "sequence.was_completed(['ResolveStart', 'AgentExecutionStart', 'ResolveComplete'])"
+        weight: 2
+```
+
+### Advanced Parameter Validation Example
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: weather-tools-validation
+spec:
+  type: event
+  config:
+    queryRef:
+      name: chicago-weather-query
+    rules:
+      - name: "coordinates_tool_called"
+        expression: "tools.was_called('get-coordinates')"
+        weight: 2
+      - name: "forecast_tool_called"
+        expression: "tools.was_called('get-forecast')"
+        weight: 2
+      - name: "coordinates_has_city_param"
+        expression: "tools.parameter_contains('get-coordinates', 'city', 'Chicago')"
+        weight: 1
+      - name: "forecast_has_office_param"
+        expression: "tools.parameter_type('get-forecast', 'office', 'string')"
+        weight: 1
+      - name: "forecast_has_grid_coords"
+        expression: "tools.parameter_type('get-forecast', 'gridX', 'integer')"
+        weight: 1
+      - name: "tools_called_exactly_once"
+        expression: "tools.get_execution_metrics('get-coordinates').call_count == 1 and tools.get_execution_metrics('get-forecast').call_count == 1"
+        weight: 2
+```
+
+### Attach an Evaluator
+
+Each `Evaluation` references an existing `Evaluator` service via `spec.evaluator`:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: tool-usage-evaluation
+spec:
+  type: event
+  config:
+    rules:
+      - name: "tools_used"
+        expression: "tool.was_called()"
+        weight: 1
+  evaluator:
+    name: tool-usage-evaluator
+    parameters:
+    - name: query.name
+      value: my-query
+    - name: query.namespace
+      value: default
+```
+
+## Backward Compatibility
+
+The system maintains backward compatibility with CEL-style expressions:
+
+```yaml
+# Old CEL-style (still works)
+expression: "events.exists(e, e.reason == 'ToolCallComplete')"
+
+# New semantic style (recommended)
+expression: "tool.was_called()"
+```
+
+## Best Practices
+
+1. **Use semantic expressions** for readability and maintainability
+2. **Apply appropriate weights** to rules based on importance
+3. **Combine multiple conditions** for comprehensive evaluation
+4. **Use scoping** to control analysis granularity
+5. **Test expressions** with sample events before deployment
+
+## Next Steps
+
+- [Semantic Expression Reference](../semantic-expressions.mdx)
+- [Event Types Reference](../event-types-reference.mdx)

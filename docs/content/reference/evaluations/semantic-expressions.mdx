@@ -1,0 +1,479 @@
+---
+title: Semantic Expression Reference
+description: Complete reference for semantic helper expressions in event-based evaluations
+---
+
+# Semantic Expression Reference
+
+Complete reference for all semantic helper methods available in event-based evaluations.
+
+## Tool Helper Methods
+
+### `tool.was_called()`
+Check if any tool was called during execution.
+
+**Returns:** `boolean`
+
+**Example:**
+```yaml
+expression: "tool.was_called()"
+```
+
+### `tools.was_called(name, [scope])`
+Check if a specific tool was called.
+
+**Parameters:**
+- `name` (string): Tool name to check
+- `scope` (string, optional): Event scope ('current', 'session', 'query', 'all')
+
+**Returns:** `boolean`
+
+**Examples:**
+```yaml
+expression: "tools.was_called('search')"
+expression: "tools.was_called('database', scope='session')"
+```
+
+### `tool.get_call_count()`
+Get total number of tool calls.
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "tool.get_call_count() >= 2"
+```
+
+### `tools.get_call_count(name)`
+Get number of calls for a specific tool.
+
+**Parameters:**
+- `name` (string): Tool name to count
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "tools.get_call_count('search') >= 1"
+```
+
+### `tool.get_success_rate()`
+Calculate overall tool success rate (0.0 to 1.0).
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "tool.get_success_rate() >= 0.8"
+```
+
+### `tools.get_success_rate(name)`
+Calculate success rate for a specific tool.
+
+**Parameters:**
+- `name` (string): Tool name to analyze
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "tools.get_success_rate('search') >= 0.9"
+```
+
+### `tools.had_error(name)`
+Check if a specific tool encountered errors.
+
+**Parameters:**
+- `name` (string): Tool name to check
+
+**Returns:** `boolean`
+
+**Example:**
+```yaml
+expression: "not tools.had_error('search')"
+```
+
+### `tools.get_execution_metrics(name).call_count`
+Get call count from detailed metrics for a specific tool.
+
+**Parameters:**
+- `name` (string): Tool name
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "tools.get_execution_metrics('search').call_count == 1"
+```
+
+### `tools.get_parameters(name)`
+Get parameters used for tool calls.
+
+**Parameters:**
+- `name` (string): Tool name
+
+**Returns:** `array` of parameter objects
+
+**Example:**
+```yaml
+expression: "tools.get_parameters('search')"
+```
+
+### `tools.parameter_contains(name, key, value)`
+Check if tool parameters contain a specific key/value.
+
+**Parameters:**
+- `name` (string): Tool name
+- `key` (string): Parameter key to check
+- `value` (string): Value to search for (case-insensitive)
+
+**Returns:** `boolean`
+
+**Example:**
+```yaml
+expression: "tools.parameter_contains('get-coordinates', 'city', 'Chicago')"
+```
+
+### `tools.parameter_type(name, key, type)`
+Validate parameter type for tool calls.
+
+**Parameters:**
+- `name` (string): Tool name
+- `key` (string): Parameter key to check
+- `type` (string): Expected type ('string', 'integer', 'float', 'boolean')
+
+**Returns:** `boolean`
+
+**Examples:**
+```yaml
+expression: "tools.parameter_type('get-forecast', 'office', 'string')"
+expression: "tools.parameter_type('get-forecast', 'gridX', 'integer')"
+```
+
+## Agent Helper Methods
+
+### `agent.was_executed()`
+Check if any agent was executed.
+
+**Returns:** `boolean`
+
+**Example:**
+```yaml
+expression: "agent.was_executed()"
+```
+
+### `agents.was_executed(name)`
+Check if a specific agent was executed.
+
+**Parameters:**
+- `name` (string): Agent name
+
+**Returns:** `boolean`
+
+**Example:**
+```yaml
+expression: "agents.was_executed('researcher')"
+```
+
+### `agent.get_execution_count()`
+Get total number of agent executions.
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "agent.get_execution_count() <= 5"
+```
+
+### `agents.get_execution_count(name)`
+Get execution count for a specific agent.
+
+**Parameters:**
+- `name` (string): Agent name
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "agents.get_execution_count('researcher') == 1"
+```
+
+### `agent.get_success_rate()`
+Calculate overall agent success rate.
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "agent.get_success_rate() >= 0.9"
+```
+
+### `agents.get_success_rate(name)`
+Calculate success rate for a specific agent.
+
+**Parameters:**
+- `name` (string): Agent name
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "agents.get_success_rate('researcher') >= 0.8"
+```
+
+
+## Query Helper Methods
+
+### `query.was_resolved()`
+Check if query was successfully resolved.
+
+**Returns:** `boolean`
+
+**Example:**
+```yaml
+expression: "query.was_resolved()"
+```
+
+### `query.get_execution_time()`
+Get total query execution time in seconds.
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "query.get_execution_time() <= 30.0"
+```
+
+### `query.get_resolution_status()`
+Get query resolution status.
+
+**Returns:** `string` ('success', 'error', 'incomplete', 'unknown')
+
+**Example:**
+```yaml
+expression: "query.get_resolution_status() == 'success'"
+```
+
+
+
+## Sequence Helper Methods
+
+### `sequence.was_completed(events)`
+Check if all events in sequence occurred (order doesn't matter).
+
+**Parameters:**
+- `events` (array): List of event reason strings
+
+**Returns:** `boolean`
+
+**Example:**
+```yaml
+expression: "sequence.was_completed(['ToolCallStart', 'ToolCallComplete'])"
+```
+
+### `sequence.check_execution_order(events, [strict])`
+Verify events occurred in specific order.
+
+**Parameters:**
+- `events` (array): Ordered list of event reasons
+- `strict` (boolean, optional): If true, events must be consecutive
+
+**Returns:** `boolean`
+
+**Example:**
+```yaml
+expression: "sequence.check_execution_order(['ResolveStart', 'ResolveComplete'], strict=false)"
+```
+
+### `sequence.get_time_between_events(start, end)`
+Calculate time between two events.
+
+**Parameters:**
+- `start` (string): Starting event reason
+- `end` (string): Ending event reason
+
+**Returns:** `number` (seconds)
+
+**Example:**
+```yaml
+expression: "sequence.get_time_between_events('ResolveStart', 'ResolveComplete') <= 60.0"
+```
+
+### `sequence.detect_parallel_execution([threshold])`
+Find events that occurred in parallel.
+
+**Parameters:**
+- `threshold` (number, optional): Time window in seconds (default: 1.0)
+
+**Returns:** `array` of parallel event groups
+
+**Example:**
+```yaml
+expression: "sequence.detect_parallel_execution(1.0).length <= 3"
+```
+
+### `sequence.get_execution_flow()`
+Get chronological flow of events with timing.
+
+**Returns:** `array` of event flow items
+
+**Example:**
+```yaml
+expression: "sequence.get_execution_flow().length >= 5"
+```
+
+## Team Helper Methods
+
+### `team.was_executed()`
+Check if any team was executed.
+
+**Returns:** `boolean`
+
+**Example:**
+```yaml
+expression: "team.was_executed()"
+```
+
+### `teams.was_executed(name)`
+Check if specific team was executed.
+
+**Parameters:**
+- `name` (string): Team name
+
+**Returns:** `boolean`
+
+**Example:**
+```yaml
+expression: "teams.was_executed('research-team')"
+```
+
+### `team.get_success_rate()`
+Calculate overall team success rate.
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "team.get_success_rate() >= 0.8"
+```
+
+### `teams.get_success_rate(name)`
+Calculate success rate for a specific team.
+
+**Parameters:**
+- `name` (string): Team name
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "teams.get_success_rate('research-team') >= 0.9"
+```
+
+
+## LLM Helper Methods
+
+### `llm.get_call_count()`
+Get total number of LLM calls.
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "llm.get_call_count() <= 10"
+```
+
+### `llm.get_success_rate()`
+Calculate LLM call success rate.
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "llm.get_success_rate() >= 0.95"
+```
+
+### `llm.get_total_tokens()`
+Get total tokens used across all LLM calls.
+
+**Returns:** `number`
+
+**Example:**
+```yaml
+expression: "llm.get_total_tokens() <= 10000"
+```
+
+## Advanced Parameter Validation
+
+The enhanced semantic expressions support detailed parameter validation for tool calls:
+
+### Parameter Content Validation
+```yaml
+# Check if get-coordinates was called with Chicago in the city parameter
+expression: "tools.parameter_contains('get-coordinates', 'city', 'Chicago')"
+
+# Check if search tool was called with a specific query
+expression: "tools.parameter_contains('search', 'query', 'weather')"
+```
+
+### Parameter Type Validation
+```yaml
+# Validate parameter types for API calls
+expression: "tools.parameter_type('get-forecast', 'gridX', 'integer')"
+expression: "tools.parameter_type('get-forecast', 'office', 'string')"
+expression: "tools.parameter_type('calculate', 'enabled', 'boolean')"
+```
+
+### Comprehensive Tool Validation Example
+```yaml
+rules:
+  - name: "coordinates_tool_used_correctly"
+    expression: "tools.was_called('get-coordinates') and tools.parameter_contains('get-coordinates', 'city', 'Chicago')"
+    weight: 3
+  
+  - name: "forecast_parameters_valid"
+    expression: "tools.parameter_type('get-forecast', 'gridX', 'integer') and tools.parameter_type('get-forecast', 'gridY', 'integer')"
+    weight: 2
+  
+  - name: "tools_called_exactly_once"
+    expression: "tools.get_execution_metrics('get-coordinates').call_count == 1 and tools.get_execution_metrics('get-forecast').call_count == 1"
+    weight: 1
+```
+
+## Combining Expressions
+
+Expressions can be combined using logical operators:
+
+### AND Operations
+```yaml
+expression: "tool.was_called() and agent.was_executed()"
+```
+
+### OR Operations
+```yaml
+expression: "query.was_resolved() or query.get_execution_time() <= 10.0"
+```
+
+### NOT Operations
+```yaml
+expression: "not tools.had_error('search')"
+```
+
+### Complex Conditions
+```yaml
+expression: "tool.get_success_rate() >= 0.8 and agent.get_success_rate() >= 0.8 and query.was_resolved()"
+```
+
+## Scope Control
+
+Most helper methods support scope parameters:
+
+- **'current'** - Current query only (default)
+- **'session'** - Entire session
+- **'query'** - Specific query ID
+- **'all'** - All events in namespace
+
+Example with scope:
+```yaml
+expression: "tools.was_called('search', scope='session')"
+```

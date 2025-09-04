@@ -256,6 +256,19 @@ func (tr *ToolRegistry) ToOpenAITools() []openai.ChatCompletionToolParam {
 	return tools
 }
 
+// GetMCPPool returns the MCP client pool for this tool registry
+func (tr *ToolRegistry) GetMCPPool() *MCPClientPool {
+	return tr.mcpPool
+}
+
+// Close closes all MCP client connections in the tool registry
+func (tr *ToolRegistry) Close() error {
+	if tr.mcpPool != nil {
+		return tr.mcpPool.Close()
+	}
+	return nil
+}
+
 type NoopExecutor struct{}
 
 func (n *NoopExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {

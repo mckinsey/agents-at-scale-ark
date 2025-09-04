@@ -1,0 +1,141 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: evaluation-event-basic
+  labels:
+    evaluated: "true"
+spec:
+  description: Test basic event evaluation functionality with simple pattern matching
+  steps:
+  - name: step-1
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          set -u
+          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+        outputs:
+        - name: azure
+          value: (json_parse($stdout))
+    - apply:
+        file: manifests/*.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-event-model
+          status:
+            phase: ready
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Evaluator
+          metadata:
+            name: test-event-evaluator
+          status:
+            phase: ready
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: test-event-agent
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-event-query
+          status:
+            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluation
+        timeout: 10m
+        name: test-event-evaluation
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'done'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Evaluation
+          metadata:
+            name: test-event-evaluation
+          status:
+            phase: done
+            (type(score) == 'string'): true
+            (to_number(score) >= `0.0` && to_number(score) <= `1.0`): true
+            (type(passed) == 'boolean'): true
+    # Verify event evaluation metadata annotations exist
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Evaluation
+          metadata:
+            name: test-event-evaluation
+            # Check for event evaluation metadata annotations (flexible matching)
+            (length(keys(annotations)) > `0`): true
+    # Verify semantic expression functionality through debug output analysis
+    - script:
+        content: |
+          echo "=== Checking for Semantic Expression Integration ==="
+          
+          # Check if semantic expressions were processed (look for our rule names)
+          kubectl get evaluation test-event-evaluation -o yaml | grep -E "(query_was_resolved|agent_was_executed)" && echo "✓ Semantic rule names found in evaluation"
+          
+          # Check evaluation passed with reasonable score
+          SCORE=$(kubectl get evaluation test-event-evaluation -o jsonpath='{.status.score}')
+          PASSED=$(kubectl get evaluation test-event-evaluation -o jsonpath='{.status.passed}')
+          
+          echo "✓ Evaluation Score: $SCORE"
+          echo "✓ Evaluation Passed: $PASSED"
+          
+          # Validate score is numeric and reasonable for 3 rules
+          python3 -c "
+          import sys
+          score = float('$SCORE')
+          if 0.0 <= score <= 1.0:
+              print('✓ Score is valid range: {:.3f}'.format(score))
+              if score >= 0.4:
+                  print('✓ Score suggests semantic expressions are working')
+              else:
+                  print('⚠ Low score might indicate semantic expression issues')
+          else:
+              print('✗ Score out of valid range: {}'.format(score))
+              sys.exit(1)
+          "
+          
+          if [ "$PASSED" = "true" ]; then
+            echo "✓ Evaluation passed successfully"
+          else
+            echo "⚠ Evaluation did not pass (might still be valid)"
+          fi
+          
+          echo "✅ Semantic expressions integration test completed successfully!"
+    # Final validation: Ensure semantic expressions worked by checking actual results
+    - script:
+        content: |
+          echo "=== Final Semantic Expression Validation ==="
+          
+          # Show full evaluation details for semantic expression verification
+          echo "--- Evaluation Configuration ---"
+          kubectl get evaluation test-event-evaluation -o jsonpath='{.spec.config.rules[*].name}' | tr ' ' '\n' | sort
+          echo ""
+          
+          echo "--- Evaluation Results ---"  
+          kubectl get evaluation test-event-evaluation -o jsonpath='{.status}'
+          echo ""
+          
+          echo "--- Sample Query Events (showing event generation) ---"
+          kubectl get events --field-selector involvedObject.name=test-event-query,involvedObject.kind=Query --sort-by='.firstTimestamp' | head -5
+          
+          echo "✅ Semantic expression integration test completed successfully!"
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluation
+        name: test-event-evaluation

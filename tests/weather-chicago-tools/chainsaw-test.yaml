@@ -1,0 +1,217 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: weather-chicago-tools
+  labels:
+    evaluated: "true"
+spec:
+  description: Test weather agent evaluation is using tools as expected
+  steps:
+  - name: step-1
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          set -u
+          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+        outputs:
+        - name: azure
+          value: (json_parse($stdout))
+    - apply:
+        file: manifests/a00-mock-server.yaml
+    - apply:
+        file: manifests/a00-evaluator-llm-rbac.yaml
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a01-secret.yaml
+    - apply:
+        file: manifests/a02-model.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: weather-default-model
+          status:
+            phase: ready
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: mock-weather-api
+            namespace: ($namespace)
+          status:
+            readyReplicas: 1
+            availableReplicas: 1
+    # Apply tools and other resources now that mock server is ready
+    - apply:
+        file: manifests/a02-z-evaluator-llm.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluator
+        timeout: 5m
+        name: evaluator-llm
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'ready'
+    # Create tools using kubectl with template substitution
+    - script:
+        content: |
+          MOCK_URL="http://mock-weather-api.$NAMESPACE.svc.cluster.local"
+          
+          # Create get-coordinates tool
+          kubectl apply -f - <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: get-coordinates
+            namespace: $NAMESPACE
+          spec:
+            type: http
+            description: "Returns coordinates for the given city name."
+            inputSchema:
+              type: object
+              properties:
+                city:
+                  type: string
+                  description: City name to get coordinates for
+              required: ["city"]
+            http:
+              url: $MOCK_URL/v1/search?name={city}&count=1
+          EOF
+          
+          # Create get-forecast tool
+          kubectl apply -f - <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: get-forecast
+            namespace: $NAMESPACE
+          spec:
+            type: http
+            description: "Get weather forecast for a specific location and time period"
+            inputSchema:
+              type: object
+              properties:
+                office:
+                  type: string
+                  description: "Weather office identifier (e.g., TOP)"
+                gridX:
+                  type: integer
+                  description: "Grid X coordinate"
+                gridY:
+                  type: integer
+                  description: "Grid Y coordinate"
+              required: ["office", "gridX", "gridY"]
+            http:
+              url: $MOCK_URL/gridpoints/{office}/{gridX},{gridY}/forecast
+          EOF
+    # Wait for tools to be created before patching URLs
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: get-coordinates
+            namespace: ($namespace)
+          status:
+            state: Ready
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: get-forecast
+            namespace: ($namespace)
+          status:
+            state: Ready
+    # Wait for service endpoints to be ready
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Endpoints
+          metadata:
+            name: mock-weather-api
+            namespace: ($namespace)
+    # Wait for mock server to be fully initialized and test connectivity
+    - script:
+        content: |
+          echo "Waiting for mock server to initialize..."
+          # Give MockServer time to load expectations
+          sleep 10
+          
+          MOCK_URL="http://mock-weather-api.$NAMESPACE.svc.cluster.local"
+          echo "Testing mock server at: $MOCK_URL"
+          
+          # Test mock server connectivity with a longer timeout
+          kubectl run test-mock-ready --image=curlimages/curl --rm -i --restart=Never -n $NAMESPACE -- \
+            curl -f -s --max-time 10 "${MOCK_URL}/v1/search?name=Chicago&count=1"
+        timeout: 30s
+    - apply:
+        file: manifests/a05-weather-agent.yaml
+    - apply:
+        file: manifests/a06-chicago-query.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: chicago-weather-agent
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: chicago-weather-query
+          status:
+            phase: done
+    - apply:
+       file: manifests/weather-tools-event-evaluation.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluation
+        timeout: 10m
+        name: weather-tools-event-evaluation
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'done'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Evaluation
+          metadata:
+            name: weather-tools-event-evaluation
+          status:
+            phase: done
+            (type(score) == 'string'): true
+            (to_number(score) >= `0.0` && to_number(score) <= `1.0`): true
+            (type(passed) == 'boolean'): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Evaluation
+          metadata:
+            name: weather-tools-event-evaluation
+            # Verify enhanced evaluation has more rules and higher expectations
+            (to_number(annotations."evaluation.metadata/passed_rules") == `8`): true
+            (to_number(annotations."evaluation.metadata/failed_rules") == `0`): true    
+          status:
+            passed: true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: chicago-weather-query
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluation
+        name: weather-tools-event-evaluation
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluator
+        name: evaluator-llm

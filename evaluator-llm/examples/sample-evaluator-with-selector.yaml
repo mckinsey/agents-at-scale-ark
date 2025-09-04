@@ -1,0 +1,105 @@
+## example with default parameters
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: evaluator-with-params
+  namespace: default
+spec:
+  description: "Evaluate queries matching selector label"
+  address:
+    valueFrom:
+      serviceRef:
+        name: evaluator-metric
+        port: "http"
+        path: "/evaluate"
+  selector:
+    resourceType: "Query" # we will only support query for now
+    apiGroup: "ark.mckinsey.com"
+    matchLabels: 
+      model: "gpt-4"
+      since: "2025-12-01" 
+      to: "2025-12-01" 
+  parameters:
+    - name: tokens
+      value: 5000
+    - name: duration
+      value: "3m"
+---
+## example with default parameters as configMap with all keys
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: evaluator-with-params-ref
+  namespace: default
+spec:
+  description: "Evaluate queries matching selector label and pulling params from configMap"
+  address:
+    valueFrom:
+      serviceRef:
+        name: evaluator-metric
+        port: "http"
+        path: "/evaluate"
+  selector:
+    resourceType: "Query" # we will only support query for now
+    apiGroup: "ark.mckinsey.com"
+    matchLabels:
+      model: "gpt-4"
+    matchExpressions:
+      - key: status
+        operator: In
+        values: ["done"]
+      - key: evaluation_required
+        operator: In
+        values: ["true"]
+  parameters:
+    valueFrom:
+      configMapRef:
+        name: ark-eval-metric-config
+        includeAllKeys: true
+---
+## example with default parameters as configMap with individual key refs
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: evaluator-with-params-key-ref
+  namespace: default
+spec:
+  description: "Evaluate queries matching selector label and pulling params from configMap"
+  address:
+    valueFrom:
+      serviceRef:
+        name: evaluator-metric
+        port: "http"
+        path: "/evaluate"
+  selector:
+    resourceType: "Query" # we will only support query for now
+    apiGroup: "ark.mckinsey.com"
+    matchLabels:
+      model: "gpt-4"
+    matchExpressions:
+      - key: type
+        operator: In
+        values: ["query"]
+  parameters:
+    - name: tokens
+      valueFrom:
+        configMapKeyRef:
+          name: ark-eval-metric-config
+          key: tokens
+          optional: false  # Make it required
+    - name: duration
+      value: "3m"    # Default value
+      valueFrom:
+        configMapKeyRef:
+          name: ark-eval-metric-config
+          key: duration
+          optional: true   # Make it optional
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ark-eval-metric-config
+  namespace: default
+data:
+  tokens: "5000"
+  duration: "3m" #stands for minutes

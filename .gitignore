@@ -138,6 +138,7 @@ services/ark-dashboard/ark-dashboard/node_modules/
 out/
 lib/ark-sdk/uv.lock
 lib/executor-common/uv.lock
+*.whl
 
 # Kubebuilder auto-generated files we don't want
 .github/workflows/test-chart.yml
