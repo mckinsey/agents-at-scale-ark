@@ -38,16 +38,6 @@ images:
     context: ./ark
     target: production
 
-  ark-dashboard:
-    image: ark-dashboard  
-    dockerfile: ./services/ark-dashboard/Dockerfile
-    context: ./services/ark-dashboard
-
-  ark-controller:
-    image: controller
-    dockerfile: ./ark/Dockerfile
-    context: ./ark
-
 # Kubernetes deployments
 deployments:
   ark-api:
