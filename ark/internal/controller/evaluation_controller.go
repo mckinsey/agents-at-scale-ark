@@ -712,13 +712,13 @@ func (r *EvaluationReconciler) updateEvaluationComplete(ctx context.Context, eva
 				latest.Annotations[annotationKey] = value
 				log.V(1).Info("Adding metadata as annotation", "evaluation", evaluation.Name, "key", annotationKey, "value", value)
 			}
-			
+
 			// Update the main object with annotations
 			if err := r.Update(ctx, latest); err != nil {
 				log.V(1).Info("failed to update Evaluation annotations (will retry)", "evaluation", evaluation.Name, "error", err)
 				return err
 			}
-			
+
 			// Re-fetch after annotation update to ensure we have the latest version
 			if err := r.Get(ctx, evalKey, latest); err != nil {
 				return err

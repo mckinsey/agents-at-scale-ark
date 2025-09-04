@@ -22,37 +22,37 @@ type simpleMessage struct {
 }
 
 // unmarshalMessageRobust tries discriminated union first, then falls back to simple role/content extraction
-func unmarshalMessageRobust(rawJSON json.RawMessage, index int) (openai.ChatCompletionMessageParamUnion, error) {
+func unmarshalMessageRobust(rawJSON json.RawMessage) (openai.ChatCompletionMessageParamUnion, error) {
 	// Step 1: Try discriminated union first (the normal case)
 	var openaiMessage openai.ChatCompletionMessageParamUnion
 	if err := json.Unmarshal(rawJSON, &openaiMessage); err == nil {
 		return openaiMessage, nil
 	}
-	
+
 	// Step 2: Fallback - try to extract role/content from simple format
 	var simple simpleMessage
 	if err := json.Unmarshal(rawJSON, &simple); err != nil {
 		return openai.ChatCompletionMessageParamUnion{}, fmt.Errorf("malformed JSON: %v", err)
 	}
-	
+
 	// Step 3: Validate role is present (any role is acceptable for future compatibility)
 	if simple.Role == "" {
 		return openai.ChatCompletionMessageParamUnion{}, fmt.Errorf("missing required 'role' field")
 	}
-	
+
 	// Step 4: Convert simple format to proper OpenAI message based on known roles
 	// For unknown roles, try user message as fallback (most permissive)
 	switch simple.Role {
 	case "user":
-		return openai.ChatCompletionMessageParamUnion(openai.UserMessage(simple.Content)), nil
+		return openai.UserMessage(simple.Content), nil
 	case "assistant":
-		return openai.ChatCompletionMessageParamUnion(openai.AssistantMessage(simple.Content)), nil
+		return openai.AssistantMessage(simple.Content), nil
 	case "system":
-		return openai.ChatCompletionMessageParamUnion(openai.SystemMessage(simple.Content)), nil
+		return openai.SystemMessage(simple.Content), nil
 	default:
 		// Future-proof: accept any role by treating as user message
 		// The OpenAI SDK will handle validation of the actual role
-		return openai.ChatCompletionMessageParamUnion(openai.UserMessage(simple.Content)), nil
+		return openai.UserMessage(simple.Content), nil
 	}
 }
 
@@ -238,8 +238,8 @@ func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 	}
 
 	messages := make([]Message, 0, len(response.Messages))
-	for i, rawMsg := range response.Messages {
-		openaiMessage, err := unmarshalMessageRobust(rawMsg, i)
+	for i, record := range response.Messages {
+		openaiMessage, err := unmarshalMessageRobust(record.Message)
 		if err != nil {
 			err := fmt.Errorf("failed to unmarshal message at index %d: %w", i, err)
 			tracker.Fail(err)
