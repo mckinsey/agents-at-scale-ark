@@ -1,6 +1,11 @@
 # DevSpace configuration for local ARK services development
 version: v2beta1
 
+# Dependencies - include other DevSpace configurations
+dependencies:
+  postgres-memory:
+    path: ./services/postgres-memory
+
 # Hooks for pre-build setup
 hooks:
   - command: ./services/ark-api/ark-api/scripts/ensure-ark-sdk-wheel.sh
@@ -139,11 +144,15 @@ dev:
     sync:
       - path: ./ark:/workspace
         startContainer: true
+        disableDownload: true
         excludePaths:
           - bin/
           - out/
           - .git/
           - "*.log"
+    # Restart container when Go files change so that the code is recompiled
+    # restartHelper:
+    #   inject: true
     # Enable SSH for IDE integration
     ssh:
       enabled: true
@@ -160,6 +169,7 @@ dev:
     sync:
       - path: ./services/ark-dashboard/ark-dashboard:/app
         startContainer: true
+        disableDownload: true
         excludePaths:
           - node_modules/
           - .next/

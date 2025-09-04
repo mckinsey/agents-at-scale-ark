@@ -16,7 +16,7 @@ dependencies = [
     "langchain-openai>=0.1.0", # openai integration
     "langchain-community>=0.0.20", # community integrations (FAISS)
     "faiss-cpu>=1.7.4", # vector search
-    "tiktoken>=0.5.0", # tokenization for embeddings and OpenAI models
+    "tiktoken>=0.5.0",
     "executor-common",
 ]
 classifiers = [
@@ -85,5 +85,5 @@ testpaths = [
 ]
 
 [tool.uv.sources]
-executor-common = { path = "../../out/executor-common/dist/executor_common-0.1.17-py3-none-any.whl" }
+executor-common = { path = "../../out/executor-common/dist/executor_common-0.1.31-py3-none-any.whl" }
 

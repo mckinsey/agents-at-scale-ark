@@ -165,9 +165,8 @@ func printQueryResults(query *arkv1alpha1.Query, outputMode string) {
 		return
 	}
 
-
 	// Display responses
-	for _,response := range query.Status.Responses {
+	for _, response := range query.Status.Responses {
 		fmt.Printf("%s\n", response.Content)
 	}
 }
