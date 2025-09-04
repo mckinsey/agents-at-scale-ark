@@ -15,6 +15,44 @@ import (
 )
 
 var _ = Describe("Evaluation Controller", func() {
+	Context("When handling timeout configuration", func() {
+		It("Should use default timeout when not specified", func() {
+			reconciler := &EvaluationReconciler{}
+			evaluation := &arkv1alpha1.Evaluation{
+				Spec: arkv1alpha1.EvaluationSpec{
+					// Timeout not specified
+				},
+			}
+			timeout := reconciler.getEvaluationTimeout(evaluation)
+			Expect(timeout.Minutes()).To(Equal(float64(5))) // Default is 5 minutes
+		})
+
+		It("Should use specified timeout when provided", func() {
+			reconciler := &EvaluationReconciler{}
+			duration := metav1.Duration{Duration: 10 * 60 * 1e9} // 10 minutes in nanoseconds
+			evaluation := &arkv1alpha1.Evaluation{
+				Spec: arkv1alpha1.EvaluationSpec{
+					Timeout: &duration,
+				},
+			}
+			timeout := reconciler.getEvaluationTimeout(evaluation)
+			Expect(timeout.Minutes()).To(Equal(float64(10)))
+		})
+
+		It("Should use custom timeout for baseline evaluation", func() {
+			reconciler := &EvaluationReconciler{}
+			duration := metav1.Duration{Duration: 30 * 1e9} // 30 seconds in nanoseconds
+			evaluation := &arkv1alpha1.Evaluation{
+				Spec: arkv1alpha1.EvaluationSpec{
+					Type:    "baseline",
+					Timeout: &duration,
+				},
+			}
+			timeout := reconciler.getEvaluationTimeout(evaluation)
+			Expect(timeout.Seconds()).To(Equal(float64(30)))
+		})
+	})
+
 	Context("When creating an Evaluation", func() {
 		It("Should attempt to call evaluator service in manual evaluation", func() {
 			ctx := context.Background()

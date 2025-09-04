@@ -182,8 +182,8 @@ EOF
     --set image.tag="${ARK_IMAGE_TAG}" \
     --namespace default --create-namespace \
     --wait \
-    --timeout=120s
-  kubectl -n default rollout status deployment/evaluator-llm --timeout=60s
+    --timeout=300s
+  kubectl -n default rollout status deployment/evaluator-llm --timeout=180s
 fi
 
 echo

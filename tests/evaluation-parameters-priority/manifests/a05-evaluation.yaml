@@ -1,0 +1,21 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: test-direct-evaluation
+spec:
+  type: direct
+  config:
+    input: "What is the square root of 25?"
+    output: "The square root of 25 is 5"
+  evaluator:
+    name: test-evaluator-llm
+    parameters:
+    - name: min-score
+      value: "0.7"
+    - name: temperature
+      value: "0.1"
+    - name: golden-examples
+      valueFrom:
+        configMapKeyRef:
+          name: golden-examples
+          key: examples

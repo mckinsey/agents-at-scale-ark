@@ -1,0 +1,83 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: evaluation-manual
+  labels:
+    evaluated: "true"
+spec:
+  description: Test parameters priority of evaluation over evaluator
+  steps:
+  - name: step-1
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          set -u
+          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+        outputs:
+        - name: azure
+          value: (json_parse($stdout))
+    - apply:
+        file: manifests/*.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: priority-evaluation-model
+          status:
+            phase: ready
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Evaluator
+          metadata:
+            name: test-evaluator-llm
+          status:
+            phase: ready
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: golden-examples
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluation
+        timeout: 5m
+        name: test-direct-evaluation
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'done'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Evaluation
+          metadata:
+            name: test-direct-evaluation
+          status:
+            phase: done
+            (type(score) == 'string'): true
+            (to_number(score) >= `0.0` && to_number(score) <= `1.0`): true
+            (type(passed) == 'boolean'): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Evaluation
+          metadata:
+            name: test-direct-evaluation
+            (contains(keys(annotations), 'evaluation.metadata/reasoning')): true
+            (contains(keys(annotations), 'evaluation.metadata/criteria_scores')): true
+            (contains(keys(annotations), 'evaluation.metadata/evaluation_scope')): true
+            (contains(keys(annotations), 'evaluation.metadata/min_score_threshold')): true
+            (contains(keys(annotations), 'evaluation.metadata/model_used')): true
+            (contains(keys(annotations), 'evaluation.metadata/query_id')): true
+            annotations:
+              evaluation.metadata/min_score_threshold: "0.7"
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluation
+        name: test-direct-evaluation

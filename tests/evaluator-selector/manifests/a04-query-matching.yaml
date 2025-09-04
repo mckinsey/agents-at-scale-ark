@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: matching-query
+  labels:
+    environment: "production"
+    model: "gpt-4"
+    evaluation_required: "true"
+spec:
+  input: "What are the key benefits of renewable energy adoption?"
+  targets:
+    - type: model
+      name: selector-model

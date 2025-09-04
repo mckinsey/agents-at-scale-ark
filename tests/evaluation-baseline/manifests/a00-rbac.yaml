@@ -1,0 +1,24 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: test-baseline-evaluator-role-($namespace)
+rules:
+- apiGroups: ["ark.mckinsey.com"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["secrets", "events"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: test-baseline-evaluator-binding-($namespace)
+subjects:
+- kind: ServiceAccount
+  name: evaluator-llm
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: test-baseline-evaluator-role-($namespace)
+  apiGroup: rbac.authorization.k8s.io

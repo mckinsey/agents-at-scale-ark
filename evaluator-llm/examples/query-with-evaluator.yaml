@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: query-with-evaluation
+spec:
+  input: "Explain the benefits of renewable energy sources and their impact on the environment"
+  targets:
+    - type: agent
+      name: amazed
+  evaluators:
+    - name: evaluator-llm
