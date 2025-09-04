@@ -406,16 +406,16 @@ export function EventsSection({
                         {getEventTypeBadge(event.type)}
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100 font-mono">
+                    <td className="px-3 py-3 text-xs text-gray-900 dark:text-gray-100 font-mono">
                       {event.reason}
                     </td>
                     <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                      <Badge variant="secondary" className="font-mono">
+                      <Badge variant="secondary" className="font-mono text-xs">
                         {event.involvedObjectKind}
                       </Badge>
                     </td>
                     <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                      <div className="font-mono font-medium">
+                      <div className="font-mono font-medium text-xs">
                         {event.involvedObjectName}
                       </div>
                       {event.involvedObjectNamespace &&
@@ -430,7 +430,7 @@ export function EventsSection({
                         {event.involvedObjectUid || "-"}
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100 font-mono">
+                    <td className="px-3 py-3 text-xs text-gray-900 dark:text-gray-100 font-mono">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger className="text-left">
