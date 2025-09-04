@@ -40,6 +40,7 @@ export interface MemoryResource {
 export interface MemoryFilters {
   memoryName?: string;
   sessionId?: string;
+  queryId?: string;
   limit?: number;
   page?: number;
 }

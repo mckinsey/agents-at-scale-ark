@@ -1,14 +1,14 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/ui/pagination";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator
+} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -22,9 +22,9 @@ import {
   type MemoryFilters
 } from "@/lib/services/memory";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 
-import { Database, MessageSquare } from "lucide-react";
+import { Database, MessageSquare, ChevronDown } from "lucide-react";
 
 interface MemorySectionProps {
   readonly namespace: string;
@@ -49,11 +49,24 @@ export function MemorySection({
   const [loading, setLoading] = useState(true);
   const [availableMemories, setAvailableMemories] = useState<MemoryResource[]>([]);
   const [availableSessions, setAvailableSessions] = useState<string[]>([]);
+  const [availableQueries, setAvailableQueries] = useState<string[]>([]);
+  
+  const [memoryFilter, setMemoryFilter] = useState("");
+  const [sessionFilter, setSessionFilter] = useState("");
+  const [queryFilter, setQueryFilter] = useState("");
+  const [memoryDropdownOpen, setMemoryDropdownOpen] = useState(false);
+  const [sessionDropdownOpen, setSessionDropdownOpen] = useState(false);
+  const [queryDropdownOpen, setQueryDropdownOpen] = useState(false);
+  
+  const memoryFilterRef = useRef<HTMLInputElement>(null);
+  const sessionFilterRef = useRef<HTMLInputElement>(null);
+  const queryFilterRef = useRef<HTMLInputElement>(null);
 
   const initialPage = parseInt(searchParams.get("page") || "1", 10);
   const initialLimit = parseInt(searchParams.get("limit") || "10", 10);
   const initialMemory = searchParams.get("memory") || undefined;
   const initialSessionId = searchParams.get("sessionId") || undefined;
+  const initialQueryId = searchParams.get("queryId") || undefined;
 
   const [totalMessages, setTotalMessages] = useState(0);
   const [currentPage, setCurrentPage] = useState(initialPage);
@@ -63,6 +76,7 @@ export function MemorySection({
     page: initialPage,
     memoryName: initialMemory,
     sessionId: initialSessionId,
+    queryId: initialQueryId,
     ...initialFilters
   });
 
@@ -95,7 +109,8 @@ export function MemorySection({
           memoryService.getSessions(namespace),
           memoryService.getAllMemoryMessages(namespace, {
             memory: filters.memoryName && filters.memoryName !== "all" ? filters.memoryName : undefined,
-            session: filters.sessionId && filters.sessionId !== "all" ? filters.sessionId : undefined
+            session: filters.sessionId && filters.sessionId !== "all" ? filters.sessionId : undefined,
+            query: filters.queryId && filters.queryId !== "all" ? filters.queryId : undefined
           })
         ]);
         
@@ -108,9 +123,12 @@ export function MemorySection({
         setAvailableMemories(memoriesData);
         setMemoryMessages(sortedMessages);
 
-        // Extract unique session IDs for filtering
+        // Extract unique session IDs and query IDs for filtering
         const sessionIds = new Set(sessionsData.map(s => s.sessionId));
         setAvailableSessions(Array.from(sessionIds).sort());
+        
+        const queryIds = new Set(sortedMessages.map(m => m.queryId));
+        setAvailableQueries(Array.from(queryIds).sort());
 
       } catch (error) {
         console.error("Failed to load memory messages:", error);
@@ -138,13 +156,15 @@ export function MemorySection({
     const limitFromUrl = parseInt(searchParams.get("limit") || "10", 10);
     const memoryFromUrl = searchParams.get("memory") || undefined;
     const sessionFromUrl = searchParams.get("sessionId") || undefined;
+    const queryFromUrl = searchParams.get("queryId") || undefined;
 
     // Only update if URL params actually changed
     if (
       pageFromUrl !== currentPage ||
       limitFromUrl !== itemsPerPage ||
       memoryFromUrl !== filters.memoryName ||
-      sessionFromUrl !== filters.sessionId
+      sessionFromUrl !== filters.sessionId ||
+      queryFromUrl !== filters.queryId
     ) {
       setCurrentPage(pageFromUrl);
       setItemsPerPage(limitFromUrl);
@@ -152,10 +172,49 @@ export function MemorySection({
         page: pageFromUrl,
         limit: limitFromUrl,
         memoryName: memoryFromUrl,
-        sessionId: sessionFromUrl
+        sessionId: sessionFromUrl,
+        queryId: queryFromUrl
       });
     }
-  }, [searchParams, currentPage, itemsPerPage, filters.memoryName, filters.sessionId]);
+  }, [searchParams, currentPage, itemsPerPage, filters.memoryName, filters.sessionId, filters.queryId]);
+
+  // Focus filter inputs when dropdowns open
+  useEffect(() => {
+    if (memoryDropdownOpen && memoryFilterRef.current) {
+      memoryFilterRef.current.focus();
+    }
+  }, [memoryDropdownOpen]);
+  
+  useEffect(() => {
+    if (sessionDropdownOpen && sessionFilterRef.current) {
+      sessionFilterRef.current.focus();
+    }
+  }, [sessionDropdownOpen]);
+  
+  useEffect(() => {
+    if (queryDropdownOpen && queryFilterRef.current) {
+      queryFilterRef.current.focus();
+    }
+  }, [queryDropdownOpen]);
+
+  // Filtered options
+  const filteredMemories = useMemo(() => {
+    return availableMemories.filter(memory =>
+      memory.name.toLowerCase().includes(memoryFilter.toLowerCase())
+    );
+  }, [availableMemories, memoryFilter]);
+  
+  const filteredSessions = useMemo(() => {
+    return availableSessions.filter(session =>
+      session.toLowerCase().includes(sessionFilter.toLowerCase())
+    );
+  }, [availableSessions, sessionFilter]);
+  
+  const filteredQueries = useMemo(() => {
+    return availableQueries.filter(query =>
+      query.toLowerCase().includes(queryFilter.toLowerCase())
+    );
+  }, [availableQueries, queryFilter]);
 
   const handleFilterChange = (
     key: keyof MemoryFilters,
@@ -176,7 +235,8 @@ export function MemorySection({
       page: 1,
       limit: itemsPerPage,
       memoryName: undefined,
-      sessionId: undefined
+      sessionId: undefined,
+      queryId: undefined
     });
   };
 
@@ -234,39 +294,167 @@ export function MemorySection({
   return (
     <div className="space-y-4 p-4">
       <div className="flex flex-wrap gap-4 items-center">
-        <Select
-          value={searchParams.get("memory") || "all"}
-          onValueChange={(value) => updateUrlParams({ memory: value === "all" ? undefined : value, page: 1 })}
-        >
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Memory Resource" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Memories</SelectItem>
-            {availableMemories.map((memory) => (
-              <SelectItem key={memory.name} value={memory.name}>
-                {memory.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <DropdownMenu open={memoryDropdownOpen} onOpenChange={setMemoryDropdownOpen}>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="w-48 justify-between text-sm h-9 font-normal min-w-0">
+              <span className={`truncate min-w-0 ${!searchParams.get("memory") || searchParams.get("memory") === "all" ? 'text-muted-foreground' : ''}`}>
+                {!searchParams.get("memory") || searchParams.get("memory") === "all" 
+                  ? "All Memories" 
+                  : searchParams.get("memory")
+                }
+              </span>
+              <ChevronDown className="h-4 w-4 flex-shrink-0 ml-1" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-48" align="start">
+            <div className="p-2">
+              <Input
+                ref={memoryFilterRef}
+                placeholder="Filter memories..."
+                value={memoryFilter}
+                onChange={(e) => setMemoryFilter(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </div>
+            <DropdownMenuSeparator />
+            <div className="max-h-64 overflow-auto">
+              <div 
+                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+                onClick={() => {
+                  updateUrlParams({ memory: undefined, page: 1 });
+                  setMemoryDropdownOpen(false);
+                }}
+              >
+                All Memories
+              </div>
+              {filteredMemories.map((memory) => (
+                <div 
+                  key={memory.name}
+                  className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+                  onClick={() => {
+                    updateUrlParams({ memory: memory.name, page: 1 });
+                    setMemoryDropdownOpen(false);
+                  }}
+                >
+                  {memory.name}
+                </div>
+              ))}
+              {filteredMemories.length === 0 && memoryFilter && (
+                <div className="p-3 text-sm text-gray-500">
+                  No memories match your filter
+                </div>
+              )}
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-        <Select
-          value={searchParams.get("sessionId") || "all"}
-          onValueChange={(value) => handleFilterChange("sessionId", value)}
-        >
-          <SelectTrigger className="w-64">
-            <SelectValue placeholder="Session ID" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Sessions</SelectItem>
-            {availableSessions.map((sessionId) => (
-              <SelectItem key={sessionId} value={sessionId}>
-                {sessionId.length > 30 ? `${sessionId.substring(0, 30)}...` : sessionId}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <DropdownMenu open={sessionDropdownOpen} onOpenChange={setSessionDropdownOpen}>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="w-64 justify-between text-sm h-9 font-normal min-w-0">
+              <span className={`truncate min-w-0 ${!searchParams.get("sessionId") || searchParams.get("sessionId") === "all" ? 'text-muted-foreground' : ''}`}>
+                {!searchParams.get("sessionId") || searchParams.get("sessionId") === "all" 
+                  ? "All Sessions" 
+                  : (searchParams.get("sessionId")!.length > 30 ? `${searchParams.get("sessionId")!.substring(0, 30)}...` : searchParams.get("sessionId"))
+                }
+              </span>
+              <ChevronDown className="h-4 w-4 flex-shrink-0 ml-1" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-64" align="start">
+            <div className="p-2">
+              <Input
+                ref={sessionFilterRef}
+                placeholder="Filter sessions..."
+                value={sessionFilter}
+                onChange={(e) => setSessionFilter(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </div>
+            <DropdownMenuSeparator />
+            <div className="max-h-64 overflow-auto">
+              <div 
+                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+                onClick={() => {
+                  handleFilterChange("sessionId", "all");
+                  setSessionDropdownOpen(false);
+                }}
+              >
+                All Sessions
+              </div>
+              {filteredSessions.map((sessionId) => (
+                <div 
+                  key={sessionId}
+                  className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+                  onClick={() => {
+                    handleFilterChange("sessionId", sessionId);
+                    setSessionDropdownOpen(false);
+                  }}
+                >
+                  {sessionId.length > 30 ? `${sessionId.substring(0, 30)}...` : sessionId}
+                </div>
+              ))}
+              {filteredSessions.length === 0 && sessionFilter && (
+                <div className="p-3 text-sm text-gray-500">
+                  No sessions match your filter
+                </div>
+              )}
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu open={queryDropdownOpen} onOpenChange={setQueryDropdownOpen}>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="w-64 justify-between text-sm h-9 font-normal min-w-0">
+              <span className={`truncate min-w-0 ${!searchParams.get("queryId") || searchParams.get("queryId") === "all" ? 'text-muted-foreground' : ''}`}>
+                {!searchParams.get("queryId") || searchParams.get("queryId") === "all" 
+                  ? "All Queries" 
+                  : (searchParams.get("queryId")!.length > 30 ? `${searchParams.get("queryId")!.substring(0, 30)}...` : searchParams.get("queryId"))
+                }
+              </span>
+              <ChevronDown className="h-4 w-4 flex-shrink-0 ml-1" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-64" align="start">
+            <div className="p-2">
+              <Input
+                ref={queryFilterRef}
+                placeholder="Filter queries..."
+                value={queryFilter}
+                onChange={(e) => setQueryFilter(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </div>
+            <DropdownMenuSeparator />
+            <div className="max-h-64 overflow-auto">
+              <div 
+                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+                onClick={() => {
+                  handleFilterChange("queryId", "all");
+                  setQueryDropdownOpen(false);
+                }}
+              >
+                All Queries
+              </div>
+              {filteredQueries.map((queryId) => (
+                <div 
+                  key={queryId}
+                  className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+                  onClick={() => {
+                    handleFilterChange("queryId", queryId);
+                    setQueryDropdownOpen(false);
+                  }}
+                >
+                  {queryId.length > 30 ? `${queryId.substring(0, 30)}...` : queryId}
+                </div>
+              ))}
+              {filteredQueries.length === 0 && queryFilter && (
+                <div className="p-3 text-sm text-gray-500">
+                  No queries match your filter
+                </div>
+              )}
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <Button
           variant="outline"
@@ -275,7 +463,8 @@ export function MemorySection({
           disabled={
             !(
               (filters.memoryName && filters.memoryName !== "all") ||
-              (filters.sessionId && filters.sessionId !== "all")
+              (filters.sessionId && filters.sessionId !== "all") ||
+              (filters.queryId && filters.queryId !== "all")
             )
           }
         >

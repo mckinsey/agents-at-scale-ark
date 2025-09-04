@@ -19,7 +19,6 @@ images:
     image: postgres-memory
     dockerfile: ./Dockerfile
     context: ./
-    target: production
 
 # Kubernetes deployments
 deployments:
