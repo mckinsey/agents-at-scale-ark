@@ -2,9 +2,9 @@
 version: v2beta1
 
 # Dependencies - include other DevSpace configurations
-dependencies:
-  postgres-memory:
-    path: ./services/postgres-memory
+# dependencies:
+#   postgres-memory:
+#     path: ./services/postgres-memory
 
 # Hooks for pre-build setup
 hooks:
@@ -52,7 +52,7 @@ deployments:
           image:
             repository: ${runtime.images.ark-api.image}
             tag: ${runtime.images.ark-api.tag}
-          # Override resources for in-cluster local development - API with live reload needs more memory and CPU than production
+          # Override resources for local development
           resources:
             limits:
               memory: "1024Mi"
@@ -71,7 +71,7 @@ deployments:
           image:
             repository: ${runtime.images.ark-dashboard.image}
             tag: ${runtime.images.ark-dashboard.tag}
-          # Override resources for in-cluster local development - Next.js + Turbopack compilation needs 3GB+ memory and 2 CPU cores for fast builds
+          # Override resources for local development
           resources:
             limits:
               memory: "3072Mi"
@@ -91,7 +91,7 @@ deployments:
             image:
               repository: ${runtime.images.ark-controller.image}
               tag: ${runtime.images.ark-controller.tag}
-            # Override resources for in-cluster local development - controller with live reload needs more memory and CPU than production
+            # Override resources for local development
             resources:
               limits:
                 memory: "2048Mi"
@@ -99,7 +99,7 @@ deployments:
               requests:
                 memory: "256Mi"
                 cpu: "200m"
-          # Override security context for development - allow root for dev images
+          # Override security context for development
           securityContext:
             runAsNonRoot: false
 
