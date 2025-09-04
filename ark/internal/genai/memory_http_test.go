@@ -117,19 +117,13 @@ func TestUnmarshalMessageRobust(t *testing.T) {
 			rawJSON := json.RawMessage(tc.jsonInput)
 			result, err := unmarshalMessageRobust(rawJSON)
 
-			if tc.expectError {
-				if err == nil {
-					t.Errorf("Expected error for %s, but got none. Description: %s", tc.name, tc.description)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Unexpected error for %s: %v. Description: %s", tc.name, err, tc.description)
-				} else {
-					// Verify we got a valid message
-					if result == (openai.ChatCompletionMessageParamUnion{}) {
-						t.Errorf("Got empty message for %s. Description: %s", tc.name, tc.description)
-					}
-				}
+			switch {
+			case tc.expectError && err == nil:
+				t.Errorf("Expected error for %s, but got none. Description: %s", tc.name, tc.description)
+			case !tc.expectError && err != nil:
+				t.Errorf("Unexpected error for %s: %v. Description: %s", tc.name, err, tc.description)
+			case !tc.expectError && result == (openai.ChatCompletionMessageParamUnion{}):
+				t.Errorf("Got empty message for %s. Description: %s", tc.name, tc.description)
 			}
 		})
 	}

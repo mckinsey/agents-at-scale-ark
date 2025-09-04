@@ -43,11 +43,11 @@ func unmarshalMessageRobust(rawJSON json.RawMessage) (openai.ChatCompletionMessa
 	// Step 4: Convert simple format to proper OpenAI message based on known roles
 	// For unknown roles, try user message as fallback (most permissive)
 	switch simple.Role {
-	case "user":
+	case RoleUser:
 		return openai.UserMessage(simple.Content), nil
-	case "assistant":
+	case RoleAssistant:
 		return openai.AssistantMessage(simple.Content), nil
-	case "system":
+	case RoleSystem:
 		return openai.SystemMessage(simple.Content), nil
 	default:
 		// Future-proof: accept any role by treating as user message
