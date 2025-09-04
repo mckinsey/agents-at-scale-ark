@@ -290,12 +290,12 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
     // Separate evaluations by type
     const standardEvaluations = evaluations.filter(evaluation => {
       const mode = getTypeDisplay(evaluation)
-      return ['direct', 'query', 'batch', 'manual'].includes(mode)
+      return ['direct', 'query', 'batch', 'manual', 'event'].includes(mode)
     })
     
     const datasetEvaluations = evaluations.filter(evaluation => {
       const mode = getTypeDisplay(evaluation)
-      return mode === 'dataset'
+      return mode === 'baseline'
     })
     
     // Get current evaluations based on active tab
@@ -603,7 +603,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
                   Type
                 </th>
                 <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {activeTab === 'dataset' ? 'Dataset Ref' : 'Query Ref'}
+                  Query Ref
                 </th>
                 <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => handleSort('score')}>
                   <div className="flex items-center">
@@ -647,13 +647,7 @@ export const EvaluationsSection = forwardRef<{ openAddEditor: () => void }, Eval
                       key={evaluation.name}
                       className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/30 cursor-pointer"
                       onClick={() => {
-                        // For dataset evaluations, we might need different handling
-                        if (activeTab === 'dataset') {
-                          // TODO: Create a specialized dataset evaluation detail view
-                          console.warn('Dataset evaluation details not yet implemented')
-                        } else {
-                          router.push(`/evaluation/${evaluation.name}?namespace=${namespace}`)
-                        }
+                        router.push(`/evaluation/${evaluation.name}?namespace=${namespace}`)
                       }}
                     >
                       <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100 font-mono">
