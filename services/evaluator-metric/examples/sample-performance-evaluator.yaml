@@ -1,0 +1,43 @@
+## High-performance evaluator for strict latency requirements
+apiVersion: ark.mckinsey.com/v1alpha1  
+kind: Evaluator
+metadata:
+  name: high-performance-evaluator
+  namespace: default
+spec:
+  description: "Strict performance requirements evaluator for premium tier queries"
+  address:
+    value: http://evaluator-metric.default.svc.cluster.local:8000
+  selector:
+    resourceType: "Query"
+    apiGroup: "ark.mckinsey.com"
+    matchLabels:
+      performance-tier: "premium"
+    matchExpressions:
+      - key: sla-level
+        operator: In
+        values: ["gold", "platinum"]
+  parameters:
+    - name: maxDuration
+      value: "10s"
+    - name: maxLatency  
+      value: "5s"
+    - name: minResponseLength
+      value: "100"
+    - name: maxErrorRate
+      value: "0.01"
+    - name: responseCompletenessThreshold
+      value: "0.95"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: performance-sla-config
+  namespace: default
+data:
+  # SLA definitions
+  gold-max-duration: "15s"
+  gold-max-latency: "8s"
+  platinum-max-duration: "5s"
+  platinum-max-latency: "3s"
+  response-quality-threshold: "0.9"

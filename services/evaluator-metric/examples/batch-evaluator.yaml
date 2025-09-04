@@ -1,0 +1,86 @@
+## Batch evaluation configuration for parent/child evaluation aggregation
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: batch-metrics-evaluator
+  namespace: default
+  labels:
+    type: batch-metrics
+    category: aggregation
+    batch-enabled: "true"
+spec:
+  description: "Batch metrics evaluator for aggregating multiple query evaluations"
+  address:
+    valueFrom:
+      serviceRef:
+        name: evaluator-metric
+        port: "http"
+        path: "/evaluate/direct"
+  selector:
+    resourceType: "Query"
+    apiGroup: "ark.mckinsey.com"
+    matchLabels:
+      batch-evaluation: "enabled"
+    matchExpressions:
+      - key: evaluation-type
+        operator: In
+        values: ["batch", "aggregate", "summary"]
+  parameters:
+    - name: batchMode
+      value: "true"
+    - name: aggregationStrategy
+      value: "weighted-average"
+    - name: minBatchSize
+      value: "3"
+    - name: maxBatchSize
+      value: "20"
+    - name: batchTimeoutDuration
+      value: "5m"
+    - name: parentEvaluationRequired
+      value: "true"
+    - name: childEvaluationPassThreshold
+      value: "0.7"
+    - name: parentPassRequirement
+      value: "all-children-pass"  # Options: all-children-pass, majority-pass, weighted-score
+    # Individual metrics thresholds for child evaluations
+    - name: maxTokens
+      value: "5000"
+    - name: maxDuration
+      value: "60s"
+    - name: maxCostPerQuery
+      value: "0.30"
+    - name: tokenEfficiencyThreshold
+      value: "0.6"
+    - name: costEfficiencyThreshold
+      value: "0.7"
+    - name: performanceThreshold
+      value: "0.75"
+    - name: overallScoreThreshold
+      value: "0.7"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: batch-evaluation-config
+  namespace: default
+data:
+  # Batch processing configuration
+  batch-processing-enabled: "true"
+  max-concurrent-evaluations: "10"
+  evaluation-timeout: "300s"
+  
+  # Aggregation weights for parent evaluation
+  token-weight: "0.25"
+  cost-weight: "0.30"
+  performance-weight: "0.25"
+  quality-weight: "0.20"
+  
+  # Parent evaluation criteria
+  parent-pass-strategy: "all-children-pass"
+  minimum-children-required: "2"
+  evaluation-summary-format: "detailed"
+  
+  # Failure handling
+  child-failure-tolerance: "0"  # 0 means all children must pass
+  retry-failed-evaluations: "true"
+  max-retry-attempts: "3"

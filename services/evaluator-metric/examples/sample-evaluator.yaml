@@ -1,0 +1,33 @@
+  ## example with default parameters as configMap with all keys
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: evaluator-with-params-ref
+  namespace: default
+spec:
+  description: "Evaluate queries matching selector label and pulling params from configMap"
+  address:
+    value: http://evaluator-metric.default.svc.cluster.local:8000   
+  selector:
+    resourceType: "Query" 
+    apiGroup: "ark.mckinsey.com"
+    matchLabels:
+      model: "gpt-4"
+    matchExpressions:
+      - key: monitor-metric
+        operator: In
+        values: ["true"]
+  parameters:
+    valueFrom:
+      configMapRef:
+        name: ark-eval-metric-config
+        includeAllKeys: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ark-eval-metric-config
+  namespace: default
+data:
+  maxTokens: "5000"
+  maxDuration: "3m" #stands for 3 minutes
