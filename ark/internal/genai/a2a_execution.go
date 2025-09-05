@@ -65,14 +65,37 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		content = userInput.OfUser.Content.OfString.Value
 	}
 
-	// Execute A2A agent
-	response, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName)
+	// Execute A2A agent with event recording
+	response, err := ExecuteA2AAgentWithRecorder(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, nil, &a2aServer)
 	if err != nil {
 		a2aTracker.Fail(err)
+		e.recorder.EmitEvent(ctx, "Warning", "A2AExecutionFailed", BaseEvent{
+			Name: "A2AAgentExecutionFailed",
+			Metadata: map[string]string{
+				"agent":     agentName,
+				"namespace": namespace,
+				"error":     err.Error(),
+				"a2aServer": a2aServerName,
+				"address":   a2aAddress,
+			},
+		})
 		return nil, fmt.Errorf("A2A agent execution failed: %w", err)
 	}
 
 	log.Info("A2A agent execution completed", "agent", agentName, "response_length", len(response))
+
+	// Emit success event
+	e.recorder.EmitEvent(ctx, "Normal", "A2AExecutionSuccess", BaseEvent{
+		Name: "A2AAgentExecutionCompleted",
+		Metadata: map[string]string{
+			"agent":          agentName,
+			"namespace":      namespace,
+			"responseLength": fmt.Sprintf("%d", len(response)),
+			"a2aServer":      a2aServerName,
+			"address":        a2aAddress,
+			"hasError":       "false",
+		},
+	})
 
 	a2aTracker.CompleteWithMetadata(response, map[string]string{
 		"responseLength": fmt.Sprintf("%d", len(response)),

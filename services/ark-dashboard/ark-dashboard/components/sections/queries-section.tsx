@@ -8,6 +8,7 @@ import type { components } from "@/lib/api/generated/types";
 import { Trash2, ChevronUp, ChevronDown, FileText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { formatAge } from "@/lib/utils/time";
+import { EvaluationStatusIndicator } from "@/components/evaluation";
 import {
   Tooltip,
   TooltipContent,
@@ -235,6 +236,9 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
                   Token Usage (Prompt / Completion)
                 </th>
                 <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
+                  Evaluations
+                </th>
+                <th className="px-3 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
                   Status
                 </th>
                 <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -246,7 +250,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
               {sortedQueries.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
                   >
                     No queries found
@@ -300,6 +304,15 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
                       </td>
                       <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                         {formatTokenUsage(query)}
+                      </td>
+                      <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100 align-middle">
+                        <div className="flex items-center justify-center">
+                          <EvaluationStatusIndicator 
+                            queryName={query.name}
+                            namespace={namespace}
+                            compact={true}
+                          />
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-center">
                         {getStatusBadge(getStatus(query), query.name)}

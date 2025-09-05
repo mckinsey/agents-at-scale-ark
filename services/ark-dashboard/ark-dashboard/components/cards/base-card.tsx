@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -83,11 +83,11 @@ export function BaseCard({
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2 pr-24">
           {Icon && (
-            typeof Icon === 'function' ? (
-              <Icon className={cn("h-5 w-5 flex-shrink-0", iconClassName)} />
-            ) : (
+            React.isValidElement(Icon) ? (
               Icon
-            )
+            ) : typeof Icon === 'function' ? (
+              <Icon className={cn("h-5 w-5 flex-shrink-0", iconClassName)} />
+            ) : null
           )}
           <div className="truncate block max-w-[220px]">
             {isTruncated ? (
@@ -134,12 +134,12 @@ export function BaseCard({
         {children}
       </div>
       {description && (
-        <div className="flex-1 flex-row flex w-full h-full px-6 py-3">
+        <div className="flex-1 flex-row flex w-full h-full px-6">
           <CardDescription>{description}</CardDescription>
         </div>
       )}
       {footer && (
-        <div className="flex-1 flex-row flex w-full h-full px-6 pt-3">
+        <div className="flex-1 flex-row flex w-full h-full px-6">
           {footer}
         </div>
       )}
