@@ -150,3 +150,5 @@ node_modules/
 # Local documentation files
 *.local.md
 .devspace/
+services/*/ark_sdk-*.whl
+services/ark-dashboard/ark-dashboard/lib/api/generated/openapi.json
