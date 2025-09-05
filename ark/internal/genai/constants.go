@@ -11,7 +11,6 @@ const (
 const (
 	AgentToolTypeBuiltIn = "built-in"
 	AgentToolTypeCustom  = "custom"
-	AgentToolTypeAgent   = "agent"
 )
 
 // Role constants for execution engine messages
@@ -24,6 +23,7 @@ const (
 
 // Tool type constants
 const (
-	ToolTypeHTTP = "http"
-	ToolTypeMCP  = "mcp"
+	ToolTypeHTTP  = "http"
+	ToolTypeMCP   = "mcp"
+	ToolTypeAgent = "agent"
 )

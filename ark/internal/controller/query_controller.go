@@ -602,7 +602,7 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 
 	// Save new messages to memory (user message + response messages)
 	newMessages := append([]genai.Message{userMessage}, responseMessages...)
-	if err := memory.AddMessages(ctx, newMessages); err != nil {
+	if err := memory.AddMessages(ctx, query.Name, newMessages); err != nil {
 		return nil, fmt.Errorf("failed to save new messages to memory: %w", err)
 	}
 

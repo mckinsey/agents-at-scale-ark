@@ -181,7 +181,6 @@ spec:
                       enum:
                       - built-in
                       - custom
-                      - agent
                       type: string
                   required:
                   - type

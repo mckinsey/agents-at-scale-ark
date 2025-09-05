@@ -17,7 +17,7 @@ type ToolFunction struct {
 
 type AgentTool struct {
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=built-in;custom;agent
+	// +kubebuilder:validation:Enum=built-in;custom
 	Type string `json:"type"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MinLength=1

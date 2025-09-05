@@ -92,67 +92,96 @@ func (r *ToolRegistry) registerCustomTool(ctx context.Context, k8sClient client.
 func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *MCPClientPool) (ToolExecutor, error) {
 	switch tool.Spec.Type {
 	case ToolTypeHTTP:
-		if tool.Spec.HTTP == nil {
-			return nil, fmt.Errorf("http spec is required for tool %s", tool.Name)
-		}
-		return &HTTPExecutor{
-			K8sClient:     k8sClient,
-			ToolName:      tool.Name,
-			ToolNamespace: namespace,
-		}, nil
+		return createHTTPExecutor(k8sClient, tool, namespace)
 	case ToolTypeMCP:
-		if tool.Spec.MCP == nil {
-			return nil, fmt.Errorf("mcp spec is required for tool %s", tool.Name)
-		}
-
-		mcpServerNamespace := tool.Spec.MCP.MCPServerRef.Namespace
-		if mcpServerNamespace == "" {
-			mcpServerNamespace = namespace
-		}
-
-		var mcpServerCRD arkv1alpha1.MCPServer
-		mcpServerKey := types.NamespacedName{
-			Name:      tool.Spec.MCP.MCPServerRef.Name,
-			Namespace: mcpServerNamespace,
-		}
-		if err := k8sClient.Get(ctx, mcpServerKey, &mcpServerCRD); err != nil {
-			return nil, fmt.Errorf("failed to get MCP server %v: %w", mcpServerKey, err)
-		}
-
-		mcpURL, err := BuildMCPServerURL(ctx, k8sClient, &mcpServerCRD)
-		if err != nil {
-			return nil, fmt.Errorf("failed to build MCP server URL: %w", err)
-		}
-
-		headers := make(map[string]string)
-		for _, header := range mcpServerCRD.Spec.Headers {
-			value, err := ResolveHeaderValue(ctx, k8sClient, header, namespace)
-			if err != nil {
-				return nil, fmt.Errorf("failed to resolve header %s: %w", header.Name, err)
-			}
-			headers[header.Name] = value
-		}
-
-		// Use the MCP client pool to get or create the client
-		mcpClient, err := mcpPool.GetOrCreateClient(
-			ctx,
-			tool.Spec.MCP.MCPServerRef.Name,
-			mcpServerNamespace,
-			mcpURL,
-			headers,
-			mcpServerCRD.Spec.Transport,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get or create MCP client for tool %s: %w", tool.Name, err)
-		}
-
-		return &MCPExecutor{
-			ToolName:  tool.Spec.MCP.ToolName,
-			MCPClient: mcpClient,
-		}, nil
+		return createMCPExecutor(ctx, k8sClient, tool, namespace, mcpPool)
+	case ToolTypeAgent:
+		return createAgentExecutor(ctx, k8sClient, tool, namespace)
 	default:
 		return nil, fmt.Errorf("unsupported tool type %s for tool %s", tool.Spec.Type, tool.Name)
 	}
+}
+
+func createAgentExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string) (ToolExecutor, error) {
+	if tool.Spec.Agent.Name == "" {
+		return nil, fmt.Errorf("agent spec is required for tool %s", tool.Name)
+	}
+
+	agentCRD := &arkv1alpha1.Agent{}
+	key := types.NamespacedName{Name: tool.Spec.Agent.Name, Namespace: namespace}
+	if err := k8sClient.Get(ctx, key, agentCRD); err != nil {
+		return nil, fmt.Errorf("failed to get agent %v: %w", key, err)
+	}
+
+	return &AgentToolExecutor{
+		AgentName: tool.Spec.Agent.Name,
+		Namespace: namespace,
+		AgentCRD:  agentCRD,
+		k8sClient: k8sClient,
+	}, nil
+}
+
+func createHTTPExecutor(k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string) (ToolExecutor, error) {
+	if tool.Spec.HTTP == nil {
+		return nil, fmt.Errorf("http spec is required for tool %s", tool.Name)
+	}
+	return &HTTPExecutor{
+		K8sClient:     k8sClient,
+		ToolName:      tool.Name,
+		ToolNamespace: namespace,
+	}, nil
+}
+
+func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *MCPClientPool) (ToolExecutor, error) {
+	if tool.Spec.MCP == nil {
+		return nil, fmt.Errorf("mcp spec is required for tool %s", tool.Name)
+	}
+
+	mcpServerNamespace := tool.Spec.MCP.MCPServerRef.Namespace
+	if mcpServerNamespace == "" {
+		mcpServerNamespace = namespace
+	}
+
+	var mcpServerCRD arkv1alpha1.MCPServer
+	mcpServerKey := types.NamespacedName{
+		Name:      tool.Spec.MCP.MCPServerRef.Name,
+		Namespace: mcpServerNamespace,
+	}
+	if err := k8sClient.Get(ctx, mcpServerKey, &mcpServerCRD); err != nil {
+		return nil, fmt.Errorf("failed to get MCP server %v: %w", mcpServerKey, err)
+	}
+
+	mcpURL, err := BuildMCPServerURL(ctx, k8sClient, &mcpServerCRD)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build MCP server URL: %w", err)
+	}
+
+	headers := make(map[string]string)
+	for _, header := range mcpServerCRD.Spec.Headers {
+		value, err := ResolveHeaderValue(ctx, k8sClient, header, namespace)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve header %s: %w", header.Name, err)
+		}
+		headers[header.Name] = value
+	}
+
+	// Use the MCP client pool to get or create the client
+	mcpClient, err := mcpPool.GetOrCreateClient(
+		ctx,
+		tool.Spec.MCP.MCPServerRef.Name,
+		mcpServerNamespace,
+		mcpURL,
+		headers,
+		mcpServerCRD.Spec.Transport,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get or create MCP client for tool %s: %w", tool.Name, err)
+	}
+
+	return &MCPExecutor{
+		ToolName:  tool.Spec.MCP.ToolName,
+		MCPClient: mcpClient,
+	}, nil
 }
 
 func (r *ToolRegistry) registerSingleCustomTool(ctx context.Context, k8sClient client.Client, tool arkv1alpha1.Tool, namespace string, functions []arkv1alpha1.ToolFunction) error {
@@ -186,10 +215,6 @@ func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client
 		}
 	case AgentToolTypeCustom:
 		if err := r.registerCustomTool(ctx, k8sClient, agentTool, namespace); err != nil {
-			return err
-		}
-	case AgentToolTypeAgent:
-		if err := r.registerAgentTool(ctx, k8sClient, agentTool, namespace); err != nil {
 			return err
 		}
 	default:
@@ -270,44 +295,4 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall, recorder
 		Name:    call.Function.Name,
 		Content: lastMessage.OfAssistant.Content.OfString.Value,
 	}, nil
-}
-
-// registerAgentTool registers an agent as a tool
-func (r *ToolRegistry) registerAgentTool(ctx context.Context, k8sClient client.Client, agentTool arkv1alpha1.AgentTool, namespace string) error {
-	if agentTool.Name == "" {
-		return fmt.Errorf("agent name is required for agent tool")
-	}
-
-	// Create tool definition
-
-	tool, err := r.getToolCRD(ctx, k8sClient, agentTool.Name, namespace)
-	if err != nil {
-		return err
-	}
-	toolDef := CreateToolFromCRD(tool)
-	toolName := fmt.Sprintf("call_%s", tool.Spec.Agent)
-	fmt.Println("Registering agent tool:", tool.Spec.Agent)
-
-	agentCRD := &arkv1alpha1.Agent{}
-	agentKey := types.NamespacedName{Name: tool.Spec.Agent, Namespace: namespace}
-
-	if err := k8sClient.Get(ctx, agentKey, agentCRD); err != nil {
-		return fmt.Errorf("failed to get agent %v: %w", agentKey, err)
-	}
-
-	// Create executor
-	executor := &AgentToolExecutor{
-		AgentName: toolName,
-		Namespace: namespace,
-		AgentCRD:  agentCRD,
-		k8sClient: k8sClient,
-	}
-
-	// Register the tool
-	r.RegisterTool(toolDef, executor)
-
-	log := logf.FromContext(ctx)
-	log.Info("registered agent tool", "toolName", agentTool.Name, "agentName", toolName, "namespace", namespace)
-
-	return nil
 }

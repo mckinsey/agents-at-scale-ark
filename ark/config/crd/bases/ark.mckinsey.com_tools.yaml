@@ -38,7 +38,13 @@ spec:
           spec:
             properties:
               agent:
-                type: string
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
               annotations:
                 description: Optional additional tool information
                 properties:
