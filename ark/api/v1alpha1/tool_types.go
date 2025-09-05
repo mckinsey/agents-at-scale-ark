@@ -25,7 +25,10 @@ type MCPToolRef struct {
 	ToolName string `json:"toolName"`
 }
 
+// AgentToolRef defines a reference to an Agent Tool.
 type AgentToolRef struct {
+	// Name of the Agent Tool being referenced.
+	// This must be a non-empty string.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
@@ -75,7 +78,9 @@ type ToolSpec struct {
 	// MCP-specific configuration for MCP server tools
 	// +kubebuilder:validation:Optional
 	MCP *MCPToolRef `json:"mcp,omitempty"`
-
+	// Agent-specific configuration for agent tools.
+	// This field is required only if Type = "agent".
+	// +kubebuilder:validation:Optional
 	Agent *AgentToolRef `json:"agent,omitempty"`
 }
 
