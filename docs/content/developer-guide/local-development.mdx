@@ -1,31 +1,34 @@
 ---
 title: "Local Development"
-description: "Local development with DevSpace for ARK services"
+description: "Local development guide"
 ---
 
 # Local Development
 
-> [!NOTE]
->
-> DevSpace is being integrated for improved local development experience with hot reload and file sync. Currently configured for `ark-api` and `ark-dashboard` services with full development workflow support.
+For local development, [DevSpace](https://www.devspace.sh/) can be used for live-reload of the controller, APIs and dashboard.
 
-DevSpace builds and deploys ARK services with live reload, debugger support in IDEs, and file synchronization for rapid iteration. Currently DevSpace is enabled for:
-
-- `ark-api` - The ARK API layer with FastAPI hot reload
-- `ark-dashboard` - The ARK Dashboard with Next.js Turbopack compilation
-
-## Essential Commands
+Install `devspace` with:
 
 ```bash
-# Development mode with hot reload and file sync
+brew install devspace
+```
+
+Deploy the controller, Ark APIs and dashboard and run with live-reload:
+
+```bash
 devspace dev
+```
 
-# Build images and deploy to cluster without development features
+The controller and services are deployed with their full-fat production Helm charts, but the production images are swapped out for 'dev' images - these dev images contain all of the services needed for live reload and so on. Your local code is synched into the dev containers. Development containers have `devspace` in the name, such as `ark-controller-devspace`.
+
+When you are ready to build the final production containers and test with those, just run:
+
+```bash
 devspace deploy
+```
 
-# Clean up deployment
+To remove all devspace containers, run:
+
+```bash
 devspace purge
-
-# View logs
-devspace logs -f
 ```

@@ -260,8 +260,19 @@ chainsaw test samples/walkthrough/teams/tests/
 
 First, set up the MCP filesystem server for document storage:
 ```bash
+# Build and load the filesys MCP server image
+cd mcp/filesys
+docker build -t mcp-filesys:latest .
+# Load image into cluster (choose based on your setup)
+kind load docker-image mcp-filesys:latest        # For kind
+minikube image load mcp-filesys:latest           # For minikube
+cd ../..
+
 # Deploy filesystem MCP server
-helm install mcp-filesys mcp/filesys/chart/
+helm install mcp-filesys mcp/filesys/chart --set image.repository=mcp-filesys --set image.tag=latest
+
+# Verify it's ready (should show READY=True)
+kubectl get mcpservers
 ```
 
 **Recommended: Deploy components in order to avoid dependency issues**
@@ -342,8 +353,17 @@ open http://localhost:8080
 If you want to deploy everything at once without the step-by-step tutorial:
 
 ```bash
-# 1. Deploy MCP filesystem server
-helm install mcp-filesys mcp/filesys/chart/
+# 1. Build and load the filesys MCP server image
+cd mcp/filesys
+docker build -t mcp-filesys:latest .
+kind load docker-image mcp-filesys:latest
+cd ../..
+
+# Deploy MCP filesystem server
+helm install mcp-filesys mcp/filesys/chart --set image.repository=mcp-filesys --set image.tag=latest
+
+# Verify it's ready (should show READY=True)
+kubectl get mcpservers
 
 # 2. Deploy complete workflow (two-step approach to avoid dependency issues)
 kubectl apply -f samples/walkthrough/tools/web-search-tool.yaml

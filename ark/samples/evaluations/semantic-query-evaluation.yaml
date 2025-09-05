@@ -1,0 +1,34 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: semantic-query-resolution-evaluator
+  namespace: default
+spec:
+  description: "Evaluates query resolution success and performance using semantic expressions"
+  type: event
+  config:
+    rules:
+      - name: "query_resolved"
+        expression: "query.was_resolved()"
+        description: "Verifies query was successfully resolved"
+        weight: 3
+      
+      - name: "query_fast_execution"
+        expression: "query.get_execution_time() <= 30.0"
+        description: "Ensures query completed within 30 seconds"
+        weight: 2
+      
+      - name: "query_status_success"
+        expression: "query.get_resolution_status() == 'success'"
+        description: "Verifies query status is successful"
+        weight: 3
+      
+      - name: "query_targets"
+        expression: "query.get_query_targets() >= 1"
+        description: "Ensures at least one target was resolved"
+        weight: 1
+      
+      - name: "query_no_timeout"
+        expression: "not query.was_query_timeout(60.0)"
+        description: "Ensures query didn't timeout (60s threshold)"
+        weight: 2

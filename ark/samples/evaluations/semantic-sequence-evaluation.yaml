@@ -1,0 +1,34 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: semantic-sequence-validation-evaluator
+  namespace: default
+spec:
+  description: "Evaluates execution sequences and flow patterns using semantic expressions"
+  type: event
+  config:
+    rules:
+      - name: "standard_sequence"
+        expression: "sequence.was_completed(['ResolveStart', 'AgentExecutionStart', 'ToolCallStart', 'ToolCallComplete', 'AgentExecutionComplete', 'ResolveComplete'])"
+        description: "Verifies standard execution sequence"
+        weight: 3
+      
+      - name: "proper_ordering"
+        expression: "sequence.check_execution_order(['ResolveStart', 'ResolveComplete'], strict=false)"
+        description: "Ensures resolve starts before it completes"
+        weight: 2
+      
+      - name: "tool_sequence"
+        expression: "sequence.was_sequence_completed(['ToolCallStart', 'ToolCallComplete'])"
+        description: "Verifies tool calls are properly completed"
+        weight: 2
+      
+      - name: "execution_time_between"
+        expression: "sequence.get_time_between_events('ResolveStart', 'ResolveComplete') <= 60.0"
+        description: "Ensures resolution completed within 60 seconds"
+        weight: 1
+      
+      - name: "no_parallel_overload"
+        expression: "sequence.detect_parallel_execution(time_threshold=1.0).length <= 3"
+        description: "Ensures no more than 3 parallel execution groups"
+        weight: 1

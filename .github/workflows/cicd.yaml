@@ -506,7 +506,6 @@ jobs:
             tar xz -C /tmp
           sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
           sudo chmod +x /usr/local/bin/chainsaw
-
       - name: Run evaluated E2E tests
         env:
           E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
@@ -517,7 +516,8 @@ jobs:
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
-          chainsaw test --config .chainsaw.yaml --selector 'evaluated=true'
+          # Use special config for evaluated tests with longer timeouts and sequential execution
+          chainsaw test --config .chainsaw-evaluated.yaml --selector 'evaluated=true'
 
       - uses: ./.github/actions/collect-coverage-e2e
         with:
@@ -849,6 +849,7 @@ jobs:
             --field deploy_containers=true \
             --field deploy_to_pages=true \
             --field deploy_to_npm=true \
-            --field deploy_helm_chart=true
+            --field deploy_helm_chart=true \
+            --field deploy_to_pypi=true
         env:
           GH_TOKEN: ${{ github.token }}

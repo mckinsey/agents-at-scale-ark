@@ -1,0 +1,52 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: weather-tools-event-evaluation
+spec:
+  type: event
+  config:
+    queryRef:
+      name: chicago-weather-query
+    rules:
+      # Verify both tools were called
+      - name: "coordinates_tool_called"
+        expression: "tools.was_called('get-coordinates')"
+        weight: 2
+
+      - name: "forecast_tool_called"
+        expression: "tools.was_called('get-forecast')"
+        weight: 2
+
+      # Verify tools were called exactly once each
+      - name: "coordinates_called_once"
+        expression: "tools.get_execution_metrics('get-coordinates').call_count == 1"
+        weight: 1
+
+      - name: "forecast_called_once"
+        expression: "tools.get_execution_metrics('get-forecast').call_count == 1"
+        weight: 1
+
+      # Verify tool parameters are correct
+      - name: "coordinates_has_city_param"
+        expression: "tools.parameter_contains('get-coordinates', 'city', 'Chicago')"
+        weight: 1
+
+      - name: "forecast_has_office_param"
+        expression: "tools.parameter_type('get-forecast', 'office', 'string')"
+        weight: 1
+
+      - name: "forecast_has_grid_coords"
+        expression: "tools.parameter_type('get-forecast', 'gridX', 'integer')"
+        weight: 1
+
+      # Verify reasonable execution time (under 2 minutes)
+      - name: "reasonable_execution_time"
+        expression: "query.get_execution_time() <= 120.0"
+        weight: 1
+
+  evaluator:
+    name: evaluator-llm
+    parameters:
+      - name: evaluation-type
+        value: "event"
+  timeout: 5m

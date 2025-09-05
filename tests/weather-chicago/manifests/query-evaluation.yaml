@@ -1,0 +1,21 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: weather-query-ref-evaluation
+spec:
+  type: query
+  config:
+    queryRef:
+      name: chicago-weather-query
+      responseTarget: "agent:chicago-weather-agent"
+  evaluator:
+    name: evaluator-llm
+    parameters:
+      - name: scope
+        value: "accuracy,completeness"
+      - name: min-score
+        value: "0.6"
+      - name: temperature
+        value: "0.1"
+  timeout: 5m
+  ttl: 720h

@@ -1,0 +1,66 @@
+## Multi-model evaluator with different thresholds per model
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: multi-model-metrics-evaluator
+  namespace: default
+  labels:
+    type: model-specific-metrics
+    category: multi-model
+spec:
+  description: "Model-specific metrics evaluator with different thresholds for different models"
+  address:
+    value: http://evaluator-metric.default.svc.cluster.local:8000
+  selector:
+    resourceType: "Query"
+    apiGroup: "ark.mckinsey.com"
+    matchExpressions:
+      - key: model
+        operator: In
+        values: ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo", "claude-3-opus", "claude-3-sonnet"]
+      - key: evaluate-metrics
+        operator: Exists
+  parameters:
+    valueFrom:
+      configMapRef:
+        name: multi-model-thresholds
+        includeAllKeys: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: multi-model-thresholds
+  namespace: default
+data:
+  # GPT-4 thresholds (most expensive, highest quality)
+  gpt-4-maxTokens: "3000"
+  gpt-4-maxDuration: "45s"
+  gpt-4-maxCostPerQuery: "0.50"
+  gpt-4-tokenEfficiencyThreshold: "0.5"
+  gpt-4-costEfficiencyThreshold: "0.6"
+  
+  # GPT-4 Turbo thresholds (balanced)
+  gpt-4-turbo-maxTokens: "4000" 
+  gpt-4-turbo-maxDuration: "30s"
+  gpt-4-turbo-maxCostPerQuery: "0.25"
+  gpt-4-turbo-tokenEfficiencyThreshold: "0.6"
+  gpt-4-turbo-costEfficiencyThreshold: "0.7"
+  
+  # GPT-3.5 Turbo thresholds (fastest, cheapest)
+  gpt-3.5-turbo-maxTokens: "5000"
+  gpt-3.5-turbo-maxDuration: "20s" 
+  gpt-3.5-turbo-maxCostPerQuery: "0.05"
+  gpt-3.5-turbo-tokenEfficiencyThreshold: "0.7"
+  gpt-3.5-turbo-costEfficiencyThreshold: "0.8"
+  
+  # Claude models thresholds
+  claude-3-opus-maxTokens: "3500"
+  claude-3-opus-maxDuration: "40s"
+  claude-3-opus-maxCostPerQuery: "0.40"
+  claude-3-sonnet-maxTokens: "4500"
+  claude-3-sonnet-maxDuration: "25s"
+  claude-3-sonnet-maxCostPerQuery: "0.15"
+  
+  # Global settings
+  overallScoreThreshold: "0.70"
+  performanceThreshold: "0.75"

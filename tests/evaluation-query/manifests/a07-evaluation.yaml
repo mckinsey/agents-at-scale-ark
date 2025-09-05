@@ -1,0 +1,26 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: test-query-ref-evaluation
+spec:
+  type: query
+  config:
+    queryRef:
+      name: test-evaluated-query
+      responseTarget: "agent:test-evaluation-agent"
+  evaluator:
+    name: test-query-evaluator
+    parameters:
+      - name: scope
+        value: "accuracy,completeness"
+      - name: min-score
+        value: "0.6"
+      - name: temperature
+        value: "0.1"
+      - name: golden-examples
+        valueFrom:
+          configMapKeyRef:
+            name: query-golden-examples
+            key: examples
+  timeout: 5m
+  ttl: 720h

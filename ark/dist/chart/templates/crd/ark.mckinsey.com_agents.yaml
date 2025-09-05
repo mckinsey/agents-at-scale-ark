@@ -78,8 +78,6 @@ spec:
               parameters:
                 description: Parameters for template processing in the prompt field
                 items:
-                  description: Parameter defines a parameter for template processing
-                    in prompts and inputs
                   properties:
                     name:
                       description: Name of the parameter (used as template variable)
@@ -93,7 +91,7 @@ spec:
                         with value)
                       properties:
                         configMapKeyRef:
-                          description: Reference to a key in a ConfigMap
+                          description: Selects a key from a ConfigMap.
                           properties:
                             key:
                               description: The key to select.
@@ -116,7 +114,7 @@ spec:
                           type: object
                           x-kubernetes-map-type: atomic
                         secretKeyRef:
-                          description: Reference to a key in a Secret
+                          description: SecretKeySelector selects a key of a Secret.
                           properties:
                             key:
                               description: The key of the secret to select from.  Must
@@ -139,6 +137,27 @@ spec:
                           - key
                           type: object
                           x-kubernetes-map-type: atomic
+                        serviceRef:
+                          properties:
+                            name:
+                              description: Name of the service
+                              type: string
+                            namespace:
+                              description: Namespace of the service. Defaults to the
+                                namespace as the resource.
+                              type: string
+                            path:
+                              description: Optional path to append to the service
+                                address. For models might be 'v1', for gemini might
+                                be 'v1beta/openai', for mcp servers might be 'mcp'.
+                              type: string
+                            port:
+                              description: Port name to use. If not specified, uses
+                                the service's only port or first port.
+                              type: string
+                          required:
+                          - name
+                          type: object
                       type: object
                   required:
                   - name
@@ -161,55 +180,6 @@ spec:
                         - name
                         type: object
                       type: array
-                    labelSelector:
-                      description: |-
-                        A label selector is a label query over a set of resources. The result of matchLabels and
-                        matchExpressions are ANDed. An empty label selector matches all objects. A null
-                        label selector matches no objects.
-                      properties:
-                        matchExpressions:
-                          description: matchExpressions is a list of label selector
-                            requirements. The requirements are ANDed.
-                          items:
-                            description: |-
-                              A label selector requirement is a selector that contains values, a key, and an operator that
-                              relates the key and values.
-                            properties:
-                              key:
-                                description: key is the label key that the selector
-                                  applies to.
-                                type: string
-                              operator:
-                                description: |-
-                                  operator represents a key's relationship to a set of values.
-                                  Valid operators are In, NotIn, Exists and DoesNotExist.
-                                type: string
-                              values:
-                                description: |-
-                                  values is an array of string values. If the operator is In or NotIn,
-                                  the values array must be non-empty. If the operator is Exists or DoesNotExist,
-                                  the values array must be empty. This array is replaced during a strategic
-                                  merge patch.
-                                items:
-                                  type: string
-                                type: array
-                                x-kubernetes-list-type: atomic
-                            required:
-                            - key
-                            - operator
-                            type: object
-                          type: array
-                          x-kubernetes-list-type: atomic
-                        matchLabels:
-                          additionalProperties:
-                            type: string
-                          description: |-
-                            matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
-                            map is equivalent to an element of matchExpressions, whose key field is "key", the
-                            operator is "In", and the values array contains only "value". The requirements are ANDed.
-                          type: object
-                      type: object
-                      x-kubernetes-map-type: atomic
                     name:
                       minLength: 1
                       type: string

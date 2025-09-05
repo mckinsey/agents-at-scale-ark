@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -71,10 +72,13 @@ func (r *EvaluatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	case statusRunning:
 		// Continue processing
-		return r.processEvaluator(ctx, evaluator)
+		return r.processEvaluator(ctx, &evaluator)
 	default:
 		// Initialize to running state
-		if err := r.updateStatus(ctx, evaluator, statusRunning, "Resolving evaluator address"); err != nil {
+		if err := r.updateStatusAtomic(ctx, req.NamespacedName, func(e *arkv1alpha1.Evaluator) {
+			e.Status.Phase = statusRunning
+			e.Status.Message = "Resolving evaluator address"
+		}); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -88,7 +92,7 @@ func (r *EvaluatorReconciler) getResolver() *common.ValueSourceResolver {
 	return r.resolver
 }
 
-func (r *EvaluatorReconciler) processEvaluator(ctx context.Context, evaluator arkv1alpha1.Evaluator) (ctrl.Result, error) {
+func (r *EvaluatorReconciler) processEvaluator(ctx context.Context, evaluator *arkv1alpha1.Evaluator) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 	log.Info("Processing evaluator", "evaluator", evaluator.Name)
 
@@ -97,48 +101,74 @@ func (r *EvaluatorReconciler) processEvaluator(ctx context.Context, evaluator ar
 	resolvedAddress, err := resolver.ResolveValueSource(ctx, evaluator.Spec.Address, evaluator.Namespace)
 	if err != nil {
 		log.Error(err, "failed to resolve Evaluator address", "evaluator", evaluator.Name)
-		if err := r.updateStatus(ctx, evaluator, statusError, fmt.Sprintf("Failed to resolve address: %v", err)); err != nil {
+		// Atomic update for error state
+		if err := r.updateStatusAtomic(ctx, client.ObjectKeyFromObject(evaluator), func(e *arkv1alpha1.Evaluator) {
+			e.Status.Phase = statusError
+			e.Status.Message = fmt.Sprintf("Failed to resolve address: %v", err)
+			e.Status.LastResolvedAddress = "" // Clear on error
+		}); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
 
-	// Update resolved address in status
-	evaluator.Status.LastResolvedAddress = resolvedAddress
-
 	// If evaluator has selector, process matching queries
 	if evaluator.Spec.Selector != nil {
-		if err := r.processEvaluatorWithSelector(ctx, &evaluator); err != nil {
+		if err := r.processEvaluatorWithSelector(ctx, evaluator); err != nil {
 			log.Error(err, "failed to process evaluator with selector", "evaluator", evaluator.Name)
-			if err := r.updateStatus(ctx, evaluator, statusError, fmt.Sprintf("Failed to process selector: %v", err)); err != nil {
+			// Atomic update for error state
+			if err := r.updateStatusAtomic(ctx, client.ObjectKeyFromObject(evaluator), func(e *arkv1alpha1.Evaluator) {
+				e.Status.Phase = statusError
+				e.Status.Message = fmt.Sprintf("Failed to process selector: %v", err)
+				e.Status.LastResolvedAddress = resolvedAddress // Keep resolved address
+			}); err != nil {
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
 		}
 	}
 
-	// Mark as ready
-	if err := r.updateStatus(ctx, evaluator, statusReady, "Evaluator address resolved successfully"); err != nil {
+	// Mark as ready - atomic update with all fields
+	if err := r.updateStatusAtomic(ctx, client.ObjectKeyFromObject(evaluator), func(e *arkv1alpha1.Evaluator) {
+		e.Status.Phase = statusReady
+		e.Status.Message = "Evaluator address resolved successfully"
+		e.Status.LastResolvedAddress = resolvedAddress
+	}); err != nil {
 		return ctrl.Result{}, err
 	}
+
+	// Record event for successful processing
+	r.Recorder.Event(evaluator, corev1.EventTypeNormal, "AddressResolved",
+		fmt.Sprintf("Successfully resolved address: %s", resolvedAddress))
 
 	log.Info("Evaluator processed successfully", "evaluator", evaluator.Name, "resolvedAddress", resolvedAddress)
 	return ctrl.Result{}, nil
 }
 
-func (r *EvaluatorReconciler) updateStatus(ctx context.Context, evaluator arkv1alpha1.Evaluator, phase, message string) error {
+// updateStatusAtomic performs atomic status updates with retry on conflict
+func (r *EvaluatorReconciler) updateStatusAtomic(ctx context.Context, namespacedName types.NamespacedName, updateFn func(*arkv1alpha1.Evaluator)) error {
 	log := logf.FromContext(ctx)
 
-	evaluator.Status.Phase = phase
-	evaluator.Status.Message = message
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Get fresh copy
+		var evaluator arkv1alpha1.Evaluator
+		if err := r.Get(ctx, namespacedName, &evaluator); err != nil {
+			return err
+		}
 
-	if err := r.Status().Update(ctx, &evaluator); err != nil {
-		log.Error(err, "failed to update Evaluator status", "evaluator", evaluator.Name)
-		return err
-	}
+		// Apply updates
+		updateFn(&evaluator)
 
-	log.Info("Updated Evaluator status", "evaluator", evaluator.Name, "phase", phase, "message", message)
-	return nil
+		// Update status
+		if err := r.Status().Update(ctx, &evaluator); err != nil {
+			log.V(1).Info("failed to update Evaluator status (will retry)", "evaluator", evaluator.Name, "error", err)
+			return err
+		}
+
+		log.Info("Updated Evaluator status", "evaluator", evaluator.Name,
+			"phase", evaluator.Status.Phase, "message", evaluator.Status.Message)
+		return nil
+	})
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -420,26 +450,46 @@ func (r *EvaluatorReconciler) shouldRetriggerEvaluation(evaluation *arkv1alpha1.
 func (r *EvaluatorReconciler) updateEvaluationForQuery(ctx context.Context, evaluation *arkv1alpha1.Evaluation, evaluator *arkv1alpha1.Evaluator, query *arkv1alpha1.Query) error {
 	log := logf.FromContext(ctx)
 
-	// Update annotations to reflect query changes
-	if evaluation.Annotations == nil {
-		evaluation.Annotations = make(map[string]string)
-	}
-	evaluation.Annotations[annotations.QueryGeneration] = fmt.Sprintf("%d", query.Generation)
-	evaluation.Annotations[annotations.QueryPhase] = query.Status.Phase
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Get fresh copy
+		var currentEval arkv1alpha1.Evaluation
+		evalKey := client.ObjectKeyFromObject(evaluation)
+		if err := r.Get(ctx, evalKey, &currentEval); err != nil {
+			return err
+		}
 
-	// Resolve and update parameters
-	parameters, err := r.resolveEvaluatorParameters(ctx, evaluator.Spec.Parameters, evaluator.Namespace)
-	if err != nil {
-		return fmt.Errorf("failed to resolve parameters: %w", err)
-	}
-	evaluation.Spec.Evaluator.Parameters = parameters
+		// Update annotations
+		if currentEval.Annotations == nil {
+			currentEval.Annotations = make(map[string]string)
+		}
+		currentEval.Annotations[annotations.QueryGeneration] = fmt.Sprintf("%d", query.Generation)
+		currentEval.Annotations[annotations.QueryPhase] = query.Status.Phase
 
-	// Reset evaluation status to trigger re-evaluation
-	evaluation.Status.Phase = ""
-	evaluation.Status.Message = ""
-	evaluation.Status.Score = ""
-	evaluation.Status.Passed = false
+		// Resolve and update parameters
+		parameters, err := r.resolveEvaluatorParameters(ctx, evaluator.Spec.Parameters, evaluator.Namespace)
+		if err != nil {
+			return fmt.Errorf("failed to resolve parameters: %w", err)
+		}
+		currentEval.Spec.Evaluator.Parameters = parameters
 
-	log.Info("Updating evaluation for retriggering", "evaluation", evaluation.Name, "query", query.Name)
-	return r.Update(ctx, evaluation)
+		// Update main object first
+		if err := r.Update(ctx, &currentEval); err != nil {
+			return err
+		}
+
+		// Then atomically reset status to trigger re-evaluation
+		currentEval.Status = arkv1alpha1.EvaluationStatus{
+			Phase:   "",
+			Message: "",
+			Score:   "",
+			Passed:  false,
+		}
+
+		if err := r.Status().Update(ctx, &currentEval); err != nil {
+			return err
+		}
+
+		log.Info("Updated evaluation for retriggering", "evaluation", currentEval.Name, "query", query.Name)
+		return nil
+	})
 }

@@ -1,0 +1,42 @@
+## Cost-focused evaluator for monitoring query expenses
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: cost-evaluator
+  namespace: default
+spec:
+  description: "Cost optimization metrics evaluator for expensive queries"
+  address:
+    value: http://evaluator-metric.default.svc.cluster.local:8000
+  selector:
+    resourceType: "Query"
+    apiGroup: "ark.mckinsey.com"
+    matchLabels:
+      cost-monitoring: "enabled"
+    matchExpressions:
+      - key: model
+        operator: In
+        values: ["gpt-4", "gpt-4-turbo"]
+  parameters:
+    - name: maxCostPerQuery
+      value: "0.10"
+    - name: costEfficiencyThreshold
+      value: "0.8"
+    - name: maxTokens
+      value: "3000"
+    - name: tokenEfficiencyThreshold
+      value: "0.4"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cost-evaluator-pricing
+  namespace: default
+data:
+  # Model pricing per 1K tokens (in USD)
+  gpt-4-input-price: "0.03"
+  gpt-4-output-price: "0.06"  
+  gpt-4-turbo-input-price: "0.01"
+  gpt-4-turbo-output-price: "0.03"
+  gpt-3.5-turbo-input-price: "0.0015"
+  gpt-3.5-turbo-output-price: "0.002"

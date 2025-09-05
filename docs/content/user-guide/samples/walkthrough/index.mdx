@@ -69,6 +69,18 @@ Verify installation:
 kubectl get pods -n ark-system
 ```
 
+### Environment Variables for Testing
+
+The tests in this tutorial require Azure OpenAI credentials to execute queries. Set these environment variables before running any tests:
+
+```bash
+# Required for all chainsaw tests in this tutorial
+export E2E_TEST_AZURE_OPENAI_KEY="your-azure-openai-api-key"
+export E2E_TEST_AZURE_OPENAI_BASE_URL="https://your-resource.openai.azure.com/"
+```
+
+You can obtain these credentials from your Azure OpenAI service. If you don't have Azure OpenAI access, you can still follow the tutorial to understand the concepts, but the test execution steps will not work.
+
 ## Step 1: Create and Test Web Search Tool
 
 ### What You'll Learn
@@ -246,8 +258,21 @@ chainsaw test samples/walkthrough/teams/tests/
 
 First, set up the MCP filesystem server for document storage:
 ```bash
+# Build and load the filesys MCP server image
+cd mcp/filesys
+docker build -t mcp-filesys:latest .
+
+# Load image into cluster (choose based on your setup)
+kind load docker-image mcp-filesys:latest        # For kind
+minikube image load mcp-filesys:latest           # For minikube
+
+cd ../..
+
 # Deploy filesystem MCP server
-helm install mcp-filesys mcp/filesys/chart/
+helm install mcp-filesys mcp/filesys/chart --set image.repository=mcp-filesys --set image.tag=latest
+
+# Verify it's ready (should show READY=True)
+kubectl get mcpservers
 ```
 
 Deploy all components together using Kustomize:
@@ -313,8 +338,10 @@ open http://localhost:8080
 If you want to deploy everything at once without the step-by-step tutorial:
 
 ```bash
-# 1. Deploy MCP filesystem server
-helm install mcp-filesys mcp/filesys/chart/
+# 1. Build and deploy MCP filesystem server
+cd mcp/filesys && docker build -t mcp-filesys:latest . && cd ../..
+# Load into cluster: kind load docker-image mcp-filesys:latest OR minikube image load mcp-filesys:latest
+helm install mcp-filesys mcp/filesys/chart --set image.repository=mcp-filesys --set image.tag=latest
 
 # 2. Deploy complete workflow using kustomization.yaml
 kubectl apply -k samples/walkthrough/

@@ -1,0 +1,178 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mock-responses
+data:
+  geocoding-response.json: |
+    {
+      "results": [
+        {
+          "id": 4887398,
+          "name": "Chicago",
+          "latitude": 41.85003,
+          "longitude": -87.65005,
+          "country": "United States",
+          "admin1": "Illinois"
+        }
+      ]
+    }
+  
+  weather-response.json: |
+    {
+      "properties": {
+        "periods": [
+          {
+            "number": 1,
+            "name": "Today",
+            "temperature": 72,
+            "temperatureUnit": "F",
+            "windSpeed": "10 mph",
+            "windDirection": "W",
+            "shortForecast": "Partly Cloudy",
+            "detailedForecast": "Partly cloudy with a high near 72°F. West wind around 10 mph."
+          },
+          {
+            "number": 2,
+            "name": "Tonight",
+            "temperature": 58,
+            "temperatureUnit": "F",
+            "windSpeed": "5 mph",
+            "windDirection": "SW",
+            "shortForecast": "Mostly Clear",
+            "detailedForecast": "Mostly clear with a low around 58°F. Southwest wind around 5 mph."
+          }
+        ]
+      }
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-weather-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-weather-api
+  template:
+    metadata:
+      labels:
+        app: mock-weather-api
+    spec:
+      containers:
+      - name: mock-server
+        image: mockserver/mockserver:5.15.0
+        ports:
+        - containerPort: 1080
+        env:
+        - name: MOCKSERVER_LOG_LEVEL
+          value: INFO
+        - name: MOCKSERVER_INITIALIZATION_JSON_PATH
+          value: /config/expectations.json
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: responses
+          mountPath: /responses
+      volumes:
+      - name: config
+        configMap:
+          name: mock-server-config
+      - name: responses
+        configMap:
+          name: mock-responses
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-weather-api
+spec:
+  selector:
+    app: mock-weather-api
+  ports:
+  - port: 80
+    targetPort: 1080
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mock-server-config
+data:
+  expectations.json: |
+    [
+      {
+        "httpRequest": {
+          "method": "GET",
+          "path": "/v1/search",
+          "queryStringParameters": {
+            "name": ["Chicago.*"],
+            "count": ["1"]
+          }
+        },
+        "httpResponse": {
+          "statusCode": 200,
+          "headers": {
+            "Content-Type": ["application/json"]
+          },
+          "body": {
+            "type": "JSON",
+            "json": {
+              "results": [
+                {
+                  "id": 4887398,
+                  "name": "Chicago",
+                  "latitude": 41.85003,
+                  "longitude": -87.65005,
+                  "country": "United States",
+                  "admin1": "Illinois"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "httpRequest": {
+          "method": "GET",
+          "path": "/gridpoints/LOT/.*"
+        },
+        "httpResponse": {
+          "statusCode": 200,
+          "headers": {
+            "Content-Type": ["application/json"]
+          },
+          "body": {
+            "type": "JSON",
+            "json": {
+              "properties": {
+                "periods": [
+                  {
+                    "number": 1,
+                    "name": "Today",
+                    "temperature": 72,
+                    "temperatureUnit": "F",
+                    "windSpeed": "10 mph",
+                    "windDirection": "W",
+                    "shortForecast": "Partly Cloudy",
+                    "detailedForecast": "Partly cloudy with a high near 72°F. West wind around 10 mph."
+                  },
+                  {
+                    "number": 2,
+                    "name": "Tonight",
+                    "temperature": 58,
+                    "temperatureUnit": "F",
+                    "windSpeed": "5 mph",
+                    "windDirection": "SW",
+                    "shortForecast": "Mostly Clear",
+                    "detailedForecast": "Mostly clear with a low around 58°F. Southwest wind around 5 mph."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    ]

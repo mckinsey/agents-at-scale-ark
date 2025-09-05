@@ -169,6 +169,7 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName, queryTracker *genai.OperationTracker, tokenCollector *genai.TokenUsageCollector) {
 	log := logf.FromContext(opCtx)
 	cleanupCache := true
+	startTime := time.Now()
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -219,6 +220,14 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		cleanupCache = false
 	} else {
 		_ = r.updateStatus(opCtx, &obj, statusDone)
+	}
+
+	duration := &metav1.Duration{Duration: time.Since(startTime)}
+	if len(evaluators) > 0 {
+		_ = r.updateStatusWithDuration(opCtx, &obj, statusEvaluating, duration)
+		cleanupCache = false
+	} else {
+		_ = r.updateStatusWithDuration(opCtx, &obj, statusDone, duration)
 	}
 }
 
@@ -424,10 +433,17 @@ func makeResponse(messages []genai.Message) string {
 }
 
 func (r *QueryReconciler) updateStatus(ctx context.Context, query *arkv1alpha1.Query, status string) error {
+	return r.updateStatusWithDuration(ctx, query, status, nil)
+}
+
+func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
 	if ctx.Err() != nil {
 		return nil
 	}
 	query.Status.Phase = status
+	if duration != nil {
+		query.Status.Duration = duration
+	}
 	err := r.Status().Update(ctx, query)
 	if err != nil {
 		logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
@@ -546,7 +562,7 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 
 	// Save new messages to memory (user message + response messages)
 	newMessages := append([]genai.Message{userMessage}, responseMessages...)
-	if err := memory.AddMessages(ctx, newMessages); err != nil {
+	if err := memory.AddMessages(ctx, query.Name, newMessages); err != nil {
 		return nil, fmt.Errorf("failed to save new messages to memory: %w", err)
 	}
 
@@ -655,7 +671,7 @@ func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Qu
 
 	// Save new messages to memory (user message + response messages)
 	newMessages := append([]genai.Message{userMessage}, responseMessages...)
-	if err := memory.AddMessages(ctx, newMessages); err != nil {
+	if err := memory.AddMessages(ctx, query.Name, newMessages); err != nil {
 		return nil, fmt.Errorf("failed to save new messages to memory: %w", err)
 	}
 
@@ -664,6 +680,8 @@ func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Qu
 
 func (r *QueryReconciler) executeTool(ctx context.Context, query arkv1alpha1.Query, toolName string, impersonatedClient client.Client, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) { //nolint:unparam
 	// tokenCollector parameter is kept for consistency with other execute methods but not used since tools don't consume tokens
+	log := logf.FromContext(ctx)
+
 	var toolCRD arkv1alpha1.Tool
 	toolKey := types.NamespacedName{Name: toolName, Namespace: query.Namespace}
 
@@ -695,8 +713,17 @@ func (r *QueryReconciler) executeTool(ctx context.Context, query arkv1alpha1.Que
 	}
 
 	toolRegistry := genai.NewToolRegistry()
+	defer func() {
+		if err := toolRegistry.Close(); err != nil {
+			// Log the error but don't fail the request since tool execution already succeeded
+			log.Error(err, "Failed to close MCP client connections in tool registry")
+		}
+		log.Info("MCP client connections closed successfully")
+	}()
+
 	toolDefinition := genai.CreateToolFromCRD(&toolCRD)
-	executor, err := genai.CreateToolExecutor(ctx, impersonatedClient, &toolCRD, query.Namespace)
+	// Pass the tool registry's MCP pool to CreateToolExecutor
+	executor, err := genai.CreateToolExecutor(ctx, impersonatedClient, &toolCRD, query.Namespace, toolRegistry.GetMCPPool())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tool executor: %w", err)
 	}

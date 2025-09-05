@@ -1,0 +1,70 @@
+# Query that matches the production-quality-evaluator selector
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: production-analysis-query
+  namespace: default
+  labels:
+    environment: "production"
+    model: "gpt-4"
+    evaluation_required: "true"
+    status: "done"  # This would normally be set by the controller
+spec:
+  input: "Analyze the latest quarterly revenue trends and provide strategic recommendations"
+  targets:
+    - type: agent
+      name: financial-analyst-agent
+
+---
+# Query that matches the configmap-based-evaluator selector
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: research-priority-query
+  namespace: default
+  labels:
+    team: "research"
+    priority: "high"
+spec:
+  input: "What are the emerging trends in renewable energy storage technologies?"
+  targets:
+    - type: agent
+      name: research-agent
+
+---
+# Query that doesn't match any evaluator selectors
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: development-query
+  namespace: default
+  labels:
+    environment: "development"
+    model: "gpt-3.5-turbo"
+spec:
+  input: "Test query for development purposes"
+  targets:
+    - type: agent
+      name: test-agent
+
+---
+# Manual evaluation with parameter overrides
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: manual-override-evaluation
+  namespace: default
+spec:
+  mode: query
+  evaluator:
+    name: production-quality-evaluator
+    parameters:
+      - name: scope
+        value: "accuracy,completeness"  # Override default scope
+      - name: min-score
+        value: "0.9"                    # Override default min-score
+      - name: custom_metric
+        value: "response_time"          # New parameter not in evaluator
+  queryRef:
+    name: production-analysis-query
+    responseIndex: 0
