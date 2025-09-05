@@ -21,6 +21,7 @@ The Deploy pipeline is run on demand to deploy:
 - Multi-arch Containers to the configured container registry
 - Helm chart to the configured container registry (under `/charts` path)
 - ARK CLI to NPM registry
+- ARK Python SDK to PyPI registry
 - Ark to the configured distribution environment
 - Ark to the configured AWS test environment
 - Ark to the configured GKE test environment
@@ -63,7 +64,7 @@ Release please will create pull requests, update the changelog, and the CI/CD pi
       - **release-libs**: Attaches Python wheel files to GitHub release
       - **release-chart**: Attaches Helm chart package to GitHub release
       - **release-ark-cli**: Attaches ARK CLI npm package to GitHub release
-      - **run-deploy-workflow**: Triggers the Deploy workflow for production deployment
+      - **run-deploy-workflow**: Triggers the Deploy workflow for distribution channels
 
 ### Version Synchronization
 
@@ -114,6 +115,9 @@ GitHub variables and secrets for ARK build and deployment workflows. All configu
 | `DOCS_SITE_BASE_PATH` | Variable (Optional) | Base path for documentation site when serving from non-root URL (e.g., GitHub Pages) | |
 | **NPM Registry (CLI Deployment)** | | |
 | `NPM_TOKEN` | Secret (Optional) | NPM authentication token with publish permissions for CLI deployment | |
+| **PyPI Registry (Python SDK Deployment)** | | |
+| `TEST_PYPI_API_TOKEN` | Secret (Required for PyPI deployment) | TestPyPI authentication token for testing Python package deployment | |
+| `PYPI_API_TOKEN` | Secret (Required for PyPI deployment) | PyPI authentication token with publish permissions for Python SDK deployment | |
 | **Code Quality and Analysis** | | |
 | `SONAR_TOKEN` | Secret | SonarQube authentication token |
 | `SONAR_HOST_URL` | Secret | SonarQube server URL |
