@@ -195,13 +195,23 @@
         "bug",
         "code"
       ]
+    },
+    {
+      "login": "kuriantom369",
+      "name": "kuriantom369",
+      "avatar_url": "https://avatars.githubusercontent.com/u/116743025?v=4",
+      "profile": "https://github.com/kuriantom369",
+      "contributions": [
+        "doc",
+        "bug"
+      ]
     }
   ],
   "contributorsPerLine": 7,
   "skipCi": true,
   "repoType": "github",
   "repoHost": "https://github.com",
-  "projectName": "agents-at-scale",
-  "projectOwner": "McK-Internal",
+  "projectName": "agents-at-scale-ark",
+  "projectOwner": "mckinsey",
   "badgeTemplate": "<a href=\"https://github.com/McK-Internal/agents-at-scale/blob/main/docs/content/contributors.mdx\"><img src=\"https://img.shields.io/github/all-contributors/McK-Internal/agents-at-scale?color=ee8449&style=flat-square\" alt=\"All Contributors\" /></a>"
 }
