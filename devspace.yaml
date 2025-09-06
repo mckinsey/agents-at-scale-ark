@@ -145,6 +145,8 @@ dev:
     command:
       ["sh", "-c", "cd /app && go run cmd/main.go --leader-elect=false"]
     namespace: ark-system
+    logs:
+      lastLines: 50
     # File synchronization for hot reload
     sync:
       - path: ./ark:/app
