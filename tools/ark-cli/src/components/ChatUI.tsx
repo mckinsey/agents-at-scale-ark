@@ -47,11 +47,8 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
             setTarget(matchedTarget);
             setTargetIndex(matchedIndex >= 0 ? matchedIndex : 0);
             setShowTargetSelector(false);
-            setMessages([{
-              role: 'system',
-              content: `Connected to ${matchedTarget.type}: ${matchedTarget.name}`,
-              timestamp: new Date(),
-            }]);
+            // Don't add system message, just start with empty messages
+            setMessages([]);
           } else {
             // If target not found, show selector
             setShowTargetSelector(true);
@@ -91,13 +88,8 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
     setTarget(item.value);
     setTargetIndex(selectedIndex >= 0 ? selectedIndex : 0);
     setShowTargetSelector(false);
-    setMessages([
-      {
-        role: 'system',
-        content: `Connected to ${item.value.type}: ${item.value.name}`,
-        timestamp: new Date(),
-      },
-    ]);
+    // Don't add system message, just start with empty messages
+    setMessages([]);
   };
 
   const handleSubmit = async (value: string) => {
@@ -263,7 +255,15 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
     <Box flexDirection="column" height="100%">
       <Box flexDirection="column" flexGrow={1}>
         {messages.length === 0 ? (
-          <Text color="gray">Start typing to begin the conversation...</Text>
+          <Box flexDirection="column">
+            {target && (
+              <Box marginBottom={1}>
+                <Text color="gray">Connected to </Text>
+                <Text color="green">{target.type}/{target.name}</Text>
+              </Box>
+            )}
+            <Text color="gray">Start typing to begin the conversation...</Text>
+          </Box>
         ) : (
           messages.map(renderMessage)
         )}
