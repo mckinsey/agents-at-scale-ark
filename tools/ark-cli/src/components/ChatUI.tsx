@@ -88,6 +88,14 @@ const ChatUI: React.FC = () => {
         content: value
       });
 
+      // Add placeholder assistant message while waiting
+      const assistantMessageId = Date.now();
+      setMessages((prev) => [...prev, {
+        role: 'assistant',
+        content: '',
+        timestamp: new Date(),
+      }]);
+
       // Send message and get response
       let responseContent = '';
       const fullResponse = await chatClientRef.current.sendMessage(
@@ -96,35 +104,28 @@ const ChatUI: React.FC = () => {
         (chunk) => {
           // Handle streaming response
           responseContent += chunk;
-          // Update the UI with streaming content
+          // Update the assistant message with streaming content
           setMessages((prev) => {
             const newMessages = [...prev];
-            const lastMessage = newMessages[newMessages.length - 1];
-            
-            if (lastMessage && lastMessage.role === 'assistant') {
-              // Update existing assistant message
-              lastMessage.content = responseContent;
-            } else {
-              // Add new assistant message
-              newMessages.push({
-                role: 'assistant',
-                content: responseContent,
-                timestamp: new Date(),
-              });
+            const assistantMsg = newMessages[newMessages.length - 1];
+            if (assistantMsg && assistantMsg.role === 'assistant') {
+              assistantMsg.content = responseContent;
             }
-            return newMessages;
+            return [...newMessages];
           });
         }
       );
 
-      // If no streaming occurred, add the full response
-      if (!responseContent && fullResponse) {
-        setMessages((prev) => [...prev, {
-          role: 'assistant',
-          content: fullResponse,
-          timestamp: new Date(),
-        }]);
-      }
+      // If we got a response but no streaming, update the message
+      const finalContent = responseContent || fullResponse || 'No response received';
+      setMessages((prev) => {
+        const newMessages = [...prev];
+        const assistantMsg = newMessages[newMessages.length - 1];
+        if (assistantMsg && assistantMsg.role === 'assistant') {
+          assistantMsg.content = finalContent;
+        }
+        return [...newMessages];
+      });
 
       setIsTyping(false);
     } catch (err) {
@@ -143,17 +144,25 @@ const ChatUI: React.FC = () => {
   const renderMessage = (msg: Message, index: number) => {
     const isUser = msg.role === 'user';
     const isSystem = msg.role === 'system';
+    const isAssistant = msg.role === 'assistant';
+    
+    // Determine the status dot color based on if message is being typed
+    const isCurrentlyTyping = isAssistant && isTyping && index === messages.length - 1;
+    const dotColor = isCurrentlyTyping ? 'gray' : 'green';
     
     return (
       <Box key={index} flexDirection="column" marginBottom={1}>
         <Box>
+          {isAssistant && (
+            <Text color={dotColor}>● </Text>
+          )}
           <Text color={isUser ? 'cyan' : isSystem ? 'gray' : 'green'} bold>
             {isUser ? 'You' : isSystem ? 'System' : target?.name}
           </Text>
           <Text color="gray"> • {msg.timestamp.toLocaleTimeString()}</Text>
         </Box>
         <Box marginLeft={2}>
-          <Text>{msg.content}</Text>
+          <Text>{msg.content || (isCurrentlyTyping ? '...' : '')}</Text>
         </Box>
       </Box>
     );
