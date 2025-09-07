@@ -261,7 +261,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
             {target && (
               <Box marginBottom={1}>
                 <Text color="gray">Connected to </Text>
-                <Text>{target.type} </Text>
+                <Text color="gray">{target.type} </Text>
                 <Text color="green">{target.name}</Text>
               </Box>
             )}
@@ -297,7 +297,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
             {target && (
               <>
                 <Text color="gray">⏵⏵ Chatting with </Text>
-                <Text>{target.type} </Text>
+                <Text color="gray">{target.type} </Text>
                 <Text color="green">{target.name}</Text>
                 <Text color="gray"> • Shift+Tab to cycle • </Text>
               </>
