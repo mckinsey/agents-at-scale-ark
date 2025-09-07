@@ -1,8 +1,7 @@
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
 import TextInput from 'ink-text-input';
 import SelectInput from 'ink-select-input';
 import * as React from 'react';
-import chalk from 'chalk';
 
 interface Message {
   role: 'user' | 'assistant' | 'system';
@@ -28,21 +27,15 @@ const ChatUI: React.FC = () => {
     { label: '🤖 Agent: weather', value: { type: 'agent', name: 'weather' } as ChatTarget },
     { label: '🤖 Agent: math', value: { type: 'agent', name: 'math' } as ChatTarget },
     { label: '🧠 Model: default', value: { type: 'model', name: 'default' } as ChatTarget },
+    { label: '❌ Exit', value: null },
   ];
 
-  useInput((input, key) => {
-    if (key.escape) {
-      if (showTargetSelector) {
-        process.exit(0);
-      } else {
-        setShowTargetSelector(true);
-        setTarget(null);
-        setMessages([]);
-      }
+  const handleTargetSelect = (item: { value: ChatTarget | null }) => {
+    if (item.value === null) {
+      process.exit(0);
+      return;
     }
-  });
-
-  const handleTargetSelect = (item: { value: ChatTarget }) => {
+    
     setTarget(item.value);
     setShowTargetSelector(false);
     setMessages([
@@ -120,11 +113,6 @@ const ChatUI: React.FC = () => {
             onSelect={handleTargetSelect}
           />
         </Box>
-        <Box marginTop={1}>
-          <Text color="gray" dimColor>
-            Press ESC to exit
-          </Text>
-        </Box>
       </Box>
     );
   }
@@ -141,7 +129,7 @@ const ChatUI: React.FC = () => {
         <Text color="cyan" bold>
           💬 Chat with {target?.type}: {target?.name}
         </Text>
-        <Text color="gray"> (ESC to change target)</Text>
+        <Text color="gray"> (Ctrl+C to exit)</Text>
       </Box>
 
       <Box flexDirection="column" flexGrow={1} marginBottom={1}>

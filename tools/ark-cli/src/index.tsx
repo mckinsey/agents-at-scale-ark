@@ -11,7 +11,9 @@ const packageJson = require('../package.json');
 import { createChatCommand } from './commands/chat.js';
 import { createClusterCommand } from './commands/cluster/index.js';
 import { createCompletionCommand } from './commands/completion.js';
+import { createDashboardCommand } from './commands/dashboard.js';
 import { createGenerateCommand } from './commands/generate/index.js';
+import { createStatusCommand } from './commands/status.js';
 import { createConfigCommand } from './commands/config.js';
 import { StatusChecker } from './components/statusChecker.js';
 import { ConfigManager } from './config.js';
@@ -20,7 +22,6 @@ import MainMenu from './ui/MainMenu.js';
 import { StatusFormatter } from './ui/statusFormatter.js';
 
 function showMainMenu() {
-  console.clear();
   render(<MainMenu />);
 }
 
@@ -43,16 +44,6 @@ async function handleStatusCheck() {
 }
 
 async function main() {
-  // Handle Ctrl+C properly
-  process.on('SIGINT', () => {
-    console.log('\n👋 Goodbye!');
-    process.exit(0);
-  });
-
-  process.on('SIGTERM', () => {
-    process.exit(0);
-  });
-
   const program = new Command();
   program
     .name(packageJson.name)
@@ -62,7 +53,9 @@ async function main() {
   program.addCommand(createChatCommand());
   program.addCommand(createClusterCommand());
   program.addCommand(createCompletionCommand());
+  program.addCommand(createDashboardCommand());
   program.addCommand(createGenerateCommand());
+  program.addCommand(createStatusCommand());
   program.addCommand(createConfigCommand());
 
   // Add check status command
@@ -78,7 +71,6 @@ async function main() {
 
   // If no args provided, show interactive menu
   if (process.argv.length === 2) {
-    console.log();
     showMainMenu();
     return;
   }
