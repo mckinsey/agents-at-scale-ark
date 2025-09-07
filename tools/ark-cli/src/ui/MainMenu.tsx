@@ -32,9 +32,11 @@ const MainMenu: React.FC = () => {
       }
         
       case 'dashboard': {
-        // Execute the dashboard command directly
-        const { execSync } = await import('child_process');
-        process.exit(0); // Exit menu to run command
+        // Import and run the dashboard command
+        const { createDashboardCommand } = await import('../commands/dashboard.js');
+        const dashboardCmd = createDashboardCommand();
+        await dashboardCmd.parseAsync(['node', 'ark', 'dashboard']);
+        break;
       }
         
       case 'status': {
