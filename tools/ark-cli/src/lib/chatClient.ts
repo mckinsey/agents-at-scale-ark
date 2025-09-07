@@ -21,7 +21,7 @@ export class ChatClient {
     
     // Configure OpenAI SDK to use ark-api endpoint
     this.openai = new OpenAI({
-      baseURL: `${apiBaseUrl}/v1`,
+      baseURL: `${apiBaseUrl}/openai/v1`,
       apiKey: 'dummy', // ark-api doesn't require an API key
       dangerouslyAllowBrowser: false,
     });
