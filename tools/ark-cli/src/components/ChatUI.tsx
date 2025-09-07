@@ -3,6 +3,9 @@ import TextInput from 'ink-text-input';
 import Spinner from 'ink-spinner';
 import chalk from 'chalk';
 import * as React from 'react';
+import { marked } from 'marked';
+// @ts-ignore - no types available
+import TerminalRenderer from 'marked-terminal';
 import { ChatClient, QueryTarget } from '../lib/chatClient.js';
 
 interface Message {
@@ -15,6 +18,21 @@ interface Message {
 
 interface ChatUIProps {
   initialTargetId?: string;
+}
+
+// Check if markdown rendering is enabled
+const ENABLE_MARKDOWN = process.env.ARK_CHAT_MARKDOWN === 'true';
+
+// Configure marked with terminal renderer if markdown is enabled
+if (ENABLE_MARKDOWN) {
+  marked.setOptions({
+    renderer: new TerminalRenderer({
+      showSectionPrefix: false,
+      width: 80,
+      reflowText: true,
+      preserveNewlines: true,
+    })
+  });
 }
 
 const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
@@ -274,9 +292,13 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
         {/* Message content */}
         {msg.content && (
           <Box marginLeft={2}>
-            <Text>
-              {msg.content}
-            </Text>
+            {ENABLE_MARKDOWN && isAssistant ? (
+              // Render markdown for assistant messages when enabled
+              <Text>{marked.parseInline(msg.content)}</Text>
+            ) : (
+              // Plain text for user messages or when markdown is disabled
+              <Text>{msg.content}</Text>
+            )}
           </Box>
         )}
       </Box>

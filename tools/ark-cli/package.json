@@ -50,6 +50,8 @@
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",
     "inquirer": "^12.1.0",
+    "marked": "^15.0.12",
+    "marked-terminal": "^7.3.0",
     "open": "^10.2.0",
     "openai": "^5.19.1",
     "react": "^19.1.0",
