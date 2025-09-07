@@ -10,12 +10,16 @@ interface Message {
   timestamp: Date;
 }
 
-const ChatUI: React.FC = () => {
+interface ChatUIProps {
+  initialTargetId?: string;
+}
+
+const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [input, setInput] = React.useState('');
   const [isTyping, setIsTyping] = React.useState(false);
   const [target, setTarget] = React.useState<QueryTarget | null>(null);
-  const [showTargetSelector, setShowTargetSelector] = React.useState(true);
+  const [showTargetSelector, setShowTargetSelector] = React.useState(!initialTargetId);
   const [availableTargets, setAvailableTargets] = React.useState<QueryTarget[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -32,6 +36,25 @@ const ChatUI: React.FC = () => {
         
         const targets = await client.getQueryTargets();
         setAvailableTargets(targets);
+        
+        // If initialTargetId is provided, find and set the target
+        if (initialTargetId) {
+          const matchedTarget = targets.find(t => t.id === initialTargetId);
+          if (matchedTarget) {
+            setTarget(matchedTarget);
+            setShowTargetSelector(false);
+            setMessages([{
+              role: 'system',
+              content: `Connected to ${matchedTarget.type}: ${matchedTarget.name}`,
+              timestamp: new Date(),
+            }]);
+          } else {
+            // If target not found, show selector
+            setShowTargetSelector(true);
+            setError(`Target "${initialTargetId}" not found`);
+          }
+        }
+        
         setIsLoading(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to initialize chat');
@@ -40,7 +63,7 @@ const ChatUI: React.FC = () => {
     };
 
     initializeChat();
-  }, []);
+  }, [initialTargetId]);
 
   const handleTargetSelect = (item: { value: QueryTarget | null }) => {
     if (item.value === null) {
@@ -159,7 +182,7 @@ const ChatUI: React.FC = () => {
           <Text color={isUser ? 'cyan' : isSystem ? 'gray' : 'green'} bold>
             {isUser ? 'You' : isSystem ? 'System' : target?.name}
           </Text>
-          <Text color="gray"> • {msg.timestamp.toLocaleTimeString()}</Text>
+          <Text color="gray"> {msg.timestamp.toLocaleTimeString()}</Text>
         </Box>
         <Box marginLeft={2}>
           <Text>{msg.content || (isCurrentlyTyping ? '...' : '')}</Text>
