@@ -78,13 +78,6 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
       
       setTargetIndex(nextIndex);
       setTarget(nextTarget);
-      
-      // Add a system message about the switch
-      setMessages((prev) => [...prev, {
-        role: 'system',
-        content: `Switched to ${nextTarget.type}: ${nextTarget.name}`,
-        timestamp: new Date(),
-      }]);
     }
   });
 
@@ -161,15 +154,19 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
 
       setIsTyping(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send message');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
+      setError(errorMessage);
       setIsTyping(false);
       
-      // Add error as a system message
-      setMessages((prev) => [...prev, {
-        role: 'system',
-        content: `Error: ${err instanceof Error ? err.message : 'Failed to send message'}`,
-        timestamp: new Date(),
-      }]);
+      // Update the assistant's message with the error
+      setMessages((prev) => {
+        const newMessages = [...prev];
+        const lastMessage = newMessages[newMessages.length - 1];
+        if (lastMessage && lastMessage.role === 'assistant') {
+          lastMessage.content = `Error: ${errorMessage}`;
+        }
+        return newMessages;
+      });
     }
   };
 
@@ -180,14 +177,18 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
     
     // Determine if this is the last assistant message and we're typing
     const isCurrentlyTyping = isAssistant && isTyping && index === messages.length - 1;
-    const hasError = isAssistant && msg.content === 'No response received';
+    const hasError = isAssistant && (msg.content.startsWith('Error:') || msg.content === 'No response received');
+    
+    // Don't render system messages separately anymore
+    if (isSystem) {
+      return null;
+    }
     
     return (
       <Box key={index} flexDirection="column" marginBottom={1}>
         <Box>
           {/* Status indicator */}
           {isUser && <Text color="cyan">●</Text>}
-          {isSystem && <Text color="gray">●</Text>}
           {isAssistant && !isCurrentlyTyping && !hasError && <Text color="green">●</Text>}
           {isAssistant && isCurrentlyTyping && (
             <Text>
@@ -198,15 +199,15 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
           <Text> </Text>
           
           {/* Name */}
-          <Text color={isUser ? 'cyan' : isSystem ? 'gray' : isCurrentlyTyping ? 'gray' : hasError ? 'red' : 'green'} bold>
-            {isUser ? 'You' : isSystem ? 'System' : target?.name}
+          <Text color={isUser ? 'cyan' : isCurrentlyTyping ? 'gray' : hasError ? 'red' : 'green'} bold>
+            {isUser ? 'You' : target?.name}
           </Text>
           
           {/* Timestamp */}
           <Text color="gray"> {msg.timestamp.toLocaleTimeString()}</Text>
         </Box>
         
-        {/* Message content - no ellipsis when typing */}
+        {/* Message content */}
         {msg.content && (
           <Box marginLeft={2}>
             <Text color={hasError ? 'red' : undefined}>
