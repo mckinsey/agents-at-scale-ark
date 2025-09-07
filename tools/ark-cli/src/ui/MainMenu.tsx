@@ -32,9 +32,9 @@ const MainMenu: React.FC = () => {
       }
         
       case 'dashboard': {
-        const DashboardCLI = (await import('../components/DashboardCLI.js')).default;
-        render(<DashboardCLI />);
-        break;
+        // Execute the dashboard command directly
+        const { execSync } = await import('child_process');
+        process.exit(0); // Exit menu to run command
       }
         
       case 'status': {
