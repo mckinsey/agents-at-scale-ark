@@ -11,8 +11,6 @@ export function createDashboardCommand(): Command {
     .description('Open the ARK dashboard in your browser')
     .action(async () => {
       try {
-        console.log(chalk.cyan('Looking for ARK dashboard service...'));
-        
         // Find the dashboard service using kubectl
         const { execSync } = await import('child_process');
         
@@ -24,7 +22,7 @@ export function createDashboardCommand(): Command {
           // Look for service with ark-dashboard in the name
           const services = execSync(
             `kubectl get svc -A -o json | jq -r '.items[] | select(.metadata.name | contains("ark-dashboard")) | .metadata.namespace + "/" + .metadata.name'`,
-            { encoding: 'utf8' }
+            { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
           ).trim();
           
           if (services) {
@@ -35,7 +33,7 @@ export function createDashboardCommand(): Command {
             // Try to find by label
             const servicesByLabel = execSync(
               `kubectl get svc -A -l app=ark-dashboard -o json | jq -r '.items[0] | .metadata.namespace + "/" + .metadata.name'`,
-              { encoding: 'utf8' }
+              { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
             ).trim();
             
             if (servicesByLabel && servicesByLabel !== 'null/null') {
@@ -50,25 +48,19 @@ export function createDashboardCommand(): Command {
         
         if (!serviceName) {
           console.error(chalk.red('Error: ARK dashboard service not found in cluster'));
-          console.error(chalk.yellow('Please ensure the ARK dashboard is deployed to your cluster'));
           process.exit(1);
         }
-        
-        console.log(chalk.green(`Found dashboard service: ${serviceName} in namespace: ${namespace}`));
         
         // Get the service port
         let servicePort = '3000'; // Default port
         try {
           servicePort = execSync(
             `kubectl get svc ${serviceName} -n ${namespace} -o jsonpath='{.spec.ports[0].port}'`,
-            { encoding: 'utf8' }
+            { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
           ).trim();
         } catch (error) {
-          console.log(chalk.yellow(`Using default port ${servicePort}`));
+          // Use default port
         }
-        
-        // Start port forwarding
-        console.log(chalk.cyan(`Starting port forward localhost:${DASHBOARD_PORT} -> ${serviceName}:${servicePort}`));
         
         const portForward = spawn('kubectl', [
           'port-forward',
@@ -84,10 +76,10 @@ export function createDashboardCommand(): Command {
         
         // Open browser
         const url = `http://localhost:${DASHBOARD_PORT}`;
-        console.log(chalk.green(`Opening browser to ${url}`));
         await open(url);
         
-        console.log(chalk.gray('\nPress Ctrl+C to stop the dashboard\n'));
+        console.log(chalk.green(`ARK dashboard running on: ${url}`));
+        console.log(chalk.gray('Press Ctrl+C to stop'));
         
         // Handle errors only
         portForward.stderr?.on('data', (data) => {
@@ -109,7 +101,6 @@ export function createDashboardCommand(): Command {
         
         // Handle Ctrl+C gracefully
         process.on('SIGINT', () => {
-          console.log(chalk.yellow('\nStopping dashboard...'));
           portForward.kill();
           process.exit(0);
         });
