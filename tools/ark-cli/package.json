@@ -50,6 +50,7 @@
     "ink-text-input": "^6.0.0",
     "inquirer": "^12.1.0",
     "open": "^10.2.0",
+    "openai": "^5.19.1",
     "react": "^19.1.0",
     "simple-git": "^3.28.0",
     "yaml": "^2.6.1"
