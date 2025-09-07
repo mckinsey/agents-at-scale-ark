@@ -298,20 +298,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
   return (
     <Box flexDirection="column" height="100%">
       <Box flexDirection="column" flexGrow={1}>
-        {messages.length === 0 ? (
-          <Box flexDirection="column">
-            {target && (
-              <Box marginBottom={1}>
-                <Text color="gray">Connected to </Text>
-                <Text color="gray">{target.type} </Text>
-                <Text color="green">{target.name}</Text>
-              </Box>
-            )}
-            <Text color="gray">Start typing to begin the conversation...</Text>
-          </Box>
-        ) : (
-          messages.map(renderMessage)
-        )}
+        {messages.map(renderMessage)}
       </Box>
 
       <Box flexDirection="column">
