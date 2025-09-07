@@ -42,6 +42,16 @@ async function handleStatusCheck() {
 }
 
 async function main() {
+  // Handle Ctrl+C properly
+  process.on('SIGINT', () => {
+    console.log('\n👋 Goodbye!');
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', () => {
+    process.exit(0);
+  });
+
   const program = new Command();
   program
     .name(packageJson.name)
