@@ -13,10 +13,16 @@ npm install -g @agents-at-scale/ark
 
 ## Basic Usage
 
-Start a chat session:
-
 ```bash
+# Enable tab completion (add to ~/.bashrc or ~/.zshrc)
+eval "$(ark completion bash)"  # For bash
+eval "$(ark completion zsh)"   # For zsh
+
+# Start interactive chat
 ark chat
+
+# Chat with a specific target
+ark chat agent/math
 ```
 
 Then query any agent:
