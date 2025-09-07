@@ -236,51 +236,36 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
 
   return (
     <Box flexDirection="column" height="100%">
-      <Box
-        flexDirection="row"
-        borderStyle="single"
-        borderColor="cyan"
-        paddingX={1}
-        marginBottom={1}
-      >
-        <Text color="cyan" bold>
-          💬 Chat with {target?.type}: {target?.name}
-        </Text>
-        <Text color="gray"> (Ctrl+C to exit)</Text>
-      </Box>
-
-      <Box flexDirection="column" flexGrow={1} marginBottom={1}>
+      <Box flexDirection="column" flexGrow={1}>
         {messages.length === 0 ? (
           <Text color="gray">Start typing to begin the conversation...</Text>
         ) : (
           messages.map(renderMessage)
         )}
-        {isTyping && !messages.find(m => m.role === 'assistant' && m.timestamp.getTime() > Date.now() - 1000) && (
-          <Box>
-            <Text color="gray">
-              {target?.name} is typing...
-            </Text>
-          </Box>
-        )}
       </Box>
 
-      <Box 
-        borderStyle="round" 
-        borderColor="cyan"
-        paddingX={1}
-      >
-        <Box flexDirection="row" width="100%">
-          <Text color="cyan" bold>
-            › 
-          </Text>
-          <Box marginLeft={1} flexGrow={1}>
-            <TextInput
-              value={input}
-              onChange={setInput}
-              onSubmit={handleSubmit}
-              placeholder="Type your message..."
-            />
+      <Box flexDirection="column">
+        <Box 
+          borderStyle="round" 
+          borderColor="cyan"
+          paddingX={1}
+        >
+          <Box flexDirection="row" width="100%">
+            <Text color="cyan" bold>
+              › 
+            </Text>
+            <Box marginLeft={1} flexGrow={1}>
+              <TextInput
+                value={input}
+                onChange={setInput}
+                onSubmit={handleSubmit}
+                placeholder="Type your message..."
+              />
+            </Box>
           </Box>
+        </Box>
+        <Box marginLeft={1} marginTop={0}>
+          <Text color="gray" dimColor>Ctrl+C to exit</Text>
         </Box>
       </Box>
     </Box>
