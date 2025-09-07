@@ -79,32 +79,14 @@ export class ChatClient {
     }
 
     try {
-      if (onChunk) {
-        // Stream the response
-        const stream = await this.openai!.chat.completions.create({
-          model: targetId,
-          messages: messages,
-          stream: true,
-        });
+      // Always use non-streaming for now
+      const completion = await this.openai!.chat.completions.create({
+        model: targetId,
+        messages: messages,
+        stream: false,
+      });
 
-        let fullResponse = '';
-        for await (const chunk of stream) {
-          const content = chunk.choices[0]?.delta?.content || '';
-          if (content) {
-            fullResponse += content;
-            onChunk(content);
-          }
-        }
-        return fullResponse;
-      } else {
-        // Get the full response at once
-        const completion = await this.openai!.chat.completions.create({
-          model: targetId,
-          messages: messages,
-        });
-
-        return completion.choices[0]?.message?.content || '';
-      }
+      return completion.choices[0]?.message?.content || '';
     } catch (error) {
       throw error;
     }

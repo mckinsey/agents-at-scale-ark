@@ -111,44 +111,18 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
         content: value
       });
 
-      // Add placeholder assistant message while waiting
-      const assistantMessageId = Date.now();
-      setMessages((prev) => [...prev, {
-        role: 'assistant',
-        content: '',
-        timestamp: new Date(),
-      }]);
-
       // Send message and get response
-      let responseContent = '';
       const fullResponse = await chatClientRef.current.sendMessage(
         target.id,
-        apiMessages,
-        (chunk) => {
-          // Handle streaming response
-          responseContent += chunk;
-          // Update the assistant message with streaming content
-          setMessages((prev) => {
-            const newMessages = [...prev];
-            const assistantMsg = newMessages[newMessages.length - 1];
-            if (assistantMsg && assistantMsg.role === 'assistant') {
-              assistantMsg.content = responseContent;
-            }
-            return [...newMessages];
-          });
-        }
+        apiMessages
       );
 
-      // If we got a response but no streaming, update the message
-      const finalContent = responseContent || fullResponse || 'No response received';
-      setMessages((prev) => {
-        const newMessages = [...prev];
-        const assistantMsg = newMessages[newMessages.length - 1];
-        if (assistantMsg && assistantMsg.role === 'assistant') {
-          assistantMsg.content = finalContent;
-        }
-        return [...newMessages];
-      });
+      // Add the assistant's response
+      setMessages((prev) => [...prev, {
+        role: 'assistant',
+        content: fullResponse || 'No response received',
+        timestamp: new Date(),
+      }]);
 
       setIsTyping(false);
     } catch (err) {
@@ -176,8 +150,14 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
     return (
       <Box key={index} flexDirection="column" marginBottom={1}>
         <Box>
+          {isUser && (
+            <Text color="cyan">● </Text>
+          )}
           {isAssistant && (
             <Text color={dotColor}>● </Text>
+          )}
+          {isSystem && (
+            <Text color="gray">● </Text>
           )}
           <Text color={isUser ? 'cyan' : isSystem ? 'gray' : 'green'} bold>
             {isUser ? 'You' : isSystem ? 'System' : target?.name}
