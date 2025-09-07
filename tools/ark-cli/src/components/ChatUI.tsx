@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
-import SelectInput from 'ink-select-input';
 import Spinner from 'ink-spinner';
+import chalk from 'chalk';
 import * as React from 'react';
 import { ChatClient, QueryTarget } from '../lib/chatClient.js';
 
@@ -22,7 +22,6 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
   const [input, setInput] = React.useState('');
   const [isTyping, setIsTyping] = React.useState(false);
   const [target, setTarget] = React.useState<QueryTarget | null>(null);
-  const [showTargetSelector, setShowTargetSelector] = React.useState(!initialTargetId);
   const [availableTargets, setAvailableTargets] = React.useState<QueryTarget[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -49,11 +48,9 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
           if (matchedTarget) {
             setTarget(matchedTarget);
             setTargetIndex(matchedIndex >= 0 ? matchedIndex : 0);
-            setShowTargetSelector(false);
             setMessages([]);
           } else {
-            // If target not found, show selector
-            setShowTargetSelector(true);
+            // If target not found, show error
             setError(`Target "${initialTargetId}" not found`);
           }
         } else if (targets.length > 0) {
@@ -80,7 +77,6 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
           if (selectedTarget) {
             setTarget(selectedTarget);
             setTargetIndex(selectedIndex);
-            setShowTargetSelector(false);
             setMessages([]);
           } else {
             setError('No targets available');
@@ -91,8 +87,9 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
         
         setIsLoading(false);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to initialize chat');
-        setIsLoading(false);
+        const errorMessage = err instanceof Error ? err.message : 'Failed to initialize chat';
+        console.error(chalk.red('Error:'), errorMessage);
+        process.exit(1);
       }
     };
 
@@ -102,7 +99,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
   // Handle keyboard input
   useInput((input, key) => {
     // Shift+Tab to cycle through targets
-    if (!showTargetSelector && key.shift && key.tab && availableTargets.length > 0) {
+    if (key.shift && key.tab && availableTargets.length > 0) {
       // Cycle to next target
       const nextIndex = (targetIndex + 1) % availableTargets.length;
       const nextTarget = availableTargets[nextIndex];
@@ -130,19 +127,6 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
     }
   });
 
-  const handleTargetSelect = (item: { value: QueryTarget | null }) => {
-    if (item.value === null) {
-      process.exit(0);
-      return;
-    }
-    
-    const selectedIndex = availableTargets.findIndex(t => t.id === item.value!.id);
-    setTarget(item.value);
-    setTargetIndex(selectedIndex >= 0 ? selectedIndex : 0);
-    setShowTargetSelector(false);
-    // Don't add system message, just start with empty messages
-    setMessages([]);
-  };
 
   const handleSubmit = async (value: string) => {
     if (!value.trim() || !target || !chatClientRef.current) return;
@@ -299,42 +283,13 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
     );
   };
 
-  if (showTargetSelector) {
-    // Prepare items for SelectInput
-    const selectItems = [
-      ...availableTargets.map(t => ({
-        label: `${t.type === 'agent' ? '🤖' : t.type === 'model' ? '🧠' : '🔧'} ${t.type}: ${t.name}`,
-        value: t
-      })),
-      { label: '❌ Exit', value: null }
-    ];
-
+  // Show loading state
+  if (isLoading) {
     return (
       <Box flexDirection="column">
-        <Box marginBottom={1}>
-          <Text color="cyan" bold>
-            💬 ARK Chat Interface
-          </Text>
-        </Box>
-        
-        {isLoading ? (
-          <Text color="yellow">Loading available targets...</Text>
-        ) : error ? (
-          <Box flexDirection="column">
-            <Text color="red">Error: {error}</Text>
-            <Text color="gray">Using fallback targets...</Text>
-          </Box>
-        ) : (
-          <>
-            <Text color="gray">Select a target to chat with:</Text>
-            <Box marginTop={1}>
-              <SelectInput
-                items={selectItems}
-                onSelect={handleTargetSelect}
-              />
-            </Box>
-          </>
-        )}
+        <Text color="yellow">
+          <Spinner type="dots" /> Loading available targets...
+        </Text>
       </Box>
     );
   }

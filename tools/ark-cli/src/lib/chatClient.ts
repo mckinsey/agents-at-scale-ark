@@ -58,14 +58,13 @@ export class ChatClient {
       });
 
       return targets;
-    } catch (error) {
-      console.error('Failed to fetch query targets:', error);
-      // Return mock data as fallback
-      return [
-        { id: 'agent:weather', name: 'weather', type: 'agent', description: 'Weather information agent' },
-        { id: 'agent:math', name: 'math', type: 'agent', description: 'Mathematical calculations agent' },
-        { id: 'model:default', name: 'default', type: 'model', description: 'Default language model' },
-      ];
+    } catch (error: any) {
+      // Check if it's a connection error
+      if (error?.name === 'APIConnectionError' || error?.message?.includes('Connection error')) {
+        throw new Error('Cannot connect to ARK API. Please ensure ark-api is running.');
+      }
+      // For other errors, throw them as-is
+      throw error;
     }
   }
 
