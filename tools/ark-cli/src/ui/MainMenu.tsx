@@ -38,6 +38,9 @@ const MainMenu: React.FC = () => {
           app.unmount();
         }
         
+        // Clear the screen
+        console.clear();
+        
         // Import and run the dashboard command
         const { createDashboardCommand } = await import('../commands/dashboard.js');
         const dashboardCmd = createDashboardCommand();
