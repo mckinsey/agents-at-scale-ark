@@ -127,7 +127,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
         role: 'assistant',
         content: '',
         timestamp: new Date(),
-        targetName: `${target.type}/${target.name}`,
+        targetName: target.name,  // Store just the name
       }]);
 
       // Send message and get response
@@ -194,7 +194,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
           
           {/* Name */}
           <Text color={isUser ? 'cyan' : isCurrentlyTyping ? 'gray' : hasError ? 'red' : 'green'} bold>
-            {isUser ? 'You' : msg.targetName || `${target?.type}/${target?.name}`}
+            {isUser ? 'You' : msg.targetName || target?.name}
           </Text>
           
           {/* Timestamp */}
@@ -261,7 +261,8 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
             {target && (
               <Box marginBottom={1}>
                 <Text color="gray">Connected to </Text>
-                <Text color="green">{target.type}/{target.name}</Text>
+                <Text>{target.type} </Text>
+                <Text color="green">{target.name}</Text>
               </Box>
             )}
             <Text color="gray">Start typing to begin the conversation...</Text>
@@ -296,7 +297,8 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
             {target && (
               <>
                 <Text color="gray">⏵⏵ Chatting with </Text>
-                <Text color="green">{target.type}/{target.name}</Text>
+                <Text>{target.type} </Text>
+                <Text color="green">{target.name}</Text>
                 <Text color="gray"> • Shift+Tab to cycle • </Text>
               </>
             )}
