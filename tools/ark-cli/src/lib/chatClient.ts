@@ -8,6 +8,9 @@ export interface QueryTarget {
   description?: string;
 }
 
+// Enable streaming - set to false to disable streaming globally
+const ENABLE_STREAMING = true;
+
 export class ChatClient {
   private openai?: OpenAI;
   private configManager: ConfigManager;
@@ -80,16 +83,18 @@ export class ChatClient {
     }
 
     try {
-      // Request streaming to test server behavior
+      // Use streaming if enabled and onChunk is provided
+      const shouldStream = ENABLE_STREAMING && !!onChunk;
+      
       const completion = await this.openai!.chat.completions.create({
         model: targetId,
         messages: messages,
-        stream: true,
+        stream: shouldStream,
         signal: signal,
       } as any);
 
       // Handle streaming response
-      if (Symbol.asyncIterator in completion) {
+      if (shouldStream && Symbol.asyncIterator in completion) {
         let fullResponse = '';
         for await (const chunk of completion as any) {
           const content = chunk.choices[0]?.delta?.content || '';
@@ -102,8 +107,23 @@ export class ChatClient {
         }
         return fullResponse;
       } else {
-        // Fallback if not actually streaming
-        return (completion as any).choices[0]?.message?.content || '';
+        // Non-streaming response or server doesn't support streaming
+        const response = completion as any;
+        
+        if (!response.choices || !response.choices[0]) {
+          console.error('Unexpected response structure:', JSON.stringify(response));
+          return '';
+        }
+        
+        const content = response.choices[0].message?.content || '';
+        
+        // If we requested streaming but got a full response, still call onChunk
+        // to maintain consistent behavior
+        if (shouldStream && onChunk && content) {
+          onChunk(content);
+        }
+        
+        return content;
       }
     } catch (error) {
       throw error;

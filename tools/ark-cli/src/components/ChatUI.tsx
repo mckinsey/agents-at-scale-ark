@@ -189,17 +189,31 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
       const fullResponse = await chatClientRef.current.sendMessage(
         target.id,
         apiMessages,
-        undefined,
+        (chunk: string) => {
+          // Update the assistant's message progressively as chunks arrive
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            const lastMessage = newMessages[newMessages.length - 1];
+            // Only update if not cancelled
+            if (lastMessage && lastMessage.role === 'assistant' && !lastMessage.cancelled) {
+              lastMessage.content = (lastMessage.content || '') + chunk;
+            }
+            return newMessages;
+          });
+        },
         controller.signal
       );
 
-      // Update the assistant's message with the actual response
+      // For non-streaming responses or final validation
       setMessages((prev) => {
         const newMessages = [...prev];
         const lastMessage = newMessages[newMessages.length - 1];
-        // Only update if not cancelled
+        // Only update if not cancelled and we have a full response
         if (lastMessage && lastMessage.role === 'assistant' && !lastMessage.cancelled) {
-          lastMessage.content = fullResponse || 'No response received';
+          // If content is empty (no streaming occurred), set the full response
+          if (!lastMessage.content) {
+            lastMessage.content = fullResponse || 'No response received';
+          }
         }
         return newMessages;
       });
@@ -252,7 +266,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
           {isUser && <Text color="cyan">●</Text>}
           {isAssistant && !isCurrentlyTyping && !hasError && !isCancelled && <Text color="green">●</Text>}
           {isAssistant && isCurrentlyTyping && (
-            <Text color="yellowBright">
+            <Text color="yellow">
               <Spinner type="dots" />
             </Text>
           )}
@@ -261,7 +275,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
           <Text> </Text>
           
           {/* Name */}
-          <Text color={isUser ? 'cyan' : isCurrentlyTyping ? 'yellowBright' : isCancelled ? 'gray' : hasError ? 'red' : 'green'} bold>
+          <Text color={isUser ? 'cyan' : isCurrentlyTyping ? 'yellow' : isCancelled ? 'gray' : hasError ? 'red' : 'green'} bold>
             {isUser ? 'You' : msg.targetName || target?.name}
           </Text>
           
@@ -346,7 +360,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
       <Box flexDirection="column">
         <Box 
           borderStyle="round" 
-          borderColor="cyan"
+          borderColor="gray"
           paddingX={1}
         >
           <Box flexDirection="row" width="100%">
