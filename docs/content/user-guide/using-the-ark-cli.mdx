@@ -24,8 +24,14 @@ ark chat
 # Chat with a specific target
 ark chat agent/math
 
-# Enable markdown rendering for assistant responses
-ARK_CHAT_MARKDOWN=true ark chat
+# Enable streaming responses (disabled by default)
+ARK_ENABLE_STREAMING=1 ark chat
+
+# Enable markdown rendering for assistant responses (disabled by default)
+ARK_ENABLE_MARKDOWN=1 ark chat
+
+# Enable both streaming and markdown
+ARK_ENABLE_STREAMING=1 ARK_ENABLE_MARKDOWN=1 ark chat
 ```
 
 Then query any agent:

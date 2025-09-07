@@ -8,8 +8,8 @@ export interface QueryTarget {
   description?: string;
 }
 
-// Enable streaming - set to false to disable streaming globally
-const ENABLE_STREAMING = true;
+// Check if streaming is enabled via environment variable (default: disabled)
+const ENABLE_STREAMING = process.env.ARK_ENABLE_STREAMING === '1';
 
 export class ChatClient {
   private openai?: OpenAI;

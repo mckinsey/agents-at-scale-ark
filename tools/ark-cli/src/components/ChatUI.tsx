@@ -20,8 +20,8 @@ interface ChatUIProps {
   initialTargetId?: string;
 }
 
-// Check if markdown rendering is enabled
-const ENABLE_MARKDOWN = process.env.ARK_CHAT_MARKDOWN === 'true';
+// Check if markdown rendering is enabled via environment variable (default: disabled)
+const ENABLE_MARKDOWN = process.env.ARK_ENABLE_MARKDOWN === '1';
 
 // Configure marked with terminal renderer if markdown is enabled
 if (ENABLE_MARKDOWN) {
