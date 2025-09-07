@@ -162,19 +162,19 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
       <Box key={index} flexDirection="column" marginBottom={1}>
         <Box>
           {/* Status indicator */}
-          {isUser && <Text color="cyan">● </Text>}
-          {isSystem && <Text color="gray">● </Text>}
-          {isAssistant && !isCurrentlyTyping && !hasError && <Text color="green">● </Text>}
+          {isUser && <Text color="cyan">●</Text>}
+          {isSystem && <Text color="gray">●</Text>}
+          {isAssistant && !isCurrentlyTyping && !hasError && <Text color="green">●</Text>}
           {isAssistant && isCurrentlyTyping && (
             <Text color="gray">
               <Spinner type="dots" />
             </Text>
           )}
-          {isAssistant && hasError && <Text color="red">● </Text>}
+          {isAssistant && hasError && <Text color="red">●</Text>}
           <Text> </Text>
           
           {/* Name */}
-          <Text color={isUser ? 'cyan' : isSystem ? 'gray' : hasError ? 'red' : 'green'} bold>
+          <Text color={isUser ? 'cyan' : isSystem ? 'gray' : isCurrentlyTyping ? 'gray' : hasError ? 'red' : 'green'} bold>
             {isUser ? 'You' : isSystem ? 'System' : target?.name}
           </Text>
           
@@ -182,12 +182,14 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
           <Text color="gray"> {msg.timestamp.toLocaleTimeString()}</Text>
         </Box>
         
-        {/* Message content */}
-        <Box marginLeft={2}>
-          <Text color={hasError ? 'red' : undefined}>
-            {msg.content || (isCurrentlyTyping ? '...' : '')}
-          </Text>
-        </Box>
+        {/* Message content - no ellipsis when typing */}
+        {msg.content && (
+          <Box marginLeft={2}>
+            <Text color={hasError ? 'red' : undefined}>
+              {msg.content}
+            </Text>
+          </Box>
+        )}
       </Box>
     );
   };
