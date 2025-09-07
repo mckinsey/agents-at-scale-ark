@@ -15,6 +15,7 @@ import { createDashboardCommand } from './commands/dashboard.js';
 import { createGenerateCommand } from './commands/generate/index.js';
 import { createStatusCommand } from './commands/status.js';
 import { createConfigCommand } from './commands/config.js';
+import { createTargetsCommand } from './commands/targets.js';
 import { StatusChecker } from './components/statusChecker.js';
 import { ConfigManager } from './config.js';
 import { ArkClient } from './lib/arkClient.js';
@@ -57,6 +58,7 @@ async function main() {
   program.addCommand(createGenerateCommand());
   program.addCommand(createStatusCommand());
   program.addCommand(createConfigCommand());
+  program.addCommand(createTargetsCommand());
 
   // Add check status command
   const checkCommand = new Command('check');

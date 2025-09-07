@@ -31,7 +31,7 @@ _ark_completion() {
   
   case \${COMP_CWORD} in
     1)
-      opts="cluster completion check help"
+      opts="cluster completion check chat targets help"
       COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
       return 0
       ;;
@@ -50,6 +50,22 @@ _ark_completion() {
         check)
           opts="status"
           COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
+          return 0
+          ;;
+        targets)
+          opts="list ls"
+          COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
+          return 0
+          ;;
+        chat)
+          # Dynamically fetch available targets using ark targets list
+          local targets
+          targets=$(ark targets list 2>/dev/null)
+          if [ -z "\$targets" ]; then
+            # Fallback to common targets if API is not available
+            targets="agent/sample-agent agent/math agent/weather model/default"
+          fi
+          COMPREPLY=( $(compgen -W "\${targets}" -- \${cur}) )
           return 0
           ;;
       esac
@@ -84,6 +100,8 @@ _ark() {
         'cluster[Cluster management commands]' \\
         'completion[Generate shell completion scripts]' \\
         'check[Check system components]' \\
+        'chat[Interactive chat with agents and models]' \\
+        'targets[List available query targets]' \\
         'help[Show help information]'
       ;;
     subcommand)
@@ -101,6 +119,20 @@ _ark() {
         check)
           _values 'check commands' \\
             'status[Check system status]'
+          ;;
+        targets)
+          _values 'targets commands' \\
+            'list[List all available targets]' \\
+            'ls[List all available targets]'
+          ;;
+        chat)
+          # Get available targets dynamically
+          local -a targets
+          targets=($(ark targets list 2>/dev/null))
+          if [ \${#targets[@]} -eq 0 ]; then
+            targets=('agent/sample-agent' 'agent/math' 'agent/weather' 'model/default')
+          fi
+          _values 'available targets' \${targets[@]}
           ;;
       esac
       ;;
