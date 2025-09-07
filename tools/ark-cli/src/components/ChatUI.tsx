@@ -292,12 +292,12 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
           <Box flexDirection="row">
             {target && (
               <>
-                <Text color="gray" dimColor>⏵⏵ Chatting with </Text>
-                <Text color="green" dimColor>{target.type}/{target.name}</Text>
-                <Text color="gray" dimColor> • Shift+Tab to cycle • </Text>
+                <Text color="gray">⏵⏵ Chatting with </Text>
+                <Text color="green">{target.type}/{target.name}</Text>
+                <Text color="gray"> • Shift+Tab to cycle • </Text>
               </>
             )}
-            <Text color="gray" dimColor>Ctrl+C to exit</Text>
+            <Text color="gray">Ctrl+C to exit</Text>
           </Box>
         </Box>
       </Box>
