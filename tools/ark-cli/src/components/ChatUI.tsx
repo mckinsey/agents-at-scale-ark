@@ -9,6 +9,7 @@ interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: Date;
+  targetName?: string;  // Store the target name with the message
 }
 
 interface ChatUIProps {
@@ -126,6 +127,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
         role: 'assistant',
         content: '',
         timestamp: new Date(),
+        targetName: `${target.type}/${target.name}`,
       }]);
 
       // Send message and get response
@@ -192,7 +194,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
           
           {/* Name */}
           <Text color={isUser ? 'cyan' : isCurrentlyTyping ? 'gray' : hasError ? 'red' : 'green'} bold>
-            {isUser ? 'You' : target?.name}
+            {isUser ? 'You' : msg.targetName || `${target?.type}/${target?.name}`}
           </Text>
           
           {/* Timestamp */}
@@ -202,7 +204,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
         {/* Message content */}
         {msg.content && (
           <Box marginLeft={2}>
-            <Text color={hasError ? 'red' : undefined}>
+            <Text>
               {msg.content}
             </Text>
           </Box>
