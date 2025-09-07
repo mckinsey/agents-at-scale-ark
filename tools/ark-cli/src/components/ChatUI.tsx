@@ -1,4 +1,4 @@
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import SelectInput from 'ink-select-input';
 import Spinner from 'ink-spinner';
@@ -24,6 +24,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
   const [availableTargets, setAvailableTargets] = React.useState<QueryTarget[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [targetIndex, setTargetIndex] = React.useState(0);
   
   const chatClientRef = React.useRef<ChatClient | undefined>(undefined);
 
@@ -41,8 +42,10 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
         // If initialTargetId is provided, find and set the target
         if (initialTargetId) {
           const matchedTarget = targets.find(t => t.id === initialTargetId);
+          const matchedIndex = targets.findIndex(t => t.id === initialTargetId);
           if (matchedTarget) {
             setTarget(matchedTarget);
+            setTargetIndex(matchedIndex >= 0 ? matchedIndex : 0);
             setShowTargetSelector(false);
             setMessages([{
               role: 'system',
@@ -66,13 +69,34 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
     initializeChat();
   }, [initialTargetId]);
 
+  // Handle shift+tab to cycle through targets
+  useInput((input, key) => {
+    if (!showTargetSelector && key.shift && key.tab && availableTargets.length > 0) {
+      // Cycle to next target
+      const nextIndex = (targetIndex + 1) % availableTargets.length;
+      const nextTarget = availableTargets[nextIndex];
+      
+      setTargetIndex(nextIndex);
+      setTarget(nextTarget);
+      
+      // Add a system message about the switch
+      setMessages((prev) => [...prev, {
+        role: 'system',
+        content: `Switched to ${nextTarget.type}: ${nextTarget.name}`,
+        timestamp: new Date(),
+      }]);
+    }
+  });
+
   const handleTargetSelect = (item: { value: QueryTarget | null }) => {
     if (item.value === null) {
       process.exit(0);
       return;
     }
     
+    const selectedIndex = availableTargets.findIndex(t => t.id === item.value!.id);
     setTarget(item.value);
+    setTargetIndex(selectedIndex >= 0 ? selectedIndex : 0);
     setShowTargetSelector(false);
     setMessages([
       {
@@ -265,7 +289,16 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
           </Box>
         </Box>
         <Box marginLeft={1} marginTop={0}>
-          <Text color="gray" dimColor>Ctrl+C to exit</Text>
+          <Box flexDirection="row">
+            {target && (
+              <>
+                <Text color="gray" dimColor>⏵⏵ Chatting with </Text>
+                <Text color="green" dimColor>{target.type}/{target.name}</Text>
+                <Text color="gray" dimColor> • Shift+Tab to cycle • </Text>
+              </>
+            )}
+            <Text color="gray" dimColor>Ctrl+C to exit</Text>
+          </Box>
         </Box>
       </Box>
     </Box>
