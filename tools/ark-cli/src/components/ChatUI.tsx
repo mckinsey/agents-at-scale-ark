@@ -190,7 +190,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
           {isSystem && <Text color="gray">●</Text>}
           {isAssistant && !isCurrentlyTyping && !hasError && <Text color="green">●</Text>}
           {isAssistant && isCurrentlyTyping && (
-            <Text color="gray">
+            <Text>
               <Spinner type="dots" />
             </Text>
           )}
