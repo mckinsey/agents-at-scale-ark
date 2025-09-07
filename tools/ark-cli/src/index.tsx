@@ -8,6 +8,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const packageJson = require('../package.json');
 
+import { createChatCommand } from './commands/chat.js';
 import { createClusterCommand } from './commands/cluster/index.js';
 import { createCompletionCommand } from './commands/completion.js';
 import { createGenerateCommand } from './commands/generate/index.js';
@@ -58,6 +59,7 @@ async function main() {
     .description(packageJson.description)
     .version(packageJson.version);
 
+  program.addCommand(createChatCommand());
   program.addCommand(createClusterCommand());
   program.addCommand(createCompletionCommand());
   program.addCommand(createGenerateCommand());

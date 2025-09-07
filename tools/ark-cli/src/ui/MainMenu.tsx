@@ -2,6 +2,7 @@ import {Text, Box, useInput} from 'ink';
 import SelectInput from 'ink-select-input';
 import * as React from 'react';
 
+import ChatUI from '../components/ChatUI.js';
 import DashboardCLI from '../components/DashboardCLI.js';
 import GeneratorUI from '../components/GeneratorUI.js';
 import {StatusChecker} from '../components/statusChecker.js';
@@ -11,7 +12,7 @@ import {StatusData, ServiceStatus} from '../lib/types.js';
 
 const EXIT_TIMEOUT_MS = 1000;
 
-type MenuChoice = 'dashboard' | 'status' | 'generate' | 'exit';
+type MenuChoice = 'dashboard' | 'status' | 'generate' | 'chat' | 'exit';
 
 interface MenuItem {
   label: string;
@@ -27,6 +28,7 @@ const MainMenu: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
 
   const choices: MenuItem[] = [
+    {label: '💬 Chat', value: 'chat'},
     {label: '🏷️  Dashboard', value: 'dashboard'},
     {label: '🔍 Status Check', value: 'status'},
     {label: '🎯 Generate', value: 'generate'},
@@ -72,8 +74,8 @@ const MainMenu: React.FC = () => {
   useInput((input, key) => {
     if (selectedChoice && selectedChoice !== 'exit') {
       if (key.escape || input === 'q' || key.return) {
-        // For generate, only reset on specific key combinations to avoid conflicts
-        if (selectedChoice === 'generate' && !(key.escape || input === 'q')) {
+        // For generate and chat, only reset on specific key combinations to avoid conflicts
+        if ((selectedChoice === 'generate' || selectedChoice === 'chat') && !(key.escape || input === 'q')) {
           return;
         }
         setSelectedChoice(null);
@@ -250,6 +252,7 @@ const MainMenu: React.FC = () => {
         </Box>
       )}
       {selectedChoice === 'generate' && <GeneratorUI />}
+      {selectedChoice === 'chat' && <ChatUI />}
       {selectedChoice === 'exit' && <Text color="yellow">👋 Goodbye!</Text>}
     </>
   );
