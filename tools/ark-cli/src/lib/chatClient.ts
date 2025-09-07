@@ -79,14 +79,30 @@ export class ChatClient {
     }
 
     try {
-      // Always use non-streaming for now
+      // Request streaming to test server behavior
       const completion = await this.openai!.chat.completions.create({
         model: targetId,
         messages: messages,
-        stream: false,
+        stream: true,
       });
 
-      return completion.choices[0]?.message?.content || '';
+      // Handle streaming response
+      if (Symbol.asyncIterator in completion) {
+        let fullResponse = '';
+        for await (const chunk of completion as any) {
+          const content = chunk.choices[0]?.delta?.content || '';
+          if (content) {
+            fullResponse += content;
+            if (onChunk) {
+              onChunk(content);
+            }
+          }
+        }
+        return fullResponse;
+      } else {
+        // Fallback if not actually streaming
+        return (completion as any).choices[0]?.message?.content || '';
+      }
     } catch (error) {
       throw error;
     }

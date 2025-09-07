@@ -227,8 +227,12 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
             {isUser ? 'You' : msg.targetName || target?.name}
           </Text>
           
-          {/* Timestamp */}
-          <Text color="gray"> {msg.timestamp.toLocaleTimeString()}</Text>
+          {/* Timestamp or interrupt hint */}
+          {isAssistant && isCurrentlyTyping ? (
+            <Text color="gray"> (Esc to interrupt)</Text>
+          ) : (
+            <Text color="gray"> {msg.timestamp.toLocaleTimeString()}</Text>
+          )}
         </Box>
         
         {/* Message content */}
