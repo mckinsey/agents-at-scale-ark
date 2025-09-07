@@ -10,6 +10,7 @@ interface Message {
   content: string;
   timestamp: Date;
   targetName?: string;  // Store the target name with the message
+  cancelled?: boolean;  // Track if message was cancelled
 }
 
 interface ChatUIProps {
@@ -121,7 +122,8 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
         const newMessages = [...prev];
         const lastMessage = newMessages[newMessages.length - 1];
         if (lastMessage && lastMessage.role === 'assistant' && !lastMessage.content) {
-          lastMessage.content = 'Request cancelled';
+          lastMessage.content = 'Interrupted by user';
+          lastMessage.cancelled = true;
         }
         return newMessages;
       });
@@ -195,7 +197,8 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
       setMessages((prev) => {
         const newMessages = [...prev];
         const lastMessage = newMessages[newMessages.length - 1];
-        if (lastMessage && lastMessage.role === 'assistant') {
+        // Only update if not cancelled
+        if (lastMessage && lastMessage.role === 'assistant' && !lastMessage.cancelled) {
           lastMessage.content = fullResponse || 'No response received';
         }
         return newMessages;
@@ -203,7 +206,13 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
 
       setIsTyping(false);
       setAbortController(null);
-    } catch (err) {
+    } catch (err: any) {
+      // Check if this was cancelled by user
+      if (err?.name === 'AbortError') {
+        // Request was cancelled, message already updated by Esc handler
+        return;
+      }
+      
       const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
       setError(errorMessage);
       setIsTyping(false);
@@ -213,7 +222,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
       setMessages((prev) => {
         const newMessages = [...prev];
         const lastMessage = newMessages[newMessages.length - 1];
-        if (lastMessage && lastMessage.role === 'assistant') {
+        if (lastMessage && lastMessage.role === 'assistant' && !lastMessage.cancelled) {
           lastMessage.content = `Error: ${errorMessage}`;
         }
         return newMessages;
@@ -229,6 +238,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
     // Determine if this is the last assistant message and we're typing
     const isCurrentlyTyping = isAssistant && isTyping && index === messages.length - 1;
     const hasError = isAssistant && (msg.content.startsWith('Error:') || msg.content === 'No response received');
+    const isCancelled = msg.cancelled === true;
     
     // Don't render system messages separately anymore
     if (isSystem) {
@@ -240,23 +250,24 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
         <Box>
           {/* Status indicator */}
           {isUser && <Text color="cyan">●</Text>}
-          {isAssistant && !isCurrentlyTyping && !hasError && <Text color="green">●</Text>}
+          {isAssistant && !isCurrentlyTyping && !hasError && !isCancelled && <Text color="green">●</Text>}
           {isAssistant && isCurrentlyTyping && (
-            <Text color="yellow">
+            <Text color="yellowBright">
               <Spinner type="dots" />
             </Text>
           )}
           {isAssistant && hasError && <Text color="red">●</Text>}
+          {isAssistant && isCancelled && <Text color="gray">●</Text>}
           <Text> </Text>
           
           {/* Name */}
-          <Text color={isUser ? 'cyan' : isCurrentlyTyping ? 'yellow' : hasError ? 'red' : 'green'} bold>
+          <Text color={isUser ? 'cyan' : isCurrentlyTyping ? 'yellowBright' : isCancelled ? 'gray' : hasError ? 'red' : 'green'} bold>
             {isUser ? 'You' : msg.targetName || target?.name}
           </Text>
           
           {/* Timestamp or interrupt hint */}
           {isAssistant && isCurrentlyTyping ? (
-            <Text color="gray"> (Esc to interrupt)</Text>
+            <Text color="gray"> (esc to interrupt)</Text>
           ) : (
             <Text color="gray"> {msg.timestamp.toLocaleTimeString()}</Text>
           )}
