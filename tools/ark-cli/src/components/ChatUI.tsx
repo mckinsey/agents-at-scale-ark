@@ -154,7 +154,7 @@ const ChatUI: React.FC = () => {
     // Prepare items for SelectInput
     const selectItems = [
       ...availableTargets.map(t => ({
-        label: `${t.type === 'agent' ? '🤖' : '🧠'} ${t.type}: ${t.name}${t.description ? ` - ${t.description}` : ''}`,
+        label: `${t.type === 'agent' ? '🤖' : t.type === 'model' ? '🧠' : '🔧'} ${t.type}: ${t.name}`,
         value: t
       })),
       { label: '❌ Exit', value: null }

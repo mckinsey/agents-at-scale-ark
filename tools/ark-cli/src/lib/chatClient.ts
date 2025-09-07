@@ -42,15 +42,15 @@ export class ChatClient {
       // Transform the models into our QueryTarget format
       const targets: QueryTarget[] = models.data.map(model => {
         // Parse the model ID to determine if it's an agent or model
-        // Assuming format like "agent:weather" or "model:gpt-4"
-        const [type, ...nameParts] = model.id.split(':');
-        const name = nameParts.join(':') || model.id;
+        // Format is "type/name" e.g., "agent/math", "model/default"
+        const [type, ...nameParts] = model.id.split('/');
+        const name = nameParts.join('/') || model.id;
         
         return {
           id: model.id,
           name: name,
-          type: (type === 'agent' || type === 'model') ? type as 'agent' | 'model' : 'model',
-          description: model.created ? `Created: ${new Date(model.created * 1000).toLocaleDateString()}` : undefined
+          type: type as 'agent' | 'model',
+          description: undefined
         };
       });
 
