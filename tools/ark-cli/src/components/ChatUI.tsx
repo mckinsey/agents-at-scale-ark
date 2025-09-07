@@ -26,6 +26,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
   const [error, setError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [targetIndex, setTargetIndex] = React.useState(0);
+  const [abortController, setAbortController] = React.useState<AbortController | null>(null);
   
   const chatClientRef = React.useRef<ChatClient | undefined>(undefined);
 
@@ -97,8 +98,9 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
     initializeChat();
   }, [initialTargetId]);
 
-  // Handle shift+tab to cycle through targets
+  // Handle keyboard input
   useInput((input, key) => {
+    // Shift+Tab to cycle through targets
     if (!showTargetSelector && key.shift && key.tab && availableTargets.length > 0) {
       // Cycle to next target
       const nextIndex = (targetIndex + 1) % availableTargets.length;
@@ -106,6 +108,23 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
       
       setTargetIndex(nextIndex);
       setTarget(nextTarget);
+    }
+    
+    // Esc to cancel current request
+    if (key.escape && isTyping && abortController) {
+      abortController.abort();
+      setAbortController(null);
+      setIsTyping(false);
+      
+      // Update the last message to show it was cancelled
+      setMessages((prev) => {
+        const newMessages = [...prev];
+        const lastMessage = newMessages[newMessages.length - 1];
+        if (lastMessage && lastMessage.role === 'assistant' && !lastMessage.content) {
+          lastMessage.content = 'Request cancelled';
+        }
+        return newMessages;
+      });
     }
   });
 
@@ -138,6 +157,10 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
     setError(null);
 
     try {
+      // Create abort controller for this request
+      const controller = new AbortController();
+      setAbortController(controller);
+      
       // Convert messages to format expected by OpenAI API - only include user and assistant messages
       const apiMessages = messages
         .filter(msg => msg.role === 'user' || msg.role === 'assistant')
@@ -160,10 +183,12 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
         targetName: target.name,  // Store just the name
       }]);
 
-      // Send message and get response
+      // Send message and get response with abort signal
       const fullResponse = await chatClientRef.current.sendMessage(
         target.id,
-        apiMessages
+        apiMessages,
+        undefined,
+        controller.signal
       );
 
       // Update the assistant's message with the actual response
@@ -177,10 +202,12 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
       });
 
       setIsTyping(false);
+      setAbortController(null);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
       setError(errorMessage);
       setIsTyping(false);
+      setAbortController(null);
       
       // Update the assistant's message with the error
       setMessages((prev) => {
@@ -215,7 +242,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
           {isUser && <Text color="cyan">●</Text>}
           {isAssistant && !isCurrentlyTyping && !hasError && <Text color="green">●</Text>}
           {isAssistant && isCurrentlyTyping && (
-            <Text>
+            <Text color="yellow">
               <Spinner type="dots" />
             </Text>
           )}
@@ -223,7 +250,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
           <Text> </Text>
           
           {/* Name */}
-          <Text color={isUser ? 'cyan' : isCurrentlyTyping ? 'gray' : hasError ? 'red' : 'green'} bold>
+          <Text color={isUser ? 'cyan' : isCurrentlyTyping ? 'yellow' : hasError ? 'red' : 'green'} bold>
             {isUser ? 'You' : msg.targetName || target?.name}
           </Text>
           

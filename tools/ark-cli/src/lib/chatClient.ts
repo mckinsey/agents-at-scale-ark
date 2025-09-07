@@ -72,7 +72,8 @@ export class ChatClient {
   async sendMessage(
     targetId: string,
     messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
-    onChunk?: (chunk: string) => void
+    onChunk?: (chunk: string) => void,
+    signal?: AbortSignal
   ): Promise<string> {
     if (!this.openai) {
       await this.initialize();
@@ -84,7 +85,8 @@ export class ChatClient {
         model: targetId,
         messages: messages,
         stream: true,
-      });
+        signal: signal,
+      } as any);
 
       // Handle streaming response
       if (Symbol.asyncIterator in completion) {
