@@ -156,32 +156,37 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
     
     // Determine if this is the last assistant message and we're typing
     const isCurrentlyTyping = isAssistant && isTyping && index === messages.length - 1;
+    const hasError = isAssistant && msg.content === 'No response received';
     
     return (
       <Box key={index} flexDirection="column" marginBottom={1}>
-        {/* Message box with border */}
-        <Box 
-          borderStyle="round" 
-          borderColor={isUser ? 'cyan' : isSystem ? 'gray' : 'green'}
-          paddingX={1}
-        >
-          <Text>{msg.content || (isCurrentlyTyping ? 'Thinking...' : '')}</Text>
-        </Box>
-        
-        {/* Name and timestamp below the box */}
-        <Box marginLeft={1} marginTop={0}>
-          {isCurrentlyTyping && (
-            <>
-              <Text color="green">
-                <Spinner type="dots" />
-              </Text>
-              <Text> </Text>
-            </>
+        <Box>
+          {/* Status indicator */}
+          {isUser && <Text color="cyan">● </Text>}
+          {isSystem && <Text color="gray">● </Text>}
+          {isAssistant && !isCurrentlyTyping && !hasError && <Text color="green">● </Text>}
+          {isAssistant && isCurrentlyTyping && (
+            <Text color="gray">
+              <Spinner type="dots" />
+            </Text>
           )}
-          <Text color={isUser ? 'cyan' : isSystem ? 'gray' : 'green'} dimColor>
+          {isAssistant && hasError && <Text color="red">● </Text>}
+          <Text> </Text>
+          
+          {/* Name */}
+          <Text color={isUser ? 'cyan' : isSystem ? 'gray' : hasError ? 'red' : 'green'} bold>
             {isUser ? 'You' : isSystem ? 'System' : target?.name}
           </Text>
-          <Text color="gray" dimColor> • {msg.timestamp.toLocaleTimeString()}</Text>
+          
+          {/* Timestamp */}
+          <Text color="gray"> {msg.timestamp.toLocaleTimeString()}</Text>
+        </Box>
+        
+        {/* Message content */}
+        <Box marginLeft={2}>
+          <Text color={hasError ? 'red' : undefined}>
+            {msg.content || (isCurrentlyTyping ? '...' : '')}
+          </Text>
         </Box>
       </Box>
     );
@@ -257,17 +262,23 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
         )}
       </Box>
 
-      <Box flexDirection="row">
-        <Text color="cyan" bold>
-          › 
-        </Text>
-        <Box marginLeft={1} flexGrow={1}>
-          <TextInput
-            value={input}
-            onChange={setInput}
-            onSubmit={handleSubmit}
-            placeholder="Type your message..."
-          />
+      <Box 
+        borderStyle="round" 
+        borderColor="cyan"
+        paddingX={1}
+      >
+        <Box flexDirection="row" width="100%">
+          <Text color="cyan" bold>
+            › 
+          </Text>
+          <Box marginLeft={1} flexGrow={1}>
+            <TextInput
+              value={input}
+              onChange={setInput}
+              onSubmit={handleSubmit}
+              placeholder="Type your message..."
+            />
+          </Box>
         </Box>
       </Box>
     </Box>
