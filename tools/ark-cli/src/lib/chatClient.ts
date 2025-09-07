@@ -79,6 +79,9 @@ export class ChatClient {
     }
 
     try {
+      console.log('Sending message to:', targetId);
+      console.log('Messages:', messages);
+      
       if (onChunk) {
         // Stream the response
         const stream = await this.openai!.chat.completions.create({
@@ -95,6 +98,7 @@ export class ChatClient {
             onChunk(content);
           }
         }
+        console.log('Streamed response:', fullResponse);
         return fullResponse;
       } else {
         // Get the full response at once
@@ -103,7 +107,9 @@ export class ChatClient {
           messages: messages,
         });
 
-        return completion.choices[0]?.message?.content || '';
+        const response = completion.choices[0]?.message?.content || '';
+        console.log('Full response:', response);
+        return response;
       }
     } catch (error) {
       console.error('Failed to send message:', error);

@@ -90,7 +90,7 @@ const ChatUI: React.FC = () => {
 
       // Send message and get response
       let responseContent = '';
-      await chatClientRef.current.sendMessage(
+      const fullResponse = await chatClientRef.current.sendMessage(
         target.id,
         apiMessages,
         (chunk) => {
@@ -116,6 +116,15 @@ const ChatUI: React.FC = () => {
           });
         }
       );
+
+      // If no streaming occurred, add the full response
+      if (!responseContent && fullResponse) {
+        setMessages((prev) => [...prev, {
+          role: 'assistant',
+          content: fullResponse,
+          timestamp: new Date(),
+        }]);
+      }
 
       setIsTyping(false);
     } catch (err) {
