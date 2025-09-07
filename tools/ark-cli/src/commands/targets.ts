@@ -10,7 +10,7 @@ export function createTargetsCommand(): Command {
     .command('list')
     .alias('ls')
     .description('List all available query targets')
-    .option('-j, --json', 'Output in JSON format')
+    .option('-o, --output <format>', 'Output format (json or text)', 'text')
     .option('-t, --type <type>', 'Filter by type (agent, team, model, tool)')
     .action(async (options) => {
       try {
@@ -33,7 +33,7 @@ export function createTargetsCommand(): Command {
           return a.name.localeCompare(b.name);
         });
         
-        if (options.json) {
+        if (options.output === 'json') {
           console.log(JSON.stringify(filteredTargets, null, 2));
         } else {
           if (filteredTargets.length === 0) {
