@@ -1,6 +1,7 @@
 import { Box, Text } from 'ink';
 import TextInput from 'ink-text-input';
 import SelectInput from 'ink-select-input';
+import Spinner from 'ink-spinner';
 import * as React from 'react';
 import { ChatClient, QueryTarget } from '../lib/chatClient.js';
 
@@ -111,18 +112,28 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
         content: value
       });
 
+      // Add a placeholder message for the assistant while thinking
+      setMessages((prev) => [...prev, {
+        role: 'assistant',
+        content: '',
+        timestamp: new Date(),
+      }]);
+
       // Send message and get response
       const fullResponse = await chatClientRef.current.sendMessage(
         target.id,
         apiMessages
       );
 
-      // Add the assistant's response
-      setMessages((prev) => [...prev, {
-        role: 'assistant',
-        content: fullResponse || 'No response received',
-        timestamp: new Date(),
-      }]);
+      // Update the assistant's message with the actual response
+      setMessages((prev) => {
+        const newMessages = [...prev];
+        const lastMessage = newMessages[newMessages.length - 1];
+        if (lastMessage && lastMessage.role === 'assistant') {
+          lastMessage.content = fullResponse || 'No response received';
+        }
+        return newMessages;
+      });
 
       setIsTyping(false);
     } catch (err) {
@@ -143,29 +154,34 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
     const isSystem = msg.role === 'system';
     const isAssistant = msg.role === 'assistant';
     
-    // Determine the status dot color based on if message is being typed
+    // Determine if this is the last assistant message and we're typing
     const isCurrentlyTyping = isAssistant && isTyping && index === messages.length - 1;
-    const dotColor = isCurrentlyTyping ? 'gray' : 'green';
     
     return (
       <Box key={index} flexDirection="column" marginBottom={1}>
-        <Box>
-          {isUser && (
-            <Text color="cyan">● </Text>
+        {/* Message box with border */}
+        <Box 
+          borderStyle="round" 
+          borderColor={isUser ? 'cyan' : isSystem ? 'gray' : 'green'}
+          paddingX={1}
+        >
+          <Text>{msg.content || (isCurrentlyTyping ? 'Thinking...' : '')}</Text>
+        </Box>
+        
+        {/* Name and timestamp below the box */}
+        <Box marginLeft={1} marginTop={0}>
+          {isCurrentlyTyping && (
+            <>
+              <Text color="green">
+                <Spinner type="dots" />
+              </Text>
+              <Text> </Text>
+            </>
           )}
-          {isAssistant && (
-            <Text color={dotColor}>● </Text>
-          )}
-          {isSystem && (
-            <Text color="gray">● </Text>
-          )}
-          <Text color={isUser ? 'cyan' : isSystem ? 'gray' : 'green'} bold>
+          <Text color={isUser ? 'cyan' : isSystem ? 'gray' : 'green'} dimColor>
             {isUser ? 'You' : isSystem ? 'System' : target?.name}
           </Text>
-          <Text color="gray"> {msg.timestamp.toLocaleTimeString()}</Text>
-        </Box>
-        <Box marginLeft={2}>
-          <Text>{msg.content || (isCurrentlyTyping ? '...' : '')}</Text>
+          <Text color="gray" dimColor> • {msg.timestamp.toLocaleTimeString()}</Text>
         </Box>
       </Box>
     );
