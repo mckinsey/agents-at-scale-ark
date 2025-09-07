@@ -4,7 +4,7 @@ import { ConfigManager } from '../config.js';
 export interface QueryTarget {
   id: string;
   name: string;
-  type: 'agent' | 'model';
+  type: 'agent' | 'model' | 'tool' | string;
   description?: string;
 }
 
@@ -49,7 +49,7 @@ export class ChatClient {
         return {
           id: model.id,
           name: name,
-          type: type as 'agent' | 'model',
+          type: type,
           description: undefined
         };
       });

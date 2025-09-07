@@ -40,21 +40,51 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
         const targets = await client.getQueryTargets();
         setAvailableTargets(targets);
         
-        // If initialTargetId is provided, find and set the target
         if (initialTargetId) {
+          // If initialTargetId is provided, find and set the target
           const matchedTarget = targets.find(t => t.id === initialTargetId);
           const matchedIndex = targets.findIndex(t => t.id === initialTargetId);
           if (matchedTarget) {
             setTarget(matchedTarget);
             setTargetIndex(matchedIndex >= 0 ? matchedIndex : 0);
             setShowTargetSelector(false);
-            // Don't add system message, just start with empty messages
             setMessages([]);
           } else {
             // If target not found, show selector
             setShowTargetSelector(true);
             setError(`Target "${initialTargetId}" not found`);
           }
+        } else if (targets.length > 0) {
+          // No initial target specified - auto-select first available
+          // Priority: agents > models > tools
+          const agents = targets.filter(t => t.type === 'agent');
+          const models = targets.filter(t => t.type === 'model');
+          const tools = targets.filter(t => t.type === 'tool');
+          
+          let selectedTarget: QueryTarget | null = null;
+          let selectedIndex = 0;
+          
+          if (agents.length > 0) {
+            selectedTarget = agents[0];
+            selectedIndex = targets.findIndex(t => t.id === agents[0].id);
+          } else if (models.length > 0) {
+            selectedTarget = models[0];
+            selectedIndex = targets.findIndex(t => t.id === models[0].id);
+          } else if (tools.length > 0) {
+            selectedTarget = tools[0];
+            selectedIndex = targets.findIndex(t => t.id === tools[0].id);
+          }
+          
+          if (selectedTarget) {
+            setTarget(selectedTarget);
+            setTargetIndex(selectedIndex);
+            setShowTargetSelector(false);
+            setMessages([]);
+          } else {
+            setError('No targets available');
+          }
+        } else {
+          setError('No agents, models, or tools available');
         }
         
         setIsLoading(false);
@@ -249,6 +279,18 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
             </Box>
           </>
         )}
+      </Box>
+    );
+  }
+
+  // Show error if no targets available
+  if (!target && error) {
+    return (
+      <Box flexDirection="column">
+        <Text color="red">⚠ Error: {error}</Text>
+        <Box marginTop={1}>
+          <Text color="gray">Please ensure ark-api is running and has available agents, models, or tools.</Text>
+        </Box>
       </Box>
     );
   }
