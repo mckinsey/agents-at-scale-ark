@@ -89,20 +89,15 @@ export function createDashboardCommand(): Command {
         
         console.log(chalk.gray('\nPress Ctrl+C to stop the dashboard\n'));
         
-        // Handle output
-        portForward.stdout?.on('data', (data) => {
-          console.log(chalk.gray(data.toString()));
-        });
-        
+        // Handle errors only
         portForward.stderr?.on('data', (data) => {
           const message = data.toString();
           if (message.includes('bind: address already in use')) {
             console.error(chalk.red(`\nError: Port ${DASHBOARD_PORT} is already in use`));
             console.error(chalk.yellow('Another dashboard session may be running'));
             process.exit(1);
-          } else if (!message.includes('Forwarding from')) {
-            console.error(chalk.red(message));
           }
+          // Suppress all kubectl output except critical errors
         });
         
         portForward.on('close', (code) => {
