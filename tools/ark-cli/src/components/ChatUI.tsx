@@ -122,9 +122,9 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
     setError(null);
 
     try {
-      // Convert messages to format expected by OpenAI API
+      // Convert messages to format expected by OpenAI API - only include user and assistant messages
       const apiMessages = messages
-        .filter(msg => msg.role !== 'system' || msg === messages[0]) // Keep only first system message
+        .filter(msg => msg.role === 'user' || msg.role === 'assistant')
         .map(msg => ({
           role: msg.role,
           content: msg.content
