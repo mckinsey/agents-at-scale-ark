@@ -23,7 +23,9 @@ import MainMenu from './ui/MainMenu.js';
 import { StatusFormatter } from './ui/statusFormatter.js';
 
 function showMainMenu() {
-  render(<MainMenu />);
+  const app = render(<MainMenu />);
+  // Store app instance globally so MainMenu can access it
+  (global as any).inkApp = app;
 }
 
 async function handleStatusCheck() {
