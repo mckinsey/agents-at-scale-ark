@@ -12,7 +12,6 @@
   ],
   "scripts": {
     "build": "tsc && chmod +x dist/index.js",
-    "dev": "tsx watch --clear-screen=false --no-stdin src/index.tsx",
     "start": "NODE_NO_WARNINGS=1 node dist/index.js",
     "clean": "rm -rf dist",
     "lint": "eslint src/ --fix && prettier --write src/",
