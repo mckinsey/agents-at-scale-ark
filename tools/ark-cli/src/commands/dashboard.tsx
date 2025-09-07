@@ -62,7 +62,7 @@ export function createDashboardCommand(): Command {
           // Use default port
         }
         
-        console.log(chalk.cyan('Connecting to dashboard...'));
+        console.log('Connecting to dashboard...');
         
         const portForward = spawn('kubectl', [
           'port-forward',
@@ -74,11 +74,11 @@ export function createDashboardCommand(): Command {
         });
         
         // Wait a moment for port forward to establish
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Show running message before opening browser
         const url = `http://localhost:${DASHBOARD_PORT}`;
-        console.log(chalk.green(`ARK dashboard running on: ${url}`));
+        console.log(`ARK dashboard: ${chalk.green(url)}`);
         console.log(chalk.gray('Press Ctrl+C to stop'));
         
         // Open browser
