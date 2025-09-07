@@ -78,8 +78,11 @@ export function createDashboardCommand(): Command {
         
         // Show running message before opening browser
         const url = `http://localhost:${DASHBOARD_PORT}`;
-        console.log(`ARK dashboard: ${chalk.green(url)}`);
+        console.log(`ARK dashboard running on: ${chalk.green(url)}`);
         console.log(chalk.gray('Press Ctrl+C to stop'));
+        
+        // Brief pause before opening browser
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Open browser
         await open(url);
