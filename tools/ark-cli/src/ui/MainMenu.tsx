@@ -32,6 +32,10 @@ const MainMenu: React.FC = () => {
       }
         
       case 'dashboard': {
+        // Close the menu UI first
+        process.stdin.pause();
+        process.stdin.setRawMode(false);
+        
         // Import and run the dashboard command
         const { createDashboardCommand } = await import('../commands/dashboard.js');
         const dashboardCmd = createDashboardCommand();
