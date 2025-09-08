@@ -27,7 +27,7 @@ type MCPToolRef struct {
 
 // AgentToolRef defines a reference to an Agent Tool.
 type AgentToolRef struct {
-	// Name of the Agent Tool being referenced.
+	// Name of the Agent being referenced.
 	// This must be a non-empty string.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
