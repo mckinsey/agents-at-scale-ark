@@ -68,8 +68,10 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
             setTargetIndex(matchedIndex >= 0 ? matchedIndex : 0);
             setMessages([]);
           } else {
-            // If target not found, show error
-            setError(`Target "${initialTargetId}" not found`);
+            // If target not found, show error and exit
+            console.error(chalk.red('Error:'), `Target "${initialTargetId}" not found`);
+            console.error(chalk.gray('Use "ark targets list" to see available targets'));
+            process.exit(1);
           }
         } else if (targets.length > 0) {
           // No initial target specified - auto-select first available
