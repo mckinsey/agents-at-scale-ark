@@ -1,7 +1,9 @@
 """Kubernetes memories API endpoints."""
 import logging
+from typing import Optional
+from urllib.parse import urlencode
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from ark_sdk.models.memory_v1alpha1 import MemoryV1alpha1
 
 from ark_sdk.client import with_ark_client
@@ -12,6 +14,12 @@ from ...models.memories import (
     MemoryCreateRequest,
     MemoryUpdateRequest,
     MemoryDetailResponse
+)
+from ...models.sessions import MemoryMessageResponse, MemoryMessageListResponse
+from ...utils.memory_client import (
+    get_memory_service_address,
+    fetch_memory_service_data,
+    get_all_memory_resources
 )
 from .exceptions import handle_k8s_errors
 
@@ -134,3 +142,85 @@ async def delete_memory(namespace: str, name: str) -> dict:
     async with with_ark_client(namespace, VERSION) as client:
         await client.memories.a_delete(name)
         return {"message": f"Memory {name} deleted successfully"}
+
+
+@router.get("/{name}/sessions/{session_id}/messages")
+@handle_k8s_errors(operation="get", resource_type="memory")
+async def get_memory_messages(namespace: str, name: str, session_id: str) -> dict:
+    """Get messages for a specific session from a memory resource."""
+    async with with_ark_client(namespace, VERSION) as client:
+        memory = await client.memories.a_get(name)
+        memory_dict = memory.to_dict()
+        
+        service_url = get_memory_service_address(memory_dict)
+        
+        return await fetch_memory_service_data(
+            service_url, 
+            "/messages",
+            params={"session_id": session_id},
+            memory_name=name
+        )
+
+
+# Add this as a separate router to avoid conflicts with existing prefix
+memory_messages_router = APIRouter(prefix="/namespaces/{namespace}", tags=["memory-messages"])
+
+
+@memory_messages_router.get("/memory-messages", response_model=MemoryMessageListResponse)
+@handle_k8s_errors(operation="list", resource_type="memory-messages")
+async def list_memory_messages(
+    namespace: str,
+    memory: Optional[str] = Query(None, description="Filter by memory name"),
+    session: Optional[str] = Query(None, description="Filter by session ID"),
+    query: Optional[str] = Query(None, description="Filter by query ID")
+) -> MemoryMessageListResponse:
+    """List all memory messages with context, optionally filtered."""
+    async with with_ark_client(namespace, VERSION) as client:
+        memory_dicts = await get_all_memory_resources(client, memory)
+        
+        all_messages = []
+        
+        for memory_dict in memory_dicts:
+            memory_name = memory_dict.get("metadata", {}).get("name", "")
+            
+            try:
+                service_url = get_memory_service_address(memory_dict)
+                
+                # Build query parameters
+                params = {}
+                if session:
+                    params["session_id"] = session
+                if query:
+                    params["query_id"] = query
+                
+                data = await fetch_memory_service_data(
+                    service_url,
+                    "/messages",
+                    params=params,
+                    memory_name=memory_name
+                )
+                
+                messages = data.get("messages", [])
+                
+                # Convert each database record to response format
+                for msg_record in messages:
+                    all_messages.append(MemoryMessageResponse(
+                        timestamp=msg_record.get("created_at"),
+                        memoryName=memory_name,
+                        sessionId=msg_record.get("session_id"),
+                        queryId=msg_record.get("query_id"),
+                        message=msg_record.get("message")
+                    ))
+            
+            except Exception as e:
+                logger.error(f"Failed to get messages from memory {memory_name}: {e}")
+                # Continue processing other memories
+                continue
+        
+        # Sort by timestamp descending (most recent first)
+        all_messages.sort(key=lambda x: x.timestamp or "", reverse=True)
+        
+        return MemoryMessageListResponse(
+            items=all_messages,
+            total=len(all_messages)
+        )

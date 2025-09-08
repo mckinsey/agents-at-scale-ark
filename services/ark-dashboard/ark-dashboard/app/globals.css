@@ -133,3 +133,7 @@
     transform: translateX(200%);
   }
 }
+
+tbody tr:last-child {
+  border-bottom: none;
+}

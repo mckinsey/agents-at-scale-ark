@@ -78,6 +78,10 @@
         },
         {
           "type": "generic",
+          "path": "services/postgres-memory/version.txt"
+        },
+        {
+          "type": "generic",
           "path": "ark/version.txt"
         },
         {

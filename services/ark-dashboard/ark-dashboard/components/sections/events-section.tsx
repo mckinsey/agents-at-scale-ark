@@ -406,31 +406,29 @@ export function EventsSection({
                         {getEventTypeBadge(event.type)}
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100 font-mono">
+                    <td className="px-3 py-3 text-xs font-mono text-gray-900 dark:text-gray-100">
                       {event.reason}
                     </td>
-                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                      <Badge variant="secondary" className="font-mono">
+                    <td className="px-3 py-3 text-xs font-mono text-gray-900 dark:text-gray-100">
+                      <Badge variant="secondary" className="text-xs">
                         {event.involvedObjectKind}
                       </Badge>
                     </td>
-                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                      <div className="font-mono font-medium">
+                    <td className="px-3 py-3 text-xs font-mono text-gray-900 dark:text-gray-100">
+                      <div className="font-medium">
                         {event.involvedObjectName}
                       </div>
                       {event.involvedObjectNamespace &&
                         event.involvedObjectNamespace !== namespace && (
-                          <div className="text-xs text-gray-500 font-mono">
+                          <div className="text-gray-500">
                             ns: {event.involvedObjectNamespace}
                           </div>
                         )}
                     </td>
-                    <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">
-                      <div className="font-mono text-xs">
-                        {event.involvedObjectUid || "-"}
-                      </div>
+                    <td className="px-3 py-3 text-xs font-mono text-gray-500 dark:text-gray-400">
+                      {event.involvedObjectUid || "-"}
                     </td>
-                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100 font-mono">
+                    <td className="px-3 py-3 text-xs font-mono text-gray-900 dark:text-gray-100">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger className="text-left">

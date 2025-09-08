@@ -37,6 +37,8 @@ def query_to_response(query: dict) -> QueryResponse:
         name=query["metadata"]["name"],
         namespace=query["metadata"]["namespace"],
         input=query["spec"]["input"],
+        memory=query["spec"].get("memory"),
+        sessionId=query["spec"].get("sessionId"),
         status=query.get("status"),
         creationTimestamp=creation_timestamp
     )

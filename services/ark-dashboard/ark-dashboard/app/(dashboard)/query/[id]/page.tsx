@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/tabs"
 import { simplifyDuration } from "@/lib/utils/time"
 import { useMarkdownProcessor } from "@/lib/hooks/use-markdown-processor"
+import { QueryEvaluationActions } from "@/components/query-actions"
 
 // Component for rendering response content
 function ResponseContent({ content, viewMode }: { content: string, viewMode: 'text' | 'markdown' }) {
@@ -46,14 +47,14 @@ function ResponseContent({ content, viewMode }: { content: string, viewMode: 'te
   
   if (viewMode === 'markdown') {
     return (
-      <div className="text-sm px-3 pb-3 pt-2 max-h-96 overflow-auto">
+      <div className="text-sm">
         {markdownContent}
       </div>
     )
   }
   
   return (
-    <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900/50 px-3 pb-3 pt-2 max-h-96 overflow-auto">
+    <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900/50 p-3">
       {content || "No content"}
     </pre>
   )
@@ -486,6 +487,12 @@ function QueryDetailContent() {
           </BreadcrumbList>
         </Breadcrumb>
         <div className="ml-auto flex gap-2">
+          {!isNew && (
+            <QueryEvaluationActions 
+              queryName={queryId} 
+              namespace={namespace} 
+            />
+          )}
           {isNew && (
             <>
               <Button 
@@ -802,7 +809,7 @@ function QueryDetailContent() {
                   </div>
                 </>
               ) : query.status?.responses && query.status.responses.length > 0 ? (
-                <Tabs defaultValue="0" className="w-full">
+                <Tabs defaultValue="0" className="w-full gap-0">
                   <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Responses</h3>
@@ -838,7 +845,7 @@ function QueryDetailContent() {
                     </div>
                   </div>
                   {query.status.responses.map((response, index) => (
-                    <TabsContent key={index} value={index.toString()} className="mt-0">
+                    <TabsContent key={index} value={index.toString()} className="mt-0 p-3">
                       <ResponseContent 
                         content={response.content || "No content"} 
                         viewMode={responseViewMode} 
@@ -879,8 +886,6 @@ function QueryDetailContent() {
                 </>
               )}
             </div>
-
-
           </div>
         </ScrollArea>
       </div>

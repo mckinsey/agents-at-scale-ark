@@ -1,9 +1,11 @@
 apiVersion: v2
 name: evaluator-llm
-description: LLM Evaluator for Ark - AI-powered query evaluation service using LLM-as-a-Judge
+description: >-
+  LLM Evaluator for Ark - AI-powered query evaluation service using
+  LLM-as-a-Judge
 type: application
-version: 0.1.0
-appVersion: "0.1.17" # x-release-please-version
+version: 0.1.32
+appVersion: 0.1.17
 keywords:
   - evaluator
   - llm

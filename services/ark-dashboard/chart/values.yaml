@@ -35,12 +35,14 @@ app:
   #       optional: true
   
   # Resource configuration
+  # For production: Dashboard serves pre-built static files so memory can be low
+  # For in-cluster local development: Increase limits to at least 1.5GB for Next.js + Turbopack compilation
   resources:
     requests:
       memory: "128Mi"
       cpu: "100m"
     limits:
-      memory: "512Mi"
+      memory: "512Mi"  # Production: pre-built files are memory efficient
       cpu: "500m"
 
 # Service account configuration

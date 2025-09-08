@@ -176,3 +176,119 @@ func TestServer_Filtering(t *testing.T) {
 		t.Errorf("filter by query failed: err=%v, total=%d", err, total)
 	}
 }
+
+func TestJSONMarshalingBehavior(t *testing.T) {
+	t.Run("NilSliceMarshalsAsNull", func(t *testing.T) {
+		var nilSlice []MessageRecord
+		response := struct {
+			Messages []MessageRecord `json:"messages"`
+			Total    int             `json:"total"`
+		}{
+			Messages: nilSlice,
+			Total:    0,
+		}
+		
+		data, err := json.Marshal(response)
+		if err != nil {
+			t.Fatalf("marshal failed: %v", err)
+		}
+		
+		if !bytes.Contains(data, []byte(`"messages":null`)) {
+			t.Errorf("expected nil slice to marshal as null, but got: %s", string(data))
+		}
+	})
+	
+	t.Run("EmptySliceMarshalsAsArray", func(t *testing.T) {
+		emptySlice := []MessageRecord{}
+		response := struct {
+			Messages []MessageRecord `json:"messages"`
+			Total    int             `json:"total"`
+		}{
+			Messages: emptySlice,
+			Total:    0,
+		}
+		
+		data, err := json.Marshal(response)
+		if err != nil {
+			t.Fatalf("marshal failed: %v", err)
+		}
+		
+		if !bytes.Contains(data, []byte(`"messages":[]`)) {
+			t.Errorf("expected empty slice to marshal as [], but got: %s", string(data))
+		}
+	})
+	
+	t.Run("NilSliceFixWorksCorrectly", func(t *testing.T) {
+		var nilSlice []MessageRecord
+		
+		// Apply the fix: convert nil to empty slice
+		if nilSlice == nil {
+			nilSlice = []MessageRecord{}
+		}
+		
+		response := struct {
+			Messages []MessageRecord `json:"messages"`
+			Total    int             `json:"total"`
+		}{
+			Messages: nilSlice,
+			Total:    0,
+		}
+		
+		data, err := json.Marshal(response)
+		if err != nil {
+			t.Fatalf("marshal failed: %v", err)
+		}
+		
+		if !bytes.Contains(data, []byte(`"messages":[]`)) {
+			t.Errorf("expected fixed nil slice to marshal as [], but got: %s", string(data))
+		}
+	})
+}
+
+func TestServer_EmptyMessagesResponse(t *testing.T) {
+	server := setupTestServer(t)
+	defer server.Close()
+
+	router := server.routes().(*mux.Router)
+
+	t.Run("EmptyMessages", func(t *testing.T) {
+		// Query for messages that don't exist
+		httpReq := httptest.NewRequest(http.MethodGet, "/messages?session_id=nonexistent", nil)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httpReq)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("expected status 200, got %d", w.Code)
+		}
+
+		var response struct {
+			Messages []MessageRecord `json:"messages"`
+			Total    int             `json:"total"`
+			Limit    int             `json:"limit"`
+			Offset   int             `json:"offset"`
+		}
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+
+		// Verify messages is an empty array, not null
+		if response.Messages == nil {
+			t.Error("messages field should be empty array [], not null")
+		}
+
+		if len(response.Messages) != 0 {
+			t.Errorf("expected 0 messages, got %d", len(response.Messages))
+		}
+
+		if response.Total != 0 {
+			t.Errorf("expected total 0, got %d", response.Total)
+		}
+
+		// Also verify the raw JSON contains [] not null
+		rawBody := w.Body.String()
+		if !bytes.Contains([]byte(rawBody), []byte(`"messages":[]`)) {
+			t.Errorf("expected messages field to be [], but got: %s", rawBody)
+		}
+	})
+}

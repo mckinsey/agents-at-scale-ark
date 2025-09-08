@@ -235,8 +235,12 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall, recorder
 	var arguments map[string]any
 	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
 		log := logf.FromContext(ctx)
-		log.Info("Error parsing tool arguments", "ToolCall", call)
-		arguments = make(map[string]any)
+		log.Error(err, "Error parsing tool arguments", "ToolCall")
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: "Failed to parse tool arguments",
+		}, fmt.Errorf("failed to parse tool arguments: %v", err)
 	}
 
 	input, exists := arguments["input"]

@@ -96,6 +96,7 @@ if allowed_origins:
 else:
     logger.info("No CORS origins configured - CORS will block all cross-origin requests")
 
+
 # Include routes
 app.include_router(router)
 
