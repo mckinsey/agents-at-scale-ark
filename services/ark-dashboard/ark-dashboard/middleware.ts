@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { auth } from "./auth";
+import type { Session } from "next-auth";
 
-export function middleware(request: NextRequest) {
+function middleware(request: NextRequest) {
   // Get the base path from environment (no default)
   const basePath = process.env.ARK_DASHBOARD_BASE_PATH || '';
   
@@ -39,6 +41,25 @@ export function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
+type NextRequestWithAuth = NextRequest & {
+  auth: Session
+}
+
+export default auth(async (req: NextRequestWithAuth) => {
+  //If no user session redirect to signin page
+  if (!req.auth) {
+    //If the user is trying to access a page other than the signin page, set it as the callback url.
+    if(req.nextUrl.pathname !== "/api/signin") {
+      const newUrl = new URL(`/api/signin?callbackUrl=${encodeURIComponent(req.url)}`, req.nextUrl.origin)
+      return NextResponse.redirect(newUrl)
+    }
+
+    return NextResponse.next()
+  }
+
+  return middleware(req)
+})
+
 export const config = {
-  matcher: '/((?!_next/static|_next/image|favicon.ico).*)',
+  matcher: '/((?!api/auth|signout|_next/static|_next/image|favicon.ico).*)',
 };

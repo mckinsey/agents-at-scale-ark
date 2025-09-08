@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
-import { AlertCircle, Plus, ChevronRight, ChevronsUpDown, Check } from "lucide-react"
+import { AlertCircle, Plus, ChevronRight, ChevronsUpDown, Check, ChevronsUpDownIcon, LogOut } from "lucide-react"
 import { useRouter, usePathname } from "next/navigation"
 import { CONFIGURATION_SECTIONS, OPERATION_SECTIONS, RUNTIME_SECTIONS } from "@/lib/constants/dashboard-icons"
 import {
@@ -33,6 +33,7 @@ import {
 import { toast } from "@/components/ui/use-toast"
 import { namespacesService, systemInfoService, type Namespace, type SystemInfo } from "@/lib/services"
 import { NamespaceEditor } from "@/components/editors"
+import { UserDetails } from "./user"
 
 export function AppSidebar() {
   const router = useRouter()
@@ -120,6 +121,10 @@ export function AppSidebar() {
   const getCurrentSection = () => {
     const path = pathname.split('/')[1]
     return path || 'agents'
+  }
+
+  const handleSignout = () => {
+    window.location.href = "/api/auth/federated-signout";
   }
 
   return (
@@ -297,25 +302,49 @@ export function AppSidebar() {
           </SidebarGroup>
         </SidebarContent>
         
-        {systemInfo && (
-          <SidebarFooter>
-            <div className="px-2 py-2 text-xs text-muted-foreground">
-              <p>
-                ARK {systemInfo.system_version} (
-                <a 
-                  href="/api/docs" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-blue-500 hover:text-blue-700 underline"
+        <SidebarFooter>
+          {systemInfo && (<div className="px-2 py-2 text-xs text-muted-foreground">
+            <p>
+              ARK {systemInfo.system_version} (
+              <a 
+                href="/api/docs" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-blue-500 hover:text-blue-700 underline"
+              >
+                APIs
+              </a>
+              )
+            </p>
+            <p>Kubernetes {systemInfo.kubernetes_version}</p>
+          </div>)}
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <SidebarMenuButton className="h-12">
+                    <UserDetails/>
+                    <ChevronsUpDownIcon className="ml-auto"/>
+                  </SidebarMenuButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  side="right"
+                  align="end"
+                  className="w-[--radix-popper-anchor-width]"
                 >
-                  APIs
-                </a>
-                )
-              </p>
-              <p>Kubernetes {systemInfo.kubernetes_version}</p>
-            </div>
-          </SidebarFooter>
-        )}
+                  <DropdownMenuLabel>
+                    <UserDetails/>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator/>
+                  <DropdownMenuItem onClick={handleSignout}>
+                    <LogOut/>
+                    <span>Sign out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
       </Sidebar>
       
       <NamespaceEditor
