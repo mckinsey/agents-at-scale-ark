@@ -205,6 +205,16 @@
         "doc",
         "bug"
       ]
+    },
+    {
+      "login": "paliwalvimal",
+      "name": "Vimal Paliwal (vim)",
+      "avatar_url": "https://avatars.githubusercontent.com/u/34170345?v=4",
+      "profile": "https://vimalpaliwal.com",
+      "contributions": [
+        "doc",
+        "bug"
+      ]
     }
   ],
   "contributorsPerLine": 7,
