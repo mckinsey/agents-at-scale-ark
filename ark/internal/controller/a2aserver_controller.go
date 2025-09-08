@@ -105,12 +105,15 @@ func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1
 
 	// Use the already resolved address from status
 	resolvedAddress := a2aServer.Status.LastResolvedAddress
-	agentCard, err := genai.DiscoverA2AAgents(ctx, r.Client, resolvedAddress, a2aServer.Spec.Headers, a2aServer.Namespace)
+	agentCard, err := genai.DiscoverA2AAgentsWithRecorder(ctx, r.Client, resolvedAddress, a2aServer.Spec.Headers, a2aServer.Namespace, r.Recorder, &a2aServer)
 	if err != nil {
+		log.Error(err, "A2A agent discovery failed", "server", a2aServer.Name, "address", resolvedAddress)
+		r.Recorder.Event(&a2aServer, corev1.EventTypeWarning, "AgentDiscoveryFailed", fmt.Sprintf("Failed to discover agents from A2A server %s: %v", resolvedAddress, err))
 		if err := r.deleteAgentByA2AServer(ctx, a2aServer.Namespace, a2aServer.Name); err != nil {
 			log.Error(err, "failed to delete existing agents", "server", a2aServer.Name, "namespace", a2aServer.Namespace)
+			r.Recorder.Event(&a2aServer, corev1.EventTypeWarning, "AgentCleanupFailed", fmt.Sprintf("Failed to cleanup existing agents: %v", err))
 		}
-		r.setCondition(&a2aServer, A2AServerReady, metav1.ConditionFalse, "DiscoveryFailed", "Server not ready due to discovery failure")
+		r.setCondition(&a2aServer, A2AServerReady, metav1.ConditionFalse, "DiscoveryFailed", fmt.Sprintf("Server not ready due to discovery failure: %v", err))
 		if err := r.updateStatusWithConditions(ctx, &a2aServer); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -119,6 +122,8 @@ func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1
 
 	// Set connected condition after successful discovery
 	if err := r.createAgentWithSkills(ctx, &a2aServer, agentCard); err != nil {
+		log.Error(err, "A2A agent creation failed", "server", a2aServer.Name, "agent", agentCard.Name)
+		r.Recorder.Event(&a2aServer, corev1.EventTypeWarning, "AgentCreationFailed", fmt.Sprintf("Failed to create agent %s: %v", agentCard.Name, err))
 		r.setCondition(&a2aServer, A2AServerReady, metav1.ConditionFalse, "AgentCreationFailed", fmt.Sprintf("Failed to create agent: %v", err))
 		if err := r.updateStatusWithConditions(ctx, &a2aServer); err != nil {
 			return ctrl.Result{}, err
@@ -188,9 +193,11 @@ func (r *A2AServerReconciler) createAgentWithSkills(ctx context.Context, a2aServ
 				},
 			}); err != nil {
 				log.Error(err, "Failed to delete agent", "agent", agentName, "a2aServer", a2aServer.Name, "namespace", a2aServer.Namespace)
+				r.Recorder.Event(a2aServer, corev1.EventTypeWarning, "AgentDeletionFailed", fmt.Sprintf("Failed to delete obsolete agent %s: %v", agentName, err))
 				return err
 			}
 			log.Info("agent deleted", "agent", agentName, "a2aServer", a2aServer.Name, "namespace", a2aServer.Namespace)
+			r.Recorder.Event(a2aServer, corev1.EventTypeNormal, "AgentDeleted", fmt.Sprintf("Deleted obsolete agent: %s", agentName))
 		}
 	}
 
@@ -248,6 +255,7 @@ func (r *A2AServerReconciler) createOrUpdateAgent(ctx context.Context, agent *ar
 
 	if errors.IsNotFound(err) {
 		if err := r.Create(ctx, agent); err != nil {
+			log.Error(err, "Failed to create A2A agent", "agent", agentName, "a2aServer", a2aServerName)
 			return false, fmt.Errorf("failed to create agent %s: %w", agentName, err)
 		}
 		log.Info("a2a agent created", "agent", agentName, "a2aServer", a2aServerName, "namespace", agent.Namespace)
@@ -255,6 +263,7 @@ func (r *A2AServerReconciler) createOrUpdateAgent(ctx context.Context, agent *ar
 	}
 
 	if err != nil {
+		log.Error(err, "Failed to get existing A2A agent", "agent", agentName, "a2aServer", a2aServerName)
 		return false, fmt.Errorf("failed to get agent %s: %w", agentName, err)
 	}
 
@@ -263,6 +272,7 @@ func (r *A2AServerReconciler) createOrUpdateAgent(ctx context.Context, agent *ar
 		existingAgent.Spec = agent.Spec
 		existingAgent.Annotations = agent.Annotations
 		if err := r.Update(ctx, existingAgent); err != nil {
+			log.Error(err, "Failed to update A2A agent", "agent", agentName, "a2aServer", a2aServerName)
 			return false, fmt.Errorf("failed to update agent %s: %w", agentName, err)
 		}
 		log.Info("a2a agent updated", "agent", agentName, "a2aServer", a2aServerName, "namespace", existingAgent.Namespace)

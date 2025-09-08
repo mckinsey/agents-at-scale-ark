@@ -33,6 +33,11 @@ on:
         required: false
         type: boolean
         default: false
+      deploy_to_pypi:
+        description: 'Deploy Python packages to PyPI registry'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -342,3 +347,30 @@ jobs:
           npm publish ark-cli.tgz --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  deploy-to-pypi:
+    needs: [check_version]
+    if: ${{ inputs.deploy_to_pypi }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download ARK SDK wheel from release
+        run: |
+          VERSION="${{ needs.check_version.outputs.version }}"
+          gh release download "$VERSION" -p "ark_sdk-*.whl" -D dist/
+        env:
+          GH_TOKEN: ${{ github.token }}
+      
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          attestations: false  # Will enable when organization Trusted Publishing is configured
+      
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          attestations: false  # Will enable when organization Trusted Publishing is configured

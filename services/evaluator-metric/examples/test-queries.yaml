@@ -1,0 +1,102 @@
+## Test queries for acceptance testing of evaluator-metric service
+
+# 1. High-token query (should fail maxTokens threshold)
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: high-token-test
+  namespace: default
+  labels:
+    monitor-metric: "true"
+    test-type: "high-token"
+    model: "gpt-4"
+spec:
+  input: "Generate a comprehensive 2000-word analysis of machine learning algorithms including detailed explanations, examples, mathematical formulations, and implementation considerations for neural networks, decision trees, support vector machines, and ensemble methods."
+  targets:
+    - type: agent
+      name: research-agent
+
+---
+# 2. Fast query (should pass all thresholds)  
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: fast-query-test
+  namespace: default
+  labels:
+    monitor-metric: "true"  
+    test-type: "fast"
+    model: "gpt-3.5-turbo"
+spec:
+  input: "What is 2+2?"
+  targets:
+    - type: agent
+      name: math-agent
+      
+---
+# 3. Cost-heavy query (should fail cost thresholds)
+apiVersion: ark.mckinsey.com/v1alpha1  
+kind: Query
+metadata:
+  name: expensive-test
+  namespace: default
+  labels:
+    cost-monitoring: "enabled"
+    test-type: "expensive"
+    model: "gpt-4-turbo"
+spec:
+  input: "Perform a complex multi-step analysis requiring detailed research, data processing, code generation, testing, and documentation across multiple domains including finance, healthcare, and technology sectors."
+  targets:
+    - type: agent
+      name: research-agent
+
+---
+# 4. Premium performance query (strict SLA requirements)
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query  
+metadata:
+  name: premium-sla-test
+  namespace: default
+  labels:
+    performance-tier: "premium"
+    sla-level: "platinum"
+    test-type: "premium"
+spec:
+  input: "Quick summary of renewable energy benefits"
+  targets:
+    - type: agent
+      name: summary-agent
+
+---
+# 5. Standard monitoring query (should pass basic thresholds)
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: standard-monitoring-test
+  namespace: default  
+  labels:
+    monitor-metric: "true"
+    test-type: "standard"
+    model: "gpt-4"
+spec:
+  input: "Explain the concept of cloud computing in 3-4 sentences"
+  targets:
+    - type: agent
+      name: explanation-agent
+
+---
+# 6. Error-prone query (should fail error rate thresholds)
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: error-test
+  namespace: default
+  labels:
+    monitor-metric: "true"
+    test-type: "error-prone"
+    expected-errors: "true"
+spec:
+  input: "Process this malformed JSON data: {invalid json structure"
+  targets:
+    - type: agent  
+      name: json-processor-agent

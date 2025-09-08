@@ -1,0 +1,86 @@
+## Sample batch evaluation that creates parent/child evaluation structure
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: sample-batch-evaluation
+  namespace: default
+  labels:
+    type: batch-evaluation
+    example: parent-child-demo
+spec:
+  description: "Sample batch evaluation demonstrating parent/child structure"
+  mode: batch
+  # Input and output for the evaluation
+  input: "What is the capital of France?"
+  output: "The capital of France is Paris. Paris is located in the north-central part of the country and serves as both the political and cultural center of France."
+  
+  # Single evaluator is required but will be ignored for batch mode
+  evaluator:
+    name: primary-evaluator
+  
+  # Multiple evaluators for batch processing - each will create a child evaluation
+  batchEvaluators:
+    - name: evaluator-metric
+      parameters:
+        - name: maxTokens
+          value: "500"
+        - name: maxDuration
+          value: "30s"
+        - name: costEfficiencyThreshold
+          value: "0.7"
+    - name: evaluator-llm
+      parameters:
+        - name: criteria
+          value: "accuracy"
+        - name: passThreshold
+          value: "0.8"
+    - name: cost-evaluator
+      parameters:
+        - name: maxCostPerQuery
+          value: "0.05"
+        - name: tokenEfficiencyThreshold
+          value: "0.6"
+---
+## Supporting evaluators for the batch evaluation
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: primary-evaluator
+  namespace: default
+spec:
+  description: "Primary evaluator (placeholder for batch mode)"
+  address:
+    value: http://evaluator-metric.default.svc.cluster.local:8000
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: evaluator-metric
+  namespace: default
+spec:
+  description: "Performance metrics evaluator"
+  address:
+    value: http://evaluator-metric.default.svc.cluster.local:8000
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: evaluator-llm
+  namespace: default
+spec:
+  description: "Quality assessment evaluator"
+  address:
+    value: http://evaluator-llm.default.svc.cluster.local:8000
+  modelRef:
+    name: gpt-4
+    namespace: default
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: cost-evaluator
+  namespace: default
+spec:
+  description: "Cost optimization evaluator"
+  address:
+    value: http://evaluator-metric.default.svc.cluster.local:8000

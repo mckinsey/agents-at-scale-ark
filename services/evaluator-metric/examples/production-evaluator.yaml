@@ -1,0 +1,63 @@
+## Production-ready evaluator with service reference and comprehensive metrics
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: production-metrics-evaluator
+  namespace: default
+  labels:
+    type: performance-metrics
+    category: production
+    version: v1
+spec:
+  description: "Production metrics evaluator with service reference and comprehensive thresholds"
+  address:
+    valueFrom:
+      serviceRef:
+        name: evaluator-metric
+        port: "http"
+        path: "/evaluate/direct"
+  selector:
+    resourceType: "Query"
+    apiGroup: "ark.mckinsey.com"
+    matchLabels:
+      environment: "production"
+      metrics-enabled: "true"
+    matchExpressions:
+      - key: tier
+        operator: In
+        values: ["standard", "premium", "enterprise"]
+  parameters:
+    - name: maxTokens
+      value: "4000"
+    - name: maxDuration
+      value: "30s"
+    - name: maxCostPerQuery
+      value: "0.25"
+    - name: tokenEfficiencyThreshold
+      value: "0.6"
+    - name: costEfficiencyThreshold
+      value: "0.7"
+    - name: performanceThreshold
+      value: "0.8"
+    - name: overallScoreThreshold
+      value: "0.75"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: production-metrics-config
+  namespace: default
+data:
+  # Production thresholds
+  max-tokens-standard: "2000"
+  max-tokens-premium: "4000" 
+  max-tokens-enterprise: "8000"
+  max-duration-standard: "60s"
+  max-duration-premium: "30s"
+  max-duration-enterprise: "15s"
+  # Cost controls
+  cost-alert-threshold: "0.20"
+  cost-limit-threshold: "0.50"
+  # Quality metrics
+  min-response-quality: "0.8"
+  completeness-threshold: "0.9"

@@ -39,8 +39,19 @@ type MessagesRequest struct {
 	Messages  []openai.ChatCompletionMessageParamUnion `json:"messages"`
 }
 
+type MessageRecord struct {
+	ID        int64           `json:"id"`
+	SessionID string          `json:"session_id"`
+	QueryID   string          `json:"query_id"`
+	Message   json.RawMessage `json:"message"`
+	CreatedAt string          `json:"created_at"`
+}
+
 type MessagesResponse struct {
-	Messages []json.RawMessage `json:"messages"`
+	Messages []MessageRecord `json:"messages"`
+	Total    int             `json:"total"`
+	Limit    int             `json:"limit"`
+	Offset   int             `json:"offset"`
 }
 
 func DefaultConfig() Config {

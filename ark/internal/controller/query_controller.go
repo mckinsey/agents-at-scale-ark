@@ -169,6 +169,7 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName, queryTracker *genai.OperationTracker, tokenCollector *genai.TokenUsageCollector) {
 	log := logf.FromContext(opCtx)
 	cleanupCache := true
+	startTime := time.Now()
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -219,6 +220,14 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		cleanupCache = false
 	} else {
 		_ = r.updateStatus(opCtx, &obj, statusDone)
+	}
+
+	duration := &metav1.Duration{Duration: time.Since(startTime)}
+	if len(evaluators) > 0 {
+		_ = r.updateStatusWithDuration(opCtx, &obj, statusEvaluating, duration)
+		cleanupCache = false
+	} else {
+		_ = r.updateStatusWithDuration(opCtx, &obj, statusDone, duration)
 	}
 }
 
@@ -424,10 +433,17 @@ func makeResponse(messages []genai.Message) string {
 }
 
 func (r *QueryReconciler) updateStatus(ctx context.Context, query *arkv1alpha1.Query, status string) error {
+	return r.updateStatusWithDuration(ctx, query, status, nil)
+}
+
+func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
 	if ctx.Err() != nil {
 		return nil
 	}
 	query.Status.Phase = status
+	if duration != nil {
+		query.Status.Duration = duration
+	}
 	err := r.Status().Update(ctx, query)
 	if err != nil {
 		logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)

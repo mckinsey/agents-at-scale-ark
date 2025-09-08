@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "evaluator-metric.fullname" . }}
+  labels:
+    {{- include "evaluator-metric.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "evaluator-metric.selectorLabels" . | nindent 6 }}

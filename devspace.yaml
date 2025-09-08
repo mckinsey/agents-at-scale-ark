@@ -1,10 +1,15 @@
 # DevSpace configuration for local ARK services development
 version: v2beta1
 
+# Dependencies - include other DevSpace configurations
+# dependencies:
+#   postgres-memory:
+#     path: ./services/postgres-memory
+
 # Hooks for pre-build setup
 hooks:
   - command: ./services/ark-api/ark-api/scripts/ensure-ark-sdk-wheel.sh
-    events: ["before:dev"]
+    events: ["before:dev", "before:deploy"]
 
 # Deployment pipelines define the workflow for different commands
 pipelines:
@@ -13,30 +18,27 @@ pipelines:
     build_images --all
     create_deployments --all
 
-  # 'devspace dev' - DevSpace recommended dev workflow: deploy production, override with dev images, file sync  
+  # 'devspace dev' - DevSpace recommended dev workflow: deploy production, override with dev images, file sync
   dev: |-
     create_deployments --all
     start_dev --all
 
-# Image build configuration  
+# Image build configuration
 images:
   ark-api:
     image: ark-api
     dockerfile: ./services/ark-api/Dockerfile
     context: ./services/ark-api
-    target: production
 
   ark-dashboard:
-    image: ark-dashboard  
+    image: ark-dashboard
     dockerfile: ./services/ark-dashboard/Dockerfile
     context: ./services/ark-dashboard
-    target: production
 
   ark-controller:
     image: controller
     dockerfile: ./ark/Dockerfile
     context: ./ark
-    target: production
 
 # Kubernetes deployments
 deployments:
@@ -50,7 +52,7 @@ deployments:
           image:
             repository: ${runtime.images.ark-api.image}
             tag: ${runtime.images.ark-api.tag}
-          # Override resources for in-cluster local development - API with live reload needs more memory and CPU than production
+          # Override resources for local development
           resources:
             limits:
               memory: "1024Mi"
@@ -69,7 +71,7 @@ deployments:
           image:
             repository: ${runtime.images.ark-dashboard.image}
             tag: ${runtime.images.ark-dashboard.tag}
-          # Override resources for in-cluster local development - Next.js + Turbopack compilation needs 3GB+ memory and 2 CPU cores for fast builds
+          # Override resources for local development
           resources:
             limits:
               memory: "3072Mi"
@@ -89,7 +91,7 @@ deployments:
             image:
               repository: ${runtime.images.ark-controller.image}
               tag: ${runtime.images.ark-controller.tag}
-            # Override resources for in-cluster local development - controller with live reload needs more memory and CPU than production
+            # Override resources for local development
             resources:
               limits:
                 memory: "2048Mi"
@@ -97,7 +99,7 @@ deployments:
               requests:
                 memory: "256Mi"
                 cpu: "200m"
-          # Override security context for development - allow root for dev images
+          # Override security context for development
           securityContext:
             runAsNonRoot: false
 
@@ -107,7 +109,12 @@ dev:
     imageSelector: ark-api
     devImage: python:3.12-slim
     # Install dependencies and start API server with hot reload
-    command: ["sh", "-c", "cd /app && apt-get update && apt-get install -y curl && curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash && pip install uv && uv add file://$(ls wheels/ark_sdk-*.whl) && uv sync && uv run uvicorn ark_api.main:app --host 0.0.0.0 --port 8000 --reload"]
+    command:
+      [
+        "sh",
+        "-c",
+        "cd /app && apt-get update && apt-get install -y curl && curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash && pip install uv && uv add file://$(ls out/ark_sdk-*.whl) && uv sync && uv run uvicorn ark_api.main:app --host 0.0.0.0 --port 8000 --reload",
+      ]
     namespace: default
     # Stream logs instead of terminal
     logs:
@@ -133,7 +140,8 @@ dev:
   ark-controller:
     imageSelector: controller
     devImage: golang:1.24-bookworm
-    command: ["sh", "-c", "cd /workspace && go run cmd/main.go --leader-elect=false"]
+    command:
+      ["sh", "-c", "cd /workspace && go run cmd/main.go --leader-elect=false"]
     namespace: ark-system
     # Stream logs instead of terminal
     logs:
@@ -142,11 +150,15 @@ dev:
     sync:
       - path: ./ark:/workspace
         startContainer: true
+        disableDownload: true
         excludePaths:
           - bin/
           - out/
           - .git/
           - "*.log"
+    # Restart container when Go files change so that the code is recompiled
+    # restartHelper:
+    #   inject: true
     # Enable SSH for IDE integration
     ssh:
       enabled: true
@@ -154,7 +166,12 @@ dev:
   ark-dashboard:
     imageSelector: ark-dashboard
     devImage: node:24-alpine
-    command: ["sh", "-c", "cd /app && npm install -g pnpm && pnpm install && pnpm run dev"]
+    command:
+      [
+        "sh",
+        "-c",
+        "cd /app && npm install -g pnpm && pnpm install && pnpm run dev",
+      ]
     namespace: default
     # Stream logs instead of terminal
     logs:
@@ -163,6 +180,7 @@ dev:
     sync:
       - path: ./services/ark-dashboard/ark-dashboard:/app
         startContainer: true
+        disableDownload: true
         excludePaths:
           - node_modules/
           - .next/

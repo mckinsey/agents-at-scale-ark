@@ -1,0 +1,21 @@
+apiVersion: v2
+name: evaluator-metric
+description: >-
+  Evaluation service specially built to assert deterministic KPIs such as token
+  consumption, performance.
+type: application
+version: 0.1.32
+appVersion: 0.1.17
+keywords:
+  - evaluator
+  - metric
+  - evaluation
+  - performance
+  - cost
+maintainers:
+  - name: Ark Team
+sources:
+  - https://github.com/McK-Internal/agents-at-scale
+annotations:
+  ark.mckinsey.com/service: evaluator-metric
+  ark.mckinsey.com/resources: service

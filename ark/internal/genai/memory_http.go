@@ -15,6 +15,47 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// Simple message structure for fallback parsing
+type simpleMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content,omitempty"`
+}
+
+// unmarshalMessageRobust tries discriminated union first, then falls back to simple role/content extraction
+func unmarshalMessageRobust(rawJSON json.RawMessage) (openai.ChatCompletionMessageParamUnion, error) {
+	// Step 1: Try discriminated union first (the normal case)
+	var openaiMessage openai.ChatCompletionMessageParamUnion
+	if err := json.Unmarshal(rawJSON, &openaiMessage); err == nil {
+		return openaiMessage, nil
+	}
+
+	// Step 2: Fallback - try to extract role/content from simple format
+	var simple simpleMessage
+	if err := json.Unmarshal(rawJSON, &simple); err != nil {
+		return openai.ChatCompletionMessageParamUnion{}, fmt.Errorf("malformed JSON: %v", err)
+	}
+
+	// Step 3: Validate role is present (any role is acceptable for future compatibility)
+	if simple.Role == "" {
+		return openai.ChatCompletionMessageParamUnion{}, fmt.Errorf("missing required 'role' field")
+	}
+
+	// Step 4: Convert simple format to proper OpenAI message based on known roles
+	// For unknown roles, try user message as fallback (most permissive)
+	switch simple.Role {
+	case RoleUser:
+		return openai.UserMessage(simple.Content), nil
+	case RoleAssistant:
+		return openai.AssistantMessage(simple.Content), nil
+	case RoleSystem:
+		return openai.SystemMessage(simple.Content), nil
+	default:
+		// Future-proof: accept any role by treating as user message
+		// The OpenAI SDK will handle validation of the actual role
+		return openai.UserMessage(simple.Content), nil
+	}
+}
+
 type HTTPMemory struct {
 	client     client.Client
 	httpClient *http.Client
@@ -197,9 +238,9 @@ func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 	}
 
 	messages := make([]Message, 0, len(response.Messages))
-	for i, rawMsg := range response.Messages {
-		var openaiMessage openai.ChatCompletionMessageParamUnion
-		if err := json.Unmarshal(rawMsg, &openaiMessage); err != nil {
+	for i, record := range response.Messages {
+		openaiMessage, err := unmarshalMessageRobust(record.Message)
+		if err != nil {
 			err := fmt.Errorf("failed to unmarshal message at index %d: %w", i, err)
 			tracker.Fail(err)
 			return nil, err

@@ -1,13 +1,26 @@
 [project]
-name = "ark_sdk"
-version = "0.1.31"
-description = "Kubernetes CRDs API"
+name = "ark-sdk"
+version = "0.1.32"
+description = "Python SDK for ARK - Agentic Runtime for Kubernetes"
 authors = [
-  {name = "OpenAPI Generator Community",email = "team@openapitools.org"},
+  {name = "McKinsey & Company", email = "dave.kerr@quantumblack.com"},
 ]
 readme = "README.md"
-keywords = ["OpenAPI", "OpenAPI-Generator", "Kubernetes CRDs API"]
+keywords = ["kubernetes", "ai", "agents", "mckinsey", "ark", "llm", "automation", "agentic-ai"]
 requires-python = ">=3.9"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: System :: Clustering",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+]
 
 dependencies = [
   "urllib3 (>=2.1.0,<3.0.0)",
@@ -18,24 +31,26 @@ dependencies = [
   "kubernetes_asyncio>=32.0.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.2.1",
+  "pytest-cov>=4.0.0",
+  "mypy>=1.5",
+  "types-python-dateutil>=2.8.19.14",
+]
+
 [project.urls]
-Repository = "https://github.com/GIT_USER_ID/GIT_REPO_ID"
-
-[tool.poetry]
-requires-poetry = ">=2.0"
-
-[tool.poetry.group.dev.dependencies]
-pytest = ">= 7.2.1"
-pytest-cov = ">= 2.8.1"
-tox = ">= 3.9.0"
-flake8 = ">= 4.0.0"
-types-python-dateutil = ">= 2.8.19.14"
-mypy = ">= 1.5"
-
+Homepage = "https://github.com/mckinsey/agents-at-scale-ark"
+Repository = "https://github.com/mckinsey/agents-at-scale-ark"
+Documentation = "https://mckinsey.github.io/agents-at-scale-ark"
+"Bug Tracker" = "https://github.com/mckinsey/agents-at-scale-ark/issues"
 
 [build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ark_sdk"]
 
 [tool.pylint.'MESSAGES CONTROL']
 extension-pkg-whitelist = "pydantic"

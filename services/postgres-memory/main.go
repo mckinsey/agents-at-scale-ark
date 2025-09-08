@@ -414,6 +414,11 @@ func (s *Server) handleGetMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Ensure messages is never null - use empty slice if nil
+	if messages == nil {
+		messages = []MessageRecord{}
+	}
+
 	response := struct {
 		Messages []MessageRecord `json:"messages"`
 		Total    int             `json:"total"`
