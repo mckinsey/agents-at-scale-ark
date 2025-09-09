@@ -215,6 +215,15 @@
         "doc",
         "bug"
       ]
+    },
+    {
+      "login": "anshu-rani-singh",
+      "name": "anshu-rani-singh",
+      "avatar_url": "https://avatars.githubusercontent.com/u/120701942?v=4",
+      "profile": "https://github.com/anshu-rani-singh",
+      "contributions": [
+        "code"
+      ]
     }
   ],
   "contributorsPerLine": 7,
