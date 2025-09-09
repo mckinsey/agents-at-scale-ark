@@ -627,12 +627,7 @@ function QueryDetailContent() {
           {/* Query Column */}
           <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
             <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Query</h3>
-                <a href={`/events?namespace=${namespace}&kind=Query&name=${query.name}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
-                  View Events
-                </a>
-              </div>
+              <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Query</h3>
             </div>
             <table className="w-full table-fixed">
               <tbody>
