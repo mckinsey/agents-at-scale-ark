@@ -83,20 +83,65 @@ function ResponseContent({ content, viewMode, rawJson, userInput }: { content: s
   }
 
   if (viewMode === 'chat') {
+    const renderChatMessages = () => {
+      const messages = [];
+      
+      // Parse the concatenated conversation string
+      if (userInput) {
+        const conversationText = userInput.replace(/^User: /, '');
+        
+        // Split by "User:" and "Agent:" to extract individual messages
+        const parts = conversationText.split(/(?=User: |Agent: )/);
+        
+        parts.forEach(part => {
+          if (part.trim()) {
+            if (part.startsWith('User: ')) {
+              messages.push({
+                type: 'user',
+                content: part.replace(/^User: /, '').trim()
+              });
+            } else if (part.startsWith('Agent: ')) {
+              messages.push({
+                type: 'assistant',
+                content: part.replace(/^Agent: /, '').trim()
+              });
+            } else {
+              // If it doesn't start with User: or Agent:, treat as user message
+              messages.push({
+                type: 'user',
+                content: part.trim()
+              });
+            }
+          }
+        });
+      }
+      
+      // Add the final response if available
+      if (content && content !== "No content") {
+        messages.push({
+          type: 'assistant',
+          content: content
+        });
+      }
+      
+      return messages;
+    };
+    
+    const messages = renderChatMessages();
+    
     return (
       <div className="text-sm space-y-3">
-        {userInput && (
-          <div className="flex justify-end">
-            <div className="bg-blue-500 text-white px-3 py-2 rounded-lg max-w-xs">
-              {userInput}
+        {messages.map((msg, index) => (
+          <div key={index} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`px-3 py-2 rounded-lg max-w-xs ${
+              msg.type === 'user' 
+                ? 'bg-blue-500 text-white' 
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
+            }`}>
+              {msg.content}
             </div>
           </div>
-        )}
-        <div className="flex justify-start">
-          <div className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-3 py-2 rounded-lg max-w-xs">
-            {content || "No content"}
-          </div>
-        </div>
+        ))}
       </div>
     )
   }
