@@ -40,6 +40,8 @@ import {
 import { simplifyDuration } from "@/lib/utils/time"
 import { useMarkdownProcessor } from "@/lib/hooks/use-markdown-processor"
 import { QueryEvaluationActions } from "@/components/query-actions"
+import { ErrorResponseContent } from '@/components/ErrorResponseContent';
+// import { ErrorChatView } from '@/components/ErrorChatView';
 
 // Component for rendering response content
 function ResponseContent({ content, viewMode, rawJson, userInput }: { content: string, viewMode: 'text' | 'markdown' | 'json' | 'chat', rawJson?: unknown, userInput?: string }) {
@@ -314,7 +316,7 @@ function QueryDetailContent() {
   const [availableMemories, setAvailableMemories] = useState<Array<{name: string}>>([])
   const [memoriesLoading, setMemoriesLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [responseViewMode, setResponseViewMode] = useState<'text' | 'markdown' | 'json' | 'chat'>('markdown')
+  const [responseViewMode, setResponseViewMode] = useState<'text' | 'markdown' | 'json' | 'chat'>('text')
   const nameFieldRef = useRef<HTMLInputElement>(null)
   const [toolSchema, setToolSchema] = useState<ToolDetail | null>(null)
 
@@ -988,6 +990,61 @@ function QueryDetailContent() {
                     </TabsContent>
                   ))}
                 </Tabs>
+              ) : query.status?.phase === 'error' ? (
+                <>
+                  <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
+                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Error Details</h3>
+                    <div className="flex items-center gap-1 text-xs overflow-x-auto whitespace-nowrap flex-shrink-0">
+                      <button 
+                        className={`px-2 py-1 rounded ${
+                          responseViewMode === 'text' 
+                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
+                            : 'text-gray-500 dark:text-gray-400'
+                        }`}
+                        onClick={() => setResponseViewMode('text')}
+                      >
+                        Text
+                      </button>
+                      <button 
+                        className={`px-2 py-1 rounded ${
+                          responseViewMode === 'markdown' 
+                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
+                            : 'text-gray-500 dark:text-gray-400'
+                        }`}
+                        onClick={() => setResponseViewMode('markdown')}
+                      >
+                        Markdown
+                      </button>
+                      <button 
+                        className={`px-2 py-1 rounded ${
+                          responseViewMode === 'json' 
+                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
+                            : 'text-gray-500 dark:text-gray-400'
+                        }`}
+                        onClick={() => setResponseViewMode('json')}
+                      >
+                        JSON
+                      </button>
+                      <button 
+                        className={`px-2 py-1 rounded ${
+                          responseViewMode === 'chat' 
+                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
+                            : 'text-gray-500 dark:text-gray-400'
+                        }`}
+                        onClick={() => setResponseViewMode('chat')}
+                      >
+                        Chat
+                      </button>
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    <ErrorResponseContent 
+                      query={query}
+                      viewMode={responseViewMode}
+                      namespace={namespace}
+                    />
+                  </div>
+                </>
               ) : (
                 <>
                   <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
