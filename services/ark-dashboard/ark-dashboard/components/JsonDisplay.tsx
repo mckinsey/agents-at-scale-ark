@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 type JsonDisplayProps = {
   value: unknown | string;
@@ -67,16 +68,32 @@ export default function JsonDisplay({
   return (
     <div className={className}>
       <div className="flex items-center gap-2 mb-2">
-        <button className="px-2 py-1 rounded bg-gray-200" onClick={copy}>Copy</button>
-        <button className="px-2 py-1 rounded bg-gray-200" onClick={download}>Download</button>
+        <button className="px-2 py-1 rounded bg-black text-white border border-gray-600 hover:bg-gray-800" onClick={copy}>Copy</button>
+        <button className="px-2 py-1 rounded bg-black text-white border border-gray-600 hover:bg-gray-800" onClick={download}>Download</button>
         {tooBig && (
           <button className="px-2 py-1 rounded bg-gray-200" onClick={() => setExpanded(v => !v)}>
             {expanded ? "Show less" : "Load full"}
           </button>
         )}
       </div>
-      <div className="border rounded overflow-visible ">
-        <SyntaxHighlighter language="json">{shown}</SyntaxHighlighter>
+      <div className="overflow-visible">
+        <SyntaxHighlighter 
+          language="json"
+          style={oneDark}
+          customStyle={{
+            background: 'transparent',
+            color: 'white',
+            margin: 0,
+            padding: 0
+          }}
+          codeTagProps={{
+            style: {
+              color: 'white'
+            }
+          }}
+        >
+          {shown}
+        </SyntaxHighlighter>
       </div>
       {!parsed && (
         <div className="mt-2 text-amber-700 text-sm">Couldn&apos;t parse JSON. Showing raw text.</div>

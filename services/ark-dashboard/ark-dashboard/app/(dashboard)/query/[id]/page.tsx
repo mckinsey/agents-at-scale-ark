@@ -40,6 +40,7 @@ import {
 import { simplifyDuration } from "@/lib/utils/time"
 import { useMarkdownProcessor } from "@/lib/hooks/use-markdown-processor"
 import { QueryEvaluationActions } from "@/components/query-actions"
+import JsonDisplay from "@/components/JsonDisplay"
 import { ErrorResponseContent } from '@/components/ErrorResponseContent';
 // import { ErrorChatView } from '@/components/ErrorChatView';
 
@@ -62,24 +63,24 @@ function ResponseContent({ content, viewMode, rawJson, userInput }: { content: s
           const parsed = JSON.parse((rawJson as { raw?: string }).raw!);
           // Create a more readable structure
           const readableJson = {
-            
             content: (rawJson as { content?: string }).content || "No content",
             target: (rawJson as { target?: { name?: string; type?: string } }).target || "No target", 
             raw: parsed
           };
-          return JSON.stringify(readableJson, null, 2);
+          return readableJson;
         } catch {
-          return JSON.stringify(rawJson, null, 2);
+          return rawJson;
         }
       }
-      return JSON.stringify(rawJson, null, 2);
+      return rawJson;
     };
 
     return (
       <div className="text-sm">
-        <pre className="bg-black text-white p-4 rounded text-sm font-mono whitespace-pre-wrap break-words border">
-          {getJsonDisplay()}
-        </pre>
+        <JsonDisplay 
+          value={getJsonDisplay()} 
+          className="bg-black text-white p-4 rounded text-sm font-mono whitespace-pre-wrap break-words"
+        />
       </div>
     )
   }
