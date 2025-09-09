@@ -191,7 +191,7 @@ type MCPExecutor struct {
 	ToolName  string
 }
 
-func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
+func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall, recorder EventEmitter) (ToolResult, error) {
 	log := logf.FromContext(ctx)
 
 	if m.MCPClient == nil {

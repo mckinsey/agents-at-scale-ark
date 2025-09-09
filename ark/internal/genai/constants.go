@@ -23,6 +23,7 @@ const (
 
 // Tool type constants
 const (
-	ToolTypeHTTP = "http"
-	ToolTypeMCP  = "mcp"
+	ToolTypeHTTP  = "http"
+	ToolTypeMCP   = "mcp"
+	ToolTypeAgent = "agent"
 )

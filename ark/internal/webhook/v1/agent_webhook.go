@@ -145,7 +145,7 @@ func (v *AgentCustomValidator) validateTool(ctx context.Context, namespace strin
 	case "custom":
 		return v.validateCustomTool(ctx, namespace, tool, hasName, index)
 	default:
-		return warnings, fmt.Errorf("tool[%d]: unsupported tool type '%s': supported types are: built-in, custom, mcp", index, tool.Type)
+		return warnings, fmt.Errorf("tool[%d]: unsupported tool type '%s': supported types are: built-in, custom", index, tool.Type)
 	}
 
 	return warnings, nil

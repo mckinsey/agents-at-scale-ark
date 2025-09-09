@@ -25,6 +25,15 @@ type MCPToolRef struct {
 	ToolName string `json:"toolName"`
 }
 
+// AgentToolRef defines a reference to an Agent Tool.
+type AgentToolRef struct {
+	// Name of the Agent being referenced.
+	// This must be a non-empty string.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+}
+
 // ToolAnnotations contains optional additional tool information
 type ToolAnnotations struct {
 	// If true, the tool may perform destructive updates to its environment. If
@@ -56,7 +65,7 @@ type ToolAnnotations struct {
 
 type ToolSpec struct {
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=http;mcp
+	// +kubebuilder:validation:Enum=http;mcp;agent
 	Type string `json:"type"`
 	// Tool description
 	Description string `json:"description,omitempty"`
@@ -69,6 +78,10 @@ type ToolSpec struct {
 	// MCP-specific configuration for MCP server tools
 	// +kubebuilder:validation:Optional
 	MCP *MCPToolRef `json:"mcp,omitempty"`
+	// Agent-specific configuration for agent tools.
+	// This field is required only if Type = "agent".
+	// +kubebuilder:validation:Optional
+	Agent *AgentToolRef `json:"agent,omitempty"`
 }
 
 type HTTPSpec struct {
@@ -91,8 +104,9 @@ type HTTPSpec struct {
 
 // Tool type constants
 const (
-	ToolTypeHTTP = "http"
-	ToolTypeMCP  = "mcp"
+	ToolTypeHTTP  = "http"
+	ToolTypeMCP   = "mcp"
+	ToolTypeAgent = "agent"
 )
 
 // Tool state constants

@@ -600,7 +600,9 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 		return nil, err
 	}
 
-	if err := memory.AddMessages(ctx, query.Name, responseMessages); err != nil {
+	// Save new messages to memory (user message + response messages)
+	newMessages := append([]genai.Message{userMessage}, responseMessages...)
+	if err := memory.AddMessages(ctx, query.Name, newMessages); err != nil {
 		return nil, fmt.Errorf("failed to save new messages to memory: %w", err)
 	}
 
@@ -728,7 +730,7 @@ func (r *QueryReconciler) executeTool(ctx context.Context, query arkv1alpha1.Que
 	toolRegistry.RegisterTool(toolDefinition, executor)
 
 	// Execute the tool using the same ExecuteTool method agents use
-	result, err := toolRegistry.ExecuteTool(ctx, toolCall)
+	result, err := toolRegistry.ExecuteTool(ctx, toolCall, tokenCollector)
 	if err != nil {
 		return nil, fmt.Errorf("tool execution failed: %w", err)
 	}

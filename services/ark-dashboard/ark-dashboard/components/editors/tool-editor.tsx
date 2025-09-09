@@ -15,6 +15,7 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { HttpFields } from "../common/http-field";
+import { AgentFields } from "../common/agent-fields";
 
 interface ToolSpec {
   name: string;
@@ -23,18 +24,21 @@ interface ToolSpec {
   inputSchema?: Record<string, unknown>;
   annotations?: Record<string, string>;
   url?: string;
+  agent?: string;
 }
 
 interface ToolEditorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (tool: ToolSpec) => void;
+  namespace: string;
 }
 
 export function ToolEditor({
   open,
   onOpenChange,
-  onSave
+  onSave,
+  namespace
 }: Readonly<ToolEditorProps>) {
   const [name, setName] = useState("");
   const [type, setType] = useState("");
@@ -49,12 +53,14 @@ export function ToolEditor({
 
   // Additional fields state
   const [httpUrl, setHttpUrl] = useState("");
+  const [selectedAgent, setSelectedAgent] = useState("");
 
   const isValid = 
     name.trim() &&
     type.trim() &&
     description.trim().length > 0 &&
-    inputSchema.trim().length > 0;
+    inputSchema.trim().length > 0 &&
+    (type !== "agent" || selectedAgent.trim());
 
   const handleSave = () => {
     let parsedInputSchema: Record<string, unknown> | undefined;
@@ -84,10 +90,11 @@ export function ToolEditor({
     const toolSpec: ToolSpec = {
       name: name.trim(),
       type: type.trim(),
-      description: description.trim(), // <-- always present now
+      description: description.trim(),
       inputSchema: parsedInputSchema,
       annotations: parsedAnnotations,
-      ...(type === "http" ? { url: httpUrl.trim() } : {})
+      ...(type === "http" ? { url: httpUrl.trim() } : {}),
+      ...(type === "agent" ? { agent: selectedAgent.trim() } : {})
     };
 
     onOpenChange(false);
@@ -97,6 +104,7 @@ export function ToolEditor({
     setInputSchema("");
     setAnnotations("");
     setHttpUrl("");
+    setSelectedAgent("");
     onSave(toolSpec);
   };
 
@@ -162,6 +170,14 @@ export function ToolEditor({
           </div>
           {type === "http" && (
             <HttpFields url={httpUrl} setUrl={setHttpUrl} />
+          )}
+          {type === "agent" && (
+            <AgentFields 
+              selectedAgent={selectedAgent} 
+              setSelectedAgent={setSelectedAgent}
+              namespace={namespace}
+              open={open}
+            />
           )}
         </div>
         <DialogFooter>

@@ -37,6 +37,20 @@ spec:
             type: object
           spec:
             properties:
+              agent:
+                description: |-
+                  Agent-specific configuration for agent tools.
+                  This field is required only if Type = "agent".
+                properties:
+                  name:
+                    description: |-
+                      Name of the Agent being referenced.
+                      This must be a non-empty string.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
               annotations:
                 description: Optional additional tool information
                 properties:
@@ -267,6 +281,7 @@ spec:
                 enum:
                 - http
                 - mcp
+                - agent
                 type: string
             required:
             - type

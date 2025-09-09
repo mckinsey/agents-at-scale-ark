@@ -1,0 +1,75 @@
+# Example: Agent calling other agents as tools
+# This demonstrates the "agents as tools" feature we just implemented
+
+# 1. Worker Agent - Specializes in research
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: research-agent
+  namespace: default
+spec:
+  description: "Specialized research agent that gathers information from various sources"
+  prompt: |
+    You are a research specialist. Your job is to gather comprehensive information
+    about the topics you're asked to research. Be thorough and provide sources
+    when possible.
+---
+# 2. Worker Agent - Specializes in analysis  
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: analysis-agent
+  namespace: default
+spec:
+  description: "Specialized analysis agent that processes data and provides insights"
+  prompt: |
+    You are a data analysis specialist. Your job is to take research data or 
+    information and provide clear insights, trends, and actionable conclusions.
+    Always structure your analysis clearly.
+---
+# 3. Research Agent Tool - Uses other agents as tools
+
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: call-research-agent
+spec:
+  type: agent # new type needed
+  inputSchema:
+    type: object
+    properties:
+      input:
+        type: string
+        description: "....."
+    required: [ "input" ]
+  agent:
+    name: research-agent
+---
+# 4. Coordinator Agent - Uses other agents as tools
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: coordinator-agent
+  namespace: default
+spec:
+  description: "Coordinator agent that orchestrates research and analysis workflows"
+  prompt: |
+    You are a smart coordinator that helps users by delegating work to specialist agents.
+
+    Available specialist agents:
+    - call-research_agent(input="...") - for gathering information, web research, and fact-finding
+    - noop(message="...") - no-operation tool for testing
+
+    For complex requests:
+    1. Break down the task
+    2. Use call-research_agent to gather information first
+    3. Use call-analysis_agent to analyze the research results
+    4. Synthesize the results into a comprehensive response
+
+    Always explain your approach and provide a final integrated answer.
+  tools:
+  - type: custom # 🎯 Creates call_research_agent tool via ark-mcp
+    name: call-research-agent
+---
+
+
