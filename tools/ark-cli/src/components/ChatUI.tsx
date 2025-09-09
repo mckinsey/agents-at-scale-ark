@@ -45,6 +45,8 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
   const [isLoading, setIsLoading] = React.useState(true);
   const [targetIndex, setTargetIndex] = React.useState(0);
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
+  const [showCommands, setShowCommands] = React.useState(false);
+  const [streamingEnabled, setStreamingEnabled] = React.useState(process.env.ARK_ENABLE_STREAMING === '1');
   
   const chatClientRef = React.useRef<ChatClient | undefined>(undefined);
 
@@ -150,6 +152,24 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
 
   const handleSubmit = async (value: string) => {
     if (!value.trim() || !target || !chatClientRef.current) return;
+    
+    // Check for slash commands
+    if (value === '/streaming') {
+      // Toggle streaming
+      const newState = !streamingEnabled;
+      setStreamingEnabled(newState);
+      process.env.ARK_ENABLE_STREAMING = newState ? '1' : '0';
+      
+      // Add system message to show the change
+      const systemMessage: Message = {
+        role: 'system',
+        content: `Streaming ${newState ? 'enabled' : 'disabled'}`,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, systemMessage]);
+      setInput('');
+      return;
+    }
 
     const userMessage: Message = {
       role: 'user',
@@ -349,13 +369,28 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
             <Box marginLeft={1} flexGrow={1}>
               <TextInput
                 value={input}
-                onChange={setInput}
+                onChange={(value) => {
+                  setInput(value);
+                  // Show commands menu only when input starts with '/'
+                  setShowCommands(value.startsWith('/'));
+                }}
                 onSubmit={handleSubmit}
                 placeholder="Type your message..."
               />
             </Box>
           </Box>
         </Box>
+        
+        {/* Command menu */}
+        {showCommands && (
+          <Box marginLeft={1} marginTop={1} flexDirection="column">
+            <Box>
+              <Text color="cyan">/streaming</Text>
+              <Text color="gray">  Toggle streaming mode (currently {streamingEnabled ? 'on' : 'off'})</Text>
+            </Box>
+          </Box>
+        )}
+        
         <Box marginLeft={1} marginTop={0}>
           <Box flexDirection="row">
             {target && (
