@@ -99,6 +99,11 @@ export class ChatClient {
       if (shouldStream && Symbol.asyncIterator in completion) {
         let fullResponse = '';
         for await (const chunk of completion as any) {
+          // Check if aborted and break immediately
+          if (signal?.aborted) {
+            break;
+          }
+          
           const content = chunk.choices[0]?.delta?.content || '';
           if (content) {
             fullResponse += content;
