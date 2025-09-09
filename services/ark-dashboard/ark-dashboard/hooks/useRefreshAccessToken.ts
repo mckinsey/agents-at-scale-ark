@@ -5,6 +5,7 @@ import { useRef, useCallback, useState } from "react";
 import { useWindowFocus } from "./useWindowFocus";
 import { useConditionalInterval } from "./useConditionalInterval";
 import { redirect, RedirectType } from "next/navigation";
+import { SIGNIN_PATH } from "@/lib/constants/auth";
 
 const refreshThresholdMs = 10 * 60 * 1000 //10mins
 
@@ -35,11 +36,11 @@ export function useRefreshAccessToken() {
 
       if (result && "error" in result && result.error) {
         console.error("[useRefreshAccessToken] Session update failed:", result.error);
-        redirect('/api/auth/signin', RedirectType.replace)
+        redirect(SIGNIN_PATH, RedirectType.replace)
       }
     } catch (error) {
       console.error("[useRefreshAccessToken] Session update error:", error);
-      redirect('/api/auth/signin', RedirectType.replace)
+      redirect(SIGNIN_PATH, RedirectType.replace)
     } finally {
       isUpdatingRef.current = false;
       setIsUpdating(false);

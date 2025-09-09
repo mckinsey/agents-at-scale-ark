@@ -2,8 +2,13 @@ import { NextAuthConfig } from "next-auth";
 import { createOIDCProvider } from "./create-oidc-provider";
 import { TokenManager } from "./token-manager";
 import {
+  SIGNIN_PATH,
   COOKIE_SESSION_TOKEN,
-  SIGNIN_PATH
+  COOKIE_CALLBACK_URL,
+  COOKIE_CSRF_TOKEN,
+  COOKIE_PKCE_CODE_VERIFIER,
+  COOKIE_STATE,
+  COOKIE_NONCE
 } from "@/lib/constants/auth";
 
 // Extract the jwt callback type from NextAuthConfig
@@ -54,21 +59,73 @@ const OIDCProvider = createOIDCProvider({
   clientSecret: process.env.OIDC_CLIENT_SECRET
 });
 
-const debug = process.env.AUTH_DEBUG === "true";
-const useSecureCookies = process.env.NEXTAUTH_URL?.startsWith("https://") || false;
-
 const session: NextAuthConfig['session'] = {
   strategy: 'jwt',
   maxAge: 30 * 60 //30mins
 };
 
+const debug = process.env.AUTH_DEBUG === "true";
+
+// Since we are using custom cookie names we have to manage these settings ourselfs.
+// https://authjs.dev/reference/nextjs#cookies
+const useSecureCookies = process.env.AUTH_URL?.startsWith("https://") || false;
+const cookiePrefix = useSecureCookies ? "__Secure-" : ""
 const cookies: NextAuthConfig['cookies'] = {
   sessionToken: {
-    name: COOKIE_SESSION_TOKEN,
+    name: `${cookiePrefix}${COOKIE_SESSION_TOKEN}`,
     options: {
       httpOnly: true,
       sameSite: 'lax',
       path: '/',
+      secure: useSecureCookies
+    }
+  },
+  callbackUrl: {
+    name: `${cookiePrefix}${COOKIE_CALLBACK_URL}`,
+    options: {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      secure: useSecureCookies
+    }
+  },
+  csrfToken: {
+    // Default to __Host- for CSRF token for additional protection if using useSecureCookies
+    // NB: The `__Host-` prefix is stricter than the `__Secure-` prefix.
+    name: `${useSecureCookies ? "__Host-" : ""}${COOKIE_CSRF_TOKEN}`,
+    options: {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      secure: useSecureCookies
+    }
+  },
+  pkceCodeVerifier: {
+    name: `${cookiePrefix}${COOKIE_PKCE_CODE_VERIFIER}`,
+    options: {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      secure: useSecureCookies,
+      maxAge: 60 * 15 // 15 minutes in seconds
+    }
+  },
+  state: {
+    name: `${cookiePrefix}${COOKIE_STATE}`,
+    options: {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      secure: useSecureCookies,
+      maxAge: 60 * 15 // 15 minutes in seconds
+    }
+  },
+  nonce: {
+    name: `${cookiePrefix}${COOKIE_NONCE}`,
+    options: {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
       secure: useSecureCookies
     }
   }

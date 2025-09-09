@@ -34,6 +34,7 @@ import { toast } from "@/components/ui/use-toast"
 import { namespacesService, systemInfoService, type Namespace, type SystemInfo } from "@/lib/services"
 import { NamespaceEditor } from "@/components/editors"
 import { UserDetails } from "./user"
+import { signout } from "@/lib/auth/signout"
 
 export function AppSidebar() {
   const router = useRouter()
@@ -121,10 +122,6 @@ export function AppSidebar() {
   const getCurrentSection = () => {
     const path = pathname.split('/')[1]
     return path || 'agents'
-  }
-
-  const handleSignout = () => {
-    window.location.href = "/api/auth/federated-signout";
   }
 
   return (
@@ -336,7 +333,7 @@ export function AppSidebar() {
                     <UserDetails/>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator/>
-                  <DropdownMenuItem onClick={handleSignout}>
+                  <DropdownMenuItem onClick={signout}>
                     <LogOut/>
                     <span>Sign out</span>
                   </DropdownMenuItem>

@@ -1,3 +1,5 @@
+import { OIDC_CONFIG_URL } from "@/lib/constants/auth";
+
 type OIDCWellKnownConfig = {
   token_endpoint?: string;
   end_session_endpoint?: string;
@@ -34,10 +36,7 @@ class OpenidConfigManager {
   }
 
   private async _fetchConfig() {
-    const issuerUrl = process.env.OIDC_ISSUER_URL;
-
-    const wellKnownUrl = `${issuerUrl}/.well-known/openid-configuration`;
-    const response = await fetch(wellKnownUrl);
+    const response = await fetch(OIDC_CONFIG_URL);
 
     if (!response.ok) {
       console.error(
@@ -50,6 +49,7 @@ class OpenidConfigManager {
 
     const config: OIDCWellKnownConfig = await response.json();
     this.config = config;
+
     return config;
   }
 }
