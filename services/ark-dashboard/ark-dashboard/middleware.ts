@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import { auth } from "./auth";
 import type { Session } from "next-auth";
 import { getToken } from "next-auth/jwt";
-import { SESSION_TOKEN } from './lib/auth/auth-config';
+import { SESSION_TOKEN } from './lib/constants/auth';
 
 async function middleware(request: NextRequest) {
   // Get the base path from environment (no default)
@@ -37,12 +37,27 @@ async function middleware(request: NextRequest) {
     // - X-Forwarded-Host: original host header from the client request  
     // - X-Forwarded-Proto: original protocol (http/https) from the client request
     // The backend uses these to generate correct URLs for OpenAPI specs and CORS handling
-    const response = NextResponse.rewrite(targetUrl);
+   /*  const response = NextResponse.rewrite(targetUrl);
     response.headers.set('X-Forwarded-Prefix', '/api');
     response.headers.set('X-Forwarded-Host', request.headers.get('host') || '');
     response.headers.set('X-Forwarded-Proto', request.nextUrl.protocol.slice(0, -1)); // Remove trailing ':'
     response.headers.set('Authorization', `Bearer ${token?.access_token}`);
-    return response;
+    return response; */
+
+    // Create new headers for the backend request (NOT the frontend response)
+    const backendHeaders = new Headers(request.headers);
+    backendHeaders.set('X-Forwarded-Prefix', '/api');
+    backendHeaders.set('X-Forwarded-Host', request.headers.get('host') || '');
+    backendHeaders.set('X-Forwarded-Proto', request.nextUrl.protocol.slice(0, -1)); // Remove trailing ':'
+    backendHeaders.set('Authorization', `Bearer ${token?.access_token}`);
+    
+    // Rewrite to backend with auth headers on REQUEST (not response)
+    // This ensures OIDC tokens are never exposed to the frontend
+    return NextResponse.rewrite(targetUrl, {
+      request: {
+        headers: backendHeaders
+      }
+    });
   }
   
   // For all other requests, continue normally
@@ -57,8 +72,8 @@ export default auth(async (req: NextRequestWithAuth) => {
   //If no user session redirect to signin page
   if (!req.auth) {
     //If the user is trying to access a page other than the signin page, set it as the callback url.
-    if(req.nextUrl.pathname !== "/api/signin") {
-      const newUrl = new URL(`/api/signin?callbackUrl=${encodeURIComponent(req.url)}`, req.nextUrl.origin)
+    if(req.nextUrl.pathname !== "/api/auth/signin") {
+      const newUrl = new URL(`/api/auth/signin?callbackUrl=${encodeURIComponent(req.url)}`, req.nextUrl.origin)
       return NextResponse.redirect(newUrl)
     }
     return NextResponse.next()
