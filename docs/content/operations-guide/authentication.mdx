@@ -1,0 +1,390 @@
+# ARK Dashboard Authentication
+
+The ARK Dashboard implements a robust OpenID Connect (OIDC) authentication system built on NextAuth.js v5. This system provides secure access control for the dashboard interface and automatic token propagation to backend API services.
+
+## Overview
+
+The authentication system consists of several key components:
+
+- **OIDC Provider Integration**: Connects to any OIDC-compliant identity provider
+- **Session Management**: Handles user sessions with automatic token refresh
+- **Middleware Authentication**: Protects routes and proxies API calls with authentication
+- **Frontend Integration**: Provides user authentication state across React components
+- **Token Management**: Automatic access token refresh and propagation to backend services
+
+## Architecture
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   User Browser  │    │   ARK Dashboard  │    │  ARK API Server │
+│                 │    │                  │    │                 │
+│  ┌─────────────┐│    │ ┌──────────────┐ │    │ ┌─────────────┐ │
+│  │ React App   ││    │ │ NextAuth.js  │ │    │ │ API Services│ │
+│  │ Components  ││    │ │ + Middleware │ │    │ │             │ │
+│  └─────────────┘│    │ └──────────────┘ │    │ └─────────────┘ │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+         │                        │                        │
+         │ 1. Access protected    │                        │
+         │    page                │                        │
+         ├───────────────────────>│                        │
+         │                        │ 2. Check auth          │
+         │                        │    middleware          │
+         │                        │                        │
+         │ 3. Redirect to OIDC    │                        │
+         │    if unauthenticated  │                        │
+         │<───────────────────────┤                        │
+         │                        │                        │
+         │ 4. API calls with      │ 5. Proxy with Bearer   │
+         │    session context     │    token               │
+         ├───────────────────────>├───────────────────────>│
+         │                        │                        │
+```
+
+## Configuration
+
+### Environment Variables
+
+The ARK Dashboard uses environment variables for authentication configuration. You can find a complete template in the `.env.example` file in the dashboard directory.
+
+The following environment variables are required for authentication:
+
+#### Core Authentication Settings
+```bash
+# NextAuth.js Configuration
+AUTH_SECRET="your-secret-key-here"                    # Required: JWT signing secret (used to encrypt tokens)
+BASE_URL="http://localhost:3000"                      # Required: Base URL of the Next.js application
+AUTH_URL="http://localhost:3000/api/auth"             # Required: URL used for handling auth related calls
+
+# OIDC Provider Configuration  
+OIDC_PROVIDER_ID="your-provider-id"                  # Required: Custom ID for the OIDC provider
+OIDC_ISSUER_URL="https://your-oidc-provider.com"     # Required: OIDC issuer URL
+OIDC_CLIENT_ID="your-client-id"                      # Required: OIDC client ID
+OIDC_CLIENT_SECRET="your-client-secret"              # Optional: OIDC client secret
+OIDC_PROVIDER_NAME="Your Provider"                   # Optional: Display name for the OIDC provider in UI
+
+# Authentication Mode
+AUTH_MODE="sso"                                       # Required: "sso" for authentication required, "open" for no authentication
+```
+
+#### Advanced Configuration
+```bash
+# Backend API Configuration (Optional - for API proxying)
+ARK_API_SERVICE_HOST="localhost"                     # Optional: API server host (default: localhost)
+ARK_API_SERVICE_PORT="8000"                          # Optional: API server port (default: 8000)  
+ARK_API_SERVICE_PROTOCOL="http"                      # Optional: API protocol (default: http)
+
+# Dashboard Base Path (for reverse proxy deployments)
+ARK_DASHBOARD_BASE_PATH="/dashboard"                 # Optional: Base path for dashboard routes
+```
+
+### Authentication Modes
+
+The `AUTH_MODE` environment variable controls the authentication behavior:
+
+- **`sso`** (default): Full authentication required. Users must authenticate with the OIDC provider to access the dashboard.
+- **`open`**: No authentication required. The application allows unrestricted access without signing in.
+
+> ⚠️ **Security Warning**: Only use `AUTH_MODE=open` in development or trusted environments. Production deployments should always use `AUTH_MODE=sso`.
+
+### OIDC Provider Setup
+
+The dashboard supports any OIDC-compliant identity provider. Configure your provider with:
+
+#### Redirect URIs
+Configure your OIDC provider with the following callback URL pattern:
+```
+https://your-domain.com/api/auth/callback/{OIDC_PROVIDER_ID}
+```
+
+For example, if your `OIDC_PROVIDER_ID=mid`, the callback URL would be:
+```
+https://your-domain.com/api/auth/callback/mid
+```
+
+#### Logout URIs  
+```
+https://your-domain.com/signout
+```
+
+#### Required Scopes
+- `openid` - Core OIDC functionality
+- `profile` - User profile information
+- `email` - User email address
+
+## Components and Hooks
+
+### Authentication Hooks
+
+#### useSession()
+Access the current user session from NextAuth.js:
+
+```tsx
+import { useSession } from "next-auth/react";
+
+export function MyComponent() {
+  const { data: session, status } = useSession();
+  
+  if (status === "loading") return <div>Loading...</div>;
+  if (status === "unauthenticated") return <div>Not authenticated</div>;
+  
+  return <div>Welcome, {session?.user?.name}!</div>;
+}
+```
+
+#### useRefreshAccessToken()
+Automatically handles token refresh on window focus and interval:
+
+```tsx
+import { useRefreshAccessToken } from "@/hooks/useRefreshAccessToken";
+
+export function DashboardLayout({ children }: { children: React.ReactNode }) {
+  useRefreshAccessToken(); // Handles automatic token refresh
+  
+  return <div>{children}</div>;
+}
+```
+
+#### useAutoSignout()
+Automatically signs out users when their session expires:
+
+```tsx
+import { useAutoSignout } from "@/hooks/useAutoSignout";
+
+export function DashboardLayout({ children }: { children: React.ReactNode }) {
+  useAutoSignout(); // Handles automatic signout on expiration
+  
+  return <div>{children}</div>;
+}
+```
+
+### Authentication Components
+
+#### UserDetails
+Displays current user information with avatar:
+
+```tsx
+import { UserDetails } from "@/components/user";
+
+export function AppSidebar() {
+  return (
+    <div>
+      <UserDetails /> {/* Shows user name, email, and avatar */}
+    </div>
+  );
+}
+```
+
+#### SessionProvider
+Provides session context to the entire application:
+
+```tsx
+import { SessionProvider } from "next-auth/react";
+import { auth } from "@/auth";
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth(); // Server-side session
+  
+  return (
+    <SessionProvider session={session}>
+      {children}
+    </SessionProvider>
+  );
+}
+```
+
+## Middleware Authentication
+
+The middleware handles route protection and API proxying with automatic token injection.
+
+### Route Protection
+
+All dashboard routes (except auth routes) are protected by default:
+
+```typescript
+export const config = {
+  matcher: '/((?!api/auth|signout|_next/static|_next/image|favicon.ico).*)'
+};
+```
+
+### API Token Proxying
+
+API calls to `/api/*` are automatically:
+1. Proxied to the backend ARK API service
+2. Enhanced with authentication headers
+3. Configured with forwarding headers for backend context
+
+```typescript
+// Middleware automatically adds these headers:
+headers.set('Authorization', `Bearer ${token.access_token}`);
+headers.set('X-Forwarded-Prefix', '/api');
+headers.set('X-Forwarded-Host', request.headers.get('host'));
+headers.set('X-Forwarded-Proto', request.nextUrl.protocol);
+```
+
+## API Routes
+
+### Authentication Endpoints
+
+#### `/api/auth/signin`
+Custom signin endpoint that redirects to the configured OIDC provider:
+
+```typescript
+// GET /api/auth/signin?callbackUrl=/dashboard
+// Redirects to OIDC provider with callback URL preservation
+```
+
+#### `/api/auth/callback/[provider]`
+OIDC callback endpoint managed by NextAuth.js:
+
+```typescript
+// Handles OIDC authorization code flow
+// Exchanges code for tokens and creates session
+```
+
+#### `/api/auth/federated-signout`
+Implements federated logout with the OIDC provider:
+
+```typescript
+// GET /api/auth/federated-signout
+// Redirects to OIDC provider's end_session_endpoint
+// Includes id_token_hint and post_logout_redirect_uri
+```
+
+### Authentication Flow
+
+The authentication flow varies based on the `AUTH_MODE` setting:
+
+#### SSO Mode (`AUTH_MODE=sso`)
+1. **Initial Access**: User accesses protected route
+2. **Middleware Check**: Middleware validates session
+3. **Redirect to OIDC**: If unauthenticated, redirect to `/api/auth/signin`
+4. **OIDC Provider**: User authenticates with external provider
+5. **Callback Processing**: OIDC callback creates NextAuth session
+6. **Session Storage**: Session stored securely with HTTP-only cookies
+7. **API Token Injection**: Middleware adds Bearer token to backend API calls
+
+#### Open Mode (`AUTH_MODE=open`)
+1. **Initial Access**: User accesses any route
+2. **No Authentication**: Middleware allows all requests to pass through
+3. **Direct API Access**: API calls are proxied directly without authentication headers
+
+> **Note**: In open mode, no authentication tokens are added to backend API calls. The backend must be configured to handle unauthenticated requests appropriately.
+
+## Security Features
+
+### Token Security
+- **HTTP-Only Cookies**: Session tokens never exposed to client JavaScript
+- **Secure Transmission**: All auth communication over HTTPS in production
+- **Token Refresh**: Automatic access token refresh before expiration
+- **Backend Isolation**: Access tokens only sent to backend, never exposed to frontend
+
+### Session Management
+- **Automatic Expiration**: Sessions expire based on OIDC token lifetime
+- **Window Focus Refresh**: Tokens refreshed when user returns to tab
+- **Interval Refresh**: Periodic token refresh (every 10 minutes)
+- **Error Handling**: Automatic redirect to signin on token refresh failure
+
+### Route Protection
+- **Middleware Guards**: All routes protected by authentication middleware
+- **Callback URL Preservation**: Original destination preserved during auth flow
+- **Public Route Exclusions**: Auth routes and static assets excluded from protection
+
+## Deployment Considerations
+
+### Reverse Proxy Configuration
+
+When deploying behind a reverse proxy, configure the base path:
+
+```bash
+ARK_DASHBOARD_BASE_PATH="/dashboard"
+BASE_URL="https://your-external-domain.com"
+```
+
+### HTTPS Requirements
+- OIDC requires HTTPS in production
+- Configure proper SSL certificates
+- Set secure cookie flags for production
+
+### High Availability
+- Session state stored in JWT cookies (stateless)
+- No session storage requirements
+- Supports horizontal scaling
+
+## Troubleshooting
+
+### Common Issues
+
+#### Authentication Loops
+- Verify `NEXTAUTH_URL` matches external domain
+- Check OIDC provider redirect URI configuration
+- Ensure `BASE_URL` is set correctly for reverse proxy deployments
+
+#### Token Refresh Failures
+- Verify OIDC provider supports refresh tokens
+- Check `OIDC_CLIENT_SECRET` configuration
+- Monitor browser console for refresh errors
+
+#### API Authentication Errors  
+- Verify backend accepts Bearer tokens
+- Check middleware token injection logic
+- Confirm `ARK_API_SERVICE_*` environment variables
+
+### Debug Logging
+
+Enable NextAuth.js debug logging:
+
+```bash
+NEXTAUTH_LOG_LEVEL="debug"
+```
+
+Monitor authentication flow in browser developer tools and server logs.
+
+## Example Configurations
+
+### Azure AD / Entra ID
+```bash
+BASE_URL="https://your-domain.com"
+AUTH_URL="https://your-domain.com/api/auth"
+AUTH_SECRET="your-generated-secret-key"
+AUTH_MODE="sso"
+OIDC_PROVIDER_ID="azure"
+OIDC_PROVIDER_NAME="Microsoft Azure AD"
+OIDC_ISSUER_URL="https://login.microsoftonline.com/your-tenant-id/v2.0"
+OIDC_CLIENT_ID="your-application-id"
+OIDC_CLIENT_SECRET="your-client-secret"
+```
+
+### Keycloak
+```bash
+BASE_URL="https://your-domain.com"
+AUTH_URL="https://your-domain.com/api/auth"
+AUTH_SECRET="your-generated-secret-key"
+AUTH_MODE="sso"
+OIDC_PROVIDER_ID="keycloak"
+OIDC_PROVIDER_NAME="Keycloak"
+OIDC_ISSUER_URL="https://your-keycloak.com/realms/your-realm"
+OIDC_CLIENT_ID="ark-dashboard"
+OIDC_CLIENT_SECRET="your-client-secret"
+```
+
+### Auth0
+```bash
+BASE_URL="https://your-domain.com"
+AUTH_URL="https://your-domain.com/api/auth"
+AUTH_SECRET="your-generated-secret-key"
+AUTH_MODE="sso"
+OIDC_PROVIDER_ID="auth0"
+OIDC_PROVIDER_NAME="Auth0"
+OIDC_ISSUER_URL="https://your-domain.auth0.com"
+OIDC_CLIENT_ID="your-client-id"
+OIDC_CLIENT_SECRET="your-client-secret"
+```
+
+### Development Mode (No Authentication)
+```bash
+BASE_URL="http://localhost:3000"
+AUTH_URL="http://localhost:3000/api/auth"
+AUTH_SECRET="development-secret-key"
+AUTH_MODE="open"
+# OIDC variables not required in open mode
+```
