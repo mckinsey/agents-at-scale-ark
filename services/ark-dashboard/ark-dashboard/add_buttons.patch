@@ -1,0 +1,29 @@
+--- a/app/(dashboard)/query/[id]/page.tsx
++++ b/app/(dashboard)/query/[id]/page.tsx
+@@ -875,6 +875,30 @@
+                       >
+                         Markdown
+                       </button>
++                      <button 
++                        className={`px-2 py-1 rounded ${
++                          responseViewMode === 'json' 
++                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
++                            : 'text-gray-500 dark:text-gray-400'
++                        }`}
++                        onClick={() => setResponseViewMode('json')}
++                      >
++                        JSON
++                      </button>
++                      <button 
++                        className={`px-2 py-1 rounded ${
++                          responseViewMode === 'chat' 
++                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
++                            : 'text-gray-500 dark:text-gray-400'
++                        }`}
++                        onClick={() => setResponseViewMode('chat')}
++                      >
++                        Chat
++                      </button>
+                     </div>
+                   </div>
+                   <div className="text-center text-muted-foreground py-8 text-xs">

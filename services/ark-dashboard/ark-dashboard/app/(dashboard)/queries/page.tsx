@@ -1,8 +1,8 @@
 "use client"
 
 import { QueriesSection } from "@/components/sections/queries-section"
-import { useSearchParams } from "next/navigation"
-import { Suspense, useRef } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
+import { Suspense } from "react"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -17,8 +17,7 @@ import { Plus } from "lucide-react"
 function QueriesContent() {
   const searchParams = useSearchParams()
   const namespace = searchParams.get("namespace") || "default"
-  const queriesSectionRef = useRef<{ openAddEditor: () => void }>(null)
-
+  const router = useRouter()
   return (
     <>
       <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
@@ -32,14 +31,14 @@ function QueriesContent() {
           </BreadcrumbList>
         </Breadcrumb>
         <div className="ml-auto">
-          <Button onClick={() => queriesSectionRef.current?.openAddEditor()}>
+          <Button onClick={() => router.push(`/query/new?namespace=${namespace}`)}>
             <Plus className="h-4 w-4 mr-2" />
             Add Query
           </Button>
         </div>
       </header>
       <div className="flex flex-1 flex-col">
-        <QueriesSection ref={queriesSectionRef} namespace={namespace} />
+        <QueriesSection namespace={namespace} />
       </div>
     </>
   )

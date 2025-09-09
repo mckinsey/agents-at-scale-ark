@@ -40,63 +40,42 @@ import {
 import { simplifyDuration } from "@/lib/utils/time"
 import { useMarkdownProcessor } from "@/lib/hooks/use-markdown-processor"
 import { QueryEvaluationActions } from "@/components/query-actions"
-
+import JsonDisplay from "@/components/JsonDisplay"
 // Component for rendering response content
-function ResponseContent({ content, viewMode, rawJson, userInput }: { content: string, viewMode: 'text' | 'markdown' | 'json' | 'chat', rawJson?: unknown, userInput?: string }) {
+function ResponseContent({ content, rawJson, userInput, viewMode }: { content: string, rawJson?: unknown, userInput?: string, viewMode: 'text' | 'markdown' | 'json' | 'chat' }) {
   const markdownContent = useMarkdownProcessor(content)
-  
-  if (viewMode === 'markdown') {
-    return (
-      <div className="text-sm">
-        {markdownContent}
-      </div>
-    )
-  }
 
   if (viewMode === 'json') {
-    const getJsonDisplay = () => {
-      if (rawJson && typeof rawJson === 'object' && (rawJson as { raw?: string }).raw) {
-        try {
-          const parsed = JSON.parse((rawJson as { raw?: string }).raw!);
-          // Create a more readable structure
-          const readableJson = {
-            
-            content: (rawJson as { content?: string }).content || "No content",
-            target: (rawJson as { target?: { name?: string; type?: string } }).target || "No target", 
-            raw: parsed
-          };
-          return JSON.stringify(readableJson, null, 2);
-        } catch {
-          return JSON.stringify(rawJson, null, 2);
-        }
-      }
-      return JSON.stringify(rawJson, null, 2);
-    };
-
     return (
-      <div className="text-sm">
-        <pre className="bg-black text-white p-4 rounded text-sm font-mono whitespace-pre-wrap break-words border">
-          {getJsonDisplay()}
-        </pre>
+      <div className="px-3 pb-3 pt-2 max-h-96 overflow-auto">
+        <JsonDisplay value={rawJson || content} />
       </div>
     )
   }
 
   if (viewMode === 'chat') {
     return (
-      <div className="text-sm space-y-3">
-        {userInput && (
-          <div className="flex justify-end">
-            <div className="bg-blue-500 text-white px-3 py-2 rounded-lg max-w-xs">
-              {userInput}
-            </div>
-          </div>
-        )}
-        <div className="flex justify-start">
-          <div className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-3 py-2 rounded-lg max-w-xs">
-            {content || "No content"}
+      <div className="space-y-3 px-3 pb-3 pt-2 max-h-96 overflow-auto bg-gray-50 dark:bg-gray-900">
+        {/* User message bubble */}
+        <div className="flex justify-end">
+          <div className="bg-blue-500 text-white rounded-2xl rounded-br-md px-4 py-2 max-w-[70%] shadow-sm">
+            <div className="text-sm whitespace-pre-wrap break-words">{userInput || "hi"}</div>
           </div>
         </div>
+        
+        {/* Assistant message bubble */}
+        <div className="flex justify-start">
+          <div className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-2xl rounded-bl-md px-4 py-2 max-w-[70%] shadow-sm border border-gray-200 dark:border-gray-700">
+            <div className="text-sm whitespace-pre-wrap break-words">{content}</div>
+          </div>
+        </div>
+      </div>
+    )
+  }  
+  if (viewMode === 'markdown') {
+    return (
+      <div className="text-sm">
+        {markdownContent}
       </div>
     )
   }
@@ -269,7 +248,7 @@ function QueryDetailContent() {
   const [availableMemories, setAvailableMemories] = useState<Array<{name: string}>>([])
   const [memoriesLoading, setMemoriesLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [responseViewMode, setResponseViewMode] = useState<'text' | 'markdown' | 'json' | 'chat'>('markdown')
+  const [responseViewMode, setResponseViewMode] = useState<'text' | 'markdown' | 'json' | 'chat'>('json')
   const nameFieldRef = useRef<HTMLInputElement>(null)
   const [toolSchema, setToolSchema] = useState<ToolDetail | null>(null)
 
@@ -829,7 +808,7 @@ function QueryDetailContent() {
                 <>
                   <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
                     <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Responses</h3>
-                    <div className="flex items-center gap-1 text-xs overflow-x-auto whitespace-nowrap flex-shrink-0">
+                    <div className="flex items-center gap-1 text-xs">
                       <button 
                         className={`px-2 py-1 rounded ${
                           responseViewMode === 'text' 
@@ -849,26 +828,6 @@ function QueryDetailContent() {
                         onClick={() => setResponseViewMode('markdown')}
                       >
                         Markdown
-                      </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'json' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('json')}
-                      >
-                        JSON
-                      </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'chat' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('chat')}
-                      >
-                        Chat
                       </button>
                     </div>
                   </div>
@@ -889,7 +848,7 @@ function QueryDetailContent() {
                         ))}
                       </TabsList>
                     </div>
-                    <div className="flex items-center gap-1 text-xs overflow-x-auto whitespace-nowrap flex-shrink-0">
+                    <div className="flex items-center gap-1 text-xs">
                       <button 
                         className={`px-2 py-1 rounded ${
                           responseViewMode === 'text' 
@@ -910,35 +869,13 @@ function QueryDetailContent() {
                       >
                         Markdown
                       </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'json' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('json')}
-                      >
-                        JSON
-                      </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'chat' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('chat')}
-                      >
-                        Chat
-                      </button>
                     </div>
                   </div>
                   {query.status.responses.map((response, index) => (
                     <TabsContent key={index} value={index.toString()} className="mt-0 p-3">
                       <ResponseContent 
-                        content={response.content || "No content"} 
+                        content={response.content || "No content"} rawJson={response} userInput={query.input} 
                         viewMode={responseViewMode} 
-                        rawJson={response} 
-                        userInput={query.input || ""}
                       />
                     </TabsContent>
                   ))}
@@ -947,7 +884,7 @@ function QueryDetailContent() {
                 <>
                   <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
                     <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Responses</h3>
-                    <div className="flex items-center gap-1 text-xs overflow-x-auto whitespace-nowrap flex-shrink-0">
+                    <div className="flex items-center gap-1 text-xs">
                       <button 
                         className={`px-2 py-1 rounded ${
                           responseViewMode === 'text' 
@@ -967,26 +904,6 @@ function QueryDetailContent() {
                         onClick={() => setResponseViewMode('markdown')}
                       >
                         Markdown
-                      </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'json' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('json')}
-                      >
-                        JSON
-                      </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'chat' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('chat')}
-                      >
-                        Chat
                       </button>
                     </div>
                   </div>

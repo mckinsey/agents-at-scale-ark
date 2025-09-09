@@ -60,10 +60,9 @@ function ResponseContent({ content, viewMode, rawJson, userInput }: { content: s
           const parsed = JSON.parse((rawJson as { raw?: string }).raw!);
           // Create a more readable structure
           const readableJson = {
-            
-            content: (rawJson as { content?: string }).content || "No content",
-            target: (rawJson as { target?: { name?: string; type?: string } }).target || "No target", 
-            raw: parsed
+            content: rawJson.content || "No content",
+            target: rawJson.target || "No target", 
+            conversation: parsed
           };
           return JSON.stringify(readableJson, null, 2);
         } catch {

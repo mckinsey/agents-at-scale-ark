@@ -65,9 +65,13 @@ type QuerySpec struct {
 	Cancel bool `json:"cancel,omitempty"`
 }
 
+// Response defines a response from a query target.
+// +kubebuilder:validation:Deprecated
+// Deprecated: Response is deprecated and will likely be replaced in the future.
 type Response struct {
 	Target  QueryTarget `json:"target,omitempty"`
 	Content string      `json:"content,omitempty"`
+	Raw     string      `json:"raw,omitempty"`
 }
 
 // +kubebuilder:object:root=true

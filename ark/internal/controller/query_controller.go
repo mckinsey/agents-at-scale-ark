@@ -410,24 +410,43 @@ func (r *QueryReconciler) reconcileQueue(ctx context.Context, query arkv1alpha1.
 		}
 		// Skip targets that were delegated to external execution engines (messages == nil)
 		if result.messages != nil {
-			allResponses = append(allResponses, arkv1alpha1.Response{Target: result.target, Content: makeResponse(result.messages)})
+			rawBytes, _ := json.Marshal(result.messages) // full original message array
+			allResponses = append(allResponses, arkv1alpha1.Response{
+				Target:  result.target,
+				Content: messageToText(result.messages[len(result.messages)-1]), // Get last message explicitly
+				Raw:     string(rawBytes),
+			})
 		}
 	}
 
 	return allResponses, nil
 }
 
-func makeResponse(messages []genai.Message) string {
-	lastMessage := messages[len(messages)-1]
+// messageToText extracts text content from a single OpenAI message format structure.
+// This function assumes the message follows OpenAI's ChatCompletionMessageParamUnion format.
+func messageToText(message genai.Message) string {
 	switch {
-	case lastMessage.OfAssistant != nil:
-		return lastMessage.OfAssistant.Content.OfString.Value
-	case lastMessage.OfTool != nil:
-		return lastMessage.OfTool.Content.OfString.Value
-	case lastMessage.OfUser != nil:
-		return lastMessage.OfUser.Content.OfString.Value
+	case message.OfAssistant != nil:
+		return message.OfAssistant.Content.OfString.Value
+	case message.OfTool != nil:
+		return message.OfTool.Content.OfString.Value
+	case message.OfUser != nil:
+		return message.OfUser.Content.OfString.Value
 	default:
-		logf.Log.Info("unknown last message type", "message", lastMessage)
+		// Extract message content for error reporting
+		var messageContent string
+		if message.OfAssistant != nil {
+			messageContent = message.OfAssistant.Content.OfString.Value
+		} else if message.OfTool != nil {
+			messageContent = message.OfTool.Content.OfString.Value
+		} else if message.OfUser != nil {
+			messageContent = message.OfUser.Content.OfString.Value
+		} else {
+			messageContent = "unknown message structure"
+		}
+		
+		logf.Log.Error(fmt.Errorf("LLMResponseMalformed"), "Unable to parse message content to text", 
+			"messageContent", messageContent, "message", message)
 		return ""
 	}
 }

@@ -1,0 +1,280 @@
+import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { queriesService } from "@/lib/services/queries"
+import { ResponseViewer } from "@/components/query-fields/ResponseViewer"
+import { getResourceEventsUrl } from "@/lib/utils/events"
+import { ExternalLink, Search, Filter, Plus } from "lucide-react"
+
+
+// Extended type to handle the responses array properly
+interface ExtendedQueryDetailResponse {
+  name?: string
+  namespace?: string
+  input?: string
+  targets?: Array<{
+    name: string
+    type: string
+  }>
+  parameters?: unknown[]
+  memory?: string
+  ttl?: string
+  timeout?: string
+  selector?: unknown
+  evaluators?: unknown[]
+  evaluatorSelector?: unknown
+  serviceAccount?: string
+  sessionId?: string
+  cancel?: boolean
+  creationTimestamp?: string
+  status?: {
+    phase?: string
+    responses?: Array<{
+      target?: {
+        type: string
+        name: string
+      }
+      content?: string
+      raw?: string
+      [k: string]: unknown
+    }>
+    evaluations?: Array<{
+      evaluatorName?: string
+      [k: string]: unknown
+    }>
+    tokenUsage?: {
+      promptTokens?: number
+      completionTokens?: number
+    }
+    duration?: string
+  } | null
+  [k: string]: unknown
+}
+
+interface QueriesSectionProps {
+  namespace: string
+}
+
+export function QueriesSection({ namespace }: QueriesSectionProps) {
+  const router = useRouter()
+  const [queries, setQueries] = useState<ExtendedQueryDetailResponse[]>([])
+  const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [filterPhase, setFilterPhase] = useState<string>("all")
+
+  const loadQueries = useCallback(async () => {
+    try {
+      setLoading(true)
+      const response = await queriesService.list(namespace)
+      // Type assertion to handle the API response properly
+      setQueries((response.items as ExtendedQueryDetailResponse[]) || [])
+    } catch (error) {
+      console.error("Failed to load queries:", error)
+    } finally {
+      setLoading(false)
+    }
+  }, [namespace])
+
+  useEffect(() => {
+    loadQueries()
+  }, [loadQueries])
+
+  const filteredQueries = queries.filter(query => {
+    const matchesSearch = query.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         query.input?.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesPhase = filterPhase === "all" || query.status?.phase === filterPhase
+    return matchesSearch && matchesPhase
+  })
+
+  const getPhaseColor = (phase?: string) => {
+    switch (phase) {
+      case "done": return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+      case "running": return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+      case "error": return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+      case "pending": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+      default: return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
+    }
+  }
+
+  const getResponse = (query: ExtendedQueryDetailResponse) => {
+    if (!query.status?.responses || query.status.responses.length === 0) {
+      return null
+    }
+    return query.status.responses[0]
+  }
+
+  const cleanUserInput = (input: string): string => {
+    if (input.toLowerCase().startsWith('user:')) {
+      return input.substring(5).trim()
+    }
+    return input
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-muted-foreground">Loading queries...</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Queries</h2>
+          <p className="text-muted-foreground">
+            Manage and monitor your query executions
+          </p>
+        </div>
+        <Button onClick={() => router.push(`/query/new?namespace=${namespace}`)}>
+          <Plus className="mr-2 h-4 w-4" />
+          New Query
+        </Button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-4">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+          <Input
+            placeholder="Search queries..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <select
+            value={filterPhase}
+            onChange={(e) => setFilterPhase(e.target.value)}
+            className="px-3 py-2 border rounded-md text-sm"
+          >
+            <option value="all">All Phases</option>
+            <option value="pending">Pending</option>
+            <option value="running">Running</option>
+            <option value="done">Done</option>
+            <option value="error">Error</option>
+          </select>
+        </div>
+      </div>
+
+      {/* View Toggle */}
+      <div className="flex justify-end mb-4">
+        <ToggleSwitch
+          options={viewOptions}
+          onToggle={(option) => setShowCompactView(option.id === "compact")}
+        />
+      </div>      {/* Queries List */}
+      <div className="grid gap-4">
+        {filteredQueries.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <div className="text-muted-foreground text-center">
+                {searchTerm || filterPhase !== "all" 
+                  ? "No queries match your filters" 
+                  : "No queries found"
+                }
+              </div>
+              {!searchTerm && filterPhase === "all" && (
+                <Button 
+                  className="mt-4" 
+                  onClick={() => router.push(`/query/new?namespace=${namespace}`)}
+                >
+                  Create your first query
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          filteredQueries.map((query) => {
+            const response = getResponse(query)
+            return (
+              <Card key={query.name} className="hover:shadow-md transition-shadow">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <CardTitle className="text-lg">{query.name}</CardTitle>
+                      <Badge className={getPhaseColor(query.status?.phase)}>
+                        {query.status?.phase || "unknown"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(getResourceEventsUrl(namespace, 'Query', query.name || ''), '_blank')}
+                        className="flex items-center gap-1"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Events
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.push(`/query/${query.name}?namespace=${namespace}`)}
+                      >
+                        View Details
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-4">
+                    {/* Input */}
+                    <div>
+                      <div className="text-sm font-medium text-muted-foreground mb-1">Input</div>
+                      <div className="text-sm bg-gray-50 dark:bg-gray-900 rounded p-2 font-mono">
+                        {cleanUserInput(query.input || "No input")}
+                      </div>
+                    </div>
+
+                    {/* Output */}
+                    {response && (
+                      <div>
+                        <div className="text-sm font-medium text-muted-foreground mb-1">Output</div>
+                        <div className="border rounded">
+                          <ResponseViewer 
+                            response={{
+                              content: response.content || "No content",
+                              raw: response.raw,
+                              target: {
+                                name: response.target?.name || "unknown",
+                                type: response.target?.type || "unknown"
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Metadata */}
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>Targets: {query.targets?.length || 0}</span>
+                      <span>Responses: {query.status?.responses?.length || 0}</span>
+                      {query.status?.tokenUsage && (
+                        <span>
+                          Tokens: {query.status.tokenUsage.promptTokens || 0} / {query.status.tokenUsage.completionTokens || 0}
+                        </span>
+                      )}
+                      {query.creationTimestamp && (
+                        <span>
+                          Created: {new Date(query.creationTimestamp).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })
+        )}
+      </div>
+    </div>
+  )
+}
