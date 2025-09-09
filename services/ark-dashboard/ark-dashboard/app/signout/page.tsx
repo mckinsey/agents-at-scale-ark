@@ -2,19 +2,32 @@
 
 import { useEffect } from "react";
 import { signOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { CheckCircle } from "lucide-react"
+import Link from "next/link"
 
 const LogoutPage = () => {
-  const router = useRouter();
 
   useEffect(() => {
     signOut({ redirect: false });
   }, []);
 
   return (
-    <div>
-      <h1>Logging out...</h1>
-      <button onClick={() => router.push("/")}>back to login page</button>
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="items-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/20">
+            <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+          </div>
+          <CardTitle className="text-2xl font-semibold">You&apos;ve been signed out</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Button asChild className="w-full">
+            <Link href="/">Return to Sign In</Link>
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 };

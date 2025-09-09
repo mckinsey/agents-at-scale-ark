@@ -1,14 +1,9 @@
 import type { Metadata } from "next";
 
 import "./globals.css";
-import ChatManager from "@/components/chat-manager";
-import { ChatProvider } from "@/lib/chat-context";
-import { Toaster } from "@/components/ui/toaster";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
 import localFont from "next/font/local";
 import { auth } from "@/auth";
-import { UserProvider } from "@/providers/UserProvider";
+import { SessionProvider } from "next-auth/react";
 
 const geistSans = localFont({
   src: [
@@ -56,23 +51,16 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await auth();
+  const session = await auth()
 
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <UserProvider user={session?.user}>
-          <ChatProvider>
-            <SidebarProvider>
-              <AppSidebar />
-              <SidebarInset>{children}</SidebarInset>
-            </SidebarProvider>
-            <ChatManager />
-            <Toaster />
-          </ChatProvider>
-        </UserProvider>
+        <SessionProvider session={session}>
+          {children}
+        </SessionProvider>
       </body>
     </html>
   );
