@@ -12,21 +12,21 @@ app:
     repository: ark-dashboard
     tag: latest
     pullPolicy: IfNotPresent
+
+  # Well-known config variables, usually set as environment variables
+  config:
+    nodeEnv: "production"
+    port: "3000"
+    hostname: "0.0.0.0"
+    arkApiService:
+      host: "ark-api.default.svc.cluster.local"
+      port: "80"
+      protocol: "http"
   
-  # Environment variables
-  env:
-    - name: NODE_ENV
-      value: "production"
-    - name: PORT
-      value: "3000"
-    - name: HOSTNAME
-      value: "0.0.0.0"
-    - name: ARK_API_SERVICE_HOST
-      value: "ark-api.default.svc.cluster.local"
-    - name: ARK_API_SERVICE_PORT
-      value: "80"
-    - name: ARK_API_SERVICE_PROTOCOL
-      value: "http"
+  # Other environment variables
+  env: {}
+    # - name: EXAMPLE_KEY
+    #   value: "example value"
   
   # Optional: Import entire secrets/configmaps as env vars
   # envFrom:

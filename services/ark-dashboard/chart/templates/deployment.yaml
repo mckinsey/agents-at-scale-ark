@@ -23,7 +23,6 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-    spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ default "default" .Values.serviceAccount.name }}
       {{- end }}
@@ -34,8 +33,20 @@ spec:
         imagePullPolicy: {{ .Values.app.image.pullPolicy }}
         ports:
         - containerPort: {{ .Values.service.targetPort }}
-        {{- if .Values.app.env }}
         env:
+          - name: NODE_ENV
+            value: {{ required "app.config.nodeEnv is required" .Values.app.config.nodeEnv | quote }}
+          - name: PORT
+            value: {{ required "app.config.port is required" .Values.app.config.port | quote }}
+          - name: HOSTNAME
+            value: {{ required "app.config.hostname is required" .Values.app.config.hostname | quote }}
+          - name: ARK_API_SERVICE_HOST
+            value: {{ required "app.config.arkApiService.host is required" .Values.app.config.arkApiService.host | quote }}
+          - name: ARK_API_SERVICE_PORT
+            value: {{ required "app.config.arkApiService.port is required" .Values.app.config.arkApiService.port | quote }}
+          - name: ARK_API_SERVICE_PROTOCOL
+            value: {{ required "app.config.arkApiService.protocol is required" .Values.app.config.arkApiService.protocol | quote }}
+          {{- if .Values.app.env }}
           {{- range .Values.app.env }}
           - name: {{ .name }}
             {{- if .value }}
@@ -45,7 +56,7 @@ spec:
               {{- toYaml .valueFrom | nindent 14 }}
             {{- end }}
           {{- end }}
-        {{- end }}
+          {{- end }}
         {{- if .Values.app.envFrom }}
         envFrom:
           {{- toYaml .Values.app.envFrom | nindent 10 }}
