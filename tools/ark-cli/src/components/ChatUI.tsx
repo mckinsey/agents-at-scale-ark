@@ -6,7 +6,7 @@ import * as React from 'react';
 import { marked } from 'marked';
 // @ts-ignore - no types available
 import TerminalRenderer from 'marked-terminal';
-import { ChatClient, QueryTarget } from '../lib/chatClient.js';
+import { ChatClient, QueryTarget, ChatConfig } from '../lib/chatClient.js';
 
 interface Message {
   role: 'user' | 'assistant' | 'system';
@@ -46,7 +46,12 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
   const [targetIndex, setTargetIndex] = React.useState(0);
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
   const [showCommands, setShowCommands] = React.useState(false);
-  const [streamingEnabled, setStreamingEnabled] = React.useState(process.env.ARK_ENABLE_STREAMING === '1');
+  
+  // Initialize chat config from environment variable
+  const [chatConfig, setChatConfig] = React.useState<ChatConfig>({
+    streamingEnabled: process.env.ARK_ENABLE_STREAMING === '1',
+    currentTarget: undefined
+  });
   
   const chatClientRef = React.useRef<ChatClient | undefined>(undefined);
 
@@ -68,6 +73,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
           if (matchedTarget) {
             setTarget(matchedTarget);
             setTargetIndex(matchedIndex >= 0 ? matchedIndex : 0);
+            setChatConfig(prev => ({ ...prev, currentTarget: matchedTarget }));
             setMessages([]);
           } else {
             // If target not found, show error and exit
@@ -99,6 +105,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
           if (selectedTarget) {
             setTarget(selectedTarget);
             setTargetIndex(selectedIndex);
+            setChatConfig(prev => ({ ...prev, currentTarget: selectedTarget }));
             setMessages([]);
           } else {
             setError('No targets available');
@@ -128,6 +135,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
       
       setTargetIndex(nextIndex);
       setTarget(nextTarget);
+      setChatConfig(prev => ({ ...prev, currentTarget: nextTarget }));
     }
     
     // Esc to cancel current request
@@ -161,8 +169,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
       if (arg === 'on' || arg === 'off') {
         // Set streaming based on argument
         const newState = arg === 'on';
-        setStreamingEnabled(newState);
-        process.env.ARK_ENABLE_STREAMING = newState ? '1' : '0';
+        setChatConfig(prev => ({ ...prev, streamingEnabled: newState }));
         
         // Add system message to show the change
         const systemMessage: Message = {
@@ -227,6 +234,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
       const fullResponse = await chatClientRef.current.sendMessage(
         target.id,
         apiMessages,
+        chatConfig,
         (chunk: string) => {
           // Update the assistant's message progressively as chunks arrive
           setMessages((prev) => {
@@ -415,7 +423,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
           <Box marginLeft={1} marginTop={1} flexDirection="column">
             <Box>
               <Text color="cyan">/streaming</Text>
-              <Text color="gray">  Toggle streaming mode ({streamingEnabled ? 'on' : 'off'})</Text>
+              <Text color="gray">  Toggle streaming mode ({chatConfig.streamingEnabled ? 'on' : 'off'})</Text>
             </Box>
           </Box>
         )}

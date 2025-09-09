@@ -8,8 +8,10 @@ export interface QueryTarget {
   description?: string;
 }
 
-// Check if streaming is enabled via environment variable (default: disabled)
-const ENABLE_STREAMING = process.env.ARK_ENABLE_STREAMING === '1';
+export interface ChatConfig {
+  streamingEnabled: boolean;
+  currentTarget?: QueryTarget;
+}
 
 export class ChatClient {
   private openai?: OpenAI;
@@ -74,6 +76,7 @@ export class ChatClient {
   async sendMessage(
     targetId: string,
     messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
+    config: ChatConfig,
     onChunk?: (chunk: string) => void,
     signal?: AbortSignal
   ): Promise<string> {
@@ -82,8 +85,8 @@ export class ChatClient {
     }
 
     try {
-      // Use streaming if enabled and onChunk is provided
-      const shouldStream = ENABLE_STREAMING && !!onChunk;
+      // Use streaming from config
+      const shouldStream = config.streamingEnabled && !!onChunk;
       
       const completion = await this.openai!.chat.completions.create({
         model: targetId,
