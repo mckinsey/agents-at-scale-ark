@@ -154,19 +154,33 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
     if (!value.trim() || !target || !chatClientRef.current) return;
     
     // Check for slash commands
-    if (value === '/streaming') {
-      // Toggle streaming
-      const newState = !streamingEnabled;
-      setStreamingEnabled(newState);
-      process.env.ARK_ENABLE_STREAMING = newState ? '1' : '0';
+    if (value.startsWith('/streaming')) {
+      const parts = value.split(' ');
+      const arg = parts[1]?.toLowerCase();
       
-      // Add system message to show the change
-      const systemMessage: Message = {
-        role: 'system',
-        content: `Streaming ${newState ? 'enabled' : 'disabled'}`,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, systemMessage]);
+      if (arg === 'on' || arg === 'off') {
+        // Set streaming based on argument
+        const newState = arg === 'on';
+        setStreamingEnabled(newState);
+        process.env.ARK_ENABLE_STREAMING = newState ? '1' : '0';
+        
+        // Add system message to show the change
+        const systemMessage: Message = {
+          role: 'system',
+          content: `Streaming ${newState ? 'enabled' : 'disabled'}`,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, systemMessage]);
+      } else {
+        // Show usage message
+        const systemMessage: Message = {
+          role: 'system',
+          content: `Streaming: use either 'on' or 'off' e.g. /streaming on`,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, systemMessage]);
+      }
+      
       setInput('');
       return;
     }
@@ -386,24 +400,27 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
           <Box marginLeft={1} marginTop={1} flexDirection="column">
             <Box>
               <Text color="cyan">/streaming</Text>
-              <Text color="gray">  Toggle streaming mode (currently {streamingEnabled ? 'on' : 'off'})</Text>
+              <Text color="gray">  Toggle streaming mode ({streamingEnabled ? 'on' : 'off'})</Text>
             </Box>
           </Box>
         )}
         
-        <Box marginLeft={1} marginTop={0}>
-          <Box flexDirection="row">
-            {target && (
-              <>
-                <Text color="gray">⏵⏵ Chatting with </Text>
-                <Text color="gray">{target.type} </Text>
-                <Text color="green">{target.name}</Text>
-                <Text color="gray"> • Shift+Tab to cycle • </Text>
-              </>
-            )}
-            <Text color="gray">Ctrl+C to exit</Text>
+        {/* Status bar - only show when menu is not open */}
+        {!showCommands && (
+          <Box marginLeft={1} marginTop={0}>
+            <Box flexDirection="row">
+              {target && (
+                <>
+                  <Text color="gray">Chatting with </Text>
+                  <Text color="gray">{target.type} </Text>
+                  <Text color="green">{target.name}</Text>
+                  <Text color="gray"> • Shift+Tab to cycle • </Text>
+                </>
+              )}
+              <Text color="gray">Ctrl+C to exit</Text>
+            </Box>
           </Box>
-        </Box>
+        )}
       </Box>
     </Box>
   );
