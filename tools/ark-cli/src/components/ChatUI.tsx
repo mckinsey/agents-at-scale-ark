@@ -175,7 +175,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
         // Show usage message
         const systemMessage: Message = {
           role: 'system',
-          content: `Streaming: use either 'on' or 'off' e.g. /streaming on`,
+          content: `Use either 'on' or 'off' e.g. /streaming on`,
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, systemMessage]);
@@ -292,8 +292,23 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
     const hasError = isAssistant && (msg.content.startsWith('Error:') || msg.content === 'No response received');
     const isCancelled = msg.cancelled === true;
     
-    // Don't render system messages separately anymore
+    // Render system messages with special formatting
     if (isSystem) {
+      // Check if this is a slash command response
+      const isSlashCommand = msg.content.includes('/streaming') || msg.content.startsWith('Streaming:') || msg.content.startsWith('Streaming ');
+      
+      if (isSlashCommand) {
+        return (
+          <Box key={index} flexDirection="column" marginBottom={1}>
+            <Box>
+              <Text color="gray">› /streaming</Text>
+            </Box>
+            <Box marginLeft={2}>
+              <Text color="gray">⎿  {msg.content}</Text>
+            </Box>
+          </Box>
+        );
+      }
       return null;
     }
     
