@@ -2895,6 +2895,8 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
+            /** Type */
+            type: string;
         };
         /** TopLogprob */
         TopLogprob: {

@@ -9,6 +9,7 @@ class ToolResponse(BaseModel):
     description: Optional[str] = None
     labels: Optional[Dict[str, str]] = None
     annotations: Optional[Dict[str, str]] = None
+    type: Optional[str] = None
 
 
 class ToolListResponse(BaseModel):
@@ -47,6 +48,7 @@ class ToolSpec(BaseModel):
     parameters: Optional[List[ToolParameter]] = None
     type: str
     http: Optional[Dict[str, str]] = None
+    agent: Optional[Dict[str, str]] = None
 
 
 class ToolCreateRequest(BaseModel):

@@ -33,7 +33,8 @@ def tool_to_response(tool: dict) -> ToolResponse:
         namespace=metadata.get("namespace", ""),
         description=spec.get("description"),
         labels=metadata.get("labels"),
-        annotations=metadata.get("annotations")
+        annotations=metadata.get("annotations"),
+        type=spec.get("type")
     )
 
 
