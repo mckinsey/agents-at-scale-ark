@@ -144,14 +144,23 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
       setAbortController(null);
       setIsTyping(false);
       
-      // Update the last message to show it was cancelled
+      // Mark the assistant message as cancelled and add system message
       setMessages((prev) => {
         const newMessages = [...prev];
         const lastMessage = newMessages[newMessages.length - 1];
-        if (lastMessage && lastMessage.role === 'assistant' && !lastMessage.content) {
-          lastMessage.content = 'Interrupted by user';
+        if (lastMessage && lastMessage.role === 'assistant') {
           lastMessage.cancelled = true;
+          // Remove the message if it has no content
+          if (!lastMessage.content) {
+            newMessages.pop();
+          }
         }
+        // Add system message about interruption
+        newMessages.push({
+          role: 'system',
+          content: 'Interrupted by user',
+          timestamp: new Date(),
+        });
         return newMessages;
       });
     }
@@ -304,6 +313,7 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
     if (isSystem) {
       // Check if this is a slash command response
       const isSlashCommand = msg.content.includes('/streaming') || msg.content.startsWith('Streaming:') || msg.content.startsWith('Streaming ');
+      const isInterruption = msg.content === 'Interrupted by user';
       
       if (isSlashCommand) {
         return (
@@ -313,6 +323,14 @@ const ChatUI: React.FC<ChatUIProps> = ({ initialTargetId }) => {
             </Box>
             <Box marginLeft={2}>
               <Text color="gray">⎿  {msg.content}</Text>
+            </Box>
+          </Box>
+        );
+      } else if (isInterruption) {
+        return (
+          <Box key={index} flexDirection="column" marginBottom={1}>
+            <Box marginLeft={2}>
+              <Text color="yellow">⎿  {msg.content}</Text>
             </Box>
           </Box>
         );
