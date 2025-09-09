@@ -3,12 +3,12 @@ import type { OktaProfile } from "@auth/core/providers/okta";
 import type { OAuthUserConfig, OIDCConfig } from "@auth/core/providers";
 
 export function createOIDCProvider<TP extends OktaProfile>(
-  options: OAuthUserConfig<TP> & {name: string, id: string}
+  options: OAuthUserConfig<TP> & { name: string, id: string }
 ): OIDCConfig<TP> {
   return {
     type: "oidc",
     wellKnown: `${options.issuer}/.well-known/openid-configuration`,
-    authorization: { params: { scope: "openid email profile offline_access" } },
+    authorization: { params: { scope: "openid email profile" } },
     checks: ["pkce", "state"],
     ...options
   };

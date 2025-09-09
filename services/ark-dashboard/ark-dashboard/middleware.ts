@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import { auth } from "./auth";
 import type { Session } from "next-auth";
 import { getToken } from "next-auth/jwt";
-import { SESSION_TOKEN } from './lib/constants/auth';
+import { COOKIE_SESSION_TOKEN } from './lib/constants/auth';
 
 async function middleware(request: NextRequest) {
   // Get the base path from environment (no default)
@@ -17,7 +17,7 @@ async function middleware(request: NextRequest) {
     const token = await getToken({
       req: request,
       secret: process.env.AUTH_SECRET,
-      cookieName: SESSION_TOKEN
+      cookieName: COOKIE_SESSION_TOKEN
     })
     // Read environment variables at runtime
     const host = process.env.ARK_API_SERVICE_HOST || 'localhost';

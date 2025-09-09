@@ -1,5 +1,5 @@
-import { SESSION_TOKEN } from "@/lib/auth/auth-config";
 import { openidConfigManager } from "@/lib/auth/openid-config-manager";
+import { COOKIE_SESSION_TOKEN } from "@/lib/constants/auth";
 import { getToken } from "next-auth/jwt";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   const token = await getToken({
     req: request,
     secret: process.env.AUTH_SECRET,
-    cookieName: SESSION_TOKEN
+    cookieName: COOKIE_SESSION_TOKEN
   })
 
   const baseURL = process.env.FRONTEND_BASE_URL || request.nextUrl.origin;
@@ -21,9 +21,9 @@ export async function GET(request: NextRequest) {
   const fallbackEndpoint = `${process.env.OIDC_ISSUER_URL}/oidc/logout`;
 
   if (!openidConfig.end_session_endpoint) {
-    console.error('Unable to retrieve end session endpoint from OIDC provider');
+    console.warn('Unable to retrieve end session endpoint from OIDC provider');
     // Fallback to the configured issuer with a common logout path
-    console.log('Using fallback endpoint:', fallbackEndpoint);
+    console.warn('Using fallback endpoint:', fallbackEndpoint);
   }
       
   const endpoint = openidConfig.end_session_endpoint || fallbackEndpoint;

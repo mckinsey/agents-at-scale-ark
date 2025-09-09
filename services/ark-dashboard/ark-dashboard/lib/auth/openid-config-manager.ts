@@ -1,4 +1,4 @@
-interface OIDCWellKnownConfig {
+type OIDCWellKnownConfig = {
   token_endpoint?: string;
   end_session_endpoint?: string;
 }
@@ -13,7 +13,6 @@ class OpenidConfigManager {
   }
 
   async getConfig() {
-    console.log('this.config', this.config)
     if (this.config) {
       return this.config;
     }

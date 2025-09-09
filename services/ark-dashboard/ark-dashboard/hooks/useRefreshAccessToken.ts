@@ -35,11 +35,11 @@ export function useRefreshAccessToken() {
 
       if (result && "error" in result && result.error) {
         console.error("[useRefreshAccessToken] Session update failed:", result.error);
-        redirect('/api/signin', RedirectType.replace)
+        redirect('/api/auth/signin', RedirectType.replace)
       }
     } catch (error) {
       console.error("[useRefreshAccessToken] Session update error:", error);
-      redirect('/api/signin', RedirectType.replace)
+      redirect('/api/auth/signin', RedirectType.replace)
     } finally {
       isUpdatingRef.current = false;
       setIsUpdating(false);

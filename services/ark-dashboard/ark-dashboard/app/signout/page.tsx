@@ -7,8 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle } from "lucide-react"
 import Link from "next/link"
 
-const LogoutPage = () => {
-
+export default function LogoutPage() {
   useEffect(() => {
     signOut({ redirect: false });
   }, []);
@@ -31,5 +30,3 @@ const LogoutPage = () => {
     </div>
   );
 };
-
-export default LogoutPage;

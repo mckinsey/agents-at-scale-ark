@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useAutoSignout } from "@/hooks/useAutoSignout";
-import { useRefreshAccessToken } from "@/hooks/useSession";
+import { useRefreshAccessToken } from "@/hooks/useRefreshAccessToken";
 
 export default function DashboardLayout({
   children
