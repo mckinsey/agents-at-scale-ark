@@ -3,7 +3,7 @@ name: hosted-langchain-agents
 description: Hosted LangChain agents sample with A2A server integration
 type: application
 version: 0.1.0
-appVersion: 0.1.32
+appVersion: 0.1.33
 annotations:
   ark.mckinsey.com/service: hosted-langchain-agents
   ark.mckinsey.com/resources: service,a2aserver

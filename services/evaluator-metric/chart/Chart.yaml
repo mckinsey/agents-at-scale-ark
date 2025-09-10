@@ -4,7 +4,7 @@ description: >-
   Evaluation service specially built to assert deterministic KPIs such as token
   consumption, performance.
 type: application
-version: 0.1.32
+version: 0.1.33
 appVersion: 0.1.17
 keywords:
   - evaluator
