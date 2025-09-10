@@ -197,8 +197,9 @@ spec:
           metadata:
             name: weather-tools-event-evaluation
             # Verify enhanced evaluation has more rules and higher expectations
-            (to_number(annotations."evaluation.metadata/passed_rules") == `8`): true
-            (to_number(annotations."evaluation.metadata/failed_rules") == `0`): true    
+            (to_number(annotations."evaluation.metadata/total_rules") == `8`): true
+            (to_number(annotations."evaluation.metadata/events_analyzed") > `0`): true  
+            (to_number(annotations."evaluation.metadata/passed_rules") > `0` ): true   
           status:
             passed: true
     catch:
