@@ -47,12 +47,9 @@ kubectl port-forward -n default svc/ark-dashboard 3000:3000
 ```
 
 ## Live reload behavior
-- Dashboard (Next.js): hot reloads on save
-- API (FastAPI): hot reloads on save
-- Controller (Go): does NOT auto-reload
-  - Restart options:
-    - Stop & start DevSpace: `devspace stop && devspace dev`
-    - Or restart the controller pod: `kubectl delete pod -n ark-system -l app=ark-controller`
+- `ark-dashboard`: hot reloads on save
+- `ark-api`: hot reloads on save  
+- `ark-controller`: restarts container on save
 
 ## When you change CRDs
 ```bash

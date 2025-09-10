@@ -15,11 +15,16 @@ hooks:
 pipelines:
   # 'devspace deploy' - Build and deploy production images
   deploy: |-
+    # Deploy any dependencies.
+    run_dependency_pipelines --all
+    # Build the ark controller and ark service images.
     build_images --all
+    # Deploy the ark controller and services.
     create_deployments --all
 
   # 'devspace dev' - DevSpace recommended dev workflow: deploy production, override with dev images, file sync
   dev: |-
+    run_dependency_pipelines --all
     create_deployments --all
     start_dev --all
 
@@ -36,7 +41,7 @@ images:
     context: ./services/ark-dashboard
 
   ark-controller:
-    image: controller
+    image: ark-controller
     dockerfile: ./ark/Dockerfile
     context: ./ark
 
@@ -113,21 +118,18 @@ dev:
       [
         "sh",
         "-c",
-        "cd /app && apt-get update && apt-get install -y curl && curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash && pip install uv && uv add file://$(ls out/ark_sdk-*.whl) && uv sync && uv run uvicorn ark_api.main:app --host 0.0.0.0 --port 8000 --reload",
+        "cd /app/ark-api && apt-get update && apt-get install -y curl && curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash && pip install uv && uv add file://$(ls out/ark_sdk-*.whl) && uv sync && uv run uvicorn ark_api.main:app --host 0.0.0.0 --port 8000 --reload",
       ]
     namespace: default
     # Stream logs instead of terminal
     logs:
       lastLines: 50
-    # File synchronization for hot reload - pyproject.toml excluded from back-sync after uv add modifies it
+    # File synchronization for hot reload
     sync:
-      - path: ./services/ark-api/ark-api:/app
+      - path: ./services/ark-api:/app
         startContainer: true
         disableDownload: true
-        excludePaths:
-          - .venv
-          - __pycache__/
-          - "*.pyc"
+        uploadExcludeFile: .dockerignore
       - path: ./ark:/workspace
         excludePaths:
           - bin/
@@ -138,27 +140,21 @@ dev:
       enabled: true
 
   ark-controller:
-    imageSelector: controller
+    imageSelector: ark-controller
     devImage: golang:1.24-bookworm
     command:
-      ["sh", "-c", "cd /workspace && go run cmd/main.go --leader-elect=false"]
+      ["sh", "-c", "cd /app && go run cmd/main.go --leader-elect=false"]
     namespace: ark-system
-    # Stream logs instead of terminal
     logs:
       lastLines: 50
     # File synchronization for hot reload
     sync:
-      - path: ./ark:/workspace
+      - path: ./ark:/app
         startContainer: true
         disableDownload: true
-        excludePaths:
-          - bin/
-          - out/
-          - .git/
-          - "*.log"
-    # Restart container when Go files change so that the code is recompiled
-    # restartHelper:
-    #   inject: true
+        uploadExcludeFile: .dockerignore
+        onUpload:
+          restartContainer: true
     # Enable SSH for IDE integration
     ssh:
       enabled: true
@@ -170,7 +166,7 @@ dev:
       [
         "sh",
         "-c",
-        "cd /app && npm install -g pnpm && pnpm install && pnpm run dev",
+        "cd /app/ark-dashboard && npm install -g pnpm && pnpm install && pnpm run dev",
       ]
     namespace: default
     # Stream logs instead of terminal
@@ -178,14 +174,10 @@ dev:
       lastLines: 50
     # File synchronization for hot reload
     sync:
-      - path: ./services/ark-dashboard/ark-dashboard:/app
+      - path: ./services/ark-dashboard:/app
         startContainer: true
         disableDownload: true
-        excludePaths:
-          - node_modules/
-          - .next/
-          - .git/
-          - "*.log"
+        uploadExcludeFile: .dockerignore
     # Enable SSH for IDE integration
     ssh:
       enabled: true
