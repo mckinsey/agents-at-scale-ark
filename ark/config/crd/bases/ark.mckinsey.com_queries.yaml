@@ -329,9 +329,7 @@ spec:
                 type: string
               responses:
                 items:
-                  description: |-
-                    Response defines a response from a query target.
-                    Deprecated: Response is deprecated and will likely be replaced in the future.
+                  description: Response defines a response from a query target.
                   properties:
                     content:
                       type: string

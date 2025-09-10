@@ -24,8 +24,6 @@ export const queriesService = {
     return response;
   },
 
-  // NEW: raw-aware getter (optional)
-
   async create(
     namespace: string,
     query: QueryCreateRequest

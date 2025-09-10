@@ -433,20 +433,10 @@ func messageToText(message genai.Message) string {
 	case message.OfUser != nil:
 		return message.OfUser.Content.OfString.Value
 	default:
-		// Extract message content for error reporting
-		var messageContent string
-		if message.OfAssistant != nil {
-			messageContent = message.OfAssistant.Content.OfString.Value
-		} else if message.OfTool != nil {
-			messageContent = message.OfTool.Content.OfString.Value
-		} else if message.OfUser != nil {
-			messageContent = message.OfUser.Content.OfString.Value
-		} else {
-			messageContent = "unknown message structure"
-		}
-		
-		logf.Log.Error(fmt.Errorf("LLMResponseMalformed"), "Unable to parse message content to text", 
-			"messageContent", messageContent, "message", message)
+		logf.Log.Error(fmt.Errorf("LLMResponseMalformed"),
+			"Unable to parse message content to text",
+			"messageContent", "unknown message structure",
+			"message", message)
 		return ""
 	}
 }
