@@ -53,7 +53,7 @@ $(EXECUTOR_LANGCHAIN_STAMP_INSTALL): $(EXECUTOR_LANGCHAIN_STAMP_BUILD)
 	cp $(ARK_EXECUTOR_COMMON_WHL) $(EXECUTOR_LANGCHAIN_SERVICE_DIR)/build-context/
 	./scripts/build-and-push.sh -i $(LANGCHAIN_IMAGE) -t $(LANGCHAIN_TAG) -f $(EXECUTOR_LANGCHAIN_SERVICE_DIR)/Dockerfile -c $(EXECUTOR_LANGCHAIN_SERVICE_DIR)
 	@rm -rf $(EXECUTOR_LANGCHAIN_SERVICE_DIR)/build-context
-	cd $(EXECUTOR_LANGCHAIN_SERVICE_DIR) && helm upgrade --install executor-langchain ./chart -n $(LANGCHAIN_NAMESPACE) --create-namespace --set app.image.tag=$(LANGCHAIN_TAG)
+	cd $(EXECUTOR_LANGCHAIN_SERVICE_DIR) && helm upgrade --install executor-langchain ./chart -n $(LANGCHAIN_NAMESPACE) --create-namespace --set image.repository=$(LANGCHAIN_IMAGE) --set image.tag=$(LANGCHAIN_TAG)
 	@touch $@
 
 # Dev target dependencies - prepare local environment  

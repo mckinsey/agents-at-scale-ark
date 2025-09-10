@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: evaluator-metric
+  repository: ghcr.io/mckinsey/agents-at-scale-ark/evaluator-metric
   pullPolicy: IfNotPresent
   tag: "latest"
 

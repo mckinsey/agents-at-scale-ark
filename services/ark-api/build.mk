@@ -86,6 +86,7 @@ $(ARK_API_STAMP_INSTALL): $(ARK_API_STAMP_BUILD) $$(LOCALHOST_GATEWAY_STAMP_INST
 	helm upgrade --install $(ARK_API_SERVICE_NAME) $(ARK_API_SERVICE_DIR)/chart \
 		--namespace $(ARK_API_NAMESPACE) \
 		--create-namespace \
+		--set app.image.repository=$(ARK_API_IMAGE) \
 		--set app.image.tag=$(ARK_API_TAG) \
 		--wait \
 		--timeout=5m

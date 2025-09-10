@@ -2,7 +2,7 @@
 replicaCount: 1
 
 image:
-  repository: executor-langchain
+  repository: ghcr.io/mckinsey/agents-at-scale-ark/executor-langchain
   pullPolicy: IfNotPresent
   tag: "latest"
 
