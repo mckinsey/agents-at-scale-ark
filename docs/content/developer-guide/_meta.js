@@ -13,5 +13,6 @@ export default {
   'evaluator-llm': 'Evaluator LLM Service',
   testing: 'End-to-End Testing',
   observability: 'Observability',
-  'langchain-execution-engine': 'LangChain Execution Engine'
+  'langchain-execution-engine': 'LangChain Execution Engine',
+  'authentication': 'Authentication'
 }

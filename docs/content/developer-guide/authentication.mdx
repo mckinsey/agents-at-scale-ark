@@ -66,17 +66,6 @@ OIDC_PROVIDER_NAME="Your Provider"                   # Optional: Display name fo
 AUTH_MODE="sso"                                       # Required: "sso" for authentication required, "open" for no authentication
 ```
 
-#### Advanced Configuration
-```bash
-# Backend API Configuration (Optional - for API proxying)
-ARK_API_SERVICE_HOST="localhost"                     # Optional: API server host (default: localhost)
-ARK_API_SERVICE_PORT="8000"                          # Optional: API server port (default: 8000)  
-ARK_API_SERVICE_PROTOCOL="http"                      # Optional: API protocol (default: http)
-
-# Dashboard Base Path (for reverse proxy deployments)
-ARK_DASHBOARD_BASE_PATH="/dashboard"                 # Optional: Base path for dashboard routes
-```
-
 ### Authentication Modes
 
 The `AUTH_MODE` environment variable controls the authentication behavior:
@@ -100,6 +89,8 @@ For example, if your `OIDC_PROVIDER_ID=mid`, the callback URL would be:
 ```
 https://your-domain.com/api/auth/callback/mid
 ```
+
+> **Note**: This callback URL is handled by the `/api/auth/[...nextauth]` catch-all route, which processes the `callback/mid` path segment to identify the provider and complete the OIDC authorization code flow.
 
 #### Logout URIs  
 ```
@@ -226,20 +217,30 @@ headers.set('X-Forwarded-Proto', request.nextUrl.protocol);
 ### Authentication Endpoints
 
 #### `/api/auth/signin`
-Custom signin endpoint that redirects to the configured OIDC provider:
+Custom signin endpoint that overrides the default NextAuth.js signin:
 
 ```typescript
 // GET /api/auth/signin?callbackUrl=/dashboard
-// Redirects to OIDC provider with callback URL preservation
+// Custom implementation that directly redirects to OIDC provider
+// Bypasses NextAuth.js default signin page
 ```
 
-#### `/api/auth/callback/[provider]`
-OIDC callback endpoint managed by NextAuth.js:
+This custom route uses the configured `OIDC_PROVIDER_ID` to redirect users directly to the OIDC provider, preserving the callback URL for post-authentication navigation.
+
+#### `/api/auth/[...nextauth]`
+NextAuth.js catch-all route that handles all authentication endpoints:
 
 ```typescript
-// Handles OIDC authorization code flow
-// Exchanges code for tokens and creates session
+// Handles all auth-related requests including:
+// - /api/auth/signin
+// - /api/auth/callback/{provider}
+// - /api/auth/signout
+// - /api/auth/session
+// - /api/auth/providers
+// - /api/auth/csrf
 ```
+
+This single route exports the GET and POST handlers from the main auth configuration and manages the complete OIDC flow including authorization code exchange and session creation.
 
 #### `/api/auth/federated-signout`
 Implements federated logout with the OIDC provider:
@@ -249,6 +250,10 @@ Implements federated logout with the OIDC provider:
 // Redirects to OIDC provider's end_session_endpoint
 // Includes id_token_hint and post_logout_redirect_uri
 ```
+
+This endpoint performs a complete logout by redirecting to the OIDC provider's `end_session_endpoint` to terminate the session on both the dashboard and the identity provider.
+
+> ⚠️ **OIDC Provider Compatibility Warning**: Some OIDC providers may not properly handle the `end_session_endpoint` call or may not support all the required parameters (`id_token_hint`, `post_logout_redirect_uri`, `client_id`). This can result in sessions getting stuck on the provider side, causing issues with proper signout. See [Federated Logout Issues](#federated-logout-issues) in the troubleshooting section for more details.
 
 ### Authentication Flow
 
@@ -279,31 +284,15 @@ The authentication flow varies based on the `AUTH_MODE` setting:
 - **Backend Isolation**: Access tokens only sent to backend, never exposed to frontend
 
 ### Session Management
-- **Automatic Expiration**: Sessions expire based on OIDC token lifetime
-- **Window Focus Refresh**: Tokens refreshed when user returns to tab
-- **Interval Refresh**: Periodic token refresh (every 10 minutes)
+- **Automatic Expiration**: NextAuth issues encrypted JWT tokens with a 30-minute TTL. Sessions are refreshed during active use but expire after 30 minutes of inactivity
+- **Window Focus Refresh**: JWT refreshed when user returns to tab
+- **Interval Refresh**: Periodic refresh of OIDC access and refresh tokens from the identity provider (every 10 minutes)
 - **Error Handling**: Automatic redirect to signin on token refresh failure
 
 ### Route Protection
 - **Middleware Guards**: All routes protected by authentication middleware
 - **Callback URL Preservation**: Original destination preserved during auth flow
 - **Public Route Exclusions**: Auth routes and static assets excluded from protection
-
-## Deployment Considerations
-
-### Reverse Proxy Configuration
-
-When deploying behind a reverse proxy, configure the base path:
-
-```bash
-ARK_DASHBOARD_BASE_PATH="/dashboard"
-BASE_URL="https://your-external-domain.com"
-```
-
-### HTTPS Requirements
-- OIDC requires HTTPS in production
-- Configure proper SSL certificates
-- Set secure cookie flags for production
 
 ### High Availability
 - Session state stored in JWT cookies (stateless)
@@ -315,7 +304,7 @@ BASE_URL="https://your-external-domain.com"
 ### Common Issues
 
 #### Authentication Loops
-- Verify `NEXTAUTH_URL` matches external domain
+- Verify `AUTH_URL` matches external domain
 - Check OIDC provider redirect URI configuration
 - Ensure `BASE_URL` is set correctly for reverse proxy deployments
 
@@ -324,17 +313,79 @@ BASE_URL="https://your-external-domain.com"
 - Check `OIDC_CLIENT_SECRET` configuration
 - Monitor browser console for refresh errors
 
-#### API Authentication Errors  
-- Verify backend accepts Bearer tokens
-- Check middleware token injection logic
-- Confirm `ARK_API_SERVICE_*` environment variables
+#### Federated Logout Issues
+
+Federated logout can fail when OIDC providers don't properly handle the logout process, causing sessions to remain active on the identity provider side.
+
+##### Symptoms
+- Users appear signed out from the dashboard but remain signed in to the OIDC provider
+- Subsequent signin attempts bypass the login screen due to existing provider session
+- Users cannot fully sign out until provider session expires
+
+##### Understanding OpenID Connect RP-Initiated Logout
+
+OpenID Connect RP-Initiated Logout is a specification that enables complete logout from both the application (ARK Dashboard) and the identity provider.
+
+**Standard vs Federated Logout:**
+
+| Client Side Logout Only | Federated Logout |
+|----------------|------------------|
+| 1. User clicks "Sign Out" | 1. User clicks "Sign Out" |
+| 2. Dashboard clears its session | 2. Dashboard redirects to provider's logout endpoint |
+| 3. User appears logged out | 3. Provider terminates its session |
+| 4. **Provider session remains active** | 4. Provider redirects back to dashboard |
+| 5. Next signin bypasses login screen | 5. **Complete logout from both systems** |
+
+##### Technical Requirements
+
+For federated logout to work properly, the identity provider must:
+
+1. **Expose End Session Endpoint**
+   ```json
+   {
+     "issuer": "https://provider.example.com",
+     "end_session_endpoint": "https://provider.example.com/oidc/logout"
+   }
+   ```
+
+2. **Support Required Parameters**
+   - `id_token_hint` : Helps identify which session to terminate
+   - `post_logout_redirect_uri` : Where to redirect after logout
+   - `client_id`: Application identifier
+
+3. **Example Logout URL**
+   ```
+   https://provider.example.com/oidc/logout?
+     id_token_hint=eyJhbGciOiJSUzI1NiIs...&
+     post_logout_redirect_uri=https://ark-dashboard.com/signout&
+     client_id=ark-dashboard-client
+   ```
+
+##### Common Causes
+- Provider doesn't support the `end_session_endpoint`
+- Provider doesn't handle `id_token_hint` parameter correctly
+- Provider ignores `post_logout_redirect_uri` parameter
+- Incomplete OpenID Connect logout implementation
+
+##### Solutions
+
+1. **Verify Provider Support**
+   Check that your OIDC provider fully supports [OpenID Connect RP-Initiated Logout](https://openid.net/specs/openid-connect-rpinitiated-1_0.html)
+
+2. **Test End Session Endpoint**
+   ```bash
+   curl -v "https://your-provider.com/end_session?id_token_hint=TOKEN&post_logout_redirect_uri=https://your-domain.com/signout"
+   ```
+
+3. **Provider Configuration**
+   Some providers require explicit configuration to enable logout functionality. Check provider-specific documentation for logout setup requirements.
 
 ### Debug Logging
 
-Enable NextAuth.js debug logging:
+Enable NextAuth debug logging:
 
 ```bash
-NEXTAUTH_LOG_LEVEL="debug"
+AUTH_DEBUG=true
 ```
 
 Monitor authentication flow in browser developer tools and server logs.
@@ -380,11 +431,10 @@ OIDC_CLIENT_ID="your-client-id"
 OIDC_CLIENT_SECRET="your-client-secret"
 ```
 
-### Development Mode (No Authentication)
+### No Authentication (Local Development)
 ```bash
 BASE_URL="http://localhost:3000"
 AUTH_URL="http://localhost:3000/api/auth"
-AUTH_SECRET="development-secret-key"
 AUTH_MODE="open"
 # OIDC variables not required in open mode
 ```
