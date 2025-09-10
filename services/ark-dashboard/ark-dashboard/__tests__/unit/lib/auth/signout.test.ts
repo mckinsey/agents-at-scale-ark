@@ -1,11 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { signout } from '@/lib/auth/signout';
 
-// Mock the constants
-vi.mock('@/lib/constants/auth', () => ({
-  FEDERATED_SIGNOUT_PATH: '/api/auth/federated-signout'
-}));
-
 describe('signout', () => {
   const originalHref = window.location.href;
 

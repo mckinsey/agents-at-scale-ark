@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi, afterAll } from 'vitest';
 import { createOIDCProvider } from '@/lib/auth/create-oidc-provider';
 import type { OktaProfile } from "@auth/core/providers/okta";
 
@@ -8,7 +8,7 @@ vi.mock('@/lib/constants/auth', () => ({
 }));
 
 describe('createOIDCProvider', () => {
-  beforeEach(() => {
+  afterAll(() => {
     vi.clearAllMocks();
   });
 
@@ -48,8 +48,7 @@ describe('createOIDCProvider', () => {
       additionalParam: 'test-value'
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const provider = createOIDCProvider(options as any);
+    const provider = createOIDCProvider(options);
 
     expect(provider.clientId).toBe('custom-client');
     expect(provider.name).toBe('Custom Provider');

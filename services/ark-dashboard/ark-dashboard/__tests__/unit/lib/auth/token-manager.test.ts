@@ -221,11 +221,7 @@ describe('TokenManager', () => {
         json: () => Promise.resolve(mockTokenResponse)
       });
 
-      try {
-        await TokenManager.getNewAccessToken(mockToken);
-      } catch {
-        // Expected to fail due to missing env vars
-      }
+      await TokenManager.getNewAccessToken(mockToken);
 
       // Verify the request was made with undefined values which URLSearchParams converts to 'undefined'
       const fetchCall = vi.mocked(fetch).mock.calls[0];

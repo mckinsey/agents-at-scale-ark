@@ -22,7 +22,7 @@ declare module "@auth/core/jwt" {
 }
 
 export type NextRequestWithAuth = NextRequest & {
-  auth: Session
+  auth?: Session | null
 }
 
 const nextAuth = NextAuth(authConfig);

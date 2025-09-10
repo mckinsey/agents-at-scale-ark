@@ -35,13 +35,6 @@ describe('OpenidConfigManager', () => {
     };
 
     it('should handle multiple concurrent calls and return consistent results', async () => {
-      // Ensure clean state for this specific test
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (openidConfigManager as any).config = null;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (openidConfigManager as any).fetchPromise = null;
-      mockFetch.mockClear();
-
       // Use mockResolvedValue to handle multiple potential calls
       mockFetch.mockResolvedValue({
         ok: true,
@@ -142,12 +135,7 @@ describe('OpenidConfigManager', () => {
     it('should reset fetchPromise after failed fetch', async () => {
       mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
-      try {
-        await openidConfigManager.getConfig();
-      } catch {
-        // Expected error
-      }
-
+      await expect(openidConfigManager.getConfig()).rejects.toThrow();
       // Verify fetchPromise is reset to null even after error
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((openidConfigManager as any).fetchPromise).toBeNull();

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextResponse } from 'next/server';
-import middlewareFunction from '@/middleware';
+import middleware from '@/middleware';
 import type { NextRequestWithAuth } from '@/auth';
 
 // Mock NextResponse methods
@@ -46,11 +46,10 @@ describe('middleware default export', () => {
   describe('authentication logic', () => {
     it('should redirect when req.auth is falsy', async () => {
       const request = createMockRequest('/dashboard');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (request as any).auth = null; // Falsy auth
+      request.auth = null; // Falsy auth
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (middlewareFunction as any)(request);
+      await (middleware as any)(request);
 
       expect(NextResponse.redirect).toHaveBeenCalledWith(
         new URL('/api/auth/signin?callbackUrl=https%3A%2F%2Fexample.com%2Fdashboard', 'https://example.com')
@@ -59,13 +58,16 @@ describe('middleware default export', () => {
 
     it('should call middleware function when authenticated', async () => {
       const request = createMockRequest('/dashboard');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (request as any).auth = {
-        user: { id: 'user123', email: 'test@example.com' }
+      request.auth = {
+        user: {
+          id: 'user123',
+          email: 'test@example.com'
+        },
+        expires: ''
       };
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (middlewareFunction as any)(request);
+      await (middleware as any)(request);
 
       // Should proceed normally for authenticated users (calls internal middleware which returns NextResponse.next())
       expect(NextResponse.next).toHaveBeenCalled();
