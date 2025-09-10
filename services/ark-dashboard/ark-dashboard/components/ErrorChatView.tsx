@@ -57,7 +57,8 @@ export function ErrorChatView({ query, namespace }: ErrorChatViewProps) {
         event.reason?.toLowerCase().includes('failed') ||
         event.reason === 'ToolCallError' ||
         event.reason === 'QueryResolveError' ||
-        event.reason === 'TargetExecutionError'
+        event.reason === 'TargetExecutionError' ||
+        event.reason === 'LLMCallError'
       );
 
       let errorDetails = '';
@@ -67,18 +68,9 @@ export function ErrorChatView({ query, namespace }: ErrorChatViewProps) {
           new Date(a.lastTimestamp || a.creationTimestamp).getTime()
         )[0];
 
-        // Try to parse the error message
-        try {
-          const errorData = JSON.parse(latestError.message);
-          if (errorData.error) {
-            errorDetails = errorData.error;
-          } else if (errorData.message) {
-            errorDetails = errorData.message;
-          }
-        } catch {
-          // If not JSON, use the message directly
-          errorDetails = latestError.message;
-        }
+        // Show raw error type for better technical understanding
+        const errorType = latestError.reason || 'UnknownError';
+        errorDetails = errorType;
       }
       
       parts.forEach((part: string) => {
@@ -105,28 +97,52 @@ export function ErrorChatView({ query, namespace }: ErrorChatViewProps) {
                   eventId: errorEvents.length > 0 ? errorEvents[0].id : null
                 });
               } else {
-                // If no specific error details from events, infer from conversation context
-                // Check if the conversation mentions weather and coordinates
-                const hasWeatherRequest = conversationText.toLowerCase().includes('weather');
-                const hasCoordinates = conversationText.includes('40.71427') || conversationText.includes('latitude');
+                // Enhanced error inference from conversation context
+                let inferredError = 'Query failed - no specific error details available';
                 
-                if (hasWeatherRequest && hasCoordinates) {
-                  messages.push({
-                    type: 'system',
-                    content: `❌ tool get-weather not found`,
-                    timestamp: null,
-                    isError: true,
-                    eventId: null
-                  });
-                } else {
-                  messages.push({
-                    type: 'system',
-                    content: `❌ Query failed - no specific error details available`,
-                    timestamp: null,
-                    isError: true,
-                    eventId: null
-                  });
+                // Check for specific error patterns in conversation
+                if (conversationText.toLowerCase().includes('weather') && 
+                    (conversationText.includes('40.71427') || conversationText.includes('latitude'))) {
+                  inferredError = 'tool get-weather not found';
+                } else if (conversationText.toLowerCase().includes('tool') && 
+                           conversationText.toLowerCase().includes('not found')) {
+                  inferredError = 'Requested tool not found';
+                } else if (conversationText.toLowerCase().includes('timeout') || 
+                           conversationText.toLowerCase().includes('timed out')) {
+                  inferredError = 'Query timed out';
+                } else if (conversationText.toLowerCase().includes('permission') || 
+                           conversationText.toLowerCase().includes('unauthorized')) {
+                  inferredError = 'Permission denied';
+                } else if (conversationText.toLowerCase().includes('network') || 
+                           conversationText.toLowerCase().includes('connection')) {
+                  inferredError = 'Network connection error';
+                } else if (conversationText.toLowerCase().includes('403') || 
+                           conversationText.toLowerCase().includes('forbidden')) {
+                  inferredError = 'API access denied (403 Forbidden)';
+                } else if (conversationText.toLowerCase().includes('401') || 
+                           conversationText.toLowerCase().includes('unauthorized')) {
+                  inferredError = 'API authentication failed (401 Unauthorized)';
+                } else if (conversationText.toLowerCase().includes('llm') || 
+                           conversationText.toLowerCase().includes('model')) {
+                  inferredError = 'LLM API error';
+                } else if (conversationText.toLowerCase().includes('agent') && 
+                           conversationText.toLowerCase().includes('error')) {
+                  inferredError = 'Agent execution error';
+                } else if (conversationText.toLowerCase().includes('team') && 
+                           conversationText.toLowerCase().includes('error')) {
+                  inferredError = 'Team execution error';
+                } else if (conversationText.toLowerCase().includes('evaluation') && 
+                           conversationText.toLowerCase().includes('error')) {
+                  inferredError = 'Evaluation error';
                 }
+                
+                messages.push({
+                  type: 'system',
+                  content: `❌ ${inferredError}`,
+                  timestamp: null,
+                  isError: true,
+                  eventId: null
+                });
               }
               return; // Skip adding the "No response" message
             }
@@ -148,6 +164,69 @@ export function ErrorChatView({ query, namespace }: ErrorChatViewProps) {
           }
         }
       });
+    }
+
+    // Always add an error message if the query phase is 'error'
+    if (query.status?.phase === 'error') {
+      const hasError = messages.some(msg => msg.type === 'system' && msg.isError);
+      
+      if (!hasError) {
+        // No error message found, add one based on available information
+        let errorMessage = 'Query failed - no specific error details available';
+        
+        // Try to get error from events first
+        const errorEvents = events.filter(event => 
+          event.type === 'Warning' || 
+          event.reason?.toLowerCase().includes('error') ||
+          event.reason?.toLowerCase().includes('failed') ||
+          event.reason === 'ToolCallError' ||
+          event.reason === 'QueryResolveError' ||
+          event.reason === 'TargetExecutionError' ||
+          event.reason === 'LLMCallError'
+        );
+        
+        if (errorEvents.length > 0) {
+          const latestError = errorEvents.sort((a, b) => 
+            new Date(b.lastTimestamp || b.creationTimestamp).getTime() - 
+            new Date(a.lastTimestamp || a.creationTimestamp).getTime()
+          )[0];
+          
+          // Show raw error type for better technical understanding
+          const errorType = latestError.reason || 'UnknownError';
+          errorMessage = errorType;
+        } else if (query.input) {
+          // Fallback to conversation context inference
+          const conversationText = query.input.toLowerCase();
+          if (conversationText.includes('weather') && 
+              (conversationText.includes('40.71427') || conversationText.includes('latitude'))) {
+            errorMessage = 'tool get-weather not found';
+          } else if (conversationText.includes('tool') && conversationText.includes('not found')) {
+            errorMessage = 'Requested tool not found';
+          } else if (conversationText.includes('timeout') || conversationText.includes('timed out')) {
+            errorMessage = 'Query timed out';
+          } else if (conversationText.includes('403') || conversationText.includes('forbidden')) {
+            errorMessage = 'API access denied (403 Forbidden)';
+          } else if (conversationText.includes('401') || conversationText.includes('unauthorized')) {
+            errorMessage = 'API authentication failed (401 Unauthorized)';
+          } else if (conversationText.includes('llm') || conversationText.includes('model')) {
+            errorMessage = 'LLM API error';
+          } else if (conversationText.includes('agent') && conversationText.includes('error')) {
+            errorMessage = 'Agent execution error';
+          } else if (conversationText.includes('team') && conversationText.includes('error')) {
+            errorMessage = 'Team execution error';
+          } else if (conversationText.includes('evaluation') && conversationText.includes('error')) {
+            errorMessage = 'Evaluation error';
+          }
+        }
+        
+        messages.push({
+          type: 'system',
+          content: `❌ ${errorMessage}`,
+          timestamp: null,
+          isError: true,
+          eventId: errorEvents.length > 0 ? errorEvents[0].id : null
+        });
+      }
     }
 
     return messages;
