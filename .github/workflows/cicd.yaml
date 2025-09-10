@@ -25,9 +25,11 @@ permissions:
 # same pull request or branch (which only triggers for 'main' in this workflow).
 # People therefore cannot cancel each others' build, only cancel pending builds
 # on their own PRs.
+# This pattern does *not* apply to the 'main' branch - which we want to always
+# have the full pipeline run on.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # Security scan with JFrog Xray
