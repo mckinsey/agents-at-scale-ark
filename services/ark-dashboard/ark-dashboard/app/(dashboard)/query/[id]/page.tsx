@@ -44,8 +44,8 @@ import JsonDisplay from "@/components/JsonDisplay"
 import { ErrorResponseContent } from '@/components/ErrorResponseContent';
 
 // Component for rendering response content
-function ResponseContent({ content, viewMode, rawJson }: { content: string, viewMode: 'text' | 'json', rawJson?: unknown }) {
-  if (viewMode === 'json') {
+function ResponseContent({ content, viewMode, rawJson }: { content: string, viewMode: 'content' | 'raw', rawJson?: unknown }) {
+  if (viewMode === 'raw') {
     const getJsonDisplay = () => {
       if (rawJson && typeof rawJson === 'object' && (rawJson as { raw?: string }).raw) {
         try {
@@ -74,6 +74,13 @@ function ResponseContent({ content, viewMode, rawJson }: { content: string, view
     )
   }
 
+  if (viewMode === 'content') {
+    return (
+      <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900/50 p-3">
+        {content || "No content"}
+      </pre>
+    )
+  }
   
   return (
     <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900/50 p-3">
@@ -243,7 +250,7 @@ function QueryDetailContent() {
   const [availableMemories, setAvailableMemories] = useState<Array<{name: string}>>([])
   const [memoriesLoading, setMemoriesLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [responseViewMode, setResponseViewMode] = useState<'text' | 'json'>('text')
+  const [responseViewMode, setResponseViewMode] = useState<'content' | 'raw'>('content')
   const nameFieldRef = useRef<HTMLInputElement>(null)
   const [toolSchema, setToolSchema] = useState<ToolDetail | null>(null)
 
@@ -807,27 +814,27 @@ function QueryDetailContent() {
               {query.status?.phase === 'running' ? (
                 <>
                   <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
-                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Responses</h3>
+                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Response</h3>
                     <div className="flex items-center gap-1 text-xs overflow-x-auto whitespace-nowrap flex-shrink-0">
                       <button 
                         className={`px-2 py-1 rounded ${
-                          responseViewMode === 'text' 
+                          responseViewMode === 'content' 
                             ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
                             : 'text-gray-500 dark:text-gray-400'
                         }`}
-                        onClick={() => setResponseViewMode('text')}
+                        onClick={() => setResponseViewMode('content')}
                       >
-                        Text
+                        Content
                       </button>
                       <button 
                         className={`px-2 py-1 rounded ${
-                          responseViewMode === 'json' 
+                          responseViewMode === 'raw' 
                             ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
                             : 'text-gray-500 dark:text-gray-400'
                         }`}
-                        onClick={() => setResponseViewMode('json')}
+                        onClick={() => setResponseViewMode('raw')}
                       >
-                        JSON
+                        Raw
                       </button>
                     </div>
                   </div>
@@ -839,7 +846,7 @@ function QueryDetailContent() {
                 <Tabs defaultValue="0" className="w-full gap-0">
                   <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Responses</h3>
+                      <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Response</h3>
                       <TabsList className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1 h-7" style={{gridTemplateColumns: `repeat(${Math.min(query.status.responses.length, 4)}, 1fr)`}}>
                         {query.status.responses.map((response, index) => (
                           <TabsTrigger key={index} value={index.toString()} className="text-xs h-6 px-2">
@@ -851,23 +858,23 @@ function QueryDetailContent() {
                     <div className="flex items-center gap-1 text-xs overflow-x-auto whitespace-nowrap flex-shrink-0">
                       <button 
                         className={`px-2 py-1 rounded ${
-                          responseViewMode === 'text' 
+                          responseViewMode === 'content' 
                             ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
                             : 'text-gray-500 dark:text-gray-400'
                         }`}
-                        onClick={() => setResponseViewMode('text')}
+                        onClick={() => setResponseViewMode('content')}
                       >
-                        Text
+                        Content
                       </button>
                       <button 
                         className={`px-2 py-1 rounded ${
-                          responseViewMode === 'json' 
+                          responseViewMode === 'raw' 
                             ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
                             : 'text-gray-500 dark:text-gray-400'
                         }`}
-                        onClick={() => setResponseViewMode('json')}
+                        onClick={() => setResponseViewMode('raw')}
                       >
-                        JSON
+                        Raw
                       </button>
                     </div>
                   </div>
@@ -889,23 +896,23 @@ function QueryDetailContent() {
                     <div className="flex items-center gap-1 text-xs overflow-x-auto whitespace-nowrap flex-shrink-0">
                       <button 
                         className={`px-2 py-1 rounded ${
-                          responseViewMode === 'text' 
+                          responseViewMode === 'content' 
                             ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
                             : 'text-gray-500 dark:text-gray-400'
                         }`}
-                        onClick={() => setResponseViewMode('text')}
+                        onClick={() => setResponseViewMode('content')}
                       >
-                        Text
+                        Content
                       </button>
                       <button 
                         className={`px-2 py-1 rounded ${
-                          responseViewMode === 'json' 
+                          responseViewMode === 'raw' 
                             ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
                             : 'text-gray-500 dark:text-gray-400'
                         }`}
-                        onClick={() => setResponseViewMode('json')}
+                        onClick={() => setResponseViewMode('raw')}
                       >
-                        JSON
+                        Raw
                       </button>
                     </div>
                   </div>
@@ -920,27 +927,27 @@ function QueryDetailContent() {
               ) : (
                 <>
                   <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
-                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Responses</h3>
+                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Response</h3>
                     <div className="flex items-center gap-1 text-xs overflow-x-auto whitespace-nowrap flex-shrink-0">
                       <button 
                         className={`px-2 py-1 rounded ${
-                          responseViewMode === 'text' 
+                          responseViewMode === 'content' 
                             ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
                             : 'text-gray-500 dark:text-gray-400'
                         }`}
-                        onClick={() => setResponseViewMode('text')}
+                        onClick={() => setResponseViewMode('content')}
                       >
-                        Text
+                        Content
                       </button>
                       <button 
                         className={`px-2 py-1 rounded ${
-                          responseViewMode === 'json' 
+                          responseViewMode === 'raw' 
                             ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
                             : 'text-gray-500 dark:text-gray-400'
                         }`}
-                        onClick={() => setResponseViewMode('json')}
+                        onClick={() => setResponseViewMode('raw')}
                       >
-                        JSON
+                        Raw
                       </button>
                     </div>
                   </div>

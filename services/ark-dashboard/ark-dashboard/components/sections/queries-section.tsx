@@ -26,14 +26,14 @@ type SortField = 'createdAt' | 'none';
 type SortDirection = 'asc' | 'desc';
 
 // NEW: view mode for the Output column
-type OutputViewMode = 'text' | 'json';
+type OutputViewMode = 'content' | 'raw';
 
 export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesSectionProps>(function QueriesSection({ namespace }, ref) {
   const [queries, setQueries] = useState<QueryResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortField, setSortField] = useState<SortField>('createdAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [outputViewMode, setOutputViewMode] = useState<OutputViewMode>('text'); // NEW
+  const [outputViewMode, setOutputViewMode] = useState<OutputViewMode>('content'); // NEW
   const showLoading = useDelayedLoading(loading);
   const router = useRouter();
 
@@ -141,7 +141,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
 
   const renderOutputCell = (query: QueryResponse) => {
     const text = getFirstResponseText(query) || "";
-    if (outputViewMode === 'text') {
+    if (outputViewMode === 'content') {
       return (
         <>
           <TooltipProvider>
@@ -299,17 +299,17 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
                       {/* NEW: global view mode toggle */}
                       <div className="ml-2 inline-flex items-center gap-1 text-xs">
                         <button
-                          className={`px-2 py-1 rounded ${outputViewMode === 'text' ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}
-                          onClick={() => setOutputViewMode('text')}
+                          className={`px-2 py-1 rounded ${outputViewMode === 'content' ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}
+                          onClick={() => setOutputViewMode('content')}
                         >
-                          Text
+                          Content
                         </button>
   
                         <button
-                          className={`px-2 py-1 rounded ${outputViewMode === 'json' ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}
-                          onClick={() => setOutputViewMode('json')}
+                          className={`px-2 py-1 rounded ${outputViewMode === 'raw' ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}
+                          onClick={() => setOutputViewMode('raw')}
                         >
-                          JSON
+                          Raw
                         </button>
                       </div>
                     </div>

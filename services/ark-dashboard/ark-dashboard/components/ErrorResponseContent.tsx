@@ -6,7 +6,7 @@ import { eventsService, Event } from '@/lib/services/events';
 interface ErrorResponseContentProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any;
-  viewMode: 'text' | 'json';
+  viewMode: 'content' | 'raw';
   namespace: string;
 }
 
@@ -57,7 +57,8 @@ export function ErrorResponseContent({ query, viewMode, namespace }: ErrorRespon
       event.reason === 'LLMCallError'
     );
 
-    if (errorEvents.length > 0) {
+    // If we have valid error events, use them
+    if (errorEvents.length > 0 && errorEvents.some(event => event.message && event.message.trim() !== '')) {
       // Get the most recent error event
       const latestError = errorEvents.sort((a, b) => 
         new Date(b.lastTimestamp || b.creationTimestamp).getTime() - 
@@ -104,65 +105,10 @@ export function ErrorResponseContent({ query, viewMode, namespace }: ErrorRespon
       };
     }
 
-    // If no specific error details from events, infer from conversation context
-    if (query.input) {
-      const conversationText = query.input.toLowerCase();
-      // Enhanced error inference from conversation context
-      let inferredError = 'Query failed - no specific error details available';
-      let errorType = 'UnknownError';
-      
-      if (conversationText.includes('weather') && 
-          (conversationText.includes('40.71427') || conversationText.includes('latitude'))) {
-        inferredError = 'tool get-weather not found';
-        errorType = 'ToolCallError';
-      } else if (conversationText.includes('tool') && conversationText.includes('not found')) {
-        inferredError = 'Requested tool not found';
-        errorType = 'ToolCallError';
-      } else if (conversationText.includes('timeout') || conversationText.includes('timed out')) {
-        inferredError = 'Query timed out';
-        errorType = 'TimeoutError';
-      } else if (conversationText.includes('permission') || conversationText.includes('unauthorized')) {
-        inferredError = 'Permission denied';
-        errorType = 'PermissionError';
-      } else if (conversationText.includes('network') || conversationText.includes('connection')) {
-        inferredError = 'Network connection error';
-        errorType = 'NetworkError';
-      } else if (conversationText.includes('403') || conversationText.includes('forbidden')) {
-        inferredError = 'API access denied (403 Forbidden)';
-        errorType = 'LLMCallError';
-      } else if (conversationText.includes('401') || conversationText.includes('unauthorized')) {
-        inferredError = 'API authentication failed (401 Unauthorized)';
-        errorType = 'LLMCallError';
-      } else if (conversationText.includes('llm') || conversationText.includes('model')) {
-        inferredError = 'LLM API error';
-        errorType = 'LLMCallError';
-      } else if (conversationText.includes('agent') && conversationText.includes('error')) {
-        inferredError = 'Agent execution error';
-        errorType = 'AgentExecutionError';
-      } else if (conversationText.includes('team') && conversationText.includes('error')) {
-        inferredError = 'Team execution error';
-        errorType = 'TeamExecutionError';
-      } else if (conversationText.includes('evaluation') && conversationText.includes('error')) {
-        inferredError = 'Evaluation error';
-        errorType = 'EvaluationError';
-      }
-      
-      return {
-        type: errorType,
-        message: inferredError,
-        details: {
-          phase: query.status?.phase,
-          responses: query.status?.responses?.length || 0,
-          timestamp: query.creationTimestamp,
-          inferred: true
-        }
-      };
-    }
-
     // Fallback to generic error
     return {
       type: 'Unknown Error',
-      message: 'Query failed with no specific error details available',
+      message: 'Query failed - no specific error details available',
       details: {
         phase: query.status?.phase,
         responses: query.status?.responses?.length || 0,
@@ -177,7 +123,7 @@ export function ErrorResponseContent({ query, viewMode, namespace }: ErrorRespon
     return <div className="text-center text-muted-foreground py-4 text-sm">Loading error details...</div>;
   }
 
-  if (viewMode === 'json') {
+  if (viewMode === 'raw') {
     return (
       <div className="text-sm">
         <pre className="bg-black text-white p-4 rounded text-sm font-mono whitespace-pre-wrap break-words border">
@@ -187,11 +133,46 @@ export function ErrorResponseContent({ query, viewMode, namespace }: ErrorRespon
     );
   }
 
+  if (viewMode === 'content') {
+    return (
+      <div className="text-sm space-y-3">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+              <span className="text-white text-xs font-bold">!</span>
+            </div>
+            <h3 className="font-semibold text-red-800 dark:text-red-200">Error Details</h3>
+          </div>
+          <div className="space-y-2 text-red-700 dark:text-red-300">
+            <p><strong>Error Type:</strong> {errorDetails.type}</p>
+            <p><strong>Message:</strong> {errorDetails.message}</p>
+            <p><strong>Phase:</strong> {errorDetails.details.phase}</p>
+            <p><strong>Responses:</strong> {errorDetails.details.responses}</p>
+            <p><strong>Timestamp:</strong> {errorDetails.details.timestamp}</p>
+            {errorDetails.details.eventId && (
+              <p><strong>Event ID:</strong> {errorDetails.details.eventId}</p>
+            )}
+          </div>
+        </div>
+        
+        {errorDetails.allEvents && errorDetails.allEvents.length > 0 && (
+          <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+            <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">All Related Events</h4>
+            <div className="space-y-2">
+              {errorDetails.allEvents.map((event, index) => (
+                <div key={index} className="text-sm text-gray-600 dark:text-gray-400">
+                  <p><strong>{event.reason}</strong> - {event.message}</p>
+                  <p className="text-xs">Type: {event.type} | Count: {event.count}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
-
-
-
-  // Default text view
+  // Default fallback
   return (
     <div className="text-sm space-y-3">
       <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
