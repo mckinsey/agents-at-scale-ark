@@ -338,6 +338,8 @@ spec:
                   properties:
                     content:
                       type: string
+                    raw:
+                      type: string
                     target:
                       properties:
                         name:
