@@ -25,8 +25,7 @@ export type NextRequestWithAuth = NextRequest & {
   auth?: Session | null
 }
 
-const nextAuth = NextAuth(authConfig);
-
+//Used to create a dummy session object when the auth mode is "open"
 function getDummySession(): Session {
   return {
     user: {
@@ -38,8 +37,14 @@ function getDummySession(): Session {
   }
 }
 
+//Used to handle incoming auth related requests when the auth mode is "open"
 async function dummyRouteHandler() {
   return NextResponse.json(getDummySession())
+}
+
+//Used to handle incoming sign in requests when the auth mode is "open"
+async function dummySignInHandler() {
+  return NextResponse.redirect('/')
 }
 
 // Function overloads for openauth
@@ -55,21 +60,24 @@ function openauth(callback?: (req: NextRequestWithAuth) => Promise<NextResponse<
   return getDummySession()
 };
 
-const sso = {
-  auth: nextAuth.auth,
-  signIn: nextAuth.signIn,
-  signOut: nextAuth.signOut,
-  GET: nextAuth.handlers.GET,
-  POST: nextAuth.handlers.POST
-};
+function getAuth() {
+  if(!process.env.AUTH_MODE || process.env.AUTH_MODE === "open") {
+    return {
+      auth: openauth,
+      signIn: dummySignInHandler,
+      GET: dummyRouteHandler,
+      POST: dummyRouteHandler
+    };
+  }
 
-const open = {
-  auth: openauth,
-  signIn: nextAuth.signIn,
-  signOut: nextAuth.signOut,
-  GET: dummyRouteHandler,
-  POST: dummyRouteHandler
-};
+  //Init NextAuth only if we are not in "open" mode
+  const nextAuth = NextAuth(authConfig);
+  return {
+    auth: nextAuth.auth,
+    signIn: nextAuth.signIn,
+    GET: nextAuth.handlers.GET,
+    POST: nextAuth.handlers.POST
+  }
+}
 
-export const { auth, GET, POST, signIn, signOut } =
-  process.env.AUTH_MODE === "open" ? open : sso;
+export const { auth, GET, POST, signIn } = getAuth();

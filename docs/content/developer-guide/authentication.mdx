@@ -70,8 +70,8 @@ AUTH_MODE="sso"                                       # Required: "sso" for auth
 
 The `AUTH_MODE` environment variable controls the authentication behavior:
 
-- **`sso`** (default): Full authentication required. Users must authenticate with the OIDC provider to access the dashboard.
-- **`open`**: No authentication required. The application allows unrestricted access without signing in.
+- **`sso`**: Full authentication required. Users must authenticate with the OIDC provider to access the dashboard.
+- **`open`** (default): No authentication required. The application allows unrestricted access without signing in.
 
 > ⚠️ **Security Warning**: Only use `AUTH_MODE=open` in development or trusted environments. Production deployments should always use `AUTH_MODE=sso`.
 
