@@ -45,7 +45,7 @@ app:
     - name: SESSION_MAX_AGE
       value: ""
     - name: AUTH_MODE
-      value: ""
+      value: "open"
   
   # Optional: Import entire secrets/configmaps as env vars
   # envFrom:
