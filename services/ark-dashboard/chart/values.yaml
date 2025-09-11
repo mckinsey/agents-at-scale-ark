@@ -10,7 +10,7 @@ app:
   name: ark-dashboard
   image:
     repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-dashboard
-    tag: latest
+    # tag defaults to .Chart.AppVersion if not specified
     pullPolicy: IfNotPresent
 
   # Well-known config variables, usually set as environment variables

@@ -33,7 +33,7 @@ spec:
             {{- end }}
           command:
             - /manager
-          image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag }}
+          image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag | default .Chart.AppVersion }}
           imagePullPolicy: {{ .Values.controllerManager.container.image.pullPolicy | default "IfNotPresent" }}
           env:
           - name: OTEL_SERVICE_NAME

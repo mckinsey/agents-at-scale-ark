@@ -4,7 +4,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/mckinsey/agents-at-scale-ark/executor-langchain
   pullPolicy: IfNotPresent
-  tag: "latest"
+  # tag defaults to .Chart.AppVersion if not specified
 
 nameOverride: ""
 fullnameOverride: ""

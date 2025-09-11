@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: evaluator-llm
   pullPolicy: IfNotPresent
-  tag: "latest"
+  # tag defaults to .Chart.AppVersion if not specified
 
 imagePullSecrets: []
 nameOverride: ""

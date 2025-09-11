@@ -837,6 +837,7 @@ jobs:
           gh workflow run deploy.yml \
             --field ark_version="${{ needs.check-release.outputs.tag }}" \
             --field deploy_containers=true \
+            --field deploy_containers_to_latest=true \
             --field deploy_to_pages=true \
             --field deploy_to_npm=true \
             --field deploy_helm_chart=true \

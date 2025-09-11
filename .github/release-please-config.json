@@ -95,6 +95,11 @@
         },
         {
           "type": "yaml",
+          "path": "services/localhost-gateway/chart/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "yaml",
           "path": "services/ark-dashboard/chart/Chart.yaml",
           "jsonpath": "$.version"
         },
