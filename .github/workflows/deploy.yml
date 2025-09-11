@@ -34,7 +34,7 @@ on:
         type: boolean
         default: false
       deploy_helm_chart:
-        description: 'Deploy Helm chart to container registry'
+        description: 'Deploy Helm charts to container registry'
         required: false
         type: boolean
         default: false
