@@ -8,8 +8,10 @@ import { redirect, RedirectType } from "next/navigation";
 import { SIGNIN_PATH } from "@/lib/constants/auth";
 
 //Typically an access_token lives for 30 mins
-//We make sure that it gets refreshed before it would expire
-const refreshThresholdMs = 10 * 60 * 1000 //10mins
+//Make sure that it gets refreshed before it would expire
+const tokenRefreshIntervalFromEnv = parseInt(process.env.NEXT_PUBLIC_TOKEN_REFRESH_INTERVAL_MS || '')
+const defaultTokenRefreshInterval = 10 * 60 * 1000 //10mins
+const tokenRefreshInterval = isNaN(tokenRefreshIntervalFromEnv) ? defaultTokenRefreshInterval : tokenRefreshIntervalFromEnv;
 
 export function useRefreshAccessToken() {
   const { status, update } = useSession();
@@ -57,7 +59,7 @@ export function useRefreshAccessToken() {
 
   useConditionalInterval({
     callback: safeUpdate,
-    delay: refreshThresholdMs,
+    delay: tokenRefreshInterval,
     condition: combinedStatus === "authenticated"
   });
 }

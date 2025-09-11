@@ -44,6 +44,8 @@ app:
       value: ""
     - name: SESSION_MAX_AGE
       value: ""
+    - name: NEXT_PUBLIC_TOKEN_REFRESH_INTERVAL_MS
+      value: "600000" #10 mins
     - name: AUTH_MODE
       value: "open"
   
