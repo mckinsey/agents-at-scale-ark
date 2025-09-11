@@ -93,7 +93,7 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 // checkModelDependency validates model dependency
 func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1alpha1.Agent) (arkv1alpha1.AgentPhase, error) {
 	if agent.Spec.ModelRef == nil {
-		return arkv1alpha1.AgentPhaseReady, nil
+		return arkv1alpha1.AgentPhasePending, nil
 	}
 
 	log := logf.FromContext(ctx)
