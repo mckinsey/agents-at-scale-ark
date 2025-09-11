@@ -79,62 +79,24 @@ const useSecureCookies = process.env.AUTH_URL?.startsWith("https://") || false;
 const cookiePrefix = useSecureCookies ? "__Secure-" : ""
 const cookies: NextAuthConfig['cookies'] = {
   sessionToken: {
-    name: `${cookiePrefix}${COOKIE_SESSION_TOKEN}`,
-    options: {
-      httpOnly: true,
-      sameSite: 'lax',
-      path: '/',
-      secure: useSecureCookies
-    }
+    name: `${cookiePrefix}${COOKIE_SESSION_TOKEN}`
   },
   callbackUrl: {
-    name: `${cookiePrefix}${COOKIE_CALLBACK_URL}`,
-    options: {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      secure: useSecureCookies
-    }
+    name: `${cookiePrefix}${COOKIE_CALLBACK_URL}`
   },
   csrfToken: {
     // Default to __Host- for CSRF token for additional protection if using useSecureCookies
     // NB: The `__Host-` prefix is stricter than the `__Secure-` prefix.
-    name: `${useSecureCookies ? "__Host-" : ""}${COOKIE_CSRF_TOKEN}`,
-    options: {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      secure: useSecureCookies
-    }
+    name: `${useSecureCookies ? "__Host-" : ""}${COOKIE_CSRF_TOKEN}`
   },
   pkceCodeVerifier: {
-    name: `${cookiePrefix}${COOKIE_PKCE_CODE_VERIFIER}`,
-    options: {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      secure: useSecureCookies,
-      maxAge: 60 * 15 // 15 minutes in seconds
-    }
+    name: `${cookiePrefix}${COOKIE_PKCE_CODE_VERIFIER}`
   },
   state: {
-    name: `${cookiePrefix}${COOKIE_STATE}`,
-    options: {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      secure: useSecureCookies,
-      maxAge: 60 * 15 // 15 minutes in seconds
-    }
+    name: `${cookiePrefix}${COOKIE_STATE}`
   },
   nonce: {
-    name: `${cookiePrefix}${COOKIE_NONCE}`,
-    options: {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      secure: useSecureCookies
-    }
+    name: `${cookiePrefix}${COOKIE_NONCE}`
   }
 };
 
