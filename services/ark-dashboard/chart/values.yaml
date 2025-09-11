@@ -42,6 +42,8 @@ app:
       value: ""
     - name: OIDC_PROVIDER_ID
       value: ""
+    - name: SESSION_MAX_AGE
+      value: ""
     - name: AUTH_MODE
       value: ""
   

@@ -8,7 +8,8 @@ import {
   COOKIE_CSRF_TOKEN,
   COOKIE_PKCE_CODE_VERIFIER,
   COOKIE_STATE,
-  COOKIE_NONCE
+  COOKIE_NONCE,
+  DEFAULT_SESSION_MAX_AGE
 } from "@/lib/constants/auth";
 
 // Extract the jwt callback type from NextAuthConfig
@@ -59,9 +60,15 @@ const OIDCProvider = createOIDCProvider({
   clientSecret: process.env.OIDC_CLIENT_SECRET
 });
 
+function getSessionMaxAge() {
+  const maxAgeFromEnv = parseInt(process.env.SESSION_MAX_AGE || '') //An empty string will result in NaN
+  //If SESSION_MAX_AGE is not set or is not a valid value we default to DEFAULT_SESSION_MAX_AGE (30mins)
+  return isNaN(maxAgeFromEnv) ? DEFAULT_SESSION_MAX_AGE : maxAgeFromEnv;
+}
+
 const session: NextAuthConfig['session'] = {
   strategy: 'jwt',
-  maxAge: 30 * 60 //30mins
+  maxAge: getSessionMaxAge()
 };
 
 const debug = process.env.AUTH_DEBUG === "true";
