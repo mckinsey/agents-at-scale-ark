@@ -103,7 +103,7 @@ export function AgentEditor({
       };
       loadTools();
     }
-  }, [open, namespace]);
+  }, [open, namespace, agent?.tools]);
 
   useEffect(() => {
     if (agent) {
@@ -123,7 +123,7 @@ export function AgentEditor({
       setPrompt("");
       setSelectedTools([]);
     }
-  }, [agent]);
+  }, [agent, agent?.tools]);
 
   const handleSave = () => {
     if (agent) {
