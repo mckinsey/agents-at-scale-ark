@@ -7,6 +7,8 @@ import { useConditionalInterval } from "./useConditionalInterval";
 import { redirect, RedirectType } from "next/navigation";
 import { SIGNIN_PATH } from "@/lib/constants/auth";
 
+//Typically an access_token lives for 30 mins
+//We make sure that it gets refreshed before it would expire
 const refreshThresholdMs = 10 * 60 * 1000 //10mins
 
 export function useRefreshAccessToken() {
