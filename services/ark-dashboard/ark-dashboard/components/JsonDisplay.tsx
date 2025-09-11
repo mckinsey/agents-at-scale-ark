@@ -1,6 +1,4 @@
 import { useMemo, useState } from "react";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 type JsonDisplayProps = {
   value: unknown | string;
@@ -77,23 +75,9 @@ export default function JsonDisplay({
         )}
       </div>
       <div className="overflow-visible">
-        <SyntaxHighlighter 
-          language="json"
-          style={oneDark}
-          customStyle={{
-            background: 'transparent',
-            color: 'white',
-            margin: 0,
-            padding: 0
-          }}
-          codeTagProps={{
-            style: {
-              color: 'white'
-            }
-          }}
-        >
+        <pre className="bg-black text-white p-4 rounded text-sm font-mono whitespace-pre-wrap break-words">
           {shown}
-        </SyntaxHighlighter>
+        </pre>
       </div>
       {!parsed && (
         <div className="mt-2 text-amber-700 text-sm">Couldn&apos;t parse JSON. Showing raw text.</div>
