@@ -2896,7 +2896,7 @@ export interface components {
                 [key: string]: string;
             } | null;
             /** Type */
-            type: string;
+            type?: string | null;
         };
         /** TopLogprob */
         TopLogprob: {

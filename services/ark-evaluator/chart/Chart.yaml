@@ -2,7 +2,7 @@ apiVersion: v2
 name: ark-evaluator
 description: Holistic Evaluator for Ark - AI-powered query evaluation service inc. LLM-as-a-Judge
 type: application
-version: 0.1.32
+version: 0.1.33
 appVersion: 0.1.17
 keywords:
   - evaluator

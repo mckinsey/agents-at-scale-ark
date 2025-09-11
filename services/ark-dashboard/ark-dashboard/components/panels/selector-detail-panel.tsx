@@ -61,7 +61,6 @@ export function SelectorDetailPanel({
 
   const removeMatchLabel = (key: string) => {
     if (selector?.labelSelector?.matchLabels) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { [key]: _removed, ...rest } = selector.labelSelector.matchLabels;
       onSelectorChange({
         ...selector,
@@ -75,7 +74,6 @@ export function SelectorDetailPanel({
 
   const updateMatchLabel = (oldKey: string, newKey: string, value: string) => {
     if (selector?.labelSelector?.matchLabels) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { [oldKey]: _removed, ...rest } =
         selector.labelSelector.matchLabels;
       onSelectorChange({

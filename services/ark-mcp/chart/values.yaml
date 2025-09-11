@@ -9,7 +9,7 @@ global:
 app:
   name: ark-mcp
   image:
-    repository: ark-mcp
+    repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-mcp
     tag: latest
     pullPolicy: IfNotPresent
   

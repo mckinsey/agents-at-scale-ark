@@ -69,6 +69,7 @@ $(ARK_DASHBOARD_STAMP_INSTALL): $(ARK_DASHBOARD_STAMP_BUILD) $$(ARK_API_STAMP_IN
 	helm upgrade --install $(ARK_DASHBOARD_SERVICE_NAME) $(ARK_DASHBOARD_SERVICE_DIR)/chart \
 		--namespace $(DASHBOARD_NAMESPACE) \
 		--create-namespace \
+		--set app.image.repository=$(DASHBOARD_IMAGE) \
 		--set app.image.tag=$(DASHBOARD_TAG) \
 		--wait \
 		--timeout=5m

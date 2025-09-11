@@ -1,8 +1,10 @@
+import { useState } from "react"
 import { Wrench, Trash2, ChevronRight, MessageCircle } from "lucide-react"
 import { BaseCard, type BaseCardAction } from "./base-card"
 import { useRouter } from "next/navigation"
 import { getCustomIcon } from "@/lib/utils/icon-resolver"
 import { ARK_ANNOTATIONS } from "@/lib/constants/annotations"
+import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog"
 import type { Tool } from "@/lib/services/tools"
 
 interface ToolCardProps {
@@ -16,6 +18,7 @@ interface ToolCardProps {
 
 export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisabledReason, namespace }: ToolCardProps) {
   const router = useRouter();
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const actions: BaseCardAction[] = []
   
   // Get custom icon or default Wrench icon
@@ -34,7 +37,7 @@ export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisable
     actions.push({
       icon: Trash2,
       label: deleteDisabled && deleteDisabledReason ? deleteDisabledReason : "Delete tool",
-      onClick: () => onDelete(tool.id),
+      onClick: () => setDeleteConfirmOpen(true),
       disabled: deleteDisabled
     })
   }
@@ -46,14 +49,28 @@ export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisable
   });
 
   return (
-    <BaseCard
-      title={tool.name || tool.type || "Unnamed Tool"}
-      description={tool.type || "Tool"}
-      icon={<IconComponent className="h-5 w-5" />}
-      iconClassName="text-muted-foreground"
-      actions={actions}
-    >
-      <div />
-    </BaseCard>
+    <>
+      <BaseCard
+        title={tool.name || tool.type || "Unnamed Tool"}
+        description={tool.type || "Tool"}
+        icon={<IconComponent className="h-5 w-5" />}
+        iconClassName="text-muted-foreground"
+        actions={actions}
+      >
+        <div />
+      </BaseCard>
+      {onDelete && (
+        <ConfirmationDialog
+          open={deleteConfirmOpen}
+          onOpenChange={setDeleteConfirmOpen}
+          title="Delete Tool"
+          description={`Do you want to delete "${tool.name || tool.type || "this tool"}" tool? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={() => onDelete(tool.id)}
+          variant="destructive"
+        />
+      )}
+    </>
   )
 }

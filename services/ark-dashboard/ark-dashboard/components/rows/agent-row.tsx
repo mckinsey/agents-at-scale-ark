@@ -1,6 +1,5 @@
 "use client";
 
-import { AgentEditor } from "@/components/editors";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -11,6 +10,8 @@ import {
 import { useChatState } from "@/lib/chat-context";
 import { toggleFloatingChat } from "@/lib/chat-events";
 import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
+import { AgentEditor } from "@/components/editors";
+import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog";
 import type {
   Agent,
   AgentCreateRequest,
@@ -45,6 +46,7 @@ export function AgentRow({
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(agent.name);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Get the model name from the modelRef
   const modelName = agent.modelRef?.name || "No model assigned";
@@ -112,7 +114,7 @@ export function AgentRow({
                       "h-8 w-8 p-0",
                       isChatOpen && "opacity-50 cursor-not-allowed"
                     )}
-                    onClick={() => !isChatOpen && onDelete(agent.id)}
+                    onClick={() => !isChatOpen && setDeleteConfirmOpen(true)}
                     disabled={isChatOpen}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -156,6 +158,18 @@ export function AgentRow({
         onSave={onUpdate || (() => {})}
         namespace={namespace}
       />
+      {onDelete && (
+        <ConfirmationDialog
+          open={deleteConfirmOpen}
+          onOpenChange={setDeleteConfirmOpen}
+          title="Delete Agent"
+          description={`Do you want to delete "${agent.name}" agent? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={() => onDelete(agent.id)}
+          variant="destructive"
+        />
+      )}
     </>
   );
 }

@@ -13,7 +13,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
-        defaultOptions: { queries: { refetchOnWindowFocus: false } }, // Disable all window switch application switch refetch
+        defaultOptions: { queries: { refetchOnWindowFocus: false } }
+         // Disable all window switch application switch refetch
       })
   );
 

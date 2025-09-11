@@ -1,5 +1,8 @@
 "use client";
 
+import { useState } from "react";
+import { ChevronRight, Trash2, Wrench, MessageCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -8,11 +11,10 @@ import {
   TooltipTrigger
 } from "@/components/ui/tooltip";
 import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
+import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog";
 import type { Tool } from "@/lib/services/tools";
 import { cn } from "@/lib/utils";
 import { getCustomIcon } from "@/lib/utils/icon-resolver";
-import { ChevronRight, MessageCircle, Trash2, Wrench } from "lucide-react";
-import { useRouter } from "next/navigation";
 
 type ToolRowProps = {
   readonly tool: Tool;
@@ -26,7 +28,8 @@ type ToolRowProps = {
 export function ToolRow(props: ToolRowProps) {
   const { tool, onInfo, onDelete, inUse, inUseReason } = props;
   const router = useRouter();
-
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  
   // Get custom icon or default Wrench icon
   const annotations = tool.annotations as Record<string, string> | undefined;
   const IconComponent = getCustomIcon(
@@ -49,23 +52,65 @@ export function ToolRow(props: ToolRowProps) {
   };
 
   return (
-    <div className="flex items-center py-3 px-4 bg-card border rounded-md hover:bg-accent/5 transition-colors w-full gap-4 flex-wrap">
-      <div className="flex items-center gap-3 flex-grow overflow-hidden">
-        <IconComponent className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-        <div className="flex flex-col gap-1 min-w-0 max-w-[400px]">
-          <p className="font-medium text-sm truncate" title={tool.name}>
-            {tool.name}
-          </p>
-          <p
-            className="text-xs text-muted-foreground truncate"
-            title={tool.description ?? ""}
-          >
-            {tool.description ?? "No description"}
-          </p>
+    <>
+      <div className="flex items-center py-3 px-4 bg-card border rounded-md shadow-sm hover:bg-accent/5 transition-colors w-full gap-4 flex-wrap">
+        <div className="flex items-center gap-3 flex-grow overflow-hidden">
+          <IconComponent className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+          <div className="flex flex-col gap-1 min-w-0 max-w-[400px]">
+            <p className="font-medium text-sm truncate" title={tool.name}>
+              {tool.name}
+            </p>
+            <p
+              className="text-xs text-muted-foreground truncate"
+              title={tool.description ?? ""}
+            >
+              {tool.description ?? "No description"}
+            </p>
+          </div>
         </div>
-      </div>
-      <div className="flex items-center gap-1 flex-shrink-0">
-        {onInfo && (
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {onInfo && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={handleInfo}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>View tool details</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {onDelete && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "h-8 w-8 p-0",
+                      inUse && "opacity-50 cursor-not-allowed"
+                    )}
+                    onClick={() => !inUse && setDeleteConfirmOpen(true)}
+                    disabled={inUse}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {inUse
+                    ? inUseReason ?? "Tool is used by agents"
+                    : "Delete tool"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -73,57 +118,29 @@ export function ToolRow(props: ToolRowProps) {
                   variant="ghost"
                   size="sm"
                   className="h-8 w-8 p-0"
-                  onClick={handleInfo}
+                  onClick={handleQueryTool}
+                  aria-label="Query tool"
                 >
-                  <ChevronRight className="h-4 w-4" />
+                  <MessageCircle className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>View tool details</TooltipContent>
+              <TooltipContent>Query tool</TooltipContent>
             </Tooltip>
           </TooltipProvider>
-        )}
-        {onDelete && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "h-8 w-8 p-0",
-                    inUse && "opacity-50 cursor-not-allowed"
-                  )}
-                  onClick={() => !inUse && onDelete(tool.id)}
-                  disabled={inUse}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {inUse
-                  ? inUseReason ?? "Tool is used by agents"
-                  : "Delete tool"}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-                onClick={handleQueryTool}
-                aria-label="Query tool"
-              >
-                <MessageCircle className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Query tool</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        </div>
       </div>
-    </div>
+      {onDelete && (
+        <ConfirmationDialog
+          open={deleteConfirmOpen}
+          onOpenChange={setDeleteConfirmOpen}
+          title="Delete Tool"
+          description={`Do you want to delete "${tool.name || tool.type || "this tool"}" tool? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={() => onDelete(tool.id)}
+          variant="destructive"
+        />
+      )}
+    </>
   );
 }

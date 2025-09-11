@@ -9,7 +9,7 @@ global:
 app:
   name: ark-dashboard
   image:
-    repository: ark-dashboard
+    repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-dashboard
     tag: latest
     pullPolicy: IfNotPresent
 

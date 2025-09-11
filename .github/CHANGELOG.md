@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.1.33](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.33...v0.1.33) (2025-09-10)
+
+
+### Miscellaneous Chores
+
+* release 0.1.33 ([13d6113](https://github.com/mckinsey/agents-at-scale-ark/commit/13d61139d3f247fbfd67e43925e3d77a443c41a9))
+
+## [0.1.33](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.32...v0.1.33) (2025-09-10)
+
+
+### Features
+
+* agent as tool creation ([#43](https://github.com/mckinsey/agents-at-scale-ark/issues/43)) ([4b58aa3](https://github.com/mckinsey/agents-at-scale-ark/commit/4b58aa368c4cc3b8e13c887879c80b24e278196a))
+* agents as tools ([#40](https://github.com/mckinsey/agents-at-scale-ark/issues/40)) ([d75c1cb](https://github.com/mckinsey/agents-at-scale-ark/commit/d75c1cbe294917b0a6d51a87db84109bda52d6a3))
+* **dashboard:** Define config as map in Helm chart values ([#80](https://github.com/mckinsey/agents-at-scale-ark/issues/80)) ([f946aa2](https://github.com/mckinsey/agents-at-scale-ark/commit/f946aa259b420df1860712a3086fe8bf12b9e4c3))
+* devspace live reload for ark-controller ([#60](https://github.com/mckinsey/agents-at-scale-ark/issues/60)) ([5ac7996](https://github.com/mckinsey/agents-at-scale-ark/commit/5ac79963de8393d31ec8396005794bbcbcfda798))
+* update charts to use GHCR images by default ([#86](https://github.com/mckinsey/agents-at-scale-ark/issues/86)) ([fabfd38](https://github.com/mckinsey/agents-at-scale-ark/commit/fabfd38a2b544eefd1cd511f2b71ab5e2b810da0))
+
 ## [0.1.32](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.31...v0.1.32) (2025-09-05)
 
 

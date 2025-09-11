@@ -125,7 +125,7 @@ export function AgentEditor({
       setSelectedTools([]);
       setIsPromptExpanded(false);
     }
-  }, [agent]);
+  }, [agent, agent?.tools]);
 
   const handleSave = () => {
     if (agent) {

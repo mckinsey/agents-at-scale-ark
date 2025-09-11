@@ -25,9 +25,11 @@ permissions:
 # same pull request or branch (which only triggers for 'main' in this workflow).
 # People therefore cannot cancel each others' build, only cancel pending builds
 # on their own PRs.
+# This pattern does *not* apply to the 'main' branch - which we want to always
+# have the full pipeline run on.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # Security scan with JFrog Xray
@@ -523,8 +525,17 @@ jobs:
         with:
           artifact-name: coverage-reports-evaluated
 
-  build-chart:
+  build-charts:
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        chart:
+          # Package only the essential charts.
+          - { name: ark-controller, path: ark/dist/chart }
+          - { name: ark-api, path: services/ark-api/chart }
+          - { name: ark-dashboard, path: services/ark-dashboard/chart }
+          - { name: ark-mcp, path: services/ark-mcp/chart }
+          - { name: localhost-gateway, path: services/localhost-gateway/chart }
     steps:
       - uses: actions/checkout@v4
 
@@ -533,33 +544,17 @@ jobs:
         with:
           version: "3.14.0"
 
-      - name: Lint Helm Chart
+      - name: Lint and Package ${{ matrix.chart.name }}
         run: |
-          cd ark/dist/chart
+          cd ${{ matrix.chart.path }}
           helm lint .
-      - name: Render and Validate Helm Chart
-        run: |
-          cd ark/dist/chart
-          # Test rendering with different values
-          helm template test-release . --debug --dry-run
+          helm package .
 
-          # Test with custom values
-          helm template test-release . \
-            --set image.tag=${{ github.sha }} \
-            --set replicaCount=2 \
-            --debug --dry-run
-      - name: Package Helm Chart
-        run: |
-          mkdir -p out
-          cd ark/dist/chart
-          # Package the chart (release-please handles versioning)
-          helm package . --destination ../../../out/
-
-      - name: Upload Chart Artifact
+      - name: Upload ${{ matrix.chart.name }} Chart
         uses: actions/upload-artifact@v4
         with:
-          name: ark-chart-${{ github.sha }}
-          path: out/ark-*.tgz
+          name: ${{ matrix.chart.name }}-${{ github.sha }}
+          path: ${{ matrix.chart.path }}/${{ matrix.chart.name }}-*.tgz
           retention-days: 30
 
   build-docs:
@@ -635,7 +630,7 @@ jobs:
         build-and-test-ark,
         build-and-test-services,
         build-docs,
-        build-chart,
+        build-charts,
         build-ark-cli,
       ]
     runs-on: ubuntu-24.04
@@ -697,7 +692,7 @@ jobs:
         build-and-test-ark,
         build-and-test-services,
         build-docs,
-        build-chart,
+        build-charts,
         build-ark-cli,
       ]
     runs-on: ubuntu-24.04
@@ -768,36 +763,31 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
 
-  release-chart:
+  release-charts:
     needs: [check-release]
     runs-on: ubuntu-24.04
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    strategy:
+      matrix:
+        chart:
+          - ark-controller
+          - ark-api
+          - ark-dashboard
+          - ark-mcp
+          - localhost-gateway
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download chart artifact
+      - name: Download ${{ matrix.chart }} artifact
         uses: actions/download-artifact@v4
         with:
-          name: ark-chart-${{ github.sha }}
+          name: ${{ matrix.chart }}-${{ github.sha }}
           path: ./
 
-      - name: Attach chart to release
+      - name: Attach ${{ matrix.chart }} to release
         run: |
           RELEASE_TAG="${{ needs.check-release.outputs.tag }}"
-          echo "Attaching chart to release: $RELEASE_TAG"
-
-          # List what we downloaded
-          echo "Chart files:"
-          ls -la ark-*.tgz || echo "No chart files found"
-
-          # Upload chart file to release
-          find . -name "ark-*.tgz" -type f | while read chart; do
-            if [ -f "$chart" ]; then
-              filename=$(basename "$chart")
-              echo "Uploading $chart as $filename"
-              gh release upload "$RELEASE_TAG" "$chart" || echo "Failed to upload $chart (may already exist)"
-            fi
-          done
+          gh release upload "$RELEASE_TAG" ${{ matrix.chart }}-*.tgz
         env:
           GH_TOKEN: ${{ github.token }}
 
