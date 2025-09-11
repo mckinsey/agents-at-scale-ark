@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 
 echo "🔨 Building executor-langchain Docker image..."
 
-# Build from services directory to include executor-common
+# Build from services directory to include ark-sdk
 cd ..
 ../scripts/build-and-push.sh -i executor-langchain -c . -f executor-langchain/Dockerfile
 

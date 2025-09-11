@@ -4,7 +4,7 @@ import logging
 from typing import List, Optional
 from langchain.schema import Document, HumanMessage, AIMessage, SystemMessage
 from langchain_community.vectorstores import FAISS
-from executor_common import BaseExecutor, Message
+from ark_sdk import BaseExecutor, Message
 from .utils import (
     create_chat_client,
     create_embeddings_client,
