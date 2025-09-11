@@ -26,7 +26,7 @@ type SortField = 'createdAt' | 'none';
 type SortDirection = 'asc' | 'desc';
 
 // NEW: view mode for the Output column
-type OutputViewMode = 'text' | 'markdown' | 'json';
+type OutputViewMode = 'text' | 'json';
 
 export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesSectionProps>(function QueriesSection({ namespace }, ref) {
   const [queries, setQueries] = useState<QueryResponse[]>([]);
@@ -160,14 +160,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
       );
     }
 
-    if (outputViewMode === 'markdown') {
-      // For markdown, just show the text with basic formatting
-      return (
-        <div className="prose prose-sm max-w-none line-clamp-3">
-          <pre className="whitespace-pre-wrap break-words">{text}</pre>
-        </div>
-      );
-    }
+
     // JSON
     const preview = getFirstResponseJsonPreview(query);
     return (
@@ -311,12 +304,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
                         >
                           Text
                         </button>
-                        <button
-                          className={`px-2 py-1 rounded ${outputViewMode === 'markdown' ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}
-                          onClick={() => setOutputViewMode('markdown')}
-                        >
-                          Markdown
-                        </button>
+  
                         <button
                           className={`px-2 py-1 rounded ${outputViewMode === 'json' ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}
                           onClick={() => setOutputViewMode('json')}

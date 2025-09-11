@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { ErrorChatView } from '@/components/ErrorChatView';
+
 import { eventsService, Event } from '@/lib/services/events';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface ErrorResponseContentProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any;
-  viewMode: 'text' | 'markdown' | 'json' | 'chat';
+  viewMode: 'text' | 'json';
   namespace: string;
 }
 
@@ -187,53 +187,9 @@ export function ErrorResponseContent({ query, viewMode, namespace }: ErrorRespon
     );
   }
 
-  if (viewMode === 'markdown') {
-    return (
-      <div className="text-sm space-y-3">
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
-              <span className="text-white text-xs font-bold">!</span>
-            </div>
-            <h3 className="font-semibold text-red-800 dark:text-red-200">Error Details</h3>
-          </div>
-          <div className="space-y-2 text-red-700 dark:text-red-300">
-            <p><strong>Error Type:</strong> {errorDetails.type}</p>
-            <p><strong>Message:</strong> {errorDetails.message}</p>
-            <p><strong>Phase:</strong> {errorDetails.details.phase}</p>
-            <p><strong>Responses:</strong> {errorDetails.details.responses}</p>
-            <p><strong>Timestamp:</strong> {errorDetails.details.timestamp}</p>
-            {errorDetails.details.eventId && (
-              <p><strong>Event ID:</strong> {errorDetails.details.eventId}</p>
-            )}
-          </div>
-        </div>
-        
-        {errorDetails.allEvents && errorDetails.allEvents.length > 0 && (
-          <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-            <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">All Related Events</h4>
-            <div className="space-y-2">
-              {errorDetails.allEvents.map((event, index) => (
-                <div key={index} className="text-sm text-gray-600 dark:text-gray-400">
-                  <p><strong>{event.reason}</strong> - {event.message}</p>
-                  <p className="text-xs">Type: {event.type} | Count: {event.count}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
 
-  if (viewMode === 'chat') {
-    return (
-      <ErrorChatView
-        query={query}
-        namespace={namespace}
-      />
-    );
-  }
+
+
 
   // Default text view
   return (

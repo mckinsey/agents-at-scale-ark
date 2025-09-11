@@ -38,24 +38,13 @@ import {
   TabsTrigger
 } from "@/components/ui/tabs"
 import { simplifyDuration } from "@/lib/utils/time"
-import { useMarkdownProcessor } from "@/lib/hooks/use-markdown-processor"
+
 import { QueryEvaluationActions } from "@/components/query-actions"
 import JsonDisplay from "@/components/JsonDisplay"
 import { ErrorResponseContent } from '@/components/ErrorResponseContent';
-// import { ErrorChatView } from '@/components/ErrorChatView';
 
 // Component for rendering response content
-function ResponseContent({ content, viewMode, rawJson, userInput }: { content: string, viewMode: 'text' | 'markdown' | 'json' | 'chat', rawJson?: unknown, userInput?: string }) {
-  const markdownContent = useMarkdownProcessor(content)
-  
-  if (viewMode === 'markdown') {
-    return (
-      <div className="text-sm">
-        {markdownContent}
-      </div>
-    )
-  }
-
+function ResponseContent({ content, viewMode, rawJson }: { content: string, viewMode: 'text' | 'json', rawJson?: unknown }) {
   if (viewMode === 'json') {
     const getJsonDisplay = () => {
       if (rawJson && typeof rawJson === 'object' && (rawJson as { raw?: string }).raw) {
@@ -85,69 +74,6 @@ function ResponseContent({ content, viewMode, rawJson, userInput }: { content: s
     )
   }
 
-  if (viewMode === 'chat') {
-    const renderChatMessages = () => {
-      const messages = [];
-      
-      // Parse the concatenated conversation string
-      if (userInput) {
-        const conversationText = userInput.replace(/^User: /, '');
-        
-        // Split by "User:" and "Agent:" to extract individual messages
-        const parts = conversationText.split(/(?=User: |Agent: )/);
-        
-        parts.forEach(part => {
-          if (part.trim()) {
-            if (part.startsWith('User: ')) {
-              messages.push({
-                type: 'user',
-                content: part.replace(/^User: /, '').trim()
-              });
-            } else if (part.startsWith('Agent: ')) {
-              messages.push({
-                type: 'assistant',
-                content: part.replace(/^Agent: /, '').trim()
-              });
-            } else {
-              // If it doesn't start with User: or Agent:, treat as user message
-              messages.push({
-                type: 'user',
-                content: part.trim()
-              });
-            }
-          }
-        });
-      }
-      
-      // Add the final response if available
-      if (content && content !== "No content") {
-        messages.push({
-          type: 'assistant',
-          content: content
-        });
-      }
-      
-      return messages;
-    };
-    
-    const messages = renderChatMessages();
-    
-    return (
-      <div className="text-sm space-y-3">
-        {messages.map((msg, index) => (
-          <div key={index} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`px-3 py-2 rounded-lg max-w-xs ${
-              msg.type === 'user' 
-                ? 'bg-blue-500 text-white' 
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
-            }`}>
-              {msg.content}
-            </div>
-          </div>
-        ))}
-      </div>
-    )
-  }
   
   return (
     <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900/50 p-3">
@@ -317,7 +243,7 @@ function QueryDetailContent() {
   const [availableMemories, setAvailableMemories] = useState<Array<{name: string}>>([])
   const [memoriesLoading, setMemoriesLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [responseViewMode, setResponseViewMode] = useState<'text' | 'markdown' | 'json' | 'chat'>('text')
+  const [responseViewMode, setResponseViewMode] = useState<'text' | 'json'>('text')
   const nameFieldRef = useRef<HTMLInputElement>(null)
   const [toolSchema, setToolSchema] = useState<ToolDetail | null>(null)
 
@@ -895,16 +821,6 @@ function QueryDetailContent() {
                       </button>
                       <button 
                         className={`px-2 py-1 rounded ${
-                          responseViewMode === 'markdown' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('markdown')}
-                      >
-                        Markdown
-                      </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
                           responseViewMode === 'json' 
                             ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
                             : 'text-gray-500 dark:text-gray-400'
@@ -912,16 +828,6 @@ function QueryDetailContent() {
                         onClick={() => setResponseViewMode('json')}
                       >
                         JSON
-                      </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'chat' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('chat')}
-                      >
-                        Chat
                       </button>
                     </div>
                   </div>
@@ -955,16 +861,6 @@ function QueryDetailContent() {
                       </button>
                       <button 
                         className={`px-2 py-1 rounded ${
-                          responseViewMode === 'markdown' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('markdown')}
-                      >
-                        Markdown
-                      </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
                           responseViewMode === 'json' 
                             ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
                             : 'text-gray-500 dark:text-gray-400'
@@ -972,16 +868,6 @@ function QueryDetailContent() {
                         onClick={() => setResponseViewMode('json')}
                       >
                         JSON
-                      </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'chat' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('chat')}
-                      >
-                        Chat
                       </button>
                     </div>
                   </div>
@@ -991,7 +877,7 @@ function QueryDetailContent() {
                         content={response.content || "No content"} 
                         viewMode={responseViewMode} 
                         rawJson={response} 
-                        userInput={query.input || ""}
+                        
                       />
                     </TabsContent>
                   ))}
@@ -1013,16 +899,6 @@ function QueryDetailContent() {
                       </button>
                       <button 
                         className={`px-2 py-1 rounded ${
-                          responseViewMode === 'markdown' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('markdown')}
-                      >
-                        Markdown
-                      </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
                           responseViewMode === 'json' 
                             ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
                             : 'text-gray-500 dark:text-gray-400'
@@ -1030,16 +906,6 @@ function QueryDetailContent() {
                         onClick={() => setResponseViewMode('json')}
                       >
                         JSON
-                      </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'chat' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('chat')}
-                      >
-                        Chat
                       </button>
                     </div>
                   </div>
@@ -1068,16 +934,6 @@ function QueryDetailContent() {
                       </button>
                       <button 
                         className={`px-2 py-1 rounded ${
-                          responseViewMode === 'markdown' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('markdown')}
-                      >
-                        Markdown
-                      </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
                           responseViewMode === 'json' 
                             ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
                             : 'text-gray-500 dark:text-gray-400'
@@ -1085,16 +941,6 @@ function QueryDetailContent() {
                         onClick={() => setResponseViewMode('json')}
                       >
                         JSON
-                      </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'chat' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('chat')}
-                      >
-                        Chat
                       </button>
                     </div>
                   </div>
