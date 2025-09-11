@@ -2,6 +2,15 @@
 
 The ARK API uses OIDC/JWT-based authentication with automatic token validation using JWKS (JSON Web Key Set).
 
+## Overview
+
+The ARK API uses a flexible JWT authentication system that validates tokens based on:
+- **App ID**: Used as the audience (`aud`) claim for JWT validation
+- **Issuer URL**: Used to fetch JWKS keys and validate the token issuer
+- **JWKS**: Automatically derived from the issuer URL for signature verification
+
+This approach matches your existing authentication system and provides compatibility with various OIDC providers.
+
 ## Environment Variables
 
 Configure the following environment variables for OIDC/JWT authentication:
@@ -10,8 +19,7 @@ Configure the following environment variables for OIDC/JWT authentication:
 # Required OIDC Configuration
 ARK_OKTA_ISSUER=https://your-oidc-provider.com/realms/your-realm
 OIDC_APPLICATION_ID=your-app-id     # Primary OIDC application ID
-OIDC_CLIENT_ID=your-client-id       # Alternative/fallback client ID
-ARK_OKTA_AUDIENCE=your-client-id    # For ark_sdk compatibility
+
 
 # Optional Configuration
 ARK_JWT_ALGORITHM=RS256  # Default: RS256
@@ -37,6 +45,26 @@ This implementation matches your existing authentication system:
 - **Direct JWKS Integration**: Uses `pyjwt_key_fetcher` directly for better control
 - **Consistent with Existing Code**: Follows the same pattern as your `SSOAuthBackend`
 
+### FlexibleTokenValidator
+
+The authentication uses a custom `FlexibleTokenValidator` class that:
+
+```python
+# Validates JWT tokens using app_id and issuer_url
+token_data = jwt.decode(
+    token, 
+    verify=True, 
+    audience=self.app_id,  # Uses OIDC_APPLICATION_ID
+    **key_entry
+)
+```
+
+**Key Features**:
+- Validates JWT signature using JWKS from the issuer
+- Validates audience claim against the configured app_id
+- Handles token expiration and issuer validation
+- Provides detailed logging for debugging
+
 ## Public Routes
 
 The following routes are exempt from authentication:
@@ -54,19 +82,18 @@ For Keycloak:
 ```bash
 ARK_OKTA_ISSUER=https://keycloak.example.com/realms/my-realm
 OIDC_APPLICATION_ID=ark-api-client  # Application ID from Keycloak
-OIDC_CLIENT_ID=ark-api-client       # Same value for fallback
+    # Same value for fallback
 ```
 
 For Auth0:
 ```bash
 ARK_OKTA_ISSUER=https://your-domain.auth0.com
-OIDC_APPLICATION_ID=your-auth0-client-id  # Application ID from Auth0
-OIDC_CLIENT_ID=your-auth0-client-id       # Same value for fallback
+OIDC_APPLICATION_ID=your-auth0-client-id  # Application ID from Auth0    # Same value for fallback
 ```
 
 For Okta:
 ```bash
 ARK_OKTA_ISSUER=https://your-domain.okta.com/oauth2/default
 OIDC_APPLICATION_ID=your-okta-client-id  # Application ID from Okta
-OIDC_CLIENT_ID=your-okta-client-id       # Same value for fallback
+ # Same value for fallback
 ```

@@ -21,9 +21,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from .config import is_route_authenticated
 
+# We're using our own FlexibleTokenValidator instead of ark_sdk
+# This provides better control and matches your existing authentication system
 try:
-    from ark_sdk.auth.validator import TokenValidator
-    from ark_sdk.auth.config import AuthConfig
     from ark_sdk.auth.exceptions import TokenValidationError
 except ImportError:
     # Fallback when ark_sdk is not available
