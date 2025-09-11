@@ -4,11 +4,13 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -20,6 +22,7 @@ import (
 
 type AgentReconciler struct {
 	client.Client
+	Recorder record.EventRecorder
 	Scheme *runtime.Scheme
 }
 
@@ -50,7 +53,7 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			log.Error(err, "Failed to initialize Agent status")
 			return ctrl.Result{}, err
 		}
-		log.Info("Initialized agent status to Pending", "agent", agent.Name)
+		r.Recorder.Event(&agent, "Normal", "AgentCreated", "Initialized agent status to Pending")
 	}
 
 	// Check tool dependencies and update status
@@ -68,7 +71,7 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			// Return error to trigger retry - controller-runtime will handle the retry with backoff
 			return ctrl.Result{}, err
 		}
-		log.Info("Updated agent status", "phase", newPhase)
+		r.Recorder.Event(&agent, "Normal", "StatusChanged", fmt.Sprintf("Agent status changed to %s", newPhase))
 	}
 
 	// Note: We also watch for Tool/Model events, so this is just a fallback
@@ -93,10 +96,10 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 // checkModelDependency validates model dependency
 func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1alpha1.Agent) (arkv1alpha1.AgentPhase, error) {
 	if agent.Spec.ModelRef == nil {
+		r.Recorder.Event(agent, "Warning", "ModelNotDefined", "Agent does not have a model reference defined")
 		return arkv1alpha1.AgentPhasePending, nil
 	}
 
-	log := logf.FromContext(ctx)
 	modelNamespace := agent.Spec.ModelRef.Namespace
 	if modelNamespace == "" {
 		modelNamespace = agent.Namespace
@@ -106,7 +109,7 @@ func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1
 	modelKey := types.NamespacedName{Name: agent.Spec.ModelRef.Name, Namespace: modelNamespace}
 	if err := r.Get(ctx, modelKey, &model); err != nil {
 		if errors.IsNotFound(err) {
-			log.Info("Model dependency not found", "model", agent.Spec.ModelRef.Name, "namespace", modelNamespace)
+			r.Recorder.Event(agent, "Warning", "ModelNotFound", fmt.Sprintf("Model '%s' not found in namespace '%s'", agent.Spec.ModelRef.Name, modelNamespace))
 			return arkv1alpha1.AgentPhasePending, nil
 		}
 		return arkv1alpha1.AgentPhaseError, err
@@ -117,15 +120,13 @@ func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1
 
 // checkToolDependencies validates tool dependencies
 func (r *AgentReconciler) checkToolDependencies(ctx context.Context, agent *arkv1alpha1.Agent) (arkv1alpha1.AgentPhase, error) {
-	log := logf.FromContext(ctx)
-
 	for _, toolSpec := range agent.Spec.Tools {
 		if toolSpec.Type == "custom" && toolSpec.Name != "" {
 			var tool arkv1alpha1.Tool
 			toolKey := types.NamespacedName{Name: toolSpec.Name, Namespace: agent.Namespace}
 			if err := r.Get(ctx, toolKey, &tool); err != nil {
 				if errors.IsNotFound(err) {
-					log.Info("Tool dependency not found", "tool", toolSpec.Name, "namespace", agent.Namespace)
+					r.Recorder.Event(agent, "Warning", "ToolNotFound", fmt.Sprintf("Tool '%s' not found in namespace '%s'", toolSpec.Name, agent.Namespace))
 					return arkv1alpha1.AgentPhasePending, nil
 				}
 				return arkv1alpha1.AgentPhaseError, err
