@@ -15,15 +15,15 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-      - jsonPath: .spec.modelRef.name
-        name: Model
-        type: string
-      - jsonPath: .status.phase
-        name: Phase
-        type: string  
-      - jsonPath: .metadata.creationTimestamp
-        name: Age
-        type: date
+    - jsonPath: .spec.modelRef.name
+      name: Model
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:

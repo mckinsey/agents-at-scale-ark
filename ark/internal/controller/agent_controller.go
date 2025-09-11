@@ -95,21 +95,21 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 
 // checkModelDependency validates model dependency
 func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1alpha1.Agent) (arkv1alpha1.AgentPhase, error) {
-	if agent.Spec.ModelRef == nil {
-		r.Recorder.Event(agent, "Warning", "ModelNotDefined", "Agent does not have a model reference defined")
-		return arkv1alpha1.AgentPhasePending, nil
-	}
+	modelName := "default"
+	modelNamespace := agent.Namespace
 
-	modelNamespace := agent.Spec.ModelRef.Namespace
-	if modelNamespace == "" {
-		modelNamespace = agent.Namespace
+	if agent.Spec.ModelRef != nil {
+		modelName = agent.Spec.ModelRef.Name
+		if agent.Spec.ModelRef.Namespace != "" {
+			modelNamespace = agent.Spec.ModelRef.Namespace
+		}
 	}
 
 	var model arkv1alpha1.Model
-	modelKey := types.NamespacedName{Name: agent.Spec.ModelRef.Name, Namespace: modelNamespace}
+	modelKey := types.NamespacedName{Name: modelName, Namespace: modelNamespace}
 	if err := r.Get(ctx, modelKey, &model); err != nil {
 		if errors.IsNotFound(err) {
-			r.Recorder.Event(agent, "Warning", "ModelNotFound", fmt.Sprintf("Model '%s' not found in namespace '%s'", agent.Spec.ModelRef.Name, modelNamespace))
+			r.Recorder.Event(agent, "Warning", "ModelNotFound", fmt.Sprintf("Model '%s' not found in namespace '%s'", modelName, modelNamespace))
 			return arkv1alpha1.AgentPhasePending, nil
 		}
 		return arkv1alpha1.AgentPhaseError, err
@@ -229,5 +229,13 @@ func (r *AgentReconciler) agentDependsOnTool(agent *arkv1alpha1.Agent, toolName 
 
 // agentDependsOnModel checks if an agent depends on a specific model
 func (r *AgentReconciler) agentDependsOnModel(agent *arkv1alpha1.Agent, modelName string) bool {
-	return agent.Spec.ModelRef != nil && agent.Spec.ModelRef.Name == modelName
+	// Check if agent explicitly references this model
+	if agent.Spec.ModelRef != nil && agent.Spec.ModelRef.Name == modelName {
+		return true
+	}
+	// Check if agent uses default model (no modelRef) and this is the default model
+	if agent.Spec.ModelRef == nil && modelName == "default" {
+		return true
+	}
+	return false
 }
