@@ -6,7 +6,7 @@ import { eventsService, Event } from '@/lib/services/events';
 interface ErrorResponseContentProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any;
-  viewMode: 'content' | 'raw';
+  viewMode: 'events' | 'details';
   namespace: string;
 }
 
@@ -123,7 +123,7 @@ export function ErrorResponseContent({ query, viewMode, namespace }: ErrorRespon
     return <div className="text-center text-muted-foreground py-4 text-sm">Loading error details...</div>;
   }
 
-  if (viewMode === 'raw') {
+  if (viewMode === 'details') {
     return (
       <div className="text-sm">
         <pre className="bg-black text-white p-4 rounded text-sm font-mono whitespace-pre-wrap break-words border">
@@ -133,7 +133,7 @@ export function ErrorResponseContent({ query, viewMode, namespace }: ErrorRespon
     );
   }
 
-  if (viewMode === 'content') {
+  if (viewMode === 'events') {
     return (
       <div className="text-sm space-y-3">
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">

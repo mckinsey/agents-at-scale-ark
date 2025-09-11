@@ -251,6 +251,7 @@ function QueryDetailContent() {
   const [memoriesLoading, setMemoriesLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [responseViewMode, setResponseViewMode] = useState<'content' | 'raw'>('content')
+  const [errorViewMode, setErrorViewMode] = useState<'events' | 'details'>('events')
   const nameFieldRef = useRef<HTMLInputElement>(null)
   const [toolSchema, setToolSchema] = useState<ToolDetail | null>(null)
 
@@ -809,7 +810,7 @@ function QueryDetailContent() {
               )}
             </div>
 
-            {/* Responses Table */}
+            {/* Response Section */}
             <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
               {query.status?.phase === 'running' ? (
                 <>
@@ -842,7 +843,7 @@ function QueryDetailContent() {
                     Processing...
                   </div>
                 </>
-              ) : query.status?.responses && query.status.responses.length > 0 ? (
+              ) : query.status?.responses && query.status.responses.length > 0 && query.status?.phase !== 'error' ? (
                 <Tabs defaultValue="0" className="w-full gap-0">
                   <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -884,46 +885,10 @@ function QueryDetailContent() {
                         content={response.content || "No content"} 
                         viewMode={responseViewMode} 
                         rawJson={response} 
-                        
                       />
                     </TabsContent>
                   ))}
                 </Tabs>
-              ) : query.status?.phase === 'error' ? (
-                <>
-                  <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
-                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Error Details</h3>
-                    <div className="flex items-center gap-1 text-xs overflow-x-auto whitespace-nowrap flex-shrink-0">
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'content' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('content')}
-                      >
-                        Content
-                      </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'raw' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('raw')}
-                      >
-                        Raw
-                      </button>
-                    </div>
-                  </div>
-                  <div className="p-3">
-                    <ErrorResponseContent 
-                      query={query}
-                      viewMode={responseViewMode}
-                      namespace={namespace}
-                    />
-                  </div>
-                </>
               ) : (
                 <>
                   <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
@@ -956,6 +921,82 @@ function QueryDetailContent() {
                   </div>
                 </>
               )}
+            </div>
+
+            {/* Error Section */}
+            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+              {query.status?.phase === 'error' ? (
+                <>
+                  <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
+                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Error</h3>
+                    <div className="flex items-center gap-1 text-xs overflow-x-auto whitespace-nowrap flex-shrink-0">
+                      <button 
+                        className={`px-2 py-1 rounded ${
+                          errorViewMode === 'events' 
+                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
+                            : 'text-gray-500 dark:text-gray-400'
+                        }`}
+                        onClick={() => setErrorViewMode('events')}
+                      >
+                        Events
+                      </button>
+                      <button 
+                        className={`px-2 py-1 rounded ${
+                          errorViewMode === 'details' 
+                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
+                            : 'text-gray-500 dark:text-gray-400'
+                        }`}
+                        onClick={() => setErrorViewMode('details')}
+                      >
+                        Details
+                      </button>
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    <ErrorResponseContent 
+                      query={query}
+                      viewMode={errorViewMode}
+                      namespace={namespace}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
+                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Error</h3>
+                    <div className="flex items-center gap-1 text-xs overflow-x-auto whitespace-nowrap flex-shrink-0">
+                      <button 
+                        className={`px-2 py-1 rounded ${
+                          errorViewMode === 'events' 
+                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
+                            : 'text-gray-500 dark:text-gray-400'
+                        }`}
+                        onClick={() => setErrorViewMode('events')}
+                      >
+                        Events
+                      </button>
+                      <button 
+                        className={`px-2 py-1 rounded ${
+                          errorViewMode === 'details' 
+                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
+                            : 'text-gray-500 dark:text-gray-400'
+                        }`}
+                        onClick={() => setErrorViewMode('details')}
+                      >
+                        Details
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-center text-muted-foreground py-8 text-xs">
+                    No errors
+                  </div>
+                </>
+              )}
+            </div>
+            
+            {/* Events Expiration Note */}
+            <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+              Note: Events expire after a certain amount of time and may no longer be available for viewing.
             </div>
           </div>
         </ScrollArea>
