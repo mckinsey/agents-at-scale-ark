@@ -20,6 +20,10 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
+const (
+	defaultModelName = "default"
+)
+
 type AgentReconciler struct {
 	client.Client
 	Recorder record.EventRecorder
@@ -95,7 +99,7 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 
 // checkModelDependency validates model dependency
 func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1alpha1.Agent) (arkv1alpha1.AgentPhase, error) {
-	modelName := "default"
+	modelName := defaultModelName
 	modelNamespace := agent.Namespace
 
 	if agent.Spec.ModelRef != nil {
@@ -234,7 +238,7 @@ func (r *AgentReconciler) agentDependsOnModel(agent *arkv1alpha1.Agent, modelNam
 		return true
 	}
 	// Check if agent uses default model (no modelRef) and this is the default model
-	if agent.Spec.ModelRef == nil && modelName == "default" {
+	if agent.Spec.ModelRef == nil && modelName == defaultModelName {
 		return true
 	}
 	return false
