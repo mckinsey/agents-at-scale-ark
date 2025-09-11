@@ -17,26 +17,26 @@ class TestAuthConfig(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         # Clear any existing environment variables
-        for key in ['ARK_OKTA_ISSUER', 'OIDC_APPLICATION_ID', 'OIDC_CLIENT_ID', 'ARK_SKIP_AUTH']:
+        for key in ['ARK_OIDC_ISSUER', 'ARK_OIDC_APPLICATION_ID', 'ARK_OIDC_CLIENT_ID', 'ARK_SKIP_AUTH']:
             if key in os.environ:
                 del os.environ[key]
 
     def tearDown(self):
         """Clean up after tests."""
         # Clear environment variables after each test
-        for key in ['ARK_OKTA_ISSUER', 'OIDC_APPLICATION_ID', 'OIDC_CLIENT_ID', 'ARK_SKIP_AUTH']:
+        for key in ['ARK_OIDC_ISSUER', 'ARK_OIDC_APPLICATION_ID', 'ARK_OIDC_CLIENT_ID', 'ARK_SKIP_AUTH']:
             if key in os.environ:
                 del os.environ[key]
 
     def test_flexible_token_validator_with_application_id(self):
-        """Test FlexibleTokenValidator with OIDC_APPLICATION_ID."""
+        """Test FlexibleTokenValidator with ARK_OIDC_APPLICATION_ID."""
         with patch.dict(os.environ, {
-            'ARK_OKTA_ISSUER': 'https://test-issuer.com',
-            'OIDC_APPLICATION_ID': 'test-app-id'
+            'ARK_OIDC_ISSUER': 'https://test-issuer.com',
+            'ARK_OIDC_APPLICATION_ID': 'test-app-id'
         }):
             validator = FlexibleTokenValidator(
-                issuer_url=os.getenv('ARK_OKTA_ISSUER'),
-                app_id=os.getenv('OIDC_APPLICATION_ID')
+                issuer_url=os.getenv('ARK_OIDC_ISSUER'),
+                app_id=os.getenv('ARK_OIDC_APPLICATION_ID')
             )
             
             self.assertEqual(validator.issuer_url, 'https://test-issuer.com')
@@ -44,14 +44,14 @@ class TestAuthConfig(unittest.TestCase):
             self.assertEqual(validator.jwks_url, 'https://test-issuer.com/.well-known/jwks.json')
 
     def test_flexible_token_validator_with_client_id_fallback(self):
-        """Test FlexibleTokenValidator with OIDC_CLIENT_ID fallback."""
+        """Test FlexibleTokenValidator with ARK_OIDC_CLIENT_ID fallback."""
         with patch.dict(os.environ, {
-            'ARK_OKTA_ISSUER': 'https://test-issuer.com',
-            'OIDC_CLIENT_ID': 'test-client-id'
+            'ARK_OIDC_ISSUER': 'https://test-issuer.com',
+            'ARK_OIDC_CLIENT_ID': 'test-client-id'
         }):
             validator = FlexibleTokenValidator(
-                issuer_url=os.getenv('ARK_OKTA_ISSUER'),
-                app_id=os.getenv('OIDC_APPLICATION_ID') or os.getenv('OIDC_CLIENT_ID')
+                issuer_url=os.getenv('ARK_OIDC_ISSUER'),
+                app_id=os.getenv('ARK_OIDC_APPLICATION_ID') or os.getenv('ARK_OIDC_CLIENT_ID')
             )
             
             self.assertEqual(validator.issuer_url, 'https://test-issuer.com')
@@ -59,15 +59,15 @@ class TestAuthConfig(unittest.TestCase):
             self.assertEqual(validator.jwks_url, 'https://test-issuer.com/.well-known/jwks.json')
 
     def test_flexible_token_validator_priority(self):
-        """Test that OIDC_APPLICATION_ID takes priority over OIDC_CLIENT_ID."""
+        """Test that ARK_OIDC_APPLICATION_ID takes priority over ARK_OIDC_CLIENT_ID."""
         with patch.dict(os.environ, {
-            'ARK_OKTA_ISSUER': 'https://test-issuer.com',
-            'OIDC_APPLICATION_ID': 'test-app-id',
-            'OIDC_CLIENT_ID': 'test-client-id'
+            'ARK_OIDC_ISSUER': 'https://test-issuer.com',
+            'ARK_OIDC_APPLICATION_ID': 'test-app-id',
+            'ARK_OIDC_CLIENT_ID': 'test-client-id'
         }):
             validator = FlexibleTokenValidator(
-                issuer_url=os.getenv('ARK_OKTA_ISSUER'),
-                app_id=os.getenv('OIDC_APPLICATION_ID') or os.getenv('OIDC_CLIENT_ID')
+                issuer_url=os.getenv('ARK_OIDC_ISSUER'),
+                app_id=os.getenv('ARK_OIDC_APPLICATION_ID') or os.getenv('ARK_OIDC_CLIENT_ID')
             )
             
             self.assertEqual(validator.app_id, 'test-app-id')
@@ -75,11 +75,11 @@ class TestAuthConfig(unittest.TestCase):
     def test_flexible_token_validator_no_app_id(self):
         """Test FlexibleTokenValidator without app_id."""
         with patch.dict(os.environ, {
-            'ARK_OKTA_ISSUER': 'https://test-issuer.com'
+            'ARK_OIDC_ISSUER': 'https://test-issuer.com'
         }):
             validator = FlexibleTokenValidator(
-                issuer_url=os.getenv('ARK_OKTA_ISSUER'),
-                app_id=os.getenv('OIDC_APPLICATION_ID') or os.getenv('OIDC_CLIENT_ID')
+                issuer_url=os.getenv('ARK_OIDC_ISSUER'),
+                app_id=os.getenv('ARK_OIDC_APPLICATION_ID') or os.getenv('ARK_OIDC_CLIENT_ID')
             )
             
             self.assertEqual(validator.issuer_url, 'https://test-issuer.com')
@@ -89,17 +89,17 @@ class TestAuthConfig(unittest.TestCase):
     def test_environment_variable_loading(self):
         """Test that environment variables are loaded correctly."""
         test_env = {
-            'ARK_OKTA_ISSUER': 'https://auth.example.com/realms/test',
-            'OIDC_APPLICATION_ID': 'app-123',
-            'OIDC_CLIENT_ID': 'client-456',
+            'ARK_OIDC_ISSUER': 'https://auth.example.com/realms/test',
+            'ARK_OIDC_APPLICATION_ID': 'app-123',
+            'ARK_OIDC_CLIENT_ID': 'client-456',
             'ARK_SKIP_AUTH': 'true'
         }
         
         with patch.dict(os.environ, test_env):
             # Test individual environment variables
-            self.assertEqual(os.getenv('ARK_OKTA_ISSUER'), 'https://auth.example.com/realms/test')
-            self.assertEqual(os.getenv('OIDC_APPLICATION_ID'), 'app-123')
-            self.assertEqual(os.getenv('OIDC_CLIENT_ID'), 'client-456')
+            self.assertEqual(os.getenv('ARK_OIDC_ISSUER'), 'https://auth.example.com/realms/test')
+            self.assertEqual(os.getenv('ARK_OIDC_APPLICATION_ID'), 'app-123')
+            self.assertEqual(os.getenv('ARK_OIDC_CLIENT_ID'), 'client-456')
             self.assertEqual(os.getenv('ARK_SKIP_AUTH'), 'true')
 
     def test_skip_auth_parsing(self):

@@ -17,18 +17,17 @@ Configure the following environment variables for OIDC/JWT authentication:
 
 ```bash
 # Required OIDC Configuration
-ARK_OKTA_ISSUER=https://your-oidc-provider.com/realms/your-realm
-OIDC_APPLICATION_ID=your-app-id     # Primary OIDC application ID
-
+ARK_OIDC_ISSUER=https://your-oidc-provider.com/realms/your-realm
+ARK_OIDC_APPLICATION_ID=your-app-id     # OIDC application ID (used as audience)
 
 # Optional Configuration
 ARK_JWT_ALGORITHM=RS256  # Default: RS256
 ARK_SKIP_AUTH=true       # Development only - skips authentication
 ```
 
-**Note**: `OIDC_APPLICATION_ID` is used as the primary app_id for JWT validation. If not set, it falls back to `OIDC_CLIENT_ID`. The JWT token's `aud` (audience) claim is validated against this app_id value, matching your existing authentication system.
+**Note**: `ARK_OIDC_APPLICATION_ID` is used as the app_id for JWT validation. The JWT token's `aud` (audience) claim is validated against this app_id value, matching your existing authentication system.
 
-**Note**: The JWKS URL is automatically derived from `ARK_OKTA_ISSUER/.well-known/jwks.json`
+**Note**: The JWKS URL is automatically derived from `ARK_OIDC_ISSUER/.well-known/jwks.json`
 
 ## How It Works
 
@@ -41,7 +40,7 @@ ARK_SKIP_AUTH=true       # Development only - skips authentication
 
 This implementation matches your existing authentication system:
 
-- **App ID as Audience**: Uses `OIDC_APPLICATION_ID` as the audience for JWT validation
+- **App ID as Audience**: Uses `ARK_OIDC_APPLICATION_ID` as the audience for JWT validation
 - **Direct JWKS Integration**: Uses `pyjwt_key_fetcher` directly for better control
 - **Consistent with Existing Code**: Follows the same pattern as your `SSOAuthBackend`
 
@@ -54,7 +53,7 @@ The authentication uses a custom `FlexibleTokenValidator` class that:
 token_data = jwt.decode(
     token, 
     verify=True, 
-    audience=self.app_id,  # Uses OIDC_APPLICATION_ID
+    audience=self.app_id,  # Uses ARK_OIDC_APPLICATION_ID
     **key_entry
 )
 ```
@@ -80,20 +79,18 @@ The following routes are exempt from authentication:
 
 For Keycloak:
 ```bash
-ARK_OKTA_ISSUER=https://keycloak.example.com/realms/my-realm
-OIDC_APPLICATION_ID=ark-api-client  # Application ID from Keycloak
-    # Same value for fallback
+ARK_OIDC_ISSUER=https://keycloak.example.com/realms/my-realm
+ARK_OIDC_APPLICATION_ID=ark-api-client  # Application ID from Keycloak
 ```
 
 For Auth0:
 ```bash
-ARK_OKTA_ISSUER=https://your-domain.auth0.com
-OIDC_APPLICATION_ID=your-auth0-client-id  # Application ID from Auth0    # Same value for fallback
+ARK_OIDC_ISSUER=https://your-domain.auth0.com
+ARK_OIDC_APPLICATION_ID=your-auth0-client-id  # Application ID from Auth0
 ```
 
 For Okta:
 ```bash
-ARK_OKTA_ISSUER=https://your-domain.okta.com/oauth2/default
-OIDC_APPLICATION_ID=your-okta-client-id  # Application ID from Okta
- # Same value for fallback
+ARK_OIDC_ISSUER=https://your-domain.okta.com/oauth2/default
+ARK_OIDC_APPLICATION_ID=your-okta-client-id  # Application ID from Okta
 ```

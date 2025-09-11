@@ -5,9 +5,8 @@ This module provides middleware to automatically protect all routes
 except those explicitly marked as public.
 
 Environment Variables:
-    ARK_OKTA_ISSUER: OIDC issuer URL (e.g., https://your-oidc-provider.com/realms/your-realm)
-    OIDC_CLIENT_ID: OIDC client ID (used as app_id for JWT validation)
-    OIDC_APPLICATION_ID: OIDC application ID (alternative to OIDC_CLIENT_ID)ant 
+    ARK_OIDC_ISSUER: OIDC issuer URL (e.g., https://your-oidc-provider.com/realms/your-realm)
+    ARK_OIDC_APPLICATION_ID: OIDC application ID (used as app_id for JWT validation)
     ARK_SKIP_AUTH: Set to "true" to skip authentication (development only)
     
 Note: JWKS URL is automatically derived from the issuer URL
@@ -29,10 +28,10 @@ except ImportError:
     # Fallback when ark_sdk is not available
     class AuthConfig:
         def __init__(self):
-            self.issuer = os.getenv("ARK_OKTA_ISSUER")
-            self.app_id = os.getenv("OIDC_APPLICATION_ID") or os.getenv("OIDC_CLIENT_ID")
+            self.issuer = os.getenv("ARK_OIDC_ISSUER")
+            self.app_id = os.getenv("ARK_OIDC_APPLICATION_ID") or os.getenv("ARK_OIDC_CLIENT_ID")
             # JWKS URL is derived from issuer URL
-            issuer_url = os.getenv("ARK_OKTA_ISSUER")
+            issuer_url = os.getenv("ARK_OIDC_ISSUER")
             self.jwks_url = f"{issuer_url}/.well-known/jwks.json" if issuer_url else None
             self.jwt_algorithm = os.getenv("ARK_JWT_ALGORITHM", "RS256")
     
@@ -139,8 +138,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     )
                 
                 # Get configuration from environment variables
-                issuer_url = os.getenv("ARK_OKTA_ISSUER")
-                app_id = os.getenv("OIDC_APPLICATION_ID") or os.getenv("OIDC_CLIENT_ID")
+                issuer_url = os.getenv("ARK_OIDC_ISSUER")
+                app_id = os.getenv("ARK_OIDC_APPLICATION_ID") or os.getenv("ARK_OIDC_CLIENT_ID")
                 logger.info(f"Auth config - issuer: {issuer_url}, app_id: {app_id}")
                 
                 # Create flexible token validator that doesn't enforce audience
