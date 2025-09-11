@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: evaluator-llm
+  repository: ghcr.io/mckinsey/agents-at-scale-ark/evaluator-llm
   pullPolicy: IfNotPresent
   tag: "latest"
 

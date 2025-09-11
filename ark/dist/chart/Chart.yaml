@@ -1,7 +1,7 @@
 apiVersion: v2
-name: ark
-description: A Helm chart to distribute the project ark
+name: ark-controller
+description: A Helm chart for the ARK Kubernetes controller
 type: application
-version: 0.1.32
-appVersion: 0.1.32
+version: 0.1.33
+appVersion: 0.1.33
 icon: https://example.com/icon.png

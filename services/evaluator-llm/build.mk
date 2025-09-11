@@ -63,7 +63,7 @@ $(EVALUATOR_LLM_STAMP_BUILD): $(EVALUATOR_LLM_STAMP_DEPS)
 $(EVALUATOR_LLM_SERVICE_NAME)-install: $(EVALUATOR_LLM_STAMP_INSTALL) # HELP: Deploy LLM evaluator service to cluster
 $(EVALUATOR_LLM_STAMP_INSTALL): $(EVALUATOR_LLM_STAMP_BUILD)
 	./scripts/build-and-push.sh -i $(EVALUATOR_IMAGE) -t $(EVALUATOR_TAG) -f $(EVALUATOR_LLM_SERVICE_DIR)/Dockerfile -c $(EVALUATOR_LLM_SERVICE_DIR)
-	cd $(EVALUATOR_LLM_SERVICE_DIR) && helm upgrade --install evaluator-llm ./chart -n $(EVALUATOR_LLM_NAMESPACE) --create-namespace --set app.image.tag=$(EVALUATOR_TAG)
+	cd $(EVALUATOR_LLM_SERVICE_DIR) && helm upgrade --install evaluator-llm ./chart -n $(EVALUATOR_LLM_NAMESPACE) --create-namespace --set image.repository=$(EVALUATOR_IMAGE) --set image.tag=$(EVALUATOR_TAG)
 	@touch $@
 
 # Uninstall target

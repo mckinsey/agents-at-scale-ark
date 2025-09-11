@@ -63,7 +63,7 @@ $(ARK_MCP_STAMP_INSTALL): $(ARK_MCP_STAMP_BUILD)
 	cp $(ARK_SDK_WHL) $(ARK_MCP_SERVICE_DIR)/ark-mcp/out/
 	./scripts/build-and-push.sh -i $(ARK_MCP_IMAGE) -t $(ARK_MCP_TAG) -f $(ARK_MCP_SERVICE_DIR)/Dockerfile -c $(ARK_MCP_SERVICE_DIR)
 	@rm -rf $(ARK_MCP_SERVICE_DIR)/ark-mcp/out
-	cd $(ARK_MCP_SERVICE_DIR) && helm upgrade --install ark-mcp ./chart -n $(ARK_MCP_NAMESPACE) --create-namespace --set app.image.tag=$(ARK_MCP_TAG)
+	cd $(ARK_MCP_SERVICE_DIR) && helm upgrade --install ark-mcp ./chart -n $(ARK_MCP_NAMESPACE) --create-namespace --set app.image.repository=$(ARK_MCP_IMAGE) --set app.image.tag=$(ARK_MCP_TAG)
 	@touch $@
 
 # Dev target dependencies - prepare local environment  

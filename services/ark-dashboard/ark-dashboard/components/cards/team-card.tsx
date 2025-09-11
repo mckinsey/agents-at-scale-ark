@@ -12,6 +12,7 @@ import {
 import { toggleFloatingChat } from "@/lib/chat-events";
 import { useChatState } from "@/lib/chat-context";
 import { TeamEditor } from "@/components/editors";
+import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog";
 import type {
   Team,
   TeamCreateRequest,
@@ -42,6 +43,7 @@ export function TeamCard({
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(team.name);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Get the names of member agents
   const memberAgents = team.members
@@ -65,7 +67,7 @@ export function TeamCard({
     actions.push({
       icon: Trash2,
       label: "Delete team",
-      onClick: () => onDelete(team.id),
+      onClick: () => setDeleteConfirmOpen(true),
       disabled: isChatOpen
     });
   }
@@ -117,6 +119,18 @@ export function TeamCard({
         models={models}
         onSave={onUpdate || (() => {})}
       />
+      {onDelete && (
+        <ConfirmationDialog
+          open={deleteConfirmOpen}
+          onOpenChange={setDeleteConfirmOpen}
+          title="Delete Team"
+          description={`Do you want to delete "${team.name}" team? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={() => onDelete(team.id)}
+          variant="destructive"
+        />
+      )}
     </>
   );
 }

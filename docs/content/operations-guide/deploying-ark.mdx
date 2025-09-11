@@ -4,32 +4,19 @@ Deploy ARK locally using quickstart or to remote clusters with registry-based de
 
 ## Local Deployment
 
-For local development against local clusters (minikube, kind, k3s, Docker Desktop Kubernetes), use the [Getting Started](/getting-started) guide. The following command builds containers locally and deploys to your local cluster (using the standard helm chart):
+For local development against local clusters (minikube, kind, k3s, Docker Desktop Kubernetes), the `make quickstart` command can be used from the repository:
 
 ```bash
-make deploy
+git clone https://github.com/mckinsey/agents-at-scale-ark.git
+cd agents-at-scale-ark
+make quickstart
 ```
 
-For greater control over the deployment, you can use the Helm chart directly:
+This builds the containers locally and deploys them to a local cluster. More details are in the [Getting Started](/getting-started) guide. 
 
-```bash
-# Build containers first
-make build-container
+## Helm Deployment with GHCR
 
-# Deploy using Helm with custom configuration
-helm upgrade --install ark-controller ./ark/dist/chart \
-  --namespace ark-system \
-  --create-namespace \
-  --set controllerManager.container.image.repository=ark-controller \
-  --set controllerManager.container.image.tag=latest \
-  --set rbac.enable=true
-```
-
-## Remote Deployment
-
-For remote clusters, deploy ARK using the Helm chart with registry-based container images. This approach is recommended for production, staging, and any non-local environments.
-
-Helm charts are attached to all [releases](https://github.com/mckinsey/agents-at-scale-ark/releases/) and deployed to the [charts packages](https://github.com/mckinsey/agents-at-scale-ark/pkgs/container/agents-at-scale-ark%2Fcharts%2Fark).
+Ark can be deployed using the Helm charts that are attached to all [releases](https://github.com/mckinsey/agents-at-scale-ark/releases/) and deployed to the [charts packages](https://github.com/orgs/mckinsey/packages?repo_name=agents-at-scale-ark). By default the chart uses the latest images available on the release.
 
 ### Prerequisites
 
@@ -50,11 +37,31 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/downloa
 
 ### Deploy ARK
 
-Deploy using the published chart from the container registry:
+Deploy the Ark controller:
 
 ```bash
 helm upgrade --install \
-  ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark \
+  ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
+  --namespace ark-system \
+  --create-namespace \
+  --set rbac.enable=true
+```
+
+In most cases, you will want to install the `ark-api` and `ark-dashboard` services as well. When running on a local cluster you may also want to install the `localhost-gateway`:
+
+```bash
+helm upgrade --install ark-api oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api
+helm upgrade --install ark-dashboard oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-dashboard
+helm upgrade --install localhost-gateway oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/localhost-gateway
+```
+
+### Deploying from a Private Regsitry
+
+The chart can be configured to install containers hosted in any registry:
+
+```bash
+helm upgrade --install \
+  ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
   --version 0.1.31 \
   --namespace ark-system \
   --create-namespace \
@@ -66,8 +73,6 @@ helm upgrade --install \
   --set containerRegistry.password=your_token \
   --set rbac.enable=true
 ```
-
-If you have the code locally, you can use the local chart at `./ark/dist/chart`.
 
 If you need to transfer containers between registries, use the transfer script:
 

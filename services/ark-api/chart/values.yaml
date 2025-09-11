@@ -9,7 +9,7 @@ global:
 app:
   name: ark-api
   image:
-    repository: ark-api
+    repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-api
     tag: latest
     pullPolicy: IfNotPresent
   

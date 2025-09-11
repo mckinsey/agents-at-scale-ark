@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Pencil, Trash2, Lock } from "lucide-react";
 import { getCustomIcon } from "@/lib/utils/icon-resolver";
 import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import { Button } from "@/components/ui/button";
+import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -51,6 +53,7 @@ export function SecretRow({
   onEdit,
   onDelete
 }: SecretRowProps) {
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   // Count models using this secret
   const modelsUsingSecret = models.filter((model) =>
     modelUsesSecret(model, secret.name)
@@ -64,7 +67,8 @@ export function SecretRow({
   const obfuscatedSecret = "••••••••••••";
 
   return (
-    <div className="flex items-center py-3 px-4 bg-card border rounded-md shadow-sm hover:bg-accent/5 transition-colors xl:w-[49%] w-full gap-4">
+    <>
+      <div className="flex items-center py-3 px-4 bg-card border rounded-md shadow-sm hover:bg-accent/5 transition-colors xl:w-[49%] w-full gap-4">
       <div className="flex items-center gap-3 flex-grow overflow-hidden">
         <IconComponent className="h-5 w-5 text-muted-foreground flex-shrink-0" />
 
@@ -136,7 +140,7 @@ export function SecretRow({
                     "h-8 w-8 p-0",
                     isInUse && "opacity-50 cursor-not-allowed"
                   )}
-                  onClick={() => !isInUse && onDelete(secret.id)}
+                  onClick={() => !isInUse && setDeleteConfirmOpen(true)}
                   disabled={isInUse}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -149,6 +153,19 @@ export function SecretRow({
           </TooltipProvider>
         )}
       </div>
-    </div>
+      </div>
+      {onDelete && (
+        <ConfirmationDialog
+          open={deleteConfirmOpen}
+          onOpenChange={setDeleteConfirmOpen}
+          title="Delete Secret"
+          description={`Do you want to delete "${secret.name}" secret? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={() => onDelete(secret.id)}
+          variant="destructive"
+        />
+      )}
+    </>
   );
 }

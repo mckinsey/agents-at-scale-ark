@@ -65,4 +65,4 @@ exclude_lines = [
 ]
 
 [tool.uv.sources]
-ark-sdk = { path = "../../out/ark-sdk/py-sdk/dist/ark_sdk-0.1.31-py3-none-any.whl" }
+ark-sdk = { path = "../../out/ark-sdk/py-sdk/dist/ark_sdk-0.1.32-py3-none-any.whl" }

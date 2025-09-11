@@ -11,6 +11,7 @@ import {
   TooltipTrigger
 } from "@/components/ui/tooltip"
 import { EvaluatorEditor } from "@/components/editors"
+import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog"
 import type {
   Evaluator,
   EvaluatorCreateRequest,
@@ -33,6 +34,7 @@ export function EvaluatorRow({
   namespace
 }: EvaluatorRowProps) {
   const [editorOpen, setEditorOpen] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
   const getAddressDisplay = () => {
     return evaluator.address || "Not configured"
@@ -114,7 +116,7 @@ export function EvaluatorRow({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => onDelete(evaluator.name)}
+                    onClick={() => setDeleteConfirmOpen(true)}
                     className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                   >
                     <Trash2 className="h-3 w-3" />
@@ -136,6 +138,18 @@ export function EvaluatorRow({
           evaluator={evaluator}
           onSave={onUpdate}
           namespace={namespace}
+        />
+      )}
+      {onDelete && (
+        <ConfirmationDialog
+          open={deleteConfirmOpen}
+          onOpenChange={setDeleteConfirmOpen}
+          title="Delete Evaluator"
+          description={`Do you want to delete "${evaluator.name}" evaluator? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={() => onDelete(evaluator.name)}
+          variant="destructive"
         />
       )}
     </>

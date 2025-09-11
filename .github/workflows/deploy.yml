@@ -186,10 +186,10 @@ jobs:
           echo "Downloading ARK Helm chart for version: $VERSION"
           
           # Download the specific chart version
-          gh release download "$VERSION" --pattern "ark-${CLEAN_VERSION}.tgz" --repo McK-Internal/agents-at-scale
+          gh release download "$VERSION" --pattern "ark-controller-${CLEAN_VERSION}.tgz" --repo McK-Internal/agents-at-scale
           
           echo "Downloaded chart:"
-          ls -la ark-${CLEAN_VERSION}.tgz
+          ls -la ark-controller-${CLEAN_VERSION}.tgz
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -226,7 +226,7 @@ jobs:
       - name: Deploy ARK chart to Distribution Environment
         run: |
           # Deploy using helm with registry configuration
-          helm upgrade --install ark-controller ./ark-${{ needs.check_version.outputs.clean_version }}.tgz \
+          helm upgrade --install ark-controller ./ark-controller-${{ needs.check_version.outputs.clean_version }}.tgz \
             --namespace ark-system \
             --set controllerManager.container.image.repository=${{ vars.DOCKER_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller \
             --set controllerManager.container.image.tag=${{ needs.check_version.outputs.clean_version }} \
@@ -249,10 +249,18 @@ jobs:
           kubectl get pods -n ark-system
           kubectl get deployments -n ark-system
 
-  deploy-helm-chart:
+  deploy-helm-charts:
     needs: [check_version]
     if: ${{ inputs.deploy_helm_chart }}
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        chart:
+          - ark-controller
+          - ark-api
+          - ark-dashboard
+          - ark-mcp
+          - localhost-gateway
     steps:
       - name: Validate version tag exists
         run: |
@@ -268,26 +276,24 @@ jobs:
         with:
           version: '3.14.0'
           
-      - name: Download ARK Helm chart from release
+      - name: Download ${{ matrix.chart }} Helm chart from release
         run: |
           VERSION="${{ needs.check_version.outputs.version }}"
           CLEAN_VERSION="${{ needs.check_version.outputs.clean_version }}"
-          echo "Downloading ARK Helm chart for version: $VERSION"
           
-          gh release download "$VERSION" --pattern "ark-${CLEAN_VERSION}.tgz"
+          gh release download "$VERSION" --pattern "${{ matrix.chart }}-${CLEAN_VERSION}.tgz"
           
-          echo "Downloaded chart:"
-          ls -la ark-${CLEAN_VERSION}.tgz
+          ls -la ${{ matrix.chart }}-${CLEAN_VERSION}.tgz
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Deploy Helm Chart to Container Registry
+      - name: Deploy ${{ matrix.chart }} to Container Registry
         run: |
           CLEAN_VERSION="${{ needs.check_version.outputs.clean_version }}"
           REGISTRY="${{ vars.DOCKER_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}"
           
           helm registry login $REGISTRY -u "${{ secrets.DOCKER_REGISTRY_USERNAME || github.actor }}" --password-stdin <<< "${{ secrets.DOCKER_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}"
-          helm push ark-${CLEAN_VERSION}.tgz oci://${REGISTRY}/charts
+          helm push ${{ matrix.chart }}-${CLEAN_VERSION}.tgz oci://${REGISTRY}/charts
 
   deploy-to-pages:
     needs: [check_version]

@@ -5,6 +5,7 @@ import { Pencil, Trash2, Globe, Settings } from "lucide-react"
 import { DASHBOARD_SECTIONS } from "@/lib/constants/dashboard-icons"
 import { BaseCard, type BaseCardAction } from "./base-card"
 import { EvaluatorEditor } from "@/components/editors"
+import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog"
 import type {
   Evaluator,
   EvaluatorCreateRequest,
@@ -27,6 +28,7 @@ export function EvaluatorCard({
   namespace
 }: EvaluatorCardProps) {
   const [editorOpen, setEditorOpen] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
   const actions: BaseCardAction[] = []
 
@@ -42,7 +44,7 @@ export function EvaluatorCard({
     actions.push({
       icon: Trash2,
       label: "Delete evaluator",
-      onClick: () => onDelete(evaluator.name)
+      onClick: () => setDeleteConfirmOpen(true)
     })
   }
 
@@ -99,6 +101,18 @@ export function EvaluatorCard({
         onSave={onUpdate || (() => {})}
         namespace={namespace}
       />
+      {onDelete && (
+        <ConfirmationDialog
+          open={deleteConfirmOpen}
+          onOpenChange={setDeleteConfirmOpen}
+          title="Delete Evaluator"
+          description={`Do you want to delete "${evaluator.name}" evaluator? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={() => onDelete(evaluator.name)}
+          variant="destructive"
+        />
+      )}
     </>
   )
 }
