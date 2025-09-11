@@ -76,6 +76,7 @@ $(ARK_API_A2A_STAMP_INSTALL): $(ARK_API_A2A_STAMP_BUILD) $$(ARK_API_STAMP_INSTAL
 	helm upgrade --install $(ARK_API_A2A_SERVICE_NAME) $(ARK_API_A2A_SERVICE_DIR)/chart \
 		--namespace $(ARK_API_A2A_NAMESPACE) \
 		--create-namespace \
+		--set app.image.repository=$(ARK_API_A2A_IMAGE) \
 		--set app.image.tag=$(ARK_API_A2A_TAG) \
 		--wait \
 		--timeout=5m

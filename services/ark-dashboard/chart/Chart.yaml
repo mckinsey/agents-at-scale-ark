@@ -2,7 +2,7 @@ apiVersion: v2
 name: ark-dashboard
 description: ARK Dashboard web interface for managing agents, models, and queries
 type: application
-version: 0.1.32
+version: 0.1.33
 appVersion: latest
 annotations:
   category: Dashboard

@@ -3,7 +3,7 @@
 # Application configuration
 app:
   image:
-    repository: ark-api-a2a
+    repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-api-a2a
     tag: "{{ .Chart.AppVersion | default .Chart.Version }}"
     pullPolicy: IfNotPresent
 

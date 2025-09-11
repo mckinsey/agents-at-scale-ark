@@ -3,7 +3,7 @@ controllerManager:
   replicas: 1
   container:
     image:
-      repository: controller
+      repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-controller
       tag: latest
       pullPolicy: IfNotPresent
     args:

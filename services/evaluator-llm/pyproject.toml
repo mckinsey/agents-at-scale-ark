@@ -1,6 +1,6 @@
 [project]
 name = "evaluator-llm"
-version = "0.1.32"
+version = "0.1.33"
 description = "LLM Evaluator for Ark - AI-powered query evaluation service"
 readme = "README.md"
 requires-python = ">=3.12"

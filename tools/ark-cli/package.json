@@ -1,6 +1,6 @@
 {
   "name": "@agents-at-scale/ark",
-  "version": "0.1.32",
+  "version": "0.1.33",
   "description": "ARK CLI - Interactive terminal interface for ARK agents",
   "main": "dist/index.js",
   "type": "module",

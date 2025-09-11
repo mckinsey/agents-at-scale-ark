@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: postgres-memory
+  repository: ghcr.io/mckinsey/agents-at-scale-ark/postgres-memory
   pullPolicy: IfNotPresent
   tag: "latest"
 

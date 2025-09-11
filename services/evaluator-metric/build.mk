@@ -63,7 +63,7 @@ $(EVALUATOR_METRIC_STAMP_BUILD): $(EVALUATOR_METRIC_STAMP_DEPS)
 $(EVALUATOR_METRIC_SERVICE_NAME)-install: $(EVALUATOR_METRIC_STAMP_INSTALL) # HELP: Deploy metric evaluator service to cluster
 $(EVALUATOR_METRIC_STAMP_INSTALL): $(EVALUATOR_METRIC_STAMP_BUILD)
 	./scripts/build-and-push.sh -i $(EVALUATOR_METRIC_IMAGE) -t $(EVALUATOR_METRIC_TAG) -f $(EVALUATOR_METRIC_SERVICE_DIR)/Dockerfile -c $(EVALUATOR_METRIC_SERVICE_DIR)
-	cd $(EVALUATOR_METRIC_SERVICE_DIR) && helm upgrade --install evaluator-metric ./chart -n $(EVALUATOR_METRIC_NAMESPACE) --create-namespace --set app.image.tag=$(EVALUATOR_METRIC_TAG)
+	cd $(EVALUATOR_METRIC_SERVICE_DIR) && helm upgrade --install evaluator-metric ./chart -n $(EVALUATOR_METRIC_NAMESPACE) --create-namespace --set image.repository=$(EVALUATOR_METRIC_IMAGE) --set image.tag=$(EVALUATOR_METRIC_TAG)
 	@touch $@
 
 # Uninstall target

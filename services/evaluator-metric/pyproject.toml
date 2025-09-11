@@ -1,6 +1,6 @@
 [project]
 name = "evaluator-metric"
-version = "0.1.32"
+version = "0.1.33"
 description = "Evaluation service using approach for Ark platform, specially focused on asserting cost and performance."
 readme = "README.md"
 requires-python = ">=3.12"
