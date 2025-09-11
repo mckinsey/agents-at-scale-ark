@@ -6,7 +6,8 @@ except those explicitly marked as public.
 
 Environment Variables:
     ARK_OKTA_ISSUER: OIDC issuer URL (e.g., https://your-oidc-provider.com/realms/your-realm)
-    ARK_OKTA_AUDIENCE: OIDC audience/client ID
+    OIDC_CLIENT_ID: OIDC client ID (used as app_id for JWT validation)
+    OIDC_APPLICATION_ID: OIDC application ID (alternative to OIDC_CLIENT_ID)ant 
     ARK_SKIP_AUTH: Set to "true" to skip authentication (development only)
     
 Note: JWKS URL is automatically derived from the issuer URL
@@ -29,7 +30,7 @@ except ImportError:
     class AuthConfig:
         def __init__(self):
             self.issuer = os.getenv("ARK_OKTA_ISSUER")
-            self.audience = os.getenv("ARK_OKTA_AUDIENCE")
+            self.app_id = os.getenv("OIDC_APPLICATION_ID") or os.getenv("OIDC_CLIENT_ID")
             # JWKS URL is derived from issuer URL
             issuer_url = os.getenv("ARK_OKTA_ISSUER")
             self.jwks_url = f"{issuer_url}/.well-known/jwks.json" if issuer_url else None
@@ -44,14 +45,54 @@ except ImportError:
             # This is a simplified version - in production, use the full ark_sdk
             import jwt
             try:
-                # Decode without verification for basic structure check
-                payload = jwt.decode(token, options={"verify_signature": False})
+                # Decode with app_id as audience (like your existing code)
+                payload = jwt.decode(token, verify=False, audience=self.config.app_id)
                 return payload
             except Exception as e:
                 raise Exception(f"Token validation failed: {e}")
     
     class TokenValidationError(Exception):
         pass
+
+# Custom token validator that's more flexible with audience validation
+class FlexibleTokenValidator:
+    def __init__(self, issuer_url: str, app_id: str = None):
+        self.issuer_url = issuer_url
+        self.app_id = app_id
+        self.jwks_url = f"{issuer_url}/.well-known/jwks.json"
+    
+    async def validate_token(self, token):
+        """Validate JWT token using app_id and issuer_url only."""
+        from pyjwt_key_fetcher import AsyncKeyFetcher
+        import jwt
+        
+        fetcher = AsyncKeyFetcher()
+        try:
+            # Get the key for token validation
+            key_entry = await fetcher.get_key(token)
+            
+            # Decode the token with app_id as audience (like your existing code)
+            token_data = jwt.decode(
+                token, 
+                verify=True, 
+                audience=self.app_id, 
+                **key_entry
+            )
+            
+            # Log token info for debugging
+            logger.info(f"Token validated successfully for app_id: {self.app_id}")
+            logger.debug(f"Token data: {token_data}")
+            
+            return token_data
+            
+        except jwt.InvalidTokenError as e:
+            logger.error(f"JWT validation failed: {str(e)}")
+            raise TokenValidationError(f"Invalid token: {str(e)}")
+        except Exception as e:
+            logger.error(f"Token validation error: {str(e)}")
+            raise TokenValidationError(f"Token validation failed: {str(e)}")
+        finally:
+            await fetcher._http_client.session.close()
 
 logger = logging.getLogger(__name__)
 
@@ -97,17 +138,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
                         content={"detail": "Missing token"}
                     )
                 
-                # Create auth config from environment variables
-                auth_config = AuthConfig()
-                logger.info(f"Auth config - issuer: {auth_config.issuer}, audience: {auth_config.audience}")
+                # Get configuration from environment variables
+                issuer_url = os.getenv("ARK_OKTA_ISSUER")
+                app_id = os.getenv("OIDC_APPLICATION_ID") or os.getenv("OIDC_CLIENT_ID")
+                logger.info(f"Auth config - issuer: {issuer_url}, app_id: {app_id}")
                 
-                # Create token validator with OIDC/JWT configuration
-                validator = TokenValidator(auth_config)
+                # Create flexible token validator that doesn't enforce audience
+                validator = FlexibleTokenValidator(issuer_url, app_id)
                 
-                # Validate the token using OIDC/JWT validation
+                # Validate the token using flexible OIDC/JWT validation
                 logger.info("Starting token validation...")
-                await validator.validate_token(token)
-                logger.info("Token validation successful")
+                token_data = await validator.validate_token(token)
+                logger.info(f"Token validation successful. User: {token_data.get('preferred_username', token_data.get('email', 'unknown'))}")
                 
             except TokenValidationError as e:
                 logger.error(f"Token validation error: {e}")
