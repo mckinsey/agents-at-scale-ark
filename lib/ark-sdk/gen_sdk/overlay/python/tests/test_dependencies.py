@@ -4,7 +4,7 @@ from unittest.mock import patch, Mock, AsyncMock
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from ark_sdk.auth.dependencies import validate_token
-from ark_sdk.auth.exceptions import TokenValidationError, ExpiredTokenError, InvalidTokenError
+from ark_sdk.auth.exceptions import TokenValidationError, ExpiredTokenError, AuthInvalidTokenError
 
 
 class TestValidateToken(unittest.TestCase):
@@ -64,7 +64,7 @@ class TestValidateToken(unittest.TestCase):
         """Test token validation with invalid token."""
         with patch('ark_sdk.auth.dependencies.TokenValidator') as mock_validator_class:
             mock_validator = Mock()
-            mock_validator.validate_token = AsyncMock(side_effect=InvalidTokenError("Invalid token"))
+            mock_validator.validate_token = AsyncMock(side_effect=AuthInvalidTokenError("Invalid token"))
             mock_validator_class.return_value = mock_validator
             
             response = self.client.get("/test", headers={"Authorization": "Bearer invalid-token"})

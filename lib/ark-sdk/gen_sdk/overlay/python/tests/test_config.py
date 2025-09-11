@@ -1,23 +1,38 @@
 """Tests for authentication configuration."""
 import os
-import pytest
+import unittest
 from unittest.mock import patch
 from ark_sdk.auth.config import AuthConfig
 
 
-class TestAuthConfig:
+class TestAuthConfig(unittest.TestCase):
     """Test cases for AuthConfig class."""
+
+    def setUp(self):
+        """Set up test environment."""
+        # Clean environment variables
+        self.original_env = {}
+        for key in list(os.environ.keys()):
+            if key.startswith('ARK_'):
+                self.original_env[key] = os.environ[key]
+                del os.environ[key]
+
+    def tearDown(self):
+        """Clean up test environment."""
+        # Restore original environment
+        for key, value in self.original_env.items():
+            os.environ[key] = value
 
     def test_default_config(self):
         """Test default configuration values."""
         config = AuthConfig()
         
-        assert config.jwt_algorithm == "RS256"
-        assert config.audience is None
-        assert config.issuer is None
-        assert config.jwks_url is None
+        self.assertEqual(config.jwt_algorithm, "RS256")
+        self.assertIsNone(config.audience)
+        self.assertIsNone(config.issuer)
+        self.assertIsNone(config.jwks_url)
 
-    def test_environment_variable_loading(self, clean_env):
+    def test_environment_variable_loading(self):
         """Test loading configuration from environment variables."""
         test_env = {
             'ARK_JWT_ALGORITHM': 'HS256',
@@ -29,12 +44,12 @@ class TestAuthConfig:
         with patch.dict(os.environ, test_env):
             config = AuthConfig()
             
-            assert config.jwt_algorithm == 'HS256'
-            assert config.audience == 'test-audience'
-            assert config.issuer == 'https://test.okta.com/oauth2/default'
-            assert config.jwks_url == 'https://test.okta.com/.well-known/jwks.json'
+            self.assertEqual(config.jwt_algorithm, 'HS256')
+            self.assertEqual(config.audience, 'test-audience')
+            self.assertEqual(config.issuer, 'https://test.okta.com/oauth2/default')
+            self.assertEqual(config.jwks_url, 'https://test.okta.com/.well-known/jwks.json')
 
-    def test_case_insensitive_environment_variables(self, clean_env):
+    def test_case_insensitive_environment_variables(self):
         """Test that environment variables are case insensitive."""
         test_env = {
             'ark_jwt_algorithm': 'ES256',
@@ -45,11 +60,11 @@ class TestAuthConfig:
         with patch.dict(os.environ, test_env):
             config = AuthConfig()
             
-            assert config.jwt_algorithm == 'ES256'
-            assert config.issuer == 'https://test.okta.com/oauth2/default'
-            assert config.audience == 'test-audience'
+            self.assertEqual(config.jwt_algorithm, 'ES256')
+            self.assertEqual(config.issuer, 'https://test.okta.com/oauth2/default')
+            self.assertEqual(config.audience, 'test-audience')
 
-    def test_audience_issuer_configuration(self, clean_env):
+    def test_audience_issuer_configuration(self):
         """Test that audience and issuer are properly configured."""
         test_env = {
             'ARK_AUDIENCE': 'test-audience',
@@ -60,10 +75,10 @@ class TestAuthConfig:
             config = AuthConfig()
             
             # Values should be present
-            assert config.audience == 'test-audience'
-            assert config.issuer == 'https://test.okta.com/oauth2/default'
+            self.assertEqual(config.audience, 'test-audience')
+            self.assertEqual(config.issuer, 'https://test.okta.com/oauth2/default')
 
-    def test_empty_string_values(self, clean_env):
+    def test_empty_string_values(self):
         """Test handling of empty string environment variables."""
         test_env = {
             'ARK_AUDIENCE': '',
@@ -75,6 +90,10 @@ class TestAuthConfig:
             config = AuthConfig()
             
             # Empty strings should be treated as None
-            assert config.audience is None
-            assert config.issuer is None
-            assert config.jwks_url is None
+            self.assertIsNone(config.audience)
+            self.assertIsNone(config.issuer)
+            self.assertIsNone(config.jwks_url)
+
+
+if __name__ == '__main__':
+    unittest.main()
