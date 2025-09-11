@@ -1,11 +1,13 @@
 """Tests for API routes."""
+import os
 import unittest
 import unittest.mock
 from unittest.mock import Mock, patch, AsyncMock
 from fastapi.testclient import TestClient
 from kubernetes_asyncio.client.rest import ApiException
 
-from ark_api.main import app
+# Set environment variable to skip authentication before importing the app
+os.environ["ARK_SKIP_AUTH"] = "true"
 
 
 class TestNamespacesEndpoint(unittest.TestCase):
@@ -13,6 +15,7 @@ class TestNamespacesEndpoint(unittest.TestCase):
     
     def setUp(self):
         """Set up test client."""
+        from ark_api.main import app
         self.client = TestClient(app)
     
     @patch('ark_api.api.v1.namespaces.ApiClient')
@@ -53,6 +56,7 @@ class TestSecretsEndpoint(unittest.TestCase):
     
     def setUp(self):
         """Set up test client."""
+        from ark_api.main import app
         self.client = TestClient(app)
     
     @patch('ark_api.api.v1.secrets.ApiClient')
@@ -211,6 +215,7 @@ class TestSecretGetEndpoint(unittest.TestCase):
     
     def setUp(self):
         """Set up test client."""
+        from ark_api.main import app
         self.client = TestClient(app)
     
     @patch('ark_api.api.v1.secrets.ApiClient')
@@ -249,6 +254,7 @@ class TestSecretCreateEndpoint(unittest.TestCase):
     
     def setUp(self):
         """Set up test client."""
+        from ark_api.main import app
         self.client = TestClient(app)
     
     @patch('ark_api.api.v1.secrets.ApiClient')
@@ -390,6 +396,7 @@ class TestSecretUpdateEndpoint(unittest.TestCase):
     
     def setUp(self):
         """Set up test client."""
+        from ark_api.main import app
         self.client = TestClient(app)
     
     @patch('ark_api.api.v1.secrets.ApiClient')
@@ -481,6 +488,7 @@ class TestSecretDeleteEndpoint(unittest.TestCase):
     
     def setUp(self):
         """Set up test client."""
+        from ark_api.main import app
         self.client = TestClient(app)
     
     @patch('ark_api.api.v1.secrets.ApiClient')
@@ -560,6 +568,7 @@ class TestAgentsEndpoint(unittest.TestCase):
     
     def setUp(self):
         """Set up test client."""
+        from ark_api.main import app
         self.client = TestClient(app)
     
     @patch('ark_api.api.v1.agents.with_ark_client')
@@ -866,6 +875,7 @@ class TestModelsEndpoint(unittest.TestCase):
     
     def setUp(self):
         """Set up test client."""
+        from ark_api.main import app
         self.client = TestClient(app)
     
     @patch('ark_api.api.v1.models.with_ark_client')
@@ -1277,6 +1287,7 @@ class TestQueriesEndpoint(unittest.TestCase):
     
     def setUp(self):
         """Set up test client."""
+        from ark_api.main import app
         self.client = TestClient(app)
     
     @patch('ark_api.api.v1.queries.with_ark_client')
@@ -1623,6 +1634,7 @@ class TestTeamsEndpoint(unittest.TestCase):
     
     def setUp(self):
         """Set up test client."""
+        from ark_api.main import app
         self.client = TestClient(app)
     
     @patch('ark_api.api.v1.teams.with_ark_client')

@@ -7,8 +7,24 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from kubernetes_asyncio import client
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # If python-dotenv is not available, try to load .env manually
+    env_file = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
+    if os.path.exists(env_file):
+        with open(env_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ[key] = value
+
 from .api import router
 from .core.config import setup_logging
+from .auth.middleware import AuthMiddleware
 from ark_sdk.k8s import init_k8s
 
 # Initialize logging
@@ -99,6 +115,9 @@ else:
 
 # Include routes
 app.include_router(router)
+
+# Add global authentication middleware (protects all routes by default except PUBLIC_ROUTES)
+app.add_middleware(AuthMiddleware)
 
 
 # Custom exception handler for validation errors
