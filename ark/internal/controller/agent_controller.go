@@ -23,7 +23,7 @@ import (
 type AgentReconciler struct {
 	client.Client
 	Recorder record.EventRecorder
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
 }
 
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=agents,verbs=get;list;watch;create;update;patch;delete
