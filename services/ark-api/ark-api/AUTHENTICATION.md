@@ -44,9 +44,9 @@ This implementation matches your existing authentication system:
 - **Direct JWKS Integration**: Uses `pyjwt_key_fetcher` directly for better control
 - **Consistent with Existing Code**: Follows the same pattern as your `SSOAuthBackend`
 
-### FlexibleTokenValidator
+### Token Validation
 
-The authentication uses a custom `FlexibleTokenValidator` class that:
+The authentication uses the `validate_token` function from the ark-sdk that:
 
 ```python
 # Validates JWT tokens using app_id and issuer_url

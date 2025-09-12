@@ -14,84 +14,20 @@ Note: JWKS URL is automatically derived from the issuer URL
 
 import logging
 import os
+import jwt
 from fastapi import Request, APIRouter
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from .config import is_route_authenticated
 
-# We're using our own FlexibleTokenValidator instead of ark_sdk
-# This provides better control and matches your existing authentication system
-try:
-    from ark_sdk.auth.exceptions import TokenValidationError
-except ImportError:
-    # Fallback when ark_sdk is not available
-    class AuthConfig:
-        def __init__(self):
-            self.issuer = os.getenv("ARK_OIDC_ISSUER")
-            self.app_id = os.getenv("ARK_OIDC_APPLICATION_ID") or os.getenv("ARK_OIDC_CLIENT_ID")
-            # JWKS URL is derived from issuer URL
-            issuer_url = os.getenv("ARK_OIDC_ISSUER")
-            self.jwks_url = f"{issuer_url}/.well-known/jwks.json" if issuer_url else None
-            self.jwt_algorithm = os.getenv("ARK_JWT_ALGORITHM", "RS256")
-    
-    class TokenValidator:
-        def __init__(self, config):
-            self.config = config
-        
-        async def validate_token(self, token):
-            # For fallback, we'll need to implement basic JWT validation
-            # This is a simplified version - in production, use the full ark_sdk
-            import jwt
-            try:
-                # Decode with app_id as audience (like your existing code)
-                payload = jwt.decode(token, verify=False, audience=self.config.app_id)
-                return payload
-            except Exception as e:
-                raise Exception(f"Token validation failed: {e}")
-    
-    class TokenValidationError(Exception):
-        pass
+# Import from ark_sdk
+from ark_sdk.auth.exceptions import TokenValidationError
+from ark_sdk.auth.validator import TokenValidator
+from ark_sdk.auth.config import AuthConfig
 
-# Custom token validator that's more flexible with audience validation
-class FlexibleTokenValidator:
-    def __init__(self, issuer_url: str, app_id: str = None):
-        self.issuer_url = issuer_url
-        self.app_id = app_id
-        self.jwks_url = f"{issuer_url}/.well-known/jwks.json"
-    
-    async def validate_token(self, token):
-        """Validate JWT token using app_id and issuer_url only."""
-        from pyjwt_key_fetcher import AsyncKeyFetcher
-        import jwt
-        
-        fetcher = AsyncKeyFetcher()
-        try:
-            # Get the key for token validation
-            key_entry = await fetcher.get_key(token)
-            
-            # Decode the token with app_id as audience (like your existing code)
-            token_data = jwt.decode(
-                token, 
-                verify=True, 
-                audience=self.app_id, 
-                **key_entry
-            )
-            
-            # Log token info for debugging
-            logger.info(f"Token validated successfully for app_id: {self.app_id}")
-            logger.debug(f"Token data: {token_data}")
-            
-            return token_data
-            
-        except jwt.InvalidTokenError as e:
-            logger.error(f"JWT validation failed: {str(e)}")
-            raise TokenValidationError(f"Invalid token: {str(e)}")
-        except Exception as e:
-            logger.error(f"Token validation error: {str(e)}")
-            raise TokenValidationError(f"Token validation failed: {str(e)}")
-        finally:
-            await fetcher._http_client.session.close()
+# Re-export for convenience
+__all__ = ['AuthMiddleware', 'TokenValidationError']
 
 logger = logging.getLogger(__name__)
 
@@ -137,16 +73,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
                         content={"detail": "Missing token"}
                     )
                 
-                # Get configuration from environment variables
-                issuer_url = os.getenv("ARK_OIDC_ISSUER")
-                app_id = os.getenv("ARK_OIDC_APPLICATION_ID") or os.getenv("ARK_OIDC_CLIENT_ID")
-                logger.info(f"Auth config - issuer: {issuer_url}, app_id: {app_id}")
                 
-                # Create flexible token validator that doesn't enforce audience
-                validator = FlexibleTokenValidator(issuer_url, app_id)
-                
-                # Validate the token using flexible OIDC/JWT validation
+                # Validate the token using ark_sdk validator
                 logger.info("Starting token validation...")
+                
+                # Create TokenValidator instance (will read config from environment)
+                validator = TokenValidator()
                 token_data = await validator.validate_token(token)
                 logger.info(f"Token validation successful. User: {token_data.get('preferred_username', token_data.get('email', 'unknown'))}")
                 

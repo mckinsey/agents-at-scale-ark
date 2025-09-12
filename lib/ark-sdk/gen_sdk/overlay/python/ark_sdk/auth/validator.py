@@ -1,8 +1,8 @@
 """Token validation for ARK SDK."""
 
 import logging
+import os
 from typing import Optional, Dict, Any
-import httpx
 from jwt import decode, PyJWKClient
 from jwt.exceptions import InvalidTokenError, ExpiredSignatureError, DecodeError
 
@@ -16,18 +16,37 @@ class TokenValidator:
     """Validates JWT tokens using JWKS."""
     
     def __init__(self, config: Optional[AuthConfig] = None):
-        self.config = config or AuthConfig()
+        if config is None:
+            self.config = self._create_config_from_env()
+        else:
+            self.config = config
         self._jwks_client: Optional[PyJWKClient] = None
         self._jwks_cache: Dict[str, Any] = {}
         self._cache_expiry: Optional[float] = None
+
+    
+    def _create_config_from_env(self) -> AuthConfig:
+        """Create AuthConfig from environment variables."""
+        # Read environment variables directly
+        issuer = os.getenv("ARK_OIDC_ISSUER")
+        audience = os.getenv("ARK_OIDC_APPLICATION_ID") or os.getenv("ARK_OIDC_CLIENT_ID")
+        jwks_url = None
+        if issuer:
+            # Use the correct JWKS endpoint for Keycloak/Okta
+            jwks_url = f"{issuer}/protocol/openid-connect/certs"
+        
+        logger.info(f"Creating AuthConfig from environment - issuer: {issuer}, audience: {audience}")
+        
+        return AuthConfig(
+            issuer=issuer,
+            audience=audience,
+            jwks_url=jwks_url
+        )
     
     def _get_jwks_client(self) -> PyJWKClient:
         """Get or create JWKS client."""
         if self._jwks_client is None and self.config.jwks_url:
-            self._jwks_client = PyJWKClient(
-            self.config.jwks_url,
-            cache_ttl=3600  # 1 hour cache
-            )
+            self._jwks_client = PyJWKClient(self.config.jwks_url)
         return self._jwks_client
     
     async def validate_token(self, token: str) -> Dict[str, Any]:
@@ -85,4 +104,5 @@ class TokenValidator:
         except Exception as e:
             logger.error(f"Token validation error: {e}")
             raise TokenValidationError(f"Token validation failed: {e}")
-    
+
+

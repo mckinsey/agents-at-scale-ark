@@ -20,13 +20,9 @@ class TestTokenValidator(unittest.TestCase):
         """Set up test environment."""
         self.config = AuthConfig(
             jwt_algorithm="RS256",
-            jwt_audience="test-audience",
-            jwt_issuer="test-issuer",
-            okta_audience="okta-audience",
-            okta_issuer="https://test.okta.com/oauth2/default",
-            jwks_url="https://test.okta.com/.well-known/jwks.json",
-            jwks_cache_ttl=3600,
-            token_validation_retries=3
+            issuer="https://test.okta.com/oauth2/default",
+            audience="okta-audience",
+            jwks_url="https://test.okta.com/.well-known/jwks.json"
         )
         self.validator = TokenValidator(self.config)
 
@@ -44,10 +40,7 @@ class TestTokenValidator(unittest.TestCase):
         result = self.validator._get_jwks_client()
         
         self.assertEqual(result, mock_client)
-        mock_jwks_client_class.assert_called_once_with(
-            self.config.jwks_url,
-            cache_ttl=self.config.jwks_cache_ttl
-        )
+        mock_jwks_client_class.assert_called_once_with(self.config.jwks_url)
 
     @patch('ark_sdk.auth.validator.PyJWKClient')
     def test_get_jwks_client_no_url(self, mock_jwks_client_class):
@@ -110,8 +103,8 @@ class TestTokenValidator(unittest.TestCase):
             "test-token",
             "test-key",
             algorithms=["RS256"],
-            audience="okta-audience",  # Should use OKTA audience as primary
-            issuer="https://test.okta.com/oauth2/default",  # Should use OKTA issuer as primary
+            audience="okta-audience",
+            issuer="https://test.okta.com/oauth2/default",
             options={
                 "verify_signature": True,
                 "verify_exp": True,
@@ -124,13 +117,11 @@ class TestTokenValidator(unittest.TestCase):
     @patch('ark_sdk.auth.validator.PyJWKClient')
     def test_validate_token_fallback_to_jwt_config(self, mock_jwks_client_class, mock_decode):
         """Test token validation falls back to JWT config when OKTA is not set."""
-        # Setup config without OKTA values
+        # Setup config without audience/issuer values
         config = AuthConfig(
             jwt_algorithm="RS256",
-            jwt_audience="jwt-audience",
-            jwt_issuer="jwt-issuer",
-            okta_audience=None,
-            okta_issuer=None,
+            audience="jwt-audience",
+            issuer="jwt-issuer",
             jwks_url="https://test.okta.com/.well-known/jwks.json"
         )
         validator = TokenValidator(config)
@@ -170,10 +161,8 @@ class TestTokenValidator(unittest.TestCase):
         # Setup config without audience/issuer
         config = AuthConfig(
             jwt_algorithm="RS256",
-            jwt_audience=None,
-            jwt_issuer=None,
-            okta_audience=None,
-            okta_issuer=None,
+            audience=None,
+            issuer=None,
             jwks_url="https://test.okta.com/.well-known/jwks.json"
         )
         validator = TokenValidator(config)
@@ -312,17 +301,12 @@ class TestTokenValidator(unittest.TestCase):
         
         self.assertIn("Token validation failed", str(context.exception))
 
-    def test_validate_token_okta_priority(self):
-        """Test that OKTA values take priority over JWT values."""
-        # This test verifies the logic in the validator
-        # OKTA values should be used as primary, JWT as fallback
-        self.assertEqual(self.config.okta_audience, "okta-audience")
-        self.assertEqual(self.config.okta_issuer, "https://test.okta.com/oauth2/default")
-        self.assertEqual(self.config.jwt_audience, "test-audience")
-        self.assertEqual(self.config.jwt_issuer, "test-issuer")
-        
-        # The validator should use OKTA values when both are present
-        # This is tested in the validate_token_success test above
+    def test_validate_token_config_values(self):
+        """Test that config values are set correctly."""
+        # This test verifies the config values
+        self.assertEqual(self.config.audience, "okta-audience")
+        self.assertEqual(self.config.issuer, "https://test.okta.com/oauth2/default")
+        self.assertEqual(self.config.jwks_url, "https://test.okta.com/.well-known/jwks.json")
 
 
 if __name__ == '__main__':
