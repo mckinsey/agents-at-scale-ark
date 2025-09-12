@@ -24,9 +24,30 @@ app:
       protocol: "http"
   
   # Other environment variables
-  env: {}
-    # - name: EXAMPLE_KEY
-    #   value: "example value"
+  env:
+    # Authentication configuration
+    - name: BASE_URL
+      value: ""
+    - name: AUTH_URL
+      value: ""
+    - name: AUTH_SECRET
+      value: ""
+    - name: OIDC_ISSUER_URL
+      value: ""
+    - name: OIDC_CLIENT_ID
+      value: ""
+    - name: OIDC_CLIENT_SECRET
+      value: ""
+    - name: OIDC_PROVIDER_NAME
+      value: ""
+    - name: OIDC_PROVIDER_ID
+      value: ""
+    - name: SESSION_MAX_AGE
+      value: ""
+    - name: NEXT_PUBLIC_TOKEN_REFRESH_INTERVAL_MS
+      value: "600000" #10 mins
+    - name: AUTH_MODE
+      value: "open"
   
   # Optional: Import entire secrets/configmaps as env vars
   # envFrom:

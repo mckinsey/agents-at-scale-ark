@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.33](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.33...v0.1.33) (2025-09-10)
+
+
+### Miscellaneous Chores
+
+* release 0.1.33 ([13d6113](https://github.com/mckinsey/agents-at-scale-ark/commit/13d61139d3f247fbfd67e43925e3d77a443c41a9))
+
 ## [0.1.33](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.32...v0.1.33) (2025-09-10)
 
 

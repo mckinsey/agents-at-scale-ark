@@ -18,7 +18,6 @@ function QueriesContent() {
   const searchParams = useSearchParams()
   const namespace = searchParams.get("namespace") || "default"
   const queriesSectionRef = useRef<{ openAddEditor: () => void }>(null)
-
   return (
     <>
       <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">

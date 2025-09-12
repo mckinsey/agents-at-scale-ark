@@ -612,7 +612,7 @@ class TestAgentsEndpoint(unittest.TestCase):
         # Check second agent
         self.assertEqual(data["items"][1]["name"], "another-agent")
         self.assertEqual(data["items"][1]["description"], "Another test agent")
-        self.assertIsNone(data["items"][1]["model_ref"])
+        self.assertEqual(data["items"][1]["model_ref"], "default")
         self.assertEqual(data["items"][1]["status"], "pending")
     
     @patch('ark_api.api.v1.agents.with_ark_client')
