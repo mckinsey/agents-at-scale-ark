@@ -9,6 +9,7 @@ import {
   type MCPServer
 } from "@/lib/services/mcp-servers";
 import { McpEditor } from "../editors/mcp-editor";
+import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog";
 
 interface McpServerCardProps {
   mcpServer: MCPServer;
@@ -27,6 +28,7 @@ export function McpServerCard({
 }: McpServerCardProps) {
   const actions: BaseCardAction[] = [];
   const [mcpEditorOpen, setMcpEditorOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Get custom icon or default Server icon
   const annotations = mcpServer.annotations as Record<string, string> | undefined;
@@ -52,7 +54,7 @@ export function McpServerCard({
     actions.push({
       icon: Trash2,
       label: "Delete MCP server",
-      onClick: () => onDelete(mcpServer.name || mcpServer.id)
+      onClick: () => setDeleteConfirmOpen(true)
     });
   }
 
@@ -100,6 +102,18 @@ export function McpServerCard({
         onSave={onUpdate || (() => {})}
         namespace={namespace}
       />
+      {onDelete && (
+        <ConfirmationDialog
+          open={deleteConfirmOpen}
+          onOpenChange={setDeleteConfirmOpen}
+          title="Delete MCP Server"
+          description={`Do you want to delete "${mcpServer.name || 'this MCP server'}" server? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={() => onDelete(mcpServer.name || mcpServer.id)}
+          variant="destructive"
+        />
+      )}
     </>
   );
 }

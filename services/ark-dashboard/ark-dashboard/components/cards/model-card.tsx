@@ -13,6 +13,7 @@ import { getCustomIcon } from "@/lib/utils/icon-resolver";
 import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import { BaseCard, type BaseCardAction } from "./base-card";
 import { ModelEditor } from "@/components/editors";
+import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog";
 import type {
   Model,
   Agent,
@@ -38,6 +39,7 @@ export function ModelCard({
   namespace
 }: ModelCardProps) {
   const [editorOpen, setEditorOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Check if any agents are using this model
   const agentsUsingModel = agents.filter(
@@ -66,7 +68,7 @@ export function ModelCard({
     actions.push({
       icon: Trash2,
       label: "Delete model",
-      onClick: () => onDelete(model.id),
+      onClick: () => setDeleteConfirmOpen(true),
       disabled: isActive
     });
   }
@@ -135,6 +137,18 @@ export function ModelCard({
         onSave={onUpdate || (() => {})}
         namespace={namespace}
       />
+      {onDelete && (
+        <ConfirmationDialog
+          open={deleteConfirmOpen}
+          onOpenChange={setDeleteConfirmOpen}
+          title="Delete Model"
+          description={`Do you want to delete "${model.name}" model? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={() => onDelete(model.id)}
+          variant="destructive"
+        />
+      )}
     </>
   );
 }

@@ -65,9 +65,11 @@ type QuerySpec struct {
 	Cancel bool `json:"cancel,omitempty"`
 }
 
+// Response defines a response from a query target.
 type Response struct {
 	Target  QueryTarget `json:"target,omitempty"`
 	Content string      `json:"content,omitempty"`
+	Raw     string      `json:"raw,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -68,7 +68,7 @@ func (v *AgentCustomValidator) validateAgent(ctx context.Context, agent *arkv1al
 	}
 
 	for i, tool := range agent.Spec.Tools {
-		toolWarnings, err := v.validateTool(ctx, agent.Namespace, i, tool)
+		toolWarnings, err := v.validateTool(i, tool)
 		if err != nil {
 			return warnings, err
 		}
@@ -119,21 +119,19 @@ func (v *AgentCustomValidator) validateBuiltInTool(tool arkv1alpha1.AgentTool, h
 	return nil
 }
 
-func (v *AgentCustomValidator) validateCustomTool(ctx context.Context, namespace string, tool arkv1alpha1.AgentTool, hasName bool, index int) (admission.Warnings, error) {
+func (v *AgentCustomValidator) validateCustomTool(tool arkv1alpha1.AgentTool, hasName bool, index int) (admission.Warnings, error) {
 	var warnings admission.Warnings
 
 	if !hasName {
 		return warnings, fmt.Errorf("tool[%d]: %s tools must specify a name", index, tool.Type)
 	}
 
-	if err := v.ValidateLoadTool(ctx, tool.Name, namespace); err != nil {
-		return warnings, fmt.Errorf("tool[%d]: %s", index, err)
-	}
-
+	// Custom tools are validated at runtime by the controller
+	// Allow creation to proceed without checking if tool exists
 	return warnings, nil
 }
 
-func (v *AgentCustomValidator) validateTool(ctx context.Context, namespace string, index int, tool arkv1alpha1.AgentTool) (admission.Warnings, error) {
+func (v *AgentCustomValidator) validateTool(index int, tool arkv1alpha1.AgentTool) (admission.Warnings, error) {
 	var warnings admission.Warnings
 	hasName := tool.Name != ""
 
@@ -143,7 +141,7 @@ func (v *AgentCustomValidator) validateTool(ctx context.Context, namespace strin
 			return warnings, err
 		}
 	case "custom":
-		return v.validateCustomTool(ctx, namespace, tool, hasName, index)
+		return v.validateCustomTool(tool, hasName, index)
 	default:
 		return warnings, fmt.Errorf("tool[%d]: unsupported tool type '%s': supported types are: built-in, custom", index, tool.Type)
 	}

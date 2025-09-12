@@ -1,0 +1,17 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: test-tool
+spec:
+  type: http
+  inputSchema:
+    type: object
+    properties:
+      message:
+        type: string
+        description: A test message
+    required:
+      - message
+  description: "A simple test tool for lifecycle testing"
+  http:
+    url: https://httpbin.org/post

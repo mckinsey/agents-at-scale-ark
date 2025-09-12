@@ -1,0 +1,52 @@
+# DevSpace configuration for ark-mcp service
+version: v2beta1
+
+pipelines:
+  deploy: |-
+    build_images --all
+    create_deployments --all
+  
+  dev: |-
+    create_deployments --all
+    start_dev --all
+
+images:
+  ark-mcp:
+    image: ark-mcp
+    dockerfile: ./Dockerfile
+    context: .
+
+deployments:
+  ark-mcp:
+    namespace: default
+    helm:
+      chart:
+        path: ./chart
+      values:
+        app:
+          image:
+            repository: ${runtime.images.ark-mcp.image}
+            tag: ${runtime.images.ark-mcp.tag}
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+
+dev:
+  ark-mcp:
+    imageSelector: ark-mcp
+    devImage: python:3.12-slim
+    command: ["sh", "-c", "cd /app/ark-mcp && pip install -e . && python -m ark_mcp.server --host 0.0.0.0 --port 8000"]
+    namespace: default
+    logs:
+      lastLines: 50
+    sync:
+      - path: .:/app
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+    ssh:
+      enabled: true

@@ -225,7 +225,7 @@ func setupControllers(mgr ctrl.Manager) {
 		name       string
 		reconciler interface{ SetupWithManager(ctrl.Manager) error }
 	}{
-		{"Agent", &controller.AgentReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
+		{"Agent", &controller.AgentReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("agent-controller")}},
 		{"Query", &controller.QueryReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("query-controller")}},
 		{"Tool", &controller.ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
 		{"Team", &controller.TeamReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},

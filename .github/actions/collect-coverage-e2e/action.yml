@@ -29,7 +29,7 @@ runs:
         kubectl -n ark-system scale deployment ark-controller --replicas=0
         
         # Wait for pods to terminate (coverage data is flushed on termination)
-        kubectl -n ark-system wait --for=delete pod -l app.kubernetes.io/name=ark --timeout=30s || true
+        kubectl -n ark-system wait --for=delete pod -l app.kubernetes.io/name=ark-controller --timeout=30s || true
         
         # Debug: Show remaining pods
         kubectl get pods -A

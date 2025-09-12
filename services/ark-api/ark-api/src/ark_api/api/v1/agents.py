@@ -13,7 +13,8 @@ from ...models.agents import (
     AgentListResponse,
     AgentCreateRequest,
     AgentUpdateRequest,
-    AgentDetailResponse
+    AgentDetailResponse,
+    ModelRef
 )
 from ...constants.annotations import A2A_SERVER_ADDRESS_ANNOTATION
 from .exceptions import handle_k8s_errors
@@ -32,7 +33,7 @@ def agent_to_response(agent: dict) -> AgentResponse:
     status = agent.get("status", {})
     
     # Extract model ref name if exists
-    model_ref = None
+    model_ref = "default"
     if spec.get("modelRef"):
         model_ref = spec["modelRef"].get("name")
     
@@ -77,7 +78,7 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
         namespace=metadata.get("namespace", ""),
         description=spec.get("description"),
         executionEngine=spec.get("executionEngine"),
-        modelRef=spec.get("modelRef"),
+        modelRef=spec.get("modelRef", ModelRef(name="default")),
         parameters=spec.get("parameters"),
         prompt=spec.get("prompt"),
         tools=spec.get("tools"),

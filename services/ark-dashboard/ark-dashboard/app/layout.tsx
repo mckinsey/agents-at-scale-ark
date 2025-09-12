@@ -1,12 +1,9 @@
 import type { Metadata } from "next";
 
 import "./globals.css";
-import ChatManager from "@/components/chat-manager";
-import { ChatProvider } from "@/lib/chat-context";
-import { Toaster } from "@/components/ui/toaster";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
 import localFont from "next/font/local";
+import { auth } from "@/auth";
+import { SessionProvider } from "next-auth/react";
 
 const geistSans = localFont({
   src: [
@@ -49,24 +46,21 @@ export const metadata: Metadata = {
   description: "Basic Configuration and Monitoring for ARK"
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await auth()
+
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ChatProvider>
-          <SidebarProvider>
-            <AppSidebar />
-            <SidebarInset>{children}</SidebarInset>
-          </SidebarProvider>
-          <ChatManager />
-          <Toaster />
-        </ChatProvider>
+        <SessionProvider session={session}>
+          {children}
+        </SessionProvider>
       </body>
     </html>
   );

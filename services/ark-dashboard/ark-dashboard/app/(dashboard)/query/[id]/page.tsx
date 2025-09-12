@@ -31,25 +31,48 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip"
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger
-} from "@/components/ui/tabs"
 import { simplifyDuration } from "@/lib/utils/time"
-import { useMarkdownProcessor } from "@/lib/hooks/use-markdown-processor"
+
 import { QueryEvaluationActions } from "@/components/query-actions"
+import JsonDisplay from "@/components/JsonDisplay"
+import { ErrorResponseContent } from '@/components/ErrorResponseContent';
 
 // Component for rendering response content
-function ResponseContent({ content, viewMode }: { content: string, viewMode: 'text' | 'markdown' }) {
-  const markdownContent = useMarkdownProcessor(content)
-  
-  if (viewMode === 'markdown') {
+function ResponseContent({ content, viewMode, rawJson }: { content: string, viewMode: 'content' | 'raw', rawJson?: unknown }) {
+  if (viewMode === 'raw') {
+    const getJsonDisplay = () => {
+      if (rawJson && typeof rawJson === 'object' && (rawJson as { raw?: string }).raw) {
+        try {
+          const parsed = JSON.parse((rawJson as { raw?: string }).raw!);
+          // Create a more readable structure
+          const readableJson = {
+            content: (rawJson as { content?: string }).content || "No content",
+            target: (rawJson as { target?: { name?: string; type?: string } }).target || "No target", 
+            raw: parsed
+          };
+          return readableJson;
+        } catch {
+          return rawJson;
+        }
+      }
+      return rawJson;
+    };
+
     return (
       <div className="text-sm">
-        {markdownContent}
+        <JsonDisplay 
+          value={getJsonDisplay()} 
+          className="bg-black text-white p-4 rounded text-sm font-mono whitespace-pre-wrap break-words"
+        />
       </div>
+    )
+  }
+
+  if (viewMode === 'content') {
+    return (
+      <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900/50 p-3">
+        {content || "No content"}
+      </pre>
     )
   }
   
@@ -221,7 +244,8 @@ function QueryDetailContent() {
   const [availableMemories, setAvailableMemories] = useState<Array<{name: string}>>([])
   const [memoriesLoading, setMemoriesLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [responseViewMode, setResponseViewMode] = useState<'text' | 'markdown'>('markdown')
+  const [responseViewMode, setResponseViewMode] = useState<'content' | 'raw'>('content')
+  const [errorViewMode, setErrorViewMode] = useState<'events' | 'details'>('events')
   const nameFieldRef = useRef<HTMLInputElement>(null)
   const [toolSchema, setToolSchema] = useState<ToolDetail | null>(null)
 
@@ -532,7 +556,12 @@ function QueryDetailContent() {
           {/* Query Column */}
           <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
             <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b">
-              <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Query</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Query</h3>
+                <a href={`/events?namespace=${namespace}&kind=Query&name=${query.name}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+                  View Events
+                </a>
+              </div>
             </div>
             <table className="w-full table-fixed">
               <tbody>
@@ -775,116 +804,87 @@ function QueryDetailContent() {
               )}
             </div>
 
-            {/* Responses Table */}
-            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-              {query.status?.phase === 'running' ? (
-                <>
-                  <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
-                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Responses</h3>
-                    <div className="flex items-center gap-1 text-xs">
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'text' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('text')}
-                      >
-                        Text
-                      </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'markdown' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('markdown')}
-                      >
-                        Markdown
-                      </button>
-                    </div>
+                        {/* Conditional Response or Error Section */}
+            {query.status?.responses && query.status.responses.length > 0 ? (
+              /* Response Section - show when there are responses */
+              <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
+                  <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Response</h3>
+                  <div className="flex items-center gap-1 text-xs overflow-x-auto whitespace-nowrap flex-shrink-0">
+                    <button 
+                      className={`px-2 py-1 rounded ${
+                        responseViewMode === 'content' 
+                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
+                          : 'text-gray-500 dark:text-gray-400'
+                      }`}
+                      onClick={() => setResponseViewMode('content')}
+                    >
+                      Content
+                    </button>
+                    <button 
+                      className={`px-2 py-1 rounded ${
+                        responseViewMode === 'raw' 
+                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
+                          : 'text-gray-500 dark:text-gray-400'
+                      }`}
+                      onClick={() => setResponseViewMode('raw')}
+                    >
+                      Raw
+                    </button>
                   </div>
-                  <div className="text-center text-muted-foreground py-8 text-sm">
-                    Processing...
-                  </div>
-                </>
-              ) : query.status?.responses && query.status.responses.length > 0 ? (
-                <Tabs defaultValue="0" className="w-full gap-0">
-                  <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Responses</h3>
-                      <TabsList className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1 h-7" style={{gridTemplateColumns: `repeat(${Math.min(query.status.responses.length, 4)}, 1fr)`}}>
-                        {query.status.responses.map((response, index) => (
-                          <TabsTrigger key={index} value={index.toString()} className="text-xs h-6 px-2">
-                            {response.target ? `${response.target.type}:${response.target.name}` : `Response ${index + 1}`}
-                          </TabsTrigger>
-                        ))}
-                      </TabsList>
-                    </div>
-                    <div className="flex items-center gap-1 text-xs">
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'text' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('text')}
-                      >
-                        Text
-                      </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'markdown' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('markdown')}
-                      >
-                        Markdown
-                      </button>
-                    </div>
-                  </div>
-                  {query.status.responses.map((response, index) => (
-                    <TabsContent key={index} value={index.toString()} className="mt-0 p-3">
+                </div>
+                <div className="p-3">
+                  {query.status?.responses?.map((response, index) => (
+                    <div key={index} className="mb-4 last:mb-0">
                       <ResponseContent 
                         content={response.content || "No content"} 
                         viewMode={responseViewMode} 
+                        rawJson={response} 
                       />
-                    </TabsContent>
-                  ))}
-                </Tabs>
-              ) : (
-                <>
-                  <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
-                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Responses</h3>
-                    <div className="flex items-center gap-1 text-xs">
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'text' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('text')}
-                      >
-                        Text
-                      </button>
-                      <button 
-                        className={`px-2 py-1 rounded ${
-                          responseViewMode === 'markdown' 
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        }`}
-                        onClick={() => setResponseViewMode('markdown')}
-                      >
-                        Markdown
-                      </button>
                     </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              /* Error Section - show when there's an error or no responses */
+              <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
+                  <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Error</h3>
+                  <div className="flex items-center gap-1 text-xs overflow-x-auto whitespace-nowrap flex-shrink-0">
+                    <button 
+                      className={`px-2 py-1 rounded ${
+                        errorViewMode === 'events' 
+                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
+                          : 'text-gray-500 dark:text-gray-400'
+                      }`}
+                      onClick={() => setErrorViewMode('events')}
+                    >
+                      Events
+                    </button>
+                    <button 
+                      className={`px-2 py-1 rounded ${
+                        errorViewMode === 'details' 
+                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
+                          : 'text-gray-500 dark:text-gray-400'
+                      }`}
+                      onClick={() => setErrorViewMode('details')}
+                    >
+                      Details
+                    </button>
                   </div>
-                  <div className="text-center text-muted-foreground py-8 text-xs">
-                    No responses yet
-                  </div>
-                </>
-              )}
+                </div>
+                <div className="p-3">
+                  <ErrorResponseContent 
+                    query={query}
+                    viewMode={errorViewMode}
+                    namespace={namespace}
+                  />
+                </div>
+              </div>
+            )}
+            
+            <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+              Note: Events expire after a certain amount of time and may no longer be available for viewing.
             </div>
           </div>
         </ScrollArea>

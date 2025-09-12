@@ -47,7 +47,7 @@ packages = ["src/ark_mcp"]
 # Black configuration
 [tool.black]
 line-length = 120
-target-version = ['py311']
+target-version = ['py312']
 include = '\.pyi?$'
 
 # Flake8 configuration
@@ -64,7 +64,7 @@ include_trailing_comma = true
 
 # MyPy configuration
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
