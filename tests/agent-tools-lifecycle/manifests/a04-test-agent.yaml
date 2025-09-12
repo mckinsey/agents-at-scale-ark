@@ -1,0 +1,14 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: test-agent
+spec:
+  prompt: |
+    You are a test agent designed to validate agent lifecycle behavior.
+    When tools are available, you can help users by utilizing them appropriately.
+    Your primary purpose is to demonstrate proper state management as dependencies change.
+  modelRef:
+    name: test-model
+  tools:
+    - type: custom
+      name: test-tool

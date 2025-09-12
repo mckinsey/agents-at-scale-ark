@@ -1,0 +1,72 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: agent-tools-lifecycle
+spec:
+  description: Test agent state transitions based on tool availability
+  steps:
+  - name: agent-pending-without-tool
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          set -u
+          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+        outputs:
+        - name: azure
+          value: (json_parse($stdout))
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a01-secret.yaml
+    - apply:
+        file: manifests/a02-model.yaml
+    # Skip Tool creation to test for 'Pending' state of Agent as Tool is missing
+    - apply:
+        file: manifests/a04-test-agent.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-model
+          status:
+            phase: ready
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: test-agent
+          status:
+            phase: Pending
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+        name: test-agent
+  - name: agent-ready-with-tool
+    try:
+    - apply:
+        file: manifests/a03-test-tool.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: test-tool
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: test-agent
+          status:
+            phase: Ready
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+        name: test-agent
