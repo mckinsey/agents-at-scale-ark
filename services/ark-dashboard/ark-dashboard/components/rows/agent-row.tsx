@@ -54,6 +54,24 @@ export function AgentRow({
   // Check if this is an A2A agent
   const isA2A = agent.isA2A || false;
 
+  // Get agent status/phase
+  const agentPhase = agent.status && typeof agent.status === "object" && "phase" in agent.status 
+    ? String(agent.status.phase) 
+    : "Unknown";
+  const isReady = agentPhase.toLowerCase() === "ready";
+  const isPending = agentPhase.toLowerCase() === "pending";
+  const hasError = agentPhase.toLowerCase() === "error";
+
+  // Get status badge color
+  let statusBadgeClass = "bg-gray-100 text-gray-800";
+  if (hasError) {
+    statusBadgeClass = "bg-red-100 text-red-800";
+  } else if (isReady) {
+    statusBadgeClass = "bg-green-100 text-green-800";
+  } else if (isPending) {
+    statusBadgeClass = "bg-yellow-100 text-yellow-800";
+  }
+
   // Get custom icon or default Bot icon
   const IconComponent = getCustomIcon(agent.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], Bot);
 
@@ -79,6 +97,15 @@ export function AgentRow({
         <div className="text-sm text-muted-foreground flex-shrink-0 mr-4">
           {!isA2A && <span>Model: {modelName}</span>}
           {isA2A && <span>A2A Agent</span>}
+        </div>
+
+        {/* Status Badge */}
+        <div className="flex-shrink-0 mr-2">
+          <span
+            className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${statusBadgeClass}`}
+          >
+            {agentPhase}
+          </span>
         </div>
 
         <div className="flex items-center gap-1 flex-shrink-0">
