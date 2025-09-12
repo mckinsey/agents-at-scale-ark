@@ -60,8 +60,8 @@ async def list_agents_sdk(namespace: str = DEFAULT_NAMESPACE) -> List[Agent]:
                 spec = agent_dict.get("spec", {})
                 status = agent_dict.get("status", {})
                 
-                # Extract model ref name if exists
-                model_ref = None
+                # Extract model ref name if exists, otherwise use "default"
+                model_ref = "default"
                 if spec.get("modelRef"):
                     model_ref = spec["modelRef"].get("name")
                 

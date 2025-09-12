@@ -62,7 +62,8 @@ kubectl port-forward -n default svc/ark-dashboard 3000:3000
 cd ark/
 make manifests
 kubectl apply -f config/crd/bases/ark.mckinsey.com_queries.yaml
-# Then restart the controller (see above)
+# Then restart the controller
+make deploy
 ```
 
 ## Build/deploy production images
