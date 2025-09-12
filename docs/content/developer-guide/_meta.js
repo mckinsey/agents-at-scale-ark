@@ -10,7 +10,7 @@ export default {
   'ark-dashboard': 'ARK Dashboard',
   'ark-gateway': 'ARK Gateway',
   'a2a-server': 'A2A Gateway',
-  'evaluator-llm': 'Evaluator LLM Service',
+  'ark-evaluator': 'Evaluation Engine Service',
   testing: 'End-to-End Testing',
   observability: 'Observability',
   'langchain-execution-engine': 'LangChain Execution Engine',

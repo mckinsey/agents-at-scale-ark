@@ -4868,6 +4868,8 @@ export interface operations {
             query?: {
                 /** @description Include enhanced metadata from annotations */
                 enhanced?: boolean;
+                /** @description Filter evaluations by query reference name */
+                query_ref?: string;
             };
             header?: never;
             path: {

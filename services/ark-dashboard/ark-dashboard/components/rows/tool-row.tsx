@@ -4,25 +4,25 @@ import { useState } from "react";
 import { ChevronRight, Trash2, Wrench, MessageCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { getCustomIcon } from "@/lib/utils/icon-resolver";
-import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog";
 import type { Tool } from "@/lib/services/tools";
+import { cn } from "@/lib/utils";
+import { getCustomIcon } from "@/lib/utils/icon-resolver";
 
 type ToolRowProps = {
-    readonly tool: Tool;
-    readonly onInfo?: (tool: Tool) => void;
-    readonly onDelete?: (id: string) => void;
-    readonly inUse?: boolean;
-    readonly inUseReason?: string;
-    readonly namespace?: string;
+  readonly tool: Tool;
+  readonly onInfo?: (tool: Tool) => void;
+  readonly onDelete?: (id: string) => void;
+  readonly inUse?: boolean;
+  readonly inUseReason?: string;
+  readonly namespace?: string;
 };
 
 export function ToolRow(props: ToolRowProps) {
@@ -32,8 +32,11 @@ export function ToolRow(props: ToolRowProps) {
   
   // Get custom icon or default Wrench icon
   const annotations = tool.annotations as Record<string, string> | undefined;
-  const IconComponent = getCustomIcon(annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], Wrench);
-  
+  const IconComponent = getCustomIcon(
+    annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
+    Wrench
+  );
+
   const handleInfo = () => {
     if (onInfo) {
       onInfo(tool);
@@ -41,7 +44,11 @@ export function ToolRow(props: ToolRowProps) {
   };
 
   const handleQueryTool = () => {
-    router.push(`/query/new?namespace=${props.namespace || 'default'}&target_tool=${tool.name}`);
+    router.push(
+      `/query/new?namespace=${props.namespace || "default"}&target_tool=${
+        tool.name
+      }`
+    );
   };
 
   return (

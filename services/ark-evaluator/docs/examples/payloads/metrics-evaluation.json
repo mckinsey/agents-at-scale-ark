@@ -1,0 +1,22 @@
+{
+  "type": "direct",
+  "config": {
+    "input": "What are the key factors to consider when implementing a machine learning project?",
+    "output": "Key factors for ML project implementation include: 1) Data quality and availability - ensuring clean, representative data; 2) Problem definition - clearly defining objectives and success metrics; 3) Model selection - choosing appropriate algorithms; 4) Infrastructure requirements - computing resources and deployment architecture; 5) Team expertise - having skilled data scientists and engineers; 6) Timeline and budget constraints; 7) Regulatory compliance and ethical considerations; 8) Model monitoring and maintenance strategies."
+  },
+  "parameters": {
+    "maxTokens": "2000",
+    "maxDuration": "30s",
+    "maxCostPerQuery": "0.08",
+    "minTokensPerSecond": "15.0",
+    "tokenEfficiencyThreshold": "0.4",
+    "costEfficiencyThreshold": "0.8",
+    "responseCompletenessThreshold": "0.9",
+    "minResponseLength": "100",
+    "maxResponseLength": "1500",
+    "tokenWeight": "0.25",
+    "costWeight": "0.25",
+    "performanceWeight": "0.25",
+    "qualityWeight": "0.25"
+  }
+}

@@ -1,0 +1,32 @@
+## Conversion quality evaluator for positive test cases
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: conversion-quality-evaluator
+  namespace: default
+  labels:
+    type: conversion-quality
+    category: positive-testing
+    domain: code-modernization
+spec:
+  description: "Evaluates quality of Java-to-JavaScript conversions for valid inputs"
+  address:
+    valueFrom:
+      serviceRef:
+        name: ark-evaluator
+        port: "http"
+        path: "/evaluate"
+  selector:
+    resourceType: "Query"
+    apiGroup: "ark.mckinsey.com"
+    matchLabels:
+      agent-type: "java-modernizer"
+  parameters:
+    - name: scope
+      value: "accuracy,completeness,usefulness,compliance"
+    - name: min_score
+      value: "0.7"
+    - name: evaluator_role
+      value: "You are a code modernization quality specialist. SCOPE RULE: Only evaluate Java-to-JavaScript conversions. If agent converts non-Java code (Python, C++, etc.) instead of refusing, this violates scope - give score 0.1-0.3. For valid Java conversions, assess technical accuracy and JavaScript best practices normally."
+    - name: evaluation_criteria
+      value: "syntax_correctness,pattern_modernization,feature_preservation,code_quality"

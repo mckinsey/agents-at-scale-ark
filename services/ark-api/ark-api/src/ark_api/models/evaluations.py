@@ -3,6 +3,7 @@
 from typing import List, Dict, Optional, Any
 from pydantic import BaseModel
 from enum import Enum
+import json
 from .evaluation_metadata import UnifiedEvaluationMetadata
 
 
@@ -180,6 +181,39 @@ class EnhancedEvaluationDetailResponse(BaseModel):
     enhanced_metadata: Optional[UnifiedEvaluationMetadata] = None
 
 
+def extract_unified_metadata_from_annotations(evaluation: dict) -> Optional[UnifiedEvaluationMetadata]:
+    """Extract unified metadata from evaluation annotations."""
+    metadata = evaluation.get("metadata", {})
+    annotations = metadata.get("annotations", {})
+    
+    if not annotations:
+        return None
+    
+    # Extract metadata from annotations with evaluation.metadata/ prefix
+    extracted_metadata = {}
+    for key, value in annotations.items():
+        if key.startswith("evaluation.metadata/"):
+            metadata_key = key.replace("evaluation.metadata/", "")
+            # Try to parse JSON strings
+            if isinstance(value, str) and (value.startswith("[") or value.startswith("{")):
+                try:
+                    extracted_metadata[metadata_key] = json.loads(value)
+                except json.JSONDecodeError:
+                    extracted_metadata[metadata_key] = value
+            else:
+                extracted_metadata[metadata_key] = value
+    
+    if not extracted_metadata:
+        return None
+    
+    # Try to create UnifiedEvaluationMetadata from extracted data
+    try:
+        return UnifiedEvaluationMetadata(**extracted_metadata)
+    except Exception:
+        # If it fails, return None - the metadata might not match the expected structure
+        return None
+
+
 def evaluation_to_response(evaluation: dict) -> EvaluationResponse:
     """Convert a Kubernetes evaluation object to response model."""
     spec = evaluation.get("spec", {})
@@ -229,13 +263,11 @@ def evaluation_to_detail_response(evaluation: dict) -> EvaluationDetailResponse:
 
 def enhanced_evaluation_to_response(evaluation: dict) -> EnhancedEvaluationResponse:
     """Convert a Kubernetes evaluation object to enhanced response model."""
-    from ..utils.annotation_extractor import AnnotationExtractor
-    
     spec = evaluation.get("spec", {})
     status = evaluation.get("status", {})
     
-    # Extract enhanced metadata
-    enhanced_metadata = AnnotationExtractor.extract_unified_metadata(evaluation)
+    # Extract enhanced metadata from annotations
+    enhanced_metadata = extract_unified_metadata_from_annotations(evaluation)
     
     return EnhancedEvaluationResponse(
         name=evaluation["metadata"]["name"],
@@ -251,8 +283,6 @@ def enhanced_evaluation_to_response(evaluation: dict) -> EnhancedEvaluationRespo
 
 def enhanced_evaluation_to_detail_response(evaluation: dict) -> EnhancedEvaluationDetailResponse:
     """Convert a Kubernetes evaluation object to enhanced detailed response model."""
-    from ..utils.annotation_extractor import AnnotationExtractor
-    
     status = evaluation.get("status", {})
     
     # Extract token usage if present
@@ -270,8 +300,8 @@ def enhanced_evaluation_to_detail_response(evaluation: dict) -> EnhancedEvaluati
     if "childEvaluationStatus" in status:
         child_status = ChildEvaluationStatus(**status["childEvaluationStatus"])
     
-    # Extract enhanced metadata
-    enhanced_metadata = AnnotationExtractor.extract_unified_metadata(evaluation)
+    # Extract enhanced metadata from annotations
+    enhanced_metadata = extract_unified_metadata_from_annotations(evaluation)
     
     return EnhancedEvaluationDetailResponse(
         name=evaluation["metadata"]["name"],

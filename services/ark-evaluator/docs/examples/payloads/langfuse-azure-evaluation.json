@@ -1,0 +1,24 @@
+{
+  "type": "direct", 
+  "evaluatorName": "langfuse-ragas-evaluator",
+  "config": {
+    "input": "How can companies reduce their carbon footprint through supply chain optimization?",
+    "output": "Companies can significantly reduce their carbon footprint through supply chain optimization by: 1) Localizing suppliers to reduce transportation emissions, 2) Implementing sustainable packaging materials and designs, 3) Optimizing logistics routes using AI and data analytics, 4) Partnering with suppliers who have strong environmental commitments, 5) Investing in renewable energy for manufacturing facilities, 6) Implementing circular economy principles through recycling and waste reduction, 7) Using digital technologies to improve supply chain transparency and tracking, 8) Consolidating shipments to improve transportation efficiency."
+  },
+  "parameters": {
+    "provider": "langfuse",
+    "langfuse.host": "https://cloud.langfuse.com",
+    "langfuse.public_key": "pk-lf-xxxxx",
+    "langfuse.secret_key": "sk-lf-xxxxx",
+    "langfuse.azure_api_key": "your-azure-openai-api-key",
+    "langfuse.azure_endpoint": "https://your-resource.openai.azure.com/",
+    "langfuse.azure_deployment": "gpt-4o",
+    "langfuse.model_version": "2024-02-01",
+    "langfuse.azure_embedding_deployment": "text-embedding-ada-002",
+    "langfuse.azure_embedding_model": "text-embedding-ada-002",
+    "metrics": "relevance,correctness,faithfulness,similarity",
+    "threshold": "0.85",
+    "context": "Based on corporate sustainability best practices and supply chain management research from leading environmental organizations and business sustainability reports.",
+    "context_source": "sustainability_best_practices_kb"
+  }
+}

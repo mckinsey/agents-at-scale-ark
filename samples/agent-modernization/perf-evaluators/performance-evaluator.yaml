@@ -1,0 +1,40 @@
+## Development environment evaluator with relaxed thresholds
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: development-metrics-evaluator
+  namespace: default
+  labels:
+    type: development-metrics
+    category: dev-environment
+    environment: development
+spec:
+  description: "Development environment evaluator with relaxed thresholds for testing"
+  address:
+    valueFrom:
+      serviceRef:
+        name: ark-evaluator
+        port: "http"
+        path: "/evaluate-metrics"
+  selector:
+    resourceType: "Query"
+    apiGroup: "ark.mckinsey.com"
+    matchLabels:
+      environment: "development"
+  parameters:
+    - name: maxTokens
+      value: "10000"  # Higher for development/testing
+    - name: maxDuration
+      value: "1s"     # More relaxed timing
+    - name: maxCostPerQuery
+      value: "1.00"   # Higher cost limit for experimentation
+    - name: tokenEfficiencyThreshold
+      value: "0.3"    # Lower efficiency requirements
+    - name: costEfficiencyThreshold
+      value: "0.4"
+    - name: performanceThreshold
+      value: "0.5"
+    - name: overallScoreThreshold
+      value: "0.4"    # Much lower passing threshold
+    - name: enableDetailedLogging
+      value: "true"   # Extra logging for development

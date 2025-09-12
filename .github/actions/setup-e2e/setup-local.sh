@@ -30,7 +30,7 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       echo "Usage: $0 [--install-coverage] [--install-evaluator]"
       echo "  --install-coverage   Install coverage collection components"
-      echo "  --install-evaluator  Install evaluator-llm service"
+      echo "  --install-evaluator  Install ark-evaluator service"
       exit 0
       ;;
     *)
@@ -174,16 +174,16 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 EOF
 
-  # Install evaluator-llm service
-  cd "${REPO_ROOT}/services/evaluator-llm/chart"
+  # Install ark-evaluator service
+  cd "${REPO_ROOT}/services/ark-evaluator/chart"
 
-  helm upgrade --install evaluator-llm . \
-    --set image.repository="${REGISTRY}/evaluator-llm" \
+  helm upgrade --install ark-evaluator . \
+    --set image.repository="${REGISTRY}/ark-evaluator" \
     --set image.tag="${ARK_IMAGE_TAG}" \
     --namespace default --create-namespace \
     --wait \
     --timeout=300s
-  kubectl -n default rollout status deployment/evaluator-llm --timeout=180s
+  kubectl -n default rollout status deployment/ark-evaluator --timeout=180s
 fi
 
 echo

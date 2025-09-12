@@ -1,20 +1,19 @@
 "use client";
 
-import type React from "react";
-import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from "react";
-import { toast } from "@/components/ui/use-toast";
-import {
-  toolsService,
-  agentsService,
-  type Tool,
-  type Agent,
-  type AgentTool
-} from "@/lib/services";
 import { ToolCard } from "@/components/cards";
-import { ToolRow } from "@/components/rows/tool-row";
-import { useDelayedLoading } from "@/lib/hooks";
-import { ToggleSwitch, type ToggleOption } from "@/components/ui/toggle-switch";
 import { InfoDialog } from "@/components/dialogs/info-dialog";
+import { ToolRow } from "@/components/rows/tool-row";
+import { ToggleSwitch, type ToggleOption } from "@/components/ui/toggle-switch";
+import { toast } from "@/components/ui/use-toast";
+import { useDelayedLoading } from "@/lib/hooks";
+import {
+  agentsService,
+  toolsService,
+  type Agent,
+  type AgentTool,
+  type Tool
+} from "@/lib/services";
+import { groupToolsByLabel } from "@/lib/utils/groupToolsByLabels";
 import {
   Collapsible,
   CollapsibleContent,
@@ -22,8 +21,14 @@ import {
 } from "@radix-ui/react-collapsible";
 import { Label } from "@radix-ui/react-label";
 import { ChevronRight } from "lucide-react";
-import { groupToolsByLabel } from "@/lib/utils/groupToolsByLabels";
 import { useRouter } from "next/navigation";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useState
+} from "react";
 import { ToolEditor } from "../editors/tool-editor";
 interface ToolsSectionProps {
   namespace: string;
@@ -231,7 +236,7 @@ export const ToolsSection = forwardRef<
                 className="group/collapsible"
                 key={`${toolGroup.groupName}-${index}`}
               >
-                <div className="bg-card text-card-foreground flex flex-col rounded-xl border p-4 shadow-sm">
+                <div className="bg-card text-card-foreground flex flex-col rounded-xl border p-4">
                   <CollapsibleTrigger className="w-full py-4">
                     <div className="flex flex-row items-center justify-between w-full">
                       <Label className="text-lg font-bold">
@@ -242,7 +247,7 @@ export const ToolsSection = forwardRef<
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     {showCompactView ? (
-                      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pb-6">
+                      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                         {toolGroup.tools.map((tool) => {
                           const toolData = toolUsageMap[tool.name] || {
                             inUse: false,
@@ -269,7 +274,7 @@ export const ToolsSection = forwardRef<
                         })}
                       </div>
                     ) : (
-                      <div className="flex flex-col gap-3 pb-6">
+                      <div className="flex flex-col gap-3">
                         {toolGroup.tools.map((tool) => {
                           const toolData = toolUsageMap[tool.name] || {
                             inUse: false,
@@ -306,7 +311,9 @@ export const ToolsSection = forwardRef<
           <InfoDialog
             open={infoDialogOpen}
             onOpenChange={setInfoDialogOpen}
-            title={`Tool: ${selectedTool.name || selectedTool.type || "Unnamed"}`}
+            title={`Tool: ${
+              selectedTool.name || selectedTool.type || "Unnamed"
+            }`}
             data={selectedTool}
             additionalFields={getAdditionalFields(selectedTool)}
           />

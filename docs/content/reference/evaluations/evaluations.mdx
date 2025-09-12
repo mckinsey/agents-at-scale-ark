@@ -8,9 +8,9 @@ Evaluations use the Ark default service that provides an LLM-as-a-Judge to asses
 
 Before using evaluations, ensure you have:
 
-1. **Evaluator Service**: Deploy the `evaluator-llm` service
+1. **Evaluator Service**: Deploy the `ark-evaluator` service
    ```bash
-   helm install evaluator-llm ./services/evaluator-llm/chart
+   helm install ark-evaluator ./services/ark-evaluator/chart
    ```
 
 2. **Default Model**: Create a default model for the evaluator to use
@@ -47,7 +47,7 @@ Before using evaluations, ensure you have:
     address:
       valueFrom: # use valueFrom when the execution service is in the same namespace 
         serviceRef:
-          name: evaluator-llm
+          name: ark-evaluator
           port: "http"
           path: "/evaluate"
     modelRef:
@@ -136,7 +136,7 @@ spec:
   address:
     valueFrom:
       serviceRef:
-        name: evaluator-llm
+        name: ark-evaluator
         port: "http"
         path: "/evaluate"
   selector:
@@ -189,7 +189,7 @@ spec:
   address:
     valueFrom:
       serviceRef:
-        name: evaluator-llm
+        name: ark-evaluator
         port: "http"
         path: "/evaluate"
   parameters:
@@ -370,6 +370,81 @@ parameters:
 4. **Quality Scoring**: Overall assessment provided
 5. **Completion**: Query marked as "done" after evaluation
 
+## Automatic Context Extraction
+
+When evaluating queries, the system automatically extracts contextual background information to help the evaluator better assess response quality. This context is added to the evaluation parameters automatically.
+
+### What Gets Extracted
+
+The evaluation controller extracts two types of contextual information:
+
+1. **Memory Context**: If the query references a memory resource, the evaluation receives information about available conversation history
+2. **Contextual Parameters**: Query parameters that contain background information (not configuration settings)
+
+### Context Parameters Added
+
+When context is extracted, two parameters are automatically added to the evaluation:
+
+```yaml
+# These parameters are added automatically by the controller:
+evaluation.context: "<extracted contextual information>"
+evaluation.context_source: "<source of the context>"
+```
+
+### Example: Query with Memory and Context
+
+```yaml
+# Query with memory and contextual parameters
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: research-query-with-context
+spec:
+  input: "What are the latest renewable energy trends?"
+  memory:
+    name: research-session-memory  # References conversation history
+  parameters:
+    - name: context.region
+      value: "European markets"
+    - name: background.timeframe  
+      value: "Q4 2024 analysis"
+    - name: reference.previous_report
+      value: "See October 2024 sustainability report"
+  targets:
+    - type: agent
+      name: research-agent
+```
+
+When this query is evaluated, the evaluation automatically receives:
+
+```yaml
+# Parameters passed to the evaluator:
+evaluation.context: |
+  Previous conversation history available (stored at: http://postgres-memory:8080)
+  Additional Context:
+  - context.region: European markets
+  - background.timeframe: Q4 2024 analysis
+  - reference.previous_report: See October 2024 sustainability report
+
+evaluation.context_source: "memory_with_params"
+```
+
+### Context Source Values
+
+The `evaluation.context_source` parameter indicates where the context came from:
+- `"memory"` - Only memory context was extracted
+- `"parameters"` - Only contextual parameters were extracted  
+- `"memory_with_params"` - Both memory and parameters were extracted
+- `"none"` - No contextual information was available
+
+### Contextual Parameter Patterns
+
+The following parameter name patterns are recognized as contextual (not configuration):
+- Parameters starting with: `context`, `background`, `reference`, `document`, `history`, `previous`, `retrieved`, `knowledge`, `source`, `material`
+- Configuration parameters (excluded): `model.*`, `temperature`, `max_tokens`, `langfuse.*`, API keys, thresholds, etc.
+
+This automatic context extraction ensures evaluators have the necessary background information to accurately assess whether responses are appropriate given the conversation history and provided context.
+
 ## Monitoring Evaluations
 
 ### Check Evaluation Status
@@ -389,7 +464,7 @@ kubectl get evaluation dataset-math-eval -w
 
 ```bash
 # Check evaluation logs
-kubectl logs -l app=evaluator-llm --tail=50
+kubectl logs -l app=ark-evaluator --tail=50
 
 # View evaluation details
 kubectl describe evaluation direct-math-eval
@@ -496,9 +571,9 @@ spec:
 ### Common Issues
 
 **Evaluation stuck in pending**:
-- Check evaluator service health: `kubectl get pods -l app=evaluator-llm`
+- Check evaluator service health: `kubectl get pods -l app=ark-evaluator`
 - Verify evaluator resource exists: `kubectl get evaluator evaluator-llm`
-- Check service logs: `kubectl logs -l app=evaluator-llm`
+- Check service logs: `kubectl logs -l app=ark-evaluator`
 
 **Low evaluation scores**:
 - Review evaluation criteria scope
@@ -510,8 +585,8 @@ spec:
 
 ```bash
 # Check evaluator service
-kubectl get service evaluator-llm
-kubectl get endpoints evaluator-llm
+kubectl get service ark-evaluator
+kubectl get endpoints ark-evaluator
 
 # Test evaluator endpoint
 kubectl port-forward service/evaluator-llm 8080:8000

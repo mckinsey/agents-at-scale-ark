@@ -11,7 +11,7 @@ This page provides detailed specifications for each ARK custom resource. For an 
 
 | Resource | API Version | Description |
 |----------|-------------|-------------|
-| [Agent](#agents) | `ark.mckinsey.com/v1alpha1` | AI agents with prompts and tools |
+| [Agent](/reference/resources/agent) | `ark.mckinsey.com/v1alpha1` | AI agents with prompts and tools |
 | [Team](#teams) | `ark.mckinsey.com/v1alpha1` | Teams of agents with execution strategies |
 | [Model](#models) | `ark.mckinsey.com/v1alpha1` | LLM service configurations |
 | [Query](#queries) | `ark.mckinsey.com/v1alpha1` | Queries to agents or teams |
@@ -60,37 +60,6 @@ spec:
 - **Base URLs**: Custom endpoints for different providers
 - **API Versions**: Provider-specific API versions
 - **Model Parameters**: Temperature, max tokens, etc.
-
-## Agents
-
-Agents are AI entities that process inputs using AI models and can use tools to extend their capabilities.
-
-### Specification
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Agent
-metadata:
-  name: weather
-spec:
-  description: Weather forecasting agent that provides current conditions and forecasts
-  prompt: |
-    You are a helpful weather assistant. You can provide weather forecasts and current conditions for any location.
-
-    You should be concise, direct, and to the point.
-    You should NOT answer with unnecessary preamble or postamble.
-  tools:
-    - type: custom
-      name: get-coordinates
-    - type: custom
-      name: get-forecast
-```
-
-### Key Fields
-- **prompt**: Defines the agent's behavior and instructions
-- **description**: Human-readable description of the agent's purpose
-- **tools**: List of tools the agent can use
-- **modelRef**: Optional reference to a specific model (uses 'default' if not specified)
-
 
 ## Teams
 
@@ -178,14 +147,13 @@ For non-deterministic cases, they use the "LLM-as-a-Judge" pattern to automatica
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Evaluator
 metadata:
-  name: llm-evaluator
+  name: ark-evaluator
 spec:
-  type: llm-judge
-  description: "LLM-as-a-Judge evaluator for query assessment"
+  description: "evaluator for query assessment"
   address:
     valueFrom:
       serviceRef:
-        name: evaluator-llm
+        name: ark-evaluator
         port: "http"
         path: "/evaluate"
   selector:  # optional - for automatic query evaluation

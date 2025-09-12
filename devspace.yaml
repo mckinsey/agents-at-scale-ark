@@ -3,6 +3,9 @@ version: v2beta1
 
 # Dependencies - include other DevSpace configurations
 # dependencies:
+#   ark-mcp:
+#     path: ./services/ark-mcp
+#     pipeline: dev
 #   postgres-memory:
 #     path: ./services/postgres-memory
 
@@ -16,7 +19,7 @@ pipelines:
   # 'devspace deploy' - Build and deploy production images
   deploy: |-
     # Deploy any dependencies.
-    run_dependency_pipelines --all
+    run_dependency_pipelines --all --set-flag pipeline=deploy
     # Build the ark controller and ark service images.
     build_images --all
     # Deploy the ark controller and services.
@@ -24,7 +27,8 @@ pipelines:
 
   # 'devspace dev' - DevSpace recommended dev workflow: deploy production, override with dev images, file sync
   dev: |-
-    run_dependency_pipelines --all
+    # Note that 'dev' doesn't seem to work here.
+    run_dependency_pipelines --all --set-flag pipeline=dev
     create_deployments --all
     start_dev --all
 
@@ -96,7 +100,6 @@ deployments:
             image:
               repository: ${runtime.images.ark-controller.image}
               tag: ${runtime.images.ark-controller.tag}
-            # Override resources for local development
             resources:
               limits:
                 memory: "2048Mi"

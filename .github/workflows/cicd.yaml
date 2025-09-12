@@ -149,9 +149,9 @@ jobs:
           - path: services/ark-dashboard
             image: ark-dashboard
             prebuild: "make ark-dashboard-deps"
-          - path: services/evaluator-llm
-            image: evaluator-llm
-            prebuild: "make evaluator-llm-deps"
+          - path: services/ark-evaluator
+            image: ark-evaluator
+            prebuild: "make ark-evaluator-deps"
           - path: services/executor-langchain
             image: executor-langchain
             prebuild: "make executor-langchain-deps && mkdir -p services/executor-langchain/build-context && cp out/executor-common/dist/executor_common-*.whl services/executor-langchain/build-context/"
@@ -495,7 +495,7 @@ jobs:
         with:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "true"
-          install-evaluator: "true" # Evaluated tests need evaluator-llm service
+          install-evaluator: "true" # Evaluated tests need ark-evaluator service
           azure-openai-key: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
           azure-openai-base-url: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
           ci-cache-registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}

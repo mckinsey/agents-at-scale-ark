@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-langfuse-evaluation
+  labels:
+    ark.mckinsey.com/test: evaluation
+    ark.mckinsey.com/provider: langfuse
+spec:
+  input: "What is the capital of France?"
+  targets:
+  - type: agent
+    name: sample-agent

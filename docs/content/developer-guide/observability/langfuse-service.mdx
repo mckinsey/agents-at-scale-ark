@@ -26,11 +26,8 @@ Deploy Langfuse as part of your ARK installation:
 # From repository root - install Langfuse with headless initialization
 make langfuse-install
 
-# Show credentials and environment variables
+# Show credentials and access instructions
 make langfuse-credentials
-
-# Open dashboard (automatically logs you in)
-make langfuse-dashboard
 ```
 
 ### Headless Initialization
@@ -50,21 +47,39 @@ The installation automatically:
 
 ### Local Development Access
 
-The `make langfuse-dashboard` command automatically opens the dashboard and logs you in. Alternatively, you can access it manually:
+After installation, you have two options to access Langfuse:
 
+**Option 1: Get credentials only**
 ```bash
-# Option 1: minikube tunnel (exposes on standard ports)
-minikube tunnel
-# Access via: http://localhost/langfuse
-
-# Option 2: port-forward nginx ingress (custom port)
-kubectl port-forward service/nginx-ingress 8080:80 -n ark-system
-# Access via: http://localhost:8080/langfuse
-
-# Option 3: direct port-forward to langfuse service
-kubectl port-forward service/langfuse-web 5264:3000 -n telemetry
-# Access via: http://localhost:5264
+make langfuse-credentials
+# Output:
+# Username: ark@ark.com
+# Password: password123
+# 
+# To access the dashboard, run:
+#   make langfuse-dashboard
 ```
+
+**Option 2: Start dashboard directly (recommended)**
+```bash
+make langfuse-dashboard
+# Output:
+# Starting Langfuse dashboard...
+# 
+# Username: ark@ark.com
+# Password: password123
+# 
+# Dashboard available at: http://localhost:3000
+# Press Ctrl+C to stop
+```
+
+The dashboard command automatically:
+- Finds an available port (starting from 3000)
+- Shows you the exact URL to visit
+- Starts port-forwarding to Langfuse
+- Displays the login credentials
+
+Simply visit the URL shown and login with the credentials displayed.
 
 ### Gateway API Access
 

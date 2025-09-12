@@ -5,7 +5,7 @@ metadata:
 spec:
   description: "Event-based evaluator for testing basic event evaluation"
   address:
-    value: http://evaluator-llm.default.svc.cluster.local:8000/evaluate
+    value: http://ark-evaluator.default.svc.cluster.local:8000/evaluate
   parameters:
   - name: model.name
     value: "test-event-model"

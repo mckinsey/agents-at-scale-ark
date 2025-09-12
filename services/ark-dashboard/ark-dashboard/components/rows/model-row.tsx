@@ -1,10 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
-import { DASHBOARD_SECTIONS } from "@/lib/constants/dashboard-icons";
-import { getCustomIcon } from "@/lib/utils/icon-resolver";
-import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -12,15 +7,20 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
+import { DASHBOARD_SECTIONS } from "@/lib/constants/dashboard-icons";
 import { ModelEditor } from "@/components/editors";
 import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog";
 import type {
-  Model,
   Agent,
+  Model,
   ModelCreateRequest,
   ModelUpdateRequest
 } from "@/lib/services";
+import { cn } from "@/lib/utils";
+import { getCustomIcon } from "@/lib/utils/icon-resolver";
+import { Pencil, Trash2 } from "lucide-react";
+import { useState } from "react";
 
 interface ModelRowProps {
   model: Model;
@@ -52,7 +52,10 @@ export function ModelRow({
   const hasError = model.status === "error";
 
   // Get custom icon or default model icon
-  const IconComponent = getCustomIcon(model.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], DASHBOARD_SECTIONS.models.icon);
+  const IconComponent = getCustomIcon(
+    model.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
+    DASHBOARD_SECTIONS.models.icon
+  );
 
   // Determine status and its styling
   const getStatusComponent = () => {
@@ -83,7 +86,7 @@ export function ModelRow({
 
   return (
     <>
-      <div className="flex items-center py-3 px-4 bg-card border rounded-md shadow-sm hover:bg-accent/5 transition-colors w-full gap-4">
+      <div className="flex items-center py-3 px-4 bg-card border rounded-md hover:bg-accent/5 transition-colors w-full gap-4">
         <div className="flex items-center gap-3 flex-grow overflow-hidden">
           <IconComponent className="h-5 w-5 text-muted-foreground flex-shrink-0" />
 

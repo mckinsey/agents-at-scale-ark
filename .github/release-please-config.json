@@ -68,12 +68,7 @@
         },
         {
           "type": "toml",
-          "path": "services/evaluator-llm/pyproject.toml",
-          "jsonpath": "project.version"
-        },
-        {
-          "type": "toml",
-          "path": "services/evaluator-metric/pyproject.toml",
+          "path": "services/ark-evaluator/pyproject.toml",
           "jsonpath": "project.version"
         },
         {
@@ -110,7 +105,7 @@
         },
         {
           "type": "yaml",
-          "path": "services/evaluator-llm/chart/Chart.yaml",
+          "path": "services/ark-evaluator/chart/Chart.yaml",
           "jsonpath": "$.version"
         },
         {

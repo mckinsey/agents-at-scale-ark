@@ -22,7 +22,7 @@ CONTAINERS=(
     "ark-api-a2a"
     "ark-dashboard"
     "executor-langchain"
-    "evaluator-llm"
+    "ark-evaluator"
     "postgres-memory"
 )
 

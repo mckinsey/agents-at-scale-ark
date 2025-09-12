@@ -20,7 +20,17 @@ spec:
     singular: agent
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.modelRef.name
+      name: Model
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         properties:
@@ -194,10 +204,20 @@ spec:
                 type: array
             type: object
           status:
+            properties:
+              phase:
+                default: Pending
+                description: The phase of an Agent is a simple, high-level summary
+                  of where the Agent is in its lifecycle.
+                enum:
+                - Pending
+                - Ready
+                - Error
+                type: string
             type: object
         type: object
     served: true
     storage: true
     subresources:
       status: {}
-{{- end -}}
+{{- end }}

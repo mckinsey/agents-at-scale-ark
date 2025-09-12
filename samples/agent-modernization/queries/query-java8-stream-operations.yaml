@@ -1,0 +1,70 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: java8-stream-operations
+  namespace: default
+  labels:
+    evaluation_required: "true"
+    agent-type: "java-modernizer"
+spec:
+  targets:
+    - type: agent
+      name: java8-to-js-modernizer
+  input: |
+    Convert this Java 8 code to modern JavaScript:
+    
+    ```java
+    import java.util.*;
+    import java.util.stream.*;
+    import java.util.concurrent.CompletableFuture;
+    
+    public class UserService {
+        private List<User> users = new ArrayList<>();
+        
+        public CompletableFuture<List<String>> getActiveUserNames() {
+            return CompletableFuture.supplyAsync(() -> 
+                users.stream()
+                    .filter(user -> user.isActive())
+                    .map(User::getName)
+                    .sorted()
+                    .collect(Collectors.toList())
+            );
+        }
+        
+        public Optional<User> findUserById(String id) {
+            return users.stream()
+                .filter(user -> user.getId().equals(id))
+                .findFirst();
+        }
+        
+        public Map<String, Long> getUserCountByRole() {
+            return users.stream()
+                .collect(Collectors.groupingBy(
+                    User::getRole,
+                    Collectors.counting()
+                ));
+        }
+        
+        public double getAverageAge() {
+            return users.stream()
+                .mapToInt(User::getAge)
+                .average()
+                .orElse(0.0);
+        }
+    }
+    
+    class User {
+        private String id;
+        private String name;
+        private int age;
+        private String role;
+        private boolean active;
+        
+        // getters and setters
+        public String getId() { return id; }
+        public String getName() { return name; }
+        public int getAge() { return age; }
+        public String getRole() { return role; }
+        public boolean isActive() { return active; }
+    }
+    ```
