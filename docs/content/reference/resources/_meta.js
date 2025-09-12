@@ -1,4 +1,6 @@
 export default {
-  mcpserver: 'MCPServer',
-  memory: 'Memory'
+  agent: 'Agents',
+  mcpserver: 'MCPServers',
+  memory: 'Memories',
+  tools: 'Tools'
 }

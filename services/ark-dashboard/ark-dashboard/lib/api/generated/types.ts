@@ -1215,7 +1215,7 @@ export interface components {
             /** Prompt */
             prompt?: string | null;
             /** Status */
-            status: string;
+            status?: string | null;
             /** Annotations */
             annotations?: {
                 [key: string]: string;

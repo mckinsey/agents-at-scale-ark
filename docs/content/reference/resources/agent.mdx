@@ -1,0 +1,182 @@
+---
+title: Agent
+description: AI agents with prompts, models, tools, and reconciliation behavior
+---
+
+# Agent
+
+Agents are the core execution units in ARK. They process inputs using AI models and can use tools to extend their capabilities.
+
+## Specification
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: example-agent
+spec:
+  # Agent's system prompt that defines its behavior
+  prompt: |
+    You are a helpful assistant.
+    
+  # Human-readable description
+  description: General-purpose assistant agent
+  
+  # Model reference (optional - uses 'default' if not specified)
+  modelRef:
+    name: gpt-4-model
+    namespace: default
+    
+  # Execution engine (optional - uses built-in OpenAI-compatible engine if not specified)
+  executionEngine:
+    name: langchain-engine
+    namespace: default
+    
+  # Tools the agent can use
+  tools:
+    - type: built-in  # System-provided tools (web-search, calculations)
+      name: web-search
+    - type: custom   # References to Tool or MCPServer resources
+      name: my-custom-tool
+      
+  # Parameters for template processing in prompts
+  parameters:
+    - name: api_endpoint
+      valueFrom:
+        configMapKeyRef:
+          name: config
+          key: endpoint
+          
+  # JSON schema for structured output (optional)
+  outputSchema:
+    type: object
+    properties:
+      summary:
+        type: string
+      confidence:
+        type: number
+        
+status:
+  # Current phase: Pending, Ready, or Error
+  phase: Ready
+```
+
+## Status and Phases
+
+Agents have a status phase that indicates their readiness state:
+
+### Phases
+
+| Phase | Description | Next Action |
+|-------|-------------|-------------|
+| **Pending** | Agent created but dependencies not resolved | Controller reconciles dependencies |
+| **Ready** | All dependencies resolved, agent operational | Agent can process queries |
+| **Error** | Agent configuration error or dependency failure | Check events for details |
+
+### Status Fields
+
+```yaml
+status:
+  phase: Ready  # Current phase: Pending, Ready, or Error
+```
+
+## Examples
+
+### Simple Agent
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: simple-agent
+spec:
+  prompt: You are a helpful assistant.
+```
+
+### Agent with Tools
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: weather-agent
+spec:
+  prompt: |
+    You are a weather forecasting assistant.
+    Use the available tools to get weather information.
+  tools:
+    - type: custom
+      name: get-coordinates
+    - type: custom
+      name: get-forecast
+```
+
+### Agent with Structured Output
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: analyzer
+spec:
+  prompt: Analyze the input and provide structured feedback.
+  outputSchema:
+    type: object
+    required: [sentiment, confidence]
+    properties:
+      sentiment:
+        type: string
+        enum: [positive, negative, neutral]
+      confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+```
+
+### Agent with Templated Prompt from ConfigMap
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: policy-reviewer
+spec:
+  prompt: |
+    You are a policy review assistant. Review documents according to these guidelines:
+    
+    Policy documents are located at: {{.policyDocumentsPath}}
+    
+    Use the following criteria for review:
+    {{.reviewCriteria}}
+  parameters:
+    - name: policyDocumentsPath
+      valueFrom:
+        configMapKeyRef:
+          name: policy-config
+          key: documents-path
+    - name: reviewCriteria
+      valueFrom:
+        configMapKeyRef:
+          name: policy-config
+          key: review-criteria
+```
+
+## Reconciliation Behavior
+
+The agent controller continuously reconciles agent resources to ensure dependencies are met:
+
+### Model Resolution
+
+1. **With modelRef**: Controller validates the specified model exists
+2. **Without modelRef**: Controller checks for model named "default" in agent's namespace
+3. **Model not found**: Agent enters "Pending" phase with warning event
+
+### Tool Resolution
+
+1. **Custom tools**: Controller validates each custom tool exists in agent's namespace
+2. **Built-in tools**: No validation needed (always available)
+3. **Tool not found**: Agent enters "Pending" phase with warning event
+
+### Dependency Watching
+
+The controller watches for changes to:
+- **Models**: When a model is created/updated, reconciles all dependent agents
+- **Tools**: When a tool is created/updated, reconciles all agents using that tool
+
+This ensures agents automatically become Ready when missing dependencies are resolved.
