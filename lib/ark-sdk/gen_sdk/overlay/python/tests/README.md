@@ -7,9 +7,7 @@ This directory contains comprehensive tests for the `ark-sdk` authentication mod
 ### Test Files
 - **`test_config.py`** - Tests for `AuthConfig` class and environment variable loading
 - **`test_exceptions.py`** - Tests for custom exception classes
-- **`test_dependencies.py`** - Tests for FastAPI dependency injection
 - **`test_validator.py`** - Tests for `TokenValidator` class and JWT validation logic
-- **`test_integration.py`** - End-to-end tests for complete authentication flows
 
 ### Test Utilities
 - **`README.md`** - This documentation file
@@ -92,15 +90,6 @@ The test suite covers:
 - ✅ Exception chaining
 - ✅ Edge cases (None, empty messages)
 
-### Dependencies (`test_dependencies.py`)
-- ✅ Successful token validation
-- ✅ Missing Authorization header
-- ✅ Invalid header format
-- ✅ Expired token handling
-- ✅ Invalid token handling
-- ✅ General validation errors
-- ✅ Bearer prefix handling
-
 ### Validator (`test_validator.py`)
 - ✅ JWKS client creation and caching
 - ✅ Successful token validation
@@ -108,10 +97,6 @@ The test suite covers:
 - ✅ Different JWT algorithms
 - ✅ Edge cases (no audience/issuer, missing JWKS URL)
 
-### Integration (`test_integration.py`)
-- ✅ Complete authentication flows
-- ✅ Error handling in complete flow
-- ✅ Different JWT algorithms
 
 ## Test Setup
 
@@ -124,13 +109,12 @@ Each test class uses `setUp()` and `tearDown()` methods for:
 
 The tests require:
 - `unittest` (Python standard library)
-- `fastapi` (for dependency testing)
 - `jwt` (for JWT validation testing)
 - `pyjwt-key-fetcher` (for JWKS testing)
 
 ## Best Practices
 
-1. **Consistent Framework**: Uses pytest as the primary testing framework
+1. **Consistent Framework**: Uses unittest as the primary testing framework
 2. **Isolation**: Each test is isolated and doesn't depend on others
 3. **Mocking**: External dependencies are properly mocked
 4. **Coverage**: All code paths are tested
