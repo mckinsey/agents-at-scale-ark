@@ -1,12 +1,8 @@
 "use client"
 
-import ChatManager from "@/components/chat-manager";
-import { ChatProvider } from "@/lib/chat-context";
-import { Toaster } from "@/components/ui/toaster";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
 import { useAutoSignout } from "@/hooks/useAutoSignout";
 import { useRefreshAccessToken } from "@/hooks/useRefreshAccessToken";
+import { Providers } from "./providers";
 
 export default function DashboardLayout({
   children
@@ -16,14 +12,5 @@ export default function DashboardLayout({
   useAutoSignout()
   useRefreshAccessToken()
 
-  return (
-    <ChatProvider>
-      <SidebarProvider>
-        <AppSidebar />
-        <SidebarInset>{children}</SidebarInset>
-      </SidebarProvider>
-      <ChatManager />
-      <Toaster />
-    </ChatProvider>
-  );
+  return (<Providers>{children}</Providers>);
 }
