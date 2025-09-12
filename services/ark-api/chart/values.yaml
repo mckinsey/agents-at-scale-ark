@@ -27,6 +27,19 @@ app:
   env:
     - name: CORS_ORIGINS
       value: "*"
+    # Authentication environment variables
+    - name: ARK_OIDC_ISSUER
+      valueFrom:
+        secretKeyRef:
+          name: ark-auth-secret
+          key: oidc-issuer
+    - name: ARK_OIDC_APPLICATION_ID
+      valueFrom:
+        secretKeyRef:
+          name: ark-auth-secret
+          key: oidc-application-id
+    - name: ARK_SKIP_AUTH
+      value: "false"
   # Optional: Import entire secrets/configmaps as env vars
   # envFrom:
   #   - secretRef:
