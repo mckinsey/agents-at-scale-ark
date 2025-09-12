@@ -47,6 +47,24 @@ export function AgentCard({
   // Check if this is an A2A agent
   const isA2A = agent.isA2A || false;
 
+  // Get agent status/phase
+  const agentPhase = agent.status && typeof agent.status === "object" && "phase" in agent.status 
+    ? String(agent.status.phase) 
+    : "Unknown";
+  const hasError = agentPhase.toLowerCase() === "error";
+  const isReady = agentPhase.toLowerCase() === "ready";
+  const isPending = agentPhase.toLowerCase() === "pending";
+
+  // Get status badge color
+  let statusBadgeClass = "bg-gray-100 text-gray-800";
+  if (hasError) {
+    statusBadgeClass = "bg-red-100 text-red-800";
+  } else if (isReady) {
+    statusBadgeClass = "bg-green-100 text-green-800";
+  } else if (isPending) {
+    statusBadgeClass = "bg-yellow-100 text-yellow-800";
+  }
+
   // Get custom icon or default Bot icon
   const IconComponent = getCustomIcon(agent.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], Bot);
 
@@ -84,10 +102,17 @@ export function AgentCard({
         icon={<IconComponent className="h-5 w-5" />}
         actions={actions}
         footer={
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Bot className="h-4 w-4" />
-            {!isA2A && <span>Model: {modelName}</span>}
-            {isA2A && <span>A2A Agent</span>}
+          <div className="flex flex-row items-end w-full justify-between">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Bot className="h-4 w-4" />
+              {!isA2A && <span>Model: {modelName}</span>}
+              {isA2A && <span>A2A Agent</span>}
+            </div>
+            <div
+              className={`px-2 py-1 rounded-full text-xs font-medium ${statusBadgeClass}`}
+            >
+              {agentPhase}
+            </div>
           </div>
         }
       />
