@@ -3,7 +3,6 @@
 import { EvaluationStatusIndicator } from "@/components/evaluation";
 import { useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import { toast } from "@/components/ui/use-toast";
-import { useDelayedLoading } from "@/lib/hooks/use-delayed-loading";
 import type { components } from "@/lib/api/generated/types";
 import { Trash2, ChevronUp, ChevronDown, RefreshCw, FileText } from "lucide-react";
 import { formatAge } from "@/lib/utils/time";
@@ -32,11 +31,9 @@ type OutputViewMode = 'content' | 'raw';
 
 export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesSectionProps>(function QueriesSection({ namespace }, ref) {
   const [queries, setQueries] = useState<QueryResponse[]>([]);
-  const [loading, setLoading] = useState(true);
   const [sortField, setSortField] = useState<SortField>('createdAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [outputViewMode, setOutputViewMode] = useState<OutputViewMode>('content'); // NEW
-  const showLoading = useDelayedLoading(loading);
   const router = useRouter();
 
   useImperativeHandle(ref, () => ({
@@ -151,6 +148,11 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
     }
   };
 
+  // Get output from query - used in the duplicate table section
+  const getOutput = (query: QueryResponse) => {
+    return getFirstResponseText(query) || "-";
+  };
+
   const renderOutputCell = (query: QueryResponse) => {
     const text = getFirstResponseText(query) || "";
     if (outputViewMode === 'content') {
@@ -189,10 +191,6 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
         </Tooltip>
       </TooltipProvider>
     );
-  };
-
-  const getStatus = (query: QueryResponse) => {
-    return (query.status as { phase?: string })?.phase || "pending";
   };
 
   const getStatusBadge = (status: string | undefined, queryName: string) => {
