@@ -243,6 +243,16 @@
         "code",
         "bug"
       ]
+    },
+    {
+      "login": "AshAnand34",
+      "name": "Aashish Anand",
+      "avatar_url": "https://avatars.githubusercontent.com/u/84689683?v=4",
+      "profile": "https://github.com/AshAnand34",
+      "contributions": [
+        "bug",
+        "doc"
+      ]
     }
   ],
   "contributorsPerLine": 7,
