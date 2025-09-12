@@ -48,13 +48,15 @@ export function ErrorResponseContent({ query, viewMode, namespace }: ErrorRespon
   const getErrorDetails = () => {
     // Find error events - look for ToolCallError, QueryResolveError, etc.
     const errorEvents = events.filter(event => 
-      event.type === 'Warning' || 
-      event.reason?.toLowerCase().includes('error') ||
-      event.reason?.toLowerCase().includes('failed') ||
-      event.reason === 'ToolCallError' ||
-      event.reason === 'QueryResolveError' ||
-      event.reason === 'TargetExecutionError' ||
-      event.reason === 'LLMCallError'
+      event.message && event.message.trim() !== '' && 
+      (event.reason?.toLowerCase().includes('error') ||
+       event.reason?.toLowerCase().includes('failed') ||
+       event.reason === 'ToolCallError' ||
+       event.reason === 'QueryResolveError' ||
+       event.reason === 'TargetExecutionError' ||
+       event.reason === 'LLMCallError') &&
+      !event.message.toLowerCase().includes('rebooted') &&
+      !event.message.toLowerCase().includes('minikube')
     );
 
     // If we have valid error events, use them
