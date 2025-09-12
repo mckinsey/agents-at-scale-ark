@@ -39,7 +39,10 @@ app:
           name: ark-auth-secret
           key: oidc-application-id
     - name: ARK_SKIP_AUTH
-      value: "false"
+      valueFrom:
+        secretKeyRef:
+          name: ark-auth-secret
+          key: skip-auth
   # Optional: Import entire secrets/configmaps as env vars
   # envFrom:
   #   - secretRef:

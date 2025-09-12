@@ -357,6 +357,7 @@ jobs:
           kubectl create secret generic ark-auth-secret \
             --from-literal=oidc-issuer="${{ secrets.ARK_OIDC_ISSUER || 'https://your-oidc-provider.com/auth/realms/your-realm' }}" \
             --from-literal=oidc-application-id="${{ secrets.ARK_OIDC_APPLICATION_ID || 'your-application-id' }}" \
+            --from-literal=skip-auth="${{ secrets.ARK_SKIP_AUTH || 'false' }}" \
             --namespace default \
             --dry-run=client -o yaml | kubectl apply -f -
 

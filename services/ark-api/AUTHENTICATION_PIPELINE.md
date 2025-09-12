@@ -18,6 +18,11 @@ To enable authentication in the CI/CD pipeline, you need to set up the following
    - **Default**: `your-application-id`
    - **Example**: `your-application-id`
 
+3. **`ARK_SKIP_AUTH`** (Optional)
+   - **Description**: Whether to skip authentication (set to "true" to disable auth)
+   - **Default**: `false`
+   - **Example**: `false` (enable auth) or `true` (disable auth)
+
 ### How to Set GitHub Secrets
 
 1. Go to your GitHub repository
@@ -30,6 +35,7 @@ To enable authentication in the CI/CD pipeline, you need to set up the following
 If the secrets are not set, the pipeline will use the following default values:
 - `ARK_OIDC_ISSUER`: `https://your-oidc-provider.com/auth/realms/your-realm`
 - `ARK_OIDC_APPLICATION_ID`: `your-application-id`
+- `ARK_SKIP_AUTH`: `false`
 
 ## Pipeline Configuration
 
