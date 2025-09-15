@@ -2,8 +2,8 @@ apiVersion: v2
 name: executor-langchain
 description: LangChain Executor for Ark - Web server that executes agents using LangChain with RAG support
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.1.33
+appVersion: "0.1.33"
 keywords:
   - langchain
   - ai

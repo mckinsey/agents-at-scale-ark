@@ -243,6 +243,17 @@
         "code",
         "bug"
       ]
+    },
+    {
+      "login": "AshAnand34",
+      "name": "Aashish Anand",
+      "avatar_url": "https://avatars.githubusercontent.com/u/84689683?v=4",
+      "profile": "https://github.com/AshAnand34",
+      "contributions": [
+        "bug",
+        "doc",
+        "code"
+      ]
     }
   ],
   "contributorsPerLine": 7,
@@ -251,5 +262,5 @@
   "repoHost": "https://github.com",
   "projectName": "agents-at-scale-ark",
   "projectOwner": "mckinsey",
-  "badgeTemplate": "<a href=\"https://github.com/McK-Internal/agents-at-scale/blob/main/docs/content/contributors.mdx\"><img src=\"https://img.shields.io/github/all-contributors/McK-Internal/agents-at-scale?color=ee8449&style=flat-square\" alt=\"All Contributors\" /></a>"
+  "badgeTemplate": "<a href=\"https://github.com/mckinsey/agents-at-scale/blob/main/docs/content/contributors.mdx\"><img src=\"https://img.shields.io/github/all-contributors/mckinsey/agents-at-scale?color=ee8449&style=flat-square\" alt=\"All Contributors\" /></a>"
 }

@@ -1,50 +1,37 @@
 "use client"
 
-import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Pencil, Trash2, Globe, Settings } from "lucide-react"
 import { DASHBOARD_SECTIONS } from "@/lib/constants/dashboard-icons"
 import { BaseCard, type BaseCardAction } from "./base-card"
-import { EvaluatorEditor } from "@/components/editors"
-import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog"
-import type {
-  Evaluator,
-  EvaluatorCreateRequest,
-  EvaluatorUpdateRequest
-} from "@/lib/services"
+import type { Evaluator } from "@/lib/services"
 
 interface EvaluatorCardProps {
   evaluator: Evaluator
-  onUpdate?: (
-    evaluator: (EvaluatorCreateRequest | EvaluatorUpdateRequest) & { id?: string }
-  ) => void
   onDelete?: (id: string) => void
   namespace: string
 }
 
 export function EvaluatorCard({
   evaluator,
-  onUpdate,
   onDelete,
   namespace
 }: EvaluatorCardProps) {
-  const [editorOpen, setEditorOpen] = useState(false)
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const router = useRouter()
 
-  const actions: BaseCardAction[] = []
-
-  if (onUpdate) {
-    actions.push({
+  const actions: BaseCardAction[] = [
+    {
       icon: Pencil,
       label: "Edit evaluator",
-      onClick: () => setEditorOpen(true)
-    })
-  }
+      onClick: () => router.push(`/evaluators/${evaluator.name}/edit?namespace=${namespace}`)
+    }
+  ]
 
   if (onDelete) {
     actions.push({
       icon: Trash2,
       label: "Delete evaluator",
-      onClick: () => setDeleteConfirmOpen(true)
+      onClick: () => onDelete(evaluator.name)
     })
   }
 
@@ -94,25 +81,6 @@ export function EvaluatorCard({
           </div>
         }
       />
-      <EvaluatorEditor
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        evaluator={evaluator}
-        onSave={onUpdate || (() => {})}
-        namespace={namespace}
-      />
-      {onDelete && (
-        <ConfirmationDialog
-          open={deleteConfirmOpen}
-          onOpenChange={setDeleteConfirmOpen}
-          title="Delete Evaluator"
-          description={`Do you want to delete "${evaluator.name}" evaluator? This action cannot be undone.`}
-          confirmText="Delete"
-          cancelText="Cancel"
-          onConfirm={() => onDelete(evaluator.name)}
-          variant="destructive"
-        />
-      )}
     </>
   )
 }

@@ -121,7 +121,7 @@ dev:
       [
         "sh",
         "-c",
-        "cd /app/ark-api && apt-get update && apt-get install -y curl && curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash && pip install uv && uv add file://$(ls out/ark_sdk-*.whl) && uv sync && uv run uvicorn ark_api.main:app --host 0.0.0.0 --port 8000 --reload",
+        "cd /app/ark-api && apt-get update && apt-get install -y curl && curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash && pip install uv && uv add file://$(ls /app/out/ark_sdk-*.whl) && uv sync && uv run uvicorn ark_api.main:app --host 0.0.0.0 --port 8000 --reload",
       ]
     namespace: default
     # Stream logs instead of terminal
@@ -165,6 +165,9 @@ dev:
   ark-dashboard:
     imageSelector: ark-dashboard
     devImage: node:24-alpine
+    env:
+      - name: NODE_ENV
+        value: development
     command:
       [
         "sh",

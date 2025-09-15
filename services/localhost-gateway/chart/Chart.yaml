@@ -3,7 +3,7 @@ name: localhost-gateway
 description: Ark Gateway for Local Development
 type: application
 version: 0.1.33
-appVersion: 1.6.2
+appVersion: 0.1.33
 annotations:
   category: Networking
   licenses: Apache-2.0

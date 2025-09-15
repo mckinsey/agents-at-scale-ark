@@ -139,6 +139,7 @@ out/
 lib/ark-sdk/uv.lock
 lib/executor-common/uv.lock
 *.whl
+*.toml.bak
 
 # Kubebuilder auto-generated files we don't want
 .github/workflows/test-chart.yml

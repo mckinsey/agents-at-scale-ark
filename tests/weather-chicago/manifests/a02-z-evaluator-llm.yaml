@@ -4,7 +4,7 @@ metadata:
   name: evaluator-llm
 spec:
   address:
-    value: http://evaluator-llm.default.svc.cluster.local:8000/evaluate
+    value: http://ark-evaluator.default.svc.cluster.local:8000/evaluate
   parameters: 
    - name: model.name
      value: weather-default-model

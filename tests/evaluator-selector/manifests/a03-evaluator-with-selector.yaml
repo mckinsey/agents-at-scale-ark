@@ -5,7 +5,7 @@ metadata:
 spec:
   description: "Test evaluator with selector for automatic query evaluation"
   address:
-    value: http://evaluator-llm.default.svc.cluster.local:8000/evaluate
+    value: http://ark-evaluator.default.svc.cluster.local:8000/evaluate
   selector:
     resourceType: "Query"
     apiGroup: "ark.mckinsey.com"

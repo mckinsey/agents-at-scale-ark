@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Pencil, Trash2, Lock } from "lucide-react";
 import { getCustomIcon } from "@/lib/utils/icon-resolver";
-import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import { Button } from "@/components/ui/button";
 import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog";
 import {
@@ -10,9 +9,10 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import type { Secret } from "@/lib/services/secrets";
+import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import type { Model } from "@/lib/services/models";
+import type { Secret } from "@/lib/services/secrets";
+import { cn } from "@/lib/utils";
 
 interface SecretRowProps {
   secret: Secret;
@@ -62,7 +62,10 @@ export function SecretRow({
   const isInUse = usageCount > 0;
 
   // Get custom icon or default Lock icon
-  const IconComponent = getCustomIcon(secret.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], Lock);
+  const IconComponent = getCustomIcon(
+    secret.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
+    Lock
+  );
 
   const obfuscatedSecret = "••••••••••••";
 

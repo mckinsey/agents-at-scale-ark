@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Pencil, Trash2, Settings, Globe } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -10,31 +10,20 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip"
-import { EvaluatorEditor } from "@/components/editors"
-import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog"
-import type {
-  Evaluator,
-  EvaluatorCreateRequest,
-  EvaluatorUpdateRequest
-} from "@/lib/services"
+import type { Evaluator } from "@/lib/services"
 
 interface EvaluatorRowProps {
   evaluator: Evaluator
-  onUpdate?: (
-    evaluator: (EvaluatorCreateRequest | EvaluatorUpdateRequest) & { id?: string }
-  ) => void
   onDelete?: (id: string) => void
   namespace: string
 }
 
 export function EvaluatorRow({
   evaluator,
-  onUpdate,
   onDelete,
   namespace
 }: EvaluatorRowProps) {
-  const [editorOpen, setEditorOpen] = useState(false)
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const router = useRouter()
 
   const getAddressDisplay = () => {
     return evaluator.address || "Not configured"
@@ -89,25 +78,23 @@ export function EvaluatorRow({
         </div>
 
         <div className="flex items-center gap-1 flex-shrink-0">
-          {onUpdate && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setEditorOpen(true)}
-                    className="h-8 w-8 p-0"
-                  >
-                    <Pencil className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Edit evaluator</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => router.push(`/evaluators/${evaluator.name}/edit?namespace=${namespace}`)}
+                  className="h-8 w-8 p-0"
+                >
+                  <Pencil className="h-3 w-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Edit evaluator</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
 
           {onDelete && (
             <TooltipProvider>
@@ -116,7 +103,7 @@ export function EvaluatorRow({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setDeleteConfirmOpen(true)}
+                    onClick={() => onDelete(evaluator.name)}
                     className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                   >
                     <Trash2 className="h-3 w-3" />
@@ -130,28 +117,6 @@ export function EvaluatorRow({
           )}
         </div>
       </div>
-
-      {onUpdate && (
-        <EvaluatorEditor
-          open={editorOpen}
-          onOpenChange={setEditorOpen}
-          evaluator={evaluator}
-          onSave={onUpdate}
-          namespace={namespace}
-        />
-      )}
-      {onDelete && (
-        <ConfirmationDialog
-          open={deleteConfirmOpen}
-          onOpenChange={setDeleteConfirmOpen}
-          title="Delete Evaluator"
-          description={`Do you want to delete "${evaluator.name}" evaluator? This action cannot be undone.`}
-          confirmText="Delete"
-          cancelText="Cancel"
-          onConfirm={() => onDelete(evaluator.name)}
-          variant="destructive"
-        />
-      )}
     </>
   )
 }

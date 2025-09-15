@@ -11,10 +11,10 @@ Self-hosted deployment with PostgreSQL, ClickHouse, and Redis.
 # From repository root - install Langfuse with headless initialization
 make langfuse-install
 
-# Show credentials and environment variables
+# Show credentials only
 make langfuse-credentials
 
-# Open dashboard (automatically logs you in)
+# Start dashboard with automatic port-forward (recommended)
 make langfuse-dashboard
 ```
 

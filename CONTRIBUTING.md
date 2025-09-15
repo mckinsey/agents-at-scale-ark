@@ -85,4 +85,4 @@ Libraries and SDKs currently exist for:
 
 ## Guidelines for contributing developers
 
-Note that any contributions you make will be under the Agents At Scale [license](./LICENSE.md).
+Note that any contributions you make will be under the Agents At Scale [license](./LICENSE).

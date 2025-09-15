@@ -38,11 +38,22 @@ VERSION = "v1alpha1"
 @handle_k8s_errors(operation="list", resource_type="evaluation")
 async def list_evaluations(
     namespace: str,
-    enhanced: bool = Query(False, description="Include enhanced metadata from annotations")
+    enhanced: bool = Query(False, description="Include enhanced metadata from annotations"),
+    query_ref: str = Query(None, description="Filter evaluations by query reference name")
 ) -> Union[EvaluationListResponse, EnhancedEvaluationListResponse]:
     """List all evaluations in a namespace."""
     async with with_ark_client(namespace, VERSION) as ark_client:
         result = await ark_client.evaluations.a_list()
+        
+        # Filter by query_ref if provided
+        if query_ref:
+            filtered_result = []
+            for item in result:
+                item_dict = item.to_dict()
+                # Check if this evaluation has a queryRef that matches
+                if (item_dict.get('spec', {}).get('config', {}).get('queryRef', {}).get('name') == query_ref):
+                    filtered_result.append(item)
+            result = filtered_result
         
         if enhanced:
             evaluations = [enhanced_evaluation_to_response(item.to_dict()) for item in result]

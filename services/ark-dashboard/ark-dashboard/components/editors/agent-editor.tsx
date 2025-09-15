@@ -38,7 +38,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger
 } from "../ui/collapsible";
-import { ChevronRight, CircleAlert, Trash2 } from "lucide-react";
+import { ChevronRight, CircleAlert, Trash2, Maximize2, Minimize2 } from "lucide-react";
 import { groupToolsByLabel } from "@/lib/utils/groupToolsByLabels";
 import {
   Tooltip,
@@ -76,6 +76,7 @@ export function AgentEditor({
   const [executionEngineName, setExecutionEngineName] = useState<string>("");
   const [prompt, setPrompt] = useState<string>("");
   const [nameError, setNameError] = useState<string | null>(null);
+  const [isPromptExpanded, setIsPromptExpanded] = useState(false);
 
   const [availableTools, setAvailableTools] = useState<Tool[]>([]);
   const [selectedTools, setSelectedTools] = useState<AgentTool[]>([]);
@@ -122,6 +123,7 @@ export function AgentEditor({
       setExecutionEngineName("");
       setPrompt("");
       setSelectedTools([]);
+      setIsPromptExpanded(false);
     }
   }, [agent, agent?.tools]);
 
@@ -285,14 +287,55 @@ export function AgentEditor({
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="prompt">Prompt</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="prompt">Prompt</Label>
+                  <div className="flex items-center gap-2">
+                    {prompt.length > 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        {prompt.length} characters
+                      </span>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsPromptExpanded(!isPromptExpanded)}
+                      className="h-8 px-2"
+                    >
+                      {isPromptExpanded ? (
+                        <>
+                          <Minimize2 className="h-4 w-4 mr-1" />
+                          Collapse
+                        </>
+                      ) : (
+                        <>
+                          <Maximize2 className="h-4 w-4 mr-1" />
+                          Expand
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
                 <Textarea
                   id="prompt"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Enter the agent's prompt or instructions..."
-                  className="min-h-[100px]"
+                  className={`transition-all duration-200 resize-none ${
+                    isPromptExpanded 
+                      ? "min-h-[400px] max-h-[500px] overflow-y-auto" 
+                      : "min-h-[100px] max-h-[150px]"
+                  }`}
+                  style={{ 
+                    whiteSpace: 'pre-wrap', 
+                    wordWrap: 'break-word' 
+                  }}
                 />
+                {isPromptExpanded && prompt.length > 0 && (
+                  <div className="text-xs text-muted-foreground">
+                    {prompt.split('\n').length} lines
+                  </div>
+                )}
               </div>
             </>
           )}

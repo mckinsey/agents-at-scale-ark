@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: langfuse-direct-evaluation
+spec:
+  type: direct
+  config:
+    input: "What is the square root of 25?"
+    output: "The square root of 25 is 5"
+  evaluator:
+    name: langfuse-evaluator

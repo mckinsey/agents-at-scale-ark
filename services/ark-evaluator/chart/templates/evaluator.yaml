@@ -1,0 +1,14 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: {{ .Values.evaluator.name }}
+  labels:
+    {{- include "ark-evaluator.labels" . | nindent 4 }}
+spec:
+  description: {{ .Values.evaluator.description | quote }}
+  address:
+    valueFrom:
+      serviceRef:
+        name: {{ include "ark-evaluator.fullname" . }}
+        port: "http"
+        path: "/evaluate"

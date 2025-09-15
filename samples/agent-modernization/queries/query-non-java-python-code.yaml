@@ -1,0 +1,50 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: non-java-python-code
+  namespace: default
+  labels:
+    evaluation_required: "true"
+    agent-type: "java-modernizer"
+spec:
+  targets:
+    - type: agent
+      name: java8-to-js-modernizer
+  input: |
+    Convert this code to JavaScript:
+    
+    ```python
+    import asyncio
+    from typing import List, Optional, Dict
+    from dataclasses import dataclass
+    
+    @dataclass
+    class Product:
+        id: str
+        name: str
+        price: float
+        category: str
+        in_stock: bool
+    
+    class ProductService:
+        def __init__(self):
+            self.products: List[Product] = []
+        
+        async def fetch_products(self) -> List[Product]:
+            # Simulate async database call
+            await asyncio.sleep(1)
+            return self.products
+        
+        def get_products_by_category(self, category: str) -> List[Product]:
+            return [p for p in self.products if p.category == category]
+        
+        def calculate_total_value(self) -> float:
+            return sum(p.price for p in self.products if p.in_stock)
+        
+        async def update_stock(self, product_id: str, in_stock: bool) -> Optional[Product]:
+            for product in self.products:
+                if product.id == product_id:
+                    product.in_stock = in_stock
+                    return product
+            return None
+    ```

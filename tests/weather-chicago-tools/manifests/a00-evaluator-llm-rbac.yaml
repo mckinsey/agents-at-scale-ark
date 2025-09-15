@@ -16,7 +16,7 @@ metadata:
   name: evaluator-llm-test-access-($namespace)
 subjects:
 - kind: ServiceAccount
-  name: evaluator-llm
+  name: ark-evaluator
   namespace: default
 roleRef:
   kind: ClusterRole

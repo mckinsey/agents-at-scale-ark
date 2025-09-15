@@ -11,7 +11,7 @@ spec:
   address:
     valueFrom:
       serviceRef:
-        name: evaluator-llm
+        name: ark-evaluator
         port: "http"
         path: "/evaluate"
   parameters:
@@ -31,7 +31,7 @@ spec:
   address:
     valueFrom:
       serviceRef:
-        name: evaluator-llm
+        name: ark-evaluator
         port: "http"
         path: "/evaluate"
   parameters:

@@ -36,6 +36,7 @@ export {
 export {
   evaluatorsService,
   type Evaluator,
+  type EvaluatorDetailResponse,
   type EvaluatorCreateRequest,
   type EvaluatorUpdateRequest
 } from "./evaluators";

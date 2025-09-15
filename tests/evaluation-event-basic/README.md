@@ -7,7 +7,7 @@ Tests basic event-based evaluation functionality using simple pattern matching.
 - Kubernetes event fetching for query execution
 - Basic pattern matching for common event types
 - Event evaluation scoring and pass/fail logic
-- Integration with evaluator-llm service event provider
+- Integration with ark-evaluator service event provider
 - Metadata annotation propagation from evaluator response
 
 ## Running
