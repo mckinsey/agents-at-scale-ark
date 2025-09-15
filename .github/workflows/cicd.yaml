@@ -351,16 +351,6 @@ jobs:
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=nginx-gateway-fabric -n ark-system --timeout=120s
           kubectl wait --for=condition=Programmed gateway/localhost-gateway -n ark-system --timeout=120s
 
-      - name: Create authentication secret
-        run: |
-          echo "=== Creating authentication secret ==="
-          kubectl create secret generic ark-auth-secret \
-            --from-literal=oidc-issuer="${{ secrets.ARK_OIDC_ISSUER || 'https://your-oidc-provider.com/auth/realms/your-realm' }}" \
-            --from-literal=oidc-application-id="${{ secrets.ARK_OIDC_APPLICATION_ID || 'your-application-id' }}" \
-            --from-literal=skip-auth="${{ secrets.ARK_SKIP_AUTH || 'false' }}" \
-            --namespace default \
-            --dry-run=client -o yaml | kubectl apply -f -
-
       - name: Deploy ark-api
         run: |
           echo "=== Deploying ark-api ==="
