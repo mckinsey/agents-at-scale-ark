@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -75,23 +75,30 @@ export function EvaluationStatusIndicator({
 }: EvaluationStatusIndicatorProps) {
   const [summary, setSummary] = useState<QueryEvaluationSummary | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
+  const loadSummary = useCallback(async () => {
+    try {
+      const data = await evaluationsService.getEvaluationSummary(namespace, queryName, enhanced)
+      setSummary(data)
+      setError(null)
+    } catch (error) {
+      console.error(`Failed to load evaluation summary for query ${queryName}:`, error)
+      setError('Failed to load evaluation status')
+      setSummary(null)
+    }
+  }, [namespace, queryName, enhanced])
+
   useEffect(() => {
-    const loadSummary = async () => {
+    const initialLoad = async () => {
       setLoading(true)
-      try {
-        const data = await evaluationsService.getEvaluationSummary(namespace, queryName, enhanced)
-        setSummary(data)
-      } catch {
-        // Silently fail - will show no evaluations state
-      } finally {
-        setLoading(false)
-      }
+      await loadSummary()
+      setLoading(false)
     }
 
-    loadSummary()
-  }, [queryName, namespace, enhanced])
+    initialLoad()
+  }, [loadSummary])
 
   const handleViewEvaluations = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -105,6 +112,31 @@ export function EvaluationStatusIndicator({
       <div className="flex items-center justify-center gap-1">
         <div className="w-4 h-4 animate-pulse bg-gray-200 rounded-full" />
         {!compact && <span className="text-xs text-muted-foreground">Loading...</span>}
+      </div>
+    )
+  }
+
+  if (error) {
+    if (compact) {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <div className="flex items-center justify-center gap-1">
+                <AlertTriangle className="w-3 h-3 text-red-600" />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{error}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )
+    }
+    return (
+      <div className="flex items-center gap-2 text-xs text-red-600">
+        <AlertTriangle className="w-3 h-3" />
+        <span>{error}</span>
       </div>
     )
   }

@@ -315,94 +315,25 @@ export const evaluationsService = {
    * Get evaluations by query reference
    */
   async getByQueryRef(namespace: string, queryName: string, enhanced: boolean = false): Promise<Evaluation[] | EnhancedEvaluationResponse[]> {
-    try {
-      // Fetch all evaluations and filter by query reference
-      // Since the list API doesn't include spec data, we'll need to use naming patterns
-      const allEvaluations = enhanced 
-        ? (await apiClient.get<EnhancedEvaluationListResponse>(`/api/v1/namespaces/${namespace}/evaluations?enhanced=true`)).items
-        : await this.getAll(namespace)
-      
-      // Filter evaluations that likely reference this query based on naming pattern
-      const matchingEvaluations = allEvaluations.filter(evaluation => {
-        // Check if evaluation name contains the query name
-        // Pattern: {evaluator-name}-{query-name}-eval
-        const evaluationName = evaluation.name.toLowerCase()
-        const queryNameLower = queryName.toLowerCase()
-        
-        // Remove common suffixes and check if query name is in the evaluation name
-        const nameWithoutSuffix = evaluationName.replace(/-eval$/, '')
-        return nameWithoutSuffix.includes(queryNameLower)
-      })
-      
-      return matchingEvaluations
-    } catch (error) {
-      console.error(`Failed to fetch evaluations for query ${queryName}:`, error)
-      return []
-    }
+    // Use the backend filter to efficiently get evaluations for a specific query
+    const url = enhanced 
+      ? `/api/v1/namespaces/${namespace}/evaluations?enhanced=true&query_ref=${encodeURIComponent(queryName)}`
+      : `/api/v1/namespaces/${namespace}/evaluations?query_ref=${encodeURIComponent(queryName)}`
+    
+    const response = enhanced 
+      ? await apiClient.get<EnhancedEvaluationListResponse>(url)
+      : await apiClient.get<EvaluationListResponse>(url)
+    
+    return response.items || []
   },
 
   /**
    * Get evaluation summary for a query
    */
   async getEvaluationSummary(namespace: string, queryName: string, enhanced: boolean = false): Promise<QueryEvaluationSummary> {
-    try {
-      const evaluations = await this.getByQueryRef(namespace, queryName, enhanced)
-      
-      if (evaluations.length === 0) {
-        return {
-          total: 0,
-          passed: 0,
-          failed: 0,
-          pending: 0,
-          status: 'none'
-        }
-      }
-      
-      let passed = 0
-      let failed = 0
-      let pending = 0
-      
-      evaluations.forEach(evaluation => {
-        const phase = evaluation.phase
-        const evaluationPassed = evaluation.passed
-        
-        if (phase === 'done') {
-          if (evaluationPassed === true) {
-            passed++
-          } else if (evaluationPassed === false) {
-            failed++
-          } else {
-            // Done but no pass/fail status
-            pending++
-          }
-        } else {
-          // Not done yet (running, error, etc.)
-          pending++
-        }
-      })
-      
-      const total = evaluations.length
-      let status: QueryEvaluationSummary['status']
-      
-      if (pending > 0) {
-        status = 'pending'
-      } else if (passed === total) {
-        status = 'all-passed'
-      } else if (failed === total) {
-        status = 'all-failed'
-      } else {
-        status = 'mixed'
-      }
-      
-      return {
-        total,
-        passed,
-        failed,
-        pending,
-        status
-      }
-    } catch (error) {
-      console.error(`Failed to get evaluation summary for query ${queryName}:`, error)
+    const evaluations = await this.getByQueryRef(namespace, queryName, enhanced)
+    
+    if (evaluations.length === 0) {
       return {
         total: 0,
         passed: 0,
@@ -410,6 +341,50 @@ export const evaluationsService = {
         pending: 0,
         status: 'none'
       }
+    }
+    
+    let passed = 0
+    let failed = 0
+    let pending = 0
+    
+    evaluations.forEach(evaluation => {
+      const phase = evaluation.phase
+      const evaluationPassed = evaluation.passed
+      
+      if (phase === 'done') {
+        if (evaluationPassed === true) {
+          passed++
+        } else if (evaluationPassed === false) {
+          failed++
+        } else {
+          // Done but no pass/fail status
+          pending++
+        }
+      } else {
+        // Not done yet (running, error, etc.)
+        pending++
+      }
+    })
+    
+    const total = evaluations.length
+    let status: QueryEvaluationSummary['status']
+    
+    if (pending > 0) {
+      status = 'pending'
+    } else if (passed === total) {
+      status = 'all-passed'
+    } else if (failed === total) {
+      status = 'all-failed'
+    } else {
+      status = 'mixed'
+    }
+    
+    return {
+      total,
+      passed,
+      failed,
+      pending,
+      status
     }
   }
 }

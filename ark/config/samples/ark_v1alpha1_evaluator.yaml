@@ -7,5 +7,5 @@ metadata:
   name: evaluator-sample
 spec:
   address:
-    value: "http://evaluator-llm:8000"
-  description: "Sample LLM evaluator service"
+    value: "http://ark-evaluator:8000"
+  description: "Ark evaluator service"

@@ -41,6 +41,9 @@ langfuse:
     
     salt: 
       value: "langfuse-salt-local-development-mode"
+    
+    encryptionKey:
+      value: "cdd693af5b1ced98097c45550ea34f374fdd8d3427aa2a6a96a2204017a8caf3"
 
     # Demo initialization environment variables
     additionalEnv:

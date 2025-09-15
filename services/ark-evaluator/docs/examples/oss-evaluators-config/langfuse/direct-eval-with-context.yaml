@@ -1,0 +1,22 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: langfuse-evaluation-with-context
+spec:
+  type: direct
+  config:
+    input: "What is the capital of France?"
+    output: "The capital of France is Paris"
+  evaluator:
+    name: langfuse-evaluator
+  parameters:
+    - name: evaluation.context
+      value: |
+        France is a country in Western Europe. It is the largest country in the European Union by area.
+        Paris has been the capital of France since 987 AD. The Paris metropolitan area, known as Île-de-France,
+        has a population of over 12 million people, making it one of the largest urban areas in Europe.
+        Other major cities in France include Lyon, Marseille, Toulouse, and Nice.
+    - name: evaluation.context_source
+      value: "retrieval"
+    - name: metrics
+      value: "relevance,correctness,faithfulness"

@@ -1,0 +1,82 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: java8-functional-interfaces
+  namespace: default
+  labels:
+    evaluation_required: "true"
+    environment: "development"
+    agent-type: "java-modernizer"
+spec:
+  targets:
+    - type: agent
+      name: java8-to-js-modernizer
+  input: |
+    Convert this Java 8 code with functional interfaces and method references to JavaScript:
+    
+    ```java
+    import java.util.*;
+    import java.util.function.*;
+    import java.time.LocalDateTime;
+    import java.time.format.DateTimeFormatter;
+    
+    public class EventProcessor {
+        private List<Event> events = new ArrayList<>();
+        
+        public void processEvents(Consumer<Event> processor) {
+            events.forEach(processor);
+        }
+        
+        public List<Event> filterEvents(Predicate<Event> filter) {
+            return events.stream()
+                .filter(filter)
+                .collect(Collectors.toList());
+        }
+        
+        public <R> List<R> transformEvents(Function<Event, R> transformer) {
+            return events.stream()
+                .map(transformer)
+                .collect(Collectors.toList());
+        }
+        
+        public void logEvents() {
+            events.forEach(System.out::println);
+        }
+        
+        public List<String> getEventDescriptions() {
+            return events.stream()
+                .map(Event::toString)
+                .collect(Collectors.toList());
+        }
+        
+        public Optional<Event> findLatestEvent() {
+            return events.stream()
+                .max(Comparator.comparing(Event::getTimestamp));
+        }
+    }
+    
+    class Event {
+        private String id;
+        private String type;
+        private LocalDateTime timestamp;
+        private Map<String, Object> data;
+        
+        public Event(String id, String type) {
+            this.id = id;
+            this.type = type;
+            this.timestamp = LocalDateTime.now();
+            this.data = new HashMap<>();
+        }
+        
+        public String getId() { return id; }
+        public String getType() { return type; }
+        public LocalDateTime getTimestamp() { return timestamp; }
+        public Map<String, Object> getData() { return data; }
+        
+        @Override
+        public String toString() {
+            return String.format("Event[id=%s, type=%s, time=%s]", 
+                id, type, timestamp.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+        }
+    }
+    ```

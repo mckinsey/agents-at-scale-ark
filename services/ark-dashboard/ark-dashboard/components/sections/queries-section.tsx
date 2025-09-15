@@ -1,12 +1,10 @@
 "use client";
 
+import { EvaluationStatusIndicator } from "@/components/evaluation";
 import { useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import { toast } from "@/components/ui/use-toast";
-import { queriesService } from "@/lib/services/queries";
-import { useDelayedLoading } from "@/lib/hooks/use-delayed-loading";
 import type { components } from "@/lib/api/generated/types";
-import { Trash2, ChevronUp, ChevronDown, FileText } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Trash2, ChevronUp, ChevronDown, RefreshCw, FileText } from "lucide-react";
 import { formatAge } from "@/lib/utils/time";
 import {
   Tooltip,
@@ -14,58 +12,65 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip";
+import { queriesService } from "@/lib/services/queries";
 import { getResourceEventsUrl } from "@/lib/utils/events";
-import { EvaluationStatusIndicator } from "@/components/evaluation";
+import { useRouter } from "next/navigation";
+import { useListQueries } from "../../lib/services/queries-hooks";
+import { Button } from "../ui/button";
 
 type QueryResponse = components["schemas"]["QueryResponse"];
 interface QueriesSectionProps {
   namespace: string;
 }
 
-type SortField = 'createdAt' | 'none';
-type SortDirection = 'asc' | 'desc';
+type SortField = "createdAt" | "none";
+type SortDirection = "asc" | "desc";
 
 // NEW: view mode for the Output column
 type OutputViewMode = 'content' | 'raw';
 
 export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesSectionProps>(function QueriesSection({ namespace }, ref) {
   const [queries, setQueries] = useState<QueryResponse[]>([]);
-  const [loading, setLoading] = useState(true);
   const [sortField, setSortField] = useState<SortField>('createdAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [outputViewMode, setOutputViewMode] = useState<OutputViewMode>('content'); // NEW
-  const showLoading = useDelayedLoading(loading);
   const router = useRouter();
 
   useImperativeHandle(ref, () => ({
     openAddEditor: () => {
-      router.push(`/query/new?namespace=${namespace}`)
+      router.push(`/query/new?namespace=${namespace}`);
     }
   }));
 
-  useEffect(() => {
-    const loadQueries = async () => {
-      setLoading(true);
-      try {
-        const data = await queriesService.list(namespace);
-        setQueries(data.items);
-      } catch (error) {
-        console.error("Failed to load queries:", error);
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Queries",
-          description:
-            error instanceof Error
-              ? error.message
-              : "An unexpected error occurred"
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
+  const getStatus = (query: QueryResponse) => {
+    return (query.status as { phase?: string })?.phase || "pending";
+  };
 
-    loadQueries();
-  }, [namespace]);
+  const {
+    data: listQueriesData,
+    isLoading: listQueriesLoading,
+    isFetching: listQueriesFetching,
+    isError: listQueriesError,
+    error: listQueriesErrorObject,
+    refetch: loadQueries
+  } = useListQueries(namespace);
+
+  useEffect(() => {
+    if (listQueriesData && !listQueriesError) {
+      setQueries(listQueriesData.items);
+    }
+
+    if (listQueriesError) {
+      toast({
+        variant: "destructive",
+        title: "Failed to Load Queries",
+        description:
+          listQueriesErrorObject instanceof Error
+            ? listQueriesErrorObject.message
+            : "An unexpected error occurred"
+      });
+    }
+  }, [listQueriesError, listQueriesData, listQueriesErrorObject]);
 
   const truncate = (text: string, maxLen = 120) =>
     text.length > maxLen ? text.slice(0, maxLen) + "..." : text;
@@ -101,18 +106,22 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
     } else {
       setSortField(field);
-      setSortDirection('desc');
+      setSortDirection("desc");
     }
   };
 
   const sortedQueries = [...queries].sort((a, b) => {
-    if (sortField === 'createdAt') {
-      const aTime = a.creationTimestamp ? new Date(a.creationTimestamp).getTime() : 0;
-      const bTime = b.creationTimestamp ? new Date(b.creationTimestamp).getTime() : 0;
-      return sortDirection === 'desc' ? bTime - aTime : aTime - bTime;
+    if (sortField === "createdAt") {
+      const aTime = a.creationTimestamp
+        ? new Date(a.creationTimestamp).getTime()
+        : 0;
+      const bTime = b.creationTimestamp
+        ? new Date(b.creationTimestamp).getTime()
+        : 0;
+      return sortDirection === "desc" ? bTime - aTime : aTime - bTime;
     }
     return 0;
   });
@@ -137,6 +146,11 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
         return "{}";
       }
     }
+  };
+
+  // Get output from query - used in the duplicate table section
+  const getOutput = (query: QueryResponse) => {
+    return getFirstResponseText(query) || "-";
   };
 
   const renderOutputCell = (query: QueryResponse) => {
@@ -177,10 +191,6 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
         </Tooltip>
       </TooltipProvider>
     );
-  };
-
-  const getStatus = (query: QueryResponse) => {
-    return (query.status as { phase?: string })?.phase || "pending";
   };
 
   const getStatusBadge = (status: string | undefined, queryName: string) => {
@@ -257,7 +267,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
     }
   };
 
-  if (showLoading) {
+  if (listQueriesLoading) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>
@@ -270,6 +280,17 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
       <main className="flex-1 overflow-auto p-4">
         <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
           <div className="overflow-x-auto">
+            <div className="ml-auto">
+              <Button
+                onClick={() => loadQueries()}
+                disabled={listQueriesFetching}
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${listQueriesFetching ? "animate-spin" : ""}`}
+                />
+                Refresh
+              </Button>
+            </div>
             <table className="w-full min-w-[800px]">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
@@ -420,6 +441,181 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
           </div>
         </div>
       </main>
+      {listQueriesFetching ? (
+        <div className="flex h-full items-center justify-center">
+          <div className="text-muted-foreground">Refetching...</div>
+        </div>
+      ) : (
+        <div className="flex h-full flex-col">
+          <main className="flex-1 overflow-auto">
+            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[800px]">
+                  <thead>
+                    <tr className="border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
+                      <th
+                        className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                        onClick={() => handleSort("createdAt")}
+                      >
+                        <div className="flex items-center">Name</div>
+                      </th>
+                      <th
+                        className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                        onClick={() => handleSort("createdAt")}
+                      >
+                        <div className="flex items-center">
+                          Age
+                          {sortField === "createdAt" &&
+                            (sortDirection === "desc" ? (
+                              <ChevronDown className="ml-1 h-4 w-4" />
+                            ) : (
+                              <ChevronUp className="ml-1 h-4 w-4" />
+                            ))}
+                        </div>
+                      </th>
+                      <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
+                        Target
+                      </th>
+                      <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
+                        Input
+                      </th>
+                      <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
+                        Output
+                      </th>
+                      <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
+                        Token Usage (Prompt / Completion)
+                      </th>
+                      <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
+                        Evaluations
+                      </th>
+                      <th className="px-3 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
+                        Status
+                      </th>
+                      <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedQueries.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={8}
+                          className="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
+                        >
+                          No queries found
+                        </td>
+                      </tr>
+                    ) : (
+                      sortedQueries.map((query) => {
+                        const target = getTargetDisplay(query);
+                        const output = getOutput(query);
+                        return (
+                          <tr
+                            key={query.name}
+                            className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/30 cursor-pointer"
+                            onClick={() =>
+                              router.push(
+                                `/query/${query.name}?namespace=${namespace}`
+                              )
+                            }
+                          >
+                            <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100 font-mono">
+                              {query.name}
+                            </td>
+                            <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                              {formatAge(query.creationTimestamp)}
+                            </td>
+                            <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                              {target}
+                            </td>
+                            <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger className="text-left">
+                                    {truncateText(query.input)}
+                                  </TooltipTrigger>
+                                  {query.input && query.input.length > 50 && (
+                                    <TooltipContent className="max-w-md">
+                                      <p className="whitespace-pre-wrap">
+                                        {query.input}
+                                      </p>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
+                            </td>
+                            <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger className="text-left">
+                                    {truncateText(output)}
+                                  </TooltipTrigger>
+                                  {output && output.length > 50 && (
+                                    <TooltipContent className="max-w-md">
+                                      <p className="whitespace-pre-wrap">
+                                        {output}
+                                      </p>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
+                            </td>
+                            <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                              {formatTokenUsage(query)}
+                            </td>
+                            <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100 align-middle">
+                              <div className="flex items-center justify-center">
+                                <EvaluationStatusIndicator
+                                  queryName={query.name}
+                                  namespace={namespace}
+                                  compact={true}
+                                />
+                              </div>
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              {getStatusBadge(getStatus(query), query.name)}
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="flex items-center justify-start gap-1">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const eventsUrl = getResourceEventsUrl(
+                                      namespace,
+                                      "Query",
+                                      query.name
+                                    );
+                                    window.open(eventsUrl, "_blank");
+                                  }}
+                                  className="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+                                  title="View query events"
+                                >
+                                  <FileText className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(query.name);
+                                  }}
+                                  className="p-1 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+                                  title="Delete query"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </main>
+        </div>
+      )}
     </div>
   );
 });

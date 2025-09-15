@@ -26,8 +26,7 @@ import {
   Clock,
   AlertCircle,
   Play,
-  Square,
-  Sparkles
+  Square
 } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
 
@@ -40,7 +39,6 @@ export interface EvaluationFilters {
   scoreMin: string
   scoreMax: string
   evaluationType: string[] // For enhanced filtering
-  enhanced: boolean // Enable enhanced mode
 }
 
 interface EvaluationFilterProps {
@@ -48,7 +46,6 @@ interface EvaluationFilterProps {
   onFiltersChange: (filters: EvaluationFilters) => void
   availableEvaluators: string[]
   availableTypes: string[]
-  availableEvaluationTypes?: string[]
 }
 
 const DEFAULT_FILTERS: EvaluationFilters = {
@@ -59,8 +56,7 @@ const DEFAULT_FILTERS: EvaluationFilters = {
   passed: "all",
   scoreMin: "",
   scoreMax: "",
-  evaluationType: [],
-  enhanced: false
+  evaluationType: []
 }
 
 const STATUS_OPTIONS = [
@@ -82,8 +78,7 @@ export function EvaluationFilter({
   filters,
   onFiltersChange,
   availableEvaluators,
-  availableTypes,
-  availableEvaluationTypes = []
+  availableTypes
 }: EvaluationFilterProps) {
   const [isOpen, setIsOpen] = useState(false)
 
@@ -115,7 +110,6 @@ export function EvaluationFilter({
     if (filters.passed !== "all") count++
     if (filters.scoreMin || filters.scoreMax) count++
     if (filters.evaluationType.length > 0) count++
-    if (filters.enhanced) count++
     return count
   }
 
@@ -133,16 +127,6 @@ export function EvaluationFilter({
           className="pl-8"
         />
       </div>
-
-      {/* Enhanced Mode Toggle */}
-      <Button
-        variant={filters.enhanced ? "default" : "outline"}
-        onClick={() => updateFilter("enhanced", !filters.enhanced)}
-        className="gap-2"
-      >
-        <Sparkles className="h-4 w-4" />
-        Enhanced
-      </Button>
 
       {/* Filter Popover */}
       <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -301,32 +285,6 @@ export function EvaluationFilter({
                 />
               </div>
             </div>
-
-            {/* Enhanced Evaluation Type Filter */}
-            {filters.enhanced && availableEvaluationTypes.length > 0 && (
-              <>
-                <Separator />
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Evaluation Type</Label>
-                  <div className="flex flex-wrap gap-1">
-                    {availableEvaluationTypes.map((type) => {
-                      const isSelected = filters.evaluationType.includes(type)
-                      return (
-                        <Button
-                          key={type}
-                          variant={isSelected ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => toggleArrayFilter("evaluationType", type)}
-                          className="text-xs capitalize"
-                        >
-                          {type}
-                        </Button>
-                      )
-                    })}
-                  </div>
-                </div>
-              </>
-            )}
           </div>
         </PopoverContent>
       </Popover>
@@ -379,16 +337,6 @@ export function EvaluationFilter({
               />
             </Badge>
           ))}
-          {filters.enhanced && (
-            <Badge variant="default" className="gap-1">
-              <Sparkles className="h-3 w-3" />
-              Enhanced
-              <X
-                className="h-3 w-3 cursor-pointer"
-                onClick={() => updateFilter("enhanced", false)}
-              />
-            </Badge>
-          )}
           {filters.passed !== "all" && (
             <Badge variant="secondary" className="gap-1">
               {filters.passed}

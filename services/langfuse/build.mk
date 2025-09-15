@@ -20,7 +20,7 @@ LANGFUSE_STAMP_TEST := $(LANGFUSE_OUT)/stamp-test
 CLEAN_TARGETS += $(LANGFUSE_OUT)
 
 # Define phony targets
-.PHONY: $(LANGFUSE_SERVICE_NAME)-build $(LANGFUSE_SERVICE_NAME)-install $(LANGFUSE_SERVICE_NAME)-uninstall $(LANGFUSE_SERVICE_NAME)-test $(LANGFUSE_SERVICE_NAME)-deploy-otel-headers
+.PHONY: $(LANGFUSE_SERVICE_NAME)-build $(LANGFUSE_SERVICE_NAME)-install $(LANGFUSE_SERVICE_NAME)-uninstall $(LANGFUSE_SERVICE_NAME)-test $(LANGFUSE_SERVICE_NAME)-deploy-otel-headers $(LANGFUSE_SERVICE_NAME)-credentials $(LANGFUSE_SERVICE_NAME)-dashboard
 
 # Build target (no build needed for Helm chart)
 $(LANGFUSE_SERVICE_NAME)-build: $(LANGFUSE_STAMP_BUILD)
@@ -62,3 +62,27 @@ $(LANGFUSE_STAMP_TEST): $(LANGFUSE_STAMP_BUILD) | $(OUT)
 	@mkdir -p $(dir $@)
 	@printf '\033[0;31m⚠️  NO TESTS ARE DEFINED for $(LANGFUSE_SERVICE_NAME)\033[0m\n'
 	@touch $@
+
+# Credentials target
+$(LANGFUSE_SERVICE_NAME)-credentials: # HELP: Show Langfuse login credentials
+	@echo "Username: ark@ark.com"
+	@echo "Password: password123"
+	@echo ""
+	@echo "To access the dashboard, run:"
+	@echo "  make langfuse-dashboard"
+
+# Dashboard target
+$(LANGFUSE_SERVICE_NAME)-dashboard: # HELP: Start dashboard with port-forward and show credentials
+	@echo "Starting Langfuse dashboard..."
+	@echo ""
+	@echo "Username: ark@ark.com"
+	@echo "Password: password123"
+	@echo ""
+	@port=3000; \
+	while lsof -Pi :$$port -sTCP:LISTEN -t >/dev/null 2>&1; do \
+		port=$$((port+1)); \
+	done; \
+	echo "Dashboard available at: http://localhost:$$port"; \
+	echo "Press Ctrl+C to stop"; \
+	echo ""; \
+	kubectl port-forward service/langfuse-web $$port:3000 -n $(LANGFUSE_NAMESPACE)

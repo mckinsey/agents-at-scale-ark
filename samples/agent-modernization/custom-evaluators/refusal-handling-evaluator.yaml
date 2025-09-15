@@ -1,0 +1,32 @@
+## Refusal handling evaluator for boundary test cases
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: refusal-handling-evaluator
+  namespace: default
+  labels:
+    type: refusal-handling
+    category: negative-testing
+    domain: agent-boundaries
+spec:
+  description: "Evaluates proper refusal behavior when agents receive out-of-scope inputs"
+  address:
+    valueFrom:
+      serviceRef:
+        name: ark-evaluator
+        port: "http"
+        path: "/evaluate"
+  selector:
+    resourceType: "Query"
+    apiGroup: "ark.mckinsey.com"
+    matchLabels:
+      agent-type: "java-modernizer"
+  parameters:
+    - name: scope
+      value: "refusal_handling,appropriateness,clarity"
+    - name: min_score
+      value: "0.9"  # Very high threshold - proper refusal is critical
+    - name: evaluator_role
+      value: "You are a refusal behavior specialist evaluator. CRITICAL RULE: If an agent converts non-Java code (Python, C++, etc.) when it should refuse, give score 0.0-0.2. Only proper refusals of out-of-scope inputs or correct Java conversions deserve high scores. Agent processing wrong input types = SEVERE failure."
+    - name: evaluation_criteria
+      value: "proper_refusal,explanation_quality,boundary_recognition"

@@ -16,7 +16,7 @@ metadata:
   name: eval-parameters-test-role-rolebinding-($namespace)
 subjects:
 - kind: ServiceAccount
-  name: evaluator-llm
+  name: ark-evaluator
   namespace: default
 roleRef:
   kind: Role

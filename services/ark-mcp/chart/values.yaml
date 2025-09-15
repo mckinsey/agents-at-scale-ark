@@ -10,7 +10,7 @@ app:
   name: ark-mcp
   image:
     repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-mcp
-    tag: latest
+    # tag defaults to .Chart.AppVersion if not specified
     pullPolicy: IfNotPresent
   
   # Resource configuration

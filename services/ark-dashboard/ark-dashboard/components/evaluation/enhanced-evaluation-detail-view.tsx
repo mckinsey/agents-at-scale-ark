@@ -1,90 +1,101 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  Play, 
-  Square, 
-  AlertCircle, 
-  CheckCircle, 
-  Clock, 
-  TrendingUp,
-  Settings,
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "@/components/ui/use-toast";
+import { useDelayedLoading } from "@/lib/hooks/use-delayed-loading";
+import {
+  EnhancedEvaluationDetailResponse,
+  evaluationsService
+} from "@/lib/services/evaluations";
+import {
+  AlertCircle,
+  BarChart3,
+  CheckCircle,
+  Clock,
   FileText,
-  BarChart3
-} from "lucide-react"
-import { toast } from "@/components/ui/use-toast"
-import { 
-  evaluationsService, 
-  EnhancedEvaluationDetailResponse
-} from "@/lib/services/evaluations"
-import { useDelayedLoading } from "@/lib/hooks/use-delayed-loading"
+  Play,
+  Settings,
+  Square,
+  TrendingUp
+} from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 // import { RuleResultsComponent } from "./rule-results-component" // Alternative component for rule display
-import { EventMetricsDisplay } from "./event-metrics-display"
-import { CategoryBreakdownComponent } from "./category-breakdown-component"
-import { MetadataCardsComponent } from "./metadata-cards-component"
-import { RawMetadataComponent } from "./raw-metadata-component"
-import { ScoreChartComponent } from "./score-chart-component"
-import { TimelineComponent } from "./timeline-component"
+import { CategoryBreakdownComponent } from "./category-breakdown-component";
+import { EventMetricsDisplay } from "./event-metrics-display";
+import { MetadataCardsComponent } from "./metadata-cards-component";
+import { RawMetadataComponent } from "./raw-metadata-component";
+import { ScoreChartComponent } from "./score-chart-component";
+import { TimelineComponent } from "./timeline-component";
 
 interface EnhancedEvaluationDetailViewProps {
-  evaluationId: string
-  namespace: string
+  evaluationId: string;
+  namespace: string;
 }
 
 interface StatusBadgeProps {
-  status: string
-  onCancel?: () => void
+  status: string;
+  onCancel?: () => void;
 }
 
 const StatusBadge = ({ status, onCancel }: StatusBadgeProps) => {
   const getStatusInfo = () => {
     switch (status) {
       case "done":
-        return { 
-          color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200", 
+        return {
+          color:
+            "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
           icon: CheckCircle,
           label: "Completed"
-        }
+        };
       case "error":
-        return { 
-          color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200", 
+        return {
+          color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
           icon: AlertCircle,
           label: "Error"
-        }
+        };
       case "running":
-        return { 
-          color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200", 
+        return {
+          color:
+            "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
           icon: Play,
           label: "Running"
-        }
+        };
       case "evaluating":
-        return { 
-          color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200", 
+        return {
+          color:
+            "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
           icon: BarChart3,
           label: "Evaluating"
-        }
+        };
       case "canceled":
-        return { 
-          color: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200", 
+        return {
+          color:
+            "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
           icon: Square,
           label: "Canceled"
-        }
+        };
       default:
-        return { 
-          color: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200", 
+        return {
+          color:
+            "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
           icon: Clock,
           label: "Unknown"
-        }
+        };
     }
-  }
+  };
 
-  const { color, icon: Icon, label } = getStatusInfo()
-  const canCancel = status === "running" || status === "evaluating"
+  const { color, icon: Icon, label } = getStatusInfo();
+  const canCancel = status === "running" || status === "evaluating";
 
   return (
     <div className="flex items-center gap-2">
@@ -99,67 +110,84 @@ const StatusBadge = ({ status, onCancel }: StatusBadgeProps) => {
         </Button>
       )}
     </div>
-  )
-}
+  );
+};
 
-export function EnhancedEvaluationDetailView({ evaluationId, namespace }: EnhancedEvaluationDetailViewProps) {
-  const [evaluation, setEvaluation] = useState<EnhancedEvaluationDetailResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [canceling, setCanceling] = useState(false)
-  const showLoading = useDelayedLoading(loading)
+export function EnhancedEvaluationDetailView({
+  evaluationId,
+  namespace
+}: EnhancedEvaluationDetailViewProps) {
+  const [evaluation, setEvaluation] =
+    useState<EnhancedEvaluationDetailResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [canceling, setCanceling] = useState(false);
+  const showLoading = useDelayedLoading(loading);
+
+  const loadEvaluation = useCallback(async () => {
+    try {
+      const data = await evaluationsService.getEnhancedDetailsByName(
+        namespace,
+        evaluationId
+      );
+      setEvaluation(data);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to Load Evaluation",
+        description:
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred"
+      });
+    }
+  }, [namespace, evaluationId]);
 
   useEffect(() => {
-    const loadEvaluation = async () => {
-      setLoading(true)
-      try {
-        const data = await evaluationsService.getEnhancedDetailsByName(namespace, evaluationId)
-        setEvaluation(data)
-      } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Evaluation",
-          description: error instanceof Error ? error.message : "An unexpected error occurred"
-        })
-      } finally {
-        setLoading(false)
-      }
-    }
+    const initialLoad = async () => {
+      setLoading(true);
+      await loadEvaluation();
+      setLoading(false);
+    };
 
-    loadEvaluation()
-  }, [evaluationId, namespace])
+    initialLoad();
+  }, [loadEvaluation]);
 
   const handleCancel = async () => {
-    if (!evaluation) return
-    
-    setCanceling(true)
+    if (!evaluation) return;
+
+    setCanceling(true);
     try {
-      await evaluationsService.cancel(namespace, evaluation.name)
+      await evaluationsService.cancel(namespace, evaluation.name);
       toast({
         variant: "default",
         title: "Evaluation Canceled",
         description: "Successfully canceled the evaluation"
-      })
-      
+      });
+
       // Reload evaluation data
-      const data = await evaluationsService.getEnhancedDetailsByName(namespace, evaluationId)
-      setEvaluation(data)
+      await loadEvaluation();
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Failed to Cancel Evaluation", 
-        description: error instanceof Error ? error.message : "An unexpected error occurred"
-      })
+        title: "Failed to Cancel Evaluation",
+        description:
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred"
+      });
     } finally {
-      setCanceling(false)
+      setCanceling(false);
     }
-  }
+  };
 
   if (showLoading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-muted-foreground">Loading enhanced evaluation details...</div>
+        <div className="text-muted-foreground">
+          Loading enhanced evaluation details...
+        </div>
       </div>
-    )
+    );
   }
 
   if (!evaluation) {
@@ -167,68 +195,82 @@ export function EnhancedEvaluationDetailView({ evaluationId, namespace }: Enhanc
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
           <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h3 className="mt-2 text-sm font-semibold text-foreground">Evaluation not found</h3>
+          <h3 className="mt-2 text-sm font-semibold text-foreground">
+            Evaluation not found
+          </h3>
           <p className="mt-1 text-sm text-muted-foreground">
             The evaluation &quot;{evaluationId}&quot; could not be found.
           </p>
         </div>
       </div>
-    )
+    );
   }
 
-  const spec = evaluation.spec as Record<string, unknown>
-  const status = evaluation.status as Record<string, unknown>
-  const evaluationMetadata = evaluation.metadata as Record<string, unknown>
-  const annotations = evaluationMetadata?.annotations as Record<string, unknown> || {}
-  
-  // Extract evaluation metadata from annotations
-  const metadata: Record<string, unknown> = {}
-  Object.entries(annotations).forEach(([key, value]) => {
-    if (key.startsWith('evaluation.metadata/')) {
-      const metadataKey = key.replace('evaluation.metadata/', '')
-      metadata[metadataKey] = value
-    }
-  })
-  
-  const enhancedMetadata = evaluation.enhanced_metadata
+  const spec = evaluation.spec as Record<string, unknown>;
+  const status = evaluation.status as Record<string, unknown>;
+  const evaluationMetadata = evaluation.metadata as Record<string, unknown>;
+  const annotations =
+    (evaluationMetadata?.annotations as Record<string, unknown>) || {};
 
-  const evaluatorInfo = spec?.evaluator as { name?: string; parameters?: Array<{ name: string; value: string }> }
-  const config = spec?.config as Record<string, unknown>
-  const queryRef = config?.queryRef as { name?: string }
-  const message = status?.message as string | undefined
-  const hasMetadata = metadata && typeof metadata === 'object' && Object.keys(metadata).length > 0
-  const reasoning = metadata?.reasoning as string | undefined
+  // Extract evaluation metadata from annotations
+  const metadata: Record<string, unknown> = {};
+  Object.entries(annotations).forEach(([key, value]) => {
+    if (key.startsWith("evaluation.metadata/")) {
+      const metadataKey = key.replace("evaluation.metadata/", "");
+      metadata[metadataKey] = value;
+    }
+  });
+
+  const enhancedMetadata = evaluation.enhanced_metadata;
+
+  const evaluatorInfo = spec?.evaluator as {
+    name?: string;
+    parameters?: Array<{ name: string; value: string }>;
+  };
+  const config = spec?.config as Record<string, unknown>;
+  const queryRef = config?.queryRef as { name?: string };
+  const message = status?.message as string | undefined;
+  const hasMetadata =
+    metadata &&
+    typeof metadata === "object" &&
+    Object.keys(metadata).length > 0;
+  const reasoning = metadata?.reasoning as string | undefined;
 
   // Determine the evaluation type for tab display
-  const evaluationType = enhancedMetadata?.evaluation_type || 
-    (typeof spec?.type === 'string' ? spec.type : 'unknown') || 
-    "unknown"
-  
+  const evaluationType =
+    enhancedMetadata?.evaluation_type ||
+    (typeof spec?.type === "string" ? spec.type : "unknown") ||
+    "unknown";
+
   // Check what enhanced components we can show
-  const hasRuleResults = enhancedMetadata?.event_metadata?.rule_results && 
-    enhancedMetadata.event_metadata.rule_results.length > 0
-  const hasCategoryBreakdown = enhancedMetadata?.category_breakdown && 
-    enhancedMetadata.category_breakdown.length > 0
-  const hasEnhancedMetadata = enhancedMetadata && (
-    enhancedMetadata.event_metadata || 
-    enhancedMetadata.baseline_metadata || 
-    enhancedMetadata.query_metadata || 
-    enhancedMetadata.batch_metadata || 
-    enhancedMetadata.direct_metadata
-  )
+  const hasRuleResults =
+    enhancedMetadata?.event_metadata?.rule_results &&
+    enhancedMetadata.event_metadata.rule_results.length > 0;
+  const hasCategoryBreakdown =
+    enhancedMetadata?.category_breakdown &&
+    enhancedMetadata.category_breakdown.length > 0;
+  const hasEnhancedMetadata =
+    enhancedMetadata &&
+    (enhancedMetadata.event_metadata ||
+      enhancedMetadata.baseline_metadata ||
+      enhancedMetadata.query_metadata ||
+      enhancedMetadata.batch_metadata ||
+      enhancedMetadata.direct_metadata);
 
   return (
     <div className="space-y-6">
       {/* Header Section */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{evaluation.name}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {evaluation.name}
+          </h1>
           <p className="text-muted-foreground">
             Enhanced evaluation in {namespace} namespace
           </p>
         </div>
-        <StatusBadge 
-          status={status?.phase as string || "unknown"} 
+        <StatusBadge
+          status={(status?.phase as string) || "unknown"}
           onCancel={canceling ? undefined : handleCancel}
         />
       </div>
@@ -245,47 +287,65 @@ export function EnhancedEvaluationDetailView({ evaluationId, namespace }: Enhanc
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Type</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Type
+                </p>
                 <Badge variant="outline" className="capitalize">
                   {evaluationType}
                 </Badge>
               </div>
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Score</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Score
+                </p>
                 <p className="text-2xl font-bold">
                   {status?.score ? Number(status.score).toFixed(2) : "-"}
                 </p>
               </div>
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Passed</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Passed
+                </p>
                 <div className="flex items-center gap-1">
                   {status?.passed === true ? (
                     <CheckCircle className="h-4 w-4 text-green-600" />
                   ) : status?.passed === false ? (
                     <AlertCircle className="h-4 w-4 text-red-600" />
                   ) : null}
-                  <span className={`font-medium ${
-                    status?.passed === true 
-                      ? "text-green-600" 
-                      : status?.passed === false 
-                        ? "text-red-600" 
+                  <span
+                    className={`font-medium ${
+                      status?.passed === true
+                        ? "text-green-600"
+                        : status?.passed === false
+                        ? "text-red-600"
                         : "text-muted-foreground"
-                  }`}>
-                    {status?.passed === true ? "Yes" : status?.passed === false ? "No" : "Unknown"}
+                    }`}
+                  >
+                    {status?.passed === true
+                      ? "Yes"
+                      : status?.passed === false
+                      ? "No"
+                      : "Unknown"}
                   </span>
                 </div>
               </div>
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Phase</p>
-                <p className="font-medium capitalize">{status?.phase as string || "unknown"}</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Phase
+                </p>
+                <p className="font-medium capitalize">
+                  {(status?.phase as string) || "unknown"}
+                </p>
               </div>
             </div>
-            
+
             {message && (
               <>
                 <Separator />
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Message</p>
+                  <p className="text-sm font-medium text-muted-foreground mb-2">
+                    Message
+                  </p>
                   <p className="text-sm">{message}</p>
                 </div>
               </>
@@ -303,43 +363,73 @@ export function EnhancedEvaluationDetailView({ evaluationId, namespace }: Enhanc
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Evaluator</p>
+              <p className="text-sm font-medium text-muted-foreground">
+                Evaluator
+              </p>
               <p className="font-medium">{evaluatorInfo?.name || "-"}</p>
             </div>
-            
+
             {queryRef?.name && (
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Query Reference</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Query Reference
+                </p>
                 <p className="font-medium">{queryRef.name}</p>
               </div>
             )}
 
-            {evaluatorInfo?.parameters && evaluatorInfo.parameters.length > 0 && (
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-2">Parameters</p>
-                <div className="space-y-2">
-                  {evaluatorInfo.parameters.map((param, index) => (
-                    <div key={index} className="flex justify-between items-center text-sm">
-                      <span className="font-medium">{param.name}:</span>
-                      <span className="text-muted-foreground font-mono">{param.value}</span>
-                    </div>
-                  ))}
+            {evaluatorInfo?.parameters &&
+              evaluatorInfo.parameters.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-2">
+                    Parameters
+                  </p>
+                  <div className="space-y-2">
+                    {evaluatorInfo.parameters.map((param, index) => (
+                      <div
+                        key={index}
+                        className="flex justify-between items-center text-sm"
+                      >
+                        <span className="font-medium">{param.name}:</span>
+                        <span className="text-muted-foreground font-mono">
+                          {param.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
           </CardContent>
         </Card>
       </div>
 
       {/* Enhanced Content Tabs */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          {hasRuleResults && <TabsTrigger value="rules">Rules</TabsTrigger>}
-          {hasCategoryBreakdown && <TabsTrigger value="categories">Categories</TabsTrigger>}
-          {hasEnhancedMetadata && <TabsTrigger value="enhanced">Enhanced</TabsTrigger>}
-          <TabsTrigger value="charts">Charts</TabsTrigger>
-          <TabsTrigger value="debug">Debug</TabsTrigger>
+        <TabsList className="flex">
+          <TabsTrigger value="overview" className="px-10">
+            Overview
+          </TabsTrigger>
+          {hasRuleResults && (
+            <TabsTrigger value="rules" className="px-10">
+              Rules
+            </TabsTrigger>
+          )}
+          {hasCategoryBreakdown && (
+            <TabsTrigger value="categories" className="px-10">
+              Categories
+            </TabsTrigger>
+          )}
+          {hasEnhancedMetadata && (
+            <TabsTrigger value="enhanced" className="px-10">
+              Enhanced
+            </TabsTrigger>
+          )}
+          <TabsTrigger value="charts" className="px-10">
+            Charts
+          </TabsTrigger>
+          <TabsTrigger value="debug" className="px-10">
+            Debug
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -363,7 +453,9 @@ export function EnhancedEvaluationDetailView({ evaluationId, namespace }: Enhanc
                         {key.replace(/_/g, " ")}
                       </p>
                       <p className="font-mono text-sm">
-                        {typeof value === "string" ? value : JSON.stringify(value)}
+                        {typeof value === "string"
+                          ? value
+                          : JSON.stringify(value)}
                       </p>
                     </div>
                   ))}
@@ -390,7 +482,7 @@ export function EnhancedEvaluationDetailView({ evaluationId, namespace }: Enhanc
 
         {hasRuleResults && (
           <TabsContent value="rules">
-            <EventMetricsDisplay 
+            <EventMetricsDisplay
               eventMetadata={enhancedMetadata!.event_metadata!}
               queryName={queryRef?.name}
               sessionId={metadata?.session_id as string | undefined}
@@ -401,7 +493,9 @@ export function EnhancedEvaluationDetailView({ evaluationId, namespace }: Enhanc
 
         {hasCategoryBreakdown && (
           <TabsContent value="categories">
-            <CategoryBreakdownComponent categories={enhancedMetadata!.category_breakdown!} />
+            <CategoryBreakdownComponent
+              categories={enhancedMetadata!.category_breakdown!}
+            />
           </TabsContent>
         )}
 
@@ -417,7 +511,7 @@ export function EnhancedEvaluationDetailView({ evaluationId, namespace }: Enhanc
             <ScoreChartComponent
               title="Category Performance"
               description="Score breakdown by evaluation category"
-              data={enhancedMetadata!.category_breakdown!.map(cat => ({
+              data={enhancedMetadata!.category_breakdown!.map((cat) => ({
                 label: cat.category,
                 score: cat.score || 0,
                 passed: cat.passed,
@@ -426,62 +520,86 @@ export function EnhancedEvaluationDetailView({ evaluationId, namespace }: Enhanc
               showTrend={true}
             />
           )}
-          
+
           {/* Rule Results Chart */}
           {hasRuleResults && (
             <ScoreChartComponent
               title="Rule Performance"
               description="Individual rule scores and results"
-              data={enhancedMetadata!.event_metadata!.rule_results!.map(rule => ({
-                label: rule.rule_name,
-                score: rule.score || (rule.passed ? 1 : 0),
-                passed: rule.passed,
-                weight: rule.weight
-              }))}
+              data={enhancedMetadata!.event_metadata!.rule_results!.map(
+                (rule) => ({
+                  label: rule.rule_name,
+                  score: rule.score || (rule.passed ? 1 : 0),
+                  passed: rule.passed,
+                  weight: rule.weight
+                })
+              )}
               showTrend={false}
             />
           )}
-          
+
           {/* Timeline for batch evaluations */}
           {enhancedMetadata?.batch_metadata?.evaluation_results && (
             <TimelineComponent
               title="Batch Evaluation Timeline"
               description="Progress of individual evaluations in the batch"
-              events={enhancedMetadata.batch_metadata.evaluation_results.map((result, index) => ({
-                id: `batch-${index}`,
-                timestamp: typeof result.timestamp === 'string' ? result.timestamp : new Date().toISOString(),
-                title: typeof result.name === 'string' ? result.name : `Evaluation ${index + 1}`,
-                description: typeof result.description === 'string' ? result.description : undefined,
-                status: result.passed ? 'completed' as const : result.failed ? 'failed' as const : 'pending' as const,
-                metadata: {
-                  score: result.score,
-                  duration: result.duration
-                }
-              }))}
+              events={enhancedMetadata.batch_metadata.evaluation_results.map(
+                (result, index) => ({
+                  id: `batch-${index}`,
+                  timestamp:
+                    typeof result.timestamp === "string"
+                      ? result.timestamp
+                      : new Date().toISOString(),
+                  title:
+                    typeof result.name === "string"
+                      ? result.name
+                      : `Evaluation ${index + 1}`,
+                  description:
+                    typeof result.description === "string"
+                      ? result.description
+                      : undefined,
+                  status: result.passed
+                    ? ("completed" as const)
+                    : result.failed
+                    ? ("failed" as const)
+                    : ("pending" as const),
+                  metadata: {
+                    score: result.score,
+                    duration: result.duration
+                  }
+                })
+              )}
             />
           )}
-          
+
           {/* Fallback message if no charts available */}
-          {!hasCategoryBreakdown && !hasRuleResults && !enhancedMetadata?.batch_metadata?.evaluation_results && (
-            <Card>
-              <CardContent className="p-6">
-                <div className="text-center text-muted-foreground">
-                  <BarChart3 className="mx-auto h-12 w-12 mb-4" />
-                  <h3 className="text-lg font-medium mb-2">No Chart Data Available</h3>
-                  <p>Enhanced metadata does not contain sufficient data for visualization.</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {!hasCategoryBreakdown &&
+            !hasRuleResults &&
+            !enhancedMetadata?.batch_metadata?.evaluation_results && (
+              <Card>
+                <CardContent className="p-6">
+                  <div className="text-center text-muted-foreground">
+                    <BarChart3 className="mx-auto h-12 w-12 mb-4" />
+                    <h3 className="text-lg font-medium mb-2">
+                      No Chart Data Available
+                    </h3>
+                    <p>
+                      Enhanced metadata does not contain sufficient data for
+                      visualization.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
         </TabsContent>
 
         <TabsContent value="debug">
-          <RawMetadataComponent 
+          <RawMetadataComponent
             metadata={enhancedMetadata || {}}
             rawMetadata={metadata}
           />
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }

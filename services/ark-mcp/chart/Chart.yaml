@@ -2,8 +2,8 @@ apiVersion: v2
 name: ark-mcp
 description: ARK MCP server for Model Context Protocol integration
 type: application
-version: "0.1.0" # x-release-please-version
-appVersion: "0.1.0" # x-release-please-version
+version: 0.1.33
+appVersion: "0.1.33"
 annotations:
   ark.mckinsey.com/service: ark-mcp
   ark.mckinsey.com/resources: service,mcpserver

@@ -5,7 +5,7 @@ metadata:
 spec:
   description: "Test LLM-based evaluator service for manual evaluation testing"
   address:
-    value: http://evaluator-llm.default.svc.cluster.local:8000/evaluate
+    value: http://ark-evaluator.default.svc.cluster.local:8000/evaluate
   parameters:
   - name: model.name
     value: priority-evaluation-model

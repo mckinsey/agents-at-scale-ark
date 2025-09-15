@@ -1,0 +1,17 @@
+{
+  "type": "direct",
+  "evaluatorName": "content-quality-evaluator",
+  "config": {
+    "input": "Explain the benefits of renewable energy for businesses.",
+    "output": "Renewable energy offers businesses significant advantages including reduced operational costs through lower electricity bills, enhanced sustainability credentials for ESG reporting, energy independence from grid fluctuations, potential revenue streams through energy storage and grid services, improved brand reputation among environmentally conscious consumers, and long-term cost predictability through fixed energy costs."
+  },
+  "parameters": {
+    "provider": "ark",
+    "scope": "all",
+    "threshold": "0.8",
+    "temperature": "0.1",
+    "max_tokens": "500",
+    "context": "Business sustainability and energy efficiency context",
+    "context_source": "corporate_sustainability_knowledge_base"
+  }
+}

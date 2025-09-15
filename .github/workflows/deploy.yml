@@ -13,6 +13,11 @@ on:
         required: false
         type: boolean
         default: false
+      deploy_containers_to_latest:
+        description: 'Deploy containers to "latest" tag'
+        required: false
+        type: boolean
+        default: false
       deploy_to_distribution_environment:
         description: 'Deploy to distribution environment'
         required: false
@@ -29,7 +34,7 @@ on:
         type: boolean
         default: false
       deploy_helm_chart:
-        description: 'Deploy Helm chart to container registry'
+        description: 'Deploy Helm charts to container registry'
         required: false
         type: boolean
         default: false
@@ -157,6 +162,18 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           prebuild: ${{ matrix.prebuild }}
+      
+      - name: Push to "latest" tag
+        if: ${{ inputs.deploy_containers_to_latest }}
+        run: |
+          REGISTRY="${{ vars.DOCKER_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}"
+          IMAGE="${{ matrix.image }}"
+          VERSION="${{ needs.check_version.outputs.clean_version }}"
+          
+          echo "Tagging and pushing $REGISTRY/$IMAGE:$VERSION as 'latest'"
+          docker buildx imagetools create \
+            --tag "$REGISTRY/$IMAGE:latest" \
+            "$REGISTRY/$IMAGE:$VERSION"
 
   deploy-to-distribution-environment:
     needs: [check_version]

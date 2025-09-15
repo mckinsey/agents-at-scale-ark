@@ -1,0 +1,19 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: langfuse-evaluation-with-context
+spec:
+  type: direct
+  config:
+    input: "What is the capital of France?"
+    output: "The capital of France is Paris"
+  evaluator:
+    name: langfuse-evaluator
+  parameters:
+    - name: evaluation.context
+      value: |
+        France is a country in Western Europe.
+        Paris has been the capital since 987 AD.
+        The Paris metropolitan area has over 12 million inhabitants.
+    - name: evaluation.context_source
+      value: "retrieval"

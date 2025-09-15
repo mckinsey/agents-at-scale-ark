@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "ark-evaluator.fullname" . }}
+  labels:
+    {{- include "ark-evaluator.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "ark-evaluator.selectorLabels" . | nindent 6 }}

@@ -147,14 +147,13 @@ For non-deterministic cases, they use the "LLM-as-a-Judge" pattern to automatica
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Evaluator
 metadata:
-  name: llm-evaluator
+  name: ark-evaluator
 spec:
-  type: llm-judge
-  description: "LLM-as-a-Judge evaluator for query assessment"
+  description: "evaluator for query assessment"
   address:
     valueFrom:
       serviceRef:
-        name: evaluator-llm
+        name: ark-evaluator
         port: "http"
         path: "/evaluate"
   selector:  # optional - for automatic query evaluation

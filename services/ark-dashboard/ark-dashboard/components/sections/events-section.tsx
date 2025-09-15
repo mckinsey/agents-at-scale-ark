@@ -268,7 +268,7 @@ export function EventsSection({
 
   return (
     <div className="space-y-4 p-4">
-      <div className="flex flex-wrap gap-4 items-center">
+      <div className="border-b flex flex-wrap gap-2 items-center pb-4">
         <Select
           value={filters.type || "all"}
           onValueChange={(value) => handleFilterChange("type", value)}
@@ -338,13 +338,12 @@ export function EventsSection({
 
         <div className="ml-auto">
           <Button
-            variant="outline"
             size="sm"
             onClick={() => loadEvents(true)}
             disabled={refreshing}
           >
             <RefreshCw
-              className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`}
+              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
             />
             Refresh
           </Button>
@@ -352,7 +351,7 @@ export function EventsSection({
       </div>
 
       {/* Events Table */}
-      <div className="border rounded-lg">
+      <div className="rounded-lg border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1200px]">
             <thead className="bg-gray-50 dark:bg-gray-900/50">

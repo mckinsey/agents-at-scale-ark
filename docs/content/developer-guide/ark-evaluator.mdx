@@ -1,0 +1,257 @@
+---
+title: ARK Evaluator
+description: Unified AI evaluation service supporting deterministic metrics and LLM-as-a-Judge evaluation
+---
+
+# ARK Evaluator
+
+Unified AI evaluation service supporting both deterministic metrics assessment and LLM-as-a-Judge evaluation with comprehensive integration capabilities.
+
+## Overview
+
+ARK Evaluator provides two complementary evaluation approaches:
+
+- **Deterministic Evaluation** (`/evaluate-metrics`): Objective, metrics-based assessment for measurable performance criteria
+- **LLM-as-a-Judge Evaluation** (`/evaluate`): Intelligent, model-based assessment for subjective quality criteria
+
+## Features
+
+- **Dual Evaluation Methods**: Both objective metrics and subjective AI assessment
+- **Multiple LLM Providers**: Azure OpenAI, ARK Native, with more in development
+- **Advanced Integrations**: Langfuse + RAGAS support with tracing
+- **Kubernetes Native**: Deploys as Evaluator custom resource
+- **REST API**: Simple HTTP interface with two evaluation endpoints
+
+## Installation
+
+Build and deploy the evaluator service:
+
+```bash
+# From project root
+make ark-evaluator-deps     # Install dependencies (including ark-sdk)
+make ark-evaluator-build    # Build Docker image  
+make ark-evaluator-install  # Deploy to cluster
+```
+
+## Usage
+
+### Deterministic Metrics Evaluation
+
+Objective performance assessment across token efficiency, cost analysis, performance metrics, and quality thresholds:
+
+```bash
+curl -X POST http://ark-evaluator:8000/evaluate-metrics \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "direct",
+    "config": {
+      "input": "What is machine learning?",
+      "output": "Machine learning is a subset of AI..."
+    },
+    "parameters": {
+      "maxTokens": "1000",
+      "maxCostPerQuery": "0.05",
+      "tokenWeight": "0.3"
+    }
+  }'
+```
+
+### LLM-as-a-Judge Evaluation
+
+Intelligent quality assessment using language models for relevance, accuracy, completeness, clarity, and usefulness:
+
+```bash
+curl -X POST http://ark-evaluator:8000/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "direct",
+    "config": {
+      "input": "Explain renewable energy benefits",
+      "output": "Renewable energy offers cost savings..."
+    },
+    "parameters": {
+      "provider": "ark",
+      "scope": "relevance,accuracy,clarity",
+      "threshold": "0.8"
+    }
+  }'
+```
+
+## Evaluation Capabilities
+
+### Deterministic Metrics
+
+Objective performance assessment across four key dimensions:
+
+- **Token Score**: Efficiency, limits, throughput for cost optimization
+- **Cost Score**: Per-query cost, efficiency ratios for budget management  
+- **Performance Score**: Latency, response time, throughput for SLA compliance
+- **Quality Score**: Completeness, length, error rates for content quality
+
+### LLM-as-a-Judge
+
+Intelligent quality assessment using advanced language models:
+
+- **Relevance**: How well response addresses the query
+- **Accuracy**: Factual correctness and reliability
+- **Completeness**: Comprehensiveness of information
+- **Clarity**: Readability and communication effectiveness
+- **Usefulness**: Practical value and actionability
+
+## Supported Providers
+
+### Currently Available
+- **Azure OpenAI**: GPT-4o, GPT-4-turbo, GPT-3.5-turbo with enterprise features
+- **ARK Native**: Configurable model endpoints with unified interface
+
+### Advanced Integrations
+- **Langfuse + RAGAS**: RAGAS metrics with Azure OpenAI, automatic tracing, and comprehensive evaluation lineage
+
+## API Endpoints
+
+### Health & Status
+- `GET /health` - Service health status
+- `GET /ready` - Service readiness check
+
+### Evaluation Endpoints
+- `POST /evaluate-metrics` - Deterministic metrics evaluation
+- `POST /evaluate` - LLM-as-a-Judge evaluation
+
+## Configuration Examples
+
+### Deterministic Evaluation
+```yaml
+parameters:
+  maxTokens: "2000"
+  maxDuration: "30s" 
+  maxCostPerQuery: "0.08"
+  tokenWeight: "0.3"
+  costWeight: "0.3"
+  performanceWeight: "0.2"
+  qualityWeight: "0.2"
+```
+
+### LLM Evaluation
+```yaml
+parameters:
+  provider: "ark"
+  scope: "relevance,accuracy,completeness"
+  threshold: "0.8"
+  temperature: "0.1"
+```
+
+### Langfuse + Azure OpenAI
+```yaml
+parameters:
+  provider: "langfuse"
+  langfuse.host: "https://cloud.langfuse.com"
+  langfuse.azure_deployment: "gpt-4o"
+  metrics: "relevance,correctness,faithfulness"
+```
+
+## Development
+
+For local development:
+
+```bash
+# Development commands
+make ark-evaluator-dev      # Run service locally
+make ark-evaluator-test     # Run tests
+```
+
+Running `make ark-evaluator-dev` sets up the service exposing two endpoints at `http://localhost:8000`. Visit `http://localhost:8000/docs` to see the interactive API documentation.
+
+### Testing `/evaluate-metrics`
+
+The metrics endpoint performs deterministic analysis without requiring LLM setup. See `/services/ark-evaluator/src/evaluator/metrics/` for the underlying logic.
+
+```bash
+curl -X POST http://localhost:8000/evaluate-metrics \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "direct",
+    "config": {
+      "input": "What is 2+2?", 
+      "output": "2+2 equals 4"
+    },
+    "parameters": {"temperature": "0.7"},
+    "evaluatorName": "test-evaluator"
+  }'
+```
+
+### Testing `/evaluate`
+
+The evaluate endpoint requires deployed ARK resources for LLM-as-a-Judge evaluation.
+
+**1. Define a model:**
+```bash
+kubectl apply -f - <<EOF
+apiVersion: ark/v1alpha1
+kind: Model
+metadata:
+  name: default
+  namespace: default
+spec:
+  type: azure
+  config:
+    model: gpt-4o-mini
+  credentials:
+    secretRef:
+      name: azure-openai-secret
+      key: api-key
+EOF
+```
+
+**2. Define an evaluator:**
+```bash
+kubectl apply -f - <<EOF
+apiVersion: ark/v1alpha1
+kind: Evaluator
+metadata:
+  name: test-ark-evaluator
+  namespace: default
+spec:
+  address:
+    value: http://ark-evaluator.default.svc.cluster.local:8000/evaluate
+  parameters:
+  - name: model.name
+    value: default
+EOF
+```
+
+**3. Send evaluation request:**
+```bash
+curl -X POST http://localhost:8000/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "direct",
+    "config": {
+      "input": "What is the capital of France?",
+      "output": "Paris"
+    },
+    "parameters": {"temperature": "0.7"},
+    "evaluatorName": "test-ark-evaluator",
+    "model": {
+      "name": "default",
+      "type": "azure", 
+      "namespace": "default"
+    }
+  }'
+```
+
+### Troubleshooting
+
+**Token expiration issues:**
+If your secret has expired, update it with a new token:
+
+```bash
+NEW_TOKEN="your-new-token-here"
+kubectl patch secret azure-openai-secret -n default --type='json' -p="[{\"op\": \"replace\", \"path\": \"/data/token\", \"value\": \"$(echo -n $NEW_TOKEN | base64)\"}]"
+```
+
+## Use Cases
+
+- **Production Monitoring**: Real-time quality assessment, cost tracking, SLA compliance
+- **Model Comparison**: A/B testing, cost-effectiveness analysis, performance benchmarking  
+- **Content Quality**: Automated content evaluation, support response assessment
+- **Development**: Prompt engineering validation, model tuning, response optimization

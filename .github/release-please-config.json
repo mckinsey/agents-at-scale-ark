@@ -68,12 +68,7 @@
         },
         {
           "type": "toml",
-          "path": "services/evaluator-llm/pyproject.toml",
-          "jsonpath": "project.version"
-        },
-        {
-          "type": "toml",
-          "path": "services/evaluator-metric/pyproject.toml",
+          "path": "services/ark-evaluator/pyproject.toml",
           "jsonpath": "project.version"
         },
         {
@@ -95,17 +90,22 @@
         },
         {
           "type": "yaml",
+          "path": "services/localhost-gateway/chart/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "yaml",
           "path": "services/ark-dashboard/chart/Chart.yaml",
           "jsonpath": "$.version"
         },
         {
           "type": "yaml",
-          "path": "services/evaluator-llm/chart/Chart.yaml",
-          "jsonpath": "$.version"
+          "path": "services/ark-dashboard/chart/Chart.yaml",
+          "jsonpath": "$.appVersion"
         },
         {
           "type": "yaml",
-          "path": "services/evaluator-metric/chart/Chart.yaml",
+          "path": "services/ark-evaluator/chart/Chart.yaml",
           "jsonpath": "$.version"
         },
         {
@@ -121,6 +121,56 @@
         {
           "type": "yaml",
           "path": "samples/agent-hosting/hosted-langchain-agents/chart/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "yaml",
+          "path": "services/ark-api/chart/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "services/ark-api/chart/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "yaml",
+          "path": "services/ark-mcp/chart/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "services/ark-mcp/chart/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "yaml",
+          "path": "services/ark-api-a2a/chart/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "services/ark-api-a2a/chart/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "yaml",
+          "path": "services/executor-langchain/chart/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "services/executor-langchain/chart/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "yaml",
+          "path": "services/postgres-memory/chart/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "services/postgres-memory/chart/Chart.yaml",
           "jsonpath": "$.appVersion"
         }
       ]

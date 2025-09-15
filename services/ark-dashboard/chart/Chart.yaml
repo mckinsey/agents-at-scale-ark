@@ -3,7 +3,7 @@ name: ark-dashboard
 description: ARK Dashboard web interface for managing agents, models, and queries
 type: application
 version: 0.1.33
-appVersion: latest
+appVersion: 0.1.33
 annotations:
   category: Dashboard
   licenses: Apache-2.0

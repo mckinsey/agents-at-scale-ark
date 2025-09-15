@@ -349,13 +349,14 @@ func (r *EvaluationReconciler) resolveFinalParameters(ctx context.Context, evalu
 		return evaluation.Spec.Evaluator.Parameters
 	}
 
-	// Resolve evaluator parameters (this would need to be implemented if we support parameter resolution in evaluators)
-	// For now, we'll convert the evaluator parameters to the standard Parameter format
+	// Convert evaluator parameters to the standard Parameter format
+	// Include both Value and ValueFrom fields
 	evaluatorParams := make([]arkv1alpha1.Parameter, 0, len(evaluator.Spec.Parameters))
 	for _, param := range evaluator.Spec.Parameters {
 		evaluatorParams = append(evaluatorParams, arkv1alpha1.Parameter{
-			Name:  param.Name,
-			Value: param.Value, // For now, we only support direct values from evaluators
+			Name:      param.Name,
+			Value:     param.Value,
+			ValueFrom: param.ValueFrom, // Include ValueFrom for proper resolution
 		})
 	}
 
@@ -407,6 +408,11 @@ func (r *EvaluationReconciler) processDirectEvaluation(ctx context.Context, eval
 
 	// Convert parameters to map for debugging
 	paramMap := r.convertParametersToMap(ctx, finalParameters, evaluation.Namespace)
+
+	// Note: For direct evaluations, context should be provided via parameters
+	// We don't extract context automatically as there's no query/agent/team to extract from
+	// Users can provide context via evaluation.context parameter
+
 	log.Info("Parameters converted to map", "evaluation", evaluation.Name, "paramMap", paramMap, "finalParametersCount", len(finalParameters))
 
 	// Build unified evaluation request
@@ -599,6 +605,9 @@ func (r *EvaluationReconciler) processQueryEvaluation(ctx context.Context, evalu
 	// Note: Using DirectRequest since QueryRefRequest is not yet implemented in the service
 	// Add query reference to parameters for evaluators that need full query metadata
 	parameters := r.convertParametersToMap(ctx, finalParameters, evaluation.Namespace)
+
+	// Extract contextual background information for improved evaluation accuracy
+	parameters = r.addContextToParameters(ctx, &evaluation, parameters)
 
 	// Ensure queryRef has proper namespace - default to evaluation's namespace if not specified
 	queryRef := evaluation.Spec.Config.QueryRef
@@ -1062,6 +1071,36 @@ func (r *EvaluationReconciler) processEventEvaluation(ctx context.Context, evalu
 		"metadataCount", len(response.Metadata))
 
 	return ctrl.Result{}, nil
+}
+
+// addContextToParameters adds contextual background information to evaluation parameters using the helper
+func (r *EvaluationReconciler) addContextToParameters(ctx context.Context, evaluation *arkv1alpha1.Evaluation, parameters map[string]string) map[string]string {
+	log := logf.FromContext(ctx)
+
+	// Skip if context already provided
+	if _, hasContext := parameters["evaluation.context"]; hasContext {
+		log.Info("Context already provided in parameters, skipping extraction")
+		return parameters
+	}
+
+	// Use context retrieval helper to extract only true contextual background information
+	helper := genai.NewContextHelper(r.Client)
+	extractedContext, contextSource := helper.ExtractContextualBackground(ctx, evaluation)
+
+	// Add context to parameters if extracted
+	if extractedContext != "" {
+		if parameters == nil {
+			parameters = make(map[string]string)
+		}
+		parameters["evaluation.context"] = extractedContext
+		parameters["evaluation.context_source"] = contextSource
+		log.Info("Added contextual background to parameters",
+			"evaluationType", evaluation.Spec.Type,
+			"contextLength", len(extractedContext),
+			"contextSource", contextSource)
+	}
+
+	return parameters
 }
 
 // SetupWithManager sets up the controller with the Manager.

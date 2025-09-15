@@ -1,0 +1,53 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: malformed-java-code
+  namespace: default
+  labels:
+    evaluation_required: "true"
+    environment: "development"
+    agent-type: "java-modernizer"
+spec:
+  targets:
+    - type: agent
+      name: java8-to-js-modernizer
+  input: |
+    Convert this Java code to JavaScript:
+    
+    ```java
+    import java.util.*;
+    
+    public class BrokenService {
+        private List<Item> items = new ArrayList<>();
+        
+        // Missing closing brace for method
+        public void processItems() {
+            items.stream()
+                .filter(item -> item.getValue() > 100
+                .map(Item::getName)
+                // Syntax error: incomplete lambda
+                .forEach(name -> {
+                    System.out.println(name)
+                // Missing semicolon and closing brace
+        }
+        
+        // Invalid stream operation mixing
+        public List<String> getNames() {
+            return items.stream()
+                .filter(item -> item != null)
+                .map(Item::getName)
+                .filter(name -> name.length() > 5)
+                .sorted()
+                // Wrong collector type
+                .collect(Collectors.toSet());  // Should be toList() for List<String> return type
+        }
+        
+        // Undefined types and methods
+        public Future<Response> fetchData() {
+            return CompletableFuture.supplyAsync(() -> 
+                makeRequest()  // Method doesn't exist
+                    .withTimeout(5000)  // Method doesn't exist
+                    .parseAs(ResponseType.JSON)  // Type doesn't exist
+            );
+        }
+    ```

@@ -1,0 +1,71 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: langfuse-evaluator
+  namespace: default
+  labels:
+    ark.mckinsey.com/provider: langfuse
+    ark.mckinsey.com/service: evaluation
+spec:
+  description: "Langfuse-based evaluation using cluster-deployed Langfuse instance"
+  address:
+    valueFrom:
+      serviceRef:
+        name: ark-evaluator
+        namespace: default
+        port: "http"
+        path: "/evaluate"
+  parameters:
+    # Provider selection
+    - name: provider
+      value: langfuse
+    - name: langfuse.azure_embedding_deployment
+      value: "text-embedding-ada-002"  # or whatever your embedding deployment is named
+    - name: langfuse.azure_embedding_model
+      value: "text-embedding-ada-002"   # the model name
+    # Langfuse cluster configuration from ConfigMap
+    - name: langfuse.host
+      valueFrom:
+        configMapKeyRef:
+          name: langfuse-cluster-config
+          key: host
+    
+    - name: langfuse.project
+      valueFrom:
+        configMapKeyRef:
+          name: langfuse-cluster-config
+          key: project
+    
+    # Langfuse credentials from Secret
+    - name: langfuse.public_key
+      valueFrom:
+        secretKeyRef:
+          name: langfuse-cluster-secrets
+          key: public_key
+    
+    - name: langfuse.secret_key
+      valueFrom:
+        secretKeyRef:
+          name: langfuse-cluster-secrets
+          key: secret_key
+
+    # Azure-specific required parameters
+    - name: langfuse.azure_endpoint
+      value: "https://lxo.openai.azure.com/"
+    - name: langfuse.azure_deployment
+      value: "gpt-4.1-mini"
+    - name: langfuse.model_version
+      value: "2024-12-01-preview"
+    - name: langfuse.azure_api_key
+      valueFrom:
+        secretKeyRef:
+          name: azure-openai-secret
+          key: token
+
+    # Evaluation metrics configuration
+    - name: metrics
+      value: "relevance,correctness,clarity"
+    
+    # Threshold configuration
+    - name: threshold
+      value: "0.7"

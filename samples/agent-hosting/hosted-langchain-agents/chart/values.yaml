@@ -10,7 +10,7 @@ app:
   name: hosted-langchain-agents
   image:
     repository: hosted-langchain-agents
-    tag: latest
+    # tag defaults to .Chart.AppVersion if not specified
     pullPolicy: IfNotPresent
   
   # Resource configuration

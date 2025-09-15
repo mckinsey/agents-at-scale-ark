@@ -29,7 +29,7 @@ spec:
       automountServiceAccountToken: false
       containers:
       - name: {{ .Values.app.name }}
-        image: "{{ .Values.app.image.repository }}:{{ .Values.app.image.tag }}"
+        image: "{{ .Values.app.image.repository }}:{{ .Values.app.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.app.image.pullPolicy }}
         ports:
         - containerPort: {{ .Values.service.targetPort }}

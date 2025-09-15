@@ -1,0 +1,89 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: java-with-threading-complexity
+  namespace: default
+  labels:
+    evaluation_required: "true"
+    environment: "development"
+    agent-type: "java-modernizer"
+spec:
+  targets:
+    - type: agent
+      name: java8-to-js-modernizer
+  input: |
+    Convert this complex Java 8 code with threading and synchronization to JavaScript:
+    
+    ```java
+    import java.util.*;
+    import java.util.concurrent.*;
+    import java.util.concurrent.atomic.*;
+    import java.util.concurrent.locks.*;
+    
+    public class DataProcessor {
+        private final ExecutorService executor = Executors.newFixedThreadPool(10);
+        private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+        private final AtomicInteger counter = new AtomicInteger(0);
+        private volatile boolean isProcessing = false;
+        private final BlockingQueue<Task> taskQueue = new LinkedBlockingQueue<>();
+        
+        public synchronized void startProcessing() {
+            if (isProcessing) return;
+            isProcessing = true;
+            
+            CompletableFuture.runAsync(() -> {
+                while (isProcessing) {
+                    try {
+                        Task task = taskQueue.poll(100, TimeUnit.MILLISECONDS);
+                        if (task != null) {
+                            processTask(task);
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }, executor);
+        }
+        
+        private void processTask(Task task) {
+            rwLock.writeLock().lock();
+            try {
+                // Simulate complex processing with thread safety
+                int count = counter.incrementAndGet();
+                task.process(count);
+                
+                // Native thread operations
+                Thread.yield();
+                TimeUnit.MILLISECONDS.sleep(10);
+                
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                rwLock.writeLock().unlock();
+            }
+        }
+        
+        public List<CompletableFuture<Result>> processBatch(List<Data> dataList) {
+            return dataList.stream()
+                .map(data -> CompletableFuture
+                    .supplyAsync(() -> {
+                        rwLock.readLock().lock();
+                        try {
+                            return new Result(data.getId(), processData(data));
+                        } finally {
+                            rwLock.readLock().unlock();
+                        }
+                    }, executor)
+                    .exceptionally(ex -> new Result("error", null)))
+                .collect(Collectors.toList());
+        }
+        
+        private Object processData(Data data) {
+            // Complex synchronized processing
+            synchronized(this) {
+                return data.transform();
+            }
+        }
+    }
+    ```

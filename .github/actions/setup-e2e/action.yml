@@ -31,7 +31,7 @@ inputs:
     required: false
     default: 'false'
   install-evaluator:
-    description: 'Install evaluator-llm service for evaluation tests'
+    description: 'Install ark-evaluator service for evaluation tests'
     required: false
     default: 'false'
 
