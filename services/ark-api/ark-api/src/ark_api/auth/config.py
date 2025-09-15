@@ -10,9 +10,7 @@ PUBLIC_ROUTES: Set[str] = {
     "/ready",
     "/docs",
     "/openapi.json",
-    "/redoc",
-    "/openai/v1/models",
-    "/openai/v1/chat/completions",
+    "/redoc"
 }
 
 def is_route_authenticated(path: str) -> bool:
