@@ -46,7 +46,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         skip_auth = os.getenv("ARK_SKIP_AUTH", "false").lower() == "true"
         logger.info(f"ARK_SKIP_AUTH={os.getenv('ARK_SKIP_AUTH')}, skip_auth={skip_auth}, path={path}")
         if skip_auth:
-            logger.info(f"Skipping authentication for path: {path}")
             response = await call_next(request)
             return response
         
@@ -55,9 +54,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             try:
                 # Extract the Authorization header
                 auth_header = request.headers.get("Authorization")
-                logger.info(f"Authorization header: {auth_header}")
                 if not auth_header or not auth_header.startswith("Bearer "):
-                    logger.warning(f"Missing or invalid authorization header: {auth_header}")
                     return JSONResponse(
                         status_code=401,
                         content={"detail": "Missing or invalid authorization header"}
@@ -65,9 +62,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 
                 # Extract the token
                 token = auth_header[7:]  # Remove "Bearer " prefix
-                logger.info(f"Extracted token: {token[:20]}..." if len(token) > 20 else f"Extracted token: {token}")
                 if not token:
-                    logger.warning("Empty token after Bearer prefix removal")
                     return JSONResponse(
                         status_code=401,
                         content={"detail": "Missing token"}
@@ -75,12 +70,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 
                 
                 # Validate the token using ark_sdk validator
-                logger.info("Starting token validation...")
                 
                 # Create TokenValidator instance (will read config from environment)
                 validator = TokenValidator()
-                token_data = await validator.validate_token(token)
-                logger.info(f"Token validation successful. User: {token_data.get('preferred_username', token_data.get('email', 'unknown'))}")
+                await validator.validate_token(token)
                 
             except TokenValidationError as e:
                 logger.error(f"Token validation error: {e}")
