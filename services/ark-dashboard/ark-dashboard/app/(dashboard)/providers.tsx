@@ -2,11 +2,11 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
-import { AppSidebar } from "../components/app-sidebar";
-import ChatManager from "../components/chat-manager";
-import { SidebarInset, SidebarProvider } from "../components/ui/sidebar";
-import { Toaster } from "../components/ui/toaster";
-import { ChatProvider } from "../lib/chat-context";
+import { AppSidebar } from "@/components/app-sidebar";
+import ChatManager from "@/components/chat-manager";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { Toaster } from "@/components/ui/toaster";
+import { ChatProvider } from "@/lib/chat-context";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   // Prevents QueryClient from being recreated on each render

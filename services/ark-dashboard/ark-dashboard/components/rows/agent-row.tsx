@@ -7,6 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip";
+import { AgentPhaseBadge } from "@/components/ui/agent-phase-badge";
 import { useChatState } from "@/lib/chat-context";
 import { toggleFloatingChat } from "@/lib/chat-events";
 import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
@@ -25,14 +26,14 @@ import { Bot, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 interface AgentRowProps {
-  agent: Agent;
-  teams: Team[];
-  models: Model[];
-  onUpdate?: (
+  readonly   agent: Agent;
+  readonly   teams: Team[];
+  readonly   models: Model[];
+  readonly   onUpdate?: (
     agent: (AgentCreateRequest | AgentUpdateRequest) & { id?: string }
   ) => void;
-  onDelete?: (id: string) => void;
-  namespace: string;
+  readonly   onDelete?: (id: string) => void;
+  readonly   namespace: string;
 }
 
 export function AgentRow({
@@ -83,6 +84,8 @@ export function AgentRow({
           {!isA2A && <span>Model: {modelName}</span>}
           {isA2A && <span>A2A Agent</span>}
         </div>
+
+        <AgentPhaseBadge agent={agent} />
 
         <div className="flex items-center gap-1 flex-shrink-0">
           {onUpdate && (
