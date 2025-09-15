@@ -233,6 +233,75 @@ class TestAuthMiddleware(unittest.TestCase):
         call_next.assert_called_once_with(request)
         self.assertIsNotNone(response)
 
+    @patch.dict(os.environ, {
+        'AUTH_MODE': 'sso',
+        'ARK_OIDC_ISSUER': '',
+        'ARK_OIDC_APPLICATION_ID': 'test-app-id'
+    })
+    async def test_missing_oidc_issuer_disables_auth(self):
+        """Test that missing ARK_OIDC_ISSUER disables authentication even with AUTH_MODE=sso."""
+        # Mock request
+        request = Mock()
+        request.url.path = "/api/v1/agents"
+        request.headers = {}
+
+        # Mock call_next
+        call_next = AsyncMock()
+        call_next.return_value = Mock()
+
+        # Test middleware
+        response = await self.middleware.dispatch(request, call_next)
+
+        # Verify that call_next was called (authentication was skipped)
+        call_next.assert_called_once_with(request)
+        self.assertIsNotNone(response)
+
+    @patch.dict(os.environ, {
+        'AUTH_MODE': 'sso',
+        'ARK_OIDC_ISSUER': 'https://test-issuer.com',
+        'ARK_OIDC_APPLICATION_ID': ''
+    })
+    async def test_missing_oidc_app_id_disables_auth(self):
+        """Test that missing ARK_OIDC_APPLICATION_ID disables authentication even with AUTH_MODE=sso."""
+        # Mock request
+        request = Mock()
+        request.url.path = "/api/v1/agents"
+        request.headers = {}
+
+        # Mock call_next
+        call_next = AsyncMock()
+        call_next.return_value = Mock()
+
+        # Test middleware
+        response = await self.middleware.dispatch(request, call_next)
+
+        # Verify that call_next was called (authentication was skipped)
+        call_next.assert_called_once_with(request)
+        self.assertIsNotNone(response)
+
+    @patch.dict(os.environ, {
+        'AUTH_MODE': 'sso',
+        'ARK_OIDC_ISSUER': '',
+        'ARK_OIDC_APPLICATION_ID': ''
+    })
+    async def test_missing_both_oidc_configs_disables_auth(self):
+        """Test that missing both OIDC configs disables authentication even with AUTH_MODE=sso."""
+        # Mock request
+        request = Mock()
+        request.url.path = "/api/v1/agents"
+        request.headers = {}
+
+        # Mock call_next
+        call_next = AsyncMock()
+        call_next.return_value = Mock()
+
+        # Test middleware
+        response = await self.middleware.dispatch(request, call_next)
+
+        # Verify that call_next was called (authentication was skipped)
+        call_next.assert_called_once_with(request)
+        self.assertIsNotNone(response)
+
 
 if __name__ == '__main__':
     unittest.main()

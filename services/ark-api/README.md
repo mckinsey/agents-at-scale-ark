@@ -30,15 +30,20 @@ AUTH_MODE=open          # Disable authentication (development)
 
 The `AUTH_MODE` environment variable controls authentication behavior:
 
-- **`AUTH_MODE=sso`** (case insensitive): Authentication **required**
+- **`AUTH_MODE=sso`** (case insensitive): Authentication **required** (if OIDC config is available)
   - All protected routes require valid JWT tokens
   - Invalid or missing tokens return 401 Unauthorized
+  - Requires `ARK_OIDC_ISSUER` and `ARK_OIDC_APPLICATION_ID` to be configured
   - Use for production environments
 
 - **`AUTH_MODE=open`** or any other value: Authentication **disabled**
   - All routes are accessible without authentication
   - Use for development and testing
   - Default behavior when AUTH_MODE is not set
+
+- **Missing OIDC configuration**: Authentication **disabled** (even with `AUTH_MODE=sso`)
+  - If `ARK_OIDC_ISSUER` or `ARK_OIDC_APPLICATION_ID` are not configured, authentication is skipped
+  - This prevents authentication errors when OIDC is not properly set up
 
 ### Public Routes
 - `/health`, `/ready`, `/docs`, `/openapi.json`, `/redoc`

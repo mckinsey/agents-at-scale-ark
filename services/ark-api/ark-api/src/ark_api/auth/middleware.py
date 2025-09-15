@@ -43,8 +43,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         
         # Only apply authentication if AUTH_MODE is set to "sso" (case insensitive)
+        # and OIDC configuration is available
         auth_mode = os.getenv("AUTH_MODE", "").lower()
-        skip_auth = auth_mode != "sso"
+        oidc_issuer = os.getenv("ARK_OIDC_ISSUER", "")
+        oidc_app_id = os.getenv("ARK_OIDC_APPLICATION_ID", "")
+        
+        # Skip authentication if AUTH_MODE is not "sso" or OIDC config is missing
+        skip_auth = (auth_mode != "sso") or (not oidc_issuer) or (not oidc_app_id)
 
         if skip_auth:
             response = await call_next(request)
