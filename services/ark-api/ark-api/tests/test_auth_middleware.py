@@ -23,12 +23,12 @@ class TestAuthMiddleware(unittest.TestCase):
         self.middleware = AuthMiddleware(Mock())
 
     @patch.dict(os.environ, {
-        'ARK_SKIP_AUTH': 'true',
+        'AUTH_MODE': 'open',
         'ARK_OKTA_ISSUER': 'https://test-issuer.com',
         'OIDC_APPLICATION_ID': 'test-app-id'
     })
     async def test_skip_auth_enabled(self):
-        """Test that authentication is skipped when ARK_SKIP_AUTH=true."""
+        """Test that authentication is skipped when AUTH_MODE=open."""
         # Mock request
         request = Mock()
         request.url.path = "/api/v1/agents"
@@ -46,12 +46,12 @@ class TestAuthMiddleware(unittest.TestCase):
         self.assertIsNotNone(response)
 
     @patch.dict(os.environ, {
-        'ARK_SKIP_AUTH': 'false',
+        'AUTH_MODE': 'sso',
         'ARK_OKTA_ISSUER': 'https://test-issuer.com',
         'OIDC_APPLICATION_ID': 'test-app-id'
     })
     async def test_skip_auth_disabled_missing_header(self):
-        """Test that authentication is required when ARK_SKIP_AUTH=false."""
+        """Test that authentication is required when AUTH_MODE=sso."""
         # Mock request
         request = Mock()
         request.url.path = "/api/v1/agents"
@@ -68,7 +68,7 @@ class TestAuthMiddleware(unittest.TestCase):
         self.assertIn("Missing or invalid authorization header", response.body.decode())
 
     @patch.dict(os.environ, {
-        'ARK_SKIP_AUTH': 'false',
+        'AUTH_MODE': 'sso',
         'ARK_OKTA_ISSUER': 'https://test-issuer.com',
         'OIDC_APPLICATION_ID': 'test-app-id'
     })
@@ -90,7 +90,7 @@ class TestAuthMiddleware(unittest.TestCase):
         self.assertIn("Missing or invalid authorization header", response.body.decode())
 
     @patch.dict(os.environ, {
-        'ARK_SKIP_AUTH': 'false',
+        'AUTH_MODE': 'sso',
         'ARK_OKTA_ISSUER': 'https://test-issuer.com',
         'OIDC_APPLICATION_ID': 'test-app-id'
     })
@@ -120,7 +120,7 @@ class TestAuthMiddleware(unittest.TestCase):
         self.assertIsNotNone(response)
 
     @patch.dict(os.environ, {
-        'ARK_SKIP_AUTH': 'false',
+        'AUTH_MODE': 'sso',
         'ARK_OKTA_ISSUER': 'https://test-issuer.com',
         'OIDC_APPLICATION_ID': 'test-app-id'
     })
@@ -152,6 +152,74 @@ class TestAuthMiddleware(unittest.TestCase):
         # Mock request for public route
         request = Mock()
         request.url.path = "/health"
+        request.headers = {}
+
+        # Mock call_next
+        call_next = AsyncMock()
+        call_next.return_value = Mock()
+
+        # Test middleware
+        response = await self.middleware.dispatch(request, call_next)
+
+        # Verify that call_next was called (authentication was skipped)
+        call_next.assert_called_once_with(request)
+        self.assertIsNotNone(response)
+
+    @patch.dict(os.environ, {
+        'AUTH_MODE': 'sso',
+        'ARK_OKTA_ISSUER': 'https://test-issuer.com',
+        'OIDC_APPLICATION_ID': 'test-app-id'
+    })
+    async def test_auth_mode_sso_enables_auth(self):
+        """Test that AUTH_MODE=sso enables authentication."""
+        # Mock request
+        request = Mock()
+        request.url.path = "/api/v1/agents"
+        request.headers = {}
+
+        # Mock call_next
+        call_next = AsyncMock()
+
+        # Test middleware
+        response = await self.middleware.dispatch(request, call_next)
+
+        # Verify that a 401 response is returned (authentication required)
+        self.assertEqual(response.status_code, 401)
+        self.assertIn("Missing or invalid authorization header", response.body.decode())
+
+    @patch.dict(os.environ, {
+        'AUTH_MODE': 'open',
+        'ARK_OKTA_ISSUER': 'https://test-issuer.com',
+        'OIDC_APPLICATION_ID': 'test-app-id'
+    })
+    async def test_auth_mode_open_disables_auth(self):
+        """Test that AUTH_MODE=open disables authentication."""
+        # Mock request
+        request = Mock()
+        request.url.path = "/api/v1/agents"
+        request.headers = {}
+
+        # Mock call_next
+        call_next = AsyncMock()
+        call_next.return_value = Mock()
+
+        # Test middleware
+        response = await self.middleware.dispatch(request, call_next)
+
+        # Verify that call_next was called (authentication was skipped)
+        call_next.assert_called_once_with(request)
+        self.assertIsNotNone(response)
+
+    @patch.dict(os.environ, {
+        'AUTH_MODE': 'invalid',
+        'ARK_OKTA_ISSUER': 'https://test-issuer.com',
+        'OIDC_APPLICATION_ID': 'test-app-id'
+    })
+    async def test_auth_mode_invalid_disables_auth(self):
+        """Test that any AUTH_MODE other than 'sso' disables authentication."""
+        # Mock request
+        request = Mock()
+        request.url.path = "/api/v1/agents"
         request.headers = {}
 
         # Mock call_next

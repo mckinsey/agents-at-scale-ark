@@ -8,19 +8,8 @@ from fastapi.responses import JSONResponse
 from kubernetes_asyncio import client
 
 # Load environment variables from .env file
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    # If python-dotenv is not available, try to load .env manually
-    env_file = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
-    if os.path.exists(env_file):
-        with open(env_file, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
-                    os.environ[key] = value
+from dotenv import load_dotenv
+load_dotenv()
 
 from .api import router
 from .core.config import setup_logging

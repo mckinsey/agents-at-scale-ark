@@ -7,7 +7,7 @@ except those explicitly marked as public.
 Environment Variables:
     ARK_OIDC_ISSUER: OIDC issuer URL (e.g., https://your-oidc-provider.com/realms/your-realm)
     ARK_OIDC_APPLICATION_ID: OIDC application ID (used as app_id for JWT validation)
-    ARK_SKIP_AUTH: Set to "true" to skip authentication (development only)
+    AUTH_MODE: Set to "sso" to enable authentication, any other value to skip authentication
     
 Note: JWKS URL is automatically derived from the issuer URL
 """
@@ -42,9 +42,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Get the path from the request
         path = request.url.path
         
-        # Skip authentication if ARK_SKIP_AUTH is set
-        skip_auth = os.getenv("ARK_SKIP_AUTH", "false").lower() == "true"
-        logger.info(f"ARK_SKIP_AUTH={os.getenv('ARK_SKIP_AUTH')}, skip_auth={skip_auth}, path={path}")
+        # Only apply authentication if AUTH_MODE is set to "sso" (case insensitive)
+        auth_mode = os.getenv("AUTH_MODE", "").lower()
+        skip_auth = auth_mode != "sso"
+
         if skip_auth:
             response = await call_next(request)
             return response

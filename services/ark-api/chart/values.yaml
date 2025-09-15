@@ -29,20 +29,11 @@ app:
       value: "*"
     # Authentication environment variables
     - name: ARK_OIDC_ISSUER
-      valueFrom:
-        secretKeyRef:
-          name: ark-auth-secret
-          key: oidc-issuer
+      value: ""
     - name: ARK_OIDC_APPLICATION_ID
-      valueFrom:
-        secretKeyRef:
-          name: ark-auth-secret
-          key: oidc-application-id
-    - name: ARK_SKIP_AUTH
-      valueFrom:
-        secretKeyRef:
-          name: ark-auth-secret
-          key: skip-auth
+      value: ""
+    - name: AUTH_MODE
+      value: "open"
   # Optional: Import entire secrets/configmaps as env vars
   # envFrom:
   #   - secretRef:

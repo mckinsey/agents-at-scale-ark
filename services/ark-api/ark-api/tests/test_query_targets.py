@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from src.ark_api.utils.query_targets import parse_model_to_query_target
 
 # Set environment variable to skip authentication before importing the app
-os.environ["ARK_SKIP_AUTH"] = "true"
+os.environ["AUTH_MODE"] = "open"
 
 
 class TestParseModelToQueryTarget(unittest.TestCase):

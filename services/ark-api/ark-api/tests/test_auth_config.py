@@ -18,14 +18,14 @@ class TestAuthConfig(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         # Clear any existing environment variables
-        for key in ['ARK_OIDC_ISSUER', 'ARK_OIDC_APPLICATION_ID', 'ARK_OIDC_CLIENT_ID', 'ARK_SKIP_AUTH']:
+        for key in ['ARK_OIDC_ISSUER', 'ARK_OIDC_APPLICATION_ID', 'AUTH_MODE']:
             if key in os.environ:
                 del os.environ[key]
 
     def tearDown(self):
         """Clean up after tests."""
         # Clear environment variables after each test
-        for key in ['ARK_OIDC_ISSUER', 'ARK_OIDC_APPLICATION_ID', 'ARK_OIDC_CLIENT_ID', 'ARK_SKIP_AUTH']:
+        for key in ['ARK_OIDC_ISSUER', 'ARK_OIDC_APPLICATION_ID', 'AUTH_MODE']:
             if key in os.environ:
                 del os.environ[key]
 
@@ -35,30 +35,30 @@ class TestAuthConfig(unittest.TestCase):
         test_env = {
             'ARK_OIDC_ISSUER': 'https://auth.example.com/realms/test',
             'ARK_OIDC_APPLICATION_ID': 'app-123',
-            'ARK_OIDC_CLIENT_ID': 'client-456',
-            'ARK_SKIP_AUTH': 'true'
+            'AUTH_MODE': 'open'
         }
         
         with patch.dict(os.environ, test_env):
             # Test individual environment variables
             self.assertEqual(os.getenv('ARK_OIDC_ISSUER'), 'https://auth.example.com/realms/test')
             self.assertEqual(os.getenv('ARK_OIDC_APPLICATION_ID'), 'app-123')
-            self.assertEqual(os.getenv('ARK_OIDC_CLIENT_ID'), 'client-456')
-            self.assertEqual(os.getenv('ARK_SKIP_AUTH'), 'true')
+            self.assertEqual(os.getenv('AUTH_MODE'), 'open')
 
-    def test_skip_auth_parsing(self):
-        """Test ARK_SKIP_AUTH environment variable parsing."""
-        # Test various truthy values (only 'true' variations work with current logic)
-        for value in ['true', 'True', 'TRUE']:
-            with patch.dict(os.environ, {'ARK_SKIP_AUTH': value}):
-                skip_auth = os.getenv("ARK_SKIP_AUTH", "false").lower() == "true"
-                self.assertTrue(skip_auth, f"Failed for value: {value}")
-
-        # Test various falsy values
-        for value in ['false', 'False', 'FALSE', '0', '1', 'no', 'yes', 'off', 'on', '', None]:
-            with patch.dict(os.environ, {'ARK_SKIP_AUTH': value} if value is not None else {}):
-                skip_auth = os.getenv("ARK_SKIP_AUTH", "false").lower() == "true"
+    def test_auth_mode_parsing(self):
+        """Test AUTH_MODE environment variable parsing."""
+        # Test SSO mode (authentication required)
+        for value in ['sso', 'SSO', 'Sso']:
+            with patch.dict(os.environ, {'AUTH_MODE': value}):
+                auth_mode = os.getenv("AUTH_MODE", "").lower()
+                skip_auth = auth_mode != "sso"
                 self.assertFalse(skip_auth, f"Failed for value: {value}")
+
+        # Test non-SSO modes (authentication skipped)
+        for value in ['open', 'Open', 'OPEN', 'false', 'true', 'off', 'on', '', None]:
+            with patch.dict(os.environ, {'AUTH_MODE': value} if value is not None else {}):
+                auth_mode = os.getenv("AUTH_MODE", "").lower()
+                skip_auth = auth_mode != "sso"
+                self.assertTrue(skip_auth, f"Failed for value: {value}")
 
 
 

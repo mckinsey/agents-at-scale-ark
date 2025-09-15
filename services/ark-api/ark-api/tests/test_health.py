@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from kubernetes_asyncio.client.rest import ApiException
 
 # Set environment variable to skip authentication before importing the app
-os.environ["ARK_SKIP_AUTH"] = "true"
+os.environ["AUTH_MODE"] = "open"
 
 
 class TestHealthEndpoints(unittest.TestCase):
