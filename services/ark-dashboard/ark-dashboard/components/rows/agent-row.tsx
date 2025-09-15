@@ -7,6 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip";
+import { AgentPhaseBadge } from "@/components/ui/agent-phase-badge";
 import { useChatState } from "@/lib/chat-context";
 import { toggleFloatingChat } from "@/lib/chat-events";
 import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
@@ -25,14 +26,14 @@ import { Bot, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 interface AgentRowProps {
-  agent: Agent;
-  teams: Team[];
-  models: Model[];
-  onUpdate?: (
+  readonly   agent: Agent;
+  readonly   teams: Team[];
+  readonly   models: Model[];
+  readonly   onUpdate?: (
     agent: (AgentCreateRequest | AgentUpdateRequest) & { id?: string }
   ) => void;
-  onDelete?: (id: string) => void;
-  namespace: string;
+  readonly   onDelete?: (id: string) => void;
+  readonly   namespace: string;
 }
 
 export function AgentRow({
@@ -53,24 +54,6 @@ export function AgentRow({
 
   // Check if this is an A2A agent
   const isA2A = agent.isA2A || false;
-
-  // Get agent status/phase
-  const agentPhase = agent.status && typeof agent.status === "object" && "phase" in agent.status 
-    ? String(agent.status.phase) 
-    : "Unknown";
-  const isReady = agentPhase.toLowerCase() === "ready";
-  const isPending = agentPhase.toLowerCase() === "pending";
-  const hasError = agentPhase.toLowerCase() === "error";
-
-  // Get status badge color
-  let statusBadgeClass = "bg-gray-100 text-gray-800";
-  if (hasError) {
-    statusBadgeClass = "bg-red-100 text-red-800";
-  } else if (isReady) {
-    statusBadgeClass = "bg-green-100 text-green-800";
-  } else if (isPending) {
-    statusBadgeClass = "bg-yellow-100 text-yellow-800";
-  }
 
   // Get custom icon or default Bot icon
   const IconComponent = getCustomIcon(
@@ -102,14 +85,7 @@ export function AgentRow({
           {isA2A && <span>A2A Agent</span>}
         </div>
 
-        {/* Status Badge */}
-        <div className="flex-shrink-0 mr-2">
-          <span
-            className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${statusBadgeClass}`}
-          >
-            {agentPhase}
-          </span>
-        </div>
+        <AgentPhaseBadge agent={agent} />
 
         <div className="flex items-center gap-1 flex-shrink-0">
           {onUpdate && (
