@@ -29,7 +29,7 @@ class TokenValidator:
         """Create AuthConfig from environment variables."""
         # Read environment variables directly
         issuer = os.getenv("ARK_OIDC_ISSUER")
-        audience = os.getenv("ARK_OIDC_APPLICATION_ID") or os.getenv("ARK_OIDC_CLIENT_ID")
+        audience = os.getenv("ARK_OIDC_APPLICATION_ID")
         jwks_url = None
         if issuer:
             # Use the correct JWKS endpoint for Keycloak/Okta
