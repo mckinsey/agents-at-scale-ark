@@ -47,7 +47,6 @@ The `AUTH_MODE` environment variable controls authentication behavior:
 
 ### Public Routes
 - `/health`, `/ready`, `/docs`, `/openapi.json`, `/redoc`
-- `/openai/v1/models`, `/openai/v1/chat/completions`
 
 ### Local Development
 Create `.env` file in `services/ark-api/ark-api/`:
