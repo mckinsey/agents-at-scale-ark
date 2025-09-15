@@ -48,6 +48,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
         oidc_issuer = os.getenv("ARK_OIDC_ISSUER", "")
         oidc_app_id = os.getenv("ARK_OIDC_APPLICATION_ID", "")
         
+        # Check OIDC configuration and log appropriate messages
+        if auth_mode == "sso":
+            if not oidc_issuer:
+                logger.warning("AUTH_MODE=sso but ARK_OIDC_ISSUER is not configured. Authentication disabled.")
+            elif not oidc_app_id:
+                logger.warning("AUTH_MODE=sso but ARK_OIDC_APPLICATION_ID is not configured. Authentication disabled.")
+            else:
+                logger.debug("Authentication enabled: AUTH_MODE=sso with valid OIDC configuration")
+        else:
+            logger.debug(f"Authentication disabled: AUTH_MODE={auth_mode or 'not set'}")
+        
         # Skip authentication if AUTH_MODE is not "sso" or OIDC config is missing
         skip_auth = (auth_mode != "sso") or (not oidc_issuer) or (not oidc_app_id)
 
