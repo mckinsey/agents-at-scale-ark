@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Bot, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { BaseCard, type BaseCardAction } from "./base-card";
+import { AgentPhaseBadge } from "@/components/ui/agent-phase-badge";
 import { getCustomIcon } from "@/lib/utils/icon-resolver";
 import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import { toggleFloatingChat } from "@/lib/chat-events";
@@ -84,10 +85,13 @@ export function AgentCard({
         icon={<IconComponent className="h-5 w-5" />}
         actions={actions}
         footer={
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Bot className="h-4 w-4" />
-            {!isA2A && <span>Model: {modelName}</span>}
-            {isA2A && <span>A2A Agent</span>}
+          <div className="flex flex-row items-end w-full justify-between">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Bot className="h-4 w-4" />
+              {!isA2A && <span>Model: {modelName}</span>}
+              {isA2A && <span>A2A Agent</span>}
+            </div>
+            <AgentPhaseBadge agent={agent} />
           </div>
         }
       />
