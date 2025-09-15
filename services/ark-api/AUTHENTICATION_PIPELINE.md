@@ -1,4 +1,4 @@
-s# Authentication Configuration for CI/CD Pipeline
+# Authentication Configuration for CI/CD Pipeline
 
 This document explains how to configure authentication environment variables for the ARK API service in the CI/CD pipeline.
 
