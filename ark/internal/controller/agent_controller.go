@@ -9,6 +9,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -154,40 +155,51 @@ func (r *AgentReconciler) checkToolDependencies(ctx context.Context, agent *arkv
 func (r *AgentReconciler) checkA2AServerDependency(ctx context.Context, agent *arkv1alpha1.Agent) (arkv1alpha1.AgentPhase, error) {
 	// Check if agent has an A2AServer owner
 	for _, ownerRef := range agent.GetOwnerReferences() {
-		if ownerRef.Kind == "A2AServer" && ownerRef.APIVersion == "ark.mckinsey.com/v1prealpha1" {
-			// Get the A2AServer
-			var a2aServer arkv1prealpha1.A2AServer
-			a2aServerKey := types.NamespacedName{Name: ownerRef.Name, Namespace: agent.Namespace}
-			if err := r.Get(ctx, a2aServerKey, &a2aServer); err != nil {
-				if errors.IsNotFound(err) {
-					r.Recorder.Event(agent, corev1.EventTypeWarning, "A2AServerNotFound", fmt.Sprintf("A2AServer '%s' not found in namespace '%s'", ownerRef.Name, agent.Namespace))
-					return arkv1alpha1.AgentPhasePending, nil
-				}
-				return arkv1alpha1.AgentPhaseError, err
-			}
-
-			// Check if A2AServer is Ready
-			isReady := false
-			for _, condition := range a2aServer.Status.Conditions {
-				if condition.Type == "Ready" && condition.Status == "True" {
-					isReady = true
-					break
-				}
-			}
-
-			if !isReady {
-				r.Recorder.Event(agent, corev1.EventTypeWarning, "A2AServerNotReady", fmt.Sprintf("A2AServer '%s' is not ready", ownerRef.Name))
-				return arkv1alpha1.AgentPhasePending, nil
-			}
-
-			// A2AServer is ready - emit event for successful dependency
-			r.Recorder.Event(agent, corev1.EventTypeNormal, "A2AServerReady", fmt.Sprintf("A2AServer '%s' is ready", ownerRef.Name))
+		if ownerRef.Kind != "A2AServer" || ownerRef.APIVersion != "ark.mckinsey.com/v1prealpha1" {
+			continue
 		}
+
+		return r.validateA2AServerDependency(ctx, agent, ownerRef)
 	}
 
-	// No A2AServer owner or A2AServer is ready
+	// No A2AServer owner
 	return arkv1alpha1.AgentPhaseReady, nil
 }
+
+// validateA2AServerDependency checks if the A2AServer is ready
+func (r *AgentReconciler) validateA2AServerDependency(ctx context.Context, agent *arkv1alpha1.Agent, ownerRef metav1.OwnerReference) (arkv1alpha1.AgentPhase, error) {
+	// Get the A2AServer
+	var a2aServer arkv1prealpha1.A2AServer
+	a2aServerKey := types.NamespacedName{Name: ownerRef.Name, Namespace: agent.Namespace}
+	if err := r.Get(ctx, a2aServerKey, &a2aServer); err != nil {
+		if errors.IsNotFound(err) {
+			r.Recorder.Event(agent, corev1.EventTypeWarning, "A2AServerNotFound", fmt.Sprintf("A2AServer '%s' not found in namespace '%s'", ownerRef.Name, agent.Namespace))
+			return arkv1alpha1.AgentPhasePending, nil
+		}
+		return arkv1alpha1.AgentPhaseError, err
+	}
+
+	// Check if A2AServer is Ready
+	if !r.isA2AServerReady(&a2aServer) {
+		r.Recorder.Event(agent, corev1.EventTypeWarning, "A2AServerNotReady", fmt.Sprintf("A2AServer '%s' is not ready", ownerRef.Name))
+		return arkv1alpha1.AgentPhasePending, nil
+	}
+
+	// A2AServer is ready - emit event for successful dependency
+	r.Recorder.Event(agent, corev1.EventTypeNormal, "A2AServerReady", fmt.Sprintf("A2AServer '%s' is ready", ownerRef.Name))
+	return arkv1alpha1.AgentPhaseReady, nil
+}
+
+// isA2AServerReady checks if an A2AServer has Ready condition true
+func (r *AgentReconciler) isA2AServerReady(a2aServer *arkv1prealpha1.A2AServer) bool {
+	for _, condition := range a2aServer.Status.Conditions {
+		if condition.Type == "Ready" && condition.Status == "True" {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.Agent{}).

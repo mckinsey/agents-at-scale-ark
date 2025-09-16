@@ -319,14 +319,6 @@ func (r *A2AServerReconciler) listAgentByA2AServer(ctx context.Context, a2aServe
 	return agentList, err
 }
 
-func (r *A2AServerReconciler) deleteAgentByA2AServer(ctx context.Context, a2aServerNamespace, a2aServerName string) error {
-	deleteOpts := []client.DeleteAllOfOption{
-		client.InNamespace(a2aServerNamespace),
-		client.MatchingLabels{labels.A2AServerLabel: a2aServerName},
-	}
-	return r.DeleteAllOf(ctx, &arkv1alpha1.Agent{}, deleteOpts...)
-}
-
 func (r *A2AServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1prealpha1.A2AServer{}).

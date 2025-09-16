@@ -1,0 +1,26 @@
+# Example demonstrating A2AServer and Agent dependency
+---
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: A2AServer
+metadata:
+  name: example-a2a-server
+  namespace: default
+spec:
+  address:
+    value: "http://a2a-server:8080"
+  description: "Example A2AServer for testing agent dependencies"
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: example-agent-with-a2a
+  namespace: default
+  ownerReferences:
+  - apiVersion: ark.mckinsey.com/v1prealpha1
+    kind: A2AServer
+    name: example-a2a-server
+    uid: "" # This will be populated by Kubernetes
+spec:
+  prompt: |
+    You are an AI assistant that depends on the A2AServer being ready.
+  description: "Agent that waits for A2AServer to be ready before becoming ready itself"
