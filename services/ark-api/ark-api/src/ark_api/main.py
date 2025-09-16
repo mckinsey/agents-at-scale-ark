@@ -13,7 +13,6 @@ load_dotenv()
 
 from .api import router
 from .core.config import setup_logging
-from .core.namespace import detect_current_context, set_current_context
 from .auth.middleware import AuthMiddleware
 from ark_sdk.k8s import init_k8s
 
@@ -25,11 +24,7 @@ logger = setup_logging()
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting up ARK API...")
-    
-    # Detect the current context (namespace + cluster info)
-    detected_context = detect_current_context()
-    set_current_context(detected_context)
-    
+
     await init_k8s()
     logger.info("Kubernetes clients initialized")
     yield
