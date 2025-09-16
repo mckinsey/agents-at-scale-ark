@@ -23,7 +23,7 @@ class NamespaceCreateRequest(BaseModel):
 class ContextResponse(BaseModel):
     """Response model for current Kubernetes context."""
     namespace: str
-    cluster: str
+    cluster: Optional[str]
 
 
 class SecretResponse(BaseModel):
