@@ -8,8 +8,11 @@ inputs:
 
 outputs:
   ci-cache-registry:
-    description: 'Container registry URL to use for this workflow run'
+    description: 'Container registry URL to use for this workflow run (includes namespace)'
     value: ${{ steps.set-registry.outputs.ci-cache-registry }}
+  ci-cache-registry-hostname:
+    description: 'Container registry hostname for login (e.g., ghcr.io)'
+    value: ${{ steps.set-registry.outputs.ci-cache-registry-hostname }}
   is-fork-pr:
     description: 'Whether this is a PR from a forked repository'
     value: ${{ steps.set-registry.outputs.is-fork-pr }}
@@ -60,6 +63,7 @@ runs:
         
         # Output for use in other jobs
         echo "ci-cache-registry=$REGISTRY" >> $GITHUB_OUTPUT
+        echo "ci-cache-registry-hostname=ghcr.io" >> $GITHUB_OUTPUT
         echo "is-fork-pr=$IS_FORK_PR" >> $GITHUB_OUTPUT
         
         # Brief summary for workflow run visibility
