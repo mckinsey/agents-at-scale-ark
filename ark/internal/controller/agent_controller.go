@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -18,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 )
 
 const (
@@ -35,6 +37,7 @@ type AgentReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=agents/finalizers,verbs=update
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=tools,verbs=get;list;watch
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=models,verbs=get;list;watch
+// +kubebuilder:rbac:groups=ark.mckinsey.com,resources=a2aservers,verbs=get;list;watch
 
 func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
@@ -57,7 +60,7 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			log.Error(err, "Failed to initialize Agent status")
 			return ctrl.Result{}, err
 		}
-		r.Recorder.Event(&agent, "Normal", "AgentCreated", "Initialized agent status to Pending")
+		r.Recorder.Event(&agent, corev1.EventTypeNormal, "AgentCreated", "Initialized agent status to Pending")
 	}
 
 	// Check tool dependencies and update status
@@ -75,7 +78,7 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			// Return error to trigger retry - controller-runtime will handle the retry with backoff
 			return ctrl.Result{}, err
 		}
-		r.Recorder.Event(&agent, "Normal", "StatusChanged", fmt.Sprintf("Agent status changed to %s", newPhase))
+		r.Recorder.Event(&agent, corev1.EventTypeNormal, "StatusChanged", fmt.Sprintf("Agent status changed to %s", newPhase))
 	}
 
 	// Note: We also watch for Tool/Model events, so this is just a fallback
@@ -88,6 +91,11 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 // checkDependencies validates all agent dependencies and returns appropriate phase
 func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alpha1.Agent) (arkv1alpha1.AgentPhase, error) {
+	// Check A2AServer dependency (if agent is owned by an A2AServer)
+	if phase, err := r.checkA2AServerDependency(ctx, agent); err != nil || phase != arkv1alpha1.AgentPhaseReady {
+		return phase, err
+	}
+
 	// Check model dependency
 	if phase, err := r.checkModelDependency(ctx, agent); err != nil || phase != arkv1alpha1.AgentPhaseReady {
 		return phase, err
@@ -113,7 +121,7 @@ func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1
 	modelKey := types.NamespacedName{Name: modelName, Namespace: modelNamespace}
 	if err := r.Get(ctx, modelKey, &model); err != nil {
 		if errors.IsNotFound(err) {
-			r.Recorder.Event(agent, "Warning", "ModelNotFound", fmt.Sprintf("Model '%s' not found in namespace '%s'", modelName, modelNamespace))
+			r.Recorder.Event(agent, corev1.EventTypeWarning, "ModelNotFound", fmt.Sprintf("Model '%s' not found in namespace '%s'", modelName, modelNamespace))
 			return arkv1alpha1.AgentPhasePending, nil
 		}
 		return arkv1alpha1.AgentPhaseError, err
@@ -130,7 +138,7 @@ func (r *AgentReconciler) checkToolDependencies(ctx context.Context, agent *arkv
 			toolKey := types.NamespacedName{Name: toolSpec.Name, Namespace: agent.Namespace}
 			if err := r.Get(ctx, toolKey, &tool); err != nil {
 				if errors.IsNotFound(err) {
-					r.Recorder.Event(agent, "Warning", "ToolNotFound", fmt.Sprintf("Tool '%s' not found in namespace '%s'", toolSpec.Name, agent.Namespace))
+					r.Recorder.Event(agent, corev1.EventTypeWarning, "ToolNotFound", fmt.Sprintf("Tool '%s' not found in namespace '%s'", toolSpec.Name, agent.Namespace))
 					return arkv1alpha1.AgentPhasePending, nil
 				}
 				return arkv1alpha1.AgentPhaseError, err
@@ -142,6 +150,44 @@ func (r *AgentReconciler) checkToolDependencies(ctx context.Context, agent *arkv
 	return arkv1alpha1.AgentPhaseReady, nil
 }
 
+// checkA2AServerDependency validates A2AServer dependency for agents owned by A2AServers
+func (r *AgentReconciler) checkA2AServerDependency(ctx context.Context, agent *arkv1alpha1.Agent) (arkv1alpha1.AgentPhase, error) {
+	// Check if agent has an A2AServer owner
+	for _, ownerRef := range agent.GetOwnerReferences() {
+		if ownerRef.Kind == "A2AServer" && ownerRef.APIVersion == "ark.mckinsey.com/v1prealpha1" {
+			// Get the A2AServer
+			var a2aServer arkv1prealpha1.A2AServer
+			a2aServerKey := types.NamespacedName{Name: ownerRef.Name, Namespace: agent.Namespace}
+			if err := r.Get(ctx, a2aServerKey, &a2aServer); err != nil {
+				if errors.IsNotFound(err) {
+					r.Recorder.Event(agent, corev1.EventTypeWarning, "A2AServerNotFound", fmt.Sprintf("A2AServer '%s' not found in namespace '%s'", ownerRef.Name, agent.Namespace))
+					return arkv1alpha1.AgentPhasePending, nil
+				}
+				return arkv1alpha1.AgentPhaseError, err
+			}
+
+			// Check if A2AServer is Ready
+			isReady := false
+			for _, condition := range a2aServer.Status.Conditions {
+				if condition.Type == "Ready" && condition.Status == "True" {
+					isReady = true
+					break
+				}
+			}
+
+			if !isReady {
+				r.Recorder.Event(agent, corev1.EventTypeWarning, "A2AServerNotReady", fmt.Sprintf("A2AServer '%s' is not ready", ownerRef.Name))
+				return arkv1alpha1.AgentPhasePending, nil
+			}
+
+			// A2AServer is ready - emit event for successful dependency
+			r.Recorder.Event(agent, corev1.EventTypeNormal, "A2AServerReady", fmt.Sprintf("A2AServer '%s' is ready", ownerRef.Name))
+		}
+	}
+
+	// No A2AServer owner or A2AServer is ready
+	return arkv1alpha1.AgentPhaseReady, nil
+}
 func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.Agent{}).
@@ -154,6 +200,11 @@ func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&arkv1alpha1.Model{},
 			handler.EnqueueRequestsFromMapFunc(r.findAgentsForModel),
+		).
+		// Watch for A2AServer events and reconcile owned agents
+		Watches(
+			&arkv1prealpha1.A2AServer{},
+			handler.EnqueueRequestsFromMapFunc(r.findAgentsForA2AServer),
 		).
 		Named("agent").
 		Complete(r)
@@ -242,4 +293,40 @@ func (r *AgentReconciler) agentDependsOnModel(agent *arkv1alpha1.Agent, modelNam
 		return true
 	}
 	return false
+}
+
+// findAgentsForA2AServer finds agents owned by the given A2AServer
+func (r *AgentReconciler) findAgentsForA2AServer(ctx context.Context, obj client.Object) []reconcile.Request {
+	a2aServer, ok := obj.(*arkv1prealpha1.A2AServer)
+	if !ok {
+		return nil
+	}
+
+	log := logf.Log.WithName("agent-controller").WithValues("a2aserver", a2aServer.Name, "namespace", a2aServer.Namespace)
+
+	// List all agents in the same namespace
+	var agentList arkv1alpha1.AgentList
+	if err := r.List(ctx, &agentList, client.InNamespace(a2aServer.Namespace)); err != nil {
+		log.Error(err, "Failed to list agents for A2AServer dependency check")
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, agent := range agentList.Items {
+		// Check if this agent is owned by the A2AServer
+		for _, ownerRef := range agent.GetOwnerReferences() {
+			if ownerRef.Kind == "A2AServer" && ownerRef.Name == a2aServer.Name {
+				requests = append(requests, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      agent.Name,
+						Namespace: agent.Namespace,
+					},
+				})
+				log.Info("Triggering reconciliation for agent owned by A2AServer", "agent", agent.Name)
+				break
+			}
+		}
+	}
+
+	return requests
 }
