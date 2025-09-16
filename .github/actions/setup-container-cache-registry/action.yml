@@ -61,9 +61,17 @@ runs:
           echo "Internal event - using org registry: $REGISTRY"
         fi
         
+        # Extract registry hostname from full registry path
+        # Examples:
+        # - ghcr.io/owner/repo -> ghcr.io
+        # - docker.io/myorg/myrepo -> docker.io
+        # - myregistry.com:5000/path -> myregistry.com:5000
+        # - ghcr.io -> ghcr.io (no path)
+        REGISTRY_HOSTNAME=$(echo "$REGISTRY" | cut -d'/' -f1)
+        
         # Output for use in other jobs
         echo "ci-cache-registry=$REGISTRY" >> $GITHUB_OUTPUT
-        echo "ci-cache-registry-hostname=ghcr.io" >> $GITHUB_OUTPUT
+        echo "ci-cache-registry-hostname=$REGISTRY_HOSTNAME" >> $GITHUB_OUTPUT
         echo "is-fork-pr=$IS_FORK_PR" >> $GITHUB_OUTPUT
         
         # Brief summary for workflow run visibility
@@ -71,7 +79,8 @@ runs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
         echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
-        echo "| **Registry** | \`$REGISTRY\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Registry Path** | \`$REGISTRY\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Registry Host** | \`$REGISTRY_HOSTNAME\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **Is Fork PR** | $IS_FORK_PR |" >> $GITHUB_STEP_SUMMARY
         echo "| **Event Type** | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
         echo "| **Actor** | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
