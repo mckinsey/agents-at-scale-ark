@@ -17,8 +17,8 @@ The ARK API uses OIDC/JWT-based authentication with automatic token validation.
 
 ```bash
 # OIDC Configuration
-ARK_OIDC_ISSUER=https://your-oidc-provider.com/realms/your-realm
-ARK_OIDC_APPLICATION_ID=your-app-id
+OIDC_ISSUER_URL=https://your-oidc-provider.com/realms/your-realm
+OIDC_APPLICATION_ID=your-app-id
 
 # Authentication Mode
 AUTH_MODE=sso           # Enable OIDC authentication (production)
@@ -33,7 +33,7 @@ The `AUTH_MODE` environment variable controls authentication behavior:
 - **`AUTH_MODE=sso`** (case insensitive): Authentication **required** (if OIDC config is available)
   - All protected routes require valid JWT tokens
   - Invalid or missing tokens return 401 Unauthorized
-  - Requires `ARK_OIDC_ISSUER` and `ARK_OIDC_APPLICATION_ID` to be configured
+  - Requires `OIDC_ISSUER_URL` and `OIDC_APPLICATION_ID` to be configured
   - Use for production environments
 
 - **`AUTH_MODE=open`** or any other value: Authentication **disabled**
@@ -42,7 +42,7 @@ The `AUTH_MODE` environment variable controls authentication behavior:
   - Default behavior when AUTH_MODE is not set
 
 - **Missing OIDC configuration**: Authentication **disabled** (even with `AUTH_MODE=sso`)
-  - If `ARK_OIDC_ISSUER` or `ARK_OIDC_APPLICATION_ID` are not configured, authentication is skipped
+  - If `OIDC_ISSUER_URL` or `OIDC_APPLICATION_ID` are not configured, authentication is skipped
   - This prevents authentication errors when OIDC is not properly set up
 
 ### Public Routes
@@ -51,8 +51,8 @@ The `AUTH_MODE` environment variable controls authentication behavior:
 ### Local Development
 Create `.env` file in `services/ark-api/ark-api/`:
 ```bash
-ARK_OIDC_ISSUER=https://your-oidc-provider.com/realms/your-realm
-ARK_OIDC_APPLICATION_ID=your-application-id
+OIDC_ISSUER_URL=https://your-oidc-provider.com/realms/your-realm
+OIDC_APPLICATION_ID=your-application-id
 AUTH_MODE=open
 ```
 

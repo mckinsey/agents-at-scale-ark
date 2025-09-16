@@ -28,9 +28,9 @@ app:
     - name: CORS_ORIGINS
       value: "*"
     # Authentication environment variables
-    - name: ARK_OIDC_ISSUER
+    - name: OIDC_ISSUER_URL
       value: ""
-    - name: ARK_OIDC_APPLICATION_ID
+    - name: OIDC_APPLICATION_ID
       value: ""
     - name: AUTH_MODE
       value: "open"

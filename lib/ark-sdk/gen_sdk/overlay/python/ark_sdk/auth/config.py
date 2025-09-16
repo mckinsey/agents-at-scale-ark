@@ -12,8 +12,8 @@ class AuthConfig(BaseSettings):
     jwt_algorithm: str = "RS256"
     
     # Authentication settings
-    issuer: Optional[str] = Field(None, env="ARK_OIDC_ISSUER")
-    audience: Optional[str] = Field(None, env="ARK_OIDC_APPLICATION_ID")
+    issuer: Optional[str] = Field(None, env="OIDC_ISSUER_URL")
+    audience: Optional[str] = Field(None, env="OIDC_APPLICATION_ID")
     jwks_url: Optional[str] = None
     
     def __init__(self, **kwargs):

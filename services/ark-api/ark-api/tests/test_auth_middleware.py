@@ -235,11 +235,11 @@ class TestAuthMiddleware(unittest.TestCase):
 
     @patch.dict(os.environ, {
         'AUTH_MODE': 'sso',
-        'ARK_OIDC_ISSUER': '',
-        'ARK_OIDC_APPLICATION_ID': 'test-app-id'
+        'OIDC_ISSUER_URL': '',
+        'OIDC_APPLICATION_ID': 'test-app-id'
     })
     async def test_missing_oidc_issuer_disables_auth(self):
-        """Test that missing ARK_OIDC_ISSUER disables authentication even with AUTH_MODE=sso."""
+        """Test that missing OIDC_ISSUER_URL disables authentication even with AUTH_MODE=sso."""
         # Mock request
         request = Mock()
         request.url.path = "/api/v1/agents"
@@ -258,11 +258,11 @@ class TestAuthMiddleware(unittest.TestCase):
 
     @patch.dict(os.environ, {
         'AUTH_MODE': 'sso',
-        'ARK_OIDC_ISSUER': 'https://test-issuer.com',
-        'ARK_OIDC_APPLICATION_ID': ''
+        'OIDC_ISSUER_URL': 'https://test-issuer.com',
+        'OIDC_APPLICATION_ID': ''
     })
     async def test_missing_oidc_app_id_disables_auth(self):
-        """Test that missing ARK_OIDC_APPLICATION_ID disables authentication even with AUTH_MODE=sso."""
+        """Test that missing OIDC_APPLICATION_ID disables authentication even with AUTH_MODE=sso."""
         # Mock request
         request = Mock()
         request.url.path = "/api/v1/agents"
@@ -281,8 +281,8 @@ class TestAuthMiddleware(unittest.TestCase):
 
     @patch.dict(os.environ, {
         'AUTH_MODE': 'sso',
-        'ARK_OIDC_ISSUER': '',
-        'ARK_OIDC_APPLICATION_ID': ''
+        'OIDC_ISSUER_URL': '',
+        'OIDC_APPLICATION_ID': ''
     })
     async def test_missing_both_oidc_configs_disables_auth(self):
         """Test that missing both OIDC configs disables authentication even with AUTH_MODE=sso."""
