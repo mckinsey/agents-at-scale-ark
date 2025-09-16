@@ -133,7 +133,7 @@ quickstart() {
     # Check ark controller status, will warn the user if not deployed.
     check_ark_controller
 
-    # Add this webhook health check here
+    # Webhook health check
     echo "testing webhook connectivity..."
     if ! kubectl get agent sample-agent >/dev/null 2>&1; then
         echo -e "${yellow}warning${nc}: webhook may not be ready, restarting controller..."
