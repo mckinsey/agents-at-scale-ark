@@ -37,6 +37,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       ci-cache-registry: ${{ steps.setup-registry.outputs.ci-cache-registry }}
+      ci-cache-registry-hostname: ${{ steps.setup-registry.outputs.ci-cache-registry-hostname }}
       is-fork-pr: ${{ steps.setup-registry.outputs.is-fork-pr }}
     steps:
       - uses: actions/checkout@v4
@@ -190,7 +191,7 @@ jobs:
       - name: Login to Docker Registry
         uses: docker/login-action@v3
         with:
-          registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
+          registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry-hostname }}
           username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
