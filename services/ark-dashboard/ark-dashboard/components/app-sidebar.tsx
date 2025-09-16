@@ -55,51 +55,28 @@ export function AppSidebar() {
     const loadInitialData = async () => {
       setLoading(true)
       try {
-        // Load critical data first (namespaces and system info)
-        const [namespacesData, systemData] = await Promise.all([
-          namespacesService.getAll(),
-          systemInfoService.get()
+        // Load system info and get current context
+        const [systemData, context] = await Promise.all([
+          systemInfoService.get(),
+          namespacesService.getContext()
         ])
-        
-        const filteredNamespaces = namespacesData.filter(ns => 
-          !['cert-manager', 'kube-node-lease', 'kube-system', 'kube-public'].includes(ns.name)
-        )
-        setNamespaces(filteredNamespaces)
+
         setSystemInfo(systemData)
-        setNamespaceResolved(true)
-        
-        // Get current context and simplify namespace selection
-        let selectedNamespace = "default"
-        
-        try {
-          const context = await namespacesService.getContext()
-          selectedNamespace = context.namespace
-        } catch (error) {
-          console.warn("Failed to get current context, using fallback namespace:", error)
-          // Check URL for namespace parameter as fallback
-          const urlParams = new URLSearchParams(window.location.search)
-          const urlNamespace = urlParams.get('namespace')
-          if (urlNamespace) {
-            selectedNamespace = urlNamespace
-          }
-        }
-        
-        // Always show only the current namespace (simplified approach)
-        let currentNamespaceOnly = filteredNamespaces.filter(ns => ns.name === selectedNamespace)
-        
-        // If the current namespace isn't in the filtered list, create it
-        if (currentNamespaceOnly.length === 0) {
-          currentNamespaceOnly = [{
-            name: selectedNamespace,
-            id: 0
-          }]
-        }
-        
-        // Always show only the current namespace (simplified approach)
+
+        // Use the detected namespace from context (backend handles fallback)
+        const selectedNamespace = context.namespace
+
+        // Show only the current namespace
+        const currentNamespaceOnly = [{
+          name: selectedNamespace,
+          id: 0
+        }]
+
         setNamespaces(currentNamespaceOnly)
         setNamespace(selectedNamespace)
-        
-        // Update URL to reflect the detected namespace (set once on startup)
+        setNamespaceResolved(true)
+
+        // Update URL to reflect the detected namespace
         const currentPath = pathname
         router.push(`${currentPath}?namespace=${selectedNamespace}`)
       } catch (error) {

@@ -315,7 +315,6 @@ jobs:
           ARK_QUICKSTART_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
           ARK_QUICKSTART_API_VERSION: 2024-12-01-preview
           ARK_QUICKSTART_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
-          ARK_DETECT_NAMESPACE: ${{ vars.ARK_DETECT_NAMESPACE }}
           ARK_QUICKSTART_CONTROLLER_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller
           ARK_QUICKSTART_CONTROLLER_TAG: ${{ github.sha }}
           CACHE_ARGS: --cache-from type=registry,ref=${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache --cache-to type=registry,ref=${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache,mode=max
@@ -326,7 +325,6 @@ jobs:
           echo "ARK_QUICKSTART_MODEL_VERSION=$ARK_QUICKSTART_MODEL_VERSION"
           echo "ARK_QUICKSTART_BASE_URL=$ARK_QUICKSTART_BASE_URL"
           echo "ARK_QUICKSTART_API_VERSION=$ARK_QUICKSTART_API_VERSION"
-          echo "ARK_DETECT_NAMESPACE=$ARK_DETECT_NAMESPACE"
           echo "ARK_QUICKSTART_API_KEY=***"
           make quickstart
       - name: Test end-to-end query
