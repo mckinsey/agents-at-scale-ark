@@ -24,7 +24,7 @@ class TestAuthMiddleware(unittest.TestCase):
 
     @patch.dict(os.environ, {
         'AUTH_MODE': 'open',
-        'ARK_OKTA_ISSUER': 'https://test-issuer.com',
+        'OIDC_ISSUER_URL': 'https://test-issuer.com',
         'OIDC_APPLICATION_ID': 'test-app-id'
     })
     async def test_skip_auth_enabled(self):
@@ -47,7 +47,7 @@ class TestAuthMiddleware(unittest.TestCase):
 
     @patch.dict(os.environ, {
         'AUTH_MODE': 'sso',
-        'ARK_OKTA_ISSUER': 'https://test-issuer.com',
+        'OIDC_ISSUER_URL': 'https://test-issuer.com',
         'OIDC_APPLICATION_ID': 'test-app-id'
     })
     async def test_skip_auth_disabled_missing_header(self):
@@ -69,7 +69,7 @@ class TestAuthMiddleware(unittest.TestCase):
 
     @patch.dict(os.environ, {
         'AUTH_MODE': 'sso',
-        'ARK_OKTA_ISSUER': 'https://test-issuer.com',
+        'OIDC_ISSUER_URL': 'https://test-issuer.com',
         'OIDC_APPLICATION_ID': 'test-app-id'
     })
     async def test_skip_auth_disabled_invalid_header(self):
@@ -91,7 +91,7 @@ class TestAuthMiddleware(unittest.TestCase):
 
     @patch.dict(os.environ, {
         'AUTH_MODE': 'sso',
-        'ARK_OKTA_ISSUER': 'https://test-issuer.com',
+        'OIDC_ISSUER_URL': 'https://test-issuer.com',
         'OIDC_APPLICATION_ID': 'test-app-id'
     })
     @patch('ark_sdk.auth.validator.TokenValidator')
@@ -121,7 +121,7 @@ class TestAuthMiddleware(unittest.TestCase):
 
     @patch.dict(os.environ, {
         'AUTH_MODE': 'sso',
-        'ARK_OKTA_ISSUER': 'https://test-issuer.com',
+        'OIDC_ISSUER_URL': 'https://test-issuer.com',
         'OIDC_APPLICATION_ID': 'test-app-id'
     })
     @patch('ark_sdk.auth.validator.TokenValidator')
@@ -167,7 +167,7 @@ class TestAuthMiddleware(unittest.TestCase):
 
     @patch.dict(os.environ, {
         'AUTH_MODE': 'sso',
-        'ARK_OKTA_ISSUER': 'https://test-issuer.com',
+        'OIDC_ISSUER_URL': 'https://test-issuer.com',
         'OIDC_APPLICATION_ID': 'test-app-id'
     })
     async def test_auth_mode_sso_enables_auth(self):
@@ -189,7 +189,7 @@ class TestAuthMiddleware(unittest.TestCase):
 
     @patch.dict(os.environ, {
         'AUTH_MODE': 'open',
-        'ARK_OKTA_ISSUER': 'https://test-issuer.com',
+        'OIDC_ISSUER_URL': 'https://test-issuer.com',
         'OIDC_APPLICATION_ID': 'test-app-id'
     })
     async def test_auth_mode_open_disables_auth(self):
@@ -212,7 +212,7 @@ class TestAuthMiddleware(unittest.TestCase):
 
     @patch.dict(os.environ, {
         'AUTH_MODE': 'invalid',
-        'ARK_OKTA_ISSUER': 'https://test-issuer.com',
+        'OIDC_ISSUER_URL': 'https://test-issuer.com',
         'OIDC_APPLICATION_ID': 'test-app-id'
     })
     async def test_auth_mode_invalid_disables_auth(self):

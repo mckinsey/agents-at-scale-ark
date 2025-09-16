@@ -5,8 +5,8 @@ This module provides middleware to automatically protect all routes
 except those explicitly marked as public.
 
 Environment Variables:
-    ARK_OIDC_ISSUER: OIDC issuer URL (e.g., https://your-oidc-provider.com/realms/your-realm)
-    ARK_OIDC_APPLICATION_ID: OIDC application ID (used as app_id for JWT validation)
+    OIDC_ISSUER_URL: OIDC issuer URL (e.g., https://your-oidc-provider.com/realms/your-realm)
+    OIDC_APPLICATION_ID: OIDC application ID (used as app_id for JWT validation)
     AUTH_MODE: Set to "sso" to enable authentication, any other value to skip authentication
     
 Note: JWKS URL is automatically derived from the issuer URL
@@ -45,15 +45,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Only apply authentication if AUTH_MODE is set to "sso" (case insensitive)
         # and OIDC configuration is available
         auth_mode = os.getenv("AUTH_MODE", "").lower()
-        oidc_issuer = os.getenv("ARK_OIDC_ISSUER", "")
-        oidc_app_id = os.getenv("ARK_OIDC_APPLICATION_ID", "")
+        oidc_issuer = os.getenv("OIDC_ISSUER_URL", "")
+        oidc_app_id = os.getenv("OIDC_APPLICATION_ID", "")
         
         # Check OIDC configuration and log appropriate messages
         if auth_mode == "sso":
             if not oidc_issuer:
-                logger.warning("AUTH_MODE=sso but ARK_OIDC_ISSUER is not configured. Authentication disabled.")
+                logger.warning("AUTH_MODE=sso but OIDC_ISSUER_URL is not configured. Authentication disabled.")
             elif not oidc_app_id:
-                logger.warning("AUTH_MODE=sso but ARK_OIDC_APPLICATION_ID is not configured. Authentication disabled.")
+                logger.warning("AUTH_MODE=sso but OIDC_APPLICATION_ID is not configured. Authentication disabled.")
             else:
                 logger.debug("Authentication enabled: AUTH_MODE=sso with valid OIDC configuration")
         else:

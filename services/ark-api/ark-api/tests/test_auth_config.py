@@ -18,14 +18,14 @@ class TestAuthConfig(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         # Clear any existing environment variables
-        for key in ['ARK_OIDC_ISSUER', 'ARK_OIDC_APPLICATION_ID', 'AUTH_MODE']:
+        for key in ['OIDC_ISSUER_URL', 'OIDC_APPLICATION_ID', 'AUTH_MODE']:
             if key in os.environ:
                 del os.environ[key]
 
     def tearDown(self):
         """Clean up after tests."""
         # Clear environment variables after each test
-        for key in ['ARK_OIDC_ISSUER', 'ARK_OIDC_APPLICATION_ID', 'AUTH_MODE']:
+        for key in ['OIDC_ISSUER_URL', 'OIDC_APPLICATION_ID', 'AUTH_MODE']:
             if key in os.environ:
                 del os.environ[key]
 
@@ -33,15 +33,15 @@ class TestAuthConfig(unittest.TestCase):
     def test_environment_variable_loading(self):
         """Test that environment variables are loaded correctly."""
         test_env = {
-            'ARK_OIDC_ISSUER': 'https://auth.example.com/realms/test',
-            'ARK_OIDC_APPLICATION_ID': 'app-123',
+            'OIDC_ISSUER_URL': 'https://auth.example.com/realms/test',
+            'OIDC_APPLICATION_ID': 'app-123',
             'AUTH_MODE': 'open'
         }
         
         with patch.dict(os.environ, test_env):
             # Test individual environment variables
-            self.assertEqual(os.getenv('ARK_OIDC_ISSUER'), 'https://auth.example.com/realms/test')
-            self.assertEqual(os.getenv('ARK_OIDC_APPLICATION_ID'), 'app-123')
+            self.assertEqual(os.getenv('OIDC_ISSUER_URL'), 'https://auth.example.com/realms/test')
+            self.assertEqual(os.getenv('OIDC_APPLICATION_ID'), 'app-123')
             self.assertEqual(os.getenv('AUTH_MODE'), 'open')
 
     def test_auth_mode_parsing(self):
