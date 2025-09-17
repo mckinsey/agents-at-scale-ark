@@ -55,7 +55,7 @@ func (t *Team) executeGraph(ctx context.Context, userInput Message, history []Me
 
 		if t.MaxTurns != nil && turns+1 >= *t.MaxTurns {
 			turnTracker.TeamTurn(ctx, "MaxTurns", t.FullName(), t.Strategy, turns+1)
-			return newMessages, fmt.Errorf("team graph MaxTurns %d reached for team %s", *t.MaxTurns, t.GetName())
+			return newMessages, nil
 		}
 	}
 

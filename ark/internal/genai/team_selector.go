@@ -152,7 +152,7 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 
 		if t.MaxTurns != nil && turn+1 >= *t.MaxTurns {
 			turnTracker.TeamTurn(ctx, "MaxTurns", t.FullName(), t.Strategy, turn+1)
-			return newMessages, fmt.Errorf("team selector MaxTurns reached %s", t.GetName())
+			return newMessages, nil
 		}
 	}
 }
