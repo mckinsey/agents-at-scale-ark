@@ -1644,7 +1644,7 @@ export interface components {
             /** Namespace */
             namespace: string;
             /** Cluster */
-            cluster: string;
+            cluster: string | null;
         };
         /** Custom */
         Custom: {
