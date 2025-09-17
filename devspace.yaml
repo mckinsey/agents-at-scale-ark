@@ -133,6 +133,11 @@ dev:
         startContainer: true
         disableDownload: true
         uploadExcludeFile: .dockerignore
+      - path: ./services/ark-api/out:/app/out/
+        startContainer: true
+        disableDownload: true
+        onUpload:
+          restartContainer: true
       - path: ./ark:/workspace
         excludePaths:
           - bin/

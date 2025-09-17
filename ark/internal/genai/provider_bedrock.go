@@ -17,6 +17,7 @@ import (
 type BedrockModel struct {
 	Model           string
 	Region          string
+	BaseURL         string
 	AccessKeyID     string
 	SecretAccessKey string
 	SessionToken    string
@@ -64,10 +65,11 @@ type bedrockContent struct {
 	Input map[string]interface{} `json:"input,omitempty"`
 }
 
-func NewBedrockModel(model, region, accessKeyID, secretAccessKey, sessionToken, modelArn string, properties map[string]string) *BedrockModel {
+func NewBedrockModel(model, region, baseURL, accessKeyID, secretAccessKey, sessionToken, modelArn string, properties map[string]string) *BedrockModel {
 	return &BedrockModel{
 		Model:           model,
 		Region:          region,
+		BaseURL:         baseURL,
 		AccessKeyID:     accessKeyID,
 		SecretAccessKey: secretAccessKey,
 		SessionToken:    sessionToken,
@@ -93,6 +95,11 @@ func (bm *BedrockModel) initClient(ctx context.Context) error {
 
 	if err != nil {
 		return fmt.Errorf("failed to load AWS config: %w", err)
+	}
+
+	// If BaseURL is provided, use it as custom endpoint
+	if bm.BaseURL != "" {
+		cfg.BaseEndpoint = aws.String(bm.BaseURL)
 	}
 
 	bm.client = bedrockruntime.NewFromConfig(cfg)
@@ -315,6 +322,9 @@ func (bm *BedrockModel) BuildConfig() map[string]any {
 
 	if bm.Region != "" {
 		cfg["region"] = bm.Region
+	}
+	if bm.BaseURL != "" {
+		cfg["baseUrl"] = bm.BaseURL
 	}
 	if bm.AccessKeyID != "" {
 		cfg["accessKeyId"] = bm.AccessKeyID

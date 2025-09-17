@@ -109,10 +109,8 @@ func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1
 	if err != nil {
 		log.Error(err, "A2A agent discovery failed", "server", a2aServer.Name, "address", resolvedAddress)
 		r.Recorder.Event(&a2aServer, corev1.EventTypeWarning, "AgentDiscoveryFailed", fmt.Sprintf("Failed to discover agents from A2A server %s: %v", resolvedAddress, err))
-		if err := r.deleteAgentByA2AServer(ctx, a2aServer.Namespace, a2aServer.Name); err != nil {
-			log.Error(err, "failed to delete existing agents", "server", a2aServer.Name, "namespace", a2aServer.Namespace)
-			r.Recorder.Event(&a2aServer, corev1.EventTypeWarning, "AgentCleanupFailed", fmt.Sprintf("Failed to cleanup existing agents: %v", err))
-		}
+		// Don't delete agents - just mark A2AServer as not ready
+		// The agent controller will detect this and set agent phase to Pending
 		r.setCondition(&a2aServer, A2AServerReady, metav1.ConditionFalse, "DiscoveryFailed", fmt.Sprintf("Server not ready due to discovery failure: %v", err))
 		if err := r.updateStatusWithConditions(ctx, &a2aServer); err != nil {
 			return ctrl.Result{}, err
@@ -319,14 +317,6 @@ func (r *A2AServerReconciler) listAgentByA2AServer(ctx context.Context, a2aServe
 	}
 	err := r.List(ctx, agentList, listOpts...)
 	return agentList, err
-}
-
-func (r *A2AServerReconciler) deleteAgentByA2AServer(ctx context.Context, a2aServerNamespace, a2aServerName string) error {
-	deleteOpts := []client.DeleteAllOfOption{
-		client.InNamespace(a2aServerNamespace),
-		client.MatchingLabels{labels.A2AServerLabel: a2aServerName},
-	}
-	return r.DeleteAllOf(ctx, &arkv1alpha1.Agent{}, deleteOpts...)
 }
 
 func (r *A2AServerReconciler) SetupWithManager(mgr ctrl.Manager) error {

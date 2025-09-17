@@ -8,8 +8,11 @@ inputs:
 
 outputs:
   ci-cache-registry:
-    description: 'Container registry URL to use for this workflow run'
+    description: 'Container registry URL to use for this workflow run (includes namespace)'
     value: ${{ steps.set-registry.outputs.ci-cache-registry }}
+  ci-cache-registry-hostname:
+    description: 'Container registry hostname for login (e.g., ghcr.io)'
+    value: ${{ steps.set-registry.outputs.ci-cache-registry-hostname }}
   is-fork-pr:
     description: 'Whether this is a PR from a forked repository'
     value: ${{ steps.set-registry.outputs.is-fork-pr }}
@@ -58,8 +61,17 @@ runs:
           echo "Internal event - using org registry: $REGISTRY"
         fi
         
+        # Extract registry hostname from full registry path
+        # Examples:
+        # - ghcr.io/owner/repo -> ghcr.io
+        # - docker.io/myorg/myrepo -> docker.io
+        # - myregistry.com:5000/path -> myregistry.com:5000
+        # - ghcr.io -> ghcr.io (no path)
+        REGISTRY_HOSTNAME=$(echo "$REGISTRY" | cut -d'/' -f1)
+        
         # Output for use in other jobs
         echo "ci-cache-registry=$REGISTRY" >> $GITHUB_OUTPUT
+        echo "ci-cache-registry-hostname=$REGISTRY_HOSTNAME" >> $GITHUB_OUTPUT
         echo "is-fork-pr=$IS_FORK_PR" >> $GITHUB_OUTPUT
         
         # Brief summary for workflow run visibility
