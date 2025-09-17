@@ -23,8 +23,6 @@ func main() {
 	ctx := context.Background()
 	k8sClient := fake.NewClientBuilder().Build()
 
-	fmt.Println("=== ARK Memory Store Examples ===\n")
-
 	// Example 1: In-Memory Storage
 	fmt.Println("1. In-Memory Memory Store")
 	inMemoryExample(ctx, k8sClient)
