@@ -20,11 +20,11 @@ func (m *MockEventEmitter) EmitEvent(ctx context.Context, eventType, reason stri
 func TestInMemoryMemory(t *testing.T) {
 	ctx := context.Background()
 	k8sClient := fake.NewClientBuilder().Build()
-	
+
 	config := Config{
-		SessionId:  "test-session-123",
+		SessionId: "test-session-123",
 	}
-	
+
 	// Create in-memory memory instance with mock emitter
 	mockEmitter := &MockEventEmitter{}
 	memory, err := NewInMemoryMemory(ctx, k8sClient, "test-memory", "default", mockEmitter, config)
@@ -48,14 +48,14 @@ func TestInMemoryMemory(t *testing.T) {
 
 	// Verify message content (basic check)
 	assert.NotNil(t, retrievedMessages[0])
-	assert.NotNil(t, retrievedMessages[1]) 
+	assert.NotNil(t, retrievedMessages[1])
 	assert.NotNil(t, retrievedMessages[2])
 
 	// Test adding more messages to the same session
 	moreMessages := []Message{
 		Message(openai.AssistantMessage("The weather is sunny today!")),
 	}
-	
+
 	err = memory.AddMessages(ctx, "query-456", moreMessages)
 	assert.NoError(t, err)
 
@@ -75,11 +75,11 @@ func TestInMemoryMemoryDifferentSessions(t *testing.T) {
 
 	// Create two memory instances with different session IDs
 	config1 := Config{
-		SessionId:  "session-1",
+		SessionId: "session-1",
 	}
-	
+
 	config2 := Config{
-		SessionId:  "session-2", 
+		SessionId: "session-2",
 	}
 
 	mockEmitter := &MockEventEmitter{}
@@ -144,7 +144,7 @@ func TestInMemoryStore(t *testing.T) {
 	assert.Equal(t, 1, store.GetSessionCount())
 	assert.NotContains(t, store.GetAllSessions(), "session-1")
 	assert.Contains(t, store.GetAllSessions(), "session-2")
-	
+
 	// Verify session-1 is empty
 	cleared := store.GetMessages("session-1")
 	assert.Len(t, cleared, 0)

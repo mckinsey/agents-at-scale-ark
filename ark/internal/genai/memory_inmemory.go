@@ -42,7 +42,7 @@ func (store *InMemoryStore) GetMessages(sessionId string) []Message {
 	if messages == nil {
 		return []Message{}
 	}
-	
+
 	// Return a copy to prevent external modification
 	result := make([]Message, len(messages))
 	copy(result, messages)
@@ -53,7 +53,7 @@ func (store *InMemoryStore) GetMessages(sessionId string) []Message {
 func (store *InMemoryStore) ClearSession(sessionId string) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	
+
 	delete(store.sessions, sessionId)
 }
 
@@ -61,7 +61,7 @@ func (store *InMemoryStore) ClearSession(sessionId string) {
 func (store *InMemoryStore) GetSessionCount() int {
 	store.mu.RLock()
 	defer store.mu.RUnlock()
-	
+
 	return len(store.sessions)
 }
 
@@ -69,7 +69,7 @@ func (store *InMemoryStore) GetSessionCount() int {
 func (store *InMemoryStore) GetAllSessions() []string {
 	store.mu.RLock()
 	defer store.mu.RUnlock()
-	
+
 	sessions := make([]string, 0, len(store.sessions))
 	for sessionId := range store.sessions {
 		sessions = append(sessions, sessionId)
@@ -101,9 +101,9 @@ func NewInMemoryMemory(ctx context.Context, k8sClient client.Client, memoryName,
 	}
 
 	logCtx := logf.FromContext(ctx)
-	logCtx.Info("Creating in-memory memory store", 
-		"memoryName", memoryName, 
-		"namespace", namespace, 
+	logCtx.Info("Creating in-memory memory store",
+		"memoryName", memoryName,
+		"namespace", namespace,
 		"sessionId", sessionId)
 
 	return &InMemoryMemory{
@@ -122,17 +122,17 @@ func (m *InMemoryMemory) AddMessages(ctx context.Context, queryID string, messag
 	}
 
 	logCtx := logf.FromContext(ctx)
-	logCtx.Info("Adding messages to in-memory store", 
-		"sessionId", m.sessionId, 
-		"queryId", queryID, 
+	logCtx.Info("Adding messages to in-memory store",
+		"sessionId", m.sessionId,
+		"queryId", queryID,
 		"messageCount", len(messages))
 
 	tracker := NewOperationTracker(m.recorder, ctx, "MemoryAddMessages", m.name, map[string]string{
-		"namespace":    m.namespace,
-		"sessionId":    m.sessionId,
-		"queryId":      queryID,
-		"messages":     fmt.Sprintf("%d", len(messages)),
-		"storageType":  MemoryTypeInMemory,
+		"namespace":   m.namespace,
+		"sessionId":   m.sessionId,
+		"queryId":     queryID,
+		"messages":    fmt.Sprintf("%d", len(messages)),
+		"storageType": MemoryTypeInMemory,
 	})
 
 	// Validate messages before storing
@@ -163,14 +163,14 @@ func (m *InMemoryMemory) GetMessages(ctx context.Context) ([]Message, error) {
 	// Retrieve messages from the global in-memory store
 	messages := m.store.GetMessages(m.sessionId)
 
-	logCtx.Info("Retrieved messages from in-memory store", 
-		"sessionId", m.sessionId, 
+	logCtx.Info("Retrieved messages from in-memory store",
+		"sessionId", m.sessionId,
 		"messageCount", len(messages))
 
 	// Update metadata with message count
 	tracker.metadata["messages"] = fmt.Sprintf("%d", len(messages))
 	tracker.Complete("retrieved from in-memory store")
-	
+
 	return messages, nil
 }
 
@@ -187,7 +187,7 @@ func (m *InMemoryMemory) ClearSession(ctx context.Context) error {
 	logCtx.Info("Clearing session from in-memory store", "sessionId", m.sessionId)
 
 	m.store.ClearSession(m.sessionId)
-	
+
 	if m.recorder != nil {
 		eventData := BaseEvent{
 			Name: "SessionCleared",
@@ -198,14 +198,14 @@ func (m *InMemoryMemory) ClearSession(ctx context.Context) error {
 		}
 		m.recorder.EmitEvent(ctx, "Normal", "SessionCleared", eventData)
 	}
-	
+
 	return nil
 }
 
 // GetSessionInfo returns information about the current session (utility method)
 func (m *InMemoryMemory) GetSessionInfo(ctx context.Context) (map[string]interface{}, error) {
 	messages := m.store.GetMessages(m.sessionId)
-	
+
 	info := map[string]interface{}{
 		"sessionId":     m.sessionId,
 		"messageCount":  len(messages),
@@ -214,6 +214,6 @@ func (m *InMemoryMemory) GetSessionInfo(ctx context.Context) (map[string]interfa
 		"namespace":     m.namespace,
 		"totalSessions": m.store.GetSessionCount(),
 	}
-	
+
 	return info, nil
 }

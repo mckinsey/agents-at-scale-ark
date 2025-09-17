@@ -37,7 +37,7 @@ func main() {
 func inMemoryExample(ctx context.Context, k8sClient client.Client) {
 	// Create in-memory memory configuration
 	config := genai.Config{
-		SessionId:  "chat-session-12345",
+		SessionId: "chat-session-12345",
 	}
 
 	// Create a mock event emitter for the example
@@ -48,7 +48,11 @@ func inMemoryExample(ctx context.Context, k8sClient client.Client) {
 	if err != nil {
 		log.Fatalf("Failed to create in-memory memory: %v", err)
 	}
-	defer memory.Close()
+	defer func() {
+		if closeErr := memory.Close(); closeErr != nil {
+			log.Printf("Failed to close memory: %v", closeErr)
+		}
+	}()
 
 	// Add some conversation messages
 	messages := []genai.Message{
@@ -61,7 +65,8 @@ func inMemoryExample(ctx context.Context, k8sClient client.Client) {
 	// Store messages
 	err = memory.AddMessages(ctx, "query-001", messages)
 	if err != nil {
-		log.Fatalf("Failed to add messages: %v", err)
+		log.Printf("Failed to add messages: %v", err)
+		return
 	}
 
 	fmt.Printf("✓ Added %d messages to session: %s\n", len(messages), config.SessionId)
@@ -69,7 +74,8 @@ func inMemoryExample(ctx context.Context, k8sClient client.Client) {
 	// Retrieve messages
 	retrievedMessages, err := memory.GetMessages(ctx)
 	if err != nil {
-		log.Fatalf("Failed to get messages: %v", err)
+		log.Printf("Failed to get messages: %v", err)
+		return
 	}
 
 	fmt.Printf("✓ Retrieved %d messages from session\n", len(retrievedMessages))
@@ -82,7 +88,8 @@ func inMemoryExample(ctx context.Context, k8sClient client.Client) {
 
 	err = memory.AddMessages(ctx, "query-002", moreMessages)
 	if err != nil {
-		log.Fatalf("Failed to add more messages: %v", err)
+		log.Printf("Failed to add more messages: %v", err)
+		return
 	}
 
 	// Get final message count
@@ -94,14 +101,18 @@ func inMemoryExample(ctx context.Context, k8sClient client.Client) {
 func noopExample(ctx context.Context, k8sClient client.Client) {
 	// Create noop memory (no storage)
 	config := genai.Config{
-		SessionId:  "temp-session",
+		SessionId: "temp-session",
 	}
 
 	memory, err := genai.NewMemoryWithConfig(ctx, k8sClient, "noop-memory", "default", nil, config)
 	if err != nil {
 		log.Fatalf("Failed to create noop memory: %v", err)
 	}
-	defer memory.Close()
+	defer func() {
+		if closeErr := memory.Close(); closeErr != nil {
+			log.Printf("Failed to close memory: %v", closeErr)
+		}
+	}()
 
 	// Try to add messages (will be discarded)
 	messages := []genai.Message{
@@ -111,7 +122,8 @@ func noopExample(ctx context.Context, k8sClient client.Client) {
 
 	err = memory.AddMessages(ctx, "temp-query", messages)
 	if err != nil {
-		log.Fatalf("Failed to add messages: %v", err)
+		log.Printf("Failed to add messages: %v", err)
+		return
 	}
 
 	fmt.Printf("✓ 'Added' %d messages to noop memory (actually discarded)\n", len(messages))
@@ -119,7 +131,8 @@ func noopExample(ctx context.Context, k8sClient client.Client) {
 	// Retrieve messages (will always return empty)
 	retrievedMessages, err := memory.GetMessages(ctx)
 	if err != nil {
-		log.Fatalf("Failed to get messages: %v", err)
+		log.Printf("Failed to get messages: %v", err)
+		return
 	}
 
 	fmt.Printf("✓ Retrieved %d messages from noop memory (always empty)\n", len(retrievedMessages))
