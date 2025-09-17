@@ -129,20 +129,73 @@ This creates a ClusterRoleBinding that connects your GitHub repository identity 
 
 By default, the `ark-controller` is deployed into the `ark-system` namespace. When the controller is excecuting a query, it will impersonate the user account provided in `query.serviceAccount` field (`default` is used if no service account is specified).
 
-The out-of-the-box installation gives the `ark-controller` permissions to impersonate the `default` service account from all namespaces. This can be configured or changed in the Helm chart like so:
+The out-of-the-box installation gives the `ark-controller` permissions to impersonate the `default` service account from all namespaces. This can be configured in the Helm chart to support multi-tenancy:
 
 ```yaml
 # values.yaml
 rbac:
-impersonation:
-  allowedServiceAccounts:
-    - default
+  enable: true
+  impersonation:
+    serviceAccounts:
+      - default           # Default service account
+      - tenant-1-sa       # Service account for tenant-1 namespace
+      - tenant-2-sa       # Service account for tenant-2 namespace
+      - prod-sa          # Service account for production namespace
 ```
 
-When provisioning new tenant namespaces, ARK provides a secure role that grants access to essential Kubernetes resources (pods, services, deployments, secrets, configmaps) and all ARK resources (agents, models, queries, teams, tools) within that namespace only.
+To apply this configuration:
 
-This role prevents privilege escalation and cross-tenant access while allowing tenants to deploy typical workloads alongside their ARK agents.
+```bash
+# Install with custom service accounts
+helm install ark ./ark/dist/chart \
+  --set-string rbac.impersonation.serviceAccounts={default,tenant-1-sa,tenant-2-sa}
 
-This is suitable for local development but not for larger multi-tenant scenarios. As a starting point for how multi-tenacy can be enabled, you can copy the `ark-tenant-role` (Role) and `ark-tenant-binding` (RoleBinding) from the `default` namespace to each new tenant namespace, updating the namespace field in the RoleBinding metadata.
+# Or upgrade existing installation
+helm upgrade ark ./ark/dist/chart \
+  --reuse-values \
+  --set-string rbac.impersonation.serviceAccounts={default,tenant-1-sa,tenant-2-sa}
+```
 
-Tenants using the default service account will then have appropriate permissions to create and manage ARK resources. Note that this also gives a large number of permissions to core K8S resources, which is convenient for local development but not suitable for production use - tenant roles should be configured and managed by experienced cluster administrators.
+When provisioning new tenant namespaces, ARK provides template RBAC resources (`ark-tenant-role` and `ark-tenant-binding`) that grant access to essential Kubernetes resources (pods, services, deployments, secrets, configmaps) and all ARK resources (agents, models, queries, teams, tools, etc) within that namespace only.
+
+These templates provide namespace-scoped permissions that prevent cross-tenant access. However, the included permissions are broad and suitable primarily for development environments. For production multi-tenant scenarios, cluster administrators should customize the role permissions based on the principle of least privilege for each tenant's specific requirements.
+
+### Setting Up Tenant Namespaces
+
+Create the namespace and service account (if using custom service accounts):
+
+```bash
+kubectl create namespace tenant-1
+kubectl create serviceaccount tenant-1-sa -n tenant-1
+```
+
+Apply the ARK tenant RBAC:
+
+```bash
+# Apply the tenant role
+kubectl apply -f ark/config/rbac/ark_tenant_role.yaml -n tenant-1
+
+# Create role binding for the service account
+kubectl create rolebinding ark-tenant-binding \
+  --role=ark-tenant-role \
+  --serviceaccount=tenant-1:tenant-1-sa \
+  -n tenant-1
+```
+
+Target the service account:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: my-query
+  namespace: tenant-1
+spec:
+  serviceAccount: tenant-1-sa  # Specify the service account
+  input: "Hello from tenant-1"
+  targets:
+    - type: agent
+      name: my-agent
+```
+
+Tenants using the default service account will then have appropriate permissions to create and manage ARK resources. Note that this also gives a large number of permissions to core K8S resources, which is convenient for local development but not suitable for production use - tenant roles should be configured and managed by cluster admins.

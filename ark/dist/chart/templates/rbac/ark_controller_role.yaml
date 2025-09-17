@@ -26,14 +26,16 @@ rules:
   - list
   - patch
   - watch
+{{- range .Values.rbac.impersonation.serviceAccounts }}
 - apiGroups:
   - ""
   resourceNames:
-  - default
+  - {{ . }}
   resources:
   - serviceaccounts
   verbs:
   - impersonate
+{{- end }}
 - apiGroups:
   - ark.mckinsey.com
   resources:

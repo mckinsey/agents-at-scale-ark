@@ -44,6 +44,13 @@ controllerManager:
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:
   enable: true
+  # Service accounts the controller can impersonate for multi-tenancy
+  impersonation:
+    serviceAccounts:
+      - default  # Default service account for backward compatibility
+      # Add more service accounts for multi-tenant setups:
+      # - tenant-1-sa
+      # - tenant-2-sa
 
 # [CRDs]: To enable the CRDs
 crd:
