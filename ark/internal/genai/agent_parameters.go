@@ -13,13 +13,19 @@ import (
 )
 
 func (a *Agent) resolvePrompt(ctx context.Context) (string, error) {
-	if len(a.Parameters) == 0 {
-		return a.Prompt, nil
-	}
 
-	templateData, err := a.resolveParameters(ctx)
+	templateData := make(map[string]any)
+
+	agentParams, err := a.resolveParameters(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve parameters: %w", err)
+	}
+	for name, value := range agentParams {
+		templateData[name] = value
+	}
+
+	if len(templateData) == 0 {
+		return a.Prompt, nil
 	}
 
 	tmpl, err := template.New("agent-prompt").Parse(a.Prompt)
@@ -85,6 +91,21 @@ func (a *Agent) resolveValueFrom(ctx context.Context, valueFrom *arkv1alpha1.Val
 			return "", fmt.Errorf("key %s not found in Secret %s", valueFrom.SecretKeyRef.Key, valueFrom.SecretKeyRef.Name)
 		}
 		return string(value), nil
+	}
+
+	if valueFrom.QueryParameterRef != nil {
+		query, ok := ctx.Value("queryContextKey").(*arkv1alpha1.Query)
+		if ok && query != nil {
+			for _, param := range query.Spec.Parameters {
+				if param.Name == valueFrom.QueryParameterRef.Name {
+					if param.Value != "" {
+						return param.Value, nil
+					}
+				}
+			}
+			return "", fmt.Errorf("query parameter %s not found", valueFrom.QueryParameterRef.Name)
+		}
+		return "", fmt.Errorf("no query context available for parameter %s", valueFrom.QueryParameterRef.Name)
 	}
 
 	return "", fmt.Errorf("no supported valueFrom source specified")
