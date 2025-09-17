@@ -17,7 +17,6 @@ func TestInMemoryMemory(t *testing.T) {
 	
 	config := Config{
 		SessionId:  "test-session-123",
-		MemoryType: MemoryTypeInMemory,
 	}
 	
 	// Create in-memory memory instance
@@ -70,12 +69,10 @@ func TestInMemoryMemoryDifferentSessions(t *testing.T) {
 	// Create two memory instances with different session IDs
 	config1 := Config{
 		SessionId:  "session-1",
-		MemoryType: MemoryTypeInMemory,
 	}
 	
 	config2 := Config{
 		SessionId:  "session-2", 
-		MemoryType: MemoryTypeInMemory,
 	}
 
 	memory1, err := NewInMemoryMemory(ctx, k8sClient, "test-memory", "default", nil, config1)
