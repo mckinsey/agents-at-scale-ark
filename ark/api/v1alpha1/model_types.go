@@ -43,6 +43,8 @@ type BedrockModelConfig struct {
 	// +kubebuilder:validation:Optional
 	Region *ValueSource `json:"region,omitempty"`
 	// +kubebuilder:validation:Optional
+	BaseURL *ValueSource `json:"baseUrl,omitempty"`
+	// +kubebuilder:validation:Optional
 	AccessKeyID *ValueSource `json:"accessKeyId,omitempty"`
 	// +kubebuilder:validation:Optional
 	SecretAccessKey *ValueSource `json:"secretAccessKey,omitempty"`
