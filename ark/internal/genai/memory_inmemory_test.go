@@ -7,9 +7,15 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+// MockEventEmitter for testing
+type MockEventEmitter struct{}
+
+func (m *MockEventEmitter) EmitEvent(ctx context.Context, eventType, reason string, data EventData) {
+	// No-op for testing
+}
 
 func TestInMemoryMemory(t *testing.T) {
 	ctx := context.Background()
@@ -19,8 +25,9 @@ func TestInMemoryMemory(t *testing.T) {
 		SessionId:  "test-session-123",
 	}
 	
-	// Create in-memory memory instance
-	memory, err := NewInMemoryMemory(ctx, k8sClient, "test-memory", "default", nil, config)
+	// Create in-memory memory instance with mock emitter
+	mockEmitter := &MockEventEmitter{}
+	memory, err := NewInMemoryMemory(ctx, k8sClient, "test-memory", "default", mockEmitter, config)
 	require.NoError(t, err)
 	require.NotNil(t, memory)
 
@@ -75,10 +82,11 @@ func TestInMemoryMemoryDifferentSessions(t *testing.T) {
 		SessionId:  "session-2", 
 	}
 
-	memory1, err := NewInMemoryMemory(ctx, k8sClient, "test-memory", "default", nil, config1)
+	mockEmitter := &MockEventEmitter{}
+	memory1, err := NewInMemoryMemory(ctx, k8sClient, "test-memory", "default", mockEmitter, config1)
 	require.NoError(t, err)
 
-	memory2, err := NewInMemoryMemory(ctx, k8sClient, "test-memory", "default", nil, config2)
+	memory2, err := NewInMemoryMemory(ctx, k8sClient, "test-memory", "default", mockEmitter, config2)
 	require.NoError(t, err)
 
 	// Add messages to session 1
@@ -104,28 +112,6 @@ func TestInMemoryMemoryDifferentSessions(t *testing.T) {
 	session2Messages, err := memory2.GetMessages(ctx)
 	assert.NoError(t, err)
 	assert.Len(t, session2Messages, 2)
-}
-
-func TestInMemoryMemoryFactoryMethod(t *testing.T) {
-	ctx := context.Background()
-	k8sClient := fake.NewClientBuilder().Build()
-
-	// Test creating in-memory memory using the factory method
-	memory, err := NewInMemoryMemoryForQuery(ctx, k8sClient, "test-memory", "default", nil, "test-session")
-	require.NoError(t, err)
-	require.NotNil(t, memory)
-
-	// Test basic functionality
-	messages := []Message{
-		Message(openai.UserMessage("Factory test message")),
-	}
-	
-	err = memory.AddMessages(ctx, "factory-query", messages)
-	assert.NoError(t, err)
-
-	retrievedMessages, err := memory.GetMessages(ctx)
-	assert.NoError(t, err)
-	assert.Len(t, retrievedMessages, 1)
 }
 
 func TestInMemoryStore(t *testing.T) {

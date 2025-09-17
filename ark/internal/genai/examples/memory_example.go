@@ -12,6 +12,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+// MockEventEmitter is a simple no-op implementation of EventEmitter for examples
+type MockEventEmitter struct{}
+
+func (m *MockEventEmitter) EmitEvent(ctx context.Context, eventType, reason string, data genai.EventData) {
+	// No-op for example purposes
+}
+
 func main() {
 	ctx := context.Background()
 	k8sClient := fake.NewClientBuilder().Build()
@@ -27,23 +34,19 @@ func main() {
 	// Example 2: NoOp Storage
 	fmt.Println("2. NoOp Memory Store")
 	noopExample(ctx, k8sClient)
-
-	fmt.Println("\n" + strings.Repeat("=", 50) + "\n")
-
-	// Example 3: Memory Factory with different types
-	fmt.Println("3. Memory Factory Examples")
-	factoryExample(ctx, k8sClient)
 }
 
 func inMemoryExample(ctx context.Context, k8sClient client.Client) {
 	// Create in-memory memory configuration
 	config := genai.Config{
 		SessionId:  "chat-session-12345",
-		MemoryType: genai.MemoryTypeInMemory,
 	}
 
+	// Create a mock event emitter for the example
+	mockEmitter := &MockEventEmitter{}
+
 	// Create memory instance
-	memory, err := genai.NewInMemoryMemory(ctx, k8sClient, "demo-memory", "default", nil, config)
+	memory, err := genai.NewInMemoryMemory(ctx, k8sClient, "demo-memory", "default", mockEmitter, config)
 	if err != nil {
 		log.Fatalf("Failed to create in-memory memory: %v", err)
 	}
@@ -94,7 +97,6 @@ func noopExample(ctx context.Context, k8sClient client.Client) {
 	// Create noop memory (no storage)
 	config := genai.Config{
 		SessionId:  "temp-session",
-		MemoryType: genai.MemoryTypeNoop,
 	}
 
 	memory, err := genai.NewMemoryWithConfig(ctx, k8sClient, "noop-memory", "default", nil, config)
@@ -124,37 +126,4 @@ func noopExample(ctx context.Context, k8sClient client.Client) {
 
 	fmt.Printf("✓ Retrieved %d messages from noop memory (always empty)\n", len(retrievedMessages))
 	fmt.Printf("✓ Noop memory is useful for testing or when storage is not needed\n")
-}
-
-func factoryExample(ctx context.Context, k8sClient client.Client) {
-	// Example of creating different memory types using factory methods
-
-	// In-memory factory method
-	inMemory, err := genai.NewInMemoryMemoryForQuery(ctx, k8sClient, "factory-memory", "default", nil, "factory-session-1")
-	if err != nil {
-		log.Fatalf("Failed to create factory in-memory: %v", err)
-	}
-	defer inMemory.Close()
-
-	// Add a message
-	err = inMemory.AddMessages(ctx, "factory-query", []genai.Message{
-		genai.Message(openai.UserMessage("Factory method test")),
-	})
-	if err != nil {
-		log.Fatalf("Failed to add factory message: %v", err)
-	}
-
-	fmt.Printf("✓ Created in-memory storage using factory method\n")
-
-	// Note: HTTP memory type would fail without a proper backend service
-	// but demonstrates the factory pattern
-	fmt.Printf("✓ HTTP memory type available via factory (requires backend service)\n")
-	fmt.Printf("✓ Factory pattern supports: %s, %s, %s\n", 
-		genai.MemoryTypeHTTP, genai.MemoryTypeInMemory, genai.MemoryTypeNoop)
-
-	// Show global store stats (for in-memory type)
-	if inMemStore, ok := inMemory.(*genai.InMemoryMemory); ok {
-		info, _ := inMemStore.GetSessionInfo(ctx)
-		fmt.Printf("✓ Global in-memory store info: %+v\n", info)
-	}
 }
