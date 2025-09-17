@@ -9,7 +9,6 @@
     "postbuild": "pagefind --site .next/server/app --output-path out/_pagefind",
     "start": "next start",
     "check-links": "node check-links.js",
-    "check-links:all": "node check-links.js --include-external",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",

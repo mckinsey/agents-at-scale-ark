@@ -1,65 +1,27 @@
 #!/usr/bin/env node
 const { spawn } = require('child_process');
-const path = require('path');
 const net = require('net');
 
-const outDir = path.join(__dirname, 'out');
-
-// Parse command line arguments
-const args = process.argv.slice(2);
-const includeExternal = args.includes('--include-external');
-
-// Find an available port
-function getAvailablePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.listen(0, '127.0.0.1', () => {
-      const port = server.address().port;
-      server.close(() => resolve(port));
+// Get available port from system
+const server = net.createServer();
+server.listen(0, () => {
+  const port = server.address().port;
+  server.close(() => {
+    // Start serve on the available port
+    const serve = spawn('npx', ['serve', 'out', '-l', port], {
+      stdio: 'pipe'
     });
-    server.on('error', reject);
+
+    // Wait for server to start then run link checker
+    setTimeout(() => {
+      const blc = spawn('npx', ['blc', `http://localhost:${port}`, '--recursive', '--ordered', '--exclude-external'], {
+        stdio: 'inherit'
+      });
+
+      blc.on('close', (code) => {
+        serve.kill();
+        process.exit(code);
+      });
+    }, 3000);
   });
-}
-
-async function main() {
-  const port = await getAvailablePort();
-
-  console.log(`Starting local server on port ${port}...`);
-
-  const serve = spawn('npx', ['serve', outDir, '-l', port.toString()], {
-    stdio: 'pipe'
-  });
-
-  // Wait a bit for server to start
-  setTimeout(() => {
-    const mode = includeExternal ? 'internal and external' : 'internal only';
-    console.log(`Checking links at http://localhost:${port} (${mode})`);
-
-    // Build command based on mode
-    const blcArgs = ['blc', `http://localhost:${port}`, '--recursive', '--ordered'];
-    if (!includeExternal) {
-      blcArgs.push('--exclude-external');
-    }
-
-    const blc = spawn('npx', blcArgs, {
-      stdio: 'inherit'
-    });
-
-    blc.on('close', (code) => {
-      console.log('Stopping server...');
-      serve.kill('SIGTERM');
-      process.exit(code);
-    });
-
-    blc.on('error', (err) => {
-      console.error('Error running link checker:', err);
-      serve.kill('SIGTERM');
-      process.exit(1);
-    });
-  }, 3000);
-}
-
-main().catch(err => {
-  console.error('Failed to start:', err);
-  process.exit(1);
 });
