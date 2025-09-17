@@ -591,7 +591,10 @@ jobs:
           NEXT_PUBLIC_BASE_PATH: ${{ vars.DOCS_SITE_BASE_PATH || '' }}
 
       - name: Validate Internal Documentation Links
-        run: npm run check-links
+        run: |
+          # Rebuild docs without base path for link checking
+          npm run build
+          npm run check-links
         working-directory: docs
 
       - name: Upload Site Artifact
