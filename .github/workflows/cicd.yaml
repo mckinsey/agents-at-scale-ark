@@ -591,19 +591,8 @@ jobs:
           NEXT_PUBLIC_BASE_PATH: ${{ vars.DOCS_SITE_BASE_PATH || '' }}
 
       - name: Validate Internal Documentation Links
-        run: |
-          curl -L https://github.com/lycheeverse/lychee/releases/download/lychee-v0.20.1/lychee-x86_64-unknown-linux-gnu.tar.gz | tar -xz
-
-          chmod +x lychee
-
-          ./lychee \
-            --verbose --no-progress \
-            --root-dir "$(pwd)/docs/out" \
-            --exclude "http.*" \
-            --exclude "https.*" \
-            --exclude ".*\.yaml$" \
-            --exclude ".*\.yml$" \
-            "docs/out/**/*.html"
+        run: npm run check-links
+        working-directory: docs
 
       - name: Upload Site Artifact
         uses: actions/upload-pages-artifact@v3
