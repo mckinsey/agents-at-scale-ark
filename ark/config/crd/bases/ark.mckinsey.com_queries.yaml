@@ -329,6 +329,7 @@ spec:
                 type: string
               responses:
                 items:
+                  description: Response defines a response from a query target.
                   properties:
                     content:
                       type: string
