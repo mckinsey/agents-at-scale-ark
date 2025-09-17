@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
@@ -55,14 +56,19 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	})
 	defer agentTracker.Complete("")
 
+	log := logf.FromContext(ctx)
+
 	if a.ExecutionEngine != nil {
 		// Check if this is the reserved 'a2a' execution engine
 		if a.ExecutionEngine.Name == "a2a" {
+			log.Info("Executing with A2A execution engine", "userInput", userInput, "history", history)
 			return a.executeWithA2AExecutionEngine(ctx, userInput)
 		}
+		log.Info("Executing with execution engine", "userInput", userInput, "history", history)
 		return a.executeWithExecutionEngine(ctx, userInput, history)
 	}
 
+	log.Info("Executing locally", "userInput", userInput, "history", history)
 	return a.executeLocally(ctx, userInput, history)
 }
 

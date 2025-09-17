@@ -18,6 +18,11 @@ const (
 	MaxRetries       = 3
 	RetryDelay       = 100 * time.Millisecond
 	UserAgent        = "ark-memory-client/1.0"
+	
+	// Memory types
+	MemoryTypeHTTP     = "http"
+	MemoryTypeInMemory = "in-memory"
+	MemoryTypeNoop     = "noop"
 )
 
 type MemoryInterface interface {
@@ -79,7 +84,8 @@ func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *
 		_, err := getMemoryResource(ctx, k8sClient, "default", namespace)
 		if err != nil {
 			// If default memory doesn't exist, use noop memory
-			return NewNoopMemory(), nil
+			return NewInMemoryMemory(ctx, k8sClient, "memoryName", namespace, recorder, config)
+			// return NewNoopMemory(), nil
 		}
 		return NewMemoryWithConfig(ctx, k8sClient, "default", namespace, recorder, config)
 	}

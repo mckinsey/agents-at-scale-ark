@@ -125,19 +125,20 @@ export default function FloatingChat({ name, type, namespace, position, onClose 
     }
   }
 
-  const buildChatHistory = (messages: ChatMessageData[], currentMsg: string): string => {
-    const history = messages
-      .filter(msg => msg.content) // Only include messages with content
-      .map(msg => {
-        const prefix = msg.role === "user" ? "User" : "Agent"
-        return `${prefix}: ${msg.content}`
-      })
-      .join("\n\n")
+  // let FE don't track full chat history 
+  // const buildChatHistory = (messages: ChatMessageData[], currentMsg: string): string => {
+  //   const history = messages
+  //     .filter(msg => msg.content) // Only include messages with content
+  //     .map(msg => {
+  //       const prefix = msg.role === "user" ? "User" : "Agent"
+  //       return `${prefix}: ${msg.content}`
+  //     })
+  //     .join("\n\n")
     
-    // Add the current message
-    const fullQuery = history ? `${history}\n\nUser: ${currentMsg}` : `User: ${currentMsg}`
-    return fullQuery
-  }
+  //   // Add the current message
+  //   const fullQuery = history ? `${history}\n\nUser: ${currentMsg}` : `User: ${currentMsg}`
+  //   return fullQuery
+  // }
 
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isProcessing) return
@@ -156,7 +157,8 @@ export default function FloatingChat({ name, type, namespace, position, onClose 
 
     try {
       // Build the full query with chat history
-      const fullQuery = buildChatHistory(chatMessages, userMessage)
+      // const fullQuery = buildChatHistory(chatMessages, userMessage)
+      const fullQuery = userMessage
       
       // Submit the query with history
       const query = await chatService.submitChatQuery(
