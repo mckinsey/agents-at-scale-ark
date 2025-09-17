@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.1.33](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.33...v0.1.33) (2025-09-17)
+
+
+### Features
+
+* add auth layer ark-sdk ([#99](https://github.com/mckinsey/agents-at-scale-ark/issues/99)) ([2c81807](https://github.com/mckinsey/agents-at-scale-ark/commit/2c818077fcb448517f196acef10023bfb20c2e37))
+* ark evaluator with langfuse ([#65](https://github.com/mckinsey/agents-at-scale-ark/issues/65)) ([ecf0d4e](https://github.com/mckinsey/agents-at-scale-ark/commit/ecf0d4ebb27b009743f4086c8c8a3dd003de7b5d))
+* AWS and GCP bootstrapping infra and GitHub workflows ([#28](https://github.com/mckinsey/agents-at-scale-ark/issues/28)) ([4de68b3](https://github.com/mckinsey/agents-at-scale-ark/commit/4de68b39eab8310c534248075a26e63e0cf1d35f))
+* **dashboard:** adds ODIC with 'sso' and 'open' authentication models for dashboard ([60b701d](https://github.com/mckinsey/agents-at-scale-ark/commit/60b701d9a423cbd651468c37e0815ed0c76aeba2))
+* **dashboard:** Delete confirmation modal for agent, team and tool ([#90](https://github.com/mckinsey/agents-at-scale-ark/issues/90)) ([9be7f3b](https://github.com/mckinsey/agents-at-scale-ark/commit/9be7f3baf7c0af88e0cf149c19b32eae344a56b8))
+* implement A2AServer dependency checking for agents ([#121](https://github.com/mckinsey/agents-at-scale-ark/issues/121)) ([18ea7bc](https://github.com/mckinsey/agents-at-scale-ark/commit/18ea7bc09526d319d8b5442e20f68f0321e1d7a7))
+* non-blocking agent creation with deferred dependency validation ([#89](https://github.com/mckinsey/agents-at-scale-ark/issues/89)) ([71bab8f](https://github.com/mckinsey/agents-at-scale-ark/commit/71bab8f50c0b720b4bb5e908c244419f1f9fe684))
+* query response format ([#82](https://github.com/mckinsey/agents-at-scale-ark/issues/82)) ([7a4a5f6](https://github.com/mckinsey/agents-at-scale-ark/commit/7a4a5f6567ad337cc344de88b7332b59cb3424d3))
+* Update agent UI to show status ([#104](https://github.com/mckinsey/agents-at-scale-ark/issues/104)) ([5013f00](https://github.com/mckinsey/agents-at-scale-ark/commit/5013f002590ed1189e3b3bf5b73f19a5975d84c5))
+
+
+### Bug Fixes
+
+* `devspace dev` dashboard console errors ([#105](https://github.com/mckinsey/agents-at-scale-ark/issues/105)) ([2918dd1](https://github.com/mckinsey/agents-at-scale-ark/commit/2918dd112296b5c4d5350ef10d17fe121e5c5cb7))
+* `devspace dev` to register sdk changes at reload ([#122](https://github.com/mckinsey/agents-at-scale-ark/issues/122)) ([c71ac84](https://github.com/mckinsey/agents-at-scale-ark/commit/c71ac84638ce60534b03fd61f9b9a5c5c3325521))
+* add BaseURL support for Bedrock models ([#124](https://github.com/mckinsey/agents-at-scale-ark/issues/124)) ([48e247a](https://github.com/mckinsey/agents-at-scale-ark/commit/48e247ac945676e6648dc7c5cd325c491313ba30))
+* ark-api container restart in devspace ([#102](https://github.com/mckinsey/agents-at-scale-ark/issues/102)) ([a1bd681](https://github.com/mckinsey/agents-at-scale-ark/commit/a1bd681ebe67abe31951720894c027210562cb9d))
+* **ark-api:** return default model if not set for agent ([#73](https://github.com/mckinsey/agents-at-scale-ark/issues/73)) ([09c8dcc](https://github.com/mckinsey/agents-at-scale-ark/commit/09c8dccd5311611c92ebe81d6dae91b019e75dd7))
+* enable external PRs to use fork's container registry ([#114](https://github.com/mckinsey/agents-at-scale-ark/issues/114)) ([feedf72](https://github.com/mckinsey/agents-at-scale-ark/commit/feedf72ab7cbe401a7ba7c27a8950a320be62836))
+* Fix Namespace and path ([#100](https://github.com/mckinsey/agents-at-scale-ark/issues/100)) ([2fef74e](https://github.com/mckinsey/agents-at-scale-ark/commit/2fef74e5d681057e3b95fd77a069c9639b2ace54))
+* helm charts use AppVersion for image tags and deploy workflow supports latest ([#95](https://github.com/mckinsey/agents-at-scale-ark/issues/95)) ([d016cfe](https://github.com/mckinsey/agents-at-scale-ark/commit/d016cfe875498d3a32a3745fc77e12e8f00aa1d7))
+* missing QueryClientProvider issue, queries tab ui glitch ([#108](https://github.com/mckinsey/agents-at-scale-ark/issues/108)) ([4ac6e4b](https://github.com/mckinsey/agents-at-scale-ark/commit/4ac6e4be84e442daa77b856635caac0c872d7861))
+* quickstart fark and ark-cli installation ([#117](https://github.com/mckinsey/agents-at-scale-ark/issues/117)) ([d6bffd7](https://github.com/mckinsey/agents-at-scale-ark/commit/d6bffd7f3019b01d1c0984bea74135946a97e92a))
+* separate registry hostname from full path for docker login ([#120](https://github.com/mckinsey/agents-at-scale-ark/issues/120)) ([7342930](https://github.com/mckinsey/agents-at-scale-ark/commit/73429306c17912b19f60ba675b784bce491d1c83))
+* update badge template URL and improve iframe usage for contributors ([#98](https://github.com/mckinsey/agents-at-scale-ark/issues/98)) ([9b61b15](https://github.com/mckinsey/agents-at-scale-ark/commit/9b61b15e1591b420bda5505c294a8c3c7920dc4f))
+
+
+### Miscellaneous Chores
+
+* release 0.1.33 ([13d6113](https://github.com/mckinsey/agents-at-scale-ark/commit/13d61139d3f247fbfd67e43925e3d77a443c41a9))
+
 ## [0.1.33](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.33...v0.1.33) (2025-09-10)
 
 
