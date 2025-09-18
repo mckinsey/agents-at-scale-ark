@@ -3,12 +3,10 @@ name: ark-api-a2a
 description: ARK API A2A Gateway service for agent-to-agent communication
 type: application
 version: 0.1.33
-appVersion: "0.1.33"
+appVersion: 0.1.33
 annotations:
   category: API
   licenses: Apache-2.0
-  # ARK service identifier
   ark.mckinsey.com/service: ark-api-a2a
   ark.mckinsey.com/resources: service
-  # Usage pattern
-  usage: "Provides HTTP gateway for agent-to-agent communication and query execution"
+  usage: Provides HTTP gateway for agent-to-agent communication and query execution

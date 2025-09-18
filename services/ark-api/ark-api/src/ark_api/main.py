@@ -24,6 +24,7 @@ logger = setup_logging()
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting up ARK API...")
+
     await init_k8s()
     logger.info("Kubernetes clients initialized")
     yield

@@ -55,23 +55,30 @@ export function AppSidebar() {
     const loadInitialData = async () => {
       setLoading(true)
       try {
-        const [namespacesData, systemData] = await Promise.all([
-          namespacesService.getAll(),
-          systemInfoService.get()
+        // Load system info and get current context
+        const [systemData, context] = await Promise.all([
+          systemInfoService.get(),
+          namespacesService.getContext()
         ])
-        const filteredNamespaces = namespacesData.filter(ns => 
-          !['cert-manager', 'kube-node-lease', 'kube-system', 'kube-public'].includes(ns.name)
-        )
-        setNamespaces(filteredNamespaces)
+
         setSystemInfo(systemData)
+
+        // Use the detected namespace from context (backend handles fallback)
+        const selectedNamespace = context.namespace
+
+        // Show only the current namespace
+        const currentNamespaceOnly = [{
+          name: selectedNamespace,
+          id: 0
+        }]
+
+        setNamespaces(currentNamespaceOnly)
+        setNamespace(selectedNamespace)
         setNamespaceResolved(true)
-        
-        // Read namespace from URL if present
-        const urlParams = new URLSearchParams(window.location.search)
-        const urlNamespace = urlParams.get('namespace')
-        if (urlNamespace && filteredNamespaces.some(ns => ns.name === urlNamespace)) {
-          setNamespace(urlNamespace)
-        }
+
+        // Update URL to reflect the detected namespace
+        const currentPath = pathname
+        router.push(`${currentPath}?namespace=${selectedNamespace}`)
       } catch (error) {
         console.error("Failed to load initial data:", error)
       } finally {
@@ -80,7 +87,7 @@ export function AppSidebar() {
     }
 
     loadInitialData()
-  }, [])
+  }, [router, pathname])
 
 
   const handleNamespaceSelect = (selectedNamespace: string) => {
@@ -99,11 +106,10 @@ export function AppSidebar() {
         description: `Successfully created namespace ${name}`
       })
       
-      const updatedNamespaces = await namespacesService.getAll()
-      const filteredNamespaces = updatedNamespaces.filter(ns => 
-        !['cert-manager', 'kube-node-lease', 'kube-system', 'kube-public'].includes(ns.name)
-      )
-      setNamespaces(filteredNamespaces)
+      // Always in single namespace mode, show only the newly created namespace
+      const newNamespace = { name, id: 0 }
+      setNamespaces([newNamespace])
+      
       handleNamespaceSelect(name)
     } catch (error) {
       toast({

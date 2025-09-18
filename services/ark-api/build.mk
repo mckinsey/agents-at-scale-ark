@@ -106,6 +106,6 @@ $(ARK_API_SERVICE_NAME)-uninstall: # HELP: Remove ARK API server from cluster
 # Dev target
 $(ARK_API_SERVICE_NAME)-dev: $(ARK_API_STAMP_TEST) $(ARK_API_STAMP_DEPS) # HELP: Run ARK API server in development mode
 	cd $(ARK_API_SERVICE_SOURCE_DIR) && uv add $(ARK_SDK_WHL) && uv sync && \
-	CORS_ORIGINS=$(CORS_ORIGINS) uv run python -m uvicorn --host 0.0.0.0 --port 8000 --reload src.ark_api.main:app
+	PYTHONPATH=../../../lib/ark-sdk/gen_sdk/overlay/python:$$PYTHONPATH CORS_ORIGINS=$(CORS_ORIGINS) uv run python -m uvicorn --host 0.0.0.0 --port 8000 --reload src.ark_api.main:app
 
 

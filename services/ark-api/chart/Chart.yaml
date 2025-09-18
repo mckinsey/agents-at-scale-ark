@@ -3,7 +3,7 @@ name: ark-api
 description: ARK API service with Gateway API HTTPRoute integration
 type: application
 version: 0.1.33
-appVersion: "0.1.33"
+appVersion: 0.1.33
 annotations:
   ark.mckinsey.com/service: ark-api
   ark.mckinsey.com/resources: service
