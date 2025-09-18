@@ -14,6 +14,64 @@ make quickstart
 
 This builds the containers locally and deploys them to a local cluster. More details are in the [Getting Started](/getting-started) guide. 
 
+### Deploying only ark-controller and fark
+
+This guide focuses on just two essential components for working with ARK:
+1. **ark-controller** - The core Kubernetes operator that manages your AI agents
+2. **fark** - A command-line tool for testing and interacting with agents
+
+These two components provide the functionality you need to develop, deploy, and run AI agents on the ARK core. The controller handles all the orchestration and execution, while the CLI gives you a simple way to test and interact with your agents during development.
+
+Your applications can communicate directly with the ark-controller using any Kubernetes client library.
+
+#### Prerequisites
+
+Before installing ark-controller, ensure you have the following:
+
+- **Docker**: Container runtime for building the controller image
+- **Kubernetes cluster**: A running Kubernetes cluster (e.g. kind, minikube, Orbstack, Docker Desktop)
+- **Helm 3.x**: Package manager for Kubernetes applications
+- **kubectl**: Command-line tool for interacting with Kubernetes
+- **Go** programming language (for cli)
+
+#### Installation Steps
+
+##### Step 1: Install cert-manager (Required for webhook certificates)
+
+```bash
+helm repo add jetstack https://charts.jetstack.io --force-update
+helm repo update
+helm upgrade --install cert-manager jetstack/cert-manager \
+    --namespace cert-manager \
+    --create-namespace \
+    --set crds.enabled=true
+
+# Wait for cert-manager to be ready
+kubectl wait --for=condition=ready pod \
+    -l app.kubernetes.io/name=cert-manager \
+    -n cert-manager --timeout=60s
+```
+
+##### Step 2: Build and Deploy
+Build the ark-controller docker image and deploy the ark-controller to your Kubernetes cluster using Helm
+
+```bash
+cd ark
+docker build -t ark-controller .
+helm install ark-controller dist/chart --namespace ark-system --create-namespace
+```
+
+##### Step 3: Install fark cli
+
+```bash
+cd tools/fark
+go build -o ark ./cmd/fark
+cp fark /usr/local/bin
+fark
+```
+
+Now, you're all set to get started with [Creating and Managing Agents](https://mckinsey.github.io/agents-at-scale-ark/user-guide/agents/)
+
 ## Helm Deployment with GHCR
 
 Ark can be deployed using the Helm charts that are attached to all [releases](https://github.com/mckinsey/agents-at-scale-ark/releases/) and deployed to the [charts packages](https://github.com/orgs/mckinsey/packages?repo_name=agents-at-scale-ark). By default the chart uses the latest images available on the release.
