@@ -17,7 +17,9 @@ class MetricsCalculator:
             "gpt-4-turbo": {"input": 0.01, "output": 0.03},
             "gpt-3.5-turbo": {"input": 0.0015, "output": 0.002},
             "claude-3-sonnet": {"input": 0.003, "output": 0.015},
-            "claude-3-haiku": {"input": 0.00025, "output": 0.00125}
+            "claude-3-haiku": {"input": 0.00025, "output": 0.00125},
+            "qwen3": {"input": 0.0, "output": 0.0},  # Local Ollama model - free
+            "qwen3-8b": {"input": 0.0, "output": 0.0}  # Local Ollama model - free
         }
     
     async def calculate_overall_score(self, metrics: Dict[str, Any]) -> float:
@@ -215,7 +217,9 @@ class MetricsCalculator:
                 return
             
             # Get pricing for the model
+            logger.info(f"DEBUG: Model name for pricing lookup: '{model_name}'")
             pricing = self._get_model_pricing(model_name)
+            logger.info(f"DEBUG: Pricing found: {pricing}")
             
             # Calculate cost components
             input_cost = (prompt_tokens / 1000) * pricing["input"]
