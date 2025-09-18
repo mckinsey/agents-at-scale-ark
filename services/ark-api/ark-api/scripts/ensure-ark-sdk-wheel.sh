@@ -3,7 +3,7 @@ set -e
 
 # Ensure ARK SDK wheel exists before DevSpace sync
 
-if [ "$(git rev-parse --show-toplevel)" != "$(pwd)" ] || ! git remote get-url origin | grep -q "mckinsey/agents-at-scale-ark"; then
+if [ "$(git rev-parse --show-toplevel)" != "$(pwd)" ] || ! git remote get-url origin | grep -Eq '[[:alnum:]]+/agents-at-scale-ark'; then
     echo "Error: Must run from ARK repository root"
     exit 1
 fi
