@@ -86,33 +86,56 @@ func (t *Team) executeRoundRobin(ctx context.Context, userInput Message, history
 	messages := slices.Clone(history)
 	var newMessages []Message
 
-	for turn := 0; ; turn++ {
+	messageCount := 0 // Count individual agent messages
+	memberIndex := 0  // Track which agent should speak next
+
+	for {
 		// Check if context was cancelled
 		if ctx.Err() != nil {
 			return newMessages, ctx.Err()
 		}
 
-		turnTracker := NewExecutionRecorder(t.Recorder)
-		turnTracker.TeamTurn(ctx, "Start", t.FullName(), t.Strategy, turn)
-
-		for i, member := range t.Members {
-			// Check if context was cancelled before each member execution
-			if ctx.Err() != nil {
-				return newMessages, ctx.Err()
-			}
-
-			if err := t.executeMemberAndAccumulate(ctx, member, userInput, &messages, &newMessages, i); err != nil {
-				if IsTerminateTeam(err) {
-					return newMessages, nil
-				}
-				return newMessages, err
-			}
-		}
-
-		if t.MaxTurns != nil && turn+1 >= *t.MaxTurns {
-			turnTracker.TeamTurn(ctx, "MaxTurns", t.FullName(), t.Strategy, turn+1)
+		// Check maxTurns before executing
+		if t.MaxTurns != nil && messageCount >= *t.MaxTurns {
+			turnTracker := NewExecutionRecorder(t.Recorder)
+			turnTracker.TeamTurn(ctx, "MaxTurns", t.FullName(), t.Strategy, messageCount)
+			// Log the maxTurns limit for observability, but return success with accumulated messages
+			// This preserves monitoring/alerting capabilities
+			t.Recorder.EmitEvent(ctx, "Warning", "TeamMaxTurnsReached", BaseEvent{
+				Name: t.FullName(),
+				Metadata: map[string]string{
+					"strategy":     t.Strategy,
+					"maxTurns":     fmt.Sprintf("%d", *t.MaxTurns),
+					"teamName":     t.FullName(),
+					"messageCount": fmt.Sprintf("%d", messageCount),
+				},
+			})
 			return newMessages, nil
 		}
+
+		// Execute current agent
+		member := t.Members[memberIndex]
+
+		if err := t.executeMemberAndAccumulate(ctx, member, userInput, &messages, &newMessages, messageCount); err != nil {
+			if IsTerminateTeam(err) {
+				return newMessages, nil
+			}
+
+			// Log the error but continue with next agent (making ark resilient)
+			t.Recorder.EmitEvent(ctx, "Warning", "TeamMemberFailed", BaseEvent{
+				Name: member.GetName(),
+				Metadata: map[string]string{
+					"error":        err.Error(),
+					"memberIndex":  fmt.Sprintf("%d", memberIndex),
+					"messageCount": fmt.Sprintf("%d", messageCount),
+					"strategy":     t.Strategy,
+					"teamName":     t.FullName(),
+				},
+			})
+		}
+
+		messageCount++                                   // Increment message count (attempted message)
+		memberIndex = (memberIndex + 1) % len(t.Members) // Move to next agent in round-robin
 	}
 }
 
