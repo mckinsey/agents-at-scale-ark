@@ -3,9 +3,25 @@ Metrics calculation logic
 """
 import logging
 from typing import Dict, Any, Optional
+from enum import Enum
 from kubernetes import client
 
 logger = logging.getLogger(__name__)
+
+
+class PricingAnnotations:
+    """Constants for model pricing annotations"""
+    INPUT_COST = "pricing.ark.mckinsey.com/input-cost"
+    OUTPUT_COST = "pricing.ark.mckinsey.com/output-cost"
+    CURRENCY = "pricing.ark.mckinsey.com/currency"
+    UNIT = "pricing.ark.mckinsey.com/unit"
+
+
+class PricingUnit(Enum):
+    """Enum for pricing unit types"""
+    PER_MILLION_TOKENS = "per-million-tokens"
+    PER_THOUSAND_TOKENS = "per-thousand-tokens"
+    PER_HUNDRED_TOKENS = "per-hundred-tokens"
 
 
 class MetricsCalculator:
@@ -290,18 +306,26 @@ class MetricsCalculator:
                     metadata = model.get('metadata', {})
                     annotations = metadata.get('annotations', {})
 
-                    input_cost_str = annotations.get('pricing.ark.mckinsey.com/input-cost')
-                    output_cost_str = annotations.get('pricing.ark.mckinsey.com/output-cost')
-                    unit = annotations.get('pricing.ark.mckinsey.com/unit', 'per-million-tokens')
+                    input_cost_str = annotations.get(PricingAnnotations.INPUT_COST)
+                    output_cost_str = annotations.get(PricingAnnotations.OUTPUT_COST)
+                    unit = annotations.get(PricingAnnotations.UNIT, PricingUnit.PER_MILLION_TOKENS.value)
 
                     if input_cost_str is not None and output_cost_str is not None:
                         input_cost = float(input_cost_str)
                         output_cost = float(output_cost_str)
 
-                        # Convert from per-million-tokens to per-1k-tokens (standard format)
-                        if unit == "per-million-tokens":
+                        # Convert to per-1k-tokens (standard format)
+                        if unit == PricingUnit.PER_MILLION_TOKENS.value:
                             input_cost = input_cost / 1000
                             output_cost = output_cost / 1000
+                        elif unit == PricingUnit.PER_THOUSAND_TOKENS.value:
+                            # Already in per-1k format, no conversion needed
+                            pass
+                        elif unit == PricingUnit.PER_HUNDRED_TOKENS.value:
+                            input_cost = input_cost * 10
+                            output_cost = output_cost * 10
+                        else:
+                            logger.warning(f"Unknown pricing unit '{unit}' for model '{model_name}', assuming per-thousand-tokens")
 
                         logger.debug(f"Found model '{model_name}' in namespace '{namespace}' with annotation pricing")
                         return {"input": input_cost, "output": output_cost}
