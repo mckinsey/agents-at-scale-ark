@@ -3,4 +3,4 @@ name: postgres-memory
 description: PostgreSQL-backed memory service for ARK platform
 type: application
 version: 0.1.33
-appVersion: "0.1.33"
+appVersion: 0.1.33

@@ -32,6 +32,38 @@ Or `requirements.txt`:
 ark-sdk @ https://github.com/mckinsey/agents-at-scale-ark/releases/download/v0.1.31/ark_sdk-0.1.31-py3-none-any.whl
 ```
 
+## Updating Types When CRDs Change
+
+ARK uses Kubernetes CRDs as the source of truth. When CRDs change, types must be updated through the stack.
+
+Changes to the CRDs must be reflected in the Ark SDK, these changes must then be reflected in consumers of the SDK such as the Ark APIs, and consumers of those APIs, such as the Ark dashboard.
+
+Mechanically, the process works like this:
+
+```bash
+# Changes are made in the ark CRDs at:
+#   config/crd/bases/*.yaml:
+
+# The Python SDK is regenerated from the CRDs. The CRDs are converted into 
+# an OpenAI spec and then this regenerated the ark sdk types:
+make ark-sdk
+
+# Consumers of the ark api update their code. When a CRD change is made and the
+# sdk is regenerated, the ark-api models must be updated (manually).
+# After this, the ark-api can be built:
+make ark-api-build
+
+# This genreated the services/ark-api/openapi.json, based on the FastAPI models.
+
+# Finally, the ark dashboard can have its Typescript types automatically updated
+# based on the new ark-api routes and models:
+cp ../../ark-api/openapi.json ../out/
+npm run generate:api
+
+# This generate:
+# lib/api/generated/types.ts
+```
+
 ## Usage
 
 Online documentation is work in progress [ticket AAS-2658]. For usage examples, see the [ark-apis service](https://github.com/mckinsey/agents-at-scale-ark/tree/main/services/ark-api).
