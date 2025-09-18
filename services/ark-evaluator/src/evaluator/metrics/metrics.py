@@ -216,9 +216,9 @@ class MetricsCalculator:
                 return
             
             # Get pricing for the model
-            logger.info(f"DEBUG: Model name for pricing lookup: '{model_name}'")
+            logger.debug(f"Model name for pricing lookup: '{model_name}'")
             pricing = self._get_model_pricing(model_name)
-            logger.info(f"DEBUG: Pricing found: {pricing}")
+            logger.debug(f"Pricing found: {pricing}")
             
             # Calculate cost components
             input_cost = (prompt_tokens / 1000) * pricing["input"]
@@ -246,7 +246,7 @@ class MetricsCalculator:
         # Try to get pricing from model annotations first
         annotation_pricing = self._get_model_pricing_from_annotations(model_name)
         if annotation_pricing:
-            logger.info(f"Using annotation-based pricing for model '{model_name}': {annotation_pricing}")
+            logger.debug(f"Using annotation-based pricing for model '{model_name}': {annotation_pricing}")
             return annotation_pricing
 
         # Fallback to hardcoded pricing dictionary
@@ -254,13 +254,13 @@ class MetricsCalculator:
 
         # Check exact match first
         if clean_name in self.model_pricing:
-            logger.info(f"Using hardcoded pricing for model '{model_name}': {self.model_pricing[clean_name]}")
+            logger.debug(f"Using hardcoded pricing for model '{model_name}': {self.model_pricing[clean_name]}")
             return self.model_pricing[clean_name]
 
         # Check partial matches
         for model, pricing in self.model_pricing.items():
             if model in clean_name or clean_name in model:
-                logger.info(f"Using partial match pricing for model '{model_name}' (matched '{model}'): {pricing}")
+                logger.debug(f"Using partial match pricing for model '{model_name}' (matched '{model}'): {pricing}")
                 return pricing
 
         # Default to GPT-4 pricing if model not found
@@ -303,7 +303,7 @@ class MetricsCalculator:
                             input_cost = input_cost / 1000
                             output_cost = output_cost / 1000
 
-                        logger.info(f"Found model '{model_name}' in namespace '{namespace}' with annotation pricing")
+                        logger.debug(f"Found model '{model_name}' in namespace '{namespace}' with annotation pricing")
                         return {"input": input_cost, "output": output_cost}
 
                 except Exception as e:
