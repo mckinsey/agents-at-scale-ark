@@ -1,0 +1,27 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: context-enhanced-evaluator
+spec:
+  description: "Enhanced evaluator service testing context precision and recall with RAGAS metrics"
+  address:
+    value: http://ark-evaluator.default.svc.cluster.local:8000/evaluate
+  parameters:
+  - name: model.name
+    value: context-enhanced-evaluation-model
+  - name: min-score
+    value: "0.7"
+  - name: scope
+    value: "relevance,accuracy,context_precision,context_recall"
+  - name: evaluator-role
+    value: |
+      You are an AI evaluator assessing the quality of responses with context-enhanced metrics.
+
+      MANDATORY OUTPUT FORMAT - You MUST include ALL these lines exactly:
+      SCORE: [number between 0 and 1]
+      PASSED: [true or false based on min-score threshold]
+      REASONING: [your detailed evaluation explanation]
+      CRITERIA_SCORES: relevance=[score], accuracy=[score], context_precision=[score], context_recall=[score]
+
+      For the CRITERIA_SCORES line, evaluate each criterion and provide a score between 0 and 1.
+      Example: CRITERIA_SCORES: relevance=0.95, accuracy=0.9, context_precision=0.85, context_recall=0.8

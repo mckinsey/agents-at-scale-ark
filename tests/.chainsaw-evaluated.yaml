@@ -13,6 +13,6 @@ spec:
     cleanup: 360s                         # Longer cleanup for complex resources
     delete: 360s                          # Longer delete timeout
     error: 360s                           # Longer error handling
-    exec: 360s                           # 2 minutes for scripts with LLM calls
+    exec: 600s                           # 10 minutes for scripts with LLM calls in CI
   failFast: false                        
   parallel: 1                            # Run evaluated tests sequentially to avoid resource contention
