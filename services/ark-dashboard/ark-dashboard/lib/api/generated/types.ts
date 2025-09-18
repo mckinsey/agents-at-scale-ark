@@ -2110,6 +2110,12 @@ export interface components {
              */
             service: string;
         };
+        /**
+         * InputType
+         * @description Input type enumeration.
+         * @enum {string}
+         */
+        InputType: "user" | "messages";
         /** MCPServerDetailResponse */
         MCPServerDetailResponse: {
             /** Name */
@@ -2278,6 +2284,16 @@ export interface components {
             } | null;
         };
         /**
+         * Message
+         * @description A message in a conversation.
+         */
+        Message: {
+            /** Role */
+            role: string;
+            /** Content */
+            content: string;
+        };
+        /**
          * ModelConfig
          * @description Model configuration container.
          */
@@ -2439,8 +2455,10 @@ export interface components {
         QueryCreateRequest: {
             /** Name */
             name: string;
+            /** @default user */
+            type: components["schemas"]["InputType"] | null;
             /** Input */
-            input: string;
+            input: string | components["schemas"]["Message"][];
             memory?: components["schemas"]["Memory"] | null;
             /** Parameters */
             parameters?: components["schemas"]["ark_api__models__queries__Parameter-Input"][] | null;
@@ -2470,8 +2488,10 @@ export interface components {
             name: string;
             /** Namespace */
             namespace: string;
+            /** @default user */
+            type: components["schemas"]["InputType"] | null;
             /** Input */
-            input: string;
+            input: string | components["schemas"]["Message"][];
             memory?: components["schemas"]["Memory"] | null;
             /** Parameters */
             parameters?: components["schemas"]["ark_api__models__queries__Parameter-Output"][] | null;
@@ -2547,8 +2567,10 @@ export interface components {
             name: string;
             /** Namespace */
             namespace: string;
+            /** @default user */
+            type: components["schemas"]["InputType"] | null;
             /** Input */
-            input: string;
+            input: string | components["schemas"]["Message"][];
             memory?: components["schemas"]["Memory"] | null;
             /** Sessionid */
             sessionId?: string | null;
@@ -2564,8 +2586,9 @@ export interface components {
          * @description Request body for updating a query.
          */
         QueryUpdateRequest: {
+            type?: components["schemas"]["InputType"] | null;
             /** Input */
-            input?: string | null;
+            input?: string | components["schemas"]["Message"][] | null;
             memory?: components["schemas"]["Memory"] | null;
             /** Parameters */
             parameters?: components["schemas"]["ark_api__models__queries__Parameter-Input"][] | null;

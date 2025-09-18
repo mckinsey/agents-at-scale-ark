@@ -104,6 +104,7 @@ describe('chatService', () => {
 
       const result = await chatService.submitChatQuery(
         namespace,
+        'user',
         'Hello',
         'agent',
         'test-agent',

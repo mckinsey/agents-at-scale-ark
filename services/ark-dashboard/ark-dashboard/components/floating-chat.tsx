@@ -161,6 +161,7 @@ export default function FloatingChat({ name, type, namespace, position, onClose 
       // Submit the query with history
       const query = await chatService.submitChatQuery(
         namespace,
+        'user',
         fullQuery,
         type,
         name,

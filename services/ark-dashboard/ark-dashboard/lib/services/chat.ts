@@ -2,6 +2,9 @@ import { apiClient } from "@/lib/api/client";
 import type { components } from "@/lib/api/generated/types";
 import { generateUUID } from "@/lib/utils/uuid";
 
+export type Message = components["schemas"]["Message"];
+export type InputType = components["schemas"]["InputType"];
+
 interface AxiosError extends Error {
   response?: {
     status: number;
@@ -155,13 +158,15 @@ export const chatService = {
 
   async submitChatQuery(
     namespace: string,
-    input: string,
+    inputType: InputType,
+    input: string | Message[],
     targetType: string,
     targetName: string,
     sessionId?: string
   ): Promise<QueryDetailResponse> {
     const queryRequest: QueryCreateRequest = {
       name: `chat-query-${generateUUID()}`,
+      type: inputType,
       input,
       targets: [
         {
