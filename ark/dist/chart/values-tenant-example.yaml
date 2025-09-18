@@ -1,0 +1,13 @@
+# Example values file for multi-tenant ARK deployments
+# Use this to configure additional service accounts for impersonation
+
+rbac:
+  enable: true
+  impersonation:
+    serviceAccounts:
+      - default
+      - ark-tenant-sa
+      # Add your custom tenant service accounts below:
+      - tenant-dev-sa
+      - tenant-staging-sa
+      - tenant-prod-sa

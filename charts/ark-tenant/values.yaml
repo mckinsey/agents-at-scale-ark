@@ -3,8 +3,8 @@ serviceAccount:
   # Create a service account
   create: true
   # Name of the service account
-  # If not set, uses 'default'
-  name: default
+  # Default is 'ark-tenant-sa' which is pre-authorized in the controller
+  name: ark-tenant-sa
   # Annotations to add to the service account
   annotations: {}
 

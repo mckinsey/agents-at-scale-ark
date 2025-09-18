@@ -48,9 +48,12 @@ rbac:
   impersonation:
     serviceAccounts:
       - default  # Default service account for backward compatibility
+      - ark-tenant-sa  # Standard tenant service account name
       # Add more service accounts for multi-tenant setups:
       # - tenant-1-sa
       # - tenant-2-sa
+      # Note: Consider using a standard naming convention like 'ark-tenant-sa'
+      # across all tenant namespaces to simplify configuration
 
 # [CRDs]: To enable the CRDs
 crd:

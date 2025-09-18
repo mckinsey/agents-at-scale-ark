@@ -180,7 +180,31 @@ If not specified, the service account `default` will be used. This will create:
 
 Additional options include resource quotas and network policies, which are documented in the chart.
 
-The ARK controller must be granted permission to impersonate the tenant's service account:
+The ARK controller must be granted permission to impersonate the tenant's service account. You can do this by either:
+
+**Option 1: Update via values file (recommended)**
+
+Create a values file with all your service accounts:
+
+```yaml
+# ark-tenants-values.yaml
+rbac:
+  enable: true
+  impersonation:
+    serviceAccounts:
+      - default
+      - ark-tenant-sa
+      - tenant-1-sa
+      - tenant-2-sa
+```
+
+Then upgrade the controller:
+
+```bash
+helm upgrade ark-controller ./ark/dist/chart -f ark-tenants-values.yaml
+```
+
+**Option 2: Patch the ClusterRole directly**
 
 ```bash
 # Add the service account to the controller's impersonation permissions
