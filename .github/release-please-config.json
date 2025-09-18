@@ -172,6 +172,16 @@
           "type": "yaml",
           "path": "services/postgres-memory/chart/Chart.yaml",
           "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "yaml",
+          "path": "charts/ark-tenant/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "charts/ark-tenant/Chart.yaml",
+          "jsonpath": "$.appVersion"
         }
       ]
     }

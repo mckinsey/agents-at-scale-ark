@@ -1,0 +1,40 @@
+# Service account configuration
+serviceAccount:
+  # Create a service account
+  create: true
+  # Name of the service account
+  # If not set, uses 'default'
+  name: default
+  # Annotations to add to the service account
+  annotations: {}
+
+# RBAC configuration
+rbac:
+  # Create RBAC resources (Role and RoleBinding)
+  create: true
+  # Additional subjects for the RoleBinding (optional)
+  additionalSubjects: []
+  # Example:
+  # - kind: User
+  #   name: jane.doe@example.com
+  # - kind: Group
+  #   name: developers
+
+# Resource quota configuration (optional)
+resourceQuota:
+  enabled: false
+  limits:
+    cpu: "10"
+    memory: "20Gi"
+    persistentvolumeclaims: "10"
+    pods: "50"
+    services: "10"
+
+# Network policy configuration (optional)
+networkPolicy:
+  enabled: false
+  # Allow traffic from these namespaces
+  allowNamespaces: []
+  # Example:
+  # - ark-system
+  # - monitoring

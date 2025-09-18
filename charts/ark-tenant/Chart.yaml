@@ -1,0 +1,16 @@
+apiVersion: v2
+name: ark-tenant
+description: Helm chart for provisioning ARK tenant namespaces with RBAC
+type: application
+version: 0.1.33
+appVersion: "0.1.33"
+keywords:
+  - ark
+  - tenant
+  - rbac
+  - multi-tenancy
+maintainers:
+  - name: ARK Team
+home: https://github.com/mckinsey/agents-at-scale-ark
+sources:
+  - https://github.com/mckinsey/agents-at-scale-ark
