@@ -8,6 +8,9 @@ import unittest
 import os
 from unittest.mock import patch
 
+from ark_sdk.auth.validator import TokenValidator
+from ark_sdk.auth.config import AuthConfig
+from ark_api.auth.constants import AuthMode
 
 
 class TestAuthConfig(unittest.TestCase):
@@ -45,17 +48,17 @@ class TestAuthConfig(unittest.TestCase):
     def test_auth_mode_parsing(self):
         """Test AUTH_MODE environment variable parsing."""
         # Test SSO mode (authentication required)
-        for value in ['sso', 'SSO', 'Sso']:
+        for value in [AuthMode.SSO, 'SSO', 'Sso']:
             with patch.dict(os.environ, {'AUTH_MODE': value}):
                 auth_mode = os.getenv("AUTH_MODE", "").lower()
-                skip_auth = auth_mode != "sso"
+                skip_auth = auth_mode != AuthMode.SSO
                 self.assertFalse(skip_auth, f"Failed for value: {value}")
 
         # Test non-SSO modes (authentication skipped)
-        for value in ['open', 'Open', 'OPEN', 'false', 'true', 'off', 'on', '', None]:
+        for value in [AuthMode.OPEN, 'Open', 'OPEN', 'false', 'true', 'off', 'on', '', None]:
             with patch.dict(os.environ, {'AUTH_MODE': value} if value is not None else {}):
                 auth_mode = os.getenv("AUTH_MODE", "").lower()
-                skip_auth = auth_mode != "sso"
+                skip_auth = auth_mode != AuthMode.SSO
                 self.assertTrue(skip_auth, f"Failed for value: {value}")
 
 

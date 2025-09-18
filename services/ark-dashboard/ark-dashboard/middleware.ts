@@ -42,6 +42,23 @@ async function middleware(request: NextRequest) {
     backendHeaders.set('X-Forwarded-Host', request.headers.get('host') || '');
     backendHeaders.set('X-Forwarded-Proto', request.nextUrl.protocol.slice(0, -1)); // Remove trailing ':'
     if(token?.access_token) {
+      // DEBUG: Log JWT token details for debugging audience mismatch
+      console.log('=== JWT TOKEN DEBUG ===');
+      console.log('Full token object:', JSON.stringify(token, null, 2));
+      console.log('Access token (first 50 chars):', token.access_token.substring(0, 50) + '...');
+      
+      // Decode JWT payload to see claims (including audience)
+      try {
+        const base64Payload = token.access_token.split('.')[1];
+        const decodedPayload = JSON.parse(Buffer.from(base64Payload, 'base64').toString());
+        console.log('JWT Payload:', JSON.stringify(decodedPayload, null, 2));
+        console.log('JWT Audience (aud):', decodedPayload.aud);
+        console.log('JWT Issuer (iss):', decodedPayload.iss);
+      } catch (e) {
+        console.log('Failed to decode JWT payload:', e);
+      }
+      console.log('======================');
+      
       backendHeaders.set('Authorization', `Bearer ${token.access_token}`);
     }
     
