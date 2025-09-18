@@ -11,6 +11,7 @@ import {
   BarChart,
   Calendar,
   Database,
+  Key,
   type LucideIcon
 } from "lucide-react";
 
@@ -18,7 +19,7 @@ export interface DashboardSection {
   key: string;
   title: string;
   icon: LucideIcon;
-  group: "configurations" | "operations" | "runtime";
+  group: "configurations" | "operations" | "runtime" | "service";
 }
 
 export const DASHBOARD_SECTIONS = {
@@ -104,6 +105,14 @@ export const DASHBOARD_SECTIONS = {
     title: "ARK Services",
     icon: Settings,
     group: "runtime"
+  },
+
+  // Service
+  "api-keys": {
+    key: "api-keys",
+    title: "Service API Keys",
+    icon: Key,
+    group: "service"
   }
 } as const satisfies Record<string, DashboardSection>;
 
@@ -126,4 +135,8 @@ export const OPERATION_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
 
 export const RUNTIME_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
   (section) => section.group === "runtime"
+);
+
+export const SERVICE_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
+  (section) => section.group === "service"
 );

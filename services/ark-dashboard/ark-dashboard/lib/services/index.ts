@@ -78,3 +78,10 @@ export {
   type MemoryResource,
   type MemoryFilters
 } from "./memory";
+export {
+  apiKeysService,
+  type APIKey,
+  type APIKeyCreateRequest,
+  type APIKeyCreateResponse,
+  type APIKeyListResponse
+} from "./api-keys";
