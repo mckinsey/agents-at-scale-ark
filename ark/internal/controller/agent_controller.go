@@ -94,7 +94,7 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 }
 
 // checkDependencies validates all agent dependencies and returns availability status
-func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alpha1.Agent) (available bool, reason string, message string) {
+func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alpha1.Agent) (available bool, reason, message string) {
 	// Check A2AServer dependency (if agent is owned by an A2AServer)
 	if ok, msg := r.checkA2AServerDependency(ctx, agent); !ok {
 		return false, "A2AServerNotReady", msg
