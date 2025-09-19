@@ -145,8 +145,8 @@ quickstart() {
     echo "testing webhook connectivity..."
     if ! kubectl get agent sample-agent >/dev/null 2>&1; then
         echo -e "${yellow}warning${nc}: webhook may not be ready, restarting controller..."
-        kubectl delete pod -l app.kubernetes.io/name=ark -n ark-system
-        kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=ark -n ark-system --timeout=60s
+        kubectl delete pod -l app.kubernetes.io/name=ark-controller -n ark-system
+        kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=ark-controller -n ark-system --timeout=60s
     fi
 
     # Check for default model (cluster is now running and kubectl should work)
@@ -502,7 +502,7 @@ check_ark_controller() {
     # Has the controller manager been deployed? Is it available?
     if kubectl get deployment -n ark-system ${ARK_CONTROLLER_NAME} > /dev/null 2>&1; then
         if kubectl wait --for=condition=available --timeout=5s deployment/${ARK_CONTROLLER_NAME} -n ark-system > /dev/null 2>&1; then
-            version=$(kubectl get pods -n ark-system -l app.kubernetes.io/name=ark -o jsonpath='{.items[0].metadata.labels.app\.kubernetes\.io/version}')
+            version=$(kubectl get pods -n ark-system -l app.kubernetes.io/name=${ARK_CONTROLLER_NAME} -o jsonpath='{.items[0].metadata.labels.app\.kubernetes\.io/version}')
             echo -e "${green}✔${nc} ark controller running version ${white}${version}${nc}"
         else
             echo -e "${yellow}warning${nc}: ark controller not running"
