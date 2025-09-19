@@ -5,7 +5,7 @@ description: Command-line interfaces for interacting with ARK agents, teams, and
 
 # CLI Tools
 
-ARK provides two command-line tools for different use cases. For basic Kubernetes operations, see [Kubernetes Integration](/concepts/kubernetes).
+ARK provides two command-line tools for different use cases.
 
 ## Overview
 
@@ -14,12 +14,6 @@ The primary tool for querying agents and teams, plus CRUD operations on ARK reso
 
 ### [ark](#ark-cli) - ARK Management Interface
 Interactive dashboard and system status monitoring tool.
-
-### [k9s](#k9s) - Terminal-based Kubernetes UI
-Visual interface for managing Kubernetes resources including ARK agents, teams, and models.
-
-### [kubectl](#kubectl) - Kubernetes Command-line Tool
-Essential tool for managing Kubernetes clusters and ARK resources.
 
 ## fark
 
@@ -180,51 +174,7 @@ ark --help
 Launch the interactive menu interface:
 
 ```bash
-# Start interactive menu (no arguments)
 ark
-
-# The menu provides:
-# 🏷️  Dashboard
-# 🔍 Status Check
-# 👋 Exit
-```
-
-### Status Checking
-
-Quick health checks of your ARK installation:
-
-```bash
-# Comprehensive status check (via menu or direct command)
-ark check status
-
-# Or select "🔍 Status Check" from the interactive menu
-ark
-```
-
-### Cluster Operations
-
-```bash
-# Get cluster type
-ark cluster get-type
-
-# Get cluster IP
-ark cluster get-ip
-
-# Get cluster IP with verbose output
-ark cluster get-ip --verbose
-
-# Use specific context
-ark cluster get-ip --context minikube
-```
-
-### Development Mode
-
-```bash
-# Run in development mode from repository root
-make ark-cli-dev
-
-# Or from tools/ark-cli directory
-npm run dev
 ```
 
 ## Common Use Cases
@@ -375,7 +325,3 @@ alias kgp='kubectl get pods'
 alias kgs='kubectl get svc'
 alias kgn='kubectl get nodes'
 ```
-
----
-
-**Next**: Learn about [Compatible Models](/concepts/models) and AI provider integration.

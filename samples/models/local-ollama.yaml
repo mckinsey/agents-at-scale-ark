@@ -1,0 +1,37 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: qwen3b-local
+  namespace: default
+  annotations:
+    # Pricing information in USD per million tokens
+    pricing.ark.mckinsey.com/input-cost: "0.000"     # Free for local Ollama deployment
+    pricing.ark.mckinsey.com/output-cost: "0.000"    # Free for local Ollama deployment
+    pricing.ark.mckinsey.com/currency: "USD"
+    pricing.ark.mckinsey.com/unit: "per-million-tokens"
+
+    # Model characteristics for cost optimization
+    model.ark.mckinsey.com/parameters: "8B"
+    model.ark.mckinsey.com/context-window: "32768"
+    model.ark.mckinsey.com/deployment-type: "local"
+    model.ark.mckinsey.com/provider: "ollama"
+
+    # Performance metrics for SLA planning
+    performance.ark.mckinsey.com/avg-tokens-per-second: "45"
+    performance.ark.mckinsey.com/memory-usage: "5.2GB"
+    performance.ark.mckinsey.com/cpu-cores: "4"
+
+    # Operational metadata
+    ops.ark.mckinsey.com/last-updated: "2025-09-18"
+    ops.ark.mckinsey.com/cost-tier: "free"
+    ops.ark.mckinsey.com/recommended-use: "development,testing,analysis"
+spec:
+  config:
+    openai:
+      apiKey:
+        value: not-used
+      baseUrl:
+        value: http://host.docker.internal:11434/v1
+  model:
+    value: qwen3:8b
+  type: openai

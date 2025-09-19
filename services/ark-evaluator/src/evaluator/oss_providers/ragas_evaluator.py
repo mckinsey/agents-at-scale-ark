@@ -22,6 +22,9 @@ class RagasEvaluator:
         'correctness': 'answer_correctness',
         'similarity': 'answer_similarity',
         'faithfulness': 'faithfulness',
+        'context_precision': 'context_precision',
+        'context_recall': 'context_recall',
+        'context_entity_recall': 'context_entity_recall',
         'toxicity': None,  # RAGAS doesn't have built-in toxicity
         'helpfulness': 'answer_relevancy',  # Use relevancy as proxy
         'clarity': 'answer_similarity'  # Use similarity as proxy
@@ -49,7 +52,10 @@ class RagasEvaluator:
                 answer_relevancy,
                 answer_correctness,
                 answer_similarity,
-                faithfulness
+                faithfulness,
+                LLMContextPrecisionWithoutReference,
+                LLMContextRecall,
+                ContextEntityRecall
             )
             from ragas.metrics.base import MetricWithLLM, MetricWithEmbeddings
             from ragas.run_config import RunConfig
@@ -63,6 +69,9 @@ class RagasEvaluator:
             'correctness': answer_correctness,
             'similarity': answer_similarity,
             'faithfulness': faithfulness,
+            'context_precision': LLMContextPrecisionWithoutReference,
+            'context_recall': LLMContextRecall,
+            'context_entity_recall': ContextEntityRecall,
             'helpfulness': answer_relevancy,
             'clarity': answer_similarity
         }
