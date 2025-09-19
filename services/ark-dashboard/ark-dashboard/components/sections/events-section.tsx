@@ -147,40 +147,30 @@ export function EventsSection({
   const handleFilterChange = (key: string, value: string | undefined) => {
     const effectiveValue = value === "all" ? undefined : value;
 
-    // Build params starting with current filters to preserve them
+    // Only update the changed filter and reset page
     const params: Record<string, string | undefined> = {
-      type: currentFilters.type,
-      kind: currentFilters.kind,
-      name: currentFilters.name,
       [key]: effectiveValue,
       page: "1" // Reset to first page on filter change
     };
 
-    // If changing the kind filter, check if current name is still valid
+    // If changing the kind filter and it's actually different, also clear name
     if (key === "kind" && effectiveValue !== currentFilters.kind) {
-      // Only clear name if it won't be available in the new kind's list
-      // For now, clear it to be safe, but we could check availableNames
-      params.name = undefined;
+      params.name = undefined; // Explicitly clear name when kind changes
     }
 
     navigateWithParams(params);
   };
 
   const handlePageChange = (newPage: number) => {
+    // Only update the page parameter, leave everything else as-is
     navigateWithParams({
-      type: currentFilters.type,
-      kind: currentFilters.kind,
-      name: currentFilters.name,
-      limit: currentFilters.limit.toString(),
       page: newPage.toString()
     });
   };
 
   const handleItemsPerPageChange = (newLimit: number) => {
+    // Only update limit and reset page, leave filters as-is
     navigateWithParams({
-      type: currentFilters.type,
-      kind: currentFilters.kind,
-      name: currentFilters.name,
       limit: newLimit.toString(),
       page: "1" // Reset to first page on limit change
     });
