@@ -23,7 +23,7 @@ import {
   type EventFilters
 } from "@/lib/services/events";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AlertCircle, CheckCircle, RefreshCw } from "lucide-react";
 
@@ -47,21 +47,24 @@ export function EventsSection({
   const [availableKinds, setAvailableKinds] = useState<string[]>([]);
   const [availableNames, setAvailableNames] = useState<string[]>([]);
 
-  const initialPage = parseInt(searchParams.get("page") || "1", 10);
-  const initialLimit = parseInt(searchParams.get("limit") || "10", 10);
-  const initialType = searchParams.get("type") || undefined;
-  const initialKind = searchParams.get("kind") || undefined;
+  // Read filters directly from URL
+  const currentPage = parseInt(searchParams.get("page") || "1", 10);
+  const itemsPerPage = parseInt(searchParams.get("limit") || "10", 10);
+  const typeFilter = searchParams.get("type") || undefined;
+  const kindFilter = searchParams.get("kind") || undefined;
+  const nameFilter = searchParams.get("name") || undefined;
 
   const [totalEvents, setTotalEvents] = useState(0);
-  const [currentPage, setCurrentPage] = useState(initialPage);
-  const [itemsPerPage, setItemsPerPage] = useState(initialLimit);
-  const [filters, setFilters] = useState<EventFilters>({
-    limit: initialLimit,
-    page: initialPage,
-    type: initialType,
-    kind: initialKind,
+
+  // Combine URL params with initial filters
+  const filters: EventFilters = useMemo(() => ({
+    limit: itemsPerPage,
+    page: currentPage,
+    type: typeFilter,
+    kind: kindFilter,
+    name: nameFilter,
     ...initialFilters
-  });
+  }), [itemsPerPage, currentPage, typeFilter, kindFilter, nameFilter, initialFilters]);
 
   const updateUrlParams = useCallback(
     (params: Record<string, string | number | undefined>) => {
@@ -77,7 +80,7 @@ export function EventsSection({
 
       const newUrl =
         pathname + (newParams.toString() ? `?${newParams.toString()}` : "");
-      router.push(newUrl, { scroll: false });
+      router.replace(newUrl, { scroll: false });
     },
     [pathname, router, searchParams]
   );
@@ -125,59 +128,24 @@ export function EventsSection({
     loadEvents();
   }, [loadEvents]);
 
-  useEffect(() => {
-    const pageFromUrl = parseInt(searchParams.get("page") || "1", 10);
-    const limitFromUrl = parseInt(searchParams.get("limit") || "10", 10);
-    const typeFromUrl = searchParams.get("type") || undefined;
-    const kindFromUrl = searchParams.get("kind") || undefined;
-    const nameFromUrl = searchParams.get("name") || undefined;
-
-    const needsUpdate =
-      pageFromUrl !== currentPage ||
-      limitFromUrl !== itemsPerPage ||
-      typeFromUrl !== filters.type ||
-      kindFromUrl !== filters.kind ||
-      nameFromUrl !== filters.name;
-
-    if (needsUpdate) {
-      const newFilters = {
-        ...filters,
-        page: pageFromUrl,
-        limit: limitFromUrl,
-        type: typeFromUrl,
-        kind: kindFromUrl,
-        name: nameFromUrl
-      };
-
-      setCurrentPage(pageFromUrl);
-      setItemsPerPage(limitFromUrl);
-      setFilters(newFilters);
-    }
-  }, [searchParams, currentPage, itemsPerPage, filters]);
-
   const handleFilterChange = (
     key: keyof EventFilters,
     value: string | undefined
   ) => {
     const effectiveValue = value === "all" ? undefined : value;
 
-    setFilters((prev) => ({
-      ...prev,
-      [key]: effectiveValue,
-      page: 1
-    }));
-    setCurrentPage(1);
+    const newParams = {
+      type: key === "type" ? effectiveValue : typeFilter,
+      kind: key === "kind" ? effectiveValue : kindFilter,
+      name: key === "name" ? effectiveValue : nameFilter,
+      page: 1,
+      limit: itemsPerPage
+    };
 
-    updateUrlParams({
-      [key]: effectiveValue,
-      page: 1
-    });
+    updateUrlParams(newParams);
   };
 
   const clearFilters = () => {
-    setFilters({ limit: itemsPerPage, page: 1 });
-    setCurrentPage(1);
-
     updateUrlParams({
       page: 1,
       limit: itemsPerPage,
@@ -188,30 +156,24 @@ export function EventsSection({
   };
 
   const handlePageChange = (newPage: number) => {
-    setCurrentPage(newPage);
-    setFilters((prev) => ({
-      ...prev,
-      page: newPage
-    }));
-
-    updateUrlParams({ page: newPage });
+    updateUrlParams({
+      type: typeFilter,
+      kind: kindFilter,
+      name: nameFilter,
+      page: newPage,
+      limit: itemsPerPage
+    });
   };
 
   const totalPages = Math.max(1, Math.ceil(totalEvents / itemsPerPage));
 
   const handleItemsPerPageChange = (newLimit: number) => {
-    setItemsPerPage(newLimit);
-    setCurrentPage(1);
-
-    setFilters((prev) => ({
-      ...prev,
-      limit: newLimit,
-      page: 1
-    }));
-
     updateUrlParams({
-      limit: newLimit,
-      page: 1
+      type: typeFilter,
+      kind: kindFilter,
+      name: nameFilter,
+      page: 1,
+      limit: newLimit
     });
   };
 

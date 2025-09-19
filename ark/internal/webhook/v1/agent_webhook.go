@@ -12,7 +12,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	"mckinsey.com/ark/internal/genai"
 )
 
 // SetupAgentWebhookWithManager registers the webhook for Agent in the manager.
@@ -94,16 +93,6 @@ func (v *AgentCustomValidator) validateAgentModel(ctx context.Context, agent *ar
 				return nil
 			}
 		}
-	}
-
-	modelName, namespace := genai.ResolveModelSpec(agent.Spec.ModelRef, agent.Namespace)
-
-	err := v.ValidateLoadModel(ctx, modelName, namespace)
-	if err != nil {
-		if agent.Spec.ModelRef == nil {
-			return fmt.Errorf("no model specified for agent and no 'default' model found in namespace %s: %v", namespace, err)
-		}
-		return fmt.Errorf("model %s not found in namespace %s: %v", modelName, namespace, err)
 	}
 
 	return nil

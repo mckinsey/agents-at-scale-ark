@@ -63,31 +63,16 @@ type AgentSpec struct {
 	OutputSchema *runtime.RawExtension `json:"outputSchema,omitempty"`
 }
 
-// AgentPhase represents the phase of an Agent in its lifecycle
-type AgentPhase string
-
-const (
-	// AgentPhasePending - agent accepted but tool dependencies not resolved
-	AgentPhasePending AgentPhase = "Pending"
-	// AgentPhaseReady - all dependencies resolved, agent is ready
-	AgentPhaseReady AgentPhase = "Ready"
-	// AgentPhaseError - agent terminated with errors
-	AgentPhaseError AgentPhase = "Error"
-)
-
 type AgentStatus struct {
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default="Pending"
-	// +kubebuilder:validation:Enum=Pending;Ready;Error
-	// The phase of an Agent is a simple, high-level summary of where the Agent is in its lifecycle.
-	Phase AgentPhase `json:"phase"`
+	// Conditions represent the latest available observations of an agent's state
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:storageversion
 // +kubebuilder:printcolumn:name="Model",type="string",JSONPath=".spec.modelRef.name"
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
+// +kubebuilder:printcolumn:name="Available",type="string",JSONPath=`.status.conditions[?(@.type=="Available")].status`
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type Agent struct {
 	metav1.TypeMeta   `json:",inline"`

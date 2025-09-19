@@ -1,7 +1,6 @@
 """Kubernetes memories API endpoints."""
 import logging
 from typing import Optional
-from urllib.parse import urlencode
 
 from fastapi import APIRouter, Query
 from ark_sdk.models.memory_v1alpha1 import MemoryV1alpha1
