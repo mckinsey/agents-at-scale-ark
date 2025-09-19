@@ -23,7 +23,8 @@ import {
   type EventFilters
 } from "@/lib/services/events";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
 import { AlertCircle, CheckCircle, RefreshCw } from "lucide-react";
 
 interface EventsSectionProps {
@@ -33,67 +34,83 @@ interface EventsSectionProps {
 
 export function EventsSection({
   namespace,
-  initialFilters = {}
+  initialFilters
 }: EventsSectionProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Component state (not for filters!)
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [availableTypes, setAvailableTypes] = useState<string[]>([]);
   const [availableKinds, setAvailableKinds] = useState<string[]>([]);
   const [availableNames, setAvailableNames] = useState<string[]>([]);
+
+  // Read filters directly from URL
+  const currentPage = parseInt(searchParams.get("page") || "1", 10);
+  const itemsPerPage = parseInt(searchParams.get("limit") || "10", 10);
+  const typeFilter = searchParams.get("type") || undefined;
+  const kindFilter = searchParams.get("kind") || undefined;
+  const nameFilter = searchParams.get("name") || undefined;
+
   const [totalEvents, setTotalEvents] = useState(0);
 
-  // Read current filter values directly from URL - these are NOT state!
-  const currentFilters = {
-    page: parseInt(searchParams.get("page") || "1", 10),
-    limit: parseInt(searchParams.get("limit") || "10", 10),
-    type: searchParams.get("type") || undefined,
-    kind: searchParams.get("kind") || undefined,
-    name: searchParams.get("name") || undefined,
+  // Combine URL params with initial filters
+  const filters: EventFilters = useMemo(() => ({
+    limit: itemsPerPage,
+    page: currentPage,
+    type: typeFilter,
+    kind: kindFilter,
+    name: nameFilter,
     ...initialFilters
-  };
+  }), [itemsPerPage, currentPage, typeFilter, kindFilter, nameFilter, initialFilters]);
 
-  // Load events based on current filters
+  const updateUrlParams = useCallback(
+    (params: Record<string, string | number | undefined>) => {
+      const newParams = new URLSearchParams(searchParams.toString());
+
+      Object.entries(params).forEach(([key, value]) => {
+        if (value === undefined || value === null || value === "") {
+          newParams.delete(key);
+        } else {
+          newParams.set(key, String(value));
+        }
+      });
+
+      const newUrl =
+        pathname + (newParams.toString() ? `?${newParams.toString()}` : "");
+
+      // Only update if URL actually changes
+      const currentUrl = pathname + (searchParams.toString() ? `?${searchParams.toString()}` : "");
+      if (newUrl !== currentUrl) {
+        router.replace(newUrl, { scroll: false });
+      }
+    },
+    [pathname, router, searchParams]
+  );
+
   const loadEvents = useCallback(
     async (showRefreshing = false) => {
       if (showRefreshing) setRefreshing(true);
 
       try {
-        // Always load filter options from ALL events to get complete lists
-        const filterOptions = await eventsService.getAllFilterOptions(namespace);
+        const currentFilters: EventFilters = {
+          ...filters,
+          page: currentPage,
+          limit: itemsPerPage
+        };
 
-        // Then load filtered events based on current filters
-        const eventsData = await eventsService.getAll(namespace, currentFilters);
+        const [eventsData, filterOptions] = await Promise.all([
+          eventsService.getAll(namespace, currentFilters),
+          eventsService.getAllFilterOptions(namespace)
+        ]);
 
         setEvents(eventsData.items);
         setTotalEvents(eventsData.total);
-
-        // Store all filter options
         setAvailableTypes(filterOptions.types);
         setAvailableKinds(filterOptions.kinds);
-
-        // If a kind is selected, filter names to only show names from that kind
-        if (currentFilters.kind) {
-          // Need to get all events to properly filter names by kind
-          const allEventsData = await eventsService.getAll(namespace, {
-            kind: currentFilters.kind,
-            limit: 1000 // Get more events to find all names for this kind
-          });
-          const filteredNames = new Set(
-            allEventsData.items
-              .filter(e => e.involvedObjectKind === currentFilters.kind)
-              .map(e => e.involvedObjectName)
-              .filter(Boolean)
-          );
-          setAvailableNames(Array.from(filteredNames).sort());
-        } else {
-          setAvailableNames(filterOptions.names);
-        }
+        setAvailableNames(filterOptions.names);
       } catch (error) {
         console.error("Failed to load events:", error);
         toast({
@@ -109,76 +126,59 @@ export function EventsSection({
         if (showRefreshing) setRefreshing(false);
       }
     },
-    // Only depend on namespace and the serialized filters
-    [namespace, JSON.stringify(currentFilters)]
+    [namespace, filters, currentPage, itemsPerPage]
   );
 
-  // Load events when filters change
   useEffect(() => {
     loadEvents();
   }, [loadEvents]);
 
-  // Navigation helper - only updates URL when user interacts
-  const navigateWithParams = useCallback(
-    (updates: Record<string, string | number | undefined>) => {
-      const params = new URLSearchParams();
-
-      // Start with all current params
-      searchParams.forEach((value, key) => {
-        params.set(key, value);
-      });
-
-      // Apply updates
-      Object.entries(updates).forEach(([key, value]) => {
-        if (value === undefined || value === null || value === "") {
-          params.delete(key);
-        } else {
-          params.set(key, String(value));
-        }
-      });
-
-      const newUrl = pathname + (params.toString() ? `?${params.toString()}` : "");
-      router.push(newUrl, { scroll: false });
-    },
-    [pathname, router, searchParams]
-  );
-
-  // User interaction handlers
-  const handleFilterChange = (key: string, value: string | undefined) => {
+  const handleFilterChange = (
+    key: keyof EventFilters,
+    value: string | undefined
+  ) => {
     const effectiveValue = value === "all" ? undefined : value;
 
-    // If changing the kind filter, also clear the name filter
-    // since the available names will change
-    const params: Record<string, string | undefined> = {
-      [key]: effectiveValue,
-      page: "1" // Reset to first page on filter change
+    const newParams = {
+      type: key === "type" ? effectiveValue : typeFilter,
+      kind: key === "kind" ? effectiveValue : kindFilter,
+      name: key === "name" ? effectiveValue : nameFilter,
+      page: 1,
+      limit: itemsPerPage
     };
 
-    if (key === "kind") {
-      params.name = undefined; // Clear name when kind changes
-    }
-
-    navigateWithParams(params);
-  };
-
-  const handlePageChange = (newPage: number) => {
-    navigateWithParams({ page: newPage.toString() });
-  };
-
-  const handleItemsPerPageChange = (newLimit: number) => {
-    navigateWithParams({
-      limit: newLimit.toString(),
-      page: "1" // Reset to first page on limit change
-    });
+    updateUrlParams(newParams);
   };
 
   const clearFilters = () => {
-    navigateWithParams({
+    updateUrlParams({
+      page: 1,
+      limit: itemsPerPage,
       type: undefined,
       kind: undefined,
-      name: undefined,
-      page: "1",
-      limit: currentFilters.limit.toString()
+      name: undefined
+    });
+  };
+
+  const handlePageChange = (newPage: number) => {
+    updateUrlParams({
+      type: typeFilter,
+      kind: kindFilter,
+      name: nameFilter,
+      page: newPage,
+      limit: itemsPerPage
+    });
+  };
+
+  const totalPages = Math.max(1, Math.ceil(totalEvents / itemsPerPage));
+
+  const handleItemsPerPageChange = (newLimit: number) => {
+    updateUrlParams({
+      type: typeFilter,
+      kind: kindFilter,
+      name: nameFilter,
+      page: 1,
+      limit: newLimit
     });
   };
 
@@ -186,10 +186,7 @@ export function EventsSection({
     router.push(`/event/${event.name}?namespace=${namespace}`);
   };
 
-  // Helper functions
-  const formatAge = (timestamp: string | undefined) => {
-    if (!timestamp) return "-";
-
+  const formatAge = (timestamp: string) => {
     const now = new Date();
     const eventTime = new Date(timestamp);
     const diffMs = now.getTime() - eventTime.getTime();
@@ -225,8 +222,6 @@ export function EventsSection({
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil(totalEvents / currentFilters.limit));
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -242,7 +237,7 @@ export function EventsSection({
     <div className="space-y-4 p-4">
       <div className="border-b flex flex-wrap gap-2 items-center pb-4">
         <Select
-          value={currentFilters.type || "all"}
+          value={filters.type || "all"}
           onValueChange={(value) => handleFilterChange("type", value)}
         >
           <SelectTrigger className="w-32">
@@ -259,7 +254,7 @@ export function EventsSection({
         </Select>
 
         <Select
-          value={currentFilters.kind || "all"}
+          value={filters.kind || "all"}
           onValueChange={(value) => handleFilterChange("kind", value)}
         >
           <SelectTrigger className="w-40">
@@ -276,7 +271,7 @@ export function EventsSection({
         </Select>
 
         <Select
-          value={currentFilters.name || "all"}
+          value={filters.name || "all"}
           onValueChange={(value) => handleFilterChange("name", value)}
         >
           <SelectTrigger className="w-48">
@@ -297,7 +292,12 @@ export function EventsSection({
           size="sm"
           onClick={clearFilters}
           disabled={
-            !(currentFilters.type || currentFilters.kind || currentFilters.name)
+            !(
+              (filters.type && filters.type !== "all") ||
+              (filters.kind && filters.kind !== "all") ||
+              (filters.name && filters.name !== "all") ||
+              (filters.limit !== undefined && filters.limit !== null)
+            )
           }
         >
           Clear Filters
@@ -333,97 +333,97 @@ export function EventsSection({
                   Reason
                 </th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Object
+                  Resource Kind
                 </th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Subobject
+                  Resource Name
                 </th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Source
+                  Resource UID
                 </th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Message
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Count
-                </th>
               </tr>
             </thead>
-            <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
-              {events.map((event) => (
-                <tr
-                  key={event.name}
-                  onClick={() => handleEventClick(event)}
-                  className="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors"
-                >
-                  <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    {formatAge(event.lastTimestamp)}
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-sm">
-                    <div className="flex items-center gap-2">
-                      {getEventTypeIcon(event.type)}
-                      {getEventTypeBadge(event.type)}
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    {event.reason}
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="cursor-help">
-                            {event.involvedObjectKind}/
-                            {event.involvedObjectName}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <div className="text-xs">
-                            <div>Kind: {event.involvedObjectKind}</div>
-                            <div>Name: {event.involvedObjectName}</div>
-                            {event.involvedObjectNamespace && (
-                              <div>
-                                Namespace: {event.involvedObjectNamespace}
-                              </div>
-                            )}
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    -
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    {event.sourceComponent}
-                    {event.sourceHost && ` (${event.sourceHost})`}
-                  </td>
-                  <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                    <div className="max-w-md truncate" title={event.message}>
-                      {event.message}
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-center">
-                    {event.count}
+            <tbody className="bg-white dark:bg-gray-950 divide-y divide-gray-200 dark:divide-gray-800">
+              {events.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
+                  >
+                    No events found
                   </td>
                 </tr>
-              ))}
+              ) : (
+                events.map((event) => (
+                  <tr
+                    key={event.id}
+                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/30 cursor-pointer transition-colors"
+                    onClick={() => handleEventClick(event)}
+                  >
+                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                      {formatAge(event.creationTimestamp)}
+                    </td>
+                    <td className="px-3 py-3 text-sm">
+                      <div className="flex items-center gap-2">
+                        {getEventTypeIcon(event.type)}
+                        {getEventTypeBadge(event.type)}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-xs font-mono text-gray-900 dark:text-gray-100">
+                      {event.reason}
+                    </td>
+                    <td className="px-3 py-3 text-xs font-mono text-gray-900 dark:text-gray-100">
+                      <Badge variant="secondary" className="text-xs">
+                        {event.involvedObjectKind}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-3 text-xs font-mono text-gray-900 dark:text-gray-100">
+                      <div className="font-medium">
+                        {event.involvedObjectName}
+                      </div>
+                      {event.involvedObjectNamespace &&
+                        event.involvedObjectNamespace !== namespace && (
+                          <div className="text-gray-500">
+                            ns: {event.involvedObjectNamespace}
+                          </div>
+                        )}
+                    </td>
+                    <td className="px-3 py-3 text-xs font-mono text-gray-500 dark:text-gray-400">
+                      {event.involvedObjectUid || "-"}
+                    </td>
+                    <td className="px-3 py-3 text-xs font-mono text-gray-900 dark:text-gray-100">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger className="text-left">
+                            <div className="truncate max-w-md">
+                              {event.message}
+                            </div>
+                          </TooltipTrigger>
+                          {event.message && event.message.length > 50 && (
+                            <TooltipContent className="max-w-md">
+                              <p className="whitespace-pre-wrap">
+                                {event.message}
+                              </p>
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {events.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-gray-500">No events found</p>
-        </div>
-      )}
-
-      {/* Pagination */}
       <Pagination
-        currentPage={currentFilters.page}
+        currentPage={currentPage}
         totalPages={totalPages}
-        itemsPerPage={currentFilters.limit}
+        itemsPerPage={itemsPerPage}
         onPageChange={handlePageChange}
         onItemsPerPageChange={handleItemsPerPageChange}
       />

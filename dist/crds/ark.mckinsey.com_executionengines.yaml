@@ -1,0 +1,163 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: executionengines.ark.mckinsey.com
+spec:
+  group: ark.mckinsey.com
+  names:
+    kind: ExecutionEngine
+    listKind: ExecutionEngineList
+    plural: executionengines
+    singular: executionengine
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.lastResolvedAddress
+      name: Address
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1prealpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              ExecutionEngineSpec defines the configuration for an execution engine that can run agent workloads.
+              This allows agents to be executed by different frameworks such as LangChain, AutoGen, or other
+              agent execution systems, rather than the built-in OpenAI-compatible engine.
+              Execution engines work as operators that watch Query CRDs and process queries for agents
+              that reference them.
+            properties:
+              address:
+                description: Address specifies how to reach the execution engine
+                properties:
+                  value:
+                    type: string
+                  valueFrom:
+                    properties:
+                      configMapKeyRef:
+                        description: Selects a key from a ConfigMap.
+                        properties:
+                          key:
+                            description: The key to select.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the ConfigMap or its key
+                              must be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      secretKeyRef:
+                        description: SecretKeySelector selects a key of a Secret.
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      serviceRef:
+                        properties:
+                          name:
+                            description: Name of the service
+                            type: string
+                          namespace:
+                            description: Namespace of the service. Defaults to the
+                              namespace as the resource.
+                            type: string
+                          path:
+                            description: Optional path to append to the service address.
+                              For models might be 'v1', for gemini might be 'v1beta/openai',
+                              for mcp servers might be 'mcp'.
+                            type: string
+                          port:
+                            description: Port name to use. If not specified, uses
+                              the service's only port or first port.
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    type: object
+                type: object
+              description:
+                description: Description provides human-readable information about
+                  this execution engine
+                type: string
+              type:
+                description: Type specifies which execution engine implementation
+                  to use
+                type: string
+            required:
+            - address
+            - type
+            type: object
+          status:
+            properties:
+              lastResolvedAddress:
+                description: LastResolvedAddress contains the actual resolved address
+                  value
+                type: string
+              message:
+                type: string
+              phase:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
