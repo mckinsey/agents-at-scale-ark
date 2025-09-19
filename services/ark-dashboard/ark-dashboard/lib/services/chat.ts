@@ -158,12 +158,32 @@ export const chatService = {
 
   async submitChatQuery(
     namespace: string,
-    inputType: InputType,
+    input: string,
+    targetType: string,
+    targetName: string,
+    sessionId?: string
+  ): Promise<QueryDetailResponse> {
+    // Delegate to the more general submitFlexibleChatQuery
+    return await this.submitFlexibleChatQuery(
+      namespace,
+      input,
+      targetType,
+      targetName,
+      sessionId
+    );
+  },
+
+  // New method for flexible input types
+  async submitFlexibleChatQuery(
+    namespace: string,
     input: string | Message[],
     targetType: string,
     targetName: string,
     sessionId?: string
   ): Promise<QueryDetailResponse> {
+    // Determine the input type based on the actual input
+    const inputType: InputType = Array.isArray(input) ? "messages" : "user";
+    
     const queryRequest: QueryCreateRequest = {
       name: `chat-query-${generateUUID()}`,
       type: inputType,
