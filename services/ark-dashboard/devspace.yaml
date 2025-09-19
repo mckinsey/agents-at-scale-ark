@@ -1,0 +1,101 @@
+# DevSpace configuration for ark-dashboard service standalone development
+version: v2beta1
+
+# Deployment pipelines
+pipelines:
+  # 'devspace deploy' - Build and deploy production image
+  deploy: |-
+    build_images --all
+    create_deployments --all
+
+  # 'devspace dev' - Development workflow with hot reload
+  dev: |-
+    create_deployments --all
+    start_dev --all
+
+# Image build configuration
+images:
+  ark-dashboard:
+    image: ark-dashboard
+    dockerfile: ./Dockerfile
+    context: .
+
+# Kubernetes deployment
+deployments:
+  ark-dashboard:
+    namespace: ${DEVSPACE_NAMESPACE}
+    helm:
+      chart:
+        path: ./chart
+      values:
+        app:
+          image:
+            repository: ${runtime.images.ark-dashboard.image}
+            tag: ${runtime.images.ark-dashboard.tag}
+          # Override resources for development - reduced for cluster availability
+          resources:
+            limits:
+              memory: "1024Mi"
+              cpu: "800m"
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+
+# Development configuration - active during 'devspace dev'
+dev:
+  ark-dashboard:
+    imageSelector: ark-dashboard
+    devImage: node:24-alpine
+    env:
+      - name: NODE_ENV
+        value: development
+    command:
+      [
+        "sh",
+        "-c",
+        "cd /app/ark-dashboard && npm install -g pnpm && pnpm install && pnpm run dev",
+      ]
+    namespace: ${DEVSPACE_NAMESPACE}
+    # Stream logs instead of terminal
+    logs:
+      lastLines: 50
+    # File synchronization for hot reload
+    sync:
+      - path: .:/app
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+    # Enable SSH for IDE integration
+    ssh:
+      enabled: true
+
+# Optional: Profiles for different environments
+profiles:
+  - name: production
+    patches:
+      - op: replace
+        path: deployments.ark-dashboard.namespace
+        value: ark-system
+      - op: replace
+        path: dev.ark-dashboard.namespace
+        value: ark-system
+      - op: remove
+        path: deployments.ark-dashboard.helm.values.app.resources
+
+  - name: remote
+    patches:
+      - op: replace
+        path: images.ark-dashboard.image
+        value: ghcr.io/mckinsey/agents-at-scale-ark/ark-dashboard
+
+  - name: minimal
+    patches:
+      - op: replace
+        path: deployments.ark-dashboard.helm.values.app.resources
+        value:
+          limits:
+            memory: "512Mi"
+            cpu: "400m"
+          requests:
+            memory: "128Mi"
+            cpu: "50m"

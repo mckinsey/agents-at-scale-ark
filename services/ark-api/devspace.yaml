@@ -1,0 +1,102 @@
+# DevSpace configuration for ark-api service standalone development
+version: v2beta1
+
+# Hooks for pre-build setup
+hooks:
+  - command: ./ark-api/scripts/ensure-ark-sdk-wheel.sh ../..
+    events: ["before:dev", "before:deploy"]
+
+# Deployment pipelines
+pipelines:
+  # 'devspace deploy' - Build and deploy production image
+  deploy: |-
+    build_images --all
+    create_deployments --all
+
+  # 'devspace dev' - Development workflow with hot reload
+  dev: |-
+    create_deployments --all
+    start_dev --all
+
+# Image build configuration
+images:
+  ark-api:
+    image: ark-api
+    dockerfile: ./Dockerfile
+    context: .
+
+# Kubernetes deployment
+deployments:
+  ark-api:
+    namespace: ${DEVSPACE_NAMESPACE}
+    helm:
+      chart:
+        path: ./chart
+      values:
+        app:
+          image:
+            repository: ${runtime.images.ark-api.image}
+            tag: ${runtime.images.ark-api.tag}
+          # Override resources for local development
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "400m"
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+
+# Development configuration - active during 'devspace dev'
+dev:
+  ark-api:
+    imageSelector: ark-api
+    devImage: python:3.12-slim
+    # Install dependencies and start API server with hot reload
+    command:
+      [
+        "sh",
+        "-c",
+        "cd /app/ark-api && apt-get update && apt-get install -y curl && curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash && pip install uv && uv add file://$(ls /app/out/ark_sdk-*.whl) && uv sync && uv run uvicorn ark_api.main:app --host 0.0.0.0 --port 8000 --reload",
+      ]
+    namespace: ${DEVSPACE_NAMESPACE}
+    # Stream logs instead of terminal
+    logs:
+      lastLines: 50
+    # File synchronization for hot reload
+    sync:
+      - path: .:/app
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+      - path: ./out:/app/out/
+        startContainer: true
+        disableDownload: true
+        onUpload:
+          restartContainer: true
+      - path: ../../ark:/workspace
+        excludePaths:
+          - bin/
+          - out/
+          - .git/
+    # Enable SSH for IDE integration
+    ssh:
+      enabled: true
+
+# Optional: Profiles for different environments
+profiles:
+  - name: production
+    patches:
+      - op: replace
+        path: deployments.ark-api.namespace
+        value: ark-system
+      - op: replace
+        path: dev.ark-api.namespace
+        value: ark-system
+      - op: remove
+        path: deployments.ark-api.helm.values.app.resources
+
+  - name: remote
+    patches:
+      - op: replace
+        path: images.ark-api.image
+        value: ghcr.io/mckinsey/agents-at-scale-ark/ark-api
