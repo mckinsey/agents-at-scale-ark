@@ -133,6 +133,8 @@ API_KEY_NAMESPACE=ark-system  # Default: ark-system
   - All routes are accessible without authentication
   - Use only for development and testing
 
+**⚠️ Invalid Values**: If `AUTH_MODE` is set to an invalid value (not `sso`, `basic`, `hybrid`, or `open`), it will automatically default to `open` for development safety. A warning will be logged when this occurs.
+
 ### Security Considerations
 
 - **API Key Storage**: API keys are stored as Kubernetes secrets with bcrypt-hashed secret keys

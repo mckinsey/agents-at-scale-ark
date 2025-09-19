@@ -6,12 +6,10 @@ from fastapi import APIRouter, HTTPException, status
 
 from ...models.auth import (
     APIKeyCreateRequest,
-    APIKeyResponse,
     APIKeyCreateResponse,
     APIKeyListResponse
 )
 from ...services.api_keys import APIKeyService
-from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +32,7 @@ async def create_api_key(
     try:
         api_key_service = APIKeyService()
         
-        # No user attribution in current global key model - see docs/basic-auth-future-enhancements.md
+        # No user attribution in current global key model
         user_id = None
         
         result = await api_key_service.create_api_key(body, user_id=user_id)

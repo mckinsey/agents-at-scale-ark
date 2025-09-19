@@ -55,12 +55,21 @@ class AuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         
         # Get authentication mode and OIDC configuration
-        auth_mode = os.getenv("AUTH_MODE", "").lower()
+        auth_mode_raw = os.getenv("AUTH_MODE", "").lower()
         oidc_issuer = os.getenv("OIDC_ISSUER_URL", "")
         oidc_app_id = os.getenv("OIDC_APPLICATION_ID", "")
         
+        # Validate auth mode - default to "open" for invalid values
+        valid_auth_modes = [AuthMode.SSO, AuthMode.BASIC, AuthMode.HYBRID, AuthMode.OPEN]
+        if auth_mode_raw in valid_auth_modes:
+            auth_mode = auth_mode_raw
+        else:
+            auth_mode = AuthMode.OPEN
+            if auth_mode_raw:  # Only log if a value was actually set
+                logger.warning(f"Invalid AUTH_MODE '{auth_mode_raw}', defaulting to 'open'. Valid values: {valid_auth_modes}")
+        
         # Log authentication configuration
-        logger.debug(f"Auth mode: {auth_mode}, Path: {path}")
+        logger.debug(f"Auth mode: {auth_mode} (raw: {auth_mode_raw}), Path: {path}")
         
         # Determine which auth methods are enabled
         jwt_enabled = auth_mode in [AuthMode.SSO, AuthMode.HYBRID] and oidc_issuer and oidc_app_id

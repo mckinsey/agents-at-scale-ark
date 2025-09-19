@@ -8,7 +8,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogHeader,
-  DialogTitle,
+  DialogTitle
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -62,7 +62,7 @@ export function APIKeyCreatedDialog({ open, onOpenChange, apiKey }: APIKeyCreate
         <DialogHeader>
           <DialogTitle>API Key Created Successfully</DialogTitle>
           <DialogDescription>
-            Your API key "{apiKey.name}" has been created. Save these credentials securely.
+            Your API key &ldquo;{apiKey.name}&rdquo; has been created. Save these credentials securely.
           </DialogDescription>
         </DialogHeader>
         
