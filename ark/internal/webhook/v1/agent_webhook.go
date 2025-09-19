@@ -6,8 +6,10 @@ import (
 	"context"
 	"fmt"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -92,6 +94,21 @@ func (v *AgentCustomValidator) validateAgentModel(ctx context.Context, agent *ar
 			if agent.Spec.ExecutionEngine.Name == exception {
 				return nil
 			}
+		}
+	}
+
+	// If no model is specified, check for default model
+	if agent.Spec.ModelRef == nil {
+		// Check if a model named "default" exists in the namespace
+		var defaultModel arkv1alpha1.Model
+		if err := v.Client.Get(ctx, client.ObjectKey{
+			Namespace: agent.Namespace,
+			Name:      "default",
+		}, &defaultModel); err != nil {
+			if apierrors.IsNotFound(err) {
+				return fmt.Errorf("no model specified for agent and no 'default' model found in namespace")
+			}
+			return fmt.Errorf("failed to check for default model: %w", err)
 		}
 	}
 
