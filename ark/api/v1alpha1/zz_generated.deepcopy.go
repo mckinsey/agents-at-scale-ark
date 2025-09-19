@@ -340,6 +340,11 @@ func (in *BedrockModelConfig) DeepCopyInto(out *BedrockModelConfig) {
 		*out = new(ValueSource)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.BaseURL != nil {
+		in, out := &in.BaseURL, &out.BaseURL
+		*out = new(ValueSource)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.AccessKeyID != nil {
 		in, out := &in.AccessKeyID, &out.AccessKeyID
 		*out = new(ValueSource)
