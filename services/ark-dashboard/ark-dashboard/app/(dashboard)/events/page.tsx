@@ -16,13 +16,6 @@ function EventsContent() {
   const searchParams = useSearchParams()
   const namespace = searchParams.get("namespace") || "default"
 
-  // Extract filter parameters from URL
-  const initialFilters = {
-    type: searchParams.get("type") || undefined,
-    kind: searchParams.get("kind") || undefined,
-    name: searchParams.get("name") || undefined
-  }
-
   return (
     <>
       <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
@@ -37,7 +30,7 @@ function EventsContent() {
         </Breadcrumb>
       </header>
       <div className="flex flex-1 flex-col">
-        <EventsSection namespace={namespace} initialFilters={initialFilters} />
+        <EventsSection namespace={namespace} />
       </div>
     </>
   )
@@ -45,7 +38,7 @@ function EventsContent() {
 
 export default function EventsPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={<div className="flex items-center justify-center h-64">Loading events...</div>}>
       <EventsContent />
     </Suspense>
   )

@@ -21,8 +21,8 @@ import {
   eventsService,
   type Event
 } from "@/lib/services/events";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle, RefreshCw } from "lucide-react";
 
 interface EventsSectionProps {
@@ -31,7 +31,6 @@ interface EventsSectionProps {
 
 export function EventsSection({ namespace }: EventsSectionProps) {
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   // Component state (not for filters!)
@@ -43,31 +42,21 @@ export function EventsSection({ namespace }: EventsSectionProps) {
   const [availableNames, setAvailableNames] = useState<string[]>([]);
   const [totalEvents, setTotalEvents] = useState(0);
 
-  // Track last loaded filters to prevent double loading
-  const lastLoadedFilters = useRef<string>("");
+  // Parse filters from URL - memoized to prevent unnecessary recalculation
+  const filters = useMemo(() => ({
+    page: parseInt(searchParams.get("page") || "1", 10),
+    limit: parseInt(searchParams.get("limit") || "10", 10),
+    type: searchParams.get("type") || undefined,
+    kind: searchParams.get("kind") || undefined,
+    name: searchParams.get("name") || undefined
+  }), [searchParams]);
 
-  // Parse filters from URL
-  const page = parseInt(searchParams.get("page") || "1", 10);
-  const limit = parseInt(searchParams.get("limit") || "10", 10);
-  const type = searchParams.get("type") || undefined;
-  const kind = searchParams.get("kind") || undefined;
-  const name = searchParams.get("name") || undefined;
-
-  // Load events based on URL params
+  // Load events based on current filters
   const loadEvents = useCallback(
     async (showRefreshing = false) => {
       if (showRefreshing) setRefreshing(true);
 
       try {
-        // Build filters from current URL params
-        const filters = {
-          page,
-          limit,
-          type,
-          kind,
-          name
-        };
-
         // Always load filter options from ALL events to get complete lists
         const filterOptions = await eventsService.getAllFilterOptions(namespace);
 
@@ -82,15 +71,14 @@ export function EventsSection({ namespace }: EventsSectionProps) {
         setAvailableKinds(filterOptions.kinds);
 
         // If a kind is selected, filter names to only show names from that kind
-        if (kind) {
-          // Need to get all events to properly filter names by kind
+        if (filters.kind) {
           const allEventsData = await eventsService.getAll(namespace, {
-            kind: kind,
-            limit: 1000 // Get more events to find all names for this kind
+            kind: filters.kind,
+            limit: 1000
           });
           const filteredNames = new Set(
             allEventsData.items
-              .filter(e => e.involvedObjectKind === kind)
+              .filter(e => e.involvedObjectKind === filters.kind)
               .map(e => e.involvedObjectName)
               .filter(Boolean)
           );
@@ -113,36 +101,28 @@ export function EventsSection({ namespace }: EventsSectionProps) {
         if (showRefreshing) setRefreshing(false);
       }
     },
-    // Depend on individual URL params, not objects
-    [namespace, page, limit, type, kind, name]
+    [namespace, filters]
   );
 
-  // Load events when URL params change
+  // Load events when filters change
   useEffect(() => {
-    // Create a filter string to compare
-    const filterString = JSON.stringify({ namespace, page, limit, type, kind, name });
+    loadEvents();
+  }, [loadEvents]);
 
-    // Only load if filters have actually changed
-    if (lastLoadedFilters.current !== filterString) {
-      lastLoadedFilters.current = filterString;
-      loadEvents();
-    }
-  }, [loadEvents, namespace, page, limit, type, kind, name]);
-
-  // Create query string helper
+  // Create query string for navigation
   const createQueryString = useCallback(
-    (updates: Record<string, string | undefined>) => {
-      const params = new URLSearchParams(searchParams.toString());
+    (params: Record<string, string | undefined>) => {
+      const newSearchParams = new URLSearchParams(searchParams.toString());
 
-      Object.entries(updates).forEach(([key, value]) => {
+      Object.entries(params).forEach(([key, value]) => {
         if (value === undefined || value === null || value === "") {
-          params.delete(key);
+          newSearchParams.delete(key);
         } else {
-          params.set(key, value);
+          newSearchParams.set(key, value);
         }
       });
 
-      return params.toString();
+      return newSearchParams.toString();
     },
     [searchParams]
   );
@@ -151,34 +131,31 @@ export function EventsSection({ namespace }: EventsSectionProps) {
   const handleFilterChange = (key: string, value: string | undefined) => {
     const effectiveValue = value === "all" ? undefined : value;
 
-    // Only update the changed filter and reset page
-    const params: Record<string, string | undefined> = {
+    const updates: Record<string, string | undefined> = {
       [key]: effectiveValue,
       page: "1" // Reset to first page on filter change
     };
 
-    // If changing the kind filter and it's actually different, also clear name
-    if (key === "kind" && effectiveValue !== kind) {
-      params.name = undefined; // Explicitly clear name when kind changes
+    // If changing kind, also clear name
+    if (key === "kind" && effectiveValue !== filters.kind) {
+      updates.name = undefined;
     }
 
-    const queryString = createQueryString(params);
-    router.push(`${pathname}${queryString ? `?${queryString}` : ''}`, { scroll: false });
+    const queryString = createQueryString(updates);
+    router.push(`/events${queryString ? `?${queryString}` : ''}`, { scroll: false });
   };
 
   const handlePageChange = (newPage: number) => {
-    // Only update the page parameter, leave everything else as-is
     const queryString = createQueryString({ page: newPage.toString() });
-    router.push(`${pathname}${queryString ? `?${queryString}` : ''}`, { scroll: false });
+    router.push(`/events${queryString ? `?${queryString}` : ''}`, { scroll: false });
   };
 
   const handleItemsPerPageChange = (newLimit: number) => {
-    // Only update limit and reset page, leave filters as-is
     const queryString = createQueryString({
       limit: newLimit.toString(),
-      page: "1" // Reset to first page on limit change
+      page: "1"
     });
-    router.push(`${pathname}${queryString ? `?${queryString}` : ''}`, { scroll: false });
+    router.push(`/events${queryString ? `?${queryString}` : ''}`, { scroll: false });
   };
 
   const clearFilters = () => {
@@ -187,9 +164,9 @@ export function EventsSection({ namespace }: EventsSectionProps) {
       kind: undefined,
       name: undefined,
       page: "1",
-      limit: limit.toString()
+      limit: filters.limit.toString()
     });
-    router.push(`${pathname}${queryString ? `?${queryString}` : ''}`, { scroll: false });
+    router.push(`/events${queryString ? `?${queryString}` : ''}`, { scroll: false });
   };
 
   const handleEventClick = (event: Event) => {
@@ -235,7 +212,7 @@ export function EventsSection({ namespace }: EventsSectionProps) {
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil(totalEvents / limit));
+  const totalPages = Math.max(1, Math.ceil(totalEvents / filters.limit));
 
   if (loading) {
     return (
@@ -252,7 +229,7 @@ export function EventsSection({ namespace }: EventsSectionProps) {
     <div className="space-y-4 p-4">
       <div className="border-b flex flex-wrap gap-2 items-center pb-4">
         <Select
-          value={type || "all"}
+          value={filters.type || "all"}
           onValueChange={(value) => handleFilterChange("type", value)}
         >
           <SelectTrigger className="w-32">
@@ -269,7 +246,7 @@ export function EventsSection({ namespace }: EventsSectionProps) {
         </Select>
 
         <Select
-          value={kind || "all"}
+          value={filters.kind || "all"}
           onValueChange={(value) => handleFilterChange("kind", value)}
         >
           <SelectTrigger className="w-40">
@@ -286,7 +263,7 @@ export function EventsSection({ namespace }: EventsSectionProps) {
         </Select>
 
         <Select
-          value={name || "all"}
+          value={filters.name || "all"}
           onValueChange={(value) => handleFilterChange("name", value)}
         >
           <SelectTrigger className="w-48">
@@ -307,7 +284,7 @@ export function EventsSection({ namespace }: EventsSectionProps) {
           size="sm"
           onClick={clearFilters}
           disabled={
-            !(type || kind || name)
+            !(filters.type || filters.kind || filters.name)
           }
         >
           Clear Filters
@@ -431,9 +408,9 @@ export function EventsSection({ namespace }: EventsSectionProps) {
 
       {/* Pagination */}
       <Pagination
-        currentPage={page}
+        currentPage={filters.page}
         totalPages={totalPages}
-        itemsPerPage={limit}
+        itemsPerPage={filters.limit}
         onPageChange={handlePageChange}
         onItemsPerPageChange={handleItemsPerPageChange}
       />
