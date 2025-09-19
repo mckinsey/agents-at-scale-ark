@@ -21,18 +21,37 @@ router = APIRouter(prefix="/namespaces/{namespace}/models", tags=["models"])
 # CRD configuration
 VERSION = "v1alpha1"
 
+def _determine_model_status(status: dict) -> str:
+    """Determine model status from Kubernetes conditions."""
+    conditions = status.get("conditions", [])
+
+    model_available = None
+    for condition in conditions:
+        if condition.get("type") == "ModelAvailable":
+            model_available = condition.get("status")
+            break
+
+    if model_available == "True":
+        return "ready"
+    elif model_available == "False":
+        return "error"
+    else:
+        return "pending"
+
 def model_to_response(model: dict) -> ModelResponse:
     """Convert a Kubernetes Model CR to a response model."""
     metadata = model.get("metadata", {})
     spec = model.get("spec", {})
     status = model.get("status", {})
-    
+
+    status_value = _determine_model_status(status)
+
     return ModelResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
         type=spec.get("type", ""),
         model=spec.get("model", {}).get("value", "") if isinstance(spec.get("model"), dict) else "",
-        status=status.get("phase"),
+        status=status_value,
         annotations=metadata.get("annotations", {})
     )
 
@@ -42,6 +61,8 @@ def model_to_detail_response(model: dict) -> ModelDetailResponse:
     metadata = model.get("metadata", {})
     spec = model.get("spec", {})
     status = model.get("status", {})
+
+    status_value = _determine_model_status(status)
     
     # Process config to preserve value/valueFrom structure
     raw_config = spec.get("config", {})
@@ -64,7 +85,7 @@ def model_to_detail_response(model: dict) -> ModelDetailResponse:
         type=spec.get("type", ""),
         model=spec.get("model", {}).get("value", "") if isinstance(spec.get("model"), dict) else spec.get("model", ""),
         config=processed_config,
-        status=status.get("phase"),
+        status=status_value,
         resolved_address=status.get("resolvedAddress"),
         annotations=metadata.get("annotations", {})
     )

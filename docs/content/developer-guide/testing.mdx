@@ -137,7 +137,17 @@ kind: Model
 metadata:
   name: test-model
 status:
-  phase: ready
+  conditions:
+    - type: "Ready"
+      status: "True"
+      reason: "ModelResolved"
+      message: "Model successfully resolved and validated"
+      observedGeneration: 1
+    - type: "Discovering"
+      status: "False"
+      reason: "ValidationComplete"
+      message: "Model validation completed successfully"
+      observedGeneration: 1
 ```
 
 ### Environment Variable Templating

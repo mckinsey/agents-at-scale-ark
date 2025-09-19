@@ -893,7 +893,9 @@ class TestModelsEndpoint(unittest.TestCase):
                 "type": "openai",
                 "model": {"value": "gpt-4"}
             },
-            "status": {"phase": "Ready"}
+            "status": {"conditions": [
+                {"type": "ModelAvailable", "status": "True"}
+            ]}
         }
         
         mock_model2 = Mock()
@@ -903,7 +905,9 @@ class TestModelsEndpoint(unittest.TestCase):
                 "type": "bedrock",
                 "model": {"value": "anthropic.claude-v2"}
             },
-            "status": {"phase": "pending"}
+            "status": {"conditions": [
+                {"type": "ModelAvailable", "status": "False"}
+            ]}
         }
         
         # Mock the API response
@@ -922,13 +926,13 @@ class TestModelsEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][0]["name"], "gpt-4-model")
         self.assertEqual(data["items"][0]["type"], "openai")
         self.assertEqual(data["items"][0]["model"], "gpt-4")
-        self.assertEqual(data["items"][0]["status"], "Ready")
+        self.assertEqual(data["items"][0]["status"], "ready")
         
         # Check second model
         self.assertEqual(data["items"][1]["name"], "claude-model")
         self.assertEqual(data["items"][1]["type"], "bedrock")
         self.assertEqual(data["items"][1]["model"], "anthropic.claude-v2")
-        self.assertEqual(data["items"][1]["status"], "pending")
+        self.assertEqual(data["items"][1]["status"], "error")
     
     @patch('ark_api.api.v1.models.with_ark_client')
     def test_list_models_empty(self, mock_ark_client):
@@ -969,8 +973,7 @@ class TestModelsEndpoint(unittest.TestCase):
                         "baseUrl": {"value": "https://api.openai.com/v1"}
                     }
                 }
-            },
-            "status": {"phase": "pending"}
+            }
         }
         
         mock_client.models.a_create = AsyncMock(return_value=mock_model)
@@ -1019,8 +1022,7 @@ class TestModelsEndpoint(unittest.TestCase):
                         "apiVersion": {"value": "2023-05-15"}
                     }
                 }
-            },
-            "status": {"phase": "pending"}
+            }
         }
         
         mock_client.models.a_create = AsyncMock(return_value=mock_model)
@@ -1070,8 +1072,7 @@ class TestModelsEndpoint(unittest.TestCase):
                         "temperature": {"value": "0.7"}
                     }
                 }
-            },
-            "status": {"phase": "pending"}
+            }
         }
         
         mock_client.models.a_create = AsyncMock(return_value=mock_model)
@@ -1124,7 +1125,9 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             },
             "status": {
-                "phase": "Ready",
+                "conditions": [
+                    {"type": "ModelAvailable", "status": "True"}
+                ],
                 "resolvedAddress": "https://api.openai.com/v1"
             }
         }
@@ -1140,7 +1143,7 @@ class TestModelsEndpoint(unittest.TestCase):
         self.assertEqual(data["name"], "gpt-4-model")
         self.assertEqual(data["type"], "openai")
         self.assertEqual(data["model"], "gpt-4")
-        self.assertEqual(data["status"], "Ready")
+        self.assertEqual(data["status"], "ready")
         self.assertEqual(data["resolved_address"], "https://api.openai.com/v1")
         self.assertIn("valueFrom", data["config"]["openai"]["apiKey"])
     
@@ -1164,8 +1167,7 @@ class TestModelsEndpoint(unittest.TestCase):
                         "baseUrl": {"value": "https://api.openai.com/v1"}
                     }
                 }
-            },
-            "status": {"phase": "Ready"}
+            }
         }
         
         # Mock updated model
@@ -1181,8 +1183,7 @@ class TestModelsEndpoint(unittest.TestCase):
                         "baseUrl": {"value": "https://api.openai.com/v1"}
                     }
                 }
-            },
-            "status": {"phase": "Ready"}
+            }
         }
         
         mock_client.models.a_get = AsyncMock(return_value=existing_model)
@@ -1227,8 +1228,7 @@ class TestModelsEndpoint(unittest.TestCase):
                         "baseUrl": {"value": "https://api.openai.com/v1"}
                     }
                 }
-            },
-            "status": {"phase": "Ready"}
+            }
         }
         
         # Mock updated model
@@ -1244,8 +1244,7 @@ class TestModelsEndpoint(unittest.TestCase):
                         "baseUrl": {"value": "https://api.openai.com/v1"}
                     }
                 }
-            },
-            "status": {"phase": "Ready"}
+            }
         }
         
         mock_client.models.a_get = AsyncMock(return_value=existing_model)
