@@ -71,20 +71,23 @@ type ModelSpec struct {
 	Type string `json:"type,omitempty"`
 	// +kubebuilder:validation:Required
 	Config ModelConfig `json:"config"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="1m"
+	PollInterval *metav1.Duration `json:"pollInterval,omitempty"`
 }
 
 type ModelStatus struct {
 	// +kubebuilder:validation:Optional
 	// ResolvedAddress contains the actual resolved base URL value
 	ResolvedAddress string `json:"resolvedAddress,omitempty"`
-	Phase           string `json:"phase,omitempty"`
-	Message         string `json:"message,omitempty"`
+	// Conditions represent the latest available observations of a model's state
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.model.value`
-// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
+// +kubebuilder:printcolumn:name="Available",type=string,JSONPath=`.status.conditions[?(@.type=="ModelAvailable")].status`
 // +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.type`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 

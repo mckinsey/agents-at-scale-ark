@@ -5,7 +5,8 @@ from fastapi import APIRouter
 from kubernetes_asyncio import client
 from kubernetes_asyncio.client.api_client import ApiClient
 
-from ...models.kubernetes import NamespaceResponse, NamespaceListResponse, NamespaceCreateRequest
+from ...models.kubernetes import NamespaceResponse, NamespaceListResponse, NamespaceCreateRequest, ContextResponse
+from ...core.namespace import get_current_context
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
@@ -66,3 +67,24 @@ async def create_namespace(body: NamespaceCreateRequest) -> NamespaceResponse:
         return NamespaceResponse(
             name=created_namespace.metadata.name
         )
+
+
+@router.get("/context", response_model=ContextResponse)
+async def get_context_endpoint() -> ContextResponse:
+    """
+    Get the current Kubernetes context information.
+    
+    Returns context following standard k8s patterns:
+    1. In-cluster service account (when running in pods)
+    2. Kubeconfig context (when running locally)  
+    3. Fallback to default
+    
+    Returns:
+        ContextResponse: The current namespace and cluster information
+    """
+    current_context = get_current_context()
+    
+    return ContextResponse(
+        namespace=current_context["namespace"],
+        cluster=current_context["cluster"]
+    )

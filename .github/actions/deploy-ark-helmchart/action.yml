@@ -1,0 +1,174 @@
+name: "Deploy ARK-controller helm chart"
+description: "Download ARK Helm chart, ensure namespace/infra, install CRDs/cert-manager/gateway-api, deploy Helm release and apply RBAC. Authentication (kube/registry) must be done by caller workflow."
+inputs:
+  version:
+    description: "Release tag (e.g. v0.1.2)"
+    required: true
+  clean_version:
+    description: "Clean version used in chart filename (e.g. 0.1.2)"
+    required: true
+  chart_filename:
+    description: "Chart filename pattern (defaults to ark-<clean_version>.tgz)"
+    required: false
+    default: ""
+  repository:
+    description: "GitHub repository to download release from (defaults to caller repo)"
+    required: false
+  namespace:
+    description: "Kubernetes namespace to deploy into"
+    required: false
+    default: "ark-system"
+  image_repository:
+    description: "Controller image repository (will be passed to Helm)"
+    required: false
+    default: ""
+  container_registry_server:
+    description: "Container registry server (for chart values)"
+    required: false
+    default: ""
+  container_registry_username:
+    description: "Container registry username"
+    required: false
+    default: ""
+  container_registry_password:
+    description: "Container registry password"
+    required: false
+    default: ""
+  rbac_enable:
+    description: "Pass rbac.enable to Helm"
+    required: false
+    default: "true"
+  timeout:
+    description: "Helm timeout (e.g. 5m)"
+    required: false
+    default: "5m"
+  install_cert_manager:
+    description: "Whether to install cert-manager (true/false)"
+    required: false
+    default: "true"
+  install_gateway_api:
+    description: "Whether to install Gateway API CRDs (true/false)"
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Grant kubectl access
+      shell: bash
+      run: |
+        # kubectl apply -f ark/config/rbac/ark-deployer-role.yaml
+        ./scripts/deploy/bind-deployer-role.sh "${{ github.repository }}" 
+
+    - name: Download ARK Helm chart from release
+      shell: bash
+      id: download_chart
+      run: |
+        set -euo pipefail
+        VERSION="${{ inputs.version }}"
+        CLEAN="${{ inputs.clean_version }}"
+        if [ -n "${{ inputs.chart_filename }}" ]; then
+          CHART_NAME="${{ inputs.chart_filename }}"
+        else
+          CHART_NAME="ark-controller-${CLEAN}.tgz"
+        fi
+        echo "Downloading chart to ${CHART_NAME} for version: $VERSION"
+        gh release download "$VERSION" --pattern "$CHART_NAME" --repo "${{ inputs.repository || github.repository }}"
+        ls -la "./${CHART_NAME}"
+        echo "chart_name=${CHART_NAME}" >> $GITHUB_OUTPUT
+      env:
+          GH_TOKEN: ${{ github.token }}
+
+    - name: Check existing Helm release
+      shell: bash
+      run: |
+        if helm status ark-controller -n "${{ inputs.namespace }}" >/dev/null 2>&1; then
+          echo "release_found=true" >> $GITHUB_OUTPUT
+        else
+          echo "No existing ARK release found - proceeding with the first install"
+          echo "release_found=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Create namespace with Pod Security Standards
+      if: ${{ steps.check_release.outputs.release_found == 'false' }}
+      shell: bash
+      run: |
+        kubectl create namespace "${{ inputs.namespace }}" --dry-run=client -o yaml | \
+        kubectl patch -f - --local --type=merge -p='{
+          "metadata": {
+            "labels": {
+              "pod-security.kubernetes.io/enforce": "baseline",
+              "pod-security.kubernetes.io/audit": "baseline",
+              "pod-security.kubernetes.io/warn": "baseline"
+            }
+          }
+        }' --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Install cert-manager
+      if: ${{ inputs.install_cert_manager == 'true' && steps.check_release.outputs.release_found == 'false' }}
+      shell: bash
+      run: |
+        helm repo add jetstack https://charts.jetstack.io --force-update
+        helm repo update
+        helm upgrade --install cert-manager jetstack/cert-manager \
+          --namespace cert-manager --create-namespace \
+          --set crds.enabled=true
+
+    - name: Install Gateway API CRDs
+      if: ${{ inputs.install_gateway_api == 'true' && steps.check_release.outputs.release_found == 'false' }}
+      shell: bash
+      run: |
+        kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
+
+    - name: Install ARK CustomResourceDefinitions
+      shell: bash
+      run: |
+        kubectl apply -f ark/config/crd/bases
+
+        echo "Waiting for CRDs to be established..."
+        kubectl wait --for=condition=established --timeout=60s crd/agents.ark.mckinsey.com
+        kubectl wait --for=condition=established --timeout=60s crd/models.ark.mckinsey.com
+        kubectl wait --for=condition=established --timeout=60s crd/tools.ark.mckinsey.com
+        kubectl wait --for=condition=established --timeout=60s crd/teams.ark.mckinsey.com
+        kubectl wait --for=condition=established --timeout=60s crd/queries.ark.mckinsey.com
+        kubectl wait --for=condition=established --timeout=60s crd/memories.ark.mckinsey.com
+        kubectl wait --for=condition=established --timeout=60s crd/evaluators.ark.mckinsey.com
+        kubectl wait --for=condition=established --timeout=60s crd/mcpservers.ark.mckinsey.com
+        kubectl wait --for=condition=established --timeout=60s crd/a2aservers.ark.mckinsey.com
+        kubectl wait --for=condition=established --timeout=60s crd/executionengines.ark.mckinsey.com
+
+    - name: Deploy ARK-controller chart
+      shell: bash
+      run: |
+        CHART="./${{ steps.download_chart.outputs.chart_name }}"
+        IMAGE_REPO="${{ inputs.image_repository }}"
+        IMAGE_TAG="${{ inputs.clean_version }}"
+        set -euo pipefail
+        helm upgrade --install ark-controller "${CHART}" \
+          --namespace "${{ inputs.namespace }}" \
+          --create-namespace \
+          --set rbac.enable=${{ inputs.rbac_enable }} \
+          --timeout="${{ inputs.timeout }}" \
+          $( [ -n "${IMAGE_REPO}" ] && echo "--set controllerManager.container.image.repository=${IMAGE_REPO}" ) \
+          $( [ -n "${IMAGE_TAG}" ] && echo "--set controllerManager.container.image.tag=${IMAGE_TAG}" ) \
+          $( [ -n "${{ inputs.container_registry_server }}" ] && echo "--set containerRegistry.enabled=true --set containerRegistry.server=${{ inputs.container_registry_server }} --set containerRegistry.username=${{ inputs.container_registry_username }} --set containerRegistry.password=${{ inputs.container_registry_password }}" )
+
+    - name: Apply additional RBAC manifests
+      if: ${{ inputs.rbac_enable == 'true' }}
+      shell: bash
+      run: |
+        kubectl apply -f ark/config/rbac/ark_tenant_role.yaml || true
+        kubectl apply -f ark/config/rbac/ark_tenant_role_binding.yaml || true
+
+    - name: Wait for deployment readiness
+      shell: bash
+      run: |
+        WAIT_SECONDS=600
+        ./scripts/deploy/wait-for-deployment.sh ark-controller "${{ inputs.namespace }}" $WAIT_SECONDS
+
+    - name: Verify deployment
+      shell: bash
+      run: |
+        echo "Deployed ARK: ${{ inputs.version }}"
+        kubectl get pods -n "${{ inputs.namespace }}" || true
+        kubectl get deployments -n "${{ inputs.namespace }}"

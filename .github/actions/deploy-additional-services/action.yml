@@ -1,0 +1,112 @@
+name: "Deploy ARK Services"
+description: "Deploy ark-api, ark-api-a2a and ark-dashboard Helm charts, verify deployment and apply ingress. Caller must provide kube credentials and helm installed."
+inputs:
+  clean_version:
+    description: "Clean version used as image tag (e.g. 0.1.2)"
+    required: true
+  image_registry:
+    description: "Image registry prefix (e.g. ghcr.io/org/repo). Action will append /ark-api, /ark-api-a2a, /ark-dashboard"
+    required: false
+    default: ""
+  install_loadbalancer:
+    description: "Whether to install nginx ingress controller and setup ARK ingress (true/false)"
+    required: false
+    default: "true"
+  load_balancer_annotations:
+    description: "Additional annotations for the LoadBalancer service (e.g. load-balancer-scheme)"
+    required: false
+    default: ""
+  namespace:
+    description: "Kubernetes namespace to deploy services into"
+    required: false
+    default: "default"
+  pull_policy:
+    description: "Image pull policy"
+    required: false
+    default: "IfNotPresent"
+  services_list:
+    description: "Space-separated list of services to deploy (default: ark-api ark-api-a2a ark-dashboard)"
+    required: false
+    default: "ark-api ark-api-a2a ark-dashboard"
+  timeout:
+    description: "Helm timeout for each release (e.g. 5m)"
+    required: false
+    default: "5m"
+runs:
+  using: "composite"
+  steps:
+    - name: Install ingresses
+      if: ${{ inputs.install_ingress == 'true' }}
+      shell: bash
+      run: |
+        echo "Setting up ingress and load balancer"
+        set -euo pipefail
+        # Install nginx ingress controller
+        echo "Installing nginx ingress controller..."
+        helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+        helm repo update
+        helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+            --namespace ingress-nginx \
+            --create-namespace \
+            --set controller.service.type=LoadBalancer \
+            $( [ -n "${{ inputs.load_balancer_annotations }}" ] && echo "--set controller.service.annotations={${{ inputs.load_balancer_annotations }}}" ) \
+            --wait
+        
+        # Wait for external IP
+        echo "Waiting for external IP assignment..."
+        kubectl wait --namespace ingress-nginx \
+            --for=condition=ready pod \
+            --selector=app.kubernetes.io/component=controller \
+            --timeout=300s
+
+    - name: Deploy services
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "=== Deploying additional ARK services ==="
+        for NAME in ${{ inputs.services_list }}; do
+
+          # compute image repository per service
+          IMAGE_REPO_INPUT="${{ inputs.image_registry }}"
+          if [ -n "${IMAGE_REPO_INPUT}" ]; then
+            IMAGE_REPO="${IMAGE_REPO_INPUT}/${NAME}"
+          else
+            IMAGE_REPO="${NAME}"
+          fi
+
+          echo "=== Deploying ${NAME} ==="
+          helm upgrade --install "${NAME}" "services/${NAME}/chart" \
+            --namespace "${{ inputs.namespace }}" \
+            --create-namespace \
+            --set app.image.repository="${IMAGE_REPO}" \
+            --set app.image.tag="${{ inputs.clean_version }}" \
+            --set app.image.pullPolicy="${{ inputs.pull_policy }}" \
+            --wait \
+            --timeout="${{ inputs.timeout }}"
+        done
+
+    - name: Verify deployment
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "=== Checking deployment status ==="
+        echo "ARK Controller:"
+        if ! kubectl get pods -n ark-system -l control-plane=ark-controller; then
+          echo "Controller not found, showing all ark-system pods:"
+          kubectl get pods -n ark-system || true
+        fi
+        echo "ARK Services:"
+        for NAME in ${{ inputs.services_list }}; do
+          echo "${NAME}:"
+          kubectl get pods -n "${{ inputs.namespace }}" -l app="${NAME}" || true
+        done
+        echo "Service endpoints:"
+        kubectl get svc -n "${{ inputs.namespace }}" ${{ inputs.services_list }} || true
+
+    - name: Setup ARK ingress
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Create ingress resource for ARK services
+        kubectl apply -f ark/scripts/ark_ingress.yml || true
+        echo "Ingress controller deployed"

@@ -1,14 +1,54 @@
 name: 'Provision infrastructure - GCP'
 
 on:
-  workflow_dispatch:
+  push:
+    branches: ['main']
+    paths:
+        - 'infrastructure/gcp/**'
+        - '.github/workflows/terraform-apply-gcp.yaml'
+
+permissions:
+  id-token: write
+  contents: write
+  checks: write
+  deployments: write
+  statuses: write
+
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
+  tfe-apply:
+    runs-on: ${{vars.GH_RUNNER_LABEL}}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref }}
+      
+      - name: Authenticate to GCP (Workload Identity)
+        uses: google-github-actions/auth@v1
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
 
-      - name: Run a one-line script
-        run: echo Placeholder
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: '1.13.1'
+
+      - name: Terraform Init (GCS backend)
+        id: init
+        working-directory: ./infrastructure/providers/gcp
+        run: |
+          set -euo pipefail
+          backend_args=(
+            -backend-config="bucket=${{ secrets.GCP_TF_STATE_BUCKET }}"
+          )
+          if [ -n "${{ secrets.GCP_TF_STATE_PREFIX_GCP }}" ]; then
+            backend_args+=(-backend-config="prefix=${{ secrets.GCP_TF_STATE_PREFIX_GCP }}")
+          fi
+          terraform init -input=false "${backend_args[@]}"
+
+      - name: Terraform Apply
+        id: apply
+        working-directory: ./infrastructure/providers/gcp
+        run: terraform apply -input=false -auto-approve -var="cluster_name=${{ vars.GCP_GKE_CLUSTER_NAME }}" -var="gcp_region=${{ vars.GCP_REGION }}" -var="gcp_project_id=${{ secrets.GCP_PROJECT_ID }}"

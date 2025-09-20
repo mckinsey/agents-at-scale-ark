@@ -1,14 +1,49 @@
 name: 'Plan infrastructure - AWS'
 
 on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+    branches: ['main']
+    paths:
+        - 'infrastructure/providers/aws/**'
+        - '.github/workflows/terraform_plan_aws.yaml'
+
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
+  tfe-plan:
+    runs-on: ${{vars.GH_RUNNER_LABEL}}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Run a one-line script
-        run: echo Placeholder
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_GH_OIDC_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-duration-seconds: 1200
+
+      # compute OIDC role name for terraform var 
+      - name: Extract OIDC role name
+        id: get_role_name
+        run: |
+          echo "oidc_role_name=$(cut -d'/' -f2 <<< '${{ secrets.AWS_GH_OIDC_ROLE_ARN }}')" >> $GITHUB_OUTPUT
+
+      - name: Terraform Validate & Plan (S3 backend)
+        uses: ./.github/actions/terraform-validate-and-plan
+        with:
+          working_directory: ./infrastructure/providers/aws
+          backend: s3
+          terraform_version: '1.13.1'
+          s3_bucket: ${{ secrets.AWS_TF_STATE_BUCKET }}
+          s3_key: ${{ secrets.AWS_TF_STATE_KEY }}
+          s3_region: ${{ vars.AWS_REGION }}
+          s3_dynamodb_table: ${{ secrets.AWS_TF_STATE_DYNAMODB_TABLE }}
+          vars: -var="cluster_name=${{ vars.AWS_EKS_CLUSTER_NAME }}" -var="aws_region=${{ vars.AWS_REGION }}" -var="github_oidc_role_name=${{ steps.get_role_name.outputs.oidc_role_name }}"
+          github_token: ${{ secrets.GITHUB_TOKEN }}

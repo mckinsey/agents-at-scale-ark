@@ -1,0 +1,74 @@
+name: "Resolve ARK version"
+description: "Resolve ARK version/tag, check if tag exists and return sha. Inputs: ark_version (optional). Outputs: version, clean_version, has_version, sha."
+inputs:
+  ark_version:
+    description: "Optional ARK version/tag (e.g. v0.1.2 or 0.1.2). If empty reads version.txt of the main branch"
+    required: false
+    default: ""
+outputs:
+  version:
+    description: "Resolved version (prefixed with v)"
+    value: ${{ steps.determine.outputs.version }}
+  clean_version:
+    description: "Version without leading v"
+    value: ${{ steps.determine.outputs.clean_version }}
+  has_version:
+    description: "true if the git tag exists"
+    value: ${{ steps.check_tag.outputs.has_version }}
+  sha:
+    description: "Commit SHA for the tag (empty if the tag is missing)"
+    value: ${{ steps.get_sha.outputs.sha }}
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        # uncomment next PR
+        # ref: main
+
+    - name: Determine ARK version to deploy
+      id: determine
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -n "${{ inputs.ark_version }}" ]; then
+          INPUT_VERSION="${{ inputs.ark_version }}"
+          if [[ "$INPUT_VERSION" =~ ^v ]]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="v$INPUT_VERSION"
+          fi
+          echo "Using specified version: $VERSION" >&2
+        else
+          VERSION="v$(cat version.txt | tr -d '\n')"
+          echo "Using version from version.txt: $VERSION" >&2
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "clean_version=$(echo $VERSION | sed 's/^v//')" >> $GITHUB_OUTPUT
+
+    - name: Check if version tag exists
+      id: check_tag
+      shell: bash
+      run: |
+        set -euo pipefail
+        VERSION="${{ steps.determine.outputs.version }}"
+        if git rev-parse --verify "$VERSION" >/dev/null 2>&1; then
+          echo "has_version=true" >> $GITHUB_OUTPUT
+          echo "Version tag $VERSION exists" >&2
+        else
+          echo "has_version=false" >> $GITHUB_OUTPUT
+          echo "Version tag $VERSION does not exist" >&2
+        fi
+
+    - name: Get SHA for version tag
+      id: get_sha
+      if: ${{ steps.check_tag.outputs.has_version == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        VERSION="${{ steps.determine.outputs.version }}"
+        SHA=$(git rev-list -n 1 "$VERSION")
+        echo "sha=$SHA" >> $GITHUB_OUTPUT
+        echo "Using SHA $SHA for version $VERSION" >&2

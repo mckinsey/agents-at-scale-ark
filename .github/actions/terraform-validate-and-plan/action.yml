@@ -1,0 +1,220 @@
+name: "Terraform Validate & Plan (multi-backend, no auth)"
+description: "Init, validate and plan Terraform with S3 or GCS backend. Authentication must be handled by the caller workflow. Posts plan to PR when github_token is provided."
+inputs:
+  working_directory:
+    description: "Terraform working directory"
+    required: true
+  backend:
+    description: "Backend type: 's3', 'gcs'"
+    required: true
+  terraform_version:
+    description: "Terraform version to install"
+    required: false
+    default: "1.13.1"
+
+  # S3 backend inputs (used when backend == s3)
+  s3_bucket:
+    description: "S3 bucket for Terraform state (if backend == s3)"
+    required: false
+    default: ""
+  s3_key:
+    description: "S3 key/path for Terraform state (if backend == s3)"
+    required: false
+    default: ""
+  s3_region:
+    description: "S3 region (if backend == s3)"
+    required: false
+    default: ""
+  s3_dynamodb_table:
+    description: "DynamoDB table for state locking (optional)"
+    required: false
+    default: ""
+  s3_encrypt:
+    description: "Enable server-side encryption for S3 backend (true/false)"
+    required: false
+    default: "true"
+
+  # GCS backend inputs (used when backend == gcs)
+  gcs_bucket:
+    description: "GCS bucket for Terraform state (if backend == gcs)"
+    required: false
+    default: ""
+  gcs_prefix:
+    description: "GCS prefix for Terraform state (optional)"
+    required: false
+    default: ""
+  gcs_project:
+    description: "GCP project id for backend (optional)"
+    required: false
+    default: ""
+  # generic inputs
+  vars:
+    description: "Extra terraform -var arguments as a single string, e.g. -var='foo=bar' -var='x=1'"
+    required: false
+    default: ""
+  github_token:
+    description: "GitHub token for posting plan comment to PR (optional)"
+    required: false
+    default: ""
+outputs:
+  init_outcome:
+    description: "Outcome of terraform init (success|failure|skipped)"
+    value: ${{ steps.init.outputs.init_outcome }}
+  validate_outcome:
+    description: "Outcome of terraform validate (success|failure|skipped)"
+    value: ${{ steps.validate.outputs.validate_outcome }}
+  plan_outcome:
+    description: "Outcome of terraform plan (success|failure)"
+    value: ${{ steps.plan.outputs.plan_outcome }}
+  plan:
+    description: "Trimmed terraform plan output"
+    value: ${{ steps.plan.outputs.plan }}
+  plan_summary:
+    description: "Plan summary line (e.g. Plan: 1 to add, 0 to change, 0 to destroy)"
+    value: ${{ steps.plan.outputs.plan_summary }}
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: ${{ inputs.terraform_version }}
+
+    - id: init
+      name: Terraform Init (backend)
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        set -euo pipefail
+
+        INIT_OUTCOME="skipped"
+        backend="${{ inputs.backend }}"
+
+        if [ "$backend" = "s3" ]; then
+          if [ -z "${{ inputs.s3_bucket }}" ]; then
+            echo "Missing s3_bucket input for s3 backend" >&2
+            INIT_OUTCOME="failure"
+            echo "init_outcome=$INIT_OUTCOME" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          backend_args=(
+            -backend-config="bucket=${{ inputs.s3_bucket }}"
+          )
+          if [ -n "${{ inputs.s3_key }}" ]; then
+            backend_args+=(-backend-config="key=${{ inputs.s3_key }}")
+          fi
+          if [ -n "${{ inputs.s3_region }}" ]; then
+            backend_args+=(-backend-config="region=${{ inputs.s3_region }}")
+          fi
+          if [ -n "${{ inputs.s3_dynamodb_table }}" ]; then
+            backend_args+=(-backend-config="dynamodb_table=${{ inputs.s3_dynamodb_table }}")
+          fi
+          if [ "${{ inputs.s3_encrypt }}" != "true" ]; then
+            backend_args+=(-backend-config="encrypt=false")
+          else
+            backend_args+=(-backend-config="encrypt=true")
+          fi
+        elif [ "$backend" = "gcs" ]; then
+          if [ -z "${{ inputs.gcs_bucket }}" ]; then
+            echo "Missing gcs_bucket input for gcs backend" >&2
+            INIT_OUTCOME="failure"
+            echo "init_outcome=$INIT_OUTCOME" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          backend_args=(
+            -backend-config="bucket=${{ inputs.gcs_bucket }}"
+          )
+          if [ -n "${{ inputs.gcs_prefix }}" ]; then
+            backend_args+=(-backend-config="prefix=${{ inputs.gcs_prefix }}")
+          fi
+          if [ -n "${{ inputs.gcs_project }}" ]; then
+            backend_args+=(-backend-config="project=${{ inputs.gcs_project }}")
+          fi
+        fi
+        if terraform init -input=false "${backend_args[@]}" 2>&1 | tee init.log; then
+          INIT_OUTCOME="success"
+        else
+          INIT_OUTCOME="failure"
+        fi
+        echo "init_outcome=$INIT_OUTCOME" >> $GITHUB_OUTPUT
+
+    - id: validate
+      name: Terraform Validate
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        set -euo pipefail
+        VALIDATE_OUTCOME="skipped"
+        # run validate only if init was success or skipped (local backend)
+        if [ "${{ steps.init.outputs.init_outcome }}" = "failure" ]; then
+          VALIDATE_OUTCOME="skipped"
+        else
+          if terraform validate -no-color 2>&1 | tee validate.log; then
+            VALIDATE_OUTCOME="success"
+          else
+            VALIDATE_OUTCOME="failure"
+          fi
+        fi
+        echo "validate_outcome=$VALIDATE_OUTCOME" >> $GITHUB_OUTPUT
+
+    - id: plan
+      name: Terraform Plan
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        set -euo pipefail
+        PLAN_OUTCOME="success"
+
+        # Build VAR_ARGS from single string input (split on whitespace)
+        VAR_ARGS=()
+        if [ -n "${{ inputs.vars }}" ]; then
+          # shellword-split the provided vars string
+          read -r -a VAR_ARGS <<< "${{ inputs.vars }}"
+        fi
+
+        # run plan; capture exit code but continue
+        ( terraform plan -no-color -input=false "${VAR_ARGS[@]}" ) 2>&1 | tee plan.log || PLAN_CODE=$?
+
+        if [ -n "${PLAN_CODE:-}" ] && [ "${PLAN_CODE}" -ne 0 ]; then
+          PLAN_OUTCOME="failure"
+        fi
+
+        # extract summary line like: "Plan: 1 to add, 0 to change, 0 to destroy."
+        PLAN_SUMMARY=$(grep -Eo "^(Plan: |No changes).*" plan.log | tail -n1 || true)
+        PLAN_RAW=$(sed -n '1,60000p' plan.log || true)
+        printf "%s" "$PLAN_RAW" > plan_trimmed.log
+
+        echo "plan_outcome=$PLAN_OUTCOME" >> $GITHUB_OUTPUT
+        echo "plan_summary=$PLAN_SUMMARY" >> $GITHUB_OUTPUT
+
+    - name: Post plan to PR (optional)
+      if: ${{ inputs.github_token != '' && github.event_name == 'pull_request' }}
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github_token }}
+        script: |
+          const fs = require('fs');
+          const planTextPath = 'plan_trimmed.log';
+          const planText = fs.existsSync(planTextPath) ? fs.readFileSync(planTextPath,'utf8') : 'Plan not available';
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number
+          });
+          const botComment = comments.find(c => c.user.type === 'Bot' && c.body.includes('Terraform Summary for ${{ github.workflow }}'));
+          const body = `### Terraform Summary for ${{ github.workflow }}\n#### Terraform Init: \`${{ steps.init.outputs.init_outcome }}\`\n#### Terraform Validate: \`${{ steps.validate.outputs.validate_outcome }}\`\n#### Terraform Plan: \`${{ steps.plan.outputs.plan_outcome }}\`\n\n**Summary:**\n\`\`\`\n${{ steps.plan.outputs.plan_summary }}\n\`\`\`\n\n<details><summary>Plan details</summary>\n\n\`\`\`\n${planText}\n\`\`\`\n\n</details>\n\n*Invoker: @${{ github.actor }} — Workflow: \`${{ github.workflow }}\`*`;
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body
+            });
+          } else {
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
+          }

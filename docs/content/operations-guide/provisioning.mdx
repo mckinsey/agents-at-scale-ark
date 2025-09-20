@@ -1,0 +1,164 @@
+## Sample cloud infrastructure setup and provisioning pipelines 
+
+/infrastructure folder contains Terraform modules and top-level configurations intended to provision necessary infrastructure on the two main cloud providers (AWS, GCP). 
+It provisions a managed Kubernetes cluster up and running, so application teams can deploy and iterate. 
+
+**Security & compliance disclaimer** - 
+These modules intentionally provide the bare minimum infrastructure to accelerate onboarding and are not a secure production topology. It is the responsibility of the user or their security team to:
+- Review and harden IAM, network policies, and encryption defaults.
+- Configure audit logging, monitoring, and alerting.
+- Integrate with organization identity and secret stores.
+- Conduct penetration testing and security reviews as required.
+
+For more details, please, refer to [Disclaimer](../../disclaimer.mdx).
+
+### Key points:
+- Providers supported: AWS, GCP
+- Each provider module provisions a managed Kubernetes control plane:
+  - AWS: EKS
+  - GCP: GKE
+- Modules focus on fast bootstrap and essential resources (VPC/network, cluster, node pools, IAM/service accounts, and basic storage).
+- Users MUST extend and harden these modules to meet their organization’s security, compliance, and operational requirements.
+
+##Provisioning supports 2 approaches:
+- local - for ad-hoc PoC or short Demo
+- fork-based - for long-term use and custom development
+
+###Provision infrastructure locally:
+####AWS:
+    ```
+    - AWS CLI installed and configured: https://docs.aws.amazon.com/cli/
+    - Terraform (recommended >= 1.0)
+    - AWS credentials with permissions to create VPC, EKS, EC2, IAM, ELB, S3 (or an appropriately-scoped IAM role) 
+  ```
+####GCP:
+    ```
+    - Google Cloud SDK (gcloud) installed and authenticated: https://cloud.google.com/sdk
+    - Terraform (recommended >= 1.0)
+    - Service account with roles such as Kubernetes Engine Admin, Compute Admin, Service Account User, Storage Admin (adjust per needs)
+    - Service account key or ADC available to Terraform
+  ```
+
+Once prerequisites are in place, navigate to the respective folder:
+
+####AWS:
+  ```
+  cd /infrastructure/providers/aws
+  ```
+####GCP:
+  ```
+    cd /infrastructure/providers/gcp
+    ```
+
+
+And perform 
+```
+terraform init
+terraform plan
+terraform apply
+```
+
+Overall provisioning can take up to 10 minutes.
+
+### Fork-based provisioning and development:
+
+Configure GitHub OIDC for provisioning and deployment:
+
+####AWS:
+  ```
+resource "aws_iam_role" "github_oidc_role" {
+  name        = "github-oidc-role"
+  description = "GitHub OIDC iam role"
+
+  assume_role_policy    = file("samples/github_oidc_assume_role_policy.json")
+  max_session_duration  = 3600
+  force_detach_policies = true
+
+  tags = {
+    Environment = "dev"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "github_oidc_role_policy_attachment" {
+  role       = aws_iam_role.github_oidc_role.name
+  policy_arn = data.aws_iam_policy.github_oidc_administrator_policy.arn
+}
+
+data "aws_iam_policy" "github_oidc_administrator_policy" {
+  name = "AdministratorAccess" 
+}
+
+``` 
+Example of the policy you can find in `infrastructure/samples/github_oidc_assume_role_policy.json` - Replace `ACCOUNT_ID`, `ORG`, `REPO`, `REF` with respective values, to further harden the policy, you can add filter for your github runners IPs or other organization-specific requirements.
+####GCP:
+  ```
+resource "google_service_account" "github_oidc_sa" {
+  project    = var.gcp_project_id
+  account_id = var.github_oidc_service_account
+}
+
+resource "google_project_iam_member" "member-role" {
+  for_each = toset([
+    "roles/container.admin",
+    "roles/container.clusterAdmin",
+    "roles/compute.viewer"
+  ])
+  role    = each.key
+  member  = "serviceAccount:${google_service_account.github_oidc_sa.email}"
+  project = var.gcp_project_id
+}
+
+module "gcp_gh_oidc" {
+  source  = "terraform-google-modules/github-actions-runners/google//modules/gh-oidc"
+  version = "~> 4.0"
+
+  project_id  = var.gcp_project_id
+  pool_id     = "example-pool"
+  provider_id = "example-gh-provider"
+
+  attribute_condition = "assertion.repository==\"ORG/REPO\""
+
+  sa_mapping = {
+    "${google_service_account.github_oidc_sa.account_id}" = {
+      sa_name   = google_service_account.github_oidc_sa.name
+      attribute = "attribute.repository/ORG/REPO"
+    }
+  }
+}
+
+```
+Replace `ORG`, `REPO`,  with respective values, to further harden the policy, you can add filter for your github runners IPs or other organization-specific requirements.
+
+Create S3 or GCS bucket in the same region
+
+Populate the following secrets and variable in the GitHub repo:
+
+####AWS:
+  Secrets:
+  ```
+    AWS_GH_OIDC_ROLE_ARN
+    AWS_TF_STATE_BUCKET
+    AWS_TF_STATE_KEY (optional)
+    ```
+    Variables:
+    ```
+    AWS_REGION
+    ```
+####GCP:
+  Secrets:
+  ```
+GCP_PROJECT_ID
+GCP_WORKLOAD_IDENTITY_PROVIDER
+GCP_SA_EMAIL
+GCP_TF_STATE_BUCKET
+```
+Variables: 
+```
+GCP_REGION
+```
+
+
+- Run respective workflows:
+    - for planning infrastructure: `terraform_plan_<CLOUD_PROVIDER>.yml`
+    - for provisioning infrastructure: `terraform_apply_<CLOUD_PROVIDER>.yml`
+    - for deploying ARK-release to infrastructure: `deploy_<CLOUD_PROVIDER>.yml`

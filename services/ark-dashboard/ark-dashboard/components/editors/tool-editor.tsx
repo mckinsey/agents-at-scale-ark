@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { HttpFields } from "../common/http-field";
 import { AgentFields } from "../common/agent-fields";
+import { Maximize2, Minimize2 } from "lucide-react";
 
 interface ToolSpec {
   name: string;
@@ -50,6 +51,8 @@ export function ToolEditor({
   const [description, setDescription] = useState("");
   const [inputSchema, setInputSchema] = useState("");
   const [annotations, setAnnotations] = useState("");
+  const [isInputSchemaExpanded, setIsInputSchemaExpanded] = useState(false);
+  const [isAnnotationsExpanded, setIsAnnotationsExpanded] = useState(false);
 
   // Additional fields state
   const [httpUrl, setHttpUrl] = useState("");
@@ -105,6 +108,8 @@ export function ToolEditor({
     setAnnotations("");
     setHttpUrl("");
     setSelectedAgent("");
+    setIsInputSchemaExpanded(false);
+    setIsAnnotationsExpanded(false);
     onSave(toolSpec);
   };
 
@@ -150,23 +155,106 @@ export function ToolEditor({
             />
           </div>
             <div className="grid gap-2">
-              <Label htmlFor="inputSchema">Input Schema (JSON)</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="inputSchema">Input Schema (JSON)</Label>
+                <div className="flex items-center gap-2">
+                  {inputSchema.length > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {inputSchema.length} characters
+                    </span>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsInputSchemaExpanded(!isInputSchemaExpanded)}
+                    className="h-8 px-2"
+                  >
+                    {isInputSchemaExpanded ? (
+                      <>
+                        <Minimize2 className="h-4 w-4 mr-1" />
+                        Collapse
+                      </>
+                    ) : (
+                      <>
+                        <Maximize2 className="h-4 w-4 mr-1" />
+                        Expand
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
               <Textarea
                 id="inputSchema"
                 value={inputSchema}
                 onChange={(e) => setInputSchema(e.target.value)}
                 placeholder='e.g., {"param": "value"}'
-                className="min-h-[100px]"
+                className={`transition-all duration-200 resize-none ${
+                  isInputSchemaExpanded 
+                    ? "min-h-[400px] max-h-[500px] overflow-y-auto" 
+                    : "min-h-[100px] max-h-[150px]"
+                }`}
+                style={{ 
+                  whiteSpace: 'pre-wrap', 
+                  wordWrap: 'break-word' 
+                }}
               />
+              {isInputSchemaExpanded && inputSchema.length > 0 && (
+                <div className="text-xs text-muted-foreground">
+                  {inputSchema.split('\n').length} lines
+                </div>
+              )}
             </div>
           <div className="grid gap-2">
-            <Label htmlFor="annotations">Annotations (JSON)</Label>
-            <Input
+            <div className="flex items-center justify-between">
+              <Label htmlFor="annotations">Annotations (JSON)</Label>
+              <div className="flex items-center gap-2">
+                {annotations.length > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {annotations.length} characters
+                  </span>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsAnnotationsExpanded(!isAnnotationsExpanded)}
+                  className="h-8 px-2"
+                >
+                  {isAnnotationsExpanded ? (
+                    <>
+                      <Minimize2 className="h-4 w-4 mr-1" />
+                      Collapse
+                    </>
+                  ) : (
+                    <>
+                      <Maximize2 className="h-4 w-4 mr-1" />
+                      Expand
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+            <Textarea
               id="annotations"
               value={annotations}
               onChange={(e) => setAnnotations(e.target.value)}
               placeholder='e.g., {"note": "important"}'
+              className={`transition-all duration-200 resize-none ${
+                isAnnotationsExpanded 
+                  ? "min-h-[400px] max-h-[500px] overflow-y-auto" 
+                  : "min-h-[100px] max-h-[150px]"
+              }`}
+              style={{ 
+                whiteSpace: 'pre-wrap', 
+                wordWrap: 'break-word' 
+              }}
             />
+            {isAnnotationsExpanded && annotations.length > 0 && (
+              <div className="text-xs text-muted-foreground">
+                {annotations.split('\n').length} lines
+              </div>
+            )}
           </div>
           {type === "http" && (
             <HttpFields url={httpUrl} setUrl={setHttpUrl} />

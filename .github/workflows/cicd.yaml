@@ -590,6 +590,15 @@ jobs:
           # Set basePath for GitHub Pages deployment using configurable variable
           NEXT_PUBLIC_BASE_PATH: ${{ vars.DOCS_SITE_BASE_PATH || '' }}
 
+      - name: Validate Internal Documentation Links
+        run: |
+          # Rebuild docs without base path for link checking
+          echo "Rebuilding docs without base path for link validation..."
+          npm run build
+          echo "Checking for broken links..."
+          npm run check-links
+        working-directory: docs
+
       - name: Upload Site Artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -671,19 +680,19 @@ jobs:
         run: |
           echo "=== Coverage Report Summary ==="
           echo
-          
+
           # Enumerate through all coverage artifacts
           for artifact_dir in coverage-artifacts/*; do
             if [ -d "$artifact_dir" ]; then
               artifact_name=$(basename "$artifact_dir")
               echo "$artifact_name:"
-              
+
               # Check for Go coverage files
               if find "$artifact_dir" -name "*.out" | grep -q .; then
                 coverage_file=$(find "$artifact_dir" -name "*.out" | head -1)
                 echo "  Processing Go coverage file: $(basename "$coverage_file")"
                 go tool cover -func="$coverage_file" 2>/dev/null | tail -1 || echo "  Go coverage processing failed (best effort)"
-              # Check for Python coverage files  
+              # Check for Python coverage files
               elif find "$artifact_dir" -name ".coverage" | grep -q .; then
                 coverage_file=$(find "$artifact_dir" -name ".coverage" | head -1)
                 coverage_dir=$(dirname "$coverage_file")
@@ -694,6 +703,14 @@ jobs:
               echo
             fi
           done
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./coverage-artifacts
+          fail_ci_if_error: false
+          verbose: true
 
   check-release:
     needs:

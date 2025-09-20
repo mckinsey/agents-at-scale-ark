@@ -1,0 +1,24 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "GithubOidcAuth",
+      "Effect": "Allow",
+      "Action": [
+        "sts:TagSession",
+        "sts:AssumeRoleWithWebIdentity"
+      ],
+      "Principal": {
+        "Federated": "arn:aws:iam::ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          "token.actions.githubusercontent.com:sub": [
+            "repo:ORG/REPO:REF"
+          ]
+        }
+      }
+    }
+    ]
+}

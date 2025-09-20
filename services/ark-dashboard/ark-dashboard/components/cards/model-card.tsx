@@ -47,8 +47,22 @@ export function ModelCard({
   );
   const isActive = agentsUsingModel.length > 0;
 
-  // Check if model has an error status
-  const hasError = model.status?.toLowerCase() === "error";
+  let bgColor = "bg-gray-100";
+  let textColor = "text-gray-800";
+  let statusText = "Pending";
+
+  switch (model.status) {
+    case "error":
+        bgColor = "bg-red-100";
+        textColor = "text-red-800";
+        statusText = "Error";
+        break;
+    case "ready":
+      bgColor = "bg-green-100";
+      textColor = "text-green-800";
+      statusText = "Ready";
+      break;
+  }
 
   // Get custom icon or default model icon
   const IconComponent = getCustomIcon(model.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], DASHBOARD_SECTIONS.models.icon);
@@ -116,16 +130,8 @@ export function ModelCard({
         footer={
           <div className="flex flex-row items-end w-full justify-between">
             <div className="w-full">{description}</div>
-            <div
-              className={`px-2 py-1 rounded-full text-xs font-medium ${
-                hasError
-                  ? "bg-red-100 text-red-800"
-                  : isActive
-                  ? "bg-green-100 text-green-800"
-                  : "bg-gray-100 text-gray-800"
-              }`}
-            >
-              {hasError ? "Error" : isActive ? "Active" : "Inactive"}
+            <div className={`px-2 py-1 rounded-full text-xs font-medium ${bgColor} ${textColor}`}>
+              {statusText}
             </div>
           </div>
         }

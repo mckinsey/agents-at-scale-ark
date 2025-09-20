@@ -1,14 +1,40 @@
 name: 'Plan infrastructure - GCP'
 
 on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+    branches: ['main']
+    paths:
+      - 'infrastructure/providers/gcp/**'
+      - '.github/workflows/terraform_plan_gcp.yml'
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
+  tfe-plan:
+    runs-on: ${{ vars.GH_RUNNER_LABEL }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Run a one-line script
-        run: echo Placeholder
+      - name: Authenticate to GCP (Workload Identity)
+        uses: google-github-actions/auth@v1
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - name: Terraform Validate & Plan (GCS backend)
+        uses: ./.github/actions/terraform-validate-and-plan
+        with:
+          working_directory: ./infrastructure/providers/gcp
+          backend: gcs
+          terraform_version: '1.13.1'
+          gcs_bucket: ${{ secrets.GCP_TF_STATE_BUCKET }}
+          gcs_prefix: ${{ secrets.GCP_TF_STATE_PREFIX_GCP }}
+          gcs_project: ${{ vars.GCP_PROJECT_ID }}
+          vars: -var="gcp_region=${{ vars.GCP_REGION }}" -var="gcp_project_id=${{ secrets.GCP_PROJECT_ID }}" -var="cluster_name=${{ vars.GCP_GKE_CLUSTER_NAME }}"
+          github_token: ${{ secrets.GITHUB_TOKEN }}

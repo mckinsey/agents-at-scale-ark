@@ -1,4 +1,5 @@
 export default {
+  'provisioning': 'Provisioning Cloud Infrastructure',
   'build-pipelines': 'Build Pipelines',
   'deploying-ark': 'Deploying ARK',
   'penetration-testing-reports': 'Penetration Testing Reports',
