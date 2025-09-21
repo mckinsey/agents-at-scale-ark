@@ -43,7 +43,9 @@ spec:
           metadata:
             name: context-enhanced-evaluation-model
           status:
-            phase: ready
+            conditions:
+            - type: ModelAvailable
+              status: "True"
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
