@@ -35,6 +35,14 @@ class EvaluationManager:
             logger.info("Registered LangfuseProvider")
         except ImportError as e:
             logger.debug(f"Could not register LangfuseProvider: {e}")
+
+        # Try to register RAGAS
+        try:
+            from ..oss_providers.ragas_provider import RagasProvider
+            self.register_oss_provider('ragas', RagasProvider)
+            logger.info("Registered RagasProvider")
+        except ImportError as e:
+            logger.debug(f"Could not register RagasProvider: {e}")
         
     
     def register_oss_provider(self, name: str, provider_class: type):

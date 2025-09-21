@@ -1,0 +1,63 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-query-ragas
+  namespace: default
+spec:
+  type: direct
+  description: "Test query for standalone RAGAS evaluation"
+  target:
+    type: agent
+    name: test-agent
+  config:
+    input: "What is the capital of France?"
+    output: "The capital of France is Paris."
+  evaluators:
+    - name: ragas-evaluator
+      # Use standalone RAGAS provider (no Langfuse dependencies)
+      parameters:
+        provider: "ragas"  # Route to standalone RagasProvider
+
+        # Azure OpenAI configuration
+        azure.api_key: "${AZURE_OPENAI_API_KEY}"
+        azure.endpoint: "${AZURE_OPENAI_ENDPOINT}"
+        azure.api_version: "2024-02-01"
+        azure.deployment_name: "gpt-4"
+        azure.embedding_deployment: "text-embedding-ada-002"
+
+        # Evaluation configuration
+        metrics: "relevance,correctness,faithfulness"
+        min-score: "0.8"
+        temperature: "0.1"
+
+---
+# Alternative configuration using OpenAI
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-query-ragas-openai
+  namespace: default
+spec:
+  type: direct
+  description: "Test query for RAGAS evaluation with OpenAI"
+  target:
+    type: agent
+    name: test-agent
+  config:
+    input: "Explain machine learning"
+    output: "Machine learning is a subset of AI that uses algorithms to learn patterns from data."
+  evaluators:
+    - name: ragas-openai-evaluator
+      parameters:
+        provider: "ragas"  # Route to standalone RagasProvider
+
+        # OpenAI configuration
+        openai.api_key: "${OPENAI_API_KEY}"
+        openai.base_url: "https://api.openai.com/v1"
+        openai.model: "gpt-4"
+        openai.embedding_model: "text-embedding-ada-002"
+
+        # Evaluation configuration
+        metrics: "relevance,correctness"
+        min-score: "0.7"
+        temperature: "0.0"
