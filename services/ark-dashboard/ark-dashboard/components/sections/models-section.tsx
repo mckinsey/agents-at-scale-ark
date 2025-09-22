@@ -4,7 +4,7 @@ import type React from "react"
 import { useState, useEffect, forwardRef, useImperativeHandle } from "react"
 import { toast } from "@/components/ui/use-toast"
 import { ModelEditor } from "@/components/editors"
-import { modelsService, agentsService, type Model, type Agent, type ModelCreateRequest, type ModelUpdateRequest } from "@/lib/services"
+import { modelsService, type Model, type ModelCreateRequest, type ModelUpdateRequest } from "@/lib/services"
 import { ModelCard } from "@/components/cards"
 import { useDelayedLoading } from "@/lib/hooks"
 import { ModelRow } from "@/components/rows/model-row"
@@ -16,7 +16,6 @@ interface ModelsSectionProps {
 
 export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSectionProps>(function ModelsSection({ namespace }, ref) {
   const [models, setModels] = useState<Model[]>([])
-  const [agents, setAgents] = useState<Agent[]>([])
   const [modelEditorOpen, setModelEditorOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const showLoading = useDelayedLoading(loading)
@@ -35,12 +34,8 @@ export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSec
     const loadData = async () => {
       setLoading(true)
       try {
-        const [modelsData, agentsData] = await Promise.all([
-          modelsService.getAll(namespace),
-          agentsService.getAll(namespace)
-        ])
+        const modelsData = await modelsService.getAll(namespace)
         setModels(modelsData)
-        setAgents(agentsData)
       } catch (error) {
         console.error("Failed to load data:", error)
         toast({
@@ -101,12 +96,8 @@ export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSec
         description: `Successfully deleted ${model.name}`
       })
       // Reload data
-      const [updatedModels, updatedAgents] = await Promise.all([
-        modelsService.getAll(namespace),
-        agentsService.getAll(namespace)
-      ])
+      const updatedModels = await modelsService.getAll(namespace)
       setModels(updatedModels)
-      setAgents(updatedAgents)
     } catch (error) {
       toast({
         variant: "destructive",
@@ -138,10 +129,9 @@ export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSec
           {showCompactView && (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pb-6">
               {models.map((model) => (
-                <ModelCard 
-                  key={model.id} 
-                  model={model} 
-                  agents={agents} 
+                <ModelCard
+                  key={model.id}
+                  model={model}
                   onUpdate={handleSaveModel}
                   onDelete={handleDeleteModel}
                   namespace={namespace}
@@ -154,9 +144,8 @@ export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSec
             <div className="flex flex-col gap-3">
               {models.map((model) => (
                 <ModelRow
-                  key={model.id} 
-                  model={model} 
-                  agents={agents} 
+                  key={model.id}
+                  model={model}
                   onUpdate={handleSaveModel}
                   onDelete={handleDeleteModel}
                   namespace={namespace}

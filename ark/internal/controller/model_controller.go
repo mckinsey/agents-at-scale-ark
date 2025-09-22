@@ -53,42 +53,62 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		if err := r.updateStatus(ctx, &model); err != nil {
 			return ctrl.Result{}, err
 		}
-		// Return early to avoid double reconciliation, let the status update trigger next reconcile
-		return ctrl.Result{}, nil
+		// Return with poll interval to avoid immediate re-reconciliation
+		return ctrl.Result{RequeueAfter: model.Spec.PollInterval.Duration}, nil
 	}
 
-	// Probe the model to test whether it is available.
+	return r.processModel(ctx, model)
+}
+
+func (r *ModelReconciler) processModel(ctx context.Context, model arkv1alpha1.Model) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+	log.V(1).Info("model probing", "model", model.Name, "namespace", model.Namespace)
+
+	recorder := genai.NewModelRecorder(&model, r.Recorder)
+
+	modelTracker := genai.NewOperationTracker(recorder, ctx, "ModelProbe", model.Name, map[string]string{
+		"namespace": model.Namespace,
+		"modelName": model.Spec.Model.Value,
+	})
+
+	// Check current condition
+	currentCondition := meta.FindStatusCondition(model.Status.Conditions, ModelAvailable)
+
+	// Probe the model to test whether it is available
 	result := r.probeModel(ctx, model)
 
+	// Determine new status based on probe result
+	var newStatus metav1.ConditionStatus
+	var reason, message string
+
 	if !result.Available {
-		//	Log the failure with a detailed error message. This is still 'info'
-		//	as probe failures are expected - the model events and conditions
-		//	will make the error clear to the user.
+		newStatus = metav1.ConditionFalse
+		reason = "ProbeFailed"
+		message = result.Message
+		modelTracker.Fail(result.DetailedError)
+
+		// Log the failure with detailed error for debugging
 		log.Info("model probe failed",
 			"model", model.Name,
 			"status", result.Message,
 			"details", result.DetailedError)
+	} else {
+		newStatus = metav1.ConditionTrue
+		reason = "Available"
+		message = result.Message
+		modelTracker.Complete("probed")
+	}
 
-		//	Update the condition and events with the (stable) error message.
-		r.setCondition(&model, ModelAvailable, metav1.ConditionFalse, "ModelProbeFailed", result.Message)
-		r.Recorder.Event(&model, corev1.EventTypeWarning, "ModelProbeFailed", result.Message)
-
-		//	Update the status and re-attempt after the poll interval.
+	// Only update if status actually changed
+	if currentCondition == nil || currentCondition.Status != newStatus || currentCondition.Reason != reason {
+		log.Info("model status changed", "model", model.Name, "available", newStatus)
+		r.setCondition(&model, ModelAvailable, newStatus, reason, message)
 		if err := r.updateStatus(ctx, &model); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: model.Spec.PollInterval.Duration}, nil
 	}
 
-	// Success case - model is available
-	r.setCondition(&model, ModelAvailable, metav1.ConditionTrue, "Available", result.Message)
-	r.Recorder.Event(&model, corev1.EventTypeNormal, "ModelProbeSucceeded", result.Message)
-
-	if err := r.updateStatus(ctx, &model); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// Continue polling at regular interval
+	// Always requeue with poll interval for continuous health checking
 	return ctrl.Result{RequeueAfter: model.Spec.PollInterval.Duration}, nil
 }
 

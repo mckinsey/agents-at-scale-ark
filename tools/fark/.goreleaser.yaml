@@ -35,7 +35,7 @@ archives:
     ids:
       - fark
     name_template: >-
-      fark-cli_
+      fark_
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
@@ -44,9 +44,6 @@ archives:
     format_overrides:
       - goos: windows
         format: zip
-    files:
-      - README.md
-      - LICENSE*
 
 checksum:
   name_template: 'checksums.txt'
@@ -74,36 +71,3 @@ changelog:
       order: 1
     - title: Others
       order: 999
-
-release:
-  github:
-    owner: McK-Internal
-    name: agents-at-scale
-  name_template: "Ark CLI {{.Tag}}"
-  header: |
-    ## Ark CLI Release {{.Tag}}
-    
-    This release contains the Ark CLI binary for multiple platforms.
-    
-    ### Installation
-    
-    Download the appropriate binary for your platform from the assets below.
-    
-    #### Linux/macOS
-    ```bash
-    # Download and install (replace URL with actual release URL)
-    curl -L -o fark https://github.com/McK-Internal/agents-at-scale/releases/download/{{.Tag}}/fark-cli_Linux_x86_64.tar.gz
-    tar -xzf fark-cli_Linux_x86_64.tar.gz
-    chmod +x fark
-    sudo mv fark /usr/local/bin/
-    ```
-    
-    #### Windows
-    Download the `fark-cli_Windows_x86_64.zip` file and extract the `fark.exe` binary.
-    
-  footer: |
-    ## Checksums
-    
-    All checksums are available in the `checksums.txt` file.
-    
-    **Full Changelog**: https://github.com/McK-Internal/agents-at-scale/compare/{{.PreviousTag}}...{{.Tag}}
