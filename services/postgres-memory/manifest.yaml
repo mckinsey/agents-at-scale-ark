@@ -1,6 +1,0 @@
-name: postgres-memory
-description: PostgreSQL-backed memory service for ARK platform
-supports:
-  - install
-  - uninstall
-  - dev

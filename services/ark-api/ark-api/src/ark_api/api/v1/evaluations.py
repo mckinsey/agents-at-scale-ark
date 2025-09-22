@@ -1,17 +1,13 @@
 """API routes for Evaluation resources."""
 
-from fastapi import APIRouter, HTTPException, Query
-from kubernetes import client
-from kubernetes.client.rest import ApiException
+from fastapi import APIRouter, Query
 from ark_sdk.models.evaluation_v1alpha1 import EvaluationV1alpha1
 from ...core.constants import GROUP
 from ark_sdk.client import with_ark_client
 from typing import Union
 
 from ...models.evaluations import (
-    EvaluationResponse,
     EvaluationListResponse,
-    EnhancedEvaluationResponse,
     EnhancedEvaluationListResponse,
     EvaluationCreateRequest,
     EvaluationUpdateRequest,

@@ -2460,6 +2460,10 @@ export interface components {
             /** Evaluators */
             evaluators?: components["schemas"]["Memory"][] | null;
             evaluatorSelector?: components["schemas"]["ark_api__models__queries__LabelSelector"] | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * QueryDetailResponse
@@ -2491,6 +2495,10 @@ export interface components {
             /** Evaluators */
             evaluators?: components["schemas"]["Memory"][] | null;
             evaluatorSelector?: components["schemas"]["ark_api__models__queries__LabelSelector"] | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
             /** Status */
             status?: {
                 [key: string]: unknown;

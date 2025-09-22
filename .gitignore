@@ -6,8 +6,7 @@
 scratch.md
 .ark.env
 .env
-services/fark/fark
-services/ark/ark
+tools/fark/fark
 services/a2agw/a2agw
 .artifacts/
 local.mk
