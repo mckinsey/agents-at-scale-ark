@@ -1,7 +1,6 @@
 """API routes for Query resources."""
 
 from datetime import datetime
-from typing import Optional
 from fastapi import APIRouter
 from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
 from ark_sdk.models.query_v1alpha1_spec import QueryV1alpha1Spec

@@ -44,9 +44,9 @@ Mechanically, the process works like this:
 # Changes are made in the ark CRDs at:
 #   config/crd/bases/*.yaml:
 
-# The Python SDK is regenerated from the CRDs. The CRDs are converted into 
+# The Python SDK is regenerated from the CRDs. The CRDs are converted into
 # an OpenAI spec and then this regenerated the ark sdk types:
-make ark-sdk
+make ark-sdk-build
 
 # Consumers of the ark api update their code. When a CRD change is made and the
 # sdk is regenerated, the ark-api models must be updated (manually).
@@ -63,6 +63,21 @@ npm run generate:api
 # This generate:
 # lib/api/generated/types.ts
 ```
+
+## Adding Custom SDK Functionality
+
+The ARK SDK supports overlay files for adding custom functionality beyond generated types:
+
+1. **Add overlay files**: Place custom Python modules in `lib/ark-sdk/gen_sdk/overlay/python/ark_sdk/`
+2. **Rebuild SDK**: Run `make ark-sdk-build` to include overlay files in the wheel
+3. **Automatic rebuilds**: The build system tracks overlay files and rebuilds when they change
+
+Example overlay files include:
+- `k8s.py` - Kubernetes client utilities
+- `client.py` - ARK client wrapper
+- `streaming_config.py` - Streaming configuration utilities
+
+Overlay files are copied into the generated SDK during build and packaged in the wheel.
 
 ## Usage
 
