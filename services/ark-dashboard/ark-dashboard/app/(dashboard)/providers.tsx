@@ -1,7 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import ChatManager from "@/components/chat-manager";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -20,15 +20,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <NamespaceProvider>
-        <ChatProvider>
-          <SidebarProvider>
-            <AppSidebar />
-            <SidebarInset>{children}</SidebarInset>
-          </SidebarProvider>
-          <ChatManager />
-        </ChatProvider>
-      </NamespaceProvider>
+      <Suspense fallback={<div className="flex h-full items-center justify-center">Loading...</div>}>
+        <NamespaceProvider>
+          <ChatProvider>
+            <SidebarProvider>
+              <AppSidebar />
+              <SidebarInset>{children}</SidebarInset>
+            </SidebarProvider>
+            <ChatManager />
+          </ChatProvider>
+        </NamespaceProvider>
+      </Suspense>
     </QueryClientProvider>
   );
 }
