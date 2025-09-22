@@ -56,6 +56,7 @@ def query_to_response(query: dict) -> QueryResponse:
 def query_to_detail_response(query: dict) -> QueryDetailResponse:
     """Convert a Kubernetes query object to detailed response model."""
     spec = query["spec"]
+    metadata = query["metadata"]
     
     # Get query type and determine input field
     query_type = spec.get('type', 'user')
@@ -65,8 +66,8 @@ def query_to_detail_response(query: dict) -> QueryDetailResponse:
         input_value = spec.get("messages", [])
     
     return QueryDetailResponse(
-        name=query["metadata"]["name"],
-        namespace=query["metadata"]["namespace"],
+        name=metadata["name"],
+        namespace=metadata["namespace"],
         type=query_type,
         input=input_value,
         memory=spec.get("memory"),
