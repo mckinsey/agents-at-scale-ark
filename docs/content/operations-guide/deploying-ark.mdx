@@ -12,7 +12,7 @@ cd agents-at-scale-ark
 make quickstart
 ```
 
-This builds the containers locally and deploys them to a local cluster. More details are in the [Getting Started](/getting-started) guide. 
+This builds the containers locally and deploys them to a local cluster. More details are in the [Getting Started](../../quickstart) guide. 
 
 ### Deploying only ark-controller and fark
 
@@ -165,7 +165,7 @@ kubectl get pod -n ark-system -l control-plane=ark-controller \
 
 Before using GitHub Actions to deploy ARK to a cluster, platform administrators need to set up the required RBAC permissions.
 
-ARK includes a standard deployer role in [`ark/config/rbac/ark-deployer-role.yaml`](https://github.com/McK-Internal/agents-at-scale/blob/main/ark/config/rbac/ark-deployer-role.yaml) that defines the minimum permissions required for deployments. This role allows creating namespaces, deploying services, installing CRDs, and configuring webhooks.
+ARK includes a standard deployer role in [`ark/config/rbac/ark-deployer-role.yaml`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/ark/config/rbac/ark-deployer-role.yaml) that defines the minimum permissions required for deployments. This role allows creating namespaces, deploying services, installing CRDs, and configuring webhooks.
 
 ### Setup Process
 
@@ -178,7 +178,7 @@ kubectl apply -f ark/config/rbac/ark-deployer-role.yaml
 
 # Add the GitHub repository to the role. This allows GitHub workflows to
 # deploy Ark to any cluster they have OIDC access to.
-./scripts/deploy/bind-deployer-role.sh "McK-Internal/agents-at-scale"
+./scripts/deploy/bind-deployer-role.sh "mckinsey/agents-at-scale-ark"
 ```
 
 This creates a ClusterRoleBinding that connects your GitHub repository identity (via OIDC) to the deployment permissions.

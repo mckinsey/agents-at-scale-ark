@@ -51,8 +51,42 @@ describe('MemoryStore', () => {
     test('should validate message size', () => {
       const smallStore = new MemoryStore(100); // 100 byte limit
       const largeMessage = 'x'.repeat(200);
-      
+
       expect(() => smallStore.addMessage('test', largeMessage)).toThrow('Message exceeds maximum size');
+    });
+
+    test('should use MAX_MESSAGE_SIZE_MB env var when set', () => {
+      const originalEnv = process.env.MAX_MESSAGE_SIZE_MB;
+      process.env.MAX_MESSAGE_SIZE_MB = '1'; // 1MB limit
+
+      const envStore = new MemoryStore();
+      const largeMessage = 'x'.repeat(2 * 1024 * 1024); // 2MB message
+
+      expect(() => envStore.addMessage('test', largeMessage)).toThrow('Message exceeds maximum size');
+
+      // Restore original env
+      if (originalEnv === undefined) {
+        delete process.env.MAX_MESSAGE_SIZE_MB;
+      } else {
+        process.env.MAX_MESSAGE_SIZE_MB = originalEnv;
+      }
+    });
+
+    test('should use default 10MB when MAX_MESSAGE_SIZE_MB not set', () => {
+      const originalEnv = process.env.MAX_MESSAGE_SIZE_MB;
+      delete process.env.MAX_MESSAGE_SIZE_MB;
+
+      const defaultStore = new MemoryStore();
+      const nineeMbMessage = 'x'.repeat(9 * 1024 * 1024); // 9MB - should pass
+      const elevenMbMessage = 'x'.repeat(11 * 1024 * 1024); // 11MB - should fail
+
+      expect(() => defaultStore.addMessage('test1', nineeMbMessage)).not.toThrow();
+      expect(() => defaultStore.addMessage('test2', elevenMbMessage)).toThrow('Message exceeds maximum size');
+
+      // Restore original env
+      if (originalEnv !== undefined) {
+        process.env.MAX_MESSAGE_SIZE_MB = originalEnv;
+      }
     });
   });
 

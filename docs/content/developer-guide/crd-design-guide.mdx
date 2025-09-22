@@ -307,7 +307,7 @@ type ResourceStatus struct {
 ### Phase Values
 Follow Kubernetes conventions for status phases:
 - **Job-like resources** (Query, Evaluation): `pending`, `running`, `succeeded`, `failed`
-- **Service-like resources** (Agent, Model): `pending`, `ready`, `error`
+- **Service-like resources** (Agent): `pending`, `ready`, `error`
 - **Consider standard conditions**: Use `Conditions []metav1.Condition` for detailed status when appropriate
 
 ## Resource Structure Template

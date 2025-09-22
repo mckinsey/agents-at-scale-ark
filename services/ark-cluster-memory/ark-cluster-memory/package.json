@@ -1,13 +1,13 @@
 {
   "name": "ark-cluster-memory",
-  "version": "0.1.31",
-  "description": "In-memory Kafka-like message broker for ARK cluster",
-  "main": "dist/server.js",
+  "version": "0.1.33",
+  "description": "Ark in-cluster memory for memory and streaming data",
+  "main": "dist/main.js",
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "dev": "tsx watch --clear-screen=false src/server.ts",
-    "start": "node dist/server.js",
+    "dev": "tsx watch --clear-screen=false src/main.ts",
+    "start": "node dist/main.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

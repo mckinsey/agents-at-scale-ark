@@ -71,7 +71,7 @@ export function createMemoryRouter(memory: MemoryStore): Router {
     }
   });
 
-  // GET /messages - returns messages (original implementation for ark-api compatibility)
+  // GET /messages - returns messages
   router.get('/messages', (req, res) => {
     try {
       const session_id = req.query.session_id as string;

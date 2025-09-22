@@ -73,10 +73,6 @@
         },
         {
           "type": "generic",
-          "path": "services/postgres-memory/version.txt"
-        },
-        {
-          "type": "generic",
           "path": "ark/version.txt"
         },
         {
@@ -165,13 +161,18 @@
         },
         {
           "type": "yaml",
-          "path": "services/postgres-memory/chart/Chart.yaml",
+          "path": "services/ark-cluster-memory/chart/Chart.yaml",
           "jsonpath": "$.version"
         },
         {
           "type": "yaml",
-          "path": "services/postgres-memory/chart/Chart.yaml",
+          "path": "services/ark-cluster-memory/chart/Chart.yaml",
           "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "json",
+          "path": "services/ark-cluster-memory/ark-cluster-memory/package.json",
+          "jsonpath": "$.version"
         }
       ]
     }

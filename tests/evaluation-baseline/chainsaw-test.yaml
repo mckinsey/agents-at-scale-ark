@@ -27,7 +27,9 @@ spec:
           metadata:
             name: test-baseline-model
           status:
-            phase: ready
+            conditions:
+            - type: ModelAvailable
+              status: "True"
     - assert:
         resource:
           apiVersion: v1

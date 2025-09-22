@@ -96,6 +96,7 @@ class QueryCreateRequest(BaseModel):
     cancel: Optional[bool] = None
     evaluators: Optional[List[Memory]] = None
     evaluatorSelector: Optional[LabelSelector] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class QueryUpdateRequest(BaseModel):

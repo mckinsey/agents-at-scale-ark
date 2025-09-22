@@ -24,9 +24,9 @@ const (
 	UserAgent             = "ark-memory-client/1.0"
 )
 
-// getMemoryTimeout reads ARK_MEMORY_HTTP_TIMEOUT env var or returns default
+// getMemoryTimeout reads ARK_MEMORY_HTTP_TIMEOUT_SECONDS env var or returns default
 func getMemoryTimeout() time.Duration {
-	if timeoutStr := os.Getenv("ARK_MEMORY_HTTP_TIMEOUT"); timeoutStr != "" {
+	if timeoutStr := os.Getenv("ARK_MEMORY_HTTP_TIMEOUT_SECONDS"); timeoutStr != "" {
 		if timeoutSec, err := strconv.Atoi(timeoutStr); err == nil && timeoutSec > 0 {
 			logf.Log.V(1).Info("Using custom memory HTTP timeout", "seconds", timeoutSec)
 			return time.Duration(timeoutSec) * time.Second

@@ -11,10 +11,12 @@ export class MemoryStore {
   private readonly memoryFilePath?: string;
   public eventEmitter: EventEmitter = new EventEmitter();
 
-  constructor(maxMessageSize = 10 * 1024 * 1024) {
-    this.maxMessageSize = maxMessageSize;
+  constructor(maxMessageSize?: number) {
+    // Use MAX_MESSAGE_SIZE_MB env var or default to 10MB
+    const maxSizeMB = process.env.MAX_MESSAGE_SIZE_MB ? parseInt(process.env.MAX_MESSAGE_SIZE_MB, 10) : 10;
+    this.maxMessageSize = maxMessageSize ?? (maxSizeMB * 1024 * 1024);
     this.memoryFilePath = process.env.MEMORY_FILE_PATH;
-    
+
     this.loadFromFile();
   }
 

@@ -1,0 +1,34 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluation
+metadata:
+  name: test-context-enhanced-evaluation
+spec:
+  type: query
+  config:
+    queryRef:
+      name: context-enhanced-query
+      namespace: ($namespace)
+  evaluator:
+    name: context-enhanced-evaluator
+    parameters:
+    - name: context
+      value: |
+        Customer Profile: Associated British Foods PLC
+        Industry: Food processing and retail, Founded: 1935
+        Key Markets: UK, Europe, Asia, Africa
+        Primary Business Segments: Grocery, Sugar, Agriculture, Retail
+
+        Risk Assessment Data:
+        Credit Rating: A-, Regulatory Compliance: Excellent
+        Market Position: Leading multinational
+        Financial Stability: Strong cash flow and balance sheet
+
+        Controller Information:
+        Chairman: Michael McLintock (pending nationality verification)
+        CEO: George Weston (pending residency documentation)
+        Independent Directors: Multiple with diverse backgrounds
+        Screening Status: All cleared with 10/10 confidence scores
+    - name: scope
+      value: "relevance,accuracy,context_precision,context_recall"
+    - name: min-score
+      value: "0.6"

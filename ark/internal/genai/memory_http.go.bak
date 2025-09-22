@@ -453,3 +453,17 @@ func (m *HTTPMemory) Close() error {
 	}
 	return nil
 }
+
+// NotifyCompletion notifies the memory service that the query has completed
+// This is part of the streaming API which will be fully implemented in a future release
+func (m *HTTPMemory) NotifyCompletion(ctx context.Context) error {
+	// No-op for now - will be implemented when streaming is fully supported
+	return nil
+}
+
+// StreamChunk sends a streaming chunk to the memory service
+// This is part of the streaming API which will be fully implemented in a future release
+func (m *HTTPMemory) StreamChunk(ctx context.Context, chunk interface{}) error {
+	// No-op for now - will be implemented when streaming is fully supported
+	return nil
+}

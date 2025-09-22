@@ -27,7 +27,9 @@ spec:
           metadata:
             name: model-token-test
           status:
-            phase: ready
+            conditions:
+            - type: ModelAvailable
+              status: "True"
 
   - name: wait-for-query-completion
     try:

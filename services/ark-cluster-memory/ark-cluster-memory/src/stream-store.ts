@@ -47,6 +47,10 @@ export class StreamStore {
     return this.completedStreams.has(queryID);
   }
 
+  hasStream(queryID: string): boolean {
+    return this.streamChunks.has(queryID);
+  }
+
   subscribeToChunks(queryID: string, callback: (chunk: any) => void): () => void {
     const listener = (chunk: any) => callback(chunk);
     this.eventEmitter.on(`chunk:${queryID}`, listener);

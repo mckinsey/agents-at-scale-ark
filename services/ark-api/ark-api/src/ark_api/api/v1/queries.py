@@ -133,6 +133,14 @@ async def create_query(
             }
         
         # Create the QueryV1alpha1 object
+        metadata = {
+            "name": query.name,
+            "namespace": namespace
+        }
+        # The incoming query may contain additional metadata such as annotations (e.g. streaming annotation)
+        if query.metadata:
+            metadata.update(query.metadata)
+
         query_resource = QueryV1alpha1(
             metadata=metadata,
             spec=QueryV1alpha1Spec(**spec)

@@ -58,13 +58,22 @@ kubectl port-forward -n default svc/ark-dashboard 3000:3000
 - `ark-controller`: restarts container on save
 
 ## When you change CRDs
+
+Regenerate the manifests from the kubebuilder annotations:
+
 ```bash
 cd ark/
 make manifests
 kubectl apply -f config/crd/bases/ark.mckinsey.com_queries.yaml
-# Then restart the controller
-make deploy
 ```
+
+Regenerate the Ark SDK with the updated resource types based on the CRDS:
+
+```bash
+TODO snippet
+```
+
+More details on how the Ark SDK is generated and used is at the [Ark SDK Developer Guide](/developer-guide/ark-sdk).
 
 ## Build/deploy production images
 ```bash

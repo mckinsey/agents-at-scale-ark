@@ -23,3 +23,4 @@ LOCALHOST_GATEWAY_PORT_ANNOTATION = ARK_PREFIX + "localhost-gateway-port"
 
 # Streaming annotations
 STREAMING_ENABLED_ANNOTATION = ARK_PREFIX + "streaming-enabled"
+MEMORY_EVENT_STREAM_ENABLED_ANNOTATION = ARK_PREFIX + "memory-event-stream-enabled"

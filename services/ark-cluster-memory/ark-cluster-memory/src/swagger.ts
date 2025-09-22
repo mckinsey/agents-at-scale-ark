@@ -1,12 +1,12 @@
 import swaggerJsdoc from 'swagger-jsdoc';
 import { Express } from 'express';
 import swaggerUi from 'swagger-ui-express';
-import { version } from '../package.json';
 
 const HOST = process.env.HOST || '0.0.0.0';
 const PORT = process.env.PORT || '8080';
 
-const options: swaggerJsdoc.Options = {
+export function setupSwagger(app: Express, version: string): void {
+  const options: swaggerJsdoc.Options = {
   definition: {
     openapi: '3.0.0',
     info: {
@@ -38,11 +38,10 @@ const options: swaggerJsdoc.Options = {
   apis: process.env.NODE_ENV === 'production' 
     ? ['./dist/**/*.js']
     : ['./src/**/*.ts'],
-};
+  };
 
-export const specs = swaggerJsdoc(options);
+  const specs = swaggerJsdoc(options);
 
-export function setupSwagger(app: Express): void {
   // Serve OpenAPI spec as JSON
   app.get('/openapi.json', (req, res) => {
     res.setHeader('Content-Type', 'application/json');

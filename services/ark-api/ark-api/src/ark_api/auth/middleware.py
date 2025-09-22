@@ -14,7 +14,6 @@ Note: JWKS URL is automatically derived from the issuer URL
 
 import logging
 import os
-import jwt
 from fastapi import Request, APIRouter
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -24,7 +23,6 @@ from .config import is_route_authenticated
 # Import from ark_sdk
 from ark_sdk.auth.exceptions import TokenValidationError
 from ark_sdk.auth.validator import TokenValidator
-from ark_sdk.auth.config import AuthConfig
 
 # Re-export for convenience
 __all__ = ['AuthMiddleware', 'TokenValidationError']

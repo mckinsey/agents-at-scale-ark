@@ -48,9 +48,6 @@ export function ModelRow({
   );
   const isActive = agentsUsingModel.length > 0;
 
-  // Check if model has an error status
-  const hasError = model.status === "error";
-
   // Get custom icon or default model icon
   const IconComponent = getCustomIcon(
     model.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
@@ -61,18 +58,19 @@ export function ModelRow({
   const getStatusComponent = () => {
     let bgColor = "bg-gray-100";
     let textColor = "text-gray-800";
-    let statusText = "Inactive";
+    let statusText = "Pending";
 
-    if (isActive && !hasError) {
-      bgColor = "bg-green-100";
-      textColor = "text-green-800";
-      statusText = "Active";
-    }
-
-    if (hasError) {
-      bgColor = "bg-red-100";
-      textColor = "text-red-800";
-      statusText = "Error";
+    switch (model.status) {
+      case "error":
+          bgColor = "bg-red-100";
+          textColor = "text-red-800";
+          statusText = "Error";
+          break;
+      case "ready":
+        bgColor = "bg-green-100";
+        textColor = "text-green-800";
+        statusText = "Ready";
+        break;
     }
 
     return (
