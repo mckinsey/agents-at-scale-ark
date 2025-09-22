@@ -289,7 +289,7 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		}
 	}
 
-	tools := NewToolRegistry()
+	tools := NewToolRegistry(crd.Annotations)
 
 	if err := tools.registerTools(ctx, k8sClient, crd); err != nil {
 		return nil, err

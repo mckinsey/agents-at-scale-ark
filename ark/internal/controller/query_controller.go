@@ -721,7 +721,7 @@ func (r *QueryReconciler) executeTool(ctx context.Context, query arkv1alpha1.Que
 		Type: "function",
 	}
 
-	toolRegistry := genai.NewToolRegistry()
+	toolRegistry := genai.NewToolRegistry(query.Annotations)
 	defer func() {
 		if err := toolRegistry.Close(); err != nil {
 			// Log the error but don't fail the request since tool execution already succeeded
@@ -732,7 +732,8 @@ func (r *QueryReconciler) executeTool(ctx context.Context, query arkv1alpha1.Que
 
 	toolDefinition := genai.CreateToolFromCRD(&toolCRD)
 	// Pass the tool registry's MCP pool to CreateToolExecutor
-	executor, err := genai.CreateToolExecutor(ctx, impersonatedClient, &toolCRD, query.Namespace, toolRegistry.GetMCPPool())
+	mcpPool, mcpSessionSettings := toolRegistry.GetMCPPool()
+	executor, err := genai.CreateToolExecutor(ctx, impersonatedClient, &toolCRD, query.Namespace, mcpPool, mcpSessionSettings)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tool executor: %w", err)
 	}

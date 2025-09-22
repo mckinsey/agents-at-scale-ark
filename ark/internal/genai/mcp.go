@@ -5,14 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"strings"
 	"syscall"
 	"time"
 
-	mcpclient "github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/client/transport"
-	"github.com/mark3labs/mcp-go/mcp"
-
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -22,43 +20,35 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+type MCPSessionSettings = []*mcp.CallToolParams
+
 type MCPClient struct {
 	baseURL string
 	headers map[string]string
-	client  *mcpclient.Client
+	client  *mcp.ClientSession
 }
 
 func NewMCPClient(ctx context.Context, baseURL string, headers map[string]string, transportType string) (*MCPClient, error) {
 	return createMCPClientWithRetry(ctx, baseURL, headers, transportType, 5, 120*time.Second)
 }
 
-func createSSEClient(baseURL string, headers map[string]string) (*mcpclient.Client, error) {
-	var opts []transport.ClientOption
-	if len(headers) > 0 {
-		opts = append(opts, transport.WithHeaders(headers))
+func createSSEClient(baseURL string, headers map[string]string) (*mcp.Client, error) {
+	// SSE transport not yet supported in official SDK
+	// Fall back to HTTP streamable transport
+	return createHTTPClient(baseURL, headers)
+}
+
+func createHTTPClient(baseURL string, headers map[string]string) (*mcp.Client, error) {
+	impl := &mcp.Implementation{
+		Name:    "ark-controller",
+		Version: "1.0.0",
 	}
-	mcpClient, err := mcpclient.NewSSEMCPClient(baseURL, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create SSE MCP client for %s: %w", baseURL, err)
-	}
+
+	mcpClient := mcp.NewClient(impl, nil)
 	return mcpClient, nil
 }
 
-func createHTTPClient(baseURL string, headers map[string]string) (*mcpclient.Client, error) {
-	var opts []transport.StreamableHTTPCOption
-
-	if len(headers) > 0 {
-		opts = append(opts, transport.WithHTTPHeaders(headers))
-	}
-
-	mcpClient, err := mcpclient.NewStreamableHttpClient(baseURL, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create MCP client for %s: %w", baseURL, err)
-	}
-	return mcpClient, nil
-}
-
-func createMCPClientByTransport(baseURL string, headers map[string]string, transportType string) (*mcpclient.Client, error) {
+func createMCPClientByTransport(baseURL string, headers map[string]string, transportType string) (*mcp.Client, error) {
 	switch transportType {
 	case "sse":
 		return createSSEClient(baseURL, headers)
@@ -82,26 +72,53 @@ func performBackoff(ctx context.Context, attempt int, baseURL string) error {
 	}
 }
 
-func attemptMCPConnection(ctx, connectCtx context.Context, mcpClient *mcpclient.Client, baseURL string) error {
-	log := logf.FromContext(ctx)
-	if err := mcpClient.Start(ctx); err != nil {
-		if isRetryableError(err) {
-			log.V(1).Info("retryable error starting MCP transport", "error", err)
-			return err
-		}
-		return fmt.Errorf("failed to start MCP transport for %s: %w", baseURL, err)
+func createTransport(baseURL string, headers map[string]string) mcp.Transport {
+	// Create HTTP client with headers
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
 	}
 
-	_, err := mcpClient.Initialize(connectCtx, mcp.InitializeRequest{})
+	// If we have headers, wrap the transport
+	if len(headers) > 0 {
+		httpClient.Transport = &headerTransport{
+			headers: headers,
+			base:    http.DefaultTransport,
+		}
+	}
+
+	return &mcp.StreamableClientTransport{
+		Endpoint:   baseURL,
+		HTTPClient: httpClient,
+		MaxRetries: 5,
+	}
+}
+
+type headerTransport struct {
+	headers map[string]string
+	base    http.RoundTripper
+}
+
+func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	for k, v := range t.headers {
+		req.Header.Set(k, v)
+	}
+	return t.base.RoundTrip(req)
+}
+
+func attemptMCPConnection(ctx, connectCtx context.Context, mcpClient *mcp.Client, baseURL string, headers map[string]string) (*mcp.ClientSession, error) {
+	log := logf.FromContext(ctx)
+
+	transport := createTransport(baseURL, headers)
+	session, err := mcpClient.Connect(connectCtx, transport, nil)
 	if err != nil {
 		if isRetryableError(err) {
-			log.V(1).Info("retryable error initializing MCP client", "error", err)
-			return err
+			log.V(1).Info("retryable error connecting MCP client", "error", err)
+			return nil, err
 		}
-		return fmt.Errorf("failed to initialize MCP client for %s: transport error: %w", baseURL, err)
+		return nil, fmt.Errorf("failed to connect MCP client for %s: %w", baseURL, err)
 	}
 
-	return nil
+	return session, nil
 }
 
 func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[string]string, transportType string, maxRetries int, timeout time.Duration) (*MCPClient, error) {
@@ -116,6 +133,7 @@ func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[s
 	defer cancel()
 
 	var lastErr error
+	var session *mcp.ClientSession
 	for attempt := range maxRetries {
 		if attempt > 0 {
 			if err := performBackoff(connectCtx, attempt, baseURL); err != nil {
@@ -123,13 +141,13 @@ func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[s
 			}
 		}
 
-		err := attemptMCPConnection(ctx, connectCtx, mcpClient, baseURL)
+		session, err = attemptMCPConnection(ctx, connectCtx, mcpClient, baseURL, headers)
 		if err == nil {
 			log.Info("MCP client connected successfully", "server", baseURL, "attempts", attempt+1)
 			return &MCPClient{
 				baseURL: baseURL,
 				headers: headers,
-				client:  mcpClient,
+				client:  session,
 			}, nil
 		}
 
@@ -176,8 +194,8 @@ func isRetryableError(err error) bool {
 	return false
 }
 
-func (c *MCPClient) ListTools(ctx context.Context) ([]mcp.Tool, error) {
-	response, err := c.client.ListTools(ctx, mcp.ListToolsRequest{})
+func (c *MCPClient) ListTools(ctx context.Context) ([]*mcp.Tool, error) {
+	response, err := c.client.ListTools(ctx, &mcp.ListToolsParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -187,8 +205,9 @@ func (c *MCPClient) ListTools(ctx context.Context) ([]mcp.Tool, error) {
 
 // MCP Tool Executor
 type MCPExecutor struct {
-	MCPClient *MCPClient
-	ToolName  string
+	MCPClient   *MCPClient
+	ToolName    string
+	MCPSettings MCPSessionSettings
 }
 
 func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall, recorder EventEmitter) (ToolResult, error) {
@@ -213,10 +232,10 @@ func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall, recorder Event
 	}
 
 	log.Info("calling mcp", "tool", m.ToolName, "server", m.MCPClient.baseURL)
-	response, err := m.MCPClient.client.CallTool(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{
+	response, err := m.MCPClient.client.CallTool(ctx, &mcp.CallToolParams{
 		Name:      m.ToolName,
 		Arguments: arguments,
-	}})
+	})
 	if err != nil {
 		log.Info("tool call error", "tool", m.ToolName, "error", err, "errorType", fmt.Sprintf("%T", err))
 		return ToolResult{ID: call.ID, Name: call.Function.Name, Content: ""}, err
@@ -224,7 +243,7 @@ func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall, recorder Event
 	log.V(2).Info("tool call response", "tool", m.ToolName, "response", response)
 	var result strings.Builder
 	for _, content := range response.Content {
-		if textContent, ok := content.(mcp.TextContent); ok {
+		if textContent, ok := content.(*mcp.TextContent); ok {
 			result.WriteString(textContent.Text)
 		} else {
 			jsonBytes, _ := json.MarshalIndent(content, "", "  ")
