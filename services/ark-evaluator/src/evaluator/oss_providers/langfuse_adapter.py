@@ -278,3 +278,67 @@ class LangfuseAdapter:
                 }
 
         return MockEvaluator(evaluator_name)
+
+    async def record_evaluation_trace(
+        self,
+        input_text: str,
+        output_text: str,
+        scores: Dict[str, float],
+        params: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Record an evaluation trace with scores to Langfuse.
+
+        Args:
+            input_text: The input/prompt text
+            output_text: The generated output text
+            scores: Dictionary mapping metric names to scores
+            params: Configuration parameters including Langfuse credentials
+            metadata: Optional additional metadata to include
+
+        Returns:
+            Dictionary with trace information
+        """
+        # Get or create Langfuse client
+        client = self._get_langfuse_client(params)
+
+        # Prepare metadata
+        trace_metadata = metadata or {}
+        trace_metadata.update({
+            "scores": scores,
+            "average_score": sum(scores.values()) / len(scores) if scores else 0,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+        # Create trace
+        trace = client.trace(
+            name=f"evaluation-{datetime.utcnow().isoformat()}",
+            input=input_text,
+            output=output_text,
+            metadata=trace_metadata
+        )
+
+        # Record each score
+        for metric_name, score_value in scores.items():
+            trace.score(
+                name=metric_name,
+                value=float(score_value)
+            )
+
+        # Update trace with final scores
+        trace.update(
+            output=output_text,
+            metadata=trace_metadata
+        )
+
+        # Flush client to ensure data is sent
+        if hasattr(client, 'flush'):
+            client.flush()
+
+        return {
+            "trace_id": trace.id,
+            "scores": scores,
+            "scores_recorded": len(scores),
+            "metadata": trace_metadata
+        }
