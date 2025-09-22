@@ -229,33 +229,15 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 		agentMessages = append(agentMessages, assistantMessage)
 		newMessages = append(newMessages, assistantMessage)
 
-		// Debug logging for streaming tool calls
-		logger := logf.FromContext(ctx)
-		logger.Info("Agent response after streaming",
-			"agent", a.FullName(),
-			"streamingEnabled", eventStream != nil,
-			"hasToolCalls", len(choice.Message.ToolCalls) > 0,
-			"toolCallCount", len(choice.Message.ToolCalls),
-			"finishReason", choice.FinishReason)
-
-		if len(choice.Message.ToolCalls) > 0 {
-			logger.Info("Tool calls detected",
-				"agent", a.FullName(),
-				"firstToolName", choice.Message.ToolCalls[0].Function.Name,
-				"firstToolID", choice.Message.ToolCalls[0].ID)
-		}
-
 		if len(choice.Message.ToolCalls) == 0 {
-			logger.Info("No tool calls, returning", "agent", a.FullName())
 			return newMessages, nil
 		}
 
-		logger.Info("Executing tool calls", "agent", a.FullName(), "count", len(choice.Message.ToolCalls))
 		if err := a.executeToolCalls(ctx, choice.Message.ToolCalls, &agentMessages, &newMessages); err != nil {
+			logger := logf.FromContext(ctx)
 			logger.Error(err, "Tool execution failed", "agent", a.FullName())
 			return newMessages, err
 		}
-		logger.Info("Tool calls executed, continuing loop", "agent", a.FullName())
 	}
 }
 
