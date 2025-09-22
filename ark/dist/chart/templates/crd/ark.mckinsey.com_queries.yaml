@@ -121,7 +121,7 @@ spec:
                   type: object
                 type: array
               input:
-                minLength: 1
+                description: Input as a string (used when type=user)
                 type: string
               memory:
                 properties:
@@ -133,6 +133,22 @@ spec:
                 required:
                 - name
                 type: object
+              messages:
+                description: Input as an array of messages (used when type=messages)
+                items:
+                  description: Message represents a single message in a conversation
+                  properties:
+                    content:
+                      minLength: 1
+                      type: string
+                    role:
+                      minLength: 1
+                      type: string
+                  required:
+                  - content
+                  - role
+                  type: object
+                type: array
               parameters:
                 description: Parameters for template processing in the input field
                 items:
@@ -301,8 +317,12 @@ spec:
               ttl:
                 default: 720h
                 type: string
-            required:
-            - input
+              type:
+                default: user
+                enum:
+                - user
+                - messages
+                type: string
             type: object
           status:
             properties:

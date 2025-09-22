@@ -6,6 +6,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Message represents a single message in a conversation
+type Message struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Role string `json:"role"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Content string `json:"content"`
+}
+
 type QueryTarget struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=agent;team;model;tool
@@ -32,9 +42,16 @@ type EvaluatorRef struct {
 }
 
 type QuerySpec struct {
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Input string `json:"input"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Enum=user;messages
+	// +kubebuilder:default=user
+	Type string `json:"type,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Input as a string (used when type=user)
+	Input string `json:"input,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Input as an array of messages (used when type=messages)
+	Messages []Message `json:"messages,omitempty"`
 	// +kubebuilder:validation:Optional
 	// Parameters for template processing in the input field
 	Parameters []Parameter `json:"parameters,omitempty"`
