@@ -637,21 +637,19 @@ func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Qu
 		return nil, fmt.Errorf("unable to load model %v, error:%w", modelKey, err)
 	}
 
-	messages, err := r.loadInitialMessages(ctx, memory)
+	historyMessages, err := r.loadInitialMessages(ctx, memory)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load initial messages: %w", err)
 	}
 
-	// Resolve query input with template parameters
-	resolvedInput, err := genai.ResolveQueryInput(ctx, impersonatedClient, query.Namespace, query.Spec.Input, query.Spec.Parameters)
+	// Get input messages using the helper function
+	inputMessages, err := genai.GetQueryInputMessages(ctx, query, impersonatedClient)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve query input: %w", err)
+		return nil, fmt.Errorf("failed to get query input messages: %w", err)
 	}
 
-	userMessage := genai.NewUserMessage(resolvedInput)
-
-	// Append user message to conversation history
-	allMessages := append(messages, userMessage)
+	// Append all input messages to conversation history
+	allMessages := append(historyMessages, inputMessages...)
 
 	// Create operation tracker for the model call
 	modelTracker := genai.NewOperationTracker(tokenCollector, ctx, "ModelCall", modelName, map[string]string{
@@ -683,8 +681,8 @@ func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Qu
 
 	responseMessages := []genai.Message{assistantMessage}
 
-	// Save new messages to memory (user message + response messages)
-	newMessages := append([]genai.Message{userMessage}, responseMessages...)
+	// Save all new messages (input + response) to memory
+	newMessages := append(inputMessages, responseMessages...)
 	if err := memory.AddMessages(ctx, query.Name, newMessages); err != nil {
 		return nil, fmt.Errorf("failed to save new messages to memory: %w", err)
 	}
