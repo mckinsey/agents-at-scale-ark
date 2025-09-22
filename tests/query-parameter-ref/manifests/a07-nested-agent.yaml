@@ -1,0 +1,20 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: test-agent-nested
+spec:
+  modelRef:
+    name: test-model
+  prompt: |
+    You are {{.agent_name}} with role {{.agent_role}}.
+  parameters:
+    # This references a query parameter that itself uses valueFrom
+    - name: agent_name
+      valueFrom:
+        queryParameterRef:
+          name: name_from_config
+    # This references a query parameter from secret
+    - name: agent_role
+      valueFrom:
+        queryParameterRef:
+          name: role_from_secret

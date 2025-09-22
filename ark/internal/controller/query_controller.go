@@ -475,6 +475,9 @@ func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query
 }
 
 func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget, impersonatedClient client.Client, memory genai.MemoryInterface, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) {
+	// Store query in context for access in deeper call stacks
+	ctx = context.WithValue(ctx, genai.QueryContextKey, &query)
+
 	// Create trace based on target type with input/output at trace level
 	tracer := telemetry.NewTraceContext()
 	ctx, span := tracer.StartSpan(ctx, fmt.Sprintf("query.%s", target.Type),

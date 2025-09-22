@@ -82,6 +82,15 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      queryParameterRef:
+                        properties:
+                          name:
+                            description: Name of the parameter from the Query resource
+                            minLength: 1
+                            type: string
+                        required:
+                        - name
+                        type: object
                       secretKeyRef:
                         description: SecretKeySelector selects a key of a Secret.
                         properties:
