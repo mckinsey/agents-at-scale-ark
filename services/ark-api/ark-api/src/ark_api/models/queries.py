@@ -114,13 +114,6 @@ class QueryUpdateRequest(BaseModel):
     evaluatorSelector: Optional[LabelSelector] = None
 
 
-class StreamingInfo(BaseModel):
-    """Streaming information for a query."""
-    enabled: bool
-    url: Optional[str] = None
-    sessionId: Optional[str] = None
-
-
 class QueryDetailResponse(BaseModel):
     """Detailed query response."""
     name: str
