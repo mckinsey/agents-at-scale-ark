@@ -49,7 +49,7 @@ func WithExecutionMetadata(ctx context.Context, metadata map[string]interface{})
 	for key, value := range metadata {
 		switch key {
 		case "target":
-			tmpCtx = context.WithValue(tmpCtx, targetKey, value)
+			tmpCtx = context.WithValue(tmpCtx, targetKey, value) //nolint:fatcontext // accumulating context values
 		case "team":
 			tmpCtx = context.WithValue(tmpCtx, teamKey, value)
 		case "agent":

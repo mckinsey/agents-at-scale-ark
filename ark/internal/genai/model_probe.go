@@ -23,7 +23,7 @@ type ProbeResult struct {
 // ProbeModel tests if a model is available
 func ProbeModel(ctx context.Context, model *Model) ProbeResult {
 	// Create probe context with 30s timeout
-	timeout := 30*time.Second
+	timeout := 30 * time.Second
 	probeCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -47,10 +47,10 @@ func ProbeModel(ctx context.Context, model *Model) ProbeResult {
 	}
 }
 
-//	Returns a stable error message suitable for a 'condition'. If error messages
-//	are not stable (for example, including a request ID or UUID) then adding
-//	this message to a condition will change the message and trigger
-//	reconcillation, which can lead to an unwanted 'tight loop'.
+// Returns a stable error message suitable for a 'condition'. If error messages
+// are not stable (for example, including a request ID or UUID) then adding
+// this message to a condition will change the message and trigger
+// reconcillation, which can lead to an unwanted 'tight loop'.
 func extractStableError(err error, timeout time.Duration) string {
 	// Check for context timeout first
 	if errors.Is(err, context.DeadlineExceeded) {

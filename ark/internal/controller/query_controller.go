@@ -203,7 +203,9 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	if eventStream != nil {
 		defer func() {
 			// Always close the event stream when query execution completes
-			eventStream.Close()
+			if err := eventStream.Close(); err != nil {
+				log.Error(err, "Failed to close event stream")
+			}
 		}()
 	}
 
@@ -864,40 +866,6 @@ func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Cli
 	return impersonatedClient, nil
 }
 
-func (r *QueryReconciler) checkAndSetupStreaming(ctx context.Context, query *arkv1alpha1.Query) (genai.EventStreamInterface, error) {
-	log := logf.FromContext(ctx)
-
-	// Check if streaming is requested
-	if query.GetAnnotations() == nil || query.GetAnnotations()[annotations.StreamingEnabled] != "true" {
-		return nil, nil // Streaming not requested
-	}
-
-	// Get session ID for streaming
-	sessionId := string(query.UID)
-	if query.Spec.SessionId != "" {
-		sessionId = query.Spec.SessionId
-	}
-
-	// Try to create event stream
-	eventStream, err := genai.NewEventStreamForQuery(ctx, r.Client, query.Namespace, sessionId, query.Name)
-	if err != nil {
-		// Configuration error or service resolution failed
-		log.Error(err, "Failed to create event stream",
-			"query", query.Name,
-			"namespace", query.Namespace)
-		return nil, fmt.Errorf("streaming configuration error: %w", err)
-	}
-
-	if eventStream == nil {
-		// No streaming configured - just warn
-		log.Info("Streaming requested but no streaming service configured",
-			"query", query.Name,
-			"namespace", query.Namespace)
-	}
-
-	return eventStream, nil
-}
-
 func (r *QueryReconciler) cleanupExistingOperation(namespacedName types.NamespacedName) {
 	if existingOp, exists := r.operations.Load(namespacedName); exists {
 		logf.Log.Info("Found existing operation, clearing due to cancel", "query", namespacedName.String())
@@ -949,7 +917,6 @@ func (r *QueryReconciler) executeEvaluation(ctx context.Context, obj arkv1alpha1
 		}
 	} else {
 		obj.Status.Evaluations = evaluationResults
-
 
 		if updateErr := r.updateStatus(ctx, &obj, statusDone); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")

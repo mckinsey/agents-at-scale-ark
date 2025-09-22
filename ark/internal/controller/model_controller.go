@@ -108,7 +108,6 @@ func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Mode
 	return genai.ProbeModel(ctx, resolvedModel)
 }
 
-
 // setCondition sets a condition on the Model
 func (r *ModelReconciler) setCondition(model *arkv1alpha1.Model, conditionType string, status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{

@@ -112,7 +112,7 @@ port: "80"`,
 					Namespace: "default",
 				},
 				Data: map[string]string{
-					"enabled": "true",
+					"enabled":    "true",
 					"serviceRef": `port: "8080"`,
 				},
 			},

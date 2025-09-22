@@ -53,7 +53,6 @@ func GetStreamingConfig(ctx context.Context, k8sClient client.Client, namespace 
 		Name:      "ark-config-streaming",
 		Namespace: namespace,
 	}, cm)
-
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// No ConfigMap = no streaming (not an error)
@@ -160,7 +159,7 @@ func (h *HTTPEventStream) StreamChunk(ctx context.Context, chunk interface{}) er
 	// Write with newline delimiter for streaming
 	if _, err := h.streamWriter.Write(append(data, '\n')); err != nil {
 		// Stream broken, clear it
-		h.streamWriter.Close()
+		_ = h.streamWriter.Close() // Ignore error - we're already in error state
 		h.streamWriter = nil
 		return fmt.Errorf("failed to write chunk to stream: %w", err)
 	}
@@ -184,7 +183,7 @@ func (h *HTTPEventStream) startStream(ctx context.Context) error {
 	// The streaming lifecycle is managed by closing the pipe writer in NotifyCompletion,
 	// which causes the HTTP request to finish sending all data and complete normally.
 	// Using the query context would cause "context canceled" errors when the query completes.
-	req, err := http.NewRequestWithContext(context.Background(), "POST", streamURL, pipeReader)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, streamURL, pipeReader)
 	if err != nil {
 		return fmt.Errorf("failed to create streaming request: %w", err)
 	}
@@ -196,19 +195,27 @@ func (h *HTTPEventStream) startStream(ctx context.Context) error {
 		resp, err := h.client.Do(req)
 		if err != nil {
 			log.Error(err, "streaming request failed", "url", streamURL)
-			pipeReader.Close()
+			if closeErr := pipeReader.Close(); closeErr != nil {
+				log.Error(closeErr, "failed to close pipe reader after request failure")
+			}
 			return
 		}
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close() // Standard defer pattern - error rarely meaningful
+		}()
 
 		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
 			log.Error(nil, "streaming service returned error", "status", resp.StatusCode, "url", streamURL)
-			pipeReader.Close()
+			if closeErr := pipeReader.Close(); closeErr != nil {
+				log.Error(closeErr, "failed to close pipe reader after bad status")
+			}
 		}
 
 		// Read response to complete the HTTP request/response cycle
 		// (discarding the data as we don't need the response content)
-		io.Copy(io.Discard, resp.Body)
+		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+			log.Error(err, "failed to drain response body")
+		}
 	}()
 
 	return nil
@@ -221,13 +228,15 @@ func (h *HTTPEventStream) NotifyCompletion(ctx context.Context) error {
 
 	// Close the streaming connection if open
 	if h.streamWriter != nil {
-		h.streamWriter.Close()
+		if err := h.streamWriter.Close(); err != nil {
+			logf.FromContext(ctx).Error(err, "failed to close stream writer on completion")
+		}
 		h.streamWriter = nil
 	}
 
 	// Send completion signal
 	completeURL := fmt.Sprintf("%s/stream/%s/complete", h.baseURL, url.QueryEscape(h.queryName))
-	req, err := http.NewRequestWithContext(ctx, "POST", completeURL, bytes.NewReader([]byte("{}")))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, completeURL, bytes.NewReader([]byte("{}")))
 	if err != nil {
 		return fmt.Errorf("failed to create completion request: %w", err)
 	}
@@ -239,7 +248,9 @@ func (h *HTTPEventStream) NotifyCompletion(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to send completion: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close() // Standard defer pattern - error rarely meaningful
+	}()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
 		return fmt.Errorf("streaming service returned status %d on completion", resp.StatusCode)
