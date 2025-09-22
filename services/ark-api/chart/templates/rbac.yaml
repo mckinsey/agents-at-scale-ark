@@ -51,9 +51,9 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}
 rules:
-  # Permission to manage secrets in the same namespace
+  # Permission to manage secrets and read configmaps in the same namespace
   - apiGroups: [""]
-    resources: ["secrets"]
+    resources: ["secrets", "configmaps"]
     verbs: ["get", "list", "create", "update", "patch", "delete"]
 
 ---
