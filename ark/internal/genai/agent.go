@@ -200,7 +200,7 @@ func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCom
 }
 
 // executeLocally executes the agent using the built-in OpenAI-compatible engine
-func (a *Agent) executeLocally(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
+func (a *Agent) executeLocally(ctx context.Context, userInput Message, history []Message, _ MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
 	var tools []openai.ChatCompletionToolParam
 	if a.Tools != nil {
 		tools = a.Tools.ToOpenAITools()

@@ -148,56 +148,57 @@ func (op *OpenAIProvider) ChatCompletionStream(ctx context.Context, messages []M
 		"hasResponse", fullResponse != nil,
 		"hasChoices", fullResponse != nil && len(fullResponse.Choices) > 0)
 
-	if len(toolCallsMap) > 0 && fullResponse != nil && len(fullResponse.Choices) > 0 {
-		logf.Log.Info("Accumulated tool calls from streaming", "count", len(toolCallsMap))
+	// Early return if no tool calls to process
+	if len(toolCallsMap) == 0 || fullResponse == nil || len(fullResponse.Choices) == 0 {
+		return fullResponse, nil
+	}
 
-		// Find max index to iterate in order
-		maxIndex := int64(-1)
-		for idx := range toolCallsMap {
-			if idx > maxIndex {
-				maxIndex = idx
-			}
+	logf.Log.Info("Accumulated tool calls from streaming", "count", len(toolCallsMap))
+
+	// Find max index to iterate in order
+	maxIndex := int64(-1)
+	for idx := range toolCallsMap {
+		if idx > maxIndex {
+			maxIndex = idx
 		}
+	}
 
-		// Build tool calls array in index order
-		toolCalls := make([]openai.ChatCompletionMessageToolCall, 0, len(toolCallsMap))
-		for i := int64(0); i <= maxIndex; i++ {
-			if toolCall, exists := toolCallsMap[i]; exists {
-				toolCalls = append(toolCalls, *toolCall)
-				logf.Log.Info("Adding tool call", "index", i, "id", toolCall.ID, "name", toolCall.Function.Name)
-			}
+	// Build tool calls array in index order
+	toolCalls := make([]openai.ChatCompletionMessageToolCall, 0, len(toolCallsMap))
+	for i := int64(0); i <= maxIndex; i++ {
+		if toolCall, exists := toolCallsMap[i]; exists {
+			toolCalls = append(toolCalls, *toolCall)
+			logf.Log.Info("Adding tool call", "index", i, "id", toolCall.ID, "name", toolCall.Function.Name)
 		}
-		fullResponse.Choices[0].Message.ToolCalls = toolCalls
-		logf.Log.Info("Set tool calls on response", "count", len(toolCalls))
+	}
+	fullResponse.Choices[0].Message.ToolCalls = toolCalls
+	logf.Log.Info("Set tool calls on response", "count", len(toolCalls))
 
-		// CRITICAL: Send final accumulated message with tool calls to memory
-		// This ensures the complete assistant message with tool calls is available
-		// for agents to process after streaming completes
-		if streamFunc != nil && len(toolCalls) > 0 {
-			finalChunk := &openai.ChatCompletionChunk{
-				ID:      fullResponse.ID,
-				Object:  "chat.completion.chunk",
-				Created: fullResponse.Created,
-				Model:   fullResponse.Model,
-				Choices: []openai.ChatCompletionChunkChoice{
-					{
-						Index:        0,
-						Delta:        openai.ChatCompletionChunkChoiceDelta{},
-						FinishReason: fullResponse.Choices[0].FinishReason,
-					},
+	// CRITICAL: Send final accumulated message with tool calls to memory
+	// This ensures the complete assistant message with tool calls is available
+	// for agents to process after streaming completes
+	if streamFunc != nil && len(toolCalls) > 0 {
+		finalChunk := &openai.ChatCompletionChunk{
+			ID:      fullResponse.ID,
+			Object:  "chat.completion.chunk",
+			Created: fullResponse.Created,
+			Model:   fullResponse.Model,
+			Choices: []openai.ChatCompletionChunkChoice{
+				{
+					Index:        0,
+					Delta:        openai.ChatCompletionChunkChoiceDelta{},
+					FinishReason: fullResponse.Choices[0].FinishReason,
 				},
-			}
-
-			// Send complete accumulated message as final update
-			// This is a special chunk that contains the full message with tool calls
-			// It's marked with a special field so memory can handle it appropriately
-			logf.Log.Info("Sending final accumulated message with tool calls", "toolCount", len(toolCalls))
-			if err := streamFunc(finalChunk); err != nil {
-				logf.Log.Error(err, "Failed to send final accumulated message")
-			}
+			},
 		}
-	} else {
-		logf.Log.Info("No tool calls to add", "mapSize", len(toolCallsMap))
+
+		// Send complete accumulated message as final update
+		// This is a special chunk that contains the full message with tool calls
+		// It's marked with a special field so memory can handle it appropriately
+		logf.Log.Info("Sending final accumulated message with tool calls", "toolCount", len(toolCalls))
+		if err := streamFunc(finalChunk); err != nil {
+			logf.Log.Error(err, "Failed to send final accumulated message")
+		}
 	}
 
 	if err := stream.Err(); err != nil {
