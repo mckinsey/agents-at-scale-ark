@@ -39,7 +39,8 @@ func (ap *AzureProvider) ChatCompletion(ctx context.Context, messages []Message,
 	return client.Chat.Completions.New(ctx, params)
 }
 
-func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+// prepareStreamParams prepares the parameters for streaming chat completion
+func (ap *AzureProvider) prepareStreamParams(messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) openai.ChatCompletionNewParams {
 	openaiMessages := make([]openai.ChatCompletionMessageParamUnion, len(messages))
 	for i, msg := range messages {
 		openaiMessages[i] = openai.ChatCompletionMessageParamUnion(msg)
@@ -57,6 +58,11 @@ func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []Me
 		params.Tools = tools[0]
 	}
 
+	return params
+}
+
+func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+	params := ap.prepareStreamParams(messages, n, tools...)
 	client := ap.createClient(ctx)
 	stream := client.Chat.Completions.NewStreaming(ctx, params)
 	defer func() { _ = stream.Close() }()
