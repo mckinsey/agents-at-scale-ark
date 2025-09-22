@@ -51,10 +51,18 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}
 rules:
-  # Permission to manage secrets and read configmaps in the same namespace
+  # Permission to manage secrets in the same namespace
   - apiGroups: [""]
-    resources: ["secrets", "configmaps"]
+    resources: ["secrets"]
     verbs: ["get", "list", "create", "update", "patch", "delete"]
+  # Permission to read configmaps to load ark-config-streaming configuration
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+  # Permission to read services to get the address of the configured streaming service
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
