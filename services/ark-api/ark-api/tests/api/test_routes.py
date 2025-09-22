@@ -587,7 +587,7 @@ class TestAgentsEndpoint(unittest.TestCase):
                 "prompt": "You are a helpful assistant",
                 "modelRef": {"name": "gpt-4"}
             },
-            "status": {"phase": "Ready"}
+            "status": {"conditions": [{"type": "Available", "status": "True"}]}
         }
         
         mock_agent2 = Mock()
@@ -597,7 +597,7 @@ class TestAgentsEndpoint(unittest.TestCase):
                 "description": "Another test agent",
                 "prompt": "You are another assistant"
             },
-            "status": {"phase": "pending"}
+            "status": {"conditions": [{"type": "Available", "status": "False"}]}
         }
         
         # Mock the API response
@@ -616,13 +616,13 @@ class TestAgentsEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][0]["name"], "test-agent")
         self.assertEqual(data["items"][0]["description"], "Test agent")
         self.assertEqual(data["items"][0]["model_ref"], "gpt-4")
-        self.assertEqual(data["items"][0]["status"], "Ready")
-        
+        self.assertEqual(data["items"][0]["available"], "True")
+
         # Check second agent
         self.assertEqual(data["items"][1]["name"], "another-agent")
         self.assertEqual(data["items"][1]["description"], "Another test agent")
         self.assertEqual(data["items"][1]["model_ref"], "default")
-        self.assertEqual(data["items"][1]["status"], "pending")
+        self.assertEqual(data["items"][1]["available"], "False")
     
     @patch('ark_api.api.v1.agents.with_ark_client')
     def test_list_agents_empty(self, mock_ark_client):
@@ -926,13 +926,13 @@ class TestModelsEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][0]["name"], "gpt-4-model")
         self.assertEqual(data["items"][0]["type"], "openai")
         self.assertEqual(data["items"][0]["model"], "gpt-4")
-        self.assertEqual(data["items"][0]["status"], "ready")
-        
+        self.assertEqual(data["items"][0]["available"], "True")
+
         # Check second model
         self.assertEqual(data["items"][1]["name"], "claude-model")
         self.assertEqual(data["items"][1]["type"], "bedrock")
         self.assertEqual(data["items"][1]["model"], "anthropic.claude-v2")
-        self.assertEqual(data["items"][1]["status"], "error")
+        self.assertEqual(data["items"][1]["available"], "False")
     
     @patch('ark_api.api.v1.models.with_ark_client')
     def test_list_models_empty(self, mock_ark_client):
@@ -1143,7 +1143,7 @@ class TestModelsEndpoint(unittest.TestCase):
         self.assertEqual(data["name"], "gpt-4-model")
         self.assertEqual(data["type"], "openai")
         self.assertEqual(data["model"], "gpt-4")
-        self.assertEqual(data["status"], "ready")
+        self.assertEqual(data["available"], "True")
         self.assertEqual(data["resolved_address"], "https://api.openai.com/v1")
         self.assertIn("valueFrom", data["config"]["openai"]["apiKey"])
     

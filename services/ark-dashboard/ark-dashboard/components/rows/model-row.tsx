@@ -7,24 +7,22 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip";
+import { AvailabilityStatusBadge } from "@/components/ui/availability-status-badge";
 import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import { DASHBOARD_SECTIONS } from "@/lib/constants/dashboard-icons";
 import { ModelEditor } from "@/components/editors";
 import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog";
 import type {
-  Agent,
   Model,
   ModelCreateRequest,
   ModelUpdateRequest
 } from "@/lib/services";
-import { cn } from "@/lib/utils";
 import { getCustomIcon } from "@/lib/utils/icon-resolver";
 import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 interface ModelRowProps {
   model: Model;
-  agents: Agent[];
   onUpdate?: (
     model: ModelCreateRequest | (ModelUpdateRequest & { id: string })
   ) => void;
@@ -34,7 +32,6 @@ interface ModelRowProps {
 
 export function ModelRow({
   model,
-  agents,
   onUpdate,
   onDelete,
   namespace
@@ -42,45 +39,12 @@ export function ModelRow({
   const [editorOpen, setEditorOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  // Check if any agents are using this model
-  const agentsUsingModel = agents.filter(
-    (agent) => agent.modelRef?.name === model.name
-  );
-  const isActive = agentsUsingModel.length > 0;
-
   // Get custom icon or default model icon
   const IconComponent = getCustomIcon(
     model.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
     DASHBOARD_SECTIONS.models.icon
   );
 
-  // Determine status and its styling
-  const getStatusComponent = () => {
-    let bgColor = "bg-gray-100";
-    let textColor = "text-gray-800";
-    let statusText = "Pending";
-
-    switch (model.status) {
-      case "error":
-          bgColor = "bg-red-100";
-          textColor = "text-red-800";
-          statusText = "Error";
-          break;
-      case "ready":
-        bgColor = "bg-green-100";
-        textColor = "text-green-800";
-        statusText = "Ready";
-        break;
-    }
-
-    return (
-      <div
-        className={`px-2 py-1 rounded-full text-xs font-medium ${bgColor} ${textColor}`}
-      >
-        {statusText}
-      </div>
-    );
-  };
 
   return (
     <>
@@ -101,37 +65,13 @@ export function ModelRow({
           </div>
         </div>
 
-        <div className="text-sm text-muted-foreground flex-shrink-0 mr-4">
-          {agentsUsingModel.length > 0 && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger className="text-left hover:underline cursor-help">
-                  <span>
-                    Used by {agentsUsingModel.length} agent
-                    {agentsUsingModel.length !== 1 ? "s" : ""}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-md p-2">
-                  <div className="max-h-60 overflow-y-auto">
-                    {agentsUsingModel.map((agent, index) => (
-                      <div
-                        key={agent.id}
-                        className={`py-1 px-2 ${
-                          index % 2 === 0 ? "bg-white" : "bg-gray-100"
-                        }`}
-                      >
-                        {agent.name}
-                      </div>
-                    ))}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-          {agentsUsingModel.length === 0 && <span>Not in use</span>}
-        </div>
 
-        <div className="flex-shrink-0 mr-4">{getStatusComponent()}</div>
+        <div className="flex-shrink-0 mr-4">
+          <AvailabilityStatusBadge
+            status={model.available}
+            eventsLink={`/events?namespace=${namespace}&kind=Model&name=${model.name}&page=1`}
+          />
+        </div>
 
         <div className="flex items-center gap-1 flex-shrink-0">
           {onUpdate && (
@@ -159,18 +99,14 @@ export function ModelRow({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className={cn(
-                      "h-8 w-8 p-0",
-                      isActive && "opacity-50 cursor-not-allowed"
-                    )}
-                    onClick={() => !isActive && setDeleteConfirmOpen(true)}
-                    disabled={isActive}
+                    className="h-8 w-8 p-0"
+                    onClick={() => setDeleteConfirmOpen(true)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {isActive ? "Cannot delete model in use" : "Delete model"}
+                  Delete model
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

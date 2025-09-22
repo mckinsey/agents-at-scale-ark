@@ -3,6 +3,8 @@ from typing import List, Dict, Optional, Any
 
 from pydantic import BaseModel
 
+from .common import AvailabilityStatus
+
 
 class ExecutionEngineRef(BaseModel):
     """ExecutionEngine reference for running an agent."""
@@ -78,7 +80,7 @@ class AgentResponse(BaseModel):
     description: Optional[str] = None
     model_ref: Optional[str] = None
     prompt: Optional[str] = None
-    status: Optional[str] = None
+    available: Optional[AvailabilityStatus] = None
     annotations: Optional[Dict[str, str]] = None
 
 
@@ -121,5 +123,6 @@ class AgentDetailResponse(BaseModel):
     tools: Optional[List[Tool]] = None
     skills: Optional[List[Skill]] = None
     isA2A: bool = False
+    available: Optional[AvailabilityStatus] = None
     status: Optional[Dict[str, Any]] = None
     annotations: Optional[Dict[str, str]] = None

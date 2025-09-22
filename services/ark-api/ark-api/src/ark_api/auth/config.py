@@ -1,7 +1,6 @@
 """Authentication configuration for ark-api routes."""
 
-from typing import Set, Pattern
-import re
+from typing import Set
 
 # Routes that should NOT be authenticated (public endpoints)
 # All other routes will be protected by default

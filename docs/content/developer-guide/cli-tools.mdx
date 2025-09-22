@@ -21,8 +21,24 @@ Interactive dashboard and system status monitoring tool.
 
 ### Installation
 
+#### From GitHub Release (Recommended)
 ```bash
-# Build and install from repository root
+# Download latest release for your platform
+# Linux/macOS
+curl -L https://github.com/mckinsey/agents-at-scale-ark/releases/latest/download/fark_$(uname)_$(uname -m | sed 's/x86_64/x86_64/;s/aarch64/arm64/').tar.gz | tar xz
+sudo mv fark /usr/local/bin/
+
+# Windows: Download fark_Windows_x86_64.zip from releases page
+
+# Verify installation
+fark --help
+```
+
+#### From Source
+```bash
+# Clone and build from repository
+git clone https://github.com/mckinsey/agents-at-scale-ark.git
+cd agents-at-scale-ark
 make fark-install
 
 # Verify installation

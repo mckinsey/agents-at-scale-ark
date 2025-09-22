@@ -169,8 +169,8 @@ jobs:
           - path: services/executor-langchain
             image: executor-langchain
             prebuild: "make executor-langchain-deps && mkdir -p services/executor-langchain/build-context && cp out/executor-common/dist/executor_common-*.whl services/executor-langchain/build-context/"
-          - path: services/postgres-memory
-            image: postgres-memory
+          - path: services/ark-cluster-memory/ark-cluster-memory
+            image: ark-cluster-memory
           - path: samples/agent-hosting/hosted-langchain-agents
             image: hosted-langchain-agents
           - path: services/ark-mcp
@@ -490,6 +490,8 @@ jobs:
           FILESYS_IMAGE_TAG: ${{ github.sha }}
           HOSTED_LANGCHAIN_AGENTS_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/hosted-langchain-agents
           HOSTED_LANGCHAIN_AGENTS_IMAGE_TAG: ${{ github.sha }}
+          ARK_CLUSTER_MEMORY_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-cluster-memory
+          ARK_CLUSTER_MEMORY_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
@@ -529,6 +531,8 @@ jobs:
           FILESYS_IMAGE_TAG: ${{ github.sha }}
           HOSTED_LANGCHAIN_AGENTS_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/hosted-langchain-agents
           HOSTED_LANGCHAIN_AGENTS_IMAGE_TAG: ${{ github.sha }}
+          ARK_CLUSTER_MEMORY_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-cluster-memory
+          ARK_CLUSTER_MEMORY_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
@@ -852,6 +856,49 @@ jobs:
           else
             echo "❌ ark-cli.tgz not found"
             exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  release-fark:
+    needs: [check-release]
+    runs-on: ubuntu-24.04
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for goreleaser changelog
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean --skip=publish
+          workdir: ./tools/fark
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ needs.check-release.outputs.tag }}
+
+      - name: Upload fark binaries to release
+        run: |
+          RELEASE_TAG="${{ needs.check-release.outputs.tag }}"
+          echo "Attaching fark binaries to release: $RELEASE_TAG"
+
+          # Upload all generated archives
+          find ./tools/fark/dist -name "*.tar.gz" -o -name "*.zip" | while read archive; do
+            echo "Uploading $(basename "$archive")"
+            gh release upload "$RELEASE_TAG" "$archive" --clobber
+          done
+
+          # Upload checksums file
+          if [ -f "./tools/fark/dist/checksums.txt" ]; then
+            gh release upload "$RELEASE_TAG" "./tools/fark/dist/checksums.txt" --clobber
           fi
         env:
           GH_TOKEN: ${{ github.token }}
