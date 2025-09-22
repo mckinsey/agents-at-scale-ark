@@ -24,7 +24,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/genai"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -397,7 +396,7 @@ func (r *QueryReconciler) resolveEvaluatorSelector(ctx context.Context, selector
 func (r *QueryReconciler) reconcileQueue(ctx context.Context, query arkv1alpha1.Query, impersonatedClient client.Client, memory genai.MemoryInterface, tokenCollector *genai.TokenUsageCollector) ([]arkv1alpha1.Response, genai.EventStreamInterface, error) {
 	// Create event stream if streaming is requested
 	var eventStream genai.EventStreamInterface
-	if query.GetAnnotations() != nil && query.GetAnnotations()[annotations.StreamingEnabled] == "true" {
+	if genai.IsStreamingEnabled(query) {
 		sessionId := query.Spec.SessionId
 		if sessionId == "" {
 			sessionId = string(query.UID)
