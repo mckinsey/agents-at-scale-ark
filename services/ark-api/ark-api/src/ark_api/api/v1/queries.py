@@ -122,16 +122,6 @@ async def create_query(
         if query.evaluatorSelector:
             spec["evaluatorSelector"] = query.evaluatorSelector.model_dump()
         
-        # Handle streaming annotation
-        metadata = {
-            "name": query.name,
-            "namespace": namespace
-        }
-        if query.streaming:
-            metadata["annotations"] = {
-                "ark.mckinsey.com/streaming-enabled": "true"
-            }
-        
         # Create the QueryV1alpha1 object
         metadata = {
             "name": query.name,
