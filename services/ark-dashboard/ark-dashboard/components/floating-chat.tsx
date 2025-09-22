@@ -381,9 +381,6 @@ export default function FloatingChat({ name, type, namespace, position, onClose 
               onKeyPress={handleKeyPress}
               disabled={isProcessing}
             />
-            <div className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-muted-foreground bg-background px-1 rounded">
-              {inputMode === 'string' ? 'String' : 'Messages'}
-            </div>
           </div>
           <Button 
             onClick={handleSendMessage} 
