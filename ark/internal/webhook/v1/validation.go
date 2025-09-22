@@ -196,6 +196,9 @@ func (v *ResourceValidator) validateValueFromSources(param arkv1alpha1.Parameter
 	if param.ValueFrom.SecretKeyRef != nil {
 		sources++
 	}
+	if param.ValueFrom.ServiceRef != nil {
+		sources++
+	}
 	if param.ValueFrom.QueryParameterRef != nil {
 		sources++
 	}
@@ -220,6 +223,12 @@ func (v *ResourceValidator) validateParameterReferences(ctx context.Context, nam
 	if param.ValueFrom.SecretKeyRef != nil {
 		if err := v.ValidateLoadSecretKey(ctx, param.ValueFrom.SecretKeyRef.Name, namespace, param.ValueFrom.SecretKeyRef.Key); err != nil {
 			return fmt.Errorf("parameter[%d] '%s': %s", index, param.Name, err)
+		}
+	}
+
+	if param.ValueFrom.ServiceRef != nil {
+		if param.ValueFrom.ServiceRef.Name == "" {
+			return fmt.Errorf("parameter[%d] '%s': serviceRef.name cannot be empty", index, param.Name)
 		}
 	}
 
