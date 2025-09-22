@@ -93,7 +93,15 @@ export function AgentCard({
             </div>
             <AvailabilityStatusBadge
               status={agent.available}
-              eventsLink={`/events?namespace=${namespace}&kind=Agent&name=${agent.name}&page=1`}
+              eventsLink={{
+                href: "/events",
+                query: {
+                  namespace,
+                  kind: 'Agent',
+                  name: agent.name,
+                  page: 1
+                }
+              }}
             />
           </div>
         }

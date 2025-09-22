@@ -27,9 +27,14 @@ import { AlertCircle, CheckCircle, RefreshCw } from "lucide-react";
 
 interface EventsSectionProps {
   readonly namespace: string;
+  readonly page: number
+  readonly limit: number
+  readonly type?: string
+  readonly kind?: string
+  readonly name?: string
 }
 
-export function EventsSection({ namespace }: EventsSectionProps) {
+export function EventsSection({ namespace, page, limit, type, kind, name }: EventsSectionProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -45,13 +50,6 @@ export function EventsSection({ namespace }: EventsSectionProps) {
 
   // Track last loaded filters to prevent double loading
   const lastLoadedFilters = useRef<string>("");
-
-  // Parse filters from URL
-  const page = parseInt(searchParams.get("page") || "1", 10);
-  const limit = parseInt(searchParams.get("limit") || "10", 10);
-  const type = searchParams.get("type") || undefined;
-  const kind = searchParams.get("kind") || undefined;
-  const name = searchParams.get("name") || undefined;
 
   // Load events based on URL params
   const loadEvents = useCallback(

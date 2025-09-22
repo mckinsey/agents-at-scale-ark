@@ -1,11 +1,13 @@
 import Link from "next/link";
 import type { components } from "@/lib/api/generated/types";
+import { cn } from "@/lib/utils";
+import { ComponentProps } from "react";
 
 export type AvailabilityStatus = components["schemas"]["AvailabilityStatus"];
 
 interface AvailabilityStatusBadgeProps {
   readonly status?: AvailabilityStatus | null;
-  readonly eventsLink?: string;
+  readonly eventsLink?: (ComponentProps<typeof Link>)['href'];
   readonly className?: string;
 }
 
@@ -32,14 +34,20 @@ const STATUS_CONFIG = {
 export function AvailabilityStatusBadge({
   status,
   eventsLink,
-  className = ""
+  className
 }: AvailabilityStatusBadgeProps) {
   const statusValue = status || "Unknown";
   const config = STATUS_CONFIG[statusValue];
 
   const badgeContent = (
     <span
-      className={`inline-flex px-2 py-1 text-xs font-medium rounded-full transition-colors ${config.className} ${className}`}
+      className={
+        cn(
+          "inline-flex px-2 py-1 text-xs font-medium rounded-full transition-colors",
+          config.className,
+          className
+        )
+      }
     >
       {config.text}
     </span>

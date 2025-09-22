@@ -1,8 +1,4 @@
-"use client"
-
 import { EventsSection } from "@/components/sections/events-section"
-import { useSearchParams } from "next/navigation"
-import { Suspense } from "react"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -12,9 +8,34 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 
-function EventsContent() {
-  const searchParams = useSearchParams()
-  const namespace = searchParams.get("namespace") || "default"
+type SearchParams = {
+  namespace?: string
+  page?: string
+  limit?: string
+  type?: string
+  kind?: string
+  name?: string
+}
+
+const defaultPage = 1;
+const defaultLimit = 10;
+const defaultNamespace = "default";
+
+export default async function EventsPage({
+  searchParams
+}: {
+  searchParams: Promise<SearchParams>
+}) {
+  const filters = (await searchParams)
+
+  const parsedFilters = {
+    namespace: filters.namespace || defaultNamespace,
+    page: filters.page ? parseInt(filters.page, 10): defaultPage,
+    limit: filters.limit ? parseInt(filters.limit, 10): defaultLimit,
+    type: filters.type,
+    kind: filters.kind,
+    name: filters.name
+  }
 
   return (
     <>
@@ -30,16 +51,8 @@ function EventsContent() {
         </Breadcrumb>
       </header>
       <div className="flex flex-1 flex-col">
-        <EventsSection namespace={namespace} />
+        <EventsSection {...parsedFilters}/>
       </div>
     </>
-  )
-}
-
-export default function EventsPage() {
-  return (
-    <Suspense fallback={<div className="flex items-center justify-center h-64">Loading events...</div>}>
-      <EventsContent />
-    </Suspense>
   )
 }
