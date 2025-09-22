@@ -139,6 +139,26 @@ Intelligent quality assessment using advanced language models:
 - **Google Gemini**: Gemini Pro, Gemini Flash  
 - **Ollama**: Local model deployment
 
+### Provider Metric Discovery APIs
+
+ARK Evaluator includes APIs to dynamically discover supported metrics and their requirements:
+
+#### **GET /providers/{provider}/metrics**
+List all supported metrics for a provider with descriptions:
+```bash
+curl http://ark-evaluator:8000/providers/ragas/metrics
+```
+
+#### **GET /providers/{provider}/metrics/{metric}**
+Get detailed field requirements for specific metrics:
+```bash
+curl http://ark-evaluator:8000/providers/ragas/metrics/relevance
+```
+
+**Supported Providers:**
+- `ragas` - RAGAS evaluation metrics (relevance, context_precision, etc.)
+- `langfuse` - Langfuse integration capabilities
+
 ### Advanced Evaluation Frameworks
 
 #### ✅ **Standalone RAGAS Provider**

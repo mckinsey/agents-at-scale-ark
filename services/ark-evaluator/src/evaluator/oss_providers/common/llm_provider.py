@@ -14,39 +14,82 @@ class LLMProvider:
     """
     LLM Provider configuration and instance creation for multiple providers.
     """
-    
+
+    def _normalize_parameters(self, params: dict) -> dict:
+        """
+        Normalize parameters to support both langfuse.* and direct provider.* naming conventions.
+        This maintains backward compatibility while supporting new parameter patterns.
+        """
+        normalized = params.copy()
+
+        # Azure parameter mappings: azure.* -> langfuse.azure_*
+        azure_mappings = {
+            'azure.endpoint': 'langfuse.azure_endpoint',
+            'azure.api_key': 'langfuse.azure_api_key',
+            'azure.deployment_name': 'langfuse.azure_deployment',
+            'azure.api_version': 'langfuse.model_version',
+            'azure.embedding_deployment': 'langfuse.azure_embedding_deployment',
+            'azure.embedding_model': 'langfuse.azure_embedding_model'
+        }
+
+        # OpenAI parameter mappings: openai.* -> langfuse.openai_*
+        openai_mappings = {
+            'openai.api_key': 'langfuse.openai_api_key',
+            'openai.model': 'langfuse.model',
+            'openai.base_url': 'langfuse.openai_base_url'
+        }
+
+        # Apply mappings if original langfuse.* parameter doesn't exist
+        all_mappings = {**azure_mappings, **openai_mappings}
+
+        for source_key, target_key in all_mappings.items():
+            if source_key in params and target_key not in params:
+                normalized[target_key] = params[source_key]
+                logger.debug(f"Normalized parameter: {source_key} -> {target_key}")
+
+        return normalized
+
     def detect_provider(self, params: dict) -> Tuple[str, dict]:
         """
         Detect the LLM provider based on parameters and return provider type and config.
         """
-        # Azure OpenAI detection
-        if any(key.startswith('langfuse.azure_') for key in params.keys()):
-            return 'azure_openai', self._setup_azure_openai_config(params)
+        # Normalize parameters to support both naming conventions
+        normalized_params = self._normalize_parameters(params)
+
+        # Azure OpenAI detection - check both langfuse.* and azure.* patterns
+        if (any(key.startswith('langfuse.azure_') for key in normalized_params.keys()) or
+            any(key.startswith('azure.') for key in params.keys())):
+            return 'azure_openai', self._setup_azure_openai_config(normalized_params)
         
-        # OpenAI detection
-        if 'langfuse.openai_api_key' in params or 'OPENAI_API_KEY' in os.environ:
-            return 'openai', self._setup_openai_config(params)
-        
+        # OpenAI detection - check both patterns
+        if ('langfuse.openai_api_key' in normalized_params or
+            'openai.api_key' in params or
+            'OPENAI_API_KEY' in os.environ):
+            return 'openai', self._setup_openai_config(normalized_params)
+
         # Anthropic Claude detection
-        if 'langfuse.anthropic_api_key' in params or 'ANTHROPIC_API_KEY' in os.environ:
-            return 'anthropic', self._setup_anthropic_config(params)
-        
+        if 'langfuse.anthropic_api_key' in normalized_params or 'ANTHROPIC_API_KEY' in os.environ:
+            return 'anthropic', self._setup_anthropic_config(normalized_params)
+
         # Google Gemini detection
-        if any(key.startswith('langfuse.google_') for key in params.keys()) or 'GOOGLE_API_KEY' in os.environ:
-            return 'google', self._setup_google_config(params)
-        
+        if any(key.startswith('langfuse.google_') for key in normalized_params.keys()) or 'GOOGLE_API_KEY' in os.environ:
+            return 'google', self._setup_google_config(normalized_params)
+
         # Ollama detection
-        if 'langfuse.ollama_base_url' in params or any(key.startswith('langfuse.ollama_') for key in params.keys()):
-            return 'ollama', self._setup_ollama_config(params)
-        
+        if 'langfuse.ollama_base_url' in normalized_params or any(key.startswith('langfuse.ollama_') for key in normalized_params.keys()):
+            return 'ollama', self._setup_ollama_config(normalized_params)
+
         # Fallback to Azure OpenAI if we have the expected parameters
-        if params.get('langfuse.azure_endpoint') or params.get('langfuse.azure_deployment'):
+        if (normalized_params.get('langfuse.azure_endpoint') or
+            normalized_params.get('langfuse.azure_deployment') or
+            params.get('azure.endpoint') or
+            params.get('azure.deployment_name')):
             logger.warning("Falling back to Azure OpenAI configuration")
-            return 'azure_openai', self._setup_azure_openai_config(params)
-        
+            return 'azure_openai', self._setup_azure_openai_config(normalized_params)
+
         # Default fallback
         logger.warning("No specific LLM provider detected, defaulting to OpenAI")
-        return 'openai', self._setup_openai_config(params)
+        return 'openai', self._setup_openai_config(normalized_params)
     
     def _setup_azure_openai_config(self, params: dict) -> dict:
         """Configure Azure OpenAI settings for evaluation."""

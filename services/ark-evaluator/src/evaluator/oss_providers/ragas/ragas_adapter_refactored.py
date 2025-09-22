@@ -5,11 +5,11 @@ Supports multiple LLM providers with improved separation of concerns.
 
 import logging
 from typing import Dict, List, Any
-from ..types import EvaluationParameters
-from .uvloop_handler import UVLoopHandler
-from .azure_openai_configurator import AzureOpenAIConfigurator
+from ...types import EvaluationParameters
+from ..common.uvloop_handler import UVLoopHandler
+from ..common.azure_openai_configurator import AzureOpenAIConfigurator
 from .ragas_evaluator import RagasEvaluator
-from .llm_provider import LLMProvider
+from ..common.llm_provider import LLMProvider
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,12 @@ class RagasAdapter:
         self.uvloop_handler = UVLoopHandler()
         self.azure_configurator = AzureOpenAIConfigurator()
         self.ragas_evaluator = RagasEvaluator()
+        # Initialize validation results
+        self._validation_results = {
+            'valid_metrics': [],
+            'invalid_metrics': [],
+            'validation_errors': {}
+        }
     
     async def evaluate(
         self,
@@ -150,22 +156,51 @@ class RagasAdapter:
             
             # Extract context from parameters
             eval_params = EvaluationParameters.from_request_params(params)
-            
-            # Prepare dataset
+
+            # Prepare dataset with metric-specific fields
             dataset = self.ragas_evaluator.prepare_dataset(
                 input_text,
                 output_text,
                 eval_params.context,
-                eval_params.context_source
+                eval_params.context_source,
+                metrics=metrics,
+                ground_truth=params.get('ground_truth')
             )
-            
-            # Run RAGAS evaluation
+
+            # Validate field requirements and filter metrics
+            # Extract the first row from the dataset for validation
+            dataset_dict = {}
+            if dataset and len(dataset) > 0:
+                dataset_dict = dict(dataset[0])  # Convert first row to dictionary
+
+            valid_metrics, invalid_metrics, validation_errors = self.ragas_evaluator.validate_and_filter_metrics(
+                metrics, dataset_dict
+            )
+
+            # Store validation results for later use in metadata
+            self._validation_results = {
+                'valid_metrics': valid_metrics,
+                'invalid_metrics': invalid_metrics,
+                'validation_errors': validation_errors
+            }
+
+            # If no metrics can be evaluated, return empty scores
+            if not valid_metrics:
+                logger.warning("No metrics can be evaluated due to validation failures")
+                return {}
+
+            # Only initialize RAGAS metrics for valid metrics
+            ragas_metrics = self.ragas_evaluator.initialize_ragas_metrics(
+                valid_metrics, llm, embeddings
+            )
+
+            # Run RAGAS evaluation on valid metrics only
             result = await self.ragas_evaluator.run_evaluation(
                 dataset, ragas_metrics
             )
-            
-            # Extract and return scores
-            return self.ragas_evaluator.extract_scores(result, metrics)
+
+            # Extract scores only for valid metrics
+            return self.ragas_evaluator.extract_scores(result, metrics, valid_metrics)
             
         except Exception as e:
             logger.error(f"Error in RAGAS evaluation: {e}")
@@ -173,3 +208,12 @@ class RagasAdapter:
             return self.ragas_evaluator.get_fallback_scores(
                 input_text, output_text, metrics
             )
+
+    def get_validation_results(self) -> Dict[str, Any]:
+        """
+        Get the last validation results from field validation.
+
+        Returns:
+            Dictionary containing validation results
+        """
+        return self._validation_results.copy()

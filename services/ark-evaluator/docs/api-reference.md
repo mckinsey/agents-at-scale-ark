@@ -19,6 +19,66 @@ Content-Type: application/json
 Accept: application/json
 ```
 
+## Provider Metric Discovery Endpoints
+
+ARK Evaluator provides APIs to discover supported metrics and their field requirements for different evaluation providers.
+
+### GET /providers/{provider}/metrics
+
+Returns all supported metrics for a specific provider.
+
+**Path Parameters:**
+- `provider` - Provider name (e.g., "ragas", "langfuse")
+
+**Response:**
+```json
+{
+  "provider": "ragas",
+  "metrics": [
+    {
+      "name": "relevance",
+      "description": "Measures how relevant the answer is to the question",
+      "ragas_name": "answer_relevancy"
+    },
+    {
+      "name": "context_precision",
+      "description": "Measures precision of retrieved context",
+      "ragas_name": "llm_context_precision_without_reference"
+    }
+  ]
+}
+```
+
+### GET /providers/{provider}/metrics/{metric}
+
+Returns detailed field requirements for a specific metric.
+
+**Path Parameters:**
+- `provider` - Provider name (e.g., "ragas")
+- `metric` - Metric name (e.g., "relevance", "context_precision")
+
+**Response:**
+```json
+{
+  "provider": "ragas",
+  "metric": {
+    "name": "relevance",
+    "description": "Measures how relevant the answer is to the question",
+    "ragas_name": "answer_relevancy",
+    "required_fields": ["user_input", "response"],
+    "optional_fields": [],
+    "field_mappings": {
+      "input_text": "user_input",
+      "output_text": "response"
+    }
+  }
+}
+```
+
+**Error Responses:**
+- `404` - Provider or metric not found
+- `500` - Internal server error
+
 ## Health Check Endpoints
 
 ### GET /health

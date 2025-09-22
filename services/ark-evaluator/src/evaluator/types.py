@@ -114,6 +114,7 @@ class EvaluationParameters(BaseModel):
             "scope": "scope",
             "min-score": "min_score",
             "min_score": "min_score",
+            "threshold": "min_score",
             "max-tokens": "max_tokens",
             "max_tokens": "max_tokens",
             "temperature": "temperature",

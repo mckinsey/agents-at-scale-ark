@@ -7,9 +7,9 @@ from typing import Optional, Dict, Any, List
 import uuid
 from datetime import datetime
 
-from ..types import EvaluationParameters, UnifiedEvaluationRequest, EvaluationResponse, TokenUsage
-from ..core.interface import OSSEvaluationProvider
-from ..core.config import PlatformConfiguration
+from ...types import EvaluationParameters, UnifiedEvaluationRequest, EvaluationResponse, TokenUsage
+from ...core.interface import OSSEvaluationProvider
+from ...core.config import PlatformConfiguration
 
 logger = logging.getLogger(__name__)
 

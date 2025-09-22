@@ -65,7 +65,7 @@ class TestRagasProvider:
 
     def test_provider_initialization(self):
         """Test RagasProvider can be initialized properly."""
-        from evaluator.oss_providers.ragas_provider import RagasProvider
+        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
 
         # Test default initialization
         provider = RagasProvider()
@@ -79,14 +79,14 @@ class TestRagasProvider:
 
     def test_get_evaluation_type(self):
         """Test provider returns correct evaluation type."""
-        from evaluator.oss_providers.ragas_provider import RagasProvider
+        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
 
         provider = RagasProvider()
         assert provider.get_evaluation_type() == "ragas"
 
     def test_get_required_parameters_azure(self):
         """Test required parameters for Azure OpenAI configuration."""
-        from evaluator.oss_providers.ragas_provider import RagasProvider
+        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
 
         provider = RagasProvider()
         required = provider.get_required_parameters()
@@ -97,7 +97,7 @@ class TestRagasProvider:
 
     def test_parameter_validation_azure(self, sample_azure_params):
         """Test parameter validation for Azure configuration."""
-        from evaluator.oss_providers.ragas_provider import RagasProvider
+        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
 
         provider = RagasProvider()
 
@@ -114,7 +114,7 @@ class TestRagasProvider:
 
     def test_parameter_validation_openai(self, sample_openai_params):
         """Test parameter validation for OpenAI configuration."""
-        from evaluator.oss_providers.ragas_provider import RagasProvider
+        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
 
         provider = RagasProvider()
 
@@ -124,7 +124,7 @@ class TestRagasProvider:
     @pytest.mark.asyncio
     async def test_evaluation_with_azure_openai(self, sample_evaluation_request):
         """Test evaluation using Azure OpenAI configuration."""
-        from evaluator.oss_providers.ragas_provider import RagasProvider
+        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
 
         provider = RagasProvider()
 
@@ -134,6 +134,11 @@ class TestRagasProvider:
         with patch.object(provider, '_get_ragas_adapter') as mock_get_adapter:
             mock_adapter = AsyncMock()
             mock_adapter.evaluate = AsyncMock(return_value=mock_scores)
+            mock_adapter.get_validation_results = Mock(return_value={
+                'valid_metrics': ['relevance', 'correctness'],
+                'invalid_metrics': [],
+                'validation_errors': {}
+            })
             mock_get_adapter.return_value = mock_adapter
 
             response = await provider.evaluate(sample_evaluation_request)
@@ -154,7 +159,7 @@ class TestRagasProvider:
     @pytest.mark.asyncio
     async def test_evaluation_with_openai(self, sample_openai_params):
         """Test evaluation using OpenAI configuration."""
-        from evaluator.oss_providers.ragas_provider import RagasProvider
+        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
         from evaluator.types import UnifiedEvaluationRequest, EvaluationType, EvaluationConfig
 
         provider = RagasProvider()
@@ -173,6 +178,11 @@ class TestRagasProvider:
         with patch.object(provider, '_get_ragas_adapter') as mock_get_adapter:
             mock_adapter = AsyncMock()
             mock_adapter.evaluate = AsyncMock(return_value=mock_scores)
+            mock_adapter.get_validation_results = Mock(return_value={
+                'valid_metrics': ['relevance', 'correctness'],
+                'invalid_metrics': [],
+                'validation_errors': {}
+            })
             mock_get_adapter.return_value = mock_adapter
 
             response = await provider.evaluate(request)
@@ -184,7 +194,7 @@ class TestRagasProvider:
     @pytest.mark.asyncio
     async def test_evaluation_with_context(self):
         """Test evaluation with context information."""
-        from evaluator.oss_providers.ragas_provider import RagasProvider
+        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
         from evaluator.types import UnifiedEvaluationRequest, EvaluationType, EvaluationConfig
 
         provider = RagasProvider()
@@ -209,6 +219,11 @@ class TestRagasProvider:
         with patch.object(provider, '_get_ragas_adapter') as mock_get_adapter:
             mock_adapter = AsyncMock()
             mock_adapter.evaluate = AsyncMock(return_value=mock_scores)
+            mock_adapter.get_validation_results = Mock(return_value={
+                'valid_metrics': ['relevance', 'correctness'],
+                'invalid_metrics': [],
+                'validation_errors': {}
+            })
             mock_get_adapter.return_value = mock_adapter
 
             response = await provider.evaluate(request)
@@ -221,7 +236,7 @@ class TestRagasProvider:
     @pytest.mark.asyncio
     async def test_missing_ragas_library_handling(self, sample_evaluation_request):
         """Test graceful handling when RAGAS library is not installed."""
-        from evaluator.oss_providers.ragas_provider import RagasProvider
+        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
 
         provider = RagasProvider()
 
@@ -239,7 +254,7 @@ class TestRagasProvider:
     @pytest.mark.asyncio
     async def test_configuration_error_handling(self):
         """Test handling of configuration errors."""
-        from evaluator.oss_providers.ragas_provider import RagasProvider
+        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
         from evaluator.types import UnifiedEvaluationRequest, EvaluationType, EvaluationConfig
 
         provider = RagasProvider()
@@ -263,7 +278,7 @@ class TestRagasProvider:
     @pytest.mark.asyncio
     async def test_evaluation_failure_handling(self, sample_evaluation_request):
         """Test handling when RAGAS evaluation fails."""
-        from evaluator.oss_providers.ragas_provider import RagasProvider
+        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
 
         provider = RagasProvider()
 
@@ -281,7 +296,7 @@ class TestRagasProvider:
 
     def test_metric_parsing(self):
         """Test parsing of metric specifications."""
-        from evaluator.oss_providers.ragas_provider import RagasProvider
+        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
 
         provider = RagasProvider()
 
@@ -303,7 +318,7 @@ class TestRagasProvider:
 
     def test_connection_config_parsing_azure(self, sample_azure_params):
         """Test parsing Azure connection configuration."""
-        from evaluator.oss_providers.ragas_provider import RagasProvider
+        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
 
         provider = RagasProvider()
 
@@ -315,7 +330,7 @@ class TestRagasProvider:
 
     def test_connection_config_parsing_openai(self, sample_openai_params):
         """Test parsing OpenAI connection configuration."""
-        from evaluator.oss_providers.ragas_provider import RagasProvider
+        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
 
         provider = RagasProvider()
 
@@ -327,7 +342,7 @@ class TestRagasProvider:
     @pytest.mark.asyncio
     async def test_score_aggregation_and_thresholding(self, sample_evaluation_request):
         """Test score aggregation and pass/fail thresholding."""
-        from evaluator.oss_providers.ragas_provider import RagasProvider
+        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
 
         provider = RagasProvider()
 
@@ -337,6 +352,11 @@ class TestRagasProvider:
         with patch.object(provider, '_get_ragas_adapter') as mock_get_adapter:
             mock_adapter = AsyncMock()
             mock_adapter.evaluate = AsyncMock(return_value=mock_scores_high)
+            mock_adapter.get_validation_results = Mock(return_value={
+                'valid_metrics': ['relevance', 'correctness'],
+                'invalid_metrics': [],
+                'validation_errors': {}
+            })
             mock_get_adapter.return_value = mock_adapter
 
             response = await provider.evaluate(sample_evaluation_request)
@@ -350,6 +370,11 @@ class TestRagasProvider:
         with patch.object(provider, '_get_ragas_adapter') as mock_get_adapter:
             mock_adapter = AsyncMock()
             mock_adapter.evaluate = AsyncMock(return_value=mock_scores_low)
+            mock_adapter.get_validation_results = Mock(return_value={
+                'valid_metrics': ['relevance', 'correctness'],
+                'invalid_metrics': [],
+                'validation_errors': {}
+            })
             mock_get_adapter.return_value = mock_adapter
 
             response = await provider.evaluate(sample_evaluation_request)
@@ -360,7 +385,7 @@ class TestRagasProvider:
     @pytest.mark.asyncio
     async def test_token_usage_tracking(self, sample_evaluation_request):
         """Test that token usage is properly tracked and returned."""
-        from evaluator.oss_providers.ragas_provider import RagasProvider
+        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
         from evaluator.types import TokenUsage
 
         provider = RagasProvider()
@@ -372,6 +397,11 @@ class TestRagasProvider:
             mock_adapter = AsyncMock()
             mock_adapter.evaluate = AsyncMock(return_value=mock_scores)
             mock_adapter.get_token_usage = Mock(return_value=mock_token_usage)
+            mock_adapter.get_validation_results = Mock(return_value={
+                'valid_metrics': ['relevance'],
+                'invalid_metrics': [],
+                'validation_errors': {}
+            })
             mock_get_adapter.return_value = mock_adapter
 
             response = await provider.evaluate(sample_evaluation_request)
@@ -383,7 +413,7 @@ class TestRagasProvider:
     @pytest.mark.asyncio
     async def test_custom_threshold_parameter(self):
         """Test using custom threshold parameter."""
-        from evaluator.oss_providers.ragas_provider import RagasProvider
+        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
         from evaluator.types import UnifiedEvaluationRequest, EvaluationType, EvaluationConfig
 
         provider = RagasProvider()
@@ -407,6 +437,11 @@ class TestRagasProvider:
         with patch.object(provider, '_get_ragas_adapter') as mock_get_adapter:
             mock_adapter = AsyncMock()
             mock_adapter.evaluate = AsyncMock(return_value=mock_scores)
+            mock_adapter.get_validation_results = Mock(return_value={
+                'valid_metrics': ['relevance', 'correctness'],
+                'invalid_metrics': [],
+                'validation_errors': {}
+            })
             mock_get_adapter.return_value = mock_adapter
 
             response = await provider.evaluate(request)

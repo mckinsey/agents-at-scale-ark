@@ -7,8 +7,8 @@ import logging
 from typing import List, Optional, Dict, Any
 import time
 
-from ..types import UnifiedEvaluationRequest, EvaluationResponse, TokenUsage
-from ..core.interface import OSSEvaluationProvider
+from ...types import UnifiedEvaluationRequest, EvaluationResponse, TokenUsage
+from ...core.interface import OSSEvaluationProvider
 
 logger = logging.getLogger(__name__)
 
@@ -109,19 +109,63 @@ class RagasProvider(OSSEvaluationProvider):
                 )
 
             # Parse metrics from parameters
-            metrics = self._parse_metrics(request.parameters.get("metrics", "relevance,correctness"))
+            # Check for evaluation_criteria first (standard param), then metrics (backward compat)
+            if request.parameters and "evaluation_criteria" in request.parameters:
+                criteria = request.parameters["evaluation_criteria"]
+                # Convert list to comma-separated string if needed
+                if isinstance(criteria, list):
+                    metrics_str = ",".join(criteria)
+                else:
+                    metrics_str = criteria
+            else:
+                # Fallback to metrics parameter or default
+                metrics_str = request.parameters.get("metrics", "relevance,correctness") if request.parameters else "relevance,correctness"
+
+            metrics = self._parse_metrics(metrics_str)
 
             # Get RAGAS adapter and run evaluation
             adapter = self._get_ragas_adapter()
             scores = await adapter.evaluate(input_text, output_text, metrics, request.parameters or {})
 
+            # Get validation results for metadata
+            validation_results = adapter.get_validation_results()
+
             # Calculate overall score
             if not scores:
+                # Still include validation results in metadata even when no scores
+                execution_time = time.time() - start_time
+                metadata = {
+                    "provider": "ragas",
+                    "execution_time_seconds": str(execution_time)
+                }
+
+                # Add validation results to metadata
+                if validation_results:
+                    metadata.update({
+                        "requested_metrics": ",".join(metrics),
+                        "valid_metrics": ",".join(validation_results.get('valid_metrics', [])),
+                        "invalid_metrics": ",".join(validation_results.get('invalid_metrics', [])),
+                        "validation_summary": f"{len(validation_results.get('valid_metrics', []))} successful, {len(validation_results.get('invalid_metrics', []))} failed"
+                    })
+
+                    # Add specific validation errors if any
+                    if validation_results.get('validation_errors'):
+                        import json
+                        metadata["validation_errors"] = json.dumps(validation_results['validation_errors'])
+
+                        # Add information about failed metrics
+                        if validation_results.get('invalid_metrics'):
+                            failed_metrics_info = {}
+                            for metric in validation_results['invalid_metrics']:
+                                error = validation_results['validation_errors'].get(metric, 'validation failed')
+                                failed_metrics_info[metric] = error
+                            metadata["failed_metrics"] = json.dumps(failed_metrics_info)
+
                 return EvaluationResponse(
                     score="0.0",
                     passed=False,
                     error="No scores returned from RAGAS evaluation",
-                    metadata={"provider": "ragas", "execution_time_seconds": str(time.time() - start_time)}
+                    metadata=metadata
                 )
 
             overall_score = sum(scores.values()) / len(scores)
@@ -143,6 +187,28 @@ class RagasProvider(OSSEvaluationProvider):
                 "average_score": f"{overall_score:.2f}",
                 "execution_time_seconds": str(execution_time)
             }
+
+            # Add validation results to metadata (backward compatible - only additive)
+            if validation_results:
+                metadata.update({
+                    "requested_metrics": ",".join(metrics),
+                    "valid_metrics": ",".join(validation_results.get('valid_metrics', [])),
+                    "invalid_metrics": ",".join(validation_results.get('invalid_metrics', [])),
+                    "validation_summary": f"{len(validation_results.get('valid_metrics', []))} successful, {len(validation_results.get('invalid_metrics', []))} failed"
+                })
+
+                # Add specific validation errors if any (as JSON string for structured data)
+                if validation_results.get('validation_errors'):
+                    import json
+                    metadata["validation_errors"] = json.dumps(validation_results['validation_errors'])
+
+                # Add information about failed metrics (backward compatible)
+                if validation_results.get('invalid_metrics'):
+                    failed_metrics_info = {}
+                    for metric in validation_results['invalid_metrics']:
+                        error = validation_results['validation_errors'].get(metric, 'validation failed')
+                        failed_metrics_info[metric] = error
+                    metadata["failed_metrics"] = json.dumps(failed_metrics_info)
 
             # Add model info as strings
             for key, value in model_info.items():

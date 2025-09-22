@@ -48,7 +48,7 @@ class TestLangfuseTraceAdapter:
 
     def test_adapter_initialization(self):
         """Test LangfuseTraceAdapter can be initialized with optional parameters."""
-        from evaluator.oss_providers.langfuse_trace_adapter import LangfuseTraceAdapter
+        from evaluator.oss_providers.langfuse.langfuse_trace_adapter import LangfuseTraceAdapter
 
         # Test default initialization
         adapter = LangfuseTraceAdapter()
@@ -61,7 +61,7 @@ class TestLangfuseTraceAdapter:
 
     def test_adapter_initialization_with_client(self):
         """Test LangfuseTraceAdapter can be initialized with existing client."""
-        from evaluator.oss_providers.langfuse_trace_adapter import LangfuseTraceAdapter
+        from evaluator.oss_providers.langfuse.langfuse_trace_adapter import LangfuseTraceAdapter
 
         mock_client = Mock()
         adapter = LangfuseTraceAdapter(langfuse_client=mock_client)
@@ -70,7 +70,7 @@ class TestLangfuseTraceAdapter:
     @pytest.mark.asyncio
     async def test_trace_creation_and_score_recording(self, mock_langfuse_client, sample_params, sample_scores):
         """Test trace creation and recording external evaluation scores."""
-        from evaluator.oss_providers.langfuse_trace_adapter import LangfuseTraceAdapter
+        from evaluator.oss_providers.langfuse.langfuse_trace_adapter import LangfuseTraceAdapter
 
         adapter = LangfuseTraceAdapter(langfuse_client=mock_langfuse_client)
 
@@ -112,7 +112,7 @@ class TestLangfuseTraceAdapter:
     @pytest.mark.asyncio
     async def test_trace_creation_can_be_disabled(self, mock_langfuse_client, sample_params, sample_scores):
         """Test that trace creation can be disabled while still recording scores."""
-        from evaluator.oss_providers.langfuse_trace_adapter import LangfuseTraceAdapter
+        from evaluator.oss_providers.langfuse.langfuse_trace_adapter import LangfuseTraceAdapter
 
         # Test with traces disabled
         adapter = LangfuseTraceAdapter(create_traces=False, langfuse_client=mock_langfuse_client)
@@ -134,7 +134,7 @@ class TestLangfuseTraceAdapter:
     @pytest.mark.asyncio
     async def test_score_aggregation_and_metadata(self, mock_langfuse_client, sample_params, sample_scores):
         """Test that scores are properly aggregated and metadata is included."""
-        from evaluator.oss_providers.langfuse_trace_adapter import LangfuseTraceAdapter
+        from evaluator.oss_providers.langfuse.langfuse_trace_adapter import LangfuseTraceAdapter
 
         adapter = LangfuseTraceAdapter(langfuse_client=mock_langfuse_client)
 
@@ -169,7 +169,7 @@ class TestLangfuseTraceAdapter:
 
     def test_parameter_validation(self, sample_params):
         """Test that required parameters are validated."""
-        from evaluator.oss_providers.langfuse_trace_adapter import LangfuseTraceAdapter
+        from evaluator.oss_providers.langfuse.langfuse_trace_adapter import LangfuseTraceAdapter
 
         adapter = LangfuseTraceAdapter()
 
@@ -187,7 +187,7 @@ class TestLangfuseTraceAdapter:
     @pytest.mark.asyncio
     async def test_missing_langfuse_library_handling(self, sample_params, sample_scores):
         """Test graceful handling when Langfuse library is not installed."""
-        from evaluator.oss_providers.langfuse_trace_adapter import LangfuseTraceAdapter
+        from evaluator.oss_providers.langfuse.langfuse_trace_adapter import LangfuseTraceAdapter
 
         adapter = LangfuseTraceAdapter()
 
@@ -210,7 +210,7 @@ class TestLangfuseTraceAdapter:
     @pytest.mark.asyncio
     async def test_trace_with_custom_session_id(self, mock_langfuse_client, sample_params, sample_scores):
         """Test trace creation with custom session ID."""
-        from evaluator.oss_providers.langfuse_trace_adapter import LangfuseTraceAdapter
+        from evaluator.oss_providers.langfuse.langfuse_trace_adapter import LangfuseTraceAdapter
 
         adapter = LangfuseTraceAdapter(langfuse_client=mock_langfuse_client)
 
@@ -237,7 +237,7 @@ class TestLangfuseTraceAdapter:
     @pytest.mark.asyncio
     async def test_error_handling_during_trace_creation(self, mock_langfuse_client, sample_params, sample_scores):
         """Test error handling when trace creation fails."""
-        from evaluator.oss_providers.langfuse_trace_adapter import LangfuseTraceAdapter
+        from evaluator.oss_providers.langfuse.langfuse_trace_adapter import LangfuseTraceAdapter
 
         adapter = LangfuseTraceAdapter(langfuse_client=mock_langfuse_client)
 
@@ -257,7 +257,7 @@ class TestLangfuseTraceAdapter:
     @pytest.mark.asyncio
     async def test_batch_score_recording(self, mock_langfuse_client, sample_params):
         """Test recording multiple sets of scores to the same trace."""
-        from evaluator.oss_providers.langfuse_trace_adapter import LangfuseTraceAdapter
+        from evaluator.oss_providers.langfuse.langfuse_trace_adapter import LangfuseTraceAdapter
 
         adapter = LangfuseTraceAdapter(langfuse_client=mock_langfuse_client)
 

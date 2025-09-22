@@ -48,7 +48,7 @@ class TestLangfuseTraceAdapter:
 
     def test_adapter_initialization(self):
         """Test LangfuseAdapter can be initialized with optional parameters."""
-        from evaluator.oss_providers.langfuse_adapter import LangfuseAdapter
+        from evaluator.oss_providers.langfuse.langfuse_adapter import LangfuseAdapter
 
         # Test default initialization
         adapter = LangfuseAdapter()
@@ -61,7 +61,7 @@ class TestLangfuseTraceAdapter:
 
     def test_adapter_initialization_with_client(self):
         """Test LangfuseAdapter can be initialized with existing client."""
-        from evaluator.oss_providers.langfuse_adapter import LangfuseAdapter
+        from evaluator.oss_providers.langfuse.langfuse_adapter import LangfuseAdapter
 
         mock_client = Mock()
         adapter = LangfuseAdapter(langfuse_client=mock_client)
@@ -70,7 +70,7 @@ class TestLangfuseTraceAdapter:
     @pytest.mark.asyncio
     async def test_trace_creation_and_score_recording(self, mock_langfuse_client, sample_params, sample_scores):
         """Test trace creation and recording external evaluation scores."""
-        from evaluator.oss_providers.langfuse_adapter import LangfuseAdapter
+        from evaluator.oss_providers.langfuse.langfuse_adapter import LangfuseAdapter
 
         adapter = LangfuseAdapter(langfuse_client=mock_langfuse_client)
 
@@ -112,7 +112,7 @@ class TestLangfuseTraceAdapter:
     @pytest.mark.asyncio
     async def test_score_calculation_and_aggregation(self, sample_params):
         """Test that scores are properly calculated and aggregated."""
-        from evaluator.oss_providers.langfuse_adapter import LangfuseAdapter
+        from evaluator.oss_providers.langfuse.langfuse_adapter import LangfuseAdapter
 
         adapter = LangfuseAdapter(create_traces=False)
 
@@ -144,7 +144,7 @@ class TestLangfuseTraceAdapter:
     @pytest.mark.asyncio
     async def test_missing_langfuse_library_handling(self, sample_params):
         """Test graceful handling when Langfuse library is not installed."""
-        from evaluator.oss_providers.langfuse_adapter import LangfuseAdapter
+        from evaluator.oss_providers.langfuse.langfuse_adapter import LangfuseAdapter
 
         adapter = LangfuseAdapter()
 
@@ -166,7 +166,7 @@ class TestLangfuseTraceAdapter:
 
     def test_parameter_validation(self, sample_params):
         """Test that required parameters are validated."""
-        from evaluator.oss_providers.langfuse_adapter import LangfuseAdapter
+        from evaluator.oss_providers.langfuse.langfuse_adapter import LangfuseAdapter
 
         adapter = LangfuseAdapter()
 
@@ -184,7 +184,7 @@ class TestLangfuseTraceAdapter:
     @pytest.mark.asyncio
     async def test_trace_creation_optional(self, mock_langfuse_client, sample_params):
         """Test that trace creation can be disabled."""
-        from evaluator.oss_providers.langfuse_adapter import LangfuseAdapter
+        from evaluator.oss_providers.langfuse.langfuse_adapter import LangfuseAdapter
 
         # Test with traces disabled
         adapter_no_traces = LangfuseAdapter(create_traces=False, langfuse_client=mock_langfuse_client)
@@ -226,7 +226,7 @@ class TestLangfuseTraceAdapter:
     @pytest.mark.asyncio
     async def test_custom_evaluator_support(self, sample_params):
         """Test support for custom Langfuse evaluators."""
-        from evaluator.oss_providers.langfuse_adapter import LangfuseAdapter
+        from evaluator.oss_providers.langfuse.langfuse_adapter import LangfuseAdapter
 
         adapter = LangfuseAdapter()
 
@@ -252,7 +252,7 @@ class TestLangfuseTraceAdapter:
     @pytest.mark.asyncio
     async def test_error_handling_in_evaluation(self, sample_params):
         """Test error handling when evaluation fails."""
-        from evaluator.oss_providers.langfuse_adapter import LangfuseAdapter
+        from evaluator.oss_providers.langfuse.langfuse_adapter import LangfuseAdapter
 
         adapter = LangfuseAdapter()
 
@@ -275,7 +275,7 @@ class TestLangfuseTraceAdapter:
     @pytest.mark.asyncio
     async def test_evaluator_configuration(self, sample_params):
         """Test that evaluators can be configured with custom settings."""
-        from evaluator.oss_providers.langfuse_adapter import LangfuseAdapter
+        from evaluator.oss_providers.langfuse.langfuse_adapter import LangfuseAdapter
 
         adapter = LangfuseAdapter()
 
