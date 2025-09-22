@@ -22,7 +22,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 
 	t.Run("user type with simple input", func(t *testing.T) {
 		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-		
+
 		query := arkv1alpha1.Query{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-query",
@@ -37,7 +37,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
 		require.NoError(t, err)
 		require.Len(t, messages, 1)
-		
+
 		// Check that it's a user message
 		assert.NotNil(t, messages[0].OfUser)
 		assert.Equal(t, "Hello, how are you?", messages[0].OfUser.Content.OfString.Value)
@@ -54,12 +54,12 @@ func TestGetQueryInputMessages(t *testing.T) {
 				"location": "Berlin",
 			},
 		}
-		
+
 		k8sClient := fake.NewClientBuilder().
 			WithScheme(scheme).
 			WithObjects(configMap).
 			Build()
-		
+
 		query := arkv1alpha1.Query{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-query",
@@ -87,7 +87,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
 		require.NoError(t, err)
 		require.Len(t, messages, 1)
-		
+
 		// Check that template was resolved
 		assert.NotNil(t, messages[0].OfUser)
 		assert.Equal(t, "What's the weather in Berlin?", messages[0].OfUser.Content.OfString.Value)
@@ -95,7 +95,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 
 	t.Run("messages type with multiple messages", func(t *testing.T) {
 		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-		
+
 		query := arkv1alpha1.Query{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-query",
@@ -123,15 +123,15 @@ func TestGetQueryInputMessages(t *testing.T) {
 		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
 		require.NoError(t, err)
 		require.Len(t, messages, 3)
-		
+
 		// Check first message (user)
 		assert.NotNil(t, messages[0].OfUser)
 		assert.Equal(t, "Hello!", messages[0].OfUser.Content.OfString.Value)
-		
+
 		// Check second message (assistant)
 		assert.NotNil(t, messages[1].OfAssistant)
 		assert.Equal(t, "Hi there! How can I help you?", messages[1].OfAssistant.Content.OfString.Value)
-		
+
 		// Check third message (user)
 		assert.NotNil(t, messages[2].OfUser)
 		assert.Equal(t, "What's the weather like?", messages[2].OfUser.Content.OfString.Value)
@@ -139,7 +139,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 
 	t.Run("messages type with system message", func(t *testing.T) {
 		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-		
+
 		query := arkv1alpha1.Query{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-query",
@@ -163,11 +163,11 @@ func TestGetQueryInputMessages(t *testing.T) {
 		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
 		require.NoError(t, err)
 		require.Len(t, messages, 2)
-		
+
 		// Check system message
 		assert.NotNil(t, messages[0].OfSystem)
 		assert.Equal(t, "You are a helpful assistant.", messages[0].OfSystem.Content.OfString.Value)
-		
+
 		// Check user message
 		assert.NotNil(t, messages[1].OfUser)
 		assert.Equal(t, "Hello!", messages[1].OfUser.Content.OfString.Value)
@@ -175,7 +175,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 
 	t.Run("messages type with unknown role defaults to user", func(t *testing.T) {
 		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-		
+
 		query := arkv1alpha1.Query{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-query",
@@ -195,7 +195,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
 		require.NoError(t, err)
 		require.Len(t, messages, 1)
-		
+
 		// Check that unknown role defaults to user
 		assert.NotNil(t, messages[0].OfUser)
 		assert.Equal(t, "This should become a user message", messages[0].OfUser.Content.OfString.Value)
@@ -203,7 +203,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 
 	t.Run("empty type defaults to user", func(t *testing.T) {
 		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-		
+
 		query := arkv1alpha1.Query{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-query",
@@ -218,7 +218,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
 		require.NoError(t, err)
 		require.Len(t, messages, 1)
-		
+
 		// Check that it defaults to user type
 		assert.NotNil(t, messages[0].OfUser)
 		assert.Equal(t, "Default behavior test", messages[0].OfUser.Content.OfString.Value)
@@ -226,7 +226,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 
 	t.Run("user type with template resolution error", func(t *testing.T) {
 		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-		
+
 		query := arkv1alpha1.Query{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-query",
@@ -258,7 +258,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 
 	t.Run("messages type with empty messages array", func(t *testing.T) {
 		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-		
+
 		query := arkv1alpha1.Query{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-query",
@@ -282,7 +282,7 @@ func BenchmarkGetQueryInputMessages(b *testing.B) {
 	require.NoError(b, corev1.AddToScheme(scheme))
 	require.NoError(b, arkv1alpha1.AddToScheme(scheme))
 	k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	
+
 	// Test with user type
 	userQuery := arkv1alpha1.Query{
 		ObjectMeta: metav1.ObjectMeta{
@@ -294,7 +294,7 @@ func BenchmarkGetQueryInputMessages(b *testing.B) {
 			Input: "Hello, this is a benchmark test message",
 		},
 	}
-	
+
 	// Test with messages type
 	messagesQuery := arkv1alpha1.Query{
 		ObjectMeta: metav1.ObjectMeta{
