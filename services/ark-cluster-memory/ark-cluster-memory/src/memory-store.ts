@@ -44,7 +44,8 @@ export class MemoryStore {
       timestamp: new Date().toISOString(),
       session_id: sessionID,
       query_id: '', // Legacy method without query_id
-      message
+      message,
+      sequence: this.messages.length + 1
     };
     
     this.messages.push(storedMessage);
