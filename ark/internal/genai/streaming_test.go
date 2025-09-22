@@ -12,6 +12,40 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+// Helper to create a test ConfigMap for streaming config
+func createTestConfigMap(data map[string]string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ark-config-streaming",
+			Namespace: "default",
+		},
+		Data: data,
+	}
+}
+
+// Helper to verify test results
+func verifyStreamingConfig(t *testing.T, config *StreamingConfig, err error, expectNil, expectError, expectEnabled bool) {
+	t.Helper()
+
+	if expectError && err == nil {
+		t.Errorf("expected error but got nil")
+	}
+	if !expectError && err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	if expectNil && config != nil {
+		t.Errorf("expected nil config but got %+v", config)
+	}
+	if !expectNil && config == nil && !expectError {
+		t.Errorf("expected non-nil config but got nil")
+	}
+
+	if config != nil && config.Enabled != expectEnabled {
+		t.Errorf("expected enabled=%v but got %v", expectEnabled, config.Enabled)
+	}
+}
+
 func TestGetStreamingConfig(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -28,94 +62,58 @@ func TestGetStreamingConfig(t *testing.T) {
 		},
 		{
 			name: "valid config enabled",
-			configMap: &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ark-config-streaming",
-					Namespace: "default",
-				},
-				Data: map[string]string{
-					"enabled": "true",
-					"serviceRef": `name: ark-cluster-memory
-port: "80"`,
-				},
-			},
+			configMap: createTestConfigMap(map[string]string{
+				"enabled": "true",
+				"serviceRef": `name: ark-cluster-memory
+port: "http"`,
+			}),
 			expectNil:     false,
 			expectError:   false,
 			expectEnabled: true,
 		},
 		{
 			name: "valid config disabled",
-			configMap: &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ark-config-streaming",
-					Namespace: "default",
-				},
-				Data: map[string]string{
-					"enabled": "false",
-					"serviceRef": `name: ark-cluster-memory
-port: "80"`,
-				},
-			},
+			configMap: createTestConfigMap(map[string]string{
+				"enabled": "false",
+				"serviceRef": `name: ark-cluster-memory
+port: "http"`,
+			}),
 			expectNil:     false,
 			expectError:   false,
 			expectEnabled: false,
 		},
 		{
 			name: "missing enabled field",
-			configMap: &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ark-config-streaming",
-					Namespace: "default",
-				},
-				Data: map[string]string{
-					"serviceRef": `name: ark-cluster-memory
-port: "80"`,
-				},
-			},
+			configMap: createTestConfigMap(map[string]string{
+				"serviceRef": `name: ark-cluster-memory
+port: "http"`,
+			}),
 			expectNil:   false,
 			expectError: true,
 		},
 		{
 			name: "missing serviceRef field when enabled",
-			configMap: &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ark-config-streaming",
-					Namespace: "default",
-				},
-				Data: map[string]string{
-					"enabled": "true",
-				},
-			},
+			configMap: createTestConfigMap(map[string]string{
+				"enabled": "true",
+			}),
 			expectNil:   false,
 			expectError: true,
 		},
 		{
 			name: "invalid serviceRef YAML",
-			configMap: &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ark-config-streaming",
-					Namespace: "default",
-				},
-				Data: map[string]string{
-					"enabled":    "true",
-					"serviceRef": "invalid: yaml: structure:",
-				},
-			},
+			configMap: createTestConfigMap(map[string]string{
+				"enabled":    "true",
+				"serviceRef": "invalid: yaml: structure:",
+			}),
 			expectNil:   false,
 			expectError: true,
 		},
 		{
 			name: "serviceRef missing name",
-			configMap: &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ark-config-streaming",
-					Namespace: "default",
-				},
-				Data: map[string]string{
-					"enabled":    "true",
-					"serviceRef": `port: "8080"`,
-				},
-			},
+			configMap: createTestConfigMap(map[string]string{
+				"enabled":    "true",
+				"serviceRef": `port: "http"`,
+			}),
 			expectNil:   false,
 			expectError: true,
 		},
@@ -140,24 +138,8 @@ port: "80"`,
 			// Call GetStreamingConfig
 			config, err := GetStreamingConfig(context.Background(), client, "default")
 
-			// Check expectations
-			if tt.expectError && err == nil {
-				t.Errorf("expected error but got nil")
-			}
-			if !tt.expectError && err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-
-			if tt.expectNil && config != nil {
-				t.Errorf("expected nil config but got %+v", config)
-			}
-			if !tt.expectNil && config == nil && !tt.expectError {
-				t.Errorf("expected non-nil config but got nil")
-			}
-
-			if config != nil && config.Enabled != tt.expectEnabled {
-				t.Errorf("expected enabled=%v but got %v", tt.expectEnabled, config.Enabled)
-			}
+			// Check expectations using helper
+			verifyStreamingConfig(t, config, err, tt.expectNil, tt.expectError, tt.expectEnabled)
 		})
 	}
 }
