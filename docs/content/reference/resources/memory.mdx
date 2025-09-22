@@ -4,7 +4,7 @@ The `Memory` resource represents persistent storage for converations with agents
 
 The backend for a memory resource is an HTTP server that implements the [Memory API Specification](#memory-api-specification).
 
-In time, this resource will also configure how operations such as compaction can be performed. A reference implementation [PostgreSQL Memory](#postgresql-memory) is available.
+In time, this resource will also configure how operations such as compaction can be performed. A reference implementation [ARK Cluster Memory](#ark-cluster-memory) is available.
 
 ## Specification
 
@@ -12,7 +12,7 @@ In time, this resource will also configure how operations such as compaction can
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Memory
 metadata:
-  name: postgres-memory
+  name: ark-cluster-memory
   annotations:
     # Enable event streaming support for this memory service
     ark.mckinsey.com/memory-event-stream-enabled: "true"
@@ -22,9 +22,9 @@ spec:
     # A 'value' can be provided to give a specific URL, or a service ref to
     # point to a specific service in the cluster.
     valueFrom:
-      # In this example, we point to a deployment of the "Postgres Memory".
+      # In this example, we point to a deployment of the "ARK Cluster Memory".
       serviceRef:
-        name: postgres-memory
+        name: ark-cluster-memory
         port: 8080
 ```
 
@@ -53,7 +53,7 @@ spec:
   targets:
     - name: my-agent
   memory:
-    name: postgres-memory
+    name: ark-cluster-memory
   # Optional: specify session ID to group related queries
   # If not provided, the query UID is used as the session identifier
   sessionId: "my-conversation-session"
@@ -147,12 +147,12 @@ Returns object with session IDs:
 ```
 
 
-## PostgreSQL Memory
+## ARK Cluster Memory
 
-The PostgreSQL memory service can be installed with:
+The ARK Cluster Memory service provides an in-memory storage implementation with streaming support:
 
 ```bash
-make postgres-memory-install
+make ark-cluster-memory-install
 ```
 
-Crunchy PGO is used to simplfy PostgresSQL management.
+It stores messages in memory and supports real-time streaming via Server-Sent Events (SSE).

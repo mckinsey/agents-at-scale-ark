@@ -80,6 +80,7 @@ def query_to_detail_response(query: dict) -> QueryDetailResponse:
         cancel=spec.get("cancel"),
         evaluators=spec.get("evaluators"),
         evaluatorSelector=spec.get("evaluatorSelector"),
+        metadata=metadata,
         status=query.get("status")
     )
 
@@ -147,11 +148,16 @@ async def create_query(
             spec["evaluatorSelector"] = query.evaluatorSelector.model_dump()
         
         # Create the QueryV1alpha1 object
+        metadata = {
+            "name": query.name,
+            "namespace": namespace
+        }
+        # The incoming query may contain additional metadata such as annotations (e.g. streaming annotation)
+        if query.metadata:
+            metadata.update(query.metadata)
+
         query_resource = QueryV1alpha1(
-            metadata={
-                "name": query.name,
-                "namespace": namespace
-            },
+            metadata=metadata,
             spec=QueryV1alpha1Spec(**spec)
         )
         

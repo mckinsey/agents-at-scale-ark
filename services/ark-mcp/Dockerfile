@@ -1,12 +1,15 @@
 FROM python:3.12.9-slim
 
-# Update package list and upgrade security packages
-RUN apt-get update && \
+WORKDIR /app
+
+# Create non-root user first
+RUN adduser --system --uid 1001 --home /home/arkmcp arkmcp && \
+    apt-get update && \
     apt-get upgrade -y libpam0g libsqlite3-0 zlib1g libgnutls30 && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /home/arkmcp && \
+    chown -R arkmcp:nogroup /home/arkmcp
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
@@ -24,20 +27,18 @@ COPY ark-mcp/src/ ./src/
 RUN uv add file://$(ls /tmp/wheels/ark*.whl) && \
     uv sync --frozen --no-install-project
 
-# Create non-root user
-RUN addgroup --system --gid 1001 arkmcp
-RUN adduser --system --uid 1001 arkmcp
-
-# Create cache directory for uv
-RUN mkdir -p /app/.cache && \
-    chown -R arkmcp:arkmcp /app
+# Set up directories for non-root user
+RUN mkdir -p /home/arkmcp/.cache/uv && \
+    mkdir -p /app/src/ark_mcp.egg-info && \
+    chown -R arkmcp:nogroup /home/arkmcp && \
+    chown -R arkmcp:nogroup /app
 
 # Switch to non-root user
 USER arkmcp
 
 # Set HOME environment variable to fix uv cache location
-ENV HOME=/app
-ENV UV_CACHE_DIR=/app/.cache/uv
+ENV HOME=/home/arkmcp
+ENV XDG_CACHE_HOME=/home/arkmcp/.cache
 
 # Expose port 2627 (AMCP on dial pad)
 EXPOSE 2627
