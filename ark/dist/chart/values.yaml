@@ -46,6 +46,12 @@ rbac:
   enable: true
   # Service accounts the controller can impersonate for multi-tenancy
   impersonation:
+    # Allow impersonation of all service accounts (less secure but more flexible)
+    # WARNING: This grants broad impersonation permissions
+    allowAll: false
+
+    # Explicitly list allowed service accounts (more secure, default approach)
+    # Only used when allowAll is false
     serviceAccounts:
       - default  # Default service account for backward compatibility
       - ark-tenant-sa  # Standard tenant service account name

@@ -127,20 +127,25 @@ This creates a ClusterRoleBinding that connects your GitHub repository identity 
 
 ## Tenancy and Ark Namespaces
 
-By default, the `ark-controller` is deployed into the `ark-system` namespace. When the controller is excecuting a query, it will impersonate the user account provided in `query.serviceAccount` field (`default` is used if no service account is specified).
+By default, the `ark-controller` is deployed into the `ark-system` namespace. When the controller is executing a query, it will impersonate the user account provided in `query.serviceAccount` field (`default` is used if no service account is specified).
 
-The out-of-the-box installation gives the `ark-controller` permissions to impersonate the `default` service account from all namespaces. This can be configured in the Helm chart to support multi-tenancy:
+The out-of-the-box installation gives the `ark-controller` permissions to impersonate the `default` and `ark-tenant-sa` service accounts. This can be configured in the Helm chart to support multi-tenancy:
 
 ```yaml
 # values.yaml
 rbac:
   enable: true
   impersonation:
-    serviceAccounts:
-      - default           # Default service account
-      - tenant-1-sa       # Service account for tenant-1 namespace
-      - tenant-2-sa       # Service account for tenant-2 namespace
-      - prod-sa          # Service account for production namespace
+    # Option 1: Allow all service accounts (less secure, more flexible)
+    allowAll: true
+
+    # Option 2: Explicitly list allowed accounts (more secure, recommended)
+    # allowAll: false
+    # serviceAccounts:
+    #   - default
+    #   - ark-tenant-sa
+    #   - tenant-1-sa
+    #   - tenant-2-sa
 ```
 
 To apply this configuration:
@@ -180,36 +185,38 @@ If not specified, the service account `default` will be used. This will create:
 
 Additional options include resource quotas and network policies, which are documented in the chart.
 
-The ARK controller must be granted permission to impersonate the tenant's service account. You can do this by either:
+The ARK controller needs permission to impersonate tenant service accounts. Choose one approach:
 
-**Option 1: Update via values file (recommended)**
+**Option 1: Allow all service accounts (simplest for development)**
 
-Create a values file with all your service accounts:
+```bash
+helm upgrade ark-controller ./ark/dist/chart --set rbac.impersonation.allowAll=true
+```
+
+**Option 2: Use standard naming convention**
+
+If all tenants use `ark-tenant-sa` as their service account name (the default), no additional configuration is needed.
+
+**Option 3: Explicitly list service accounts (most secure)**
+
+Create a values file:
 
 ```yaml
 # ark-tenants-values.yaml
 rbac:
   enable: true
   impersonation:
+    allowAll: false
     serviceAccounts:
       - default
       - ark-tenant-sa
-      - tenant-1-sa
-      - tenant-2-sa
+      - custom-tenant-sa
 ```
 
-Then upgrade the controller:
+Then upgrade:
 
 ```bash
 helm upgrade ark-controller ./ark/dist/chart -f ark-tenants-values.yaml
-```
-
-**Option 2: Patch the ClusterRole directly**
-
-```bash
-# Add the service account to the controller's impersonation permissions
-kubectl patch clusterrole ark-controller-role --type='json' \
-  -p='[{"op": "add", "path": "/rules/1/resourceNames/-", "value": "tenant-1-sa"}]'
 ```
 
 ### Using the Tenant Service Account

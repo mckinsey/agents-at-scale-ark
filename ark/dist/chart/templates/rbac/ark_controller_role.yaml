@@ -26,6 +26,14 @@ rules:
   - list
   - patch
   - watch
+{{- if .Values.rbac.impersonation.allowAll }}
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - impersonate
+{{- else if .Values.rbac.impersonation.serviceAccounts }}
 {{- range .Values.rbac.impersonation.serviceAccounts }}
 - apiGroups:
   - ""
@@ -35,6 +43,7 @@ rules:
   - serviceaccounts
   verbs:
   - impersonate
+{{- end }}
 {{- end }}
 - apiGroups:
   - ark.mckinsey.com
