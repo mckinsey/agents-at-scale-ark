@@ -860,6 +860,49 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+  release-fark:
+    needs: [check-release]
+    runs-on: ubuntu-24.04
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for goreleaser changelog
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean --skip=publish
+          workdir: ./tools/fark
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ needs.check-release.outputs.tag }}
+
+      - name: Upload fark binaries to release
+        run: |
+          RELEASE_TAG="${{ needs.check-release.outputs.tag }}"
+          echo "Attaching fark binaries to release: $RELEASE_TAG"
+
+          # Upload all generated archives
+          find ./tools/fark/dist -name "*.tar.gz" -o -name "*.zip" | while read archive; do
+            echo "Uploading $(basename "$archive")"
+            gh release upload "$RELEASE_TAG" "$archive" --clobber
+          done
+
+          # Upload checksums file
+          if [ -f "./tools/fark/dist/checksums.txt" ]; then
+            gh release upload "$RELEASE_TAG" "./tools/fark/dist/checksums.txt" --clobber
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   run-deploy-workflow:
     needs: [check-release]
     runs-on: ubuntu-24.04
