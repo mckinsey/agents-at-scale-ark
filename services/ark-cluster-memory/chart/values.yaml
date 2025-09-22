@@ -1,0 +1,80 @@
+# ARK Cluster Memory chart values
+
+# Global annotations added to all resources
+global:
+  annotations:
+    ark.mckinsey.com/service: ark-cluster-memory
+
+# Application configuration
+app:
+  name: ark-cluster-memory
+  image:
+    repository: ark-cluster-memory
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  # Resource configuration
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "1024Mi"
+      cpu: "1000m"
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+
+# Memory service configuration
+memory:
+  # Create a Memory CRD resource
+  createMemoryCRD: true
+  # Set this Memory as the default (names it "default")
+  setAsDefault: false
+  # Port for the HTTP server
+  port: 8080
+  # Maximum message size in bytes (10MB)
+  maxMessageSize: 10485760
+  
+  # Streaming configuration
+  # The ark-cluster-memory service fully supports streaming via Server-Sent Events (SSE),
+  # allowing real-time delivery of query responses as they are generated.
+  # However, streaming is currently disabled until the query controller's streaming
+  # implementation is integrated. Once the controller supports streaming execution,
+  # set this to true to enable end-to-end streaming support.
+  enableStreaming: false
+
+# Persistence configuration
+persistence:
+  enabled: false
+  # Storage class for the PVC (uses default if not specified)
+  storageClass: ""
+  # Access mode for the PVC
+  accessMode: ReadWriteOnce
+  # Size of the persistent volume
+  size: 1Gi
+  # Path where memory data will be stored
+  mountPath: /data
+  # Filename for the memory data
+  memoryFileName: memory.json
+  # Filename for the stream data
+  streamFileName: stream.json
+  # Use existing PVC instead of creating a new one
+  existingClaim: ""
+
+serviceAccount:
+  create: true
+  name: ""
+
+podSecurityContext: {}
+
+securityContext: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

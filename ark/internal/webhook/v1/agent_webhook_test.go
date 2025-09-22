@@ -50,11 +50,10 @@ var _ = Describe("Agent Webhook", func() {
 	})
 
 	Context("When validating agent model requirements", func() {
-		It("Should fail when no model is specified and no default model exists", func() {
-			// Agent without modelRef and no default model in namespace
+		It("Should allow creation without model validation (handled at runtime)", func() {
+			// Agent without modelRef - validation now happens at runtime via status conditions
 			warnings, err := validator.ValidateCreate(ctx, agent)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("no model specified for agent and no 'default' model found"))
+			Expect(err).NotTo(HaveOccurred())
 			Expect(warnings).To(BeEmpty())
 		})
 
@@ -83,15 +82,15 @@ var _ = Describe("Agent Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
-		It("Should still validate models for non-A2A agents", func() {
+		It("Should allow all agents regardless of execution engine (model validation at runtime)", func() {
 			// Set execution engine to something other than A2A
 			agent.Spec.ExecutionEngine = &arkv1alpha1.ExecutionEngineRef{
 				Name: "langchain",
 			}
 
+			// Model validation now happens at runtime, not in webhook
 			warnings, err := validator.ValidateCreate(ctx, agent)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("no model specified for agent and no 'default' model found"))
+			Expect(err).NotTo(HaveOccurred())
 			Expect(warnings).To(BeEmpty())
 		})
 	})

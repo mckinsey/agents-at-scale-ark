@@ -22,7 +22,9 @@ spec:
             metadata:
               name: test-model-openai
             status:
-              phase: ready
+              conditions:
+              - type: ModelAvailable
+                status: "True"
       - assert:
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1

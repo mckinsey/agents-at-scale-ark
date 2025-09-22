@@ -16,6 +16,7 @@ from ...models.agents import (
     AgentDetailResponse,
     ModelRef
 )
+from ...models.common import extract_availability_from_conditions
 from ...constants.annotations import A2A_SERVER_ADDRESS_ANNOTATION
 from .exceptions import handle_k8s_errors
 
@@ -31,19 +32,23 @@ def agent_to_response(agent: dict) -> AgentResponse:
     metadata = agent.get("metadata", {})
     spec = agent.get("spec", {})
     status = agent.get("status", {})
-    
+
     # Extract model ref name if exists
     model_ref = "default"
     if spec.get("modelRef"):
         model_ref = spec["modelRef"].get("name")
-    
+
+    # Extract availability from conditions
+    conditions = status.get("conditions", [])
+    availability = extract_availability_from_conditions(conditions, "Available")
+
     return AgentResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
         description=spec.get("description"),
         model_ref=model_ref,
         prompt=spec.get("prompt"),
-        status=status.get("phase"),
+        available=availability,
         annotations=metadata.get("annotations", {})
     )
 
@@ -73,6 +78,10 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
             logger.warning(f"Failed to parse skills annotation for agent {metadata.get('name', '')}")
             skills = []
     
+    # Extract availability from conditions
+    conditions = status.get("conditions", [])
+    availability = extract_availability_from_conditions(conditions, "Available")
+
     return AgentDetailResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
@@ -84,6 +93,7 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
         tools=spec.get("tools"),
         skills=skills,
         isA2A=is_a2a,
+        available=availability,
         status=status,
         annotations=annotations
     )
