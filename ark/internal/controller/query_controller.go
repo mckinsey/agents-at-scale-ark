@@ -703,10 +703,24 @@ func (r *QueryReconciler) executeTool(ctx context.Context, query arkv1alpha1.Que
 		return nil, fmt.Errorf("unable to get tool %v, error:%w", toolKey, err)
 	}
 
-	// Resolve query input with template parameters (this will be the tool arguments)
-	resolvedInput, err := genai.ResolveQueryInput(ctx, impersonatedClient, query.Namespace, query.Spec.Input, query.Spec.Parameters)
+	// Get input messages using the helper function
+	inputMessages, err := genai.GetQueryInputMessages(ctx, query, impersonatedClient)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve query input: %w", err)
+		return nil, fmt.Errorf("failed to get query input messages: %w", err)
+	}
+
+	// For tools, extract the content from the last message as tool arguments
+	lastMessage := inputMessages[len(inputMessages)-1]
+	var resolvedInput string
+	switch {
+	case lastMessage.OfUser != nil:
+		resolvedInput = lastMessage.OfUser.Content.OfString.Value
+	case lastMessage.OfAssistant != nil:
+		resolvedInput = lastMessage.OfAssistant.Content.OfString.Value
+	case lastMessage.OfTool != nil:
+		resolvedInput = lastMessage.OfTool.Content.OfString.Value
+	default:
+		return nil, fmt.Errorf("unable to extract content from input message")
 	}
 
 	// Parse tool arguments from resolved input (JSON format expected)
