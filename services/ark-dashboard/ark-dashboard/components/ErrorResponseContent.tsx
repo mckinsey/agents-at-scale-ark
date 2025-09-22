@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 
 import { eventsService, Event } from '@/lib/services/events';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface ErrorResponseContentProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any;

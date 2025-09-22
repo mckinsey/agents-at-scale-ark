@@ -17,7 +17,7 @@ import { getKubernetesNameError } from "@/lib/utils/kubernetes-validation"
 interface NamespaceEditorProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSave: (name: string) => Promise<void>
+  onSave: (name: string) => void
 }
 
 export function NamespaceEditor({ open, onOpenChange, onSave }: NamespaceEditorProps) {

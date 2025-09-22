@@ -117,7 +117,10 @@ class QueryResolver:
             
             # Extract metadata for additional context
             self._extract_basic_metadata(query, metrics)
-            
+
+            # Extract model name from agent targets
+            self._extract_model_name(query, metrics)
+
             logger.info(f"Extracted {len(metrics)} metrics from query {query_name}")
             return metrics
             
@@ -436,12 +439,85 @@ class QueryResolver:
             total_seconds += float(minutes_match.group(1)) * 60
         if seconds_match:
             total_seconds += float(seconds_match.group(1))
-        
+
         if total_seconds == 0:
             # If no match, try to parse as plain number (assume seconds)
             try:
                 total_seconds = float(duration_str)
             except ValueError:
                 raise ValueError(f"Unable to parse duration string: {duration_str}")
-        
+
         return total_seconds
+
+    def _extract_model_name(self, query, metrics: Dict[str, Any]) -> None:
+        """Extract model name from query's agent targets"""
+        try:
+            # Handle both dict and QueryV1alpha1 object formats
+            targets = None
+            query_name = metrics.get("queryName", "unknown")
+
+            if isinstance(query, dict):
+                spec = query.get('spec', {})
+                targets = spec.get('targets', [])
+            else:
+                if hasattr(query, 'spec') and query.spec and hasattr(query.spec, 'targets'):
+                    targets = query.spec.targets
+
+            if not targets:
+                logger.warning(f"Query {query_name} has no targets")
+                return
+
+            # Look for agent targets and get model name from first agent
+            for target in targets:
+                if isinstance(target, dict):
+                    target_type = target.get('type')
+                    target_name = target.get('name')
+                else:
+                    target_type = getattr(target, 'type', None)
+                    target_name = getattr(target, 'name', None)
+
+                if target_type == 'agent' and target_name:
+                    try:
+                        # Look up the agent resource to get model reference
+                        namespace = metrics.get("queryNamespace", "default")
+                        agent_model = self._get_agent_model_name(target_name, namespace)
+                        if agent_model:
+                            metrics["modelName"] = agent_model
+                            logger.info(f"DEBUG: Extracted model name '{agent_model}' from agent '{target_name}'")
+                            return
+                    except Exception as e:
+                        logger.warning(f"Failed to get model name from agent '{target_name}': {e}")
+
+            logger.warning(f"Could not extract model name from query {query_name}")
+
+        except Exception as e:
+            logger.error(f"Failed to extract model name: {e}")
+
+    def _get_agent_model_name(self, agent_name: str, namespace: str) -> Optional[str]:
+        """Get model name from agent's modelRef"""
+        try:
+            # Use Custom Objects API to get agent
+            custom_api = client.CustomObjectsApi()
+            agent = custom_api.get_namespaced_custom_object(
+                group="ark.mckinsey.com",
+                version="v1alpha1",
+                namespace=namespace,
+                plural="agents",
+                name=agent_name
+            )
+
+            # Extract model reference
+            spec = agent.get('spec', {})
+            model_ref = spec.get('modelRef', {})
+            model_name = model_ref.get('name')
+
+            if model_name:
+                logger.info(f"Found model reference '{model_name}' in agent '{agent_name}'")
+                return model_name
+            else:
+                logger.warning(f"Agent '{agent_name}' has no modelRef.name")
+                return None
+
+        except Exception as e:
+            logger.error(f"Failed to lookup agent '{agent_name}' in namespace '{namespace}': {e}")
+            return None

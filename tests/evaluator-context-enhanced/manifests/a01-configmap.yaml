@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: evaluation-context-data
+data:
+  chunk1: |
+    Customer Profile: Associated British Foods PLC
+    - Industry: Food processing and retail
+    - Founded: 1935
+    - Key Markets: UK, Europe, Asia, Africa
+    - Primary Business Segments: Grocery, Sugar, Agriculture, Retail
+
+  chunk2: |
+    Risk Assessment Data:
+    - Credit Rating: A-
+    - Regulatory Compliance: Excellent
+    - Market Position: Leading multinational
+    - Financial Stability: Strong cash flow and balance sheet
+
+  chunk3: |
+    Controller Information:
+    - Chairman: Michael McLintock (pending nationality verification)
+    - CEO: George Weston (pending residency documentation)
+    - Independent Directors: Multiple with diverse backgrounds
+    - Screening Status: All cleared with 10/10 confidence scores
