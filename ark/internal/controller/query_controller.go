@@ -199,16 +199,6 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		return
 	}
 
-	// Store eventStream for cleanup later
-	if eventStream != nil {
-		defer func() {
-			// Always close the event stream when query execution completes
-			if err := eventStream.Close(); err != nil {
-				log.Error(err, "Failed to close event stream")
-			}
-		}()
-	}
-
 	queryTracker.Complete("resolved")
 	obj.Status.Responses = responses
 
@@ -243,6 +233,10 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 			if completionErr := eventStream.NotifyCompletion(opCtx); completionErr != nil {
 				// Log warning but don't fail the query
 				log.Error(completionErr, "Failed to notify query completion to event stream")
+			}
+			// Close the event stream after query completion
+			if closeErr := eventStream.Close(); closeErr != nil {
+				log.Error(closeErr, "Failed to close event stream")
 			}
 		}
 		_ = r.updateStatusWithDuration(opCtx, &obj, statusDone, duration)
@@ -721,7 +715,6 @@ func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Qu
 			return nil, err
 		}
 	} else {
-		// Execute without streaming (existing logic)
 		completion, err := model.ChatCompletion(ctx, allMessages, nil, 1)
 		if err != nil {
 			modelTracker.Fail(err)
