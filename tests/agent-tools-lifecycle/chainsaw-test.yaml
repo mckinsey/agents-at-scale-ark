@@ -44,7 +44,7 @@ spec:
             conditions:
             - type: Available
               status: "False"
-              reason: ToolsNotReady
+              reason: ToolNotFound
     catch:
     - events: {}
     - describe:
