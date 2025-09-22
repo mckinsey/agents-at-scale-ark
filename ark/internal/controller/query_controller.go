@@ -477,12 +477,26 @@ func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query
 func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget, impersonatedClient client.Client, memory genai.MemoryInterface, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) {
 	// Create trace based on target type with input/output at trace level
 	tracer := telemetry.NewTraceContext()
+	
+	// Get input messages and marshal to JSON for comprehensive telemetry
+	var inputValue string
+	if inputMessages, err := genai.GetQueryInputMessages(ctx, query, impersonatedClient); err != nil {
+		// Fallback to original input field if helper fails
+		inputValue = query.Spec.Input
+	} else {
+		if jsonBytes, err := json.Marshal(inputMessages); err != nil {
+			inputValue = query.Spec.Input // fallback on marshal error
+		} else {
+			inputValue = string(jsonBytes)
+		}
+	}
+	
 	ctx, span := tracer.StartSpan(ctx, fmt.Sprintf("query.%s", target.Type),
 		attribute.String("target.type", target.Type),
 		attribute.String("target.name", target.Name),
 		attribute.String("query.name", query.Name),
 		attribute.String("query.namespace", query.Namespace),
-		attribute.String("input.value", query.Spec.Input),
+		attribute.String("input.value", inputValue),
 	)
 	defer span.End()
 
