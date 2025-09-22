@@ -61,7 +61,7 @@ parameters:
   openai.embedding_model: "text-embedding-ada-002"
 
   # Evaluation Configuration
-  metrics: "relevance,correctness"
+  evaluation_criteria: "relevance,correctness"
   threshold: "0.7"
   temperature: "0.0"
 ```
@@ -82,9 +82,9 @@ The RAGAS provider supports all standard RAGAS metrics:
 Specify metrics as a comma-separated string:
 
 ```yaml
-metrics: "relevance,correctness,faithfulness"  # Multiple metrics
-metrics: "relevance"                           # Single metric
-metrics: "all"                                 # All available metrics
+evaluation_criteria: "relevance,correctness,faithfulness"  # Multiple metrics
+evaluation_criteria: "relevance"                           # Single metric
+evaluation_criteria: "all"                                 # All available metrics
 ```
 
 ## Provider Configuration
@@ -113,8 +113,9 @@ metrics: "all"                                 # All available metrics
 | Parameter | Required | Description | Default |
 |-----------|----------|-------------|---------|
 | `provider` | ✅ | Must be `"ragas"` | - |
-| `metrics` | ⚪ | Comma-separated metrics | `"relevance,correctness"` |
-| `threshold` | ⚪ | Passing threshold (0.0-1.0) | `"0.7"` |
+| `evaluation_criteria` | ⚪ | Comma-separated metrics | `"relevance,correctness"` |
+| `min-score` | ⚪ | Passing threshold (0.0-1.0) | `"0.7"` |
+| `context` | ⚪ | Base context retrieved that was used for the original llm response | `"0.7"` |
 | `temperature` | ⚪ | Model temperature | `"0.1"` |
 
 ## API Usage
@@ -128,8 +129,7 @@ curl -X POST http://ark-evaluator:8000/evaluate \
     "type": "direct",
     "config": {
       "input": "What is machine learning?",
-      "output": "Machine learning is a subset of artificial intelligence...",
-      "context": "AI and ML are transformative technologies..."
+      "output": "Machine learning is a subset of artificial intelligence..."
     },
     "parameters": {
       "provider": "ragas",
@@ -137,8 +137,9 @@ curl -X POST http://ark-evaluator:8000/evaluate \
       "azure.endpoint": "https://your-instance.openai.azure.com/",
       "azure.api_version": "2024-02-01",
       "azure.deployment_name": "gpt-4",
-      "metrics": "relevance,correctness,faithfulness",
-      "threshold": "0.8"
+      "evaluation_criteria": "relevance,correctness,faithfulness",
+      "context": "AI and ML are transformative technologies..."
+      "min-score": "0.8"
     }
   }'
 ```
@@ -166,59 +167,11 @@ curl -X POST http://ark-evaluator:8000/evaluate \
 }
 ```
 
-## Error Handling
-
-The RAGAS provider includes comprehensive error handling:
-
-### Missing Dependencies
-
-```json
-{
-  "score": "0.0",
-  "passed": false,
-  "error": "ragas library is not installed. Please install it with: pip install ragas datasets",
-  "metadata": {
-    "provider": "ragas",
-    "error_type": "import_error"
-  }
-}
-```
-
-### Configuration Errors
-
-```json
-{
-  "score": "0.0",
-  "passed": false,
-  "error": "Missing required parameters for RAGAS evaluation",
-  "metadata": {
-    "provider": "ragas",
-    "required_azure": "azure.api_key,azure.endpoint,azure.api_version",
-    "required_openai": "openai.api_key,openai.base_url",
-    "provided": "provider"
-  }
-}
-```
-
-### Evaluation Failures
-
-```json
-{
-  "score": "0.0",
-  "passed": false,
-  "error": "RAGAS evaluation failed: Invalid model configuration",
-  "metadata": {
-    "provider": "ragas",
-    "execution_time_seconds": "0.15"
-  }
-}
-```
-
 ## Performance Characteristics
 
 ### Benchmarks
 
-- **Evaluation Time**: 1-5 seconds per evaluation (depending on model and metrics)
+- **Evaluation Time**: 1-20 seconds per evaluation (depending on model and metrics)
 - **Memory Usage**: ~100MB baseline + model-dependent overhead
 - **Throughput**: 10-20 evaluations/minute (with proper rate limiting)
 
@@ -267,6 +220,7 @@ The RAGAS provider includes comprehensive error handling:
 # Azure OpenAI - all required
 azure.api_key: "your-key"
 azure.endpoint: "your-endpoint"
+azure.deployment_name: "model name on azure"
 azure.api_version: "2024-02-01"
 
 # OR OpenAI - all required
@@ -330,7 +284,6 @@ request = UnifiedEvaluationRequest(
     config=EvaluationConfig(
         input="What is the capital of France?",
         output="The capital of France is Paris.",
-        context="France is a country in Western Europe."
     ),
     parameters={
         "provider": "ragas",
@@ -338,7 +291,8 @@ request = UnifiedEvaluationRequest(
         "azure.endpoint": "your-endpoint",
         "azure.api_version": "2024-02-01",
         "azure.deployment_name": "gpt-4",
-        "metrics": "relevance,correctness,faithfulness",
+        "evaluation_criteria": "relevance,correctness,faithfulness",
+        "context" : "France is a country in Western Europe."
         "threshold": "0.8"
     }
 )
@@ -346,39 +300,6 @@ request = UnifiedEvaluationRequest(
 response = await manager.evaluate(request)
 print(f"Score: {response.score}, Passed: {response.passed}")
 ```
-
-## Migration from Langfuse Provider
-
-To migrate from Langfuse provider to standalone RAGAS:
-
-### Before (Langfuse + RAGAS)
-```yaml
-parameters:
-  provider: "langfuse"
-  langfuse.host: "https://cloud.langfuse.com"
-  langfuse.public_key: "your-public-key"
-  langfuse.secret_key: "your-secret-key"
-  metrics: "relevance,correctness"
-```
-
-### After (Standalone RAGAS)
-```yaml
-parameters:
-  provider: "ragas"          # Changed provider
-  # Remove Langfuse parameters
-  # Add model provider parameters
-  azure.api_key: "your-azure-key"
-  azure.endpoint: "your-endpoint"
-  azure.api_version: "2024-02-01"
-  azure.deployment_name: "gpt-4"
-  metrics: "relevance,correctness"  # Same metrics
-```
-
-### Benefits of Migration
-- ⚡ **50-70% faster evaluation** (no tracing overhead)
-- 📦 **Simpler dependencies** (no Langfuse client required)
-- 🔧 **Easier configuration** (fewer parameters)
-- 💰 **Cost reduction** (no Langfuse service costs)
 
 ---
 

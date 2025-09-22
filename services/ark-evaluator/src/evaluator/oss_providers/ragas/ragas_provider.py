@@ -125,7 +125,30 @@ class RagasProvider(OSSEvaluationProvider):
 
             # Get RAGAS adapter and run evaluation
             adapter = self._get_ragas_adapter()
-            scores = await adapter.evaluate(input_text, output_text, metrics, request.parameters or {})
+            try:
+                scores = await adapter.evaluate(input_text, output_text, metrics, request.parameters or {})
+            except Exception as e:
+                # Check if it's our custom RagasEvaluationError
+                if hasattr(e, 'error_type') and hasattr(e, 'message'):
+                    # It's a RagasEvaluationError
+                    execution_time = time.time() - start_time
+                    error_dict = e.to_dict() if hasattr(e, 'to_dict') else {"error": str(e)}
+
+                    return EvaluationResponse(
+                        score=None,
+                        passed=False,
+                        error=error_dict.get("error", str(e)),
+                        metadata={
+                            "provider": "ragas",
+                            "error_type": getattr(e, 'error_type', 'unknown'),
+                            "execution_time_seconds": str(execution_time),
+                            "requested_metrics": ",".join(metrics),
+                            "original_error": error_dict.get("original_error") if error_dict.get("original_error") else None
+                        }
+                    )
+                else:
+                    # Unknown exception, re-raise
+                    raise
 
             # Get validation results for metadata
             validation_results = adapter.get_validation_results()
@@ -252,7 +275,7 @@ class RagasProvider(OSSEvaluationProvider):
     def _get_ragas_adapter(self):
         """Get or create RAGAS adapter instance."""
         if self._ragas_adapter is None:
-            from .ragas_adapter import RagasAdapter
+            from .ragas_adapter_refactored import RagasAdapter
             self._ragas_adapter = RagasAdapter()
         return self._ragas_adapter
 

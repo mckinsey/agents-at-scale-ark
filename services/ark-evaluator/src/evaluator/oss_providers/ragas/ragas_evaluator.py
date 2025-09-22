@@ -382,7 +382,7 @@ class RagasEvaluator:
         except Exception as e:
             logger.error(f"Failed to extract RAGAS results: {e}")
             # Only return fallback scores for metrics that were supposed to be evaluated
-            return {metric: 0.5 for metric in metrics_to_extract}
+            return {metric: 0 for metric in metrics_to_extract}
 
         # Map RAGAS results back to our metric names (only for evaluated metrics)
         for metric in metrics_to_extract:
@@ -443,55 +443,3 @@ class RagasEvaluator:
         logger.info(f"Extracted scores: {scores}")
         return scores
     
-    @staticmethod
-    def get_fallback_scores(
-        input_text: str,
-        output_text: str,
-        metrics: List[str]
-    ) -> Dict[str, float]:
-        """
-        Generate fallback scores when RAGAS evaluation fails.
-        
-        Args:
-            input_text: The input text
-            output_text: The output text
-            metrics: List of metrics to score
-            
-        Returns:
-            Dictionary of fallback scores
-        """
-        logger.warning("Using fallback evaluation method")
-        scores = {}
-        
-        for metric in metrics:
-            if metric == 'relevance':
-                # Simple word overlap
-                input_words = set(input_text.lower().split())
-                output_words = set(output_text.lower().split())
-                overlap = len(input_words.intersection(output_words))
-                scores[metric] = min(1.0, overlap / max(len(input_words), 1))
-            
-            elif metric == 'correctness':
-                # Length-based scoring
-                scores[metric] = min(1.0, len(output_text) / 100)
-            
-            elif metric == 'similarity':
-                # Basic similarity check
-                scores[metric] = 0.6 if len(output_text) > 10 else 0.3
-            
-            elif metric == 'faithfulness':
-                # Default medium score
-                scores[metric] = 0.5
-            
-            elif metric == 'toxicity':
-                # Simple toxicity check
-                toxic_words = ['hate', 'stupid', 'idiot', 'kill', 'die', 'worst']
-                toxic_count = sum(1 for word in toxic_words if word in output_text.lower())
-                scores[metric] = min(1.0, toxic_count / 3.0)
-            
-            else:
-                # Default neutral score
-                scores[metric] = 0.5
-        
-        logger.info(f"Generated fallback scores: {scores}")
-        return scores
