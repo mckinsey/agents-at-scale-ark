@@ -33,7 +33,7 @@ type ChunkWithMetadata struct {
 	Ark map[string]interface{} `json:"ark,omitempty"`
 }
 
-func (m *Model) ChatCompletion(ctx context.Context, messages []Message, memory MemoryInterface, streamingEnabled bool, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStream EventStreamInterface, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
 	if m.Provider == nil {
 		return nil, nil
 	}
@@ -41,7 +41,7 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, memory M
 	// Create telemetry span for all model calls
 	tracer := telemetry.NewTraceContext()
 	spanType := "llm.chat_completion"
-	if streamingEnabled && memory != nil {
+	if eventStream != nil {
 		spanType = "llm.chat_completion_stream"
 	}
 	ctx, span := tracer.StartSpan(ctx, spanType)
@@ -58,13 +58,13 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, memory M
 	var response *openai.ChatCompletion
 	var err error
 
-	// Use streaming if enabled and memory interface is provided
-	if streamingEnabled && memory != nil {
+	// Use streaming if event stream is provided
+	if eventStream != nil {
 		logf.Log.Info("Using streaming mode for chat completion")
 		response, err = m.Provider.ChatCompletionStream(ctx, messages, n, func(chunk *openai.ChatCompletionChunk) error {
 			// Wrap chunk with ARK metadata
 			chunkWithMeta := m.wrapChunkWithMetadata(ctx, chunk)
-			return memory.StreamChunk(ctx, chunkWithMeta)
+			return eventStream.StreamChunk(ctx, chunkWithMeta)
 		}, tools...)
 		if response != nil && len(response.Choices) > 0 {
 			logf.Log.Info("Streaming response received",

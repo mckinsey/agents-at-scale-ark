@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: query-streaming-example
+  annotations:
+    # Enable streaming for this query
+    ark.mckinsey.com/streaming-enabled: "true"
+spec:
+  input: "Tell me a short story about AI"
+  targets:
+    - name: model/gpt-4

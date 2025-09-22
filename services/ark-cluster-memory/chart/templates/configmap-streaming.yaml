@@ -1,0 +1,12 @@
+{{- if .Values.streaming.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ark-config-streaming
+  namespace: {{ .Release.Namespace }}
+data:
+  enabled: {{ .Values.streaming.enabled | quote }}
+  serviceRef: |
+    name: {{ include "ark-cluster-memory.fullname" . }}
+    port: "{{ .Values.service.port }}"
+{{- end }}

@@ -31,7 +31,7 @@ func ProbeModel(ctx context.Context, model *Model) ProbeResult {
 	testMessages := []Message{NewUserMessage("Hello")}
 
 	// Try to get a completion (streaming disabled for probe)
-	_, err := model.ChatCompletion(probeCtx, testMessages, nil, false, 1)
+	_, err := model.ChatCompletion(probeCtx, testMessages, nil, 1)
 	if err != nil {
 		return ProbeResult{
 			Available:     false,
