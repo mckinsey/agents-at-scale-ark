@@ -22,7 +22,6 @@ type Team struct {
 	Recorder    EventEmitter
 	Client      client.Client
 	Namespace   string
-	// Temporary storage for streaming context during execution
 	memory      MemoryInterface
 	eventStream EventStreamInterface
 }
@@ -228,7 +227,6 @@ func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember
 		"strategy":   t.Strategy,
 	})
 
-	// Pass through streaming parameters to enable team member streaming
 	memberNewMessages, err := member.Execute(ctx, userInput, *messages, t.memory, t.eventStream)
 	if err != nil {
 		if IsTerminateTeam(err) {

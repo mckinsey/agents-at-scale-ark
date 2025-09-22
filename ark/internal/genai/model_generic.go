@@ -60,18 +60,11 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStr
 
 	// Use streaming if event stream is provided
 	if eventStream != nil {
-		logf.Log.Info("Using streaming mode for chat completion")
 		response, err = m.Provider.ChatCompletionStream(ctx, messages, n, func(chunk *openai.ChatCompletionChunk) error {
 			// Wrap chunk with ARK metadata
 			chunkWithMeta := m.wrapChunkWithMetadata(ctx, chunk)
 			return eventStream.StreamChunk(ctx, chunkWithMeta)
 		}, tools...)
-		if response != nil && len(response.Choices) > 0 {
-			logf.Log.Info("Streaming response received",
-				"hasToolCalls", len(response.Choices[0].Message.ToolCalls) > 0,
-				"toolCallCount", len(response.Choices[0].Message.ToolCalls),
-				"finishReason", response.Choices[0].FinishReason)
-		}
 	} else {
 		response, err = m.Provider.ChatCompletion(ctx, messages, n, tools...)
 	}
