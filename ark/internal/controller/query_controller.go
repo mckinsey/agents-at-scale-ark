@@ -591,6 +591,7 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 	log.Info("executing agent", "agent", agentCRD.Name)
 
 	// Add agent to execution metadata
+	// This ensures that clients can see the specific agent being queried when streaming
 	ctx = genai.WithExecutionMetadata(ctx, map[string]interface{}{
 		"agent": agentName,
 	})
@@ -708,6 +709,7 @@ func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Qu
 
 	if eventStream != nil {
 		// Execute with streaming
+		// Token usage is tracked within executeModelWithStreaming via the modelTracker
 		var err error
 		responseMessages, err = r.executeModelWithStreaming(ctx, model, allMessages, eventStream, modelTracker)
 		if err != nil {
@@ -726,7 +728,7 @@ func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Qu
 			CompletionTokens: completion.Usage.CompletionTokens,
 			TotalTokens:      completion.Usage.TotalTokens,
 		}
-		modelTracker.CompleteWithTokens("", tokenUsage)
+		modelTracker.CompleteWithTokens(tokenUsage)
 
 		if len(completion.Choices) == 0 {
 			return nil, fmt.Errorf("model returned no completion choices")
@@ -930,7 +932,7 @@ func (r *QueryReconciler) executeModelWithStreaming(ctx context.Context, model *
 		CompletionTokens: completion.Usage.CompletionTokens,
 		TotalTokens:      completion.Usage.TotalTokens,
 	}
-	modelTracker.CompleteWithTokens("streamed", tokenUsage)
+	modelTracker.CompleteWithTokens(tokenUsage)
 
 	if len(completion.Choices) == 0 {
 		return nil, fmt.Errorf("model returned no completion choices")

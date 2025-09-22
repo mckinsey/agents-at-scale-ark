@@ -204,7 +204,7 @@ func (t *Team) executeWithTracking(tracker *OperationTracker, execFunc func(cont
 	}
 
 	if teamTokenUsage.TotalTokens > 0 {
-		tracker.CompleteWithTokens("", teamTokenUsage)
+		tracker.CompleteWithTokens(teamTokenUsage)
 	} else {
 		tracker.Complete("")
 	}

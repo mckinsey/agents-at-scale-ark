@@ -126,7 +126,7 @@ func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, t
 		CompletionTokens: response.Usage.CompletionTokens,
 		TotalTokens:      response.Usage.TotalTokens,
 	}
-	llmTracker.CompleteWithTokens("", tokenUsage)
+	llmTracker.CompleteWithTokens(tokenUsage)
 
 	if len(response.Choices) == 0 {
 		return nil, fmt.Errorf("agent %s received empty response", a.FullName())
