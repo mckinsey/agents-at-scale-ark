@@ -8,8 +8,6 @@ import unittest
 import os
 from unittest.mock import patch
 
-from ark_sdk.auth.validator import TokenValidator
-from ark_sdk.auth.config import AuthConfig
 
 
 class TestAuthConfig(unittest.TestCase):
