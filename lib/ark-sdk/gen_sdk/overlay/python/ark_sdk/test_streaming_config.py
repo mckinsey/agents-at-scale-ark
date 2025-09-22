@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from ark_sdk.streaming_config import ArkStreamingConfig, ServiceRef, get_streaming_config, get_streaming_url, STREAMING_CONFIG_NAME
+from ark_sdk.streaming_config import ArkStreamingConfig, ServiceRef, get_streaming_config, get_streaming_base_url, STREAMING_CONFIG_NAME
 
 
 def test_from_dict_valid():
@@ -70,42 +70,80 @@ async def test_get_config_other_error():
         await get_streaming_config(mock_client, "default")
 
 
-def test_get_streaming_url_valid():
-    """Test constructing streaming URL with valid config."""
+@pytest.mark.asyncio
+async def test_get_streaming_base_url_valid():
+    """Test constructing base URL with valid config."""
     config = ArkStreamingConfig(
         enabled=True,
-        serviceRef=ServiceRef(name="my-service", port="8080", namespace=None)
+        serviceRef=ServiceRef(name="my-service", port="http", namespace=None)
     )
 
-    url = get_streaming_url("test-query", config, "default")
+    mock_client = AsyncMock()
+    mock_service = MagicMock()
+    mock_port = MagicMock()
+    mock_port.name = "http"
+    mock_port.port = 8080
+    mock_service.spec.ports = [mock_port]
+    mock_client.read_namespaced_service.return_value = mock_service
 
-    assert url == "http://my-service.default.svc.cluster.local:8080/stream/test-query?from-beginning=true&wait-for-query=30s"
+    url = await get_streaming_base_url(config, "default", mock_client)
+
+    assert url == "http://my-service.default.svc.cluster.local:8080"
+    mock_client.read_namespaced_service.assert_called_with(
+        name="my-service",
+        namespace="default"
+    )
 
 
-def test_get_streaming_url_with_namespace():
-    """Test streaming URL with service in different namespace."""
+@pytest.mark.asyncio
+async def test_get_streaming_base_url_with_namespace():
+    """Test base URL with service in different namespace."""
     config = ArkStreamingConfig(
         enabled=True,
-        serviceRef=ServiceRef(name="my-service", port="9090", namespace="other-ns")
+        serviceRef=ServiceRef(name="my-service", port="grpc", namespace="other-ns")
     )
 
-    url = get_streaming_url("test-query", config, "default")
+    mock_client = AsyncMock()
+    mock_service = MagicMock()
+    mock_port = MagicMock()
+    mock_port.name = "grpc"
+    mock_port.port = 9090
+    mock_service.spec.ports = [mock_port]
+    mock_client.read_namespaced_service.return_value = mock_service
 
-    assert url == "http://my-service.other-ns.svc.cluster.local:9090/stream/test-query?from-beginning=true&wait-for-query=30s"
+    url = await get_streaming_base_url(config, "default", mock_client)
+
+    assert url == "http://my-service.other-ns.svc.cluster.local:9090"
+    mock_client.read_namespaced_service.assert_called_with(
+        name="my-service",
+        namespace="other-ns"
+    )
 
 
-def test_get_streaming_url_no_config():
+@pytest.mark.asyncio
+async def test_get_streaming_base_url_no_config():
     """Test that missing config raises ValueError."""
+    mock_client = AsyncMock()
+
     with pytest.raises(ValueError, match="No streaming configuration provided"):
-        get_streaming_url("test-query", None, "default")
+        await get_streaming_base_url(None, "default", mock_client)
 
 
-def test_get_streaming_url_invalid_config():
-    """Test that invalid config raises ValueError."""
+@pytest.mark.asyncio
+async def test_get_streaming_base_url_port_not_found():
+    """Test that missing port name raises ValueError."""
     config = ArkStreamingConfig(
         enabled=True,
-        serviceRef=ServiceRef(name="", port="8080", namespace=None)
+        serviceRef=ServiceRef(name="my-service", port="nonexistent", namespace=None)
     )
 
-    with pytest.raises(ValueError, match="missing service name or port"):
-        get_streaming_url("test-query", config, "default")
+    mock_client = AsyncMock()
+    mock_service = MagicMock()
+    mock_port = MagicMock()
+    mock_port.name = "http"
+    mock_port.port = 8080
+    mock_service.spec.ports = [mock_port]
+    mock_client.read_namespaced_service.return_value = mock_service
+
+    with pytest.raises(ValueError, match="Port 'nonexistent' not found"):
+        await get_streaming_base_url(config, "default", mock_client)

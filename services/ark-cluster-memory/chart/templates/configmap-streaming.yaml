@@ -8,5 +8,5 @@ data:
   enabled: {{ .Values.streaming.enabled | quote }}
   serviceRef: |
     name: {{ include "ark-cluster-memory.fullname" . }}
-    port: "http"  # Port name from service definition
+    port: "http"
 {{- end }}

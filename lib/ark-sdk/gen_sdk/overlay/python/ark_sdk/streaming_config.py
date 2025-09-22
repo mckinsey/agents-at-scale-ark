@@ -55,16 +55,16 @@ async def get_streaming_config(k8s_client, namespace: str) -> Optional[ArkStream
     return ArkStreamingConfig.from_dict(cm.data)
 
 
-def get_streaming_url(query_name: str, config: ArkStreamingConfig, namespace: str) -> str:
-    """Get streaming URL for a query.
+async def get_streaming_base_url(config: ArkStreamingConfig, namespace: str, k8s_client) -> str:
+    """Get base URL for streaming service.
 
     Args:
-        query_name: Name of the query
         config: Streaming configuration
         namespace: Query namespace
+        k8s_client: Kubernetes client for resolving port names
 
     Returns:
-        Streaming URL
+        Base URL for streaming service
 
     Raises:
         ValueError: If URL cannot be constructed
@@ -75,11 +75,23 @@ def get_streaming_url(query_name: str, config: ArkStreamingConfig, namespace: st
     if not config.serviceRef.name or not config.serviceRef.port:
         raise ValueError("Invalid streaming configuration: missing service name or port")
 
-    # Build service URL
     service_ns = config.serviceRef.namespace or namespace
-    base_url = f"http://{config.serviceRef.name}.{service_ns}.svc.cluster.local:{config.serviceRef.port}"
 
-    # Construct streaming URL with query parameters:
-    # - from-beginning=true: Start streaming from the first event
-    # - wait-for-query=30s: Wait up to 30s for query to begin
-    return f"{base_url}/stream/{query_name}?from-beginning=true&wait-for-query=30s"
+    # Look up the service to resolve port
+    service = await k8s_client.read_namespaced_service(
+        name=config.serviceRef.name,
+        namespace=service_ns
+    )
+
+    # Find the port - it should be a name
+    port_number = None
+    for svc_port in service.spec.ports:
+        if svc_port.name == config.serviceRef.port:
+            port_number = svc_port.port
+            break
+
+    if port_number is None:
+        raise ValueError(f"Port '{config.serviceRef.port}' not found in service {config.serviceRef.name}")
+
+    # Return base URL
+    return f"http://{config.serviceRef.name}.{service_ns}.svc.cluster.local:{port_number}"

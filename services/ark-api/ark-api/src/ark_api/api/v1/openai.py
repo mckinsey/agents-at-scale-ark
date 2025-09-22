@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from ark_sdk import QueryV1alpha1Spec
 from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
-from ark_sdk.streaming_config import get_streaming_config, get_streaming_url
+from ark_sdk.streaming_config import get_streaming_config, get_streaming_base_url
 from ark_sdk.k8s import get_namespace
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -142,8 +142,10 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
                     }
                 )
 
-            # Streaming is enabled - get the URL (this will throw if misconfigured)
-            streaming_url = get_streaming_url(query_name, streaming_config, namespace)
+            # Streaming is enabled - get the base URL and construct full URL
+            base_url = await get_streaming_base_url(streaming_config, namespace, v1)
+            # Add query parameters for OpenAI streaming
+            streaming_url = f"{base_url}/stream/{query_name}?from-beginning=true&wait-for-query=30s"
 
             # Proxy to the streaming endpoint
             logger.info(f"Streaming available for query: {query_name}")
