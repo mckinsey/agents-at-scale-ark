@@ -595,7 +595,7 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 		return nil, fmt.Errorf("unable to make team %v, error:%w", teamKey, err)
 	}
 
-	messages, err := r.loadInitialMessages(ctx, memory)
+	historyMessages, err := r.loadInitialMessages(ctx, memory)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load initial messages: %w", err)
 	}
@@ -608,7 +608,7 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 
 	userMessage := genai.NewUserMessage(resolvedInput)
 
-	responseMessages, err := team.Execute(ctx, userMessage, messages)
+	responseMessages, err := team.Execute(ctx, userMessage, historyMessages)
 	if err != nil {
 		return nil, err
 	}
