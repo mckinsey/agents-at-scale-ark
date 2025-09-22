@@ -4,8 +4,8 @@ package controller
 
 import (
 	"context"
-	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -57,62 +57,57 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, nil
 	}
 
-	return r.processModel(ctx, model)
-}
+	// Probe the model to test whether it is available.
+	result := r.probeModel(ctx, model)
 
-func (r *ModelReconciler) processModel(ctx context.Context, model arkv1alpha1.Model) (ctrl.Result, error) {
-	log := logf.FromContext(ctx)
-	log.Info("model probing started", "model", model.Name, "namespace", model.Namespace)
+	if !result.Available {
+		//	Log the failure with a detailed error message. This is still 'info'
+		//	as probe failures are expected - the model events and conditions
+		//	will make the error clear to the user.
+		log.Info("model probe failed",
+			"model", model.Name,
+			"status", result.Message,
+			"details", result.DetailedError)
 
-	recorder := genai.NewModelRecorder(&model, r.Recorder)
+		//	Update the condition and events with the (stable) error message.
+		r.setCondition(&model, ModelAvailable, metav1.ConditionFalse, "ModelProbeFailed", result.Message)
+		r.Recorder.Event(&model, corev1.EventTypeWarning, "ModelProbeFailed", result.Message)
 
-	modelTracker := genai.NewOperationTracker(recorder, ctx, "ModelProbe", model.Name, map[string]string{
-		"namespace": model.Namespace,
-		"modelName": model.Spec.Model.Value,
-	})
-
-	if err := r.probeModel(ctx, model); err != nil {
-		log.Error(err, "model probing failed", "model", model.Name)
-		r.setCondition(&model, ModelAvailable, metav1.ConditionFalse, "ProbeFailed", err.Error())
-		modelTracker.Fail(err)
+		//	Update the status and re-attempt after the poll interval.
 		if err := r.updateStatus(ctx, &model); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: model.Spec.PollInterval.Duration}, nil
 	}
-	modelTracker.Complete("probed")
 
-	return r.finalizeModelProcessing(ctx, model)
+	// Success case - model is available
+	r.setCondition(&model, ModelAvailable, metav1.ConditionTrue, "Available", result.Message)
+	r.Recorder.Event(&model, corev1.EventTypeNormal, "ModelProbeSucceeded", result.Message)
+
+	if err := r.updateStatus(ctx, &model); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Continue polling at regular interval
+	return ctrl.Result{RequeueAfter: model.Spec.PollInterval.Duration}, nil
 }
 
-func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Model) error {
+func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Model) genai.ProbeResult {
 	resolvedModel, err := genai.LoadModel(ctx, r.Client, &arkv1alpha1.AgentModelRef{
 		Name:      model.Name,
 		Namespace: model.Namespace,
 	}, model.Namespace)
 	if err != nil {
-		return err
+		return genai.ProbeResult{
+			Available:     false,
+			Message:       "Failed to load model configuration",
+			DetailedError: err,
+		}
 	}
 
-	probeCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	testMessages := []genai.Message{genai.NewUserMessage("Hello")}
-	_, err = resolvedModel.ChatCompletion(probeCtx, testMessages, nil, false, 1)
-	return err
+	return genai.ProbeModel(ctx, resolvedModel)
 }
 
-func (r *ModelReconciler) finalizeModelProcessing(ctx context.Context, model arkv1alpha1.Model) (ctrl.Result, error) {
-	r.setCondition(&model, ModelAvailable, metav1.ConditionTrue, "Available", "Model is available and probed successfully")
-	if err := r.updateStatus(ctx, &model); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	logf.FromContext(ctx).Info("model probing completed", "model", model.Name, "namespace", model.Namespace)
-
-	// Return with requeue interval for continuous polling
-	return ctrl.Result{RequeueAfter: model.Spec.PollInterval.Duration}, nil
-}
 
 // setCondition sets a condition on the Model
 func (r *ModelReconciler) setCondition(model *arkv1alpha1.Model, conditionType string, status metav1.ConditionStatus, reason, message string) {

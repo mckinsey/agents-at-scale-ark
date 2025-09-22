@@ -45,7 +45,7 @@ memory:
   # However, streaming is currently disabled until the query controller's streaming
   # implementation is integrated. Once the controller supports streaming execution,
   # set this to true to enable end-to-end streaming support.
-  enableStreaming: false
+  enableStreaming: true
 
 # Persistence configuration
 persistence:
