@@ -59,35 +59,6 @@ spec:
 - **API Versions**: Provider-specific API versions
 - **Model Parameters**: Temperature, max tokens, etc.
 
-## Agents
-
-Agents are AI entities that process inputs using AI models and can use tools to extend their capabilities.
-
-### Specification
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Agent
-metadata:
-  name: weather
-spec:
-  description: Weather forecasting agent that provides current conditions and forecasts
-  prompt: |
-    You are a helpful weather assistant. You can provide weather forecasts and current conditions for any location.
-
-    You should be concise, direct, and to the point.
-    You should NOT answer with unnecessary preamble or postamble.
-  tools:
-    - type: custom
-      name: get-coordinates
-    - type: custom
-      name: get-forecast
-```
-
-### Key Fields
-- **prompt**: Defines the agent's behavior and instructions
-- **description**: Human-readable description of the agent's purpose
-- **tools**: List of tools the agent can use
-- **modelRef**: Optional reference to a specific model (uses 'default' if not specified)
 
 ## Teams
 
