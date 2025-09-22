@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Bot, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { BaseCard, type BaseCardAction } from "./base-card";
-import { AgentPhaseBadge } from "@/components/ui/agent-phase-badge";
+import { AvailabilityStatusBadge } from "@/components/ui/availability-status-badge";
 import { getCustomIcon } from "@/lib/utils/icon-resolver";
 import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import { toggleFloatingChat } from "@/lib/chat-events";
@@ -91,7 +91,18 @@ export function AgentCard({
               {!isA2A && <span>Model: {modelName}</span>}
               {isA2A && <span>A2A Agent</span>}
             </div>
-            <AgentPhaseBadge agent={agent} />
+            <AvailabilityStatusBadge
+              status={agent.available}
+              eventsLink={{
+                href: "/events",
+                query: {
+                  namespace,
+                  kind: 'Agent',
+                  name: agent.name,
+                  page: 1
+                }
+              }}
+            />
           </div>
         }
       />

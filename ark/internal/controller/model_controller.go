@@ -53,8 +53,8 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		if err := r.updateStatus(ctx, &model); err != nil {
 			return ctrl.Result{}, err
 		}
-		// Return early to avoid double reconciliation, let the status update trigger next reconcile
-		return ctrl.Result{}, nil
+		// Return with poll interval to avoid immediate re-reconciliation
+		return ctrl.Result{RequeueAfter: model.Spec.PollInterval.Duration}, nil
 	}
 
 	return r.processModel(ctx, model)
@@ -62,7 +62,7 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 func (r *ModelReconciler) processModel(ctx context.Context, model arkv1alpha1.Model) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
-	log.Info("model probing started", "model", model.Name, "namespace", model.Namespace)
+	log.V(1).Info("model probing", "model", model.Name, "namespace", model.Namespace)
 
 	recorder := genai.NewModelRecorder(&model, r.Recorder)
 
@@ -71,18 +71,39 @@ func (r *ModelReconciler) processModel(ctx context.Context, model arkv1alpha1.Mo
 		"modelName": model.Spec.Model.Value,
 	})
 
-	if err := r.probeModel(ctx, model); err != nil {
-		log.Error(err, "model probing failed", "model", model.Name)
-		r.setCondition(&model, ModelAvailable, metav1.ConditionFalse, "ProbeFailed", err.Error())
-		modelTracker.Fail(err)
+	// Check current condition
+	currentCondition := meta.FindStatusCondition(model.Status.Conditions, ModelAvailable)
+
+	// Probe the model
+	probeErr := r.probeModel(ctx, model)
+
+	// Determine new status
+	var newStatus metav1.ConditionStatus
+	var reason, message string
+
+	if probeErr != nil {
+		newStatus = metav1.ConditionFalse
+		reason = "ProbeFailed"
+		message = probeErr.Error()
+		modelTracker.Fail(probeErr)
+	} else {
+		newStatus = metav1.ConditionTrue
+		reason = "Available"
+		message = "Model is available and probed successfully"
+		modelTracker.Complete("probed")
+	}
+
+	// Only update if status actually changed
+	if currentCondition == nil || currentCondition.Status != newStatus || currentCondition.Reason != reason {
+		log.Info("model status changed", "model", model.Name, "available", newStatus)
+		r.setCondition(&model, ModelAvailable, newStatus, reason, message)
 		if err := r.updateStatus(ctx, &model); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: model.Spec.PollInterval.Duration}, nil
 	}
-	modelTracker.Complete("probed")
 
-	return r.finalizeModelProcessing(ctx, model)
+	// Always requeue with poll interval for continuous health checking
+	return ctrl.Result{RequeueAfter: model.Spec.PollInterval.Duration}, nil
 }
 
 func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Model) error {
@@ -100,18 +121,6 @@ func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Mode
 	testMessages := []genai.Message{genai.NewUserMessage("Hello")}
 	_, err = resolvedModel.ChatCompletion(probeCtx, testMessages, nil)
 	return err
-}
-
-func (r *ModelReconciler) finalizeModelProcessing(ctx context.Context, model arkv1alpha1.Model) (ctrl.Result, error) {
-	r.setCondition(&model, ModelAvailable, metav1.ConditionTrue, "Available", "Model is available and probed successfully")
-	if err := r.updateStatus(ctx, &model); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	logf.FromContext(ctx).Info("model probing completed", "model", model.Name, "namespace", model.Namespace)
-
-	// Return with requeue interval for continuous polling
-	return ctrl.Result{RequeueAfter: model.Spec.PollInterval.Duration}, nil
 }
 
 // setCondition sets a condition on the Model

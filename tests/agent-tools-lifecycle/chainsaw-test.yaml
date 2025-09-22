@@ -41,7 +41,10 @@ spec:
           metadata:
             name: test-agent
           status:
-            phase: Pending
+            conditions:
+            - type: Available
+              status: "False"
+              reason: ToolNotFound
     catch:
     - events: {}
     - describe:
@@ -65,7 +68,9 @@ spec:
           metadata:
             name: test-agent
           status:
-            phase: Ready
+            conditions:
+            - type: Available
+              status: "True"
     catch:
     - events: {}
     - describe:
