@@ -30,21 +30,27 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu"
-import { toast } from "@/components/ui/use-toast"
-import { namespacesService, systemInfoService, type Namespace, type SystemInfo } from "@/lib/services"
+import { systemInfoService, type SystemInfo } from "@/lib/services"
 import { NamespaceEditor } from "@/components/editors"
 import { UserDetails } from "./user"
 import { signout } from "@/lib/auth/signout"
+import { useNamespace } from "@/providers/NamespaceProvider"
 
 export function AppSidebar() {
   const router = useRouter()
   const pathname = usePathname()
+
+  const {
+    availableNamespaces,
+    createNamespace,
+    isPending,
+    namespace,
+    namespaceResolved,
+    setNamespace
+  } = useNamespace()
   
-  const [namespaces, setNamespaces] = useState<Namespace[]>([])
   const [loading, setLoading] = useState(true)
-  const [namespaceResolved, setNamespaceResolved] = useState(false)
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
-  const [namespace, setNamespace] = useState("default")
   const [namespaceEditorOpen, setNamespaceEditorOpen] = useState(false)
   const isPlaceholderSection = (key: string): boolean => {
     const placeholderKeys: string[] = []
@@ -55,23 +61,9 @@ export function AppSidebar() {
     const loadInitialData = async () => {
       setLoading(true)
       try {
-        const [namespacesData, systemData] = await Promise.all([
-          namespacesService.getAll(),
-          systemInfoService.get()
-        ])
-        const filteredNamespaces = namespacesData.filter(ns => 
-          !['cert-manager', 'kube-node-lease', 'kube-system', 'kube-public'].includes(ns.name)
-        )
-        setNamespaces(filteredNamespaces)
+        // Load system info and get current context
+        const systemData = await systemInfoService.get()
         setSystemInfo(systemData)
-        setNamespaceResolved(true)
-        
-        // Read namespace from URL if present
-        const urlParams = new URLSearchParams(window.location.search)
-        const urlNamespace = urlParams.get('namespace')
-        if (urlNamespace && filteredNamespaces.some(ns => ns.name === urlNamespace)) {
-          setNamespace(urlNamespace)
-        }
       } catch (error) {
         console.error("Failed to load initial data:", error)
       } finally {
@@ -80,38 +72,10 @@ export function AppSidebar() {
     }
 
     loadInitialData()
-  }, [])
+  }, [router, pathname])
 
-
-  const handleNamespaceSelect = (selectedNamespace: string) => {
-    setNamespace(selectedNamespace)
-    // Update the URL with the new namespace
-    const currentPath = pathname
-    router.push(`${currentPath}?namespace=${selectedNamespace}`)
-  }
-
-  const handleCreateNamespace = async (name: string) => {
-    try {
-      await namespacesService.create(name)
-      toast({
-        variant: "success",
-        title: "Namespace Created",
-        description: `Successfully created namespace ${name}`
-      })
-      
-      const updatedNamespaces = await namespacesService.getAll()
-      const filteredNamespaces = updatedNamespaces.filter(ns => 
-        !['cert-manager', 'kube-node-lease', 'kube-system', 'kube-public'].includes(ns.name)
-      )
-      setNamespaces(filteredNamespaces)
-      handleNamespaceSelect(name)
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Create Namespace",
-        description: error instanceof Error ? error.message : "An unexpected error occurred"
-      })
-    }
+  const handleCreateNamespace = (name: string) => {
+    createNamespace(name)
   }
 
 
@@ -142,11 +106,11 @@ export function AppSidebar() {
                     <div className="flex flex-col gap-0.5 leading-none">
                       <span className="font-medium">ARK Dashboard</span>
                       <span className="text-xs">
-                        {loading ? "Loading..." : namespaces.length === 0 ? "No namespaces" : namespace}
+                        {isPending ? "Loading..." : availableNamespaces.length === 0 ? "No namespaces" : namespace}
                       </span>
                     </div>
                     <ChevronsUpDown className="ml-auto" />
-                    {namespaces.length === 0 && !loading && (
+                    {availableNamespaces.length === 0 && !loading && (
                       <AlertCircle className="h-4 w-4 text-red-500" />
                     )}
                   </SidebarMenuButton>
@@ -160,14 +124,14 @@ export function AppSidebar() {
                   <DropdownMenuSeparator />
                   {loading ? (
                     <DropdownMenuItem disabled>Loading namespaces...</DropdownMenuItem>
-                  ) : namespaces.length === 0 ? (
+                  ) : availableNamespaces.length === 0 ? (
                     <DropdownMenuItem disabled>No namespaces available</DropdownMenuItem>
                   ) : (
                     <>
-                      {namespaces.map(ns => (
+                      {availableNamespaces.map(ns => (
                         <DropdownMenuItem
                           key={ns.name}
-                          onSelect={() => handleNamespaceSelect(ns.name)}
+                          onSelect={() => setNamespace(ns.name)}
                         >
                           {ns.name}
                           {ns.name === namespace && <Check className="ml-auto h-4 w-4" />}

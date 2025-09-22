@@ -137,7 +137,17 @@ kind: Model
 metadata:
   name: test-model
 status:
-  phase: ready
+  conditions:
+    - type: "Ready"
+      status: "True"
+      reason: "ModelResolved"
+      message: "Model successfully resolved and validated"
+      observedGeneration: 1
+    - type: "Discovering"
+      status: "False"
+      reason: "ValidationComplete"
+      message: "Model validation completed successfully"
+      observedGeneration: 1
 ```
 
 ### Environment Variable Templating
@@ -322,35 +332,26 @@ jsonpath "$.success" == true
 
 ### Real-World Examples
 
-#### PostgreSQL Memory Service
+#### ARK Cluster Memory Service
 
-From `services/postgres-memory/test/test.hurl`:
+From `services/ark-cluster-memory/test/test.hurl`:
 
 ```hurl
-# Test message storage and retrieval
-PUT http://postgres-memory/message/test-session
-Content-Type: application/json
-{
-  "message": {
-    "role": "user",
-    "content": "Test message"
-  }
-}
-HTTP 200
-
-# Verify message retrieval
-GET http://postgres-memory/message/test-session
+# Check stream exists in global status
+GET http://ark-cluster-memory/stream-statistics
 HTTP 200
 [Asserts]
-jsonpath "$.messages" count == 1
-jsonpath "$.messages[0].role" == "user"
-jsonpath "$.messages[0].content" == "Test message"
+jsonpath "$.queries.test-hurl-basic.total_chunks" == 4
+jsonpath "$.queries.test-hurl-basic.completed" == false
+jsonpath "$.queries.test-hurl-basic.chunk_types.content" == 3
+jsonpath "$.queries.test-hurl-basic.chunk_types.finish_reason" == 1
 
-# Test session isolation
-GET http://postgres-memory/message/other-session
+# Complete the stream
+POST http://ark-cluster-memory/stream/test-hurl-basic/complete
 HTTP 200
 [Asserts]
-jsonpath "$.messages" == null
+jsonpath "$.status" == "completed"
+jsonpath "$.query" == "test-hurl-basic"
 ```
 
 #### A2A Gateway Service
@@ -684,5 +685,5 @@ These tests validate:
 
 ## Next Steps
 
-- [Services](/advanced-features/services) - Learn about ARK services
-- [Observability](/advanced-features/observability) - Monitor your ARK applications
+- [Services](/developer-guide/services) - Learn about ARK services
+- [Observability](/developer-guide/observability) - Monitor your ARK applications

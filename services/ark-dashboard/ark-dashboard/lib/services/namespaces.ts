@@ -17,6 +17,12 @@ export const namespacesService = {
         }))
     },
 
+    // Get current Kubernetes context
+    async getContext(): Promise<{namespace: string, cluster: string}> {
+        const response = await apiClient.get<{namespace: string, cluster: string}>('/api/v1/context')
+        return response
+    },
+
     // Create a new namespace
     async create(name: string): Promise<Namespace> {
         const request: NamespaceCreateRequest = { name }

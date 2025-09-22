@@ -1,0 +1,57 @@
+# DevSpace configuration for ark-cluster-memory service
+version: v2beta1
+
+pipelines:
+  deploy: |-
+    build_images --all
+    create_deployments --all
+  
+  dev: |-
+    create_deployments --all
+    start_dev --all
+
+images:
+  ark-cluster-memory:
+    image: ark-cluster-memory
+    dockerfile: ./ark-cluster-memory/Dockerfile
+    context: ./ark-cluster-memory
+
+deployments:
+  ark-cluster-memory:
+    namespace: default
+    helm:
+      chart:
+        path: ./chart
+      values:
+        app:
+          image:
+            repository: ${runtime.images.ark-cluster-memory.image}
+            tag: ${runtime.images.ark-cluster-memory.tag}
+          resources:
+            limits:
+              memory: "1024Mi"
+              cpu: "1000m"
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+        memory:
+          setAsDefault: true
+        persistence:
+          enabled: true
+          size: 1Gi
+
+dev:
+  ark-cluster-memory:
+    imageSelector: ark-cluster-memory
+    devImage: node:24-alpine
+    command: ["sh", "-c", "cd /app && npm install && npm run dev"]
+    namespace: default
+    logs:
+      lastLines: 50
+    sync:
+      - path: ./ark-cluster-memory:/app
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+    ssh:
+      enabled: true

@@ -31,7 +31,9 @@ spec:
             name: structured-output-test-model
             namespace: ($namespace)
           status:
-            phase: ready
+            conditions:
+            - type: ModelAvailable
+              status: "True"
     
   - name: verify-agent-created
     try:

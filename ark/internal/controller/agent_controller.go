@@ -5,10 +5,10 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -25,6 +25,8 @@ import (
 
 const (
 	defaultModelName = "default"
+	// Condition types
+	AgentAvailable = "Available"
 )
 
 type AgentReconciler struct {
@@ -54,60 +56,66 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, err
 	}
 
-	// Initialize phase to Pending if not set (for newly created agents)
-	if agent.Status.Phase == "" {
-		agent.Status.Phase = arkv1alpha1.AgentPhasePending
-		if err := r.Status().Update(ctx, &agent); err != nil {
-			log.Error(err, "Failed to initialize Agent status")
+	// Initialize conditions if empty
+	if len(agent.Status.Conditions) == 0 {
+		r.setCondition(&agent, AgentAvailable, metav1.ConditionUnknown, "Initializing", "Agent availability is being determined")
+		if err := r.updateStatus(ctx, &agent); err != nil {
 			return ctrl.Result{}, err
 		}
-		r.Recorder.Event(&agent, corev1.EventTypeNormal, "AgentCreated", "Initialized agent status to Pending")
+		r.Recorder.Event(&agent, corev1.EventTypeNormal, "AgentCreated", "Initialized agent conditions")
+		return ctrl.Result{}, nil
 	}
 
-	// Check tool dependencies and update status
-	newPhase, err := r.checkDependencies(ctx, &agent)
-	if err != nil {
-		log.Error(err, "Failed to check dependencies")
-		return ctrl.Result{}, err
+	// Check current condition
+	currentCondition := meta.FindStatusCondition(agent.Status.Conditions, AgentAvailable)
+
+	// Check all dependencies and determine new status
+	available, reason, message := r.checkDependencies(ctx, &agent)
+
+	// Determine new status
+	var newStatus metav1.ConditionStatus
+	if available {
+		newStatus = metav1.ConditionTrue
+	} else {
+		newStatus = metav1.ConditionFalse
 	}
 
-	// Update status if phase changed
-	if agent.Status.Phase != newPhase {
-		agent.Status.Phase = newPhase
-		if err := r.Status().Update(ctx, &agent); err != nil {
-			log.Error(err, "Failed to update Agent status")
-			// Return error to trigger retry - controller-runtime will handle the retry with backoff
+	// Only update if status actually changed
+	if currentCondition == nil || currentCondition.Status != newStatus || currentCondition.Reason != reason {
+		log.Info("agent status changed", "agent", agent.Name, "available", newStatus, "reason", reason)
+		r.setCondition(&agent, AgentAvailable, newStatus, reason, message)
+		if err := r.updateStatus(ctx, &agent); err != nil {
 			return ctrl.Result{}, err
 		}
-		r.Recorder.Event(&agent, corev1.EventTypeNormal, "StatusChanged", fmt.Sprintf("Agent status changed to %s", newPhase))
-	}
-
-	// Note: We also watch for Tool/Model events, so this is just a fallback
-	if newPhase == arkv1alpha1.AgentPhasePending {
-		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil // Reduced frequency since we have event-driven updates
+		r.Recorder.Event(&agent, corev1.EventTypeNormal, "StatusChanged", fmt.Sprintf("Agent availability: %s - %s", newStatus, reason))
 	}
 
 	return ctrl.Result{}, nil
 }
 
-// checkDependencies validates all agent dependencies and returns appropriate phase
-func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alpha1.Agent) (arkv1alpha1.AgentPhase, error) {
+// checkDependencies validates all agent dependencies and returns availability status
+func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alpha1.Agent) (available bool, reason, message string) {
 	// Check A2AServer dependency (if agent is owned by an A2AServer)
-	if phase, err := r.checkA2AServerDependency(ctx, agent); err != nil || phase != arkv1alpha1.AgentPhaseReady {
-		return phase, err
+	if ok, msg := r.checkA2AServerDependency(ctx, agent); !ok {
+		return false, "A2AServerNotReady", msg
 	}
 
 	// Check model dependency
-	if phase, err := r.checkModelDependency(ctx, agent); err != nil || phase != arkv1alpha1.AgentPhaseReady {
-		return phase, err
+	if ok, msg := r.checkModelDependency(ctx, agent); !ok {
+		return false, "ModelNotFound", msg
 	}
 
 	// Check tool dependencies
-	return r.checkToolDependencies(ctx, agent)
+	if ok, msg := r.checkToolDependencies(ctx, agent); !ok {
+		return false, "ToolNotFound", msg
+	}
+
+	// All dependencies resolved
+	return true, "Available", "All dependencies are available"
 }
 
 // checkModelDependency validates model dependency
-func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1alpha1.Agent) (arkv1alpha1.AgentPhase, error) {
+func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string) {
 	modelName := defaultModelName
 	modelNamespace := agent.Namespace
 
@@ -122,37 +130,46 @@ func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1
 	modelKey := types.NamespacedName{Name: modelName, Namespace: modelNamespace}
 	if err := r.Get(ctx, modelKey, &model); err != nil {
 		if errors.IsNotFound(err) {
-			r.Recorder.Event(agent, corev1.EventTypeWarning, "ModelNotFound", fmt.Sprintf("Model '%s' not found in namespace '%s'", modelName, modelNamespace))
-			return arkv1alpha1.AgentPhasePending, nil
+			msg := fmt.Sprintf("Model '%s' not found in namespace '%s'", modelName, modelNamespace)
+			r.Recorder.Event(agent, corev1.EventTypeWarning, "ModelNotFound", msg)
+			return false, msg
 		}
-		return arkv1alpha1.AgentPhaseError, err
+		return false, fmt.Sprintf("Error checking model: %v", err)
 	}
 
-	return arkv1alpha1.AgentPhaseReady, nil
+	// Check if model is available
+	modelCondition := meta.FindStatusCondition(model.Status.Conditions, "ModelAvailable")
+	if modelCondition == nil || modelCondition.Status != metav1.ConditionTrue {
+		msg := fmt.Sprintf("Model '%s' is not available", modelName)
+		r.Recorder.Event(agent, corev1.EventTypeWarning, "ModelNotAvailable", msg)
+		return false, msg
+	}
+
+	return true, ""
 }
 
 // checkToolDependencies validates tool dependencies
-func (r *AgentReconciler) checkToolDependencies(ctx context.Context, agent *arkv1alpha1.Agent) (arkv1alpha1.AgentPhase, error) {
+func (r *AgentReconciler) checkToolDependencies(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string) {
 	for _, toolSpec := range agent.Spec.Tools {
 		if toolSpec.Type == "custom" && toolSpec.Name != "" {
 			var tool arkv1alpha1.Tool
 			toolKey := types.NamespacedName{Name: toolSpec.Name, Namespace: agent.Namespace}
 			if err := r.Get(ctx, toolKey, &tool); err != nil {
 				if errors.IsNotFound(err) {
-					r.Recorder.Event(agent, corev1.EventTypeWarning, "ToolNotFound", fmt.Sprintf("Tool '%s' not found in namespace '%s'", toolSpec.Name, agent.Namespace))
-					return arkv1alpha1.AgentPhasePending, nil
+					msg := fmt.Sprintf("Tool '%s' not found in namespace '%s'", toolSpec.Name, agent.Namespace)
+					r.Recorder.Event(agent, corev1.EventTypeWarning, "ToolNotFound", msg)
+					return false, msg
 				}
-				return arkv1alpha1.AgentPhaseError, err
+				return false, fmt.Sprintf("Error checking tool: %v", err)
 			}
 		}
 	}
 
-	// All dependencies resolved
-	return arkv1alpha1.AgentPhaseReady, nil
+	return true, ""
 }
 
 // checkA2AServerDependency validates A2AServer dependency for agents owned by A2AServers
-func (r *AgentReconciler) checkA2AServerDependency(ctx context.Context, agent *arkv1alpha1.Agent) (arkv1alpha1.AgentPhase, error) {
+func (r *AgentReconciler) checkA2AServerDependency(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string) {
 	// Check if agent has an A2AServer owner
 	for _, ownerRef := range agent.GetOwnerReferences() {
 		if ownerRef.Kind == "A2AServer" && ownerRef.APIVersion == "ark.mckinsey.com/v1prealpha1" {
@@ -161,31 +178,31 @@ func (r *AgentReconciler) checkA2AServerDependency(ctx context.Context, agent *a
 	}
 
 	// No A2AServer owner
-	return arkv1alpha1.AgentPhaseReady, nil
+	return true, ""
 }
 
 // validateA2AServerDependency checks if the A2AServer is ready
-func (r *AgentReconciler) validateA2AServerDependency(ctx context.Context, agent *arkv1alpha1.Agent, ownerRef metav1.OwnerReference) (arkv1alpha1.AgentPhase, error) {
+func (r *AgentReconciler) validateA2AServerDependency(ctx context.Context, agent *arkv1alpha1.Agent, ownerRef metav1.OwnerReference) (bool, string) {
 	// Get the A2AServer
 	var a2aServer arkv1prealpha1.A2AServer
 	a2aServerKey := types.NamespacedName{Name: ownerRef.Name, Namespace: agent.Namespace}
 	if err := r.Get(ctx, a2aServerKey, &a2aServer); err != nil {
 		if errors.IsNotFound(err) {
-			r.Recorder.Event(agent, corev1.EventTypeWarning, "A2AServerNotFound", fmt.Sprintf("A2AServer '%s' not found in namespace '%s'", ownerRef.Name, agent.Namespace))
-			return arkv1alpha1.AgentPhasePending, nil
+			msg := fmt.Sprintf("A2AServer '%s' not found in namespace '%s'", ownerRef.Name, agent.Namespace)
+			r.Recorder.Event(agent, corev1.EventTypeWarning, "A2AServerNotFound", msg)
+			return false, msg
 		}
-		return arkv1alpha1.AgentPhaseError, err
+		return false, fmt.Sprintf("Error checking A2AServer: %v", err)
 	}
 
 	// Check if A2AServer is Ready
 	if !r.isA2AServerReady(&a2aServer) {
-		r.Recorder.Event(agent, corev1.EventTypeWarning, "A2AServerNotReady", fmt.Sprintf("A2AServer '%s' is not ready", ownerRef.Name))
-		return arkv1alpha1.AgentPhasePending, nil
+		msg := fmt.Sprintf("A2AServer '%s' is not ready", ownerRef.Name)
+		r.Recorder.Event(agent, corev1.EventTypeWarning, "A2AServerNotReady", msg)
+		return false, msg
 	}
 
-	// A2AServer is ready - emit event for successful dependency
-	r.Recorder.Event(agent, corev1.EventTypeNormal, "A2AServerReady", fmt.Sprintf("A2AServer '%s' is ready", ownerRef.Name))
-	return arkv1alpha1.AgentPhaseReady, nil
+	return true, ""
 }
 
 // isA2AServerReady checks if an A2AServer has Ready condition true
@@ -196,6 +213,30 @@ func (r *AgentReconciler) isA2AServerReady(a2aServer *arkv1prealpha1.A2AServer) 
 		}
 	}
 	return false
+}
+
+// setCondition sets a condition on the Agent
+func (r *AgentReconciler) setCondition(agent *arkv1alpha1.Agent, conditionType string, status metav1.ConditionStatus, reason, message string) {
+	meta.SetStatusCondition(&agent.Status.Conditions, metav1.Condition{
+		Type:               conditionType,
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: agent.Generation,
+	})
+}
+
+// updateStatus updates the Agent status
+func (r *AgentReconciler) updateStatus(ctx context.Context, agent *arkv1alpha1.Agent) error {
+	if ctx.Err() != nil {
+		return nil
+	}
+
+	err := r.Status().Update(ctx, agent)
+	if err != nil {
+		logf.FromContext(ctx).Error(err, "failed to update agent status")
+	}
+	return err
 }
 
 func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {

@@ -1,0 +1,159 @@
+# Models
+
+Models define AI language model configurations for agents to use. Agents use the model named `default` if no specific model is configured.
+
+### OpenAI
+
+```yaml
+# Example OpenAI model.
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: default
+spec:
+  # The 'openai' type is any openai specification compatible model. This
+  # includes OpenAI, Google Gemini (in OpenAI compability mode), Anthropic
+  # Claude and so on.
+  type: openai
+  model:
+    # The specific model type.
+    value: gpt-4o
+  config:
+    openai:
+      # API endpoint URL
+      baseUrl:
+        value: "https://api.openai.com/v1"
+      # API authentication key - this should be set to a Kubernetes Secret
+      # for security purposes.
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: default-model-token
+            key: token
+      # Optional model generation parameters
+      properties:
+        temperature:
+          value: "0.7"
+        max_tokens:
+          value: "4096"
+---
+# Example of a secret that can be used to configure the API key for a model.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: default-model-token
+type: Opaque
+stringData:
+  token: "your-api-key-here"
+```
+
+An API key secret can also be created like so:
+
+```bash
+kubectl create secret generic default-model-token --from-literal=token="your-api-key-here"
+```
+
+### Azure OpenAI
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: gpt-4o-mini
+spec:
+  # The Azure OpenAI model type.
+  type: azure
+  model:
+    value: gpt-4o-mini
+  config:
+    azure:
+      baseUrl:
+        value: "https://your-resource.openai.azure.com"
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: azure-openai-key
+            key: token
+      # Azure-specific API version
+      apiVersion:
+        value: "2024-12-01-preview"
+      # Optional properties.
+      properties:
+        temperature:
+          value: "0.7"
+        max_tokens:
+          value: "4096"
+```
+
+### AWS Bedrock
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: claude-haiku
+spec:
+  # The AWS Bedrock model type.
+  type: bedrock
+  model:
+    value: "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+  config:
+    bedrock:
+      # AWS region (optional, uses default)
+      region:
+        value: "us-west-2"
+      # Base URL - optional only needed if the non-default is required.
+      baseUrl:
+        value: "https://aws-bedrock.prod.ai-gateway.quantumblack.com/your-project-id"
+      # Explicit credentials (optional, defaults to IAM role)
+      accessKeyId:
+        valueFrom:
+          secretKeyRef:
+            name: aws-credentials
+            key: access-key-id
+      secretAccessKey:
+        valueFrom:
+          secretKeyRef:
+            name: aws-credentials
+            key: secret-access-key
+      # Session token for temporary credentials or JWT tokens
+      sessionToken:
+        valueFrom:
+          secretKeyRef:
+            name: aws-credentials
+            key: session-token
+      # Custom model ARN (optional)
+      modelArn:
+        value: "arn:aws:bedrock:..."
+      properties:
+        temperature:
+          value: "0.7"
+        max_tokens:
+          value: "4096"
+```
+
+### Google Gemini and Anthropic Models
+
+Both Google Gemini and Anthropic provide OpenAI-compatible endpoints, allowing you to use their models with the `openai` type. The base URls are:
+
+- `https://generativelanguage.googleapis.com/v1beta/openai` for Google Gemini
+- `https://api.anthropic.com/v1` for Anthropic Claude
+
+Most other providers also support OpenAI compatible base URLs - check their docs for details.
+
+### Agent Model Configuration
+
+Agents can specify which model to use. If no model is specified, the `default` model is used. If an agent references a model that doesn't exist, the agent will remain in `pending` state. The `modelRef` parameter is used to specify the model name:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: weather-agent
+spec:
+  prompt: "You are a helpful weather assistant"
+  # Explicitly set the model to use
+  modelRef: 
+    # Specify the model name. If no modelRef is provided then 'default' is used.
+    name: gpt-4o-mini
+```

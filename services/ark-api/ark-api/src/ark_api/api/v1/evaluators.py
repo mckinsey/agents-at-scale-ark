@@ -1,8 +1,6 @@
 """API routes for Evaluator resources."""
 
-from fastapi import APIRouter, HTTPException
-from kubernetes import client
-from kubernetes.client.rest import ApiException
+from fastapi import APIRouter
 from ark_sdk.models.evaluator_v1alpha1 import EvaluatorV1alpha1
 from ark_sdk.models.evaluator_v1alpha1_spec import EvaluatorV1alpha1Spec
 from ark_sdk.models.evaluator_v1alpha1_spec_address import EvaluatorV1alpha1SpecAddress
@@ -14,7 +12,6 @@ from ...core.constants import GROUP
 from ark_sdk.client import with_ark_client
 
 from ...models.evaluators import (
-    EvaluatorResponse,
     EvaluatorListResponse,
     EvaluatorCreateRequest,
     EvaluatorUpdateRequest,

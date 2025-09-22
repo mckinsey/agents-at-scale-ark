@@ -10,8 +10,8 @@ from .model_resolver import _get_k8s_client
 
 
 @dataclass
-class AgentContext:
-    """Agent context for scope-aware evaluation"""
+class AgentInstructions:
+    """Agent instructions containing description and system prompt for scope-aware evaluation"""
     name: str
     description: str
     system_prompt: str
@@ -31,16 +31,16 @@ class AgentResolver:
         if not self.k8s_client:
             logger.warning("Kubernetes client not available - agent context resolution will be limited")
     
-    async def resolve_agent(self, agent_name: str, namespace: str = "default") -> Optional[AgentContext]:
+    async def resolve_agent(self, agent_name: str, namespace: str = "default") -> Optional[AgentInstructions]:
         """
         Resolve agent configuration from Kubernetes CRD
-        
+
         Args:
             agent_name: Name of the Agent resource
             namespace: Kubernetes namespace (defaults to "default")
-            
+
         Returns:
-            AgentContext with agent details or None if resolution fails
+            AgentInstructions with agent details or None if resolution fails
         """
         if not self.k8s_client:
             logger.warning(f"Cannot resolve agent {agent_name}: Kubernetes client not available")
@@ -74,15 +74,15 @@ class AgentResolver:
             # Extract scope hints from prompt and description
             scope_hints = self._extract_scope_hints(system_prompt, description)
             
-            agent_context = AgentContext(
+            agent_instructions = AgentInstructions(
                 name=name,
                 description=description,
                 system_prompt=system_prompt,
                 scope_hints=scope_hints
             )
-            
-            logger.info(f"Agent context resolved for {name}: {len(scope_hints)} scope hints found")
-            return agent_context
+
+            logger.info(f"Agent instructions resolved for {name}: {len(scope_hints)} scope hints found")
+            return agent_instructions
             
         except client.exceptions.ApiException as e:
             if e.status == 404:

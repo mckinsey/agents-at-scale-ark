@@ -11,7 +11,7 @@ ARK provides REST APIs for managing resources and executing queries. The APIs in
 
 The easiest way to explore and test the APIs is through the built-in OpenAPI interface:
 
-Start the [dashboard](/user-guide/dashboard) with `make dashboard`
+Start the [dashboard](/user-guide/dashboard) with `make dashboard` or `ark dashboard`.
 
 You can access the APIs using the 'APIs' link at bottom left of the dashboard screen:
 
@@ -39,27 +39,18 @@ Browse the complete API documentation at `http://localhost:8000/docs` when the s
 
 ## Native ARK APIs
 
-Standard REST APIs for managing ARK resources:
+Standard REST APIs for managing ARK resources, for example:
 
-- **Agents**: `/v1/namespaces/{namespace}/agents`
-- **Teams**: `/v1/namespaces/{namespace}/teams` 
-- **Queries**: `/v1/namespaces/{namespace}/queries`
-- **Models**: `/v1/namespaces/{namespace}/models`
-- **Evaluators**: `/v1/namespaces/{namespace}/evaluators`
-- **Evaluations**: `/v1/namespaces/{namespace}/evaluations`
-- **Secrets**: `/v1/namespaces/{namespace}/secrets`
-- **Namespaces**: `/v1/namespaces`
+- Agents: `/v1/namespaces/{namespace}/agents`
+- Teams: `/v1/namespaces/{namespace}/teams` 
+- Queries: `/v1/namespaces/{namespace}/queries`
+- Models: `/v1/namespaces/{namespace}/models`
+- Evaluators: `/v1/namespaces/{namespace}/evaluators`
+- Evaluations: `/v1/namespaces/{namespace}/evaluations`
+- Secrets: `/v1/namespaces/{namespace}/secrets`
+- Namespaces: `/v1/namespaces`
 
-### Example: Create an Agent
-
-```bash
-curl -X POST http://localhost:8000/v1/namespaces/default/agents \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "my-agent",
-    "prompt": "You are a helpful assistant"
-  }'
-```
+Standard Kubernetes REST patterns are followed, such as `POST` to create, `DELETE` to delete.
 
 ## OpenAI-Compatible APIs
 

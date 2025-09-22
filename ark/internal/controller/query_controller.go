@@ -239,7 +239,7 @@ func (r *QueryReconciler) setupQueryExecution(opCtx context.Context, obj arkv1al
 		return nil, nil, err
 	}
 
-	memory, err := genai.NewMemoryForQuery(opCtx, impersonatedClient, obj.Spec.Memory, obj.Namespace, tokenCollector, sessionId)
+	memory, err := genai.NewMemoryForQuery(opCtx, impersonatedClient, obj.Spec.Memory, obj.Namespace, tokenCollector, sessionId, obj.Name)
 	if err != nil {
 		queryTracker.Fail(fmt.Errorf("failed to create memory client: %w", err))
 		_ = r.updateStatus(opCtx, &obj, statusError)
