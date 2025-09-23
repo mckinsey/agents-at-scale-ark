@@ -70,45 +70,44 @@ When developing new functionality in `ark-sdk`, follow this workflow:
 
 ### 1. Make Changes in ark-sdk based on the requirement:
 
-Add your new functionality to the appropriate overlay files:
+Add new functionality to the appropriate overlay files:
 
 ```bash
 # Example structure for new functionality
 lib/ark-sdk/gen_sdk/overlay/python/ark_sdk/
-├── your_new_client.py        # Add your client class
+├── new_client.py        # Add client class
 ├── models/
-│   └── your_models.py        # Add your data models
+│   └── models.py        # Add data models
 ├── pyproject.toml           # Add any new dependencies
-└── __init__.py              # Export your new classes
 ```
 
 **Key files to modify:**
 - **Client classes** → Add to `lib/ark-sdk/gen_sdk/overlay/python/ark_sdk/`
 - **Data models** → Add to `lib/ark-sdk/gen_sdk/overlay/python/ark_sdk/models/`
 - **Dependencies** → Update `pyproject.toml`
-- **Generated clients** → Modify `python_sdk.py` to inject your client
+- **Generated clients** → Modify `python_sdk.py` to inject new client
 
 ### 2. Build Local Wheel File
 
-Generate the ark-sdk with your changes:
+Generate the ark-sdk with changes:
 
 ```bash
 # Clean previous builds
 rm -rf out/ark-sdk
 
-# Build ark-sdk with your changes
+# Build ark-sdk with changes
 make ark-sdk-build
 
 # This creates:
 # out/ark-sdk/py-sdk/dist/ark_sdk-<version>-py3-none-any.whl
 ```
 
-### 3. Test Your Changes
+### 3. Test the Changes
 
-Copy the wheel to your consuming service for testing and use the new ark-sdk functionality
+Copy the wheel to the consuming service for testing and use the new ark-sdk functionality
 
 ```bash
-# Copy wheel to your service (e.g., ark-api)
+# Copy wheel to the service (e.g., ark-api)
 cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/out/
 
 # Test with devspace
@@ -117,14 +116,14 @@ devspace dev
 
 ```python
 # Example: Using new ark-sdk functionality
-from ark_sdk.your_new_client import YourNewClient
-from ark_sdk.models.your_models import YourModel, YourRequest
+from ark_sdk.new_client import NewClient
+from ark_sdk.models.models import Model, Request
 
-# Initialize your client
-client = YourNewClient(namespace="default")
+# Initialize the client
+client = NewClient(namespace="default")
 
-# Use your new functionality
-result = client.your_new_method()
+# Use new functionality
+result = client.new_method()
 ```
 
 ## Production Deployment Workflow
@@ -156,7 +155,7 @@ jobs:
 After PyPI deployment, update consuming services to use the new version:
 
 ```toml
-# services/your-service/pyproject.toml
+# services/service-name/pyproject.toml
 dependencies = [
     "ark-sdk==0.1.35",  # Update to new version
     # ... other deps
@@ -165,11 +164,11 @@ dependencies = [
 
 ### 3. Deploy Consuming Services
 
-Deploy your consuming service with the new ark-sdk dependency:
+Deploy consuming service with the new ark-sdk dependency:
 
 ```bash
-# Build and deploy your service
-make your-service-build
+# Build and deploy service
+make <service_name>-build
 devspace deploy
 
 # Or via GitHub Actions deploy workflow
@@ -191,7 +190,7 @@ dependencies = [
 ]
 
 # Rebuild and redeploy
-make your-service-build
+make <service_name>-build
 devspace deploy
 ```
 
