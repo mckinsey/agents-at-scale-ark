@@ -10,6 +10,8 @@ const (
 	queryIDKey   contextKey = "queryId"
 	sessionIDKey contextKey = "sessionId"
 	queryNameKey contextKey = "queryName"
+	// QueryContextKey is used to pass the Query resource through context to agents
+	QueryContextKey contextKey = "queryContext"
 	// Execution metadata keys for streaming
 	// These values are sent back with streaming chunks in the 'ark' metadata field,
 	// allowing callers to differentiate the source of chunks (e.g., specific agents in a team query)

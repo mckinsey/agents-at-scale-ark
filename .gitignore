@@ -136,7 +136,6 @@ services/ark-dashboard/ark-dashboard/node_modules/
 # build output directory
 out/
 lib/ark-sdk/uv.lock
-lib/executor-common/uv.lock
 *.whl
 *.toml.bak
 

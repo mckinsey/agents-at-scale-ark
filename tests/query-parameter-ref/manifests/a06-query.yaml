@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-query-with-params
+spec:
+  input: What's your name?
+  parameters:
+    - name: your_name
+      value: "QueryAgent123"
+  targets:
+    - type: agent
+      name: test-agent

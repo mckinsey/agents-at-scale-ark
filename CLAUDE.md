@@ -16,7 +16,6 @@
   - `postgres-memory/` - Memory persistence service (Go)
   - **Execution Engines (Python):**
     - `executor-langchain/` - LangChain agent execution and tool integration engine
-    - `executor-common/` - Shared execution engine components
   - `ark-evaluator/` - AI model evaluation and scoring service (Python)
   - `vnext-ui/` - vNext Next.js web interface (TypeScript/React)
   - `ark-sdk-python/` - Python SDK for Ark resources

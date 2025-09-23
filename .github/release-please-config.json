@@ -63,11 +63,6 @@
         },
         {
           "type": "toml",
-          "path": "lib/executor-common/pyproject.toml",
-          "jsonpath": "project.version"
-        },
-        {
-          "type": "toml",
           "path": "services/ark-evaluator/pyproject.toml",
           "jsonpath": "project.version"
         },
