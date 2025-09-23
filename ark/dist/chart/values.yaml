@@ -46,20 +46,17 @@ rbac:
   enable: true
   # Service accounts the controller can impersonate for multi-tenancy
   impersonation:
-    # Allow impersonation of all service accounts (less secure but more flexible)
-    # WARNING: This grants broad impersonation permissions
-    allowAll: false
+    # Allow impersonation of all service accounts (default for easier setup)
+    # Set to false and use serviceAccounts list for production environments
+    allowAll: true
 
-    # Explicitly list allowed service accounts (more secure, default approach)
-    # Only used when allowAll is false
-    serviceAccounts:
-      - default  # Default service account for backward compatibility
-      - ark-tenant-sa  # Standard tenant service account name
-      # Add more service accounts for multi-tenant setups:
-      # - tenant-1-sa
-      # - tenant-2-sa
-      # Note: Consider using a standard naming convention like 'ark-tenant-sa'
-      # across all tenant namespaces to simplify configuration
+    # Explicitly list allowed service accounts (only used when allowAll is false)
+    # Uncomment and customize for production deployments:
+    # serviceAccounts:
+    #   - default
+    #   - ark-tenant-sa
+    #   - tenant-1-sa
+    #   - tenant-2-sa
 
 # [CRDs]: To enable the CRDs
 crd:

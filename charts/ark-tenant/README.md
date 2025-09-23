@@ -28,23 +28,13 @@ helm install ark-tenant ./charts/ark-tenant -n secure-tenant \
 
 ## Prerequisites
 
-The Ark controller must be able to impersonate the tenant service account. Choose one approach:
+The Ark controller must be able to impersonate the tenant service account. By default, the controller allows impersonation of any service account (`allowAll: true`), so no configuration is needed.
 
-Option 1: Use default `ark-tenant-sa` (no configuration needed)
-The chart defaults to using `ark-tenant-sa` which is pre-authorized in the controller.
-
-Option 2: Allow all service accounts
+For production environments that restrict impersonation:
 ```bash
 helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
   --namespace ark-system \
-  --set rbac.impersonation.allowAll=true
-```
-
-Option 3: Add specific service account to allowlist
-```bash
-helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
-  --namespace ark-system \
-  --reuse-values \
+  --set rbac.impersonation.allowAll=false \
   --set-string rbac.impersonation.serviceAccounts={default,ark-tenant-sa,prod-sa}
 ```
 

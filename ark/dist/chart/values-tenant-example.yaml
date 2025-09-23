@@ -1,9 +1,13 @@
-# Example values file for multi-tenant Ark deployments
-# Use this to configure additional service accounts for impersonation
+# Example values file for production multi-tenant Ark deployments
+# This restricts impersonation to specific service accounts only
 
 rbac:
   enable: true
   impersonation:
+    # Disable allowAll for production security
+    allowAll: false
+
+    # Explicitly list allowed service accounts
     serviceAccounts:
       - default
       - ark-tenant-sa

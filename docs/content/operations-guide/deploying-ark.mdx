@@ -125,7 +125,7 @@ This creates a ClusterRoleBinding that connects your GitHub repository identity 
 
 By default, the `ark-controller` is deployed into the `ark-system` namespace. When the controller is executing a query, it will impersonate the user account provided in `query.serviceAccount` field (`default` is used if no service account is specified).
 
-The out-of-the-box installation gives the `ark-controller` permissions to impersonate the `default` and `ark-tenant-sa` service accounts. This can be configured in the Helm chart to support multi-tenancy:
+The out-of-the-box installation allows the `ark-controller` to impersonate any service account (`allowAll: true`) for easier setup and development. For production deployments, this should be restricted to specific service accounts:
 
 ```yaml
 # values.yaml
@@ -133,13 +133,10 @@ rbac:
   # Creates ClusterRole and ClusterRoleBinding for the controller
   enable: true
   impersonation:
-    # Choose ONE of these approaches:
-
-    # Option 1: Allow impersonation of ANY service account (development/testing)
+    # Default: Allow impersonation of ANY service account (easier setup)
     allowAll: true
 
-    # Option 2: Allow specific service accounts only (production)
-    # When allowAll is true, serviceAccounts list is ignored
+    # For production: Restrict to specific service accounts
     # allowAll: false
     # serviceAccounts:
     #   - default
@@ -183,7 +180,7 @@ If not specified, the service account `default` will be used. This will create:
 
 Additional options include resource quotas and network policies, which are documented in the chart.
 
-If the Ark controller needs specific permissions to impersonate tenant service accounts (see [The Ark Controller](#the-ark-controller) when `rbac.impersonation.allowAll` is `false`), then the new service account should be added to the list of allowed impersonation accounts:
+By default, the Ark controller can impersonate any service account (`allowAll: true`). If you've restricted this for production (see [The Ark Controller](#the-ark-controller)), add the new service account to the allowed list:
 
 
 
