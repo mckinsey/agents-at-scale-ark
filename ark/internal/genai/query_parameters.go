@@ -134,10 +134,29 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 		queryType = "user" // default type
 	}
 
-	if queryType == "messages" {
+	if queryType == "user" {
+		// For 'user' type (default), get input string using helper method
+		inputString, err := query.Spec.GetInputString()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get input string: %w", err)
+		}
+		
+		// Resolve input with template parameters and create a single user message
+		resolvedInput, err := ResolveQueryInput(ctx, k8sClient, query.Namespace, inputString, query.Spec.Parameters)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve query input: %w", err)
+		}
+		userMessage := NewUserMessage(resolvedInput)
+		return []Message{userMessage}, nil
+	} else {
+		crdMessages, err := query.Spec.GetInputMessages()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get input messages: %w", err)
+		}
+		
 		// Convert CRD messages to genai.Message format
 		var messages []Message
-		for _, msg := range query.Spec.Messages {
+		for _, msg := range crdMessages {
 			switch msg.Role {
 			case "user":
 				messages = append(messages, NewUserMessage(msg.Content))
@@ -151,13 +170,5 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 			}
 		}
 		return messages, nil
-	} else {
-		// For 'user' type, resolve input with template parameters and create a single user message
-		resolvedInput, err := ResolveQueryInput(ctx, k8sClient, query.Namespace, query.Spec.Input, query.Spec.Parameters)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve query input: %w", err)
-		}
-		userMessage := NewUserMessage(resolvedInput)
-		return []Message{userMessage}, nil
 	}
 }
