@@ -537,7 +537,7 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 
 	// Add query and session context for streaming metadata
 	queryID := string(query.UID)
-	sessionID := "" // Could be extracted from annotations or labels if available
+	sessionID := query.Spec.SessionId
 	ctx = genai.WithQueryContext(ctx, queryID, sessionID, query.Name)
 
 	// Add execution metadata for streaming
