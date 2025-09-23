@@ -492,7 +492,20 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 	var err error
 	metadata := map[string]string{"targetType": target.Type, "targetName": target.Name}
 
-	if inputMessages, err := genai.GetQueryInputMessages(ctx, query, impersonatedClient); err != nil {
+	// Get input messages for processing and telemetry
+	inputMessages, err := genai.GetQueryInputMessages(ctx, query, impersonatedClient)
+	if err != nil {
+		telemetry.RecordError(span, err)
+		event := genai.ExecutionEvent{
+			BaseEvent: genai.BaseEvent{Name: target.Name, Metadata: metadata},
+			Type:      target.Type,
+		}
+		tokenCollector.EmitEvent(ctx, corev1.EventTypeWarning, "QueryResolveError", event)
+		return nil, err
+	}
+
+	// Convert messages to JSON for telemetry
+	if jsonBytes, err := json.Marshal(inputMessages); err != nil {
 		telemetry.RecordError(span, err)
 		event := genai.ExecutionEvent{
 			BaseEvent: genai.BaseEvent{Name: target.Name, Metadata: metadata},
@@ -501,18 +514,8 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 		tokenCollector.EmitEvent(ctx, corev1.EventTypeWarning, "QueryResolveError", event)
 		return nil, err
 	} else {
-		if jsonBytes, err := json.Marshal(inputMessages); err != nil {
-			telemetry.RecordError(span, err)
-			event := genai.ExecutionEvent{
-				BaseEvent: genai.BaseEvent{Name: target.Name, Metadata: metadata},
-				Type:      target.Type,
-			}
-			tokenCollector.EmitEvent(ctx, corev1.EventTypeWarning, "QueryResolveError", event)
-			return nil, err
-		} else {
-			inputValue = string(jsonBytes)
-			span.SetAttributes(attribute.String("input.value", inputValue))
-		}
+		inputValue = string(jsonBytes)
+		span.SetAttributes(attribute.String("input.value", inputValue))
 	}
 
 	timeout := 5 * time.Minute
@@ -525,7 +528,7 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 	var messages []genai.Message
 	switch target.Type {
 	case "agent":
-		messages, err = r.executeAgent(execCtx, query, target.Name, impersonatedClient, memory, tokenCollector)
+		messages, err = r.executeAgent(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, tokenCollector)
 	case "team":
 		messages, err = r.executeTeam(execCtx, query, target.Name, impersonatedClient, memory, tokenCollector)
 	case "model":
@@ -560,7 +563,7 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 	return messages, err
 }
 
-func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Query, agentName string, impersonatedClient client.Client, memory genai.MemoryInterface, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) {
+func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Query, inputMessages []genai.Message, agentName string, impersonatedClient client.Client, memory genai.MemoryInterface, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) {
 	var agentCRD arkv1alpha1.Agent
 	agentKey := types.NamespacedName{Name: agentName, Namespace: query.Namespace}
 
@@ -583,11 +586,7 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 		return nil, fmt.Errorf("unable to load initial messages: %w", err)
 	}
 
-	// Get input messages using the helper function
-	inputMessages, err := genai.GetQueryInputMessages(ctx, query, impersonatedClient)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get query input messages: %w", err)
-	}
+	// Note: inputMessages are now passed as parameter, no need to call GetQueryInputMessages again
 
 	// Execute agent with the last message as the current input and previous messages as context
 	currentMessage := inputMessages[len(inputMessages)-1]
