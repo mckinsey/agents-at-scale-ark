@@ -1,0 +1,96 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-parameter-ref
+spec:
+  steps:
+    - try:
+      - script:
+          skipLogOutput: true
+          content: |
+            set -u
+            echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+          outputs:
+          - name: azure
+            value: (json_parse($stdout))
+      - apply:
+          file: "manifests/*.yaml"
+      - assert:
+          resource:
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: query-config
+      - assert:
+          resource:
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: query-secrets
+      - assert:
+          resource:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Model
+            metadata:
+              name: test-model
+            status:
+              conditions:
+              - type: ModelAvailable
+                status: "True"
+      - assert:
+          resource:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Agent
+            metadata:
+              name: test-agent
+      - assert:
+          resource:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            metadata:
+              name: test-query-with-params
+            status:
+              phase: done
+      - assert:
+          resource:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            metadata:
+              name: test-query-with-params
+            status:
+              (length(responses)): 1
+              (contains(responses[*].target.name, 'test-agent')): true
+              (length(join('', responses[*].content)) > `10`): true
+      # Test nested valueFrom resolution - Agent referencing Query params that use ConfigMap/Secret
+      - assert:
+          resource:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Agent
+            metadata:
+              name: test-agent-nested
+      - assert:
+          resource:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            metadata:
+              name: test-query-nested-params
+            status:
+              phase: done
+      - assert:
+          resource:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            metadata:
+              name: test-query-nested-params
+            status:
+              (length(responses)): 1
+              (contains(responses[*].target.name, 'test-agent-nested')): true
+              # Verify the agent received the nested-resolved parameters
+              (contains(join('', responses[*].content), 'NestedConfigAgent')): true
+              (contains(join('', responses[*].content), 'SecretAnalyst')): true
+      catch:
+      - events: {}
+      - describe:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          name: test-query-with-params

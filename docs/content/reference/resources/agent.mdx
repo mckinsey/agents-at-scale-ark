@@ -46,6 +46,10 @@ spec:
         configMapKeyRef:
           name: config
           key: endpoint
+    - name: agent_name
+      valueFrom:
+        queryParameterRef:
+          name: agent_name
           
   # JSON schema for structured output (optional)
   outputSchema:
@@ -155,6 +159,30 @@ spec:
         configMapKeyRef:
           name: policy-config
           key: review-criteria
+```
+
+### Agent with Query Parameter Reference
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: dynamic-agent
+spec:
+  prompt: |
+    Your name is {{.agent_name}}.
+    You operate in {{.mode}} mode.
+    Your expertise level is {{.expertise_level}}.
+  parameters:
+    - name: agent_name
+      valueFrom:
+        queryParameterRef:  # Resolved from Query's parameters at runtime
+          name: agent_name
+    - name: mode
+      valueFrom:
+        queryParameterRef:
+          name: operation_mode
+    - name: expertise_level
+      value: "expert"  # Static value
 ```
 
 ## Reconciliation Behavior

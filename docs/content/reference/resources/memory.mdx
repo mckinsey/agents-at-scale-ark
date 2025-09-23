@@ -4,7 +4,7 @@ The `Memory` resource represents persistent storage for converations with agents
 
 The backend for a memory resource is an HTTP server that implements the [Memory API Specification](#memory-api-specification).
 
-In time, this resource will also configure how operations such as compaction can be performed. A reference implementation [PostgreSQL Memory](#postgresql-memory) is available.
+In time, this resource will also configure how operations such as compaction can be performed. A reference implementation [ARK Cluster Memory](#ark-cluster-memory) is available.
 
 ## Specification
 
@@ -12,36 +12,50 @@ In time, this resource will also configure how operations such as compaction can
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Memory
 metadata:
-  name: postgres-memory
+  name: ark-cluster-memory
+  annotations:
+    # Enable event streaming support for this memory service
+    ark.mckinsey.com/memory-event-stream-enabled: "true"
 spec:
   # The address of the service that handles memory API calls.
   address:
     # A 'value' can be provided to give a specific URL, or a service ref to
     # point to a specific service in the cluster.
     valueFrom:
-      # In this example, we point to a deployment of the "Postgres Memory".
+      # In this example, we point to a deployment of the "ARK Cluster Memory".
       serviceRef:
-        name: postgres-memory
+        name: ark-cluster-memory
         port: 8080
 ```
 
+### Annotations
+
+- **`ark.mckinsey.com/memory-event-stream-enabled`** - When set to `"true"`, enables event streaming capabilities for this memory service. This annotation is used to configure the Memory resource as a streaming resource, allowing real-time message delivery during query execution. See the detailed [Streaming Developer Guide](/developer-guide/queries/streaming).
+
+  > **Note:** In a future release, streaming functionality will be extracted into a dedicated resource type. For detailed information about implementing and using streaming, see the [Streaming Developer Guide](/developer-guide/queries/streaming).
+
 ## Usage
 
-Memory can be specified in a query resource:
+Memory can be specified in a query resource. If a Memory resource named `default` exists in the namespace, it will be automatically selected for queries that don't explicitly specify a memory.
+
+Memory in a query resource:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
   name: chat-with-memory
+  annotations:
+    # Enable streaming for real-time response delivery
+    ark.mckinsey.com/streaming-enabled: "true"
 spec:
   input: "What did we discuss earlier?"
   targets:
     - name: my-agent
   memory:
-    name: postgres-memory
+    name: ark-cluster-memory
   # Optional: specify session ID to group related queries
-  # If not provided, the query UID is used as session ID
+  # If not provided, the query UID is used as the session identifier
   sessionId: "my-conversation-session"
 ```
 
@@ -64,6 +78,9 @@ Memory is implemented as a simple HTTP server:
 | GET | `/messages` | Retrieve messages with optional filtering |
 | GET | `/sessions` | List all session IDs |
 | GET | `/health` | Health check |
+| GET | `/stream/{query_id}` | **Optional:** Server-Sent Events stream |
+| POST | `/stream/{query_id}` | **Optional:** Receive streaming chunks |
+| POST | `/stream/{query_id}/complete` | **Optional:** Mark query execution complete |
 
 ### Store Messages
 
@@ -90,7 +107,13 @@ Request body includes session/query context and message array:
 
 ### Retrieve Messages
 
-**GET** `/messages?session_id={id}&query_id={id}`
+**GET** `/messages?session_id={id}&query_id={id}&limit={n}&offset={n}`
+
+Retrieves stored conversation messages:
+- `session_id` (optional) - Filter by session
+- `query_id` (optional) - Filter by query
+- `limit` (optional, default: 100) - Max messages to return
+- `offset` (optional, default: 0) - Skip messages for pagination
 
 Returns timestamped message records:
 
@@ -106,7 +129,10 @@ Returns timestamped message records:
         "content": "What is the weather like?"
       }
     }
-  ]
+  ],
+  "total": 100,
+  "limit": 50,
+  "offset": 0
 }
 ```
 
@@ -114,18 +140,19 @@ Returns timestamped message records:
 
 **GET** `/sessions`
 
-Returns array of session IDs:
+Returns object with session IDs:
 
 ```json
-["session-1", "session-2", "session-3"]
+{"sessions": ["session-1", "session-2", "session-3"]}
 ```
 
-## PostgreSQL Memory
 
-The PostgreSQL memory service can be installed with:
+## ARK Cluster Memory
+
+The ARK Cluster Memory service provides an in-memory storage implementation with streaming support:
 
 ```bash
-make postgres-memory-install
+make ark-cluster-memory-install
 ```
 
-Crunchy PGO is used to simplfy PostgresSQL management.
+It stores messages in memory and supports real-time streaming via Server-Sent Events (SSE).

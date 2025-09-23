@@ -45,9 +45,14 @@ class EvaluationScope(str, Enum):
     CLARITY = "clarity"
     USEFULNESS = "usefulness"
     COMPLIANCE = "compliance"
-    APPROPRIATENESS = "appropriateness" 
+    APPROPRIATENESS = "appropriateness"
     REFUSAL_HANDLING = "refusal_handling"
     ALL = "all"
+    # RAGAS context metrics
+    CONTEXT_PRECISION = "context_precision"
+    CONTEXT_RECALL = "context_recall"
+    CONTEXT_ENTITY_RECALL = "context_entity_recall"
+    FAITHFULNESS = "faithfulness"
 
 class EvaluationParameters(BaseModel):
     scope: Optional[str] = Field(default="all", description="Evaluation scope")

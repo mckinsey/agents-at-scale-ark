@@ -1,0 +1,22 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-query-nested-params
+spec:
+  input: What's your name and role?
+  parameters:
+    # This parameter gets its value from ConfigMap - testing nested resolution
+    - name: name_from_config
+      valueFrom:
+        configMapKeyRef:
+          name: query-config
+          key: nested-agent-name
+    # This parameter gets its value from Secret - testing nested resolution
+    - name: role_from_secret
+      valueFrom:
+        secretKeyRef:
+          name: query-secrets
+          key: agent-role
+  targets:
+    - type: agent
+      name: test-agent-nested

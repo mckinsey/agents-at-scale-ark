@@ -1,7 +1,7 @@
-# Re-export types from executor-common for compatibility
-from executor_common import (
+# Re-export types from ark-sdk for compatibility
+from ark_sdk import (
     Parameter,
-    ModelConfig,
+    Model,
     AgentConfig,
     ToolDefinition,
     Message,
@@ -11,7 +11,7 @@ from executor_common import (
 
 __all__ = [
     "Parameter",
-    "ModelConfig",
+    "Model",
     "AgentConfig", 
     "ToolDefinition",
     "Message",

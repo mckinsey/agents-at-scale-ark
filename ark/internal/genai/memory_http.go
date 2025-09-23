@@ -61,6 +61,7 @@ type HTTPMemory struct {
 	httpClient *http.Client
 	baseURL    string
 	sessionId  string
+	queryName  string
 	name       string
 	namespace  string
 	recorder   EventEmitter
@@ -96,6 +97,7 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 		httpClient: httpClient,
 		baseURL:    strings.TrimSuffix(*memory.Status.LastResolvedAddress, "/"),
 		sessionId:  sessionId,
+		queryName:  config.QueryName,
 		name:       memoryName,
 		namespace:  namespace,
 		recorder:   recorder,
@@ -258,5 +260,19 @@ func (m *HTTPMemory) Close() error {
 	if m.httpClient != nil {
 		m.httpClient.CloseIdleConnections()
 	}
+	return nil
+}
+
+// NotifyCompletion notifies the memory service that the query has completed
+// This is part of the streaming API which will be fully implemented in a future release
+func (m *HTTPMemory) NotifyCompletion(ctx context.Context) error {
+	// No-op for now - will be implemented when streaming is fully supported
+	return nil
+}
+
+// StreamChunk sends a streaming chunk to the memory service
+// This is part of the streaming API which will be fully implemented in a future release
+func (m *HTTPMemory) StreamChunk(ctx context.Context, chunk interface{}) error {
+	// No-op for now - will be implemented when streaming is fully supported
 	return nil
 }

@@ -12,6 +12,7 @@ from ...models.models import (
     ModelUpdateRequest,
     ModelDetailResponse
 )
+from ...models.common import extract_availability_from_conditions
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
@@ -26,13 +27,17 @@ def model_to_response(model: dict) -> ModelResponse:
     metadata = model.get("metadata", {})
     spec = model.get("spec", {})
     status = model.get("status", {})
-    
+
+    # Extract availability from conditions
+    conditions = status.get("conditions", [])
+    availability = extract_availability_from_conditions(conditions, "ModelAvailable")
+
     return ModelResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
         type=spec.get("type", ""),
         model=spec.get("model", {}).get("value", "") if isinstance(spec.get("model"), dict) else "",
-        status=status.get("phase"),
+        available=availability,
         annotations=metadata.get("annotations", {})
     )
 
@@ -42,6 +47,10 @@ def model_to_detail_response(model: dict) -> ModelDetailResponse:
     metadata = model.get("metadata", {})
     spec = model.get("spec", {})
     status = model.get("status", {})
+
+    # Extract availability from conditions
+    conditions = status.get("conditions", [])
+    availability = extract_availability_from_conditions(conditions, "ModelAvailable")
     
     # Process config to preserve value/valueFrom structure
     raw_config = spec.get("config", {})
@@ -64,7 +73,7 @@ def model_to_detail_response(model: dict) -> ModelDetailResponse:
         type=spec.get("type", ""),
         model=spec.get("model", {}).get("value", "") if isinstance(spec.get("model"), dict) else spec.get("model", ""),
         config=processed_config,
-        status=status.get("phase"),
+        available=availability,
         resolved_address=status.get("resolvedAddress"),
         annotations=metadata.get("annotations", {})
     )

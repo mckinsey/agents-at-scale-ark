@@ -1,5 +1,7 @@
+// ARK annotation prefix - mirrors ark/internal/annotations/annotations.go
 const ARK_PREFIX = "ark.mckinsey.com/";
 
+// TypeScript constants mirroring Go constants in ark/internal/annotations/annotations.go
 export const ARK_ANNOTATIONS = {
   // Dashboard annotations
   DASHBOARD_ICON: `${ARK_PREFIX}dashboard-icon`,
@@ -23,6 +25,6 @@ export const ARK_ANNOTATIONS = {
   QUERY_GENERATION: `${ARK_PREFIX}query-generation`,
   QUERY_PHASE: `${ARK_PREFIX}query-phase`,
   
-  // General annotations
-  FINALIZER: `${ARK_PREFIX}finalizer`
+  // Streaming annotations
+  STREAMING_ENABLED: `${ARK_PREFIX}streaming-enabled`
 } as const;
