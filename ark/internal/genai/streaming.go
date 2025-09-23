@@ -19,9 +19,67 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/yaml"
 
+	"github.com/openai/openai-go"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
 )
+
+// StreamMetadata contains ARK-specific metadata for streaming chunks
+type StreamMetadata struct {
+	Query   string `json:"query,omitempty"`
+	Session string `json:"session,omitempty"`
+	Target  string `json:"target,omitempty"`
+	Team    string `json:"team,omitempty"`
+	Agent   string `json:"agent,omitempty"`
+	Model   string `json:"model,omitempty"`
+}
+
+// ChunkWithMetadata wraps an OpenAI chunk with ARK metadata
+type ChunkWithMetadata struct {
+	*openai.ChatCompletionChunk
+	Ark *StreamMetadata `json:"ark,omitempty"`
+}
+
+// WrapChunkWithMetadata adds ARK metadata to a streaming chunk
+func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChunk, modelName string) interface{} {
+	// Build metadata from context
+	metadata := &StreamMetadata{}
+
+	// Get execution metadata from context
+	execMeta := GetExecutionMetadata(ctx)
+	if target, ok := execMeta["target"].(string); ok {
+		metadata.Target = target
+	}
+	if team, ok := execMeta["team"].(string); ok {
+		metadata.Team = team
+	}
+	if agent, ok := execMeta["agent"].(string); ok {
+		metadata.Agent = agent
+	}
+	if model, ok := execMeta["model"].(string); ok {
+		metadata.Model = model
+	} else if modelName != "" {
+		metadata.Model = modelName
+	}
+
+	// Add query and session IDs
+	if queryID := getQueryID(ctx); queryID != "" {
+		metadata.Query = queryID
+	}
+	if sessionID := getSessionID(ctx); sessionID != "" {
+		metadata.Session = sessionID
+	}
+
+	// If no metadata, return chunk as-is for backward compatibility
+	if *metadata == (StreamMetadata{}) {
+		return chunk
+	}
+
+	return ChunkWithMetadata{
+		ChatCompletionChunk: chunk,
+		Ark: metadata,
+	}
+}
 
 // EventStreamInterface defines streaming capabilities for real-time event delivery
 type EventStreamInterface interface {
