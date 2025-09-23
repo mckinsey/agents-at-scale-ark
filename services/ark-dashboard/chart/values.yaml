@@ -46,6 +46,8 @@ app:
       value: ""
     - name: NEXT_PUBLIC_TOKEN_REFRESH_INTERVAL_MS
       value: "600000" #10 mins
+    - name: NEXT_PUBLIC_FALLBACK_INACTIVITY_TIMEOUT
+      value: "1800000" #30 mins
     - name: AUTH_MODE
       value: "open"
   

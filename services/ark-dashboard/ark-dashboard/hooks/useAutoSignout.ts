@@ -1,26 +1,37 @@
-"use client"
+"use client";
 
-import { signout } from "@/lib/auth/signout"
-import { useSession } from "next-auth/react"
-import { useEffect } from "react"
+import { signout } from "@/lib/auth/signout";
+import { useSession } from "next-auth/react";
+import { useEffect } from "react";
+
+const fallbackInactivityTimeoutFromEnv = parseInt(
+  process.env.NEXT_PUBLIC_FALLBACK_INACTIVITY_TIMEOUT || ""
+);
+const defaultFallbackInactivityTimeout = 30 * 60 * 1000; //30mins
+const fallbackInactivityTimeout = isNaN(fallbackInactivityTimeoutFromEnv)
+  ? defaultFallbackInactivityTimeout
+  : fallbackInactivityTimeoutFromEnv;
 
 export const useAutoSignout = () => {
-  const { data: session } = useSession()
+  const { data: session } = useSession();
 
   useEffect(() => {
     if (!session) {
-      return
+      return;
     }
-    const expiresAt = new Date(session?.expires || '').getTime()
-    const now = Date.now()
-    const timeout = expiresAt - now
+
+    const expiresAt = session?.expires
+      ? new Date(session?.expires).getTime()
+      : Date.now() + fallbackInactivityTimeout;
+    const now = Date.now();
+    const timeout = expiresAt - now;
 
     if (timeout > 0) {
-      const timer = setTimeout(signout, timeout)
-      return () => clearTimeout(timer)
+      const timer = setTimeout(signout, timeout);
+      return () => clearTimeout(timer);
     } else {
       // Already expired
-      signout()
+      signout();
     }
-  }, [session])
-}
+  }, [session]);
+};
