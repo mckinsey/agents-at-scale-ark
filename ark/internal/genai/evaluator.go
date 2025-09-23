@@ -161,7 +161,7 @@ func resolveEvaluatorAddress(ctx context.Context, k8sClient client.Client, evalu
 func buildEvaluationRequest(query arkv1alpha1.Query) EvaluationRequest {
 	return EvaluationRequest{
 		QueryID:   string(query.UID),
-		Input:     query.Spec.Input,
+		Input:     "TODO: Use query.Spec.GetInputString() when implementing RawExtension support", // TODO: Fix for RawExtension
 		Responses: query.Status.Responses,
 		Query:     query,
 	}
