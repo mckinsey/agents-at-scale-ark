@@ -478,27 +478,42 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 	// Create trace based on target type with input/output at trace level
 	tracer := telemetry.NewTraceContext()
 
-	// Get input messages and marshal to JSON for comprehensive telemetry
-	var inputValue string
-	if inputMessages, err := genai.GetQueryInputMessages(ctx, query, impersonatedClient); err != nil {
-		// Fallback to original input field if helper fails
-		inputValue = query.Spec.Input
-	} else {
-		if jsonBytes, err := json.Marshal(inputMessages); err != nil {
-			inputValue = query.Spec.Input // fallback on marshal error
-		} else {
-			inputValue = string(jsonBytes)
-		}
-	}
-
 	ctx, span := tracer.StartSpan(ctx, fmt.Sprintf("query.%s", target.Type),
 		attribute.String("target.type", target.Type),
 		attribute.String("target.name", target.Name),
 		attribute.String("query.name", query.Name),
 		attribute.String("query.namespace", query.Namespace),
-		attribute.String("input.value", inputValue),
 	)
 	defer span.End()
+
+	// Get input messages and marshal to JSON for comprehensive telemetry
+	var inputValue string
+	
+	var err error
+	metadata := map[string]string{"targetType": target.Type, "targetName": target.Name}
+
+	if inputMessages, err := genai.GetQueryInputMessages(ctx, query, impersonatedClient); err != nil {
+		telemetry.RecordError(span, err)
+		event := genai.ExecutionEvent{
+			BaseEvent: genai.BaseEvent{Name: target.Name, Metadata: metadata},
+			Type:      target.Type,
+		}
+		tokenCollector.EmitEvent(ctx, corev1.EventTypeWarning, "QueryResolveError", event)
+		return nil, err
+	} else {
+		if jsonBytes, err := json.Marshal(inputMessages); err != nil {
+			telemetry.RecordError(span, err)
+			event := genai.ExecutionEvent{
+				BaseEvent: genai.BaseEvent{Name: target.Name, Metadata: metadata},
+				Type:      target.Type,
+			}
+			tokenCollector.EmitEvent(ctx, corev1.EventTypeWarning, "QueryResolveError", event)
+			return nil, err
+		} else {
+			inputValue = string(jsonBytes)
+			span.SetAttributes(attribute.String("input.value", inputValue))
+		}
+	}
 
 	timeout := 5 * time.Minute
 	if query.Spec.Timeout != nil {
@@ -508,8 +523,6 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 	defer cancel()
 
 	var messages []genai.Message
-	var err error
-
 	switch target.Type {
 	case "agent":
 		messages, err = r.executeAgent(execCtx, query, target.Name, impersonatedClient, memory, tokenCollector)
@@ -522,8 +535,6 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 	default:
 		panic(fmt.Errorf("unknown query target type:%s", target.Type))
 	}
-
-	metadata := map[string]string{"targetType": target.Type, "targetName": target.Name}
 
 	if err != nil {
 		telemetry.RecordError(span, err)
