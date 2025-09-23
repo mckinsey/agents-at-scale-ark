@@ -14,9 +14,9 @@ make quickstart
 
 This builds the containers locally and deploys them to a local cluster. More details are in the [Getting Started](/getting-started) guide. 
 
-## Helm Deployment with GHCR
+## Deploying via Helm
 
-Ark can be deployed using the Helm charts that are attached to all [releases](https://github.com/mckinsey/agents-at-scale-ark/releases/) and deployed to the [charts packages](https://github.com/orgs/mckinsey/packages?repo_name=agents-at-scale-ark). By default the chart uses the latest images available on the release.
+Ark can be deployed using the Helm charts that are attached to all [releases](https://github.com/mckinsey/agents-at-scale-ark/releases/) and deployed to the [charts packages](https://github.com/orgs/mckinsey/packages?repo_name=agents-at-scale-ark). By default the chart uses the latest images available on the release. This process, including the deployment of prerequisites can also be run via the `ark install` command.
 
 ### Prerequisites
 
@@ -97,10 +97,6 @@ helm list -n ark-system
 # Via deployment labels  
 kubectl get deployment ark-controller -n ark-system \
   -o jsonpath='{.metadata.labels.app\.kubernetes\.io/version}'
-
-# Via pod environment variable
-kubectl get pod -n ark-system -l control-plane=ark-controller \
-  -o jsonpath='{.items[0].spec.containers[0].env[?(@.name=="VERSION")].value}'
 ```
 
 ## Cluster Preparation for CI/CD Deployments
@@ -125,7 +121,7 @@ kubectl apply -f ark/config/rbac/ark-deployer-role.yaml
 
 This creates a ClusterRoleBinding that connects your GitHub repository identity (via OIDC) to the deployment permissions.
 
-## Tenancy and Ark Namespaces
+## The Ark Controller
 
 By default, the `ark-controller` is deployed into the `ark-system` namespace. When the controller is executing a query, it will impersonate the user account provided in `query.serviceAccount` field (`default` is used if no service account is specified).
 
@@ -134,12 +130,16 @@ The out-of-the-box installation gives the `ark-controller` permissions to impers
 ```yaml
 # values.yaml
 rbac:
+  # Creates ClusterRole and ClusterRoleBinding for the controller
   enable: true
   impersonation:
-    # Option 1: Allow all service accounts (less secure, more flexible)
+    # Choose ONE of these approaches:
+
+    # Option 1: Allow impersonation of ANY service account (development/testing)
     allowAll: true
 
-    # Option 2: Explicitly list allowed accounts (more secure, recommended)
+    # Option 2: Allow specific service accounts only (production)
+    # When allowAll is true, serviceAccounts list is ignored
     # allowAll: false
     # serviceAccounts:
     #   - default
@@ -151,13 +151,11 @@ rbac:
 To apply this configuration:
 
 ```bash
-# Install with custom service accounts
-helm install ark ./ark/dist/chart \
+# Install or upgrade with custom service accounts
+helm upgrade --install ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
+  --namespace ark-system \
+  --create-namespace \
   --set-string rbac.impersonation.serviceAccounts={default,tenant-1-sa,tenant-2-sa}
-
-# Or upgrade existing installation
-helm upgrade ark ./ark/dist/chart \
-  --reuse-values \
   --set-string rbac.impersonation.serviceAccounts={default,tenant-1-sa,tenant-2-sa}
 ```
 
@@ -170,7 +168,7 @@ The chart creates namespace-scoped permissions that prevent cross-tenant access.
 The `ark-tenant` Helm chart can be used to create or provision a namespace with the required RBAC configuration:
 
 ```bash
-helm install ark-tenant ./charts/ark-tenant \
+helm install ark-tenant oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-tenant \
   -n tenant-1 \
   --create-namespace \
   --set serviceAccount.name=tenant-1-sa
@@ -185,38 +183,28 @@ If not specified, the service account `default` will be used. This will create:
 
 Additional options include resource quotas and network policies, which are documented in the chart.
 
-The ARK controller needs permission to impersonate tenant service accounts. Choose one approach:
+If the Ark controller needs specific permissions to impersonate tenant service accounts (see [The Ark Controller](#the-ark-controller) when `rbac.impersonation.allowAll` is `false`), then the new service account should be added to the list of allowed impersonation accounts:
 
-**Option 1: Allow all service accounts (simplest for development)**
 
-```bash
-helm upgrade ark-controller ./ark/dist/chart --set rbac.impersonation.allowAll=true
-```
 
-**Option 2: Use standard naming convention**
-
-If all tenants use `ark-tenant-sa` as their service account name (the default), no additional configuration is needed.
-
-**Option 3: Explicitly list service accounts (most secure)**
-
-Create a values file:
 
 ```yaml
-# ark-tenants-values.yaml
+# values.yaml for ark-controller
 rbac:
   enable: true
   impersonation:
     allowAll: false
     serviceAccounts:
-      - default
-      - ark-tenant-sa
-      - custom-tenant-sa
+      # add the new service account to the list, eg:
+      - tenant-1
 ```
 
 Then upgrade:
 
 ```bash
-helm upgrade ark-controller ./ark/dist/chart -f ark-tenants-values.yaml
+helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
+  -n ark-system \
+  -f ark-tenants-values.yaml
 ```
 
 ### Using the Tenant Service Account

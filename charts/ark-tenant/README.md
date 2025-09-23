@@ -28,13 +28,24 @@ helm install ark-tenant ./charts/ark-tenant -n secure-tenant \
 
 ## Prerequisites
 
-Before using this chart, ensure the ARK controller is configured to impersonate the service account:
+The ARK controller must be able to impersonate the tenant service account. Choose one approach:
 
+**Option 1: Use default `ark-tenant-sa` (no configuration needed)**
+The chart defaults to using `ark-tenant-sa` which is pre-authorized in the controller.
+
+**Option 2: Allow all service accounts**
 ```bash
-# Update ARK controller to allow impersonation
-helm upgrade ark ./ark/dist/chart \
+helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
+  --namespace ark-system \
+  --set rbac.impersonation.allowAll=true
+```
+
+**Option 3: Add specific service account to allowlist**
+```bash
+helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
+  --namespace ark-system \
   --reuse-values \
-  --set-string rbac.impersonation.serviceAccounts={default,prod-sa,tenant-sa}
+  --set-string rbac.impersonation.serviceAccounts={default,ark-tenant-sa,prod-sa}
 ```
 
 ## Configuration
@@ -42,7 +53,7 @@ helm upgrade ark ./ark/dist/chart \
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `serviceAccount.create` | Create a service account | `true` |
-| `serviceAccount.name` | Name of the service account | `default` |
+| `serviceAccount.name` | Name of the service account | `ark-tenant-sa` |
 | `rbac.create` | Create RBAC resources | `true` |
 | `rbac.additionalSubjects` | Additional subjects for RoleBinding | `[]` |
 | `resourceQuota.enabled` | Enable resource quotas | `false` |
@@ -69,7 +80,7 @@ metadata:
   name: my-query
   namespace: tenant-1
 spec:
-  serviceAccount: default  # Or your custom service account name
+  serviceAccount: ark-tenant-sa  # Or your custom service account name
   input: "Hello from tenant"
   targets:
     - type: agent
