@@ -3,8 +3,8 @@ serviceAccount:
   # Create a service account
   create: true
   # Name of the service account
-  # Default is 'ark-tenant-sa' which is pre-authorized in the controller
-  name: ark-tenant-sa
+  # Default is 'ark-tenant' - use this consistent name across all tenant namespaces
+  name: ark-tenant
   # Annotations to add to the service account
   annotations: {}
 
@@ -24,10 +24,12 @@ rbac:
 
 # Note on Controller Impersonation:
 # The Ark controller needs permission to impersonate the service account created above.
-# This is configured in the ark-controller chart, not here. Options:
-# 1. Use 'ark-tenant-sa' (default) - already allowed by the controller
-# 2. Set controller's rbac.impersonation.allowAll=true to allow any service account
-# 3. Add custom service account names to controller's rbac.impersonation.serviceAccounts list
+# This is configured in the ark-controller chart, not here.
+#
+# Recommended approach:
+# 1. Use 'ark-tenant' consistently across all namespaces (default)
+# 2. For development: Set controller's rbac.impersonation.allowAll=true
+# 3. For production: Add 'system:serviceaccount:{namespace}:ark-tenant' to controller's serviceAccounts list
 
 # Resource quota configuration (optional)
 resourceQuota:

@@ -50,15 +50,24 @@ rbac:
     # This makes it easy to get started - just create namespaces and go!
     allowAll: true
 
-    # Production: Set allowAll to false and list specific service accounts
-    # IMPORTANT: Must use full Kubernetes format: system:serviceaccount:namespace:name
-    # Example production configuration:
+    # Production: Restrict to specific service accounts
+    # Must use full Kubernetes format: system:serviceaccount:namespace:name
+    #
+    # RECOMMENDED: Use a consistent naming convention like 'ark-tenant'
+    # across all namespaces to simplify configuration:
+    #
     # allowAll: false
     # serviceAccounts:
-    #   - system:serviceaccount:default:default              # Default namespace
-    #   - system:serviceaccount:tenant-1:ark-tenant-sa       # Tenant 1 namespace
-    #   - system:serviceaccount:tenant-2:ark-tenant-sa       # Tenant 2 namespace
-    #   - system:serviceaccount:production:prod-sa           # Production namespace
+    #   - system:serviceaccount:default:default
+    #   - system:serviceaccount:tenant-1:ark-tenant    # Same name pattern
+    #   - system:serviceaccount:tenant-2:ark-tenant    # Same name pattern
+    #   - system:serviceaccount:tenant-3:ark-tenant    # Same name pattern
+    #   - system:serviceaccount:production:ark-tenant  # Same name pattern
+    #
+    # This approach:
+    # - Makes it clear which namespaces are authorized
+    # - Uses a consistent service account name for easy management
+    # - Requires updating when adding new tenant namespaces
     #
     # Note: When allowAll is true, the serviceAccounts list is ignored
 
