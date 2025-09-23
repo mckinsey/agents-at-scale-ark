@@ -51,6 +51,8 @@ type QuerySpec struct {
 	// +kubebuilder:default=user
 	Type string `json:"type,omitempty"`
 	// +kubebuilder:validation:Required
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
 	// Input can be a string (type=user) or []Message (type=messages)
 	Input runtime.RawExtension `json:"input"`
 	// +kubebuilder:validation:Optional

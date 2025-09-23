@@ -116,7 +116,6 @@ spec:
                 type: array
               input:
                 description: Input can be a string (type=user) or []Message (type=messages)
-                type: object
                 x-kubernetes-preserve-unknown-fields: true
               memory:
                 properties:
