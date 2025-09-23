@@ -126,3 +126,38 @@ func ResolveBodyTemplate(ctx context.Context, k8sClient client.Client, namespace
 
 	return buf.String(), nil
 }
+
+// GetQueryInputMessages returns a message array based on query type, handling both input and messages
+func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClient client.Client) ([]Message, error) {
+	queryType := query.Spec.Type
+	if queryType == "" {
+		queryType = "user" // default type
+	}
+
+	if queryType == "messages" {
+		// Convert CRD messages to genai.Message format
+		var messages []Message
+		for _, msg := range query.Spec.Messages {
+			switch msg.Role {
+			case "user":
+				messages = append(messages, NewUserMessage(msg.Content))
+			case "assistant":
+				messages = append(messages, NewAssistantMessage(msg.Content))
+			case "system":
+				messages = append(messages, NewSystemMessage(msg.Content))
+			default:
+				// For unknown roles, default to user
+				messages = append(messages, NewUserMessage(msg.Content))
+			}
+		}
+		return messages, nil
+	} else {
+		// For 'user' type, resolve input with template parameters and create a single user message
+		resolvedInput, err := ResolveQueryInput(ctx, k8sClient, query.Namespace, query.Spec.Input, query.Spec.Parameters)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve query input: %w", err)
+		}
+		userMessage := NewUserMessage(resolvedInput)
+		return []Message{userMessage}, nil
+	}
+}

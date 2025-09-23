@@ -13,6 +13,7 @@ import {
   TooltipTrigger
 } from "@/components/ui/tooltip"
 import { chatService } from "@/lib/services"
+import type { Message } from "@/lib/services/chat"
 import { ChatMessage } from "@/components/chat/chat-message"
 import type { ChatMessageData } from "@/lib/types/chat"
 
@@ -35,6 +36,7 @@ export default function FloatingChat({ name, type, namespace, position, onClose 
   const [error, setError] = useState<string | null>(null)
   const [isMaximized, setIsMaximized] = useState(false)
   const [viewMode, setViewMode] = useState<'text' | 'markdown'>('markdown')
+  const [inputMode, setInputMode] = useState<'string' | 'messages'>('string') 
   const [sessionId] = useState(() => `session-${Date.now()}`)
   const inputRef = useRef<HTMLInputElement>(null)
   const stopPollingRef = useRef<(() => void) | null>(null)
@@ -139,6 +141,24 @@ export default function FloatingChat({ name, type, namespace, position, onClose 
     return fullQuery
   }
 
+  // New function to build message array instead of concatenated string
+  const buildChatMessages = (messages: ChatMessageData[], currentMsg: string): Message[] => {
+    const messageArray: Message[] = messages
+      .filter(msg => msg.content) // Only include messages with content
+      .map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }))
+    
+    // Add the current message
+    messageArray.push({
+      role: "user",
+      content: currentMsg
+    })
+    
+    return messageArray
+  }
+
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isProcessing) return
 
@@ -155,21 +175,30 @@ export default function FloatingChat({ name, type, namespace, position, onClose 
     setIsProcessing(true)
 
     try {
-      // Build the full query with chat history
-      const fullQuery = buildChatHistory(chatMessages, userMessage)
-      
-      // Submit the query with history
-      const query = await chatService.submitChatQuery(
-        namespace,
-        'user',
-        fullQuery,
-        type,
-        name,
-        sessionId
-      )
-
-      // Poll for query status updates
-      await pollQueryStatus(query.name)
+      // Choose input method based on inputMode
+      if (inputMode === 'messages') {
+        // Use message array approach with the new flexible method
+        const messageArray = buildChatMessages(chatMessages, userMessage)
+        const query = await chatService.submitFlexibleChatQuery(
+          namespace,
+          messageArray,
+          type,
+          name,
+          sessionId
+        )
+        await pollQueryStatus(query.name)
+      } else {
+        // Use traditional string concatenation approach
+        const fullQuery = buildChatHistory(chatMessages, userMessage)
+        const query = await chatService.submitChatQuery(
+          namespace,
+          fullQuery,
+          type,
+          name,
+          sessionId
+        )
+        await pollQueryStatus(query.name)
+      }
       
     } catch (err) {
       console.error('Error sending message:', err)
@@ -232,6 +261,15 @@ export default function FloatingChat({ name, type, namespace, position, onClose 
             </TooltipProvider>
             
             <div className="flex items-center gap-1 ml-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setInputMode(inputMode === 'string' ? 'messages' : 'string')}
+                className="h-6 w-6 p-0 text-xs"
+                title={`Current input mode: ${inputMode}. Click to switch to ${inputMode === 'string' ? 'messages' : 'string'} mode`}
+              >
+                {inputMode === 'string' ? 'S' : 'M'}
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -334,14 +372,16 @@ export default function FloatingChat({ name, type, namespace, position, onClose 
         </div>
 
         <div className="flex gap-2 p-4 border-t flex-shrink-0">
-          <Input
-            ref={inputRef}
-            placeholder={isProcessing ? "Processing..." : "Type your message..."}
-            value={currentMessage}
-            onChange={(e) => setCurrentMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            disabled={isProcessing}
-          />
+          <div className="flex-1 relative">
+            <Input
+              ref={inputRef}
+              placeholder={isProcessing ? "Processing..." : `Type your message... (${inputMode} mode)`}
+              value={currentMessage}
+              onChange={(e) => setCurrentMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              disabled={isProcessing}
+            />
+          </div>
           <Button 
             onClick={handleSendMessage} 
             disabled={!currentMessage.trim() || isProcessing} 

@@ -85,6 +85,17 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
       : text;
   };
 
+  // Helper function to convert input to displayable string
+  const getInputDisplayText = (input: string | { role: string; content: string; }[] | undefined): string => {
+    if (!input) return "-";
+    if (typeof input === "string") return input;
+    if (Array.isArray(input)) {
+      // Convert message array to readable format
+      return input.map(msg => `${msg.role}: ${msg.content}`).join("\n");
+    }
+    return "-";
+  };
+
   const formatTokenUsage = (query: QueryResponse) => {
     if (!query.status?.tokenUsage) return "-";
     const usage = query.status.tokenUsage as {
@@ -378,6 +389,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
                       sortedQueries.map((query) => {
                         const target = getTargetDisplay(query);
                         const output = getOutput(query);
+                        const inputDisplayText = getInputDisplayText(query.input);
                         return (
                           <tr
                             key={query.name}
@@ -401,12 +413,12 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger className="text-left">
-                                    {truncateText(query.input)}
+                                    {truncateText(inputDisplayText)}
                                   </TooltipTrigger>
-                                  {query.input && query.input.length > 50 && (
+                                  {inputDisplayText && inputDisplayText.length > 50 && (
                                     <TooltipContent className="max-w-md">
                                       <p className="whitespace-pre-wrap">
-                                        {query.input}
+                                        {inputDisplayText}
                                       </p>
                                     </TooltipContent>
                                   )}

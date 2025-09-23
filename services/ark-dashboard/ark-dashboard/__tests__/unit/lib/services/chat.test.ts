@@ -104,7 +104,6 @@ describe('chatService', () => {
 
       const result = await chatService.submitChatQuery(
         namespace,
-        'user',
         'Hello',
         'agent',
         'test-agent',
@@ -115,6 +114,7 @@ describe('chatService', () => {
         `/api/v1/namespaces/${namespace}/queries/`,
         {
           name: 'chat-query-mock-uuid',
+          type: 'user',
           input: 'Hello',
           targets: [{ type: 'agent', name: 'test-agent' }],
           sessionId: 'session-123',
