@@ -232,7 +232,8 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	}
 }
 
-// finalizeEventStream handles event stream completion and cleanup
+// finalizeEventStream sends the completion message to the event stream and
+// closes its connection.
 func (r *QueryReconciler) finalizeEventStream(ctx context.Context, eventStream genai.EventStreamInterface) {
 	if eventStream == nil {
 		return
@@ -240,13 +241,18 @@ func (r *QueryReconciler) finalizeEventStream(ctx context.Context, eventStream g
 
 	log := logf.FromContext(ctx)
 
-	// Notify event stream that streaming is complete
+	// Notify event stream that streaming is complete. This ensures that
+	// clients connected to the stream recieve the completion event and
+	// will close their connection.
 	if completionErr := eventStream.NotifyCompletion(ctx); completionErr != nil {
-		// Log warning but don't fail the query
+		// If we cannot close the event stream, log and error but don't
+		// fail - the final message will still be available in the
+		// query response.
 		log.Error(completionErr, "Failed to notify query completion to event stream")
 	}
 
-	// Close the event stream after query completion
+	// Close the event stream. If this fails, we log and error but don't
+	// fail the query, as the final message is still recorded.
 	if closeErr := eventStream.Close(); closeErr != nil {
 		log.Error(closeErr, "Failed to close event stream")
 	}
