@@ -242,7 +242,7 @@ func (r *QueryReconciler) finalizeEventStream(ctx context.Context, eventStream g
 	log := logf.FromContext(ctx)
 
 	// Notify event stream that streaming is complete. This ensures that
-	// clients connected to the stream recieve the completion event and
+	// clients connected to the stream receive the completion event and
 	// will close their connection.
 	if completionErr := eventStream.NotifyCompletion(ctx); completionErr != nil {
 		// If we cannot close the event stream, log and error but don't
