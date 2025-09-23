@@ -168,7 +168,7 @@ jobs:
             prebuild: "make ark-evaluator-deps"
           - path: services/executor-langchain
             image: executor-langchain
-            prebuild: "make executor-langchain-deps && mkdir -p services/executor-langchain/build-context && cp out/executor-common/dist/executor_common-*.whl services/executor-langchain/build-context/"
+            prebuild: "make executor-langchain-deps && mkdir -p services/executor-langchain/build-context && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/executor-langchain/build-context/"
           - path: services/ark-cluster-memory/ark-cluster-memory
             image: ark-cluster-memory
           - path: samples/agent-hosting/hosted-langchain-agents

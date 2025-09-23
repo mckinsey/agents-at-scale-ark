@@ -33,7 +33,7 @@ CLEAN_TARGETS += $(EXECUTOR_LANGCHAIN_SERVICE_DIR)/build-context
 
 # Dependencies
 $(EXECUTOR_LANGCHAIN_SERVICE_NAME)-deps: $(EXECUTOR_LANGCHAIN_STAMP_DEPS)
-$(EXECUTOR_LANGCHAIN_STAMP_DEPS): $(EXECUTOR_LANGCHAIN_SERVICE_DIR)/pyproject.toml $(ARK_EXECUTOR_COMMON_WHL) | $(OUT)
+$(EXECUTOR_LANGCHAIN_STAMP_DEPS): $(EXECUTOR_LANGCHAIN_SERVICE_DIR)/pyproject.toml $(ARK_SDK_WHL) | $(OUT)
 	@mkdir -p $(dir $@)
 	@touch $@
 
@@ -41,7 +41,7 @@ $(EXECUTOR_LANGCHAIN_STAMP_DEPS): $(EXECUTOR_LANGCHAIN_SERVICE_DIR)/pyproject.to
 $(EXECUTOR_LANGCHAIN_SERVICE_NAME)-build: $(EXECUTOR_LANGCHAIN_STAMP_BUILD) # HELP: Build LangChain executor engine Docker image
 $(EXECUTOR_LANGCHAIN_STAMP_BUILD): $(EXECUTOR_LANGCHAIN_STAMP_DEPS)
 	@mkdir -p $(EXECUTOR_LANGCHAIN_SERVICE_DIR)/build-context
-	cp $(ARK_EXECUTOR_COMMON_WHL) $(EXECUTOR_LANGCHAIN_SERVICE_DIR)/build-context/
+	cp $(ARK_SDK_WHL) $(EXECUTOR_LANGCHAIN_SERVICE_DIR)/build-context/
 	cd $(EXECUTOR_LANGCHAIN_SERVICE_DIR) && docker build -t $(LANGCHAIN_IMAGE):$(LANGCHAIN_TAG) .
 	@rm -rf $(EXECUTOR_LANGCHAIN_SERVICE_DIR)/build-context
 	@touch $@
@@ -50,17 +50,17 @@ $(EXECUTOR_LANGCHAIN_STAMP_BUILD): $(EXECUTOR_LANGCHAIN_STAMP_DEPS)
 $(EXECUTOR_LANGCHAIN_SERVICE_NAME)-install: $(EXECUTOR_LANGCHAIN_STAMP_INSTALL) # HELP: Deploy LangChain executor engine to cluster
 $(EXECUTOR_LANGCHAIN_STAMP_INSTALL): $(EXECUTOR_LANGCHAIN_STAMP_BUILD)
 	@mkdir -p $(EXECUTOR_LANGCHAIN_SERVICE_DIR)/build-context
-	cp $(ARK_EXECUTOR_COMMON_WHL) $(EXECUTOR_LANGCHAIN_SERVICE_DIR)/build-context/
+	cp $(ARK_SDK_WHL) $(EXECUTOR_LANGCHAIN_SERVICE_DIR)/build-context/
 	./scripts/build-and-push.sh -i $(LANGCHAIN_IMAGE) -t $(LANGCHAIN_TAG) -f $(EXECUTOR_LANGCHAIN_SERVICE_DIR)/Dockerfile -c $(EXECUTOR_LANGCHAIN_SERVICE_DIR)
 	@rm -rf $(EXECUTOR_LANGCHAIN_SERVICE_DIR)/build-context
 	cd $(EXECUTOR_LANGCHAIN_SERVICE_DIR) && helm upgrade --install executor-langchain ./chart -n $(LANGCHAIN_NAMESPACE) --create-namespace --set image.repository=$(LANGCHAIN_IMAGE) --set image.tag=$(LANGCHAIN_TAG)
 	@touch $@
 
 # Dev target dependencies - prepare local environment  
-$(EXECUTOR_LANGCHAIN_SERVICE_NAME)-dev-deps: $(ARK_EXECUTOR_COMMON_WHL)
+$(EXECUTOR_LANGCHAIN_SERVICE_NAME)-dev-deps: $(ARK_SDK_WHL)
 	cd $(EXECUTOR_LANGCHAIN_SERVICE_DIR) && \
-	uv remove executor-common || true && \
-	uv add $(ARK_EXECUTOR_COMMON_WHL) && \
+	uv remove ark-sdk || true && \
+	uv add $(ARK_SDK_WHL) && \
 	uv sync
 
 # Dev target
