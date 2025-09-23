@@ -208,6 +208,4 @@ spec:
       name: my-agent
 ```
 
-Note: the below needs to be updated
-
-Tenants using the default service account will then have appropriate permissions to create and manage ARK resources. Note that this also gives a large number of permissions to core K8S resources, which is convenient for local development but not suitable for production use - tenant roles should be configured and managed by cluster admins.
+With the default `allowAll: true` configuration, queries can use any service account in any namespace without additional setup. For production environments with restricted impersonation, the ark-tenant chart provides proper RBAC configuration for tenant namespaces.
