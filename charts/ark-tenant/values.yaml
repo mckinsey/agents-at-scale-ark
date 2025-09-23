@@ -10,15 +10,24 @@ serviceAccount:
 
 # RBAC configuration
 rbac:
-  # Create RBAC resources (Role and RoleBinding)
+  # Create RBAC resources (Role and RoleBinding) in the tenant namespace
   create: true
+
   # Additional subjects for the RoleBinding (optional)
+  # These subjects will also be granted the tenant role permissions
   additionalSubjects: []
   # Example:
   # - kind: User
   #   name: jane.doe@example.com
   # - kind: Group
   #   name: developers
+
+# Note on Controller Impersonation:
+# The Ark controller needs permission to impersonate the service account created above.
+# This is configured in the ark-controller chart, not here. Options:
+# 1. Use 'ark-tenant-sa' (default) - already allowed by the controller
+# 2. Set controller's rbac.impersonation.allowAll=true to allow any service account
+# 3. Add custom service account names to controller's rbac.impersonation.serviceAccounts list
 
 # Resource quota configuration (optional)
 resourceQuota:
