@@ -44,5 +44,4 @@ resources:
 - agent_admin_role.yaml
 - agent_editor_role.yaml
 - agent_viewer_role.yaml
-# Tenant RBAC removed - use ark-tenant helm chart for multi-tenant setups
 
