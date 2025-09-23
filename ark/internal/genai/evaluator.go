@@ -21,7 +21,7 @@ import (
 
 type EvaluationRequest struct {
 	QueryID   string                 `json:"queryId"`
-	Input     string                 `json:"input"`
+	Input     []Message              `json:"input"`
 	Responses []arkv1alpha1.Response `json:"responses"`
 	Query     arkv1alpha1.Query      `json:"query"`
 }
@@ -80,7 +80,11 @@ func CallSingleEvaluator(ctx context.Context, k8sClient client.Client, query ark
 	}
 
 	// For backward compatibility with query evaluation - evaluation CRDs don't use this path
-	request := buildEvaluationRequest(query)
+	request, err := buildEvaluationRequest(ctx, k8sClient, query)
+	if err != nil {
+		tracker.Fail(err)
+		return nil, err
+	}
 	response, err := callEvaluatorHTTP(ctx, address, request)
 	if err != nil {
 		tracker.Fail(err)
@@ -158,13 +162,20 @@ func resolveEvaluatorAddress(ctx context.Context, k8sClient client.Client, evalu
 	return address, nil
 }
 
-func buildEvaluationRequest(query arkv1alpha1.Query) EvaluationRequest {
+func buildEvaluationRequest(ctx context.Context, k8sClient client.Client, query arkv1alpha1.Query) (EvaluationRequest, error) {
+	// Convert input to unified message format (handles both string and message array inputs)
+	messages, err := GetQueryInputMessages(ctx, query, k8sClient)
+	if err != nil {
+		return EvaluationRequest{}, fmt.Errorf("failed to process query input: %w", err)
+	}
+	
+	// Build evaluation request with unified message format
 	return EvaluationRequest{
 		QueryID:   string(query.UID),
-		Input:     "TODO: Use query.Spec.GetInputString() when implementing RawExtension support", // TODO: Fix for RawExtension
+		Input:     messages,
 		Responses: query.Status.Responses,
 		Query:     query,
-	}
+	}, nil
 }
 
 func callEvaluatorHTTPEndpoint(ctx context.Context, address, endpoint string, request any, timeout time.Duration) (*http.Response, error) {
