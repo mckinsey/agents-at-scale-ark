@@ -1,6 +1,6 @@
-# ARK Tenant Chart
+# Ark Tenant Chart
 
-Helm chart for provisioning ARK tenant namespaces with proper RBAC, service accounts, and optional resource controls.
+Helm chart for provisioning Ark tenant namespaces with proper RBAC, service accounts, and optional resource controls.
 
 ## Installation
 
@@ -28,19 +28,19 @@ helm install ark-tenant ./charts/ark-tenant -n secure-tenant \
 
 ## Prerequisites
 
-The ARK controller must be able to impersonate the tenant service account. Choose one approach:
+The Ark controller must be able to impersonate the tenant service account. Choose one approach:
 
-**Option 1: Use default `ark-tenant-sa` (no configuration needed)**
+Option 1: Use default `ark-tenant-sa` (no configuration needed)
 The chart defaults to using `ark-tenant-sa` which is pre-authorized in the controller.
 
-**Option 2: Allow all service accounts**
+Option 2: Allow all service accounts
 ```bash
 helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
   --namespace ark-system \
   --set rbac.impersonation.allowAll=true
 ```
 
-**Option 3: Add specific service account to allowlist**
+Option 3: Add specific service account to allowlist
 ```bash
 helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
   --namespace ark-system \
@@ -63,15 +63,15 @@ helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ar
 
 ## What Gets Created
 
-1. **ServiceAccount** (optional) - For query execution
-2. **Role** - Permissions for ARK and K8s resources
-3. **RoleBinding** - Binds role to service account
-4. **ResourceQuota** (optional) - Namespace resource limits
-5. **NetworkPolicy** (optional) - Network isolation rules
+1. ServiceAccount (optional) - For query execution
+2. Role - Permissions for Ark and K8s resources
+3. RoleBinding - Binds role to service account
+4. ResourceQuota (optional) - Namespace resource limits
+5. NetworkPolicy (optional) - Network isolation rules
 
 ## Usage
 
-After installation, create ARK resources in the namespace:
+After installation, create Ark resources in the namespace:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1

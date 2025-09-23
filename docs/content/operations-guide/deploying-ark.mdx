@@ -1,6 +1,6 @@
-# Deploying ARK
+# Deploying Ark
 
-Deploy ARK locally using quickstart or to remote clusters with registry-based deployment.
+Deploy Ark locally using quickstart or to remote clusters with registry-based deployment.
 
 ## Local Deployment
 
@@ -35,7 +35,7 @@ helm upgrade --install cert-manager jetstack/cert-manager \
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
 ```
 
-### Deploy ARK
+### Deploy Ark
 
 Deploy the Ark controller:
 
@@ -101,16 +101,16 @@ kubectl get deployment ark-controller -n ark-system \
 
 ## Cluster Preparation for CI/CD Deployments
 
-Before using GitHub Actions to deploy ARK to a cluster, platform administrators need to set up the required RBAC permissions.
+Before using GitHub Actions to deploy Ark to a cluster, platform administrators need to set up the required RBAC permissions.
 
-ARK includes a standard deployer role in [`ark/config/rbac/ark-deployer-role.yaml`](https://github.com/McK-Internal/agents-at-scale/blob/main/ark/config/rbac/ark-deployer-role.yaml) that defines the minimum permissions required for deployments. This role allows creating namespaces, deploying services, installing CRDs, and configuring webhooks.
+Ark includes a standard deployer role in [`ark/config/rbac/ark-deployer-role.yaml`](https://github.com/McK-Internal/agents-at-scale/blob/main/ark/config/rbac/ark-deployer-role.yaml) that defines the minimum permissions required for deployments. This role allows creating namespaces, deploying services, installing CRDs, and configuring webhooks.
 
 ### Setup Process
 
 Apply the standard ARK deployer role and then bind to the repository - this will ensure that your GitHub Actions will be able to deploy Ark. In many cases you will have to specify the specific runner via `runs_on` but this will depend on your organization's OIDC configuration:
 
 ```bash
-# Create the 'ark deployer' role, which has the necessary permissions to
+# Create the ark deployer role, which has the necessary permissions to
 # deploy Ark.
 kubectl apply -f ark/config/rbac/ark-deployer-role.yaml
 
@@ -178,7 +178,7 @@ If not specified, the service account `default` will be used. This will create:
 
 - The namespace (if it doesn't exist)
 - The service account
-- An `ark-tenant-role` with ARK and Kubernetes permissions
+- An `ark-tenant-role` with Ark and Kubernetes permissions
 - A RoleBinding linking the service account to the `ark-tenant-role`
 
 Additional options include resource quotas and network policies, which are documented in the chart.
