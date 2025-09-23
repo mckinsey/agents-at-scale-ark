@@ -6,7 +6,6 @@ import (
 	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/runtime"
 	"mckinsey.com/ark/internal/telemetry"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type ChatCompletionProvider interface {
@@ -25,12 +24,6 @@ type Model struct {
 	Provider     ChatCompletionProvider
 	OutputSchema *runtime.RawExtension
 	SchemaName   string
-}
-
-// ChunkWithMetadata wraps an OpenAI chunk with ARK metadata
-type ChunkWithMetadata struct {
-	*openai.ChatCompletionChunk
-	Ark map[string]interface{} `json:"ark,omitempty"`
 }
 
 func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStream EventStreamInterface, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {

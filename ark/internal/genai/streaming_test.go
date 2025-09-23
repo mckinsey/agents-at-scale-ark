@@ -6,140 +6,119 @@ import (
 	"context"
 	"testing"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"github.com/openai/openai-go"
+	"github.com/stretchr/testify/assert"
 )
 
-// Helper to create a test ConfigMap for streaming config
-func createTestConfigMap(data map[string]string) *corev1.ConfigMap {
-	return &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ark-config-streaming",
-			Namespace: "default",
-		},
-		Data: data,
-	}
-}
-
-// Helper to verify test results
-func verifyStreamingConfig(t *testing.T, config *StreamingConfig, err error, expectNil, expectError, expectEnabled bool) {
-	t.Helper()
-
-	if expectError && err == nil {
-		t.Errorf("expected error but got nil")
-	}
-	if !expectError && err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	if expectNil && config != nil {
-		t.Errorf("expected nil config but got %+v", config)
-	}
-	if !expectNil && config == nil && !expectError {
-		t.Errorf("expected non-nil config but got nil")
-	}
-
-	if config != nil && config.Enabled != expectEnabled {
-		t.Errorf("expected enabled=%v but got %v", expectEnabled, config.Enabled)
-	}
-}
-
-func TestGetStreamingConfig(t *testing.T) {
+func TestWrapChunkWithMetadata(t *testing.T) {
 	tests := []struct {
 		name          string
-		configMap     *corev1.ConfigMap
-		expectNil     bool
-		expectError   bool
-		expectEnabled bool
+		setupContext  func() context.Context
+		chunk         *openai.ChatCompletionChunk
+		modelName     string
+		expectWrapped bool
 	}{
 		{
-			name:        "no configmap exists",
-			configMap:   nil,
-			expectNil:   true,
-			expectError: false,
+			name: "with full metadata",
+			setupContext: func() context.Context {
+				ctx := context.Background()
+				ctx = WithQueryContext(ctx, "query-123", "session-456", "test-query")
+				ctx = WithExecutionMetadata(ctx, map[string]interface{}{
+					"target": "test-target",
+					"team":   "test-team",
+					"agent":  "test-agent",
+					"model":  "test-model",
+				})
+				return ctx
+			},
+			chunk: &openai.ChatCompletionChunk{
+				ID: "chunk-1",
+			},
+			modelName:     "fallback-model",
+			expectWrapped: true,
 		},
 		{
-			name: "valid config enabled",
-			configMap: createTestConfigMap(map[string]string{
-				"enabled": "true",
-				"serviceRef": `name: ark-cluster-memory
-port: "http"`,
-			}),
-			expectNil:     false,
-			expectError:   false,
-			expectEnabled: true,
+			name: "with partial metadata",
+			setupContext: func() context.Context {
+				ctx := context.Background()
+				ctx = WithQueryContext(ctx, "query-123", "", "")
+				return ctx
+			},
+			chunk: &openai.ChatCompletionChunk{
+				ID: "chunk-2",
+			},
+			modelName:     "test-model",
+			expectWrapped: true,
 		},
 		{
-			name: "valid config disabled",
-			configMap: createTestConfigMap(map[string]string{
-				"enabled": "false",
-				"serviceRef": `name: ark-cluster-memory
-port: "http"`,
-			}),
-			expectNil:     false,
-			expectError:   false,
-			expectEnabled: false,
+			name: "with no metadata",
+			setupContext: func() context.Context {
+				return context.Background()
+			},
+			chunk: &openai.ChatCompletionChunk{
+				ID: "chunk-3",
+			},
+			modelName:     "",
+			expectWrapped: false,
 		},
 		{
-			name: "missing enabled field",
-			configMap: createTestConfigMap(map[string]string{
-				"serviceRef": `name: ark-cluster-memory
-port: "http"`,
-			}),
-			expectNil:   false,
-			expectError: true,
-		},
-		{
-			name: "missing serviceRef field when enabled",
-			configMap: createTestConfigMap(map[string]string{
-				"enabled": "true",
-			}),
-			expectNil:   false,
-			expectError: true,
-		},
-		{
-			name: "invalid serviceRef YAML",
-			configMap: createTestConfigMap(map[string]string{
-				"enabled":    "true",
-				"serviceRef": "invalid: yaml: structure:",
-			}),
-			expectNil:   false,
-			expectError: true,
-		},
-		{
-			name: "serviceRef missing name",
-			configMap: createTestConfigMap(map[string]string{
-				"enabled":    "true",
-				"serviceRef": `port: "http"`,
-			}),
-			expectNil:   false,
-			expectError: true,
+			name: "model from context overrides parameter",
+			setupContext: func() context.Context {
+				ctx := context.Background()
+				ctx = WithExecutionMetadata(ctx, map[string]interface{}{
+					"model": "context-model",
+				})
+				return ctx
+			},
+			chunk: &openai.ChatCompletionChunk{
+				ID: "chunk-4",
+			},
+			modelName:     "parameter-model",
+			expectWrapped: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create fake client
-			scheme := runtime.NewScheme()
-			_ = corev1.AddToScheme(scheme)
+			ctx := tt.setupContext()
+			result := WrapChunkWithMetadata(ctx, tt.chunk, tt.modelName)
 
-			objs := []runtime.Object{}
-			if tt.configMap != nil {
-				objs = append(objs, tt.configMap)
+			if !tt.expectWrapped {
+				// Should return chunk as-is
+				assert.Equal(t, tt.chunk, result)
+			} else {
+				// Should return wrapped chunk
+				wrapped, ok := result.(ChunkWithMetadata)
+				assert.True(t, ok, "expected ChunkWithMetadata type")
+				assert.Equal(t, tt.chunk, wrapped.ChatCompletionChunk)
+				assert.NotNil(t, wrapped.Ark)
+
+				// Verify metadata fields based on context
+				switch tt.name {
+				case "with full metadata":
+					assert.Equal(t, "query-123", wrapped.Ark.Query)
+					assert.Equal(t, "session-456", wrapped.Ark.Session)
+					assert.Equal(t, "test-target", wrapped.Ark.Target)
+					assert.Equal(t, "test-team", wrapped.Ark.Team)
+					assert.Equal(t, "test-agent", wrapped.Ark.Agent)
+					assert.Equal(t, "test-model", wrapped.Ark.Model) // from context, not parameter
+				case "with partial metadata":
+					assert.Equal(t, "query-123", wrapped.Ark.Query)
+					assert.Equal(t, "", wrapped.Ark.Session)
+					assert.Equal(t, "test-model", wrapped.Ark.Model) // from parameter
+				case "model from context overrides parameter":
+					assert.Equal(t, "context-model", wrapped.Ark.Model)
+				}
 			}
-
-			client := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithRuntimeObjects(objs...).
-				Build()
-
-			// Call GetStreamingConfig
-			config, err := GetStreamingConfig(context.Background(), client, "default")
-
-			// Check expectations using helper
-			verifyStreamingConfig(t, config, err, tt.expectNil, tt.expectError, tt.expectEnabled)
 		})
 	}
+}
+
+func TestStreamMetadata_Empty(t *testing.T) {
+	// Test that empty metadata is correctly identified
+	emptyMeta := StreamMetadata{}
+	assert.True(t, emptyMeta == StreamMetadata{})
+
+	nonEmptyMeta := StreamMetadata{Query: "test"}
+	assert.False(t, nonEmptyMeta == StreamMetadata{})
 }

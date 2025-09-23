@@ -77,7 +77,7 @@ func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChun
 
 	return ChunkWithMetadata{
 		ChatCompletionChunk: chunk,
-		Ark: metadata,
+		Ark:                 metadata,
 	}
 }
 
