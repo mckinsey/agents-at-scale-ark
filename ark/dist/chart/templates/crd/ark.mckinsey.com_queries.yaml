@@ -121,8 +121,9 @@ spec:
                   type: object
                 type: array
               input:
-                description: Input as a string (used when type=user)
-                type: string
+                description: Input can be a string (type=user) or []Message (type=messages)
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
               memory:
                 properties:
                   name:
@@ -133,22 +134,6 @@ spec:
                 required:
                 - name
                 type: object
-              messages:
-                description: Input as an array of messages (used when type=messages)
-                items:
-                  description: Message represents a single message in a conversation
-                  properties:
-                    content:
-                      minLength: 1
-                      type: string
-                    role:
-                      minLength: 1
-                      type: string
-                  required:
-                  - content
-                  - role
-                  type: object
-                type: array
               parameters:
                 description: Parameters for template processing in the input field
                 items:
@@ -323,6 +308,8 @@ spec:
                 - user
                 - messages
                 type: string
+            required:
+            - input
             type: object
           status:
             properties:
