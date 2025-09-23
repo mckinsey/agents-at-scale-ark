@@ -195,23 +195,25 @@ rbac:
     allowAll: true
 
     # For production: Restrict to specific service accounts
+    # IMPORTANT: Must use full format: system:serviceaccount:namespace:name
     # allowAll: false
     # serviceAccounts:
-    #   - default
-    #   - ark-tenant-sa
-    #   - tenant-1-sa
-    #   - tenant-2-sa
+    #   - system:serviceaccount:default:default
+    #   - system:serviceaccount:tenant-1:ark-tenant-sa
+    #   - system:serviceaccount:tenant-2:ark-tenant-sa
+    #   - system:serviceaccount:production:prod-sa
 ```
 
 To restrict impersonation for production:
 
 ```bash
 # Install or upgrade with restricted service account list
+# Note: Must use full Kubernetes service account format
 helm upgrade --install ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
   --namespace ark-system \
   --create-namespace \
   --set rbac.impersonation.allowAll=false \
-  --set-string rbac.impersonation.serviceAccounts={default,ark-tenant-sa,prod-sa}
+  --set-string rbac.impersonation.serviceAccounts='{system:serviceaccount:default:default,system:serviceaccount:tenant-1:ark-tenant-sa,system:serviceaccount:production:prod-sa}'
 ```
 
 When provisioning new tenant namespaces, Ark provides the `ark-tenant` Helm chart that automatically sets up all necessary RBAC resources, service accounts, and optional resource controls within that namespace.
@@ -241,10 +243,11 @@ Additional options include resource quotas and network policies, which are docum
 By default, the Ark controller can impersonate any service account (`allowAll: true`). If you've restricted this for production (see [The Ark Controller](#the-ark-controller)), add the new service account to the allowed list:
 
 ```bash
+# Note: Must include full namespace path in service account names
 helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
   -n ark-system \
   --set rbac.impersonation.allowAll=false \
-  --set-string rbac.impersonation.serviceAccounts='{default,ark-tenant-sa,tenant-1-sa}'
+  --set-string rbac.impersonation.serviceAccounts='{system:serviceaccount:default:default,system:serviceaccount:tenant-1:ark-tenant-sa,system:serviceaccount:tenant-2:ark-tenant-sa}'
 ```
 
 ### Using the Tenant Service Account
