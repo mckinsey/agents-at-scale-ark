@@ -3,6 +3,9 @@
 package v1alpha1
 
 import (
+	"encoding/json"
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -131,6 +134,73 @@ type QueryList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Query `json:"items"`
+}
+
+// GetInputString returns the input as a string when type="user" or type is empty (default)
+func (q *QuerySpec) GetInputString() (string, error) {
+	if q.Type != "" && q.Type != "user" {
+		return "", fmt.Errorf("cannot get string input for type=%s, expected type=user or empty", q.Type)
+	}
+	
+	var inputString string
+	if err := json.Unmarshal(q.Input.Raw, &inputString); err != nil {
+		return "", fmt.Errorf("failed to unmarshal input as string: %w", err)
+	}
+	
+	return inputString, nil
+}
+
+// GetInputMessages returns the input as []Message when type="messages"
+func (q *QuerySpec) GetInputMessages() ([]Message, error) {
+	if q.Type != "messages" {
+		return nil, fmt.Errorf("cannot get message input for type=%s, expected type=messages", q.Type)
+	}
+	
+	var messages []Message
+	if err := json.Unmarshal(q.Input.Raw, &messages); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal input as messages: %w", err)
+	}
+	
+	return messages, nil
+}
+
+// SetInputString sets the input as a string and updates type to "user" (or keeps it empty for default)
+func (q *QuerySpec) SetInputString(input string) error {
+	inputBytes, err := json.Marshal(input)
+	if err != nil {
+		return fmt.Errorf("failed to marshal string input: %w", err)
+	}
+	
+	// Set type to "user" if not already set, or keep empty for default behavior
+	if q.Type == "" {
+		q.Type = "user" // Make it explicit
+	}
+	q.Input.Raw = inputBytes
+	return nil
+}
+
+// SetInputMessages sets the input as []Message and updates type to "messages"
+func (q *QuerySpec) SetInputMessages(messages []Message) error {
+	inputBytes, err := json.Marshal(messages)
+	if err != nil {
+		return fmt.Errorf("failed to marshal message input: %w", err)
+	}
+	
+	q.Type = "messages"
+	q.Input.Raw = inputBytes
+	return nil
+}
+
+// GetInputAsGeneric returns the input as either string or []Message based on type
+func (q *QuerySpec) GetInputAsGeneric() (interface{}, error) {
+	switch q.Type {
+	case "user", "": // Empty type defaults to user/string input
+		return q.GetInputString()
+	case "messages":
+		return q.GetInputMessages()
+	default:
+		return nil, fmt.Errorf("unknown input type: %s", q.Type)
+	}
 }
 
 func init() {
