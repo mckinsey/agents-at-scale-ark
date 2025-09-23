@@ -122,6 +122,13 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
                 )
 
             # Streaming was requested - check if streaming backend is available
+            # Define Server-Sent Events (SSE) headers for streaming responses
+            # These headers ensure the connection stays open and data is not cached
+            sse_headers = {
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
+
             api = k8s_client.ApiClient()
             v1 = k8s_client.CoreV1Api(api)
             streaming_config = await get_streaming_config(v1, namespace)
@@ -136,15 +143,14 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
                 return StreamingResponse(
                     iter(sse_lines),
                     media_type="text/event-stream",
-                    headers={
-                        "Cache-Control": "no-cache",
-                        "Connection": "keep-alive",
-                    }
+                    headers=sse_headers
                 )
 
             # Streaming is enabled - get the base URL and construct full URL
             base_url = await get_streaming_base_url(streaming_config, namespace, v1)
-            # Add query parameters for OpenAI streaming
+            # Construct streaming URL with query parameters:
+            # - from-beginning=true: Start streaming from the first chunk (don't skip any data)
+            # - wait-for-query=30s: Wait up to 30 seconds for the query to start producing output
             streaming_url = f"{base_url}/stream/{query_name}?from-beginning=true&wait-for-query=30s"
 
             # Proxy to the streaming endpoint
@@ -152,10 +158,7 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             return StreamingResponse(
                 proxy_streaming_response(streaming_url),
                 media_type="text/event-stream",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                }
+                headers=sse_headers
             )
 
     except Exception as e:

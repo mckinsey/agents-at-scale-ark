@@ -66,18 +66,7 @@ npm run generate:api
 
 ## Adding Custom SDK Functionality
 
-The ARK SDK supports overlay files for adding custom functionality beyond generated types:
-
-1. **Add overlay files**: Place custom Python modules in `lib/ark-sdk/gen_sdk/overlay/python/ark_sdk/`
-2. **Rebuild SDK**: Run `make ark-sdk-build` to include overlay files in the wheel
-3. **Automatic rebuilds**: The build system tracks overlay files and rebuilds when they change
-
-Example overlay files include:
-- `k8s.py` - Kubernetes client utilities
-- `client.py` - ARK client wrapper
-- `streaming_config.py` - Streaming configuration utilities
-
-Overlay files are copied into the generated SDK during build and packaged in the wheel.
+To add custom functionality to the ARK SDK, place Python modules in `lib/ark-sdk/gen_sdk/overlay/python/ark_sdk/` and run `make ark-sdk-build`. The build system automatically tracks overlay files and rebuilds when they change, copying them into the generated SDK package.
 
 ## Usage
 

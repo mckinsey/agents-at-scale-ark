@@ -603,9 +603,6 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 		return nil, fmt.Errorf("unable to get %v, error:%w", agentKey, err)
 	}
 
-	log := logf.FromContext(ctx)
-	log.Info("executing agent", "agent", agentCRD.Name)
-
 	// Add agent to execution metadata
 	// This ensures that clients can see the specific agent being queried when streaming
 	ctx = genai.WithExecutionMetadata(ctx, map[string]interface{}{

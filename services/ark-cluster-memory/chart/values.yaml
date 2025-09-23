@@ -41,7 +41,7 @@ memory:
 
 # Streaming configuration
 streaming:
-  # Enable streaming support via ConfigMap
+  # Enable streaming support via ConfigMap (creates 'ark-config-streaming' when enabled)
   enabled: true
 
 # Persistence configuration

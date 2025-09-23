@@ -18,7 +18,7 @@ class ServiceRef:
 
 @dataclass
 class ArkStreamingConfig:
-    """ARK streaming configuration."""
+    """ARK streaming configuration from 'ark-config-streaming' ConfigMap."""
     enabled: bool
     serviceRef: ServiceRef
 
@@ -69,12 +69,6 @@ async def get_streaming_base_url(config: ArkStreamingConfig, namespace: str, k8s
     Raises:
         ValueError: If URL cannot be constructed
     """
-    if not config:
-        raise ValueError("No streaming configuration provided")
-
-    if not config.serviceRef.name or not config.serviceRef.port:
-        raise ValueError("Invalid streaming configuration: missing service name or port")
-
     service_ns = config.serviceRef.namespace or namespace
 
     # Look up the service to resolve port
