@@ -3,6 +3,8 @@ from typing import List, Dict, Optional, Literal, Union, Any
 
 from pydantic import BaseModel, Field
 
+from .common import AvailabilityStatus
+
 
 class ValueSource(BaseModel):
     """ValueSource for model configuration (supports direct value or valueFrom)."""
@@ -47,7 +49,7 @@ class ModelResponse(BaseModel):
     namespace: str
     type: Literal["openai", "azure", "bedrock"]
     model: str
-    status: Optional[str] = None
+    available: Optional[AvailabilityStatus] = None
     annotations: Optional[Dict[str, str]] = None
 
 
@@ -78,6 +80,6 @@ class ModelDetailResponse(BaseModel):
     type: Literal["openai", "azure", "bedrock"]
     model: str
     config: Dict[str, Dict[str, Union[str, Dict[str, Any]]]]
-    status: Optional[str] = None
+    available: Optional[AvailabilityStatus] = None
     resolved_address: Optional[str] = None
     annotations: Optional[Dict[str, str]] = None

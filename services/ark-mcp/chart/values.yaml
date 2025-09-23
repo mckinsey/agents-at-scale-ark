@@ -16,10 +16,10 @@ app:
   # Resource configuration
   resources:
     requests:
-      memory: "128Mi"
+      memory: "256Mi"
       cpu: "100m"
     limits:
-      memory: "256Mi"
+      memory: "512Mi"
       cpu: "200m"
   
 

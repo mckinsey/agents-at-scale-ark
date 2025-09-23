@@ -30,6 +30,7 @@ When you create a Query resource, it triggers a hierarchical execution flow:
 A user creates a Query resource specifying:
 - **input**: The user's question or request
 - **targets**: One or more Agents or Teams
+- **parameters** (optional): Values to use in the query or pass to agent parameters via queryParameterRef
 - **memory** (optional): Reference to a Memory resource
 - **sessionId** (optional): Conversation session identifier
 - **serviceAccount** (optional): For RBAC isolation
@@ -44,6 +45,9 @@ spec:
   targets:
     - type: agent
       name: weather-agent
+  parameters:
+    - name: agent_name
+      value: "WeatherBot"
   memory:
     name: conversation-memory
 ```
@@ -62,14 +66,18 @@ For each target (Agent or Team):
 
 #### Agent Execution
 1. **Model Resolution**: Resolves the agent's model reference
-2. **Prompt Construction**: Builds the final prompt from:
+2. **Parameter Resolution**: Resolves agent parameters from:
+   - Static values
+   - ConfigMaps and Secrets
+   - Query parameters
+3. **Prompt Construction**: Builds the final prompt from:
    - Agent's system prompt
    - Memory context (if configured)
    - User input
-3. **Tool Preparation**: Prepares available tools and MCP servers
-4. **Model Invocation**: Sends request to the model provider
-5. **Tool Execution**: Handles any tool calls from the model
-6. **Response Generation**: Collects and formats the final response
+4. **Tool Preparation**: Prepares available tools and MCP servers
+5. **Model Invocation**: Sends request to the model provider
+6. **Tool Execution**: Handles any tool calls from the model
+7. **Response Generation**: Collects and formats the final response
 
 #### Team Execution
 1. **Strategy Application**: Uses the team's strategy (sequential, parallel, etc.)

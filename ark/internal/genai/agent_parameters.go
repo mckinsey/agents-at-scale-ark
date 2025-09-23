@@ -8,18 +8,24 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
 func (a *Agent) resolvePrompt(ctx context.Context) (string, error) {
-	if len(a.Parameters) == 0 {
-		return a.Prompt, nil
-	}
+	templateData := make(map[string]any)
 
-	templateData, err := a.resolveParameters(ctx)
+	agentParams, err := a.resolveParameters(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve parameters: %w", err)
+	}
+	for name, value := range agentParams {
+		templateData[name] = value
+	}
+
+	if len(templateData) == 0 {
+		return a.Prompt, nil
 	}
 
 	tmpl, err := template.New("agent-prompt").Parse(a.Prompt)
@@ -60,32 +66,108 @@ func (a *Agent) resolveParameters(ctx context.Context) (map[string]string, error
 
 func (a *Agent) resolveValueFrom(ctx context.Context, valueFrom *arkv1alpha1.ValueFromSource) (string, error) {
 	if valueFrom.ConfigMapKeyRef != nil {
-		configMap := &corev1.ConfigMap{}
-		key := types.NamespacedName{Name: valueFrom.ConfigMapKeyRef.Name, Namespace: a.Namespace}
-		if err := a.client.Get(ctx, key, configMap); err != nil {
-			return "", fmt.Errorf("failed to get ConfigMap %s: %w", valueFrom.ConfigMapKeyRef.Name, err)
-		}
-
-		value, exists := configMap.Data[valueFrom.ConfigMapKeyRef.Key]
-		if !exists {
-			return "", fmt.Errorf("key %s not found in ConfigMap %s", valueFrom.ConfigMapKeyRef.Key, valueFrom.ConfigMapKeyRef.Name)
-		}
-		return value, nil
+		return a.resolveConfigMapRef(ctx, valueFrom.ConfigMapKeyRef)
 	}
 
 	if valueFrom.SecretKeyRef != nil {
-		secret := &corev1.Secret{}
-		key := types.NamespacedName{Name: valueFrom.SecretKeyRef.Name, Namespace: a.Namespace}
-		if err := a.client.Get(ctx, key, secret); err != nil {
-			return "", fmt.Errorf("failed to get Secret %s: %w", valueFrom.SecretKeyRef.Name, err)
-		}
+		return a.resolveSecretRef(ctx, valueFrom.SecretKeyRef)
+	}
 
-		value, exists := secret.Data[valueFrom.SecretKeyRef.Key]
-		if !exists {
-			return "", fmt.Errorf("key %s not found in Secret %s", valueFrom.SecretKeyRef.Key, valueFrom.SecretKeyRef.Name)
-		}
-		return string(value), nil
+	if valueFrom.QueryParameterRef != nil {
+		return a.resolveQueryParameterRef(ctx, valueFrom.QueryParameterRef)
 	}
 
 	return "", fmt.Errorf("no supported valueFrom source specified")
+}
+
+func (a *Agent) resolveConfigMapRef(ctx context.Context, ref *corev1.ConfigMapKeySelector) (string, error) {
+	configMap := &corev1.ConfigMap{}
+	key := types.NamespacedName{Name: ref.Name, Namespace: a.Namespace}
+	if err := a.client.Get(ctx, key, configMap); err != nil {
+		return "", fmt.Errorf("failed to get ConfigMap %s: %w", ref.Name, err)
+	}
+
+	value, exists := configMap.Data[ref.Key]
+	if !exists {
+		return "", fmt.Errorf("key %s not found in ConfigMap %s", ref.Key, ref.Name)
+	}
+	return value, nil
+}
+
+func (a *Agent) resolveSecretRef(ctx context.Context, ref *corev1.SecretKeySelector) (string, error) {
+	secret := &corev1.Secret{}
+	key := types.NamespacedName{Name: ref.Name, Namespace: a.Namespace}
+	if err := a.client.Get(ctx, key, secret); err != nil {
+		return "", fmt.Errorf("failed to get Secret %s: %w", ref.Name, err)
+	}
+
+	value, exists := secret.Data[ref.Key]
+	if !exists {
+		return "", fmt.Errorf("key %s not found in Secret %s", ref.Key, ref.Name)
+	}
+	return string(value), nil
+}
+
+func (a *Agent) resolveQueryParameterRef(ctx context.Context, ref *arkv1alpha1.QueryParameterReference) (string, error) {
+	query, ok := ctx.Value(QueryContextKey).(*arkv1alpha1.Query)
+	if !ok || query == nil {
+		// This is an internal error - agent with queryParameterRef should only be called from queries
+		// Log for debugging but don't emit user event
+		log := logf.FromContext(ctx)
+		log.Error(nil, "Agent with queryParameterRef called without query context",
+			"agent", a.GetName(),
+			"parameter", ref.Name)
+		return "", fmt.Errorf("agent requires query context but none available (parameter: %s)", ref.Name)
+	}
+
+	// Look for the parameter in the query
+	for _, param := range query.Spec.Parameters {
+		if param.Name != ref.Name {
+			continue
+		}
+
+		// Handle direct value
+		if param.Value != "" {
+			return param.Value, nil
+		}
+
+		// Handle nested valueFrom resolution - query parameter may itself reference ConfigMap/Secret
+		// This enables chains like: Agent param -> Query param -> ConfigMap/Secret
+		if param.ValueFrom != nil {
+			value, err := resolveQueryValueFrom(ctx, a.client, a.Namespace, param.ValueFrom)
+			if err != nil {
+				// This is a user configuration error - emit event for visibility
+				if a.Recorder != nil {
+					a.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "QueryParameterResolutionFailed", BaseEvent{
+						Name: a.GetName(),
+						Metadata: map[string]string{
+							"agentName":     a.GetName(),
+							"parameterName": ref.Name,
+							"queryName":     query.Name,
+							"reason":        fmt.Sprintf("Failed to resolve query parameter from its source: %v", err),
+						},
+					})
+				}
+				return "", fmt.Errorf("failed to resolve query parameter '%s' from its source: %w", param.Name, err)
+			}
+			return value, nil
+		}
+
+		// Parameter found but has neither Value nor ValueFrom
+		return "", fmt.Errorf("query parameter '%s' has neither value nor valueFrom", param.Name)
+	}
+
+	// Parameter not found - this is a user configuration error, emit event
+	if a.Recorder != nil {
+		a.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "QueryParameterNotFound", BaseEvent{
+			Name: a.GetName(),
+			Metadata: map[string]string{
+				"agentName":     a.GetName(),
+				"parameterName": ref.Name,
+				"queryName":     query.Name,
+				"reason":        "Referenced query parameter not found",
+			},
+		})
+	}
+	return "", fmt.Errorf("query parameter '%s' not found in query '%s'", ref.Name, query.Name)
 }

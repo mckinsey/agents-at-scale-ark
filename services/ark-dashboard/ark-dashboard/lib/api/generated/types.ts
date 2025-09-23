@@ -1208,6 +1208,7 @@ export interface components {
              * @default false
              */
             isA2A: boolean;
+            available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Status */
             status?: {
                 [key: string]: unknown;
@@ -1242,8 +1243,7 @@ export interface components {
             model_ref?: string | null;
             /** Prompt */
             prompt?: string | null;
-            /** Status */
-            status?: string | null;
+            available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Annotations */
             annotations?: {
                 [key: string]: string;
@@ -1338,6 +1338,12 @@ export interface components {
             /** Count */
             count: number;
         };
+        /**
+         * AvailabilityStatus
+         * @description Resource availability status matching Kubernetes condition conventions.
+         * @enum {string}
+         */
+        AvailabilityStatus: "True" | "False" | "Unknown";
         /**
          * AzureConfig
          * @description Azure model configuration.
@@ -2342,8 +2348,7 @@ export interface components {
                     };
                 };
             };
-            /** Status */
-            status?: string | null;
+            available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Resolved Address */
             resolved_address?: string | null;
             /** Annotations */
@@ -2387,8 +2392,7 @@ export interface components {
             type: "openai" | "azure" | "bedrock";
             /** Model */
             model: string;
-            /** Status */
-            status?: string | null;
+            available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Annotations */
             annotations?: {
                 [key: string]: string;
@@ -2478,6 +2482,10 @@ export interface components {
             /** Evaluators */
             evaluators?: components["schemas"]["Memory"][] | null;
             evaluatorSelector?: components["schemas"]["ark_api__models__queries__LabelSelector"] | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * QueryDetailResponse
@@ -2511,6 +2519,10 @@ export interface components {
             /** Evaluators */
             evaluators?: components["schemas"]["Memory"][] | null;
             evaluatorSelector?: components["schemas"]["ark_api__models__queries__LabelSelector"] | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
             /** Status */
             status?: {
                 [key: string]: unknown;

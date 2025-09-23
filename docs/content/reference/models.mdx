@@ -20,6 +20,7 @@ spec:
   type: azure  # Required: "openai", "azure", or "bedrock"
   model:
     value: gpt-4.1-mini
+  pollInterval: 1m  # Optional: How often to health check (default: 1m)
   config:
     azure:
       baseUrl:
@@ -144,6 +145,8 @@ config:
 - Default model configuration for agents without explicit model assignment
 - Flexible properties system for customizing model behavior
 - Support for all OpenAI ChatCompletion parameters
+- Automatic health checking with configurable polling interval
+- Status conditions for availability monitoring
 
 ## AWS Bedrock Configuration
 
@@ -268,3 +271,56 @@ Common issues and solutions:
 - **AccessDenied**: Check IAM permissions for bedrock:InvokeModel
 - **Region not supported**: Verify model availability in your AWS region
 - **Invalid model ARN**: Check model ARN format and account permissions
+
+## Model Status and Health Checking
+
+ARK continuously monitors model availability through periodic health checks. The model controller probes each model at regular intervals to ensure it remains accessible and functional.
+
+### Health Check Configuration
+
+The `pollInterval` field controls how often the model is probed:
+
+```yaml
+spec:
+  pollInterval: 1m  # Default: 1 minute
+```
+
+### Status Conditions
+
+Model status is tracked using Kubernetes conditions pattern. The primary condition is `ModelAvailable`:
+
+```yaml
+status:
+  conditions:
+  - type: ModelAvailable
+    status: "True"        # True/False/Unknown
+    reason: "Available"   # Short reason for the condition
+    message: "Model is available and probed successfully"
+    lastTransitionTime: "2024-01-15T10:30:00Z"
+    observedGeneration: 1
+```
+
+#### Condition States
+
+- **ModelAvailable: True** - Model successfully responds to test prompts
+- **ModelAvailable: False** - Model probe failed (network error, authentication issue, etc.)
+- **ModelAvailable: Unknown** - Initial state before first probe completes
+
+### Viewing Model Status
+
+Check model availability using kubectl:
+
+```bash
+# List models with availability status
+kubectl get models
+
+NAME                TYPE      MODEL                    AVAILABLE   AGE
+gpt-4-model         azure     gpt-4.1-mini             True        5m
+claude-model        bedrock   claude-3-sonnet-v1       False       3m
+gemini-model        openai    gemini-1.5-flash         True        10m
+
+# Get detailed status
+kubectl describe model gpt-4-model
+```
+
+The `AVAILABLE` column shows the current state of the `ModelAvailable` condition, making it easy to identify models that may have connectivity or configuration issues.

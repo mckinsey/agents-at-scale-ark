@@ -15,14 +15,14 @@ make services
 Each service must include a `manifest.yaml` file that describes the service and its capabilities:
 
 ```yaml
-name: postgres-memory
-description: PostgreSQL-based memory storage
+name: ark-cluster-memory
+description: In-memory storage with streaming support
 supports:
   - dev
   - install
   - uninstall
 post-install-instructions: |
-  You need to execute: kubectl port-forward service/postgres-memory 5432:5432
+  Service is now running at: http://ark-cluster-memory:8080
 ```
 
 The `post-install-instructions` field is optional and will be displayed after successful installation.
@@ -48,7 +48,7 @@ Individual services can also be exposed using `kubectl port-forward` (as shown i
 ### Core Services
 
 - [A2A Gateway](/developer-guide/a2a-server) - Agent-to-Agent Gateway implementing A2A protocol
-- [PostgreSQL Memory](/developer-guide/services/postgres-memory) - Persistent memory storage using PostgreSQL
+- [ARK Cluster Memory](/developer-guide/services/ark-cluster-memory) - In-memory storage with SSE streaming support
 - [Execution Engine](/developer-guide/langchain-execution-engine) - Framework adapter for Langchain and other AI frameworks
 
 ### Execution Engines

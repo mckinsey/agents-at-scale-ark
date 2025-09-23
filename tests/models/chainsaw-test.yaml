@@ -22,4 +22,6 @@ spec:
             metadata:
               name: default
             status:
-              phase: ready
+              conditions:
+              - type: ModelAvailable
+                status: "True"
