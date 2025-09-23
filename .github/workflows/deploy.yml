@@ -203,6 +203,7 @@ jobs:
           - ark-dashboard
           - ark-mcp
           - localhost-gateway
+          - ark-tenant
     steps:
       - name: Validate version tag exists
         run: |
