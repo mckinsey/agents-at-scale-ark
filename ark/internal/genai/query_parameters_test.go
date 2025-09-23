@@ -29,10 +29,13 @@ func TestGetQueryInputMessages(t *testing.T) {
 				Namespace: "test-ns",
 			},
 			Spec: arkv1alpha1.QuerySpec{
-				Type:  "user",
-				Input: "Hello, how are you?",
+				Type: "user",
 			},
 		}
+		
+		// Set the input using the RawExtension helper
+		err := query.Spec.SetInputString("Hello, how are you?")
+		require.NoError(t, err)
 
 		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
 		require.NoError(t, err)
@@ -66,8 +69,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 				Namespace: "test-ns",
 			},
 			Spec: arkv1alpha1.QuerySpec{
-				Type:  "user",
-				Input: "What's the weather in {{.location}}?",
+				Type: "user",
 				Parameters: []arkv1alpha1.Parameter{
 					{
 						Name: "location",
@@ -83,6 +85,10 @@ func TestGetQueryInputMessages(t *testing.T) {
 				},
 			},
 		}
+		
+		// Set the input using the RawExtension helper
+		err := query.Spec.SetInputString("What's the weather in {{.location}}?")
+		require.NoError(t, err)
 
 		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
 		require.NoError(t, err)
@@ -103,22 +109,26 @@ func TestGetQueryInputMessages(t *testing.T) {
 			},
 			Spec: arkv1alpha1.QuerySpec{
 				Type: "messages",
-				Messages: []arkv1alpha1.Message{
-					{
-						Role:    "user",
-						Content: "Hello!",
-					},
-					{
-						Role:    "assistant",
-						Content: "Hi there! How can I help you?",
-					},
-					{
-						Role:    "user",
-						Content: "What's the weather like?",
-					},
-				},
 			},
 		}
+		
+		// Set the messages using the RawExtension helper
+		inputMessages := []arkv1alpha1.Message{
+			{
+				Role:    "user",
+				Content: "Hello!",
+			},
+			{
+				Role:    "assistant",
+				Content: "Hi there! How can I help you?",
+			},
+			{
+				Role:    "user",
+				Content: "What's the weather like?",
+			},
+		}
+		err := query.Spec.SetInputMessages(inputMessages)
+		require.NoError(t, err)
 
 		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
 		require.NoError(t, err)
@@ -147,18 +157,22 @@ func TestGetQueryInputMessages(t *testing.T) {
 			},
 			Spec: arkv1alpha1.QuerySpec{
 				Type: "messages",
-				Messages: []arkv1alpha1.Message{
-					{
-						Role:    "system",
-						Content: "You are a helpful assistant.",
-					},
-					{
-						Role:    "user",
-						Content: "Hello!",
-					},
-				},
 			},
 		}
+		
+		// Set the messages using the RawExtension helper
+		inputMessages := []arkv1alpha1.Message{
+			{
+				Role:    "system",
+				Content: "You are a helpful assistant.",
+			},
+			{
+				Role:    "user",
+				Content: "Hello!",
+			},
+		}
+		err := query.Spec.SetInputMessages(inputMessages)
+		require.NoError(t, err)
 
 		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
 		require.NoError(t, err)
@@ -183,14 +197,18 @@ func TestGetQueryInputMessages(t *testing.T) {
 			},
 			Spec: arkv1alpha1.QuerySpec{
 				Type: "messages",
-				Messages: []arkv1alpha1.Message{
-					{
-						Role:    "unknown-role",
-						Content: "This should become a user message",
-					},
-				},
 			},
 		}
+		
+		// Set the messages using the RawExtension helper
+		inputMessages := []arkv1alpha1.Message{
+			{
+				Role:    "unknown-role",
+				Content: "This should become a user message",
+			},
+		}
+		err := query.Spec.SetInputMessages(inputMessages)
+		require.NoError(t, err)
 
 		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
 		require.NoError(t, err)
@@ -211,9 +229,12 @@ func TestGetQueryInputMessages(t *testing.T) {
 			},
 			Spec: arkv1alpha1.QuerySpec{
 				// Type is empty, should default to "user"
-				Input: "Default behavior test",
 			},
 		}
+		
+		// Set the input using the RawExtension helper
+		err := query.Spec.SetInputString("Default behavior test")
+		require.NoError(t, err)
 
 		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
 		require.NoError(t, err)
@@ -233,8 +254,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 				Namespace: "test-ns",
 			},
 			Spec: arkv1alpha1.QuerySpec{
-				Type:  "user",
-				Input: "Hello {{.missing_param}}",
+				Type: "user",
 				Parameters: []arkv1alpha1.Parameter{
 					{
 						Name: "missing_param",
@@ -250,8 +270,12 @@ func TestGetQueryInputMessages(t *testing.T) {
 				},
 			},
 		}
+		
+		// Set the input using the RawExtension helper
+		err := query.Spec.SetInputString("Hello {{.missing_param}}")
+		require.NoError(t, err)
 
-		_, err := GetQueryInputMessages(ctx, query, k8sClient)
+		_, err = GetQueryInputMessages(ctx, query, k8sClient)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to resolve query input")
 	})
@@ -265,10 +289,13 @@ func TestGetQueryInputMessages(t *testing.T) {
 				Namespace: "test-ns",
 			},
 			Spec: arkv1alpha1.QuerySpec{
-				Type:     "messages",
-				Messages: []arkv1alpha1.Message{}, // Empty array
+				Type: "messages",
 			},
 		}
+		
+		// Set empty messages array using the RawExtension helper
+		err := query.Spec.SetInputMessages([]arkv1alpha1.Message{})
+		require.NoError(t, err)
 
 		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
 		require.NoError(t, err)
@@ -290,10 +317,13 @@ func BenchmarkGetQueryInputMessages(b *testing.B) {
 			Namespace: "test-ns",
 		},
 		Spec: arkv1alpha1.QuerySpec{
-			Type:  "user",
-			Input: "Hello, this is a benchmark test message",
+			Type: "user",
 		},
 	}
+	
+	// Set input for user query using RawExtension helper
+	err := userQuery.Spec.SetInputString("Hello, this is a benchmark test message")
+	require.NoError(b, err)
 
 	// Test with messages type
 	messagesQuery := arkv1alpha1.Query{
@@ -303,13 +333,17 @@ func BenchmarkGetQueryInputMessages(b *testing.B) {
 		},
 		Spec: arkv1alpha1.QuerySpec{
 			Type: "messages",
-			Messages: []arkv1alpha1.Message{
-				{Role: "user", Content: "Hello!"},
-				{Role: "assistant", Content: "Hi there! How can I help you?"},
-				{Role: "user", Content: "This is a benchmark test"},
-			},
 		},
 	}
+	
+	// Set input for messages query using RawExtension helper
+	benchMessages := []arkv1alpha1.Message{
+		{Role: "user", Content: "Hello!"},
+		{Role: "assistant", Content: "Hi there! How can I help you?"},
+		{Role: "user", Content: "This is a benchmark test"},
+	}
+	err = messagesQuery.Spec.SetInputMessages(benchMessages)
+	require.NoError(b, err)
 
 	b.Run("user_type", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
