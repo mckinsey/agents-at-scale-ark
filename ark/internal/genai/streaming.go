@@ -127,7 +127,7 @@ func GetStreamingConfig(ctx context.Context, k8sClient client.Client, namespace 
 	}
 
 	config := &StreamingConfig{
-		Enabled: enabledStr == "true",
+		Enabled: enabledStr == TrueString,
 	}
 
 	// If not enabled, return early

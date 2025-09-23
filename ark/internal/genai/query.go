@@ -9,5 +9,5 @@ import (
 
 // IsStreamingEnabled checks if streaming is requested for a query
 func IsStreamingEnabled(query arkv1alpha1.Query) bool {
-	return query.GetAnnotations() != nil && query.GetAnnotations()[annotations.StreamingEnabled] == "true"
+	return query.GetAnnotations() != nil && query.GetAnnotations()[annotations.StreamingEnabled] == TrueString
 }

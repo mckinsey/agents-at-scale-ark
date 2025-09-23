@@ -344,7 +344,7 @@ func (m *HTTPMemoryAndStreaming) isStreamingEnabled(ctx context.Context) (bool, 
 	}
 
 	enabled := annotations["ark.mckinsey.com/memory-event-stream-enabled"]
-	return enabled == "true", nil
+	return enabled == TrueString, nil
 }
 
 func (m *HTTPMemoryAndStreaming) StreamChunk(ctx context.Context, chunk interface{}) error {

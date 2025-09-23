@@ -52,7 +52,7 @@ func TestWrapChunkWithMetadata(t *testing.T) {
 		},
 		{
 			name: "with no metadata",
-			setupContext: func() context.Context {
+			setupContext: func() context.Context { //nolint:gocritic // test structure needs consistency
 				return context.Background()
 			},
 			chunk: &openai.ChatCompletionChunk{

@@ -227,18 +227,28 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		_ = r.updateStatusWithDuration(opCtx, &obj, statusEvaluating, duration)
 		cleanupCache = false
 	} else {
-		// Notify event stream that streaming is complete (if streaming was enabled)
-		if eventStream != nil {
-			if completionErr := eventStream.NotifyCompletion(opCtx); completionErr != nil {
-				// Log warning but don't fail the query
-				log.Error(completionErr, "Failed to notify query completion to event stream")
-			}
-			// Close the event stream after query completion
-			if closeErr := eventStream.Close(); closeErr != nil {
-				log.Error(closeErr, "Failed to close event stream")
-			}
-		}
+		r.finalizeEventStream(opCtx, eventStream)
 		_ = r.updateStatusWithDuration(opCtx, &obj, statusDone, duration)
+	}
+}
+
+// finalizeEventStream handles event stream completion and cleanup
+func (r *QueryReconciler) finalizeEventStream(ctx context.Context, eventStream genai.EventStreamInterface) {
+	if eventStream == nil {
+		return
+	}
+
+	log := logf.FromContext(ctx)
+
+	// Notify event stream that streaming is complete
+	if completionErr := eventStream.NotifyCompletion(ctx); completionErr != nil {
+		// Log warning but don't fail the query
+		log.Error(completionErr, "Failed to notify query completion to event stream")
+	}
+
+	// Close the event stream after query completion
+	if closeErr := eventStream.Close(); closeErr != nil {
+		log.Error(closeErr, "Failed to close event stream")
 	}
 }
 
