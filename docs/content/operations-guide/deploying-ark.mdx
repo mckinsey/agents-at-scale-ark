@@ -145,15 +145,15 @@ rbac:
     #   - tenant-2-sa
 ```
 
-To apply this configuration:
+To restrict impersonation for production:
 
 ```bash
-# Install or upgrade with custom service accounts
+# Install or upgrade with restricted service account list
 helm upgrade --install ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
   --namespace ark-system \
   --create-namespace \
-  --set-string rbac.impersonation.serviceAccounts={default,tenant-1-sa,tenant-2-sa}
-  --set-string rbac.impersonation.serviceAccounts={default,tenant-1-sa,tenant-2-sa}
+  --set rbac.impersonation.allowAll=false \
+  --set-string rbac.impersonation.serviceAccounts={default,ark-tenant-sa,prod-sa}
 ```
 
 When provisioning new tenant namespaces, ARK provides the `ark-tenant` Helm chart that automatically sets up all necessary RBAC resources, service accounts, and optional resource controls within that namespace.
@@ -182,26 +182,11 @@ Additional options include resource quotas and network policies, which are docum
 
 By default, the Ark controller can impersonate any service account (`allowAll: true`). If you've restricted this for production (see [The Ark Controller](#the-ark-controller)), add the new service account to the allowed list:
 
-
-
-
-```yaml
-# values.yaml for ark-controller
-rbac:
-  enable: true
-  impersonation:
-    allowAll: false
-    serviceAccounts:
-      # add the new service account to the list, eg:
-      - tenant-1
-```
-
-Then upgrade:
-
 ```bash
 helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
   -n ark-system \
-  -f ark-tenants-values.yaml
+  --set rbac.impersonation.allowAll=false \
+  --set-string rbac.impersonation.serviceAccounts='{default,ark-tenant-sa,tenant-1-sa}'
 ```
 
 ### Using the Tenant Service Account
