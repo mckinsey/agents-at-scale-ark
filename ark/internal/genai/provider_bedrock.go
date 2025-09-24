@@ -24,6 +24,8 @@ type BedrockModel struct {
 	ModelArn        string
 	Properties      map[string]string
 	client          *bedrockruntime.Client
+	outputSchema    *runtime.RawExtension
+	schemaName      string
 }
 
 type bedrockMessage struct {
@@ -104,6 +106,11 @@ func (bm *BedrockModel) initClient(ctx context.Context) error {
 
 	bm.client = bedrockruntime.NewFromConfig(cfg)
 	return nil
+}
+
+func (bm *BedrockModel) SetOutputSchema(schema *runtime.RawExtension, schemaName string) {
+	bm.outputSchema = schema
+	bm.schemaName = schemaName
 }
 
 func (bm *BedrockModel) ChatCompletion(ctx context.Context, messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {

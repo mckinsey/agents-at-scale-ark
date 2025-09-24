@@ -11,6 +11,7 @@ import (
 type ChatCompletionProvider interface {
 	ChatCompletion(ctx context.Context, messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error)
 	ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error)
+	SetOutputSchema(schema *runtime.RawExtension, schemaName string)
 }
 
 type ConfigProvider interface {
@@ -50,6 +51,11 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStr
 
 	var response *openai.ChatCompletion
 	var err error
+
+	// Set output schema if provided
+	if m.OutputSchema != nil {
+		m.Provider.SetOutputSchema(m.OutputSchema, m.SchemaName)
+	}
 
 	// Use streaming if event stream is provided
 	if eventStream != nil {

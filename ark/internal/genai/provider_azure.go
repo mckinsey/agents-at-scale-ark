@@ -2,19 +2,29 @@ package genai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/shared"
+	"k8s.io/apimachinery/pkg/runtime"
 	"mckinsey.com/ark/internal/common"
 )
 
 type AzureProvider struct {
-	Model      string
-	BaseURL    string
-	APIVersion string
-	APIKey     string
-	Properties map[string]string
+	Model        string
+	BaseURL      string
+	APIVersion   string
+	APIKey       string
+	Properties   map[string]string
+	outputSchema *runtime.RawExtension
+	schemaName   string
+}
+
+func (ap *AzureProvider) SetOutputSchema(schema *runtime.RawExtension, schemaName string) {
+	ap.outputSchema = schema
+	ap.schemaName = schemaName
 }
 
 func (ap *AzureProvider) ChatCompletion(ctx context.Context, messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
@@ -33,6 +43,22 @@ func (ap *AzureProvider) ChatCompletion(ctx context.Context, messages []Message,
 
 	if len(tools) > 0 && len(tools[0]) > 0 {
 		params.Tools = tools[0]
+	}
+
+	// Apply structured output schema if provided
+	if ap.outputSchema != nil && ap.outputSchema.Raw != nil {
+		var schemaObj interface{}
+		if err := json.Unmarshal(ap.outputSchema.Raw, &schemaObj); err == nil {
+			params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{
+				OfJSONSchema: &shared.ResponseFormatJSONSchemaParam{
+					JSONSchema: shared.ResponseFormatJSONSchemaJSONSchemaParam{
+						Name:   ap.schemaName,
+						Strict: openai.Bool(true),
+						Schema: schemaObj,
+					},
+				},
+			}
+		}
 	}
 
 	client := ap.createClient(ctx)
@@ -56,6 +82,22 @@ func (ap *AzureProvider) prepareStreamParams(messages []Message, n int64, tools 
 
 	if len(tools) > 0 && len(tools[0]) > 0 {
 		params.Tools = tools[0]
+	}
+
+	// Apply structured output schema if provided
+	if ap.outputSchema != nil && ap.outputSchema.Raw != nil {
+		var schemaObj interface{}
+		if err := json.Unmarshal(ap.outputSchema.Raw, &schemaObj); err == nil {
+			params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{
+				OfJSONSchema: &shared.ResponseFormatJSONSchemaParam{
+					JSONSchema: shared.ResponseFormatJSONSchemaJSONSchemaParam{
+						Name:   ap.schemaName,
+						Strict: openai.Bool(true),
+						Schema: schemaObj,
+					},
+				},
+			}
+		}
 	}
 
 	return params
