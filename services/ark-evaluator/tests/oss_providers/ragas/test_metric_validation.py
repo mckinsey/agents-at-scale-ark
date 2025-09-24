@@ -10,8 +10,8 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from evaluator.oss_providers.ragas_metrics import MetricRegistry
-from evaluator.oss_providers.ragas_evaluator import RagasEvaluator
+from src.evaluator.oss_providers.ragas.ragas_metrics import MetricRegistry
+from src.evaluator.oss_providers.ragas.ragas_evaluator import RagasEvaluator
 
 def test_correctness_validation():
     """Test that correctness metric validation works correctly."""

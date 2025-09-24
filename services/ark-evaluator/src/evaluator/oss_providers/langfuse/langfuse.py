@@ -216,7 +216,7 @@ class LangfuseProvider(OSSEvaluationProvider):
                 return {"error": 0.0}
             
             # Use RAGAS for actual evaluation, Langfuse for tracing/observability
-            from .ragas_adapter import RagasAdapter
+            from ..ragas.ragas_adapter import RagasAdapter
             from .langfuse_trace_adapter import LangfuseTraceAdapter
 
             # Run RAGAS evaluation

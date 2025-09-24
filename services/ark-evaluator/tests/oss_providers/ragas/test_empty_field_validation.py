@@ -17,8 +17,8 @@ import logging
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from evaluator.types import UnifiedEvaluationRequest, EvaluationConfig
-from evaluator.oss_providers.ragas_provider import RagasProvider
+from src.evaluator.types import UnifiedEvaluationRequest, EvaluationConfig
+from src.evaluator.oss_providers.ragas.ragas_provider import RagasProvider
 
 # Configure logging to see the validation process
 logging.basicConfig(level=logging.INFO)

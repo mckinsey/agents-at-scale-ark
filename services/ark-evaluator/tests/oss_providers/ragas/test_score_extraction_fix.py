@@ -23,7 +23,7 @@ def test_score_extraction():
     print()
 
     try:
-        from evaluator.oss_providers.ragas_evaluator import RagasEvaluator
+        from src.evaluator.oss_providers.ragas.ragas_evaluator import RagasEvaluator
 
         # Test 1: Function-based metric (relevance -> answer_relevancy)
         print("Test 1: Function-based metric score extraction")
@@ -193,7 +193,7 @@ def test_backward_compatibility():
     print("\n=== Testing Backward Compatibility ===")
 
     try:
-        from evaluator.oss_providers.ragas_evaluator import RagasEvaluator
+        from src.evaluator.oss_providers.ragas.ragas_evaluator import RagasEvaluator
 
         # Test the mappings are correct
         mappings = RagasEvaluator.METRIC_MAPPINGS

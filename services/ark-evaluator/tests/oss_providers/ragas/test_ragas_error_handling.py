@@ -15,7 +15,7 @@ async def test_ragas_error_handling():
     print("=== Testing RAGAS Error Handling ===")
 
     try:
-        from evaluator.oss_providers.ragas.ragas_adapter_refactored import RagasAdapter, RagasEvaluationError
+        from src.evaluator.oss_providers.ragas.ragas_adapter_refactored import RagasAdapter, RagasEvaluationError
         print("✅ Successfully imported RagasAdapter and RagasEvaluationError")
     except ImportError as e:
         print(f"❌ Failed to import RAGAS components: {e}")

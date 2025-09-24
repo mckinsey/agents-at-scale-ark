@@ -13,8 +13,8 @@ from unittest.mock import Mock, AsyncMock, patch
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from evaluator.types import UnifiedEvaluationRequest, EvaluationConfig
-from evaluator.oss_providers.ragas_provider import RagasProvider
+from src.evaluator.types import UnifiedEvaluationRequest, EvaluationConfig
+from src.evaluator.oss_providers.ragas.ragas_provider import RagasProvider
 
 async def test_context_recall_integration():
     """Test that context recall metric works end-to-end without RAGAS validation errors."""
@@ -125,7 +125,7 @@ async def test_dataset_columns():
 
     print("\n=== Dataset Columns Test ===")
 
-    from evaluator.oss_providers.ragas_evaluator import RagasEvaluator
+    from src.evaluator.oss_providers.ragas.ragas_evaluator import RagasEvaluator
 
     # Create dataset like the real scenario
     dataset = RagasEvaluator.prepare_dataset(

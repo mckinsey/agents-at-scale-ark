@@ -13,8 +13,8 @@ from unittest.mock import Mock, AsyncMock, patch
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from evaluator.types import UnifiedEvaluationRequest, EvaluationConfig
-from evaluator.oss_providers.ragas_provider import RagasProvider
+from src.evaluator.types import UnifiedEvaluationRequest, EvaluationConfig
+from src.evaluator.oss_providers.ragas.ragas_provider import RagasProvider
 
 async def test_context_precision_initialization_fix():
     """Test that context_precision no longer fails with initialization errors."""

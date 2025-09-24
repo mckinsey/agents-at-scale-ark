@@ -15,8 +15,8 @@ async def test_ragas_validation_error():
     print("=== Testing RAGAS Validation Error Handling ===")
 
     try:
-        from evaluator.oss_providers.ragas.ragas_provider import RagasProvider
-        from evaluator.types import UnifiedEvaluationRequest
+        from src.evaluator.oss_providers.ragas.ragas_provider import RagasProvider
+        from src.evaluator.types import UnifiedEvaluationRequest
 
         provider = RagasProvider()
 
