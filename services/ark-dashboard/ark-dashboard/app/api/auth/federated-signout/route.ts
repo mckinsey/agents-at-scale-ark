@@ -10,10 +10,7 @@ export async function GET(request: NextRequest) {
     cookieName: COOKIE_SESSION_TOKEN
   })
 
-  const protocol = request.headers.get('x-forwarded-proto') || 'https'
-  const host = request.headers.get('host') || request.nextUrl.origin;
-
-  const baseURL = process.env.BASE_URL || `${protocol}://${host}`
+  const baseURL = process.env.BASE_URL
   const redirectURL = `${baseURL}/signout`;
   if (!token?.id_token) {
     return NextResponse.redirect(new URL("/signout", baseURL)); // no session, just go home
