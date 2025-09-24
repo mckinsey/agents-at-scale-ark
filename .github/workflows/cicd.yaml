@@ -811,6 +811,7 @@ jobs:
           - ark-dashboard
           - ark-mcp
           - localhost-gateway
+          - ark-tenant
     steps:
       - uses: actions/checkout@v4
 
