@@ -14,59 +14,9 @@ make quickstart
 
 This builds the containers locally and deploys them to a local cluster. More details are in the [Getting Started](../../quickstart) guide. 
 
-### Deploying only ark-controller and fark
-
-This guide focuses on just two essential components for working with Ark:
-1. **ark-controller** - The core Kubernetes operator that manages your AI agents
-2. **fark** - A command-line tool for testing and interacting with agents
-
-These two components provide the functionality you need to develop, deploy, and run AI agents on the Ark core. The controller handles all the orchestration and execution, while the CLI gives you a simple way to test and interact with your agents during development.
-
-Your applications can communicate directly with the ark-controller using any Kubernetes client library.
-
-#### Installation Steps
-
-##### Step 1: Install cert-manager (Required for webhook certificates)
-
-```bash
-helm repo add jetstack https://charts.jetstack.io --force-update
-helm repo update
-helm upgrade --install cert-manager jetstack/cert-manager \
-    --namespace cert-manager \
-    --create-namespace \
-    --set crds.enabled=true
-
-# Wait for cert-manager to be ready
-kubectl wait --for=condition=ready pod \
-    -l app.kubernetes.io/name=cert-manager \
-    -n cert-manager --timeout=60s
-```
-
-##### Step 2: Build and Deploy
-Build the ark-controller docker image and deploy the ark-controller to your Kubernetes cluster using Helm
-
-```bash
-cd ark
-docker build -t ark-controller .
-helm install ark-controller dist/chart --namespace ark-system --create-namespace
-```
-
-##### Step 3: Install fark cli
-
-```bash
-cd tools/fark
-go build -o ark ./cmd/fark
-cp fark /usr/local/bin
-fark
-```
-
-Now, you're all set to get started with [Creating and Managing Agents](https://mckinsey.github.io/agents-at-scale-ark/user-guide/agents/)
-
 ## Deploying via Helm
 
 Ark can be deployed using the Helm charts that are attached to all [releases](https://github.com/mckinsey/agents-at-scale-ark/releases/) and deployed to the [charts packages](https://github.com/orgs/mckinsey/packages?repo_name=agents-at-scale-ark). By default the chart uses the latest images available on the release. This process, including the deployment of prerequisites can also be run via the `ark install` command.
-
-### Prerequisites
 
 Install prerequisites on your remote cluster:
 
@@ -83,8 +33,6 @@ helm upgrade --install cert-manager jetstack/cert-manager \
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
 ```
 
-### Deploy Ark
-
 Deploy the Ark controller:
 
 ```bash
@@ -95,13 +43,24 @@ helm upgrade --install \
   --set rbac.enable=true
 ```
 
-In most cases, you will want to install the `ark-api` and `ark-dashboard` services as well. When running on a local cluster you may also want to install the `localhost-gateway`:
+In many cases, you will want to install the `ark-api` and `ark-dashboard` services as well. When running on a local cluster you may also want to install the `localhost-gateway`:
 
 ```bash
 helm upgrade --install ark-api oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api
 helm upgrade --install ark-dashboard oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-dashboard
 helm upgrade --install localhost-gateway oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/localhost-gateway
 ```
+
+The `fark` (Fast Agentic Runtime Kit) CLI can be built from source:
+
+```bash
+cd tools/fark
+go build -o ark ./cmd/fark
+cp fark /usr/local/bin
+fark
+```
+
+Or installed via the [GitHub Releases](https://github.com/mckinsey/agents-at-scale-ark/releases)
 
 ### Deploying from a Private Regsitry
 
@@ -134,7 +93,7 @@ export VERSION=0.1.21
 ./scripts/deploy/transfer-ark-containers.sh
 ```
 
-## Check Version
+## Checking Ark Version and Status
 
 Once deployed, you can check the running version:
 
@@ -146,6 +105,8 @@ helm list -n ark-system
 kubectl get deployment ark-controller -n ark-system \
   -o jsonpath='{.metadata.labels.app\.kubernetes\.io/version}'
 ```
+
+The Ark CLI can be used to show the status of all running Ark services and their versions, with the `ark status` command.
 
 ## Cluster Preparation for CI/CD Deployments
 
@@ -171,17 +132,18 @@ This creates a ClusterRoleBinding that connects your GitHub repository identity 
 
 ## The Ark Controller
 
-By default, the `ark-controller` is deployed into the `ark-system` namespace. When the controller executes a query, it can optionally impersonate the service account specified in the `query.serviceAccount` field.
+By default, the `ark-controller` is deployed into the `ark-system` namespace. When the controller executes a query, it can optionally impersonate the service account specified in the `query.serviceAccount` field. Impersonation is nenabled by default and can be configured via the `ark-controller` chart values:
 
 ```yaml
-# values.yaml
+# values.yaml for ark-controller
 rbac:
   enable: true
   impersonation:
-    enabled: true  # Allow impersonation when requested by queries
+    # Allow impersonation when requested by queries.
+    enabled: true
 ```
 
-When enabled (default), the controller can impersonate any service account specified in queries. When disabled, queries can only run with the controller's own identity.
+When enabled (default), the controller can impersonate any service account specified in queries. When disabled, queries can only run with the controller's own identity. If no `serviceAccount` is specified for a query, no impersonation will occur and the `ark-controller` will execute the query using its own service account.
 
 ### Setting Up Tenant Namespaces
 
@@ -213,7 +175,8 @@ metadata:
   name: my-query
   namespace: tenant-1
 spec:
-  serviceAccount: ark-tenant  # Optional - omit to use controller identity
+  # Optional - omit to use controller identity.
+  serviceAccount: ark-tenant  
   input: "Hello from tenant-1"
   targets:
     - type: agent
