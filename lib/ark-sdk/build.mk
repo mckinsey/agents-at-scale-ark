@@ -47,11 +47,11 @@ $(ARK_SDK_WHL): $(ARK_SDK_OPENAPI) $(ARK_SDK_LIB_DIR)/generate_ark_clients.py $(
 	cd $(ARK_SDK_LIB_DIR) && uv run python generate_ark_clients.py -v $(ARK_SDK_OPENAPI) > $(ARK_SDK_OUT)/py-sdk/ark_sdk/versions.py
 	cd $(ARK_SDK_LIB_DIR) && uv run python generate_ark_clients.py -t $(ARK_SDK_OPENAPI) > $(ARK_SDK_OUT)/py-sdk/test/test_ark_client.py
 	cd $(ARK_SDK_LIB_DIR) && uv sync
-	cd $(ARK_SDK_OUT)/py-sdk && uv sync
-	cd $(ARK_SDK_OUT)/py-sdk && uv run python -m pytest test && uv run python -m build .
+	cd $(ARK_SDK_OUT)/py-sdk && uv run python -m build .
 
 # Test target
 $(ARK_SDK_LIB_NAME)-test: $(ARK_SDK_STAMP_TEST) # HELP: Run ARK SDK tests
 $(ARK_SDK_STAMP_TEST): $(ARK_SDK_WHL)
+	cd $(ARK_SDK_OUT)/py-sdk && uv sync
 	cd $(ARK_SDK_OUT)/py-sdk && uv run python -m pytest test
 	@touch $@
