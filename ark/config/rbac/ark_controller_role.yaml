@@ -25,8 +25,6 @@ rules:
   - watch
 - apiGroups:
   - ""
-  resourceNames:
-  - default
   resources:
   - serviceaccounts
   verbs:

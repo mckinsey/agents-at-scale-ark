@@ -49,7 +49,7 @@ type QueryReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=models,verbs=get;list
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=evaluators,verbs=get;list
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;list;watch;patch
-// +kubebuilder:rbac:groups="",resources=serviceaccounts,resourceNames=default,verbs=impersonate
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=impersonate
 
 func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
@@ -772,16 +772,17 @@ func (r *QueryReconciler) loadInitialMessages(ctx context.Context, memory genai.
 }
 
 func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Client, error) {
-	// Skip impersonation in dev mode
-	if os.Getenv("SKIP_IMPERSONATION") == "true" {
+	// If no service account specified, use controller's own identity.
+	// This allows queries to run without impersonation when not needed,
+	// and supports local development where impersonation isn't available.
+	serviceAccount := query.Spec.ServiceAccount
+	if serviceAccount == "" {
 		return r.Client, nil
 	}
 
-	serviceAccount := query.Spec.ServiceAccount
-	if serviceAccount == "" {
-		serviceAccount = "default"
-	}
-
+	// Impersonate the specified service account.
+	// Note: This requires rbac.impersonation.enabled=true in the Helm chart.
+	// Future architecture will move this to per-namespace query executor pods.
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
