@@ -1,25 +1,42 @@
-# HTTPRoute for explicit namespace access
+{{- if .Values.httpRoute.enabled -}}
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: langfuse-telemetry
   namespace: {{ .Values.namespace }}
-  annotations:
-    description: "Routes langfuse with explicit namespace"
+  labels:
+    app: langfuse
     {{- with .Values.global.annotations }}
-    {{- toYaml . | nindent 4 }}
+    {{- range $key, $value := . }}
+    {{ $key }}: {{ $value | quote }}
     {{- end }}
+    {{- end }}
+  {{- with .Values.httpRoute.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
+  {{- with .Values.httpRoute.parentRefs }}
   parentRefs:
-  - name: {{ .Values.gateway.name }}
-    namespace: {{ .Values.gateway.namespace }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.httpRoute.hostnames }}
   hostnames:
-  - "langfuse.{{ .Values.namespace }}.127.0.0.1.nip.io"
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /
-    backendRefs:
-    - name: {{ .Values.service.name }}
-      port: {{ .Values.service.port }}
+    {{- if .Values.httpRoute.rules }}
+    {{- range .Values.httpRoute.rules }}
+    - {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- else }}
+    # Default rule: route all traffic to the service
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ $.Values.service.name }}
+          port: {{ $.Values.service.port }}
+    {{- end }}
+{{- end }}
