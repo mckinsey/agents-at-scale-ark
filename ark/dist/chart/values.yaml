@@ -46,30 +46,17 @@ rbac:
   enable: true
   # Service account impersonation for multi-tenancy
   impersonation:
-    # Default (development): Allow impersonation of ANY service account
-    # This makes it easy to get started - just create namespaces and go!
-    allowAll: true
-
-    # Production: Restrict to specific service accounts
-    # Must use full Kubernetes format: system:serviceaccount:namespace:name
+    # Enable impersonation to allow the controller to execute queries using the
+    # service account specified in each Query resource. This is required for
+    # multi-tenancy and namespace isolation.
     #
-    # RECOMMENDED: Use a consistent naming convention like 'ark-tenant'
-    # across all namespaces to simplify configuration:
+    # When enabled (default), the controller can impersonate ANY service account.
+    # When disabled, queries can only run with the controller's own identity.
     #
-    # allowAll: false
-    # serviceAccounts:
-    #   - system:serviceaccount:default:default
-    #   - system:serviceaccount:tenant-1:ark-tenant    # Same name pattern
-    #   - system:serviceaccount:tenant-2:ark-tenant    # Same name pattern
-    #   - system:serviceaccount:tenant-3:ark-tenant    # Same name pattern
-    #   - system:serviceaccount:production:ark-tenant  # Same name pattern
-    #
-    # This approach:
-    # - Makes it clear which namespaces are authorized
-    # - Uses a consistent service account name for easy management
-    # - Requires updating when adding new tenant namespaces
-    #
-    # Note: When allowAll is true, the serviceAccounts list is ignored
+    # Note: In future releases, query execution will be handled by per-namespace
+    # 'query executor' pods, separating concerns between the controller (validation,
+    # admission, mutation) and query execution (running with proper identity).
+    enabled: true
 
 # [CRDs]: To enable the CRDs
 crd:
