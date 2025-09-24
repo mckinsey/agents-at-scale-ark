@@ -68,131 +68,18 @@ npm run generate:api
 
 When developing new functionality in `ark-sdk`, follow this workflow:
 
-### 1. Make Changes in ark-sdk based on the requirement:
+1. Add new functionality to overlay files in `lib/ark-sdk/gen_sdk/overlay/python/ark_sdk/`.
 
-Add new functionality to the appropriate overlay files:
+2. Build & Test - Run `make ark-sdk-build` to generate the wheel file, then `make ark-sdk-test` to verify changes work correctly.
 
-```bash
-# Example structure for new functionality
-lib/ark-sdk/gen_sdk/overlay/python/ark_sdk/
-├── new_client.py        # Add client class
-├── models/
-│   └── models.py        # Add data models
-├── pyproject.toml           # Add any new dependencies
-```
+3. Use in Services - Copy the generated wheel to your service's `out/` directory and test with `devspace dev` to verify integration. The service will automatically use the local wheel file instead of the PyPI version.
 
-**Key files to modify:**
-- **Client classes** → Add to `lib/ark-sdk/gen_sdk/overlay/python/ark_sdk/`
-- **Data models** → Add to `lib/ark-sdk/gen_sdk/overlay/python/ark_sdk/models/`
-- **Dependencies** → Update `pyproject.toml`
-- **Generated clients** → Modify `python_sdk.py` to inject new client
+## Production Deployment
 
-### 2. Build Local Wheel File
+1. Deploy to PyPI - Trigger deployment via GitHub Actions to publish new version to PyPI.
 
-Generate the ark-sdk with changes:
+2. Update Services - Update consuming services' `pyproject.toml` to use the new ark-sdk version, then rebuild and deploy.
 
-```bash
-# Clean previous builds
-rm -rf out/ark-sdk
-
-# Build ark-sdk with changes
-make ark-sdk-build
-
-# This creates:
-# out/ark-sdk/py-sdk/dist/ark_sdk-<version>-py3-none-any.whl
-```
-
-### 3. Test the Changes
-
-Copy the wheel to the consuming service for testing and use the new ark-sdk functionality
-
-```bash
-# Copy wheel to the service (e.g., ark-api)
-cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/out/
-
-# Test with devspace
-devspace dev
-```
-
-```python
-# Example: Using new ark-sdk functionality
-from ark_sdk.new_client import NewClient
-from ark_sdk.models.models import Model, Request
-
-# Initialize the client
-client = NewClient(namespace="default")
-
-# Use new functionality
-result = client.new_method()
-```
-
-## Production Deployment Workflow
-
-### 1. Automatic PyPI Deployment
-
-The production deployment happens automatically via GitHub Actions:
-
-```yaml
-# .github/workflows/deploy.yml triggers on:
-# - Manual workflow_dispatch with version input
-# - Release creation
-# - Tag push (e.g., v0.1.35)
-
-jobs:
-  deploy-to-pypi:
-    - Builds ark-sdk wheel
-    - Runs all tests
-    - Publishes to PyPI with new version
-```
-
-**How to trigger deployment:**
-1. **Manual:** Go to Actions → Deploy → Run workflow → Enter version
-2. **Release:** Create a GitHub release with version tag
-3. **Automatic:** Push to main branch (if configured)
-
-### 2. Update Consuming Services
-
-After PyPI deployment, update consuming services to use the new version:
-
-```toml
-# services/service-name/pyproject.toml
-dependencies = [
-    "ark-sdk==0.1.35",  # Update to new version
-    # ... other deps
-]
-```
-
-### 3. Deploy Consuming Services
-
-Deploy consuming service with the new ark-sdk dependency:
-
-```bash
-# Build and deploy service
-make <service_name>-build
-devspace deploy
-
-# Or via GitHub Actions deploy workflow
-```
-
-## Deployment Order
-
-1. **ark-sdk changes** → Build → Test → Deploy to PyPI
-2. **Consuming services** → Update dependencies → Build → Deploy
-3. **Other services** → Update as needed
-
-## Rollback Strategy
-
-```bash
-# If issues occur, rollback consuming service dependency:
-# In pyproject.toml:
-dependencies = [
-    "ark-sdk==0.1.34",  # Rollback to previous version
-]
-
-# Rebuild and redeploy
-make <service_name>-build
-devspace deploy
-```
 
 ## Usage
 
