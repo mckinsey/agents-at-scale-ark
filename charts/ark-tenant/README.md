@@ -28,14 +28,13 @@ helm install ark-tenant ./charts/ark-tenant -n secure-tenant \
 
 ## Prerequisites
 
-The Ark controller must be able to impersonate the tenant service account. By default, the controller allows impersonation of any service account (`allowAll: true`), so no configuration is needed.
+The Ark controller must have impersonation enabled (default). The controller can then impersonate any service account specified in queries.
 
-For production environments that restrict impersonation:
+To disable impersonation entirely (single-tenant mode):
 ```bash
 helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
   --namespace ark-system \
-  --set rbac.impersonation.allowAll=false \
-  --set-string rbac.impersonation.serviceAccounts={default,ark-tenant-sa,prod-sa}
+  --set rbac.impersonation.enabled=false
 ```
 
 ## Configuration
@@ -43,7 +42,7 @@ helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ar
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `serviceAccount.create` | Create a service account | `true` |
-| `serviceAccount.name` | Name of the service account | `ark-tenant-sa` |
+| `serviceAccount.name` | Name of the service account | `ark-tenant` |
 | `rbac.create` | Create RBAC resources | `true` |
 | `rbac.additionalSubjects` | Additional subjects for RoleBinding | `[]` |
 | `resourceQuota.enabled` | Enable resource quotas | `false` |
@@ -70,7 +69,7 @@ metadata:
   name: my-query
   namespace: tenant-1
 spec:
-  serviceAccount: ark-tenant-sa  # Or your custom service account name
+  serviceAccount: ark-tenant  # Or your custom service account name
   input: "Hello from tenant"
   targets:
     - type: agent

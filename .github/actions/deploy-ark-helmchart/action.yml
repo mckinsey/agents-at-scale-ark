@@ -149,7 +149,7 @@ runs:
           --namespace "${{ inputs.namespace }}" \
           --create-namespace \
           --set rbac.enable=${{ inputs.rbac_enable }} \
-          --set rbac.impersonation.allowAll=true \
+          --set rbac.impersonation.enabled=true \
           --timeout="${{ inputs.timeout }}" \
           $( [ -n "${IMAGE_REPO}" ] && echo "--set controllerManager.container.image.repository=${IMAGE_REPO}" ) \
           $( [ -n "${IMAGE_TAG}" ] && echo "--set controllerManager.container.image.tag=${IMAGE_TAG}" ) \
