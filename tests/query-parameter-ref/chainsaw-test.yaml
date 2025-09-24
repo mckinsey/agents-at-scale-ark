@@ -5,8 +5,23 @@ metadata:
 spec:
   steps:
     - try:
+      # First apply mock server
       - apply:
-          file: manifests/a0[0-3]-*.yaml
+          file: manifests/a00-mock-server.yaml
+      # Wait for mock server pod to be ready
+      - assert:
+          resource:
+            apiVersion: v1
+            kind: Pod
+            metadata:
+              name: mock-openai
+            status:
+              phase: Running
+              (contains(conditions[?type == 'Ready'].status, 'True')): true
+      # Now apply RBAC, ConfigMap, Secret
+      - apply:
+          file: manifests/a0[1-3]-*.yaml
+      # Now create the Model after mock server is ready
       - script:
           content: |
             kubectl apply -f - <<EOF
@@ -26,17 +41,9 @@ spec:
                   apiKey:
                     value: mock-api-key
             EOF
+      # Finally apply agents and queries
       - apply:
           file: manifests/a0[4-7]-*.yaml
-      - assert:
-          resource:
-            apiVersion: v1
-            kind: Pod
-            metadata:
-              name: mock-openai
-            status:
-              phase: Running
-              (contains(conditions[?type == 'Ready'].status, 'True')): true
       - assert:
           resource:
             apiVersion: v1
