@@ -22,6 +22,15 @@ type ValueFromSource struct {
 	ConfigMapKeyRef *corev1.ConfigMapKeySelector `json:"configMapKeyRef,omitempty"`
 	// +kubebuilder:validation:Optional
 	ServiceRef *ServiceReference `json:"serviceRef,omitempty"`
+	// +kubebuilder:validation:Optional
+	QueryParameterRef *QueryParameterReference `json:"queryParameterRef,omitempty"`
+}
+
+type QueryParameterReference struct {
+	// Name of the parameter from the Query resource
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
 }
 
 type ServiceReference struct {

@@ -1,0 +1,24 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: query-with-parameter-reference
+spec:
+  prompt: Your name is {{.agent_name}}.
+  parameters:
+    - name: agent_name
+      valueFrom:
+        queryParameterRef:
+          name: agent_name
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: query-with-parameter-reference
+spec:
+  input: "What's your name?"
+  targets:
+    - type: agent
+      name: query-with-parameter-reference
+  parameters:
+    - name: agent_name
+      value: "QueryAgent123"

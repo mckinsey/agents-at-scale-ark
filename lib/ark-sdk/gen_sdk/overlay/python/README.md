@@ -12,12 +12,70 @@ pip install ark-sdk
 
 ## Usage
 
-```python
-import ark_sdk
+### Kubernetes Resource Management
 
-# Example usage
-# Configure your Kubernetes client and start managing ARK resources
+```python
+from ark_sdk import ARKClientV1alpha1
+from ark_sdk.models.agent_v1alpha1 import AgentV1alpha1, AgentV1alpha1Spec
+
+# Initialize client
+client = ARKClientV1alpha1(namespace="default")
+
+# Create agent
+agent = AgentV1alpha1(
+    metadata={"name": "my-agent"},
+    spec=AgentV1alpha1Spec(prompt="Hello", modelRef={"name": "gpt-4"})
+)
+created = client.agents.create(agent)
+
+# Get, update, delete
+agent = client.agents.get("my-agent")
+agent.spec.prompt = "Updated"
+client.agents.update(agent)
+client.agents.delete("my-agent")
 ```
+
+### Execution Engine Development
+
+The SDK now includes utilities for building execution engines:
+
+```python
+from ark_sdk import BaseExecutor, ExecutorApp, ExecutionEngineRequest, Message
+
+class MyExecutor(BaseExecutor):
+    def __init__(self):
+        super().__init__("MyEngine")
+    
+    async def execute_agent(self, request: ExecutionEngineRequest) -> List[Message]:
+        # Your execution logic here
+        return [Message(role="assistant", content="Hello from my engine!")]
+
+# Create and run the executor
+executor = MyExecutor()
+app = ExecutorApp(executor, "MyEngine")
+app.run(host="0.0.0.0", port=8000)
+```
+
+### Async Operations
+
+```python
+# List agents asynchronously
+agents = await client.agents.a_list()
+
+# Create query asynchronously
+query = await client.queries.a_create(QueryV1alpha1(...))
+```
+
+## Execution Engine Types
+
+The SDK provides common types for execution engines:
+
+- `ExecutionEngineRequest` - Request format for agent execution
+- `ExecutionEngineResponse` - Response format from execution engines
+- `AgentConfig` - Agent configuration structure
+- `Message` - Chat message format
+- `BaseExecutor` - Abstract base class for execution engines
+- `ExecutorApp` - FastAPI application setup for execution engines
 
 ## Documentation
 
@@ -27,3 +85,4 @@ For full documentation and examples, visit the [ARK project repository](https://
 
 - Python 3.9+
 - Kubernetes cluster with ARK installed
+- FastAPI and uvicorn (for execution engine development)

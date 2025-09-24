@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: query-config
+data:
+  environment: "test"
+  analysis_method: "comprehensive"
+  priority_level: "high"
+  data_source: "synthetic test data"
+  nested-agent-name: "NestedConfigAgent"

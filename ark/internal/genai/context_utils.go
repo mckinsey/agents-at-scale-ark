@@ -10,6 +10,8 @@ const (
 	queryIDKey   contextKey = "queryId"
 	sessionIDKey contextKey = "sessionId"
 	queryNameKey contextKey = "queryName"
+	// QueryContextKey is used to pass the Query resource through context to agents
+	QueryContextKey contextKey = "queryContext"
 )
 
 func WithQueryContext(ctx context.Context, queryID, sessionID, queryName string) context.Context {
