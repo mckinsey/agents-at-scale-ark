@@ -2,7 +2,10 @@
 version: v2beta1
 
 # Dependencies - include other DevSpace configurations
-# dependencies:
+dependencies:
+  ark-cluster-memory:
+    path: ./services/ark-cluster-memory
+    pipeline: dev
 #   ark-mcp:
 #     path: ./services/ark-mcp
 #     pipeline: dev

@@ -7,12 +7,8 @@ This module tests the AuthMiddleware functionality.
 import unittest
 from unittest.mock import Mock, patch, AsyncMock
 import os
-import jwt
-from datetime import datetime, timedelta, timezone
 
 from ark_api.auth.middleware import AuthMiddleware, TokenValidationError
-from ark_sdk.auth.validator import TokenValidator
-from ark_sdk.auth.config import AuthConfig
 
 
 class TestAuthMiddleware(unittest.TestCase):

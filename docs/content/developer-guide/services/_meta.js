@@ -1,3 +1,3 @@
 export default {
-  'postgres-memory': 'PostgreSQL Memory'
+  'ark-cluster-memory': 'ARK Cluster Memory'
 }

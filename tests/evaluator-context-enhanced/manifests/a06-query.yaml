@@ -1,0 +1,18 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: context-enhanced-query
+spec:
+  input: |
+    Please analyze the risk profile for Associated British Foods PLC.
+
+    Provide a comprehensive KYC risk assessment that includes:
+    1. Overall risk evaluation based on business profile
+    2. Analysis of key controller information and screening status
+    3. Assessment of regulatory compliance and market position
+    4. Final risk rating with detailed justification
+
+    Focus on accuracy and completeness using all available information.
+  targets:
+  - type: agent
+    name: context-test-agent

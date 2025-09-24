@@ -4,25 +4,42 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/openai/openai-go"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
-	DefaultTimeout   = 30 * time.Second
-	ContentTypeJSON  = "application/json"
-	MessagesEndpoint = "/messages"
-	MaxRetries       = 3
-	RetryDelay       = 100 * time.Millisecond
-	UserAgent        = "ark-memory-client/1.0"
+	DefaultTimeoutSeconds = 30 // Default timeout in seconds
+	ContentTypeJSON       = "application/json"
+	MessagesEndpoint      = "/messages"
+	CompletionEndpoint    = "/stream/%s/complete"
+	MaxRetries            = 3
+	RetryDelay            = 100 * time.Millisecond
+	UserAgent             = "ark-memory-client/1.0"
 )
+
+// getMemoryTimeout reads ARK_MEMORY_HTTP_TIMEOUT_SECONDS env var or returns default
+func getMemoryTimeout() time.Duration {
+	if timeoutStr := os.Getenv("ARK_MEMORY_HTTP_TIMEOUT_SECONDS"); timeoutStr != "" {
+		if timeoutSec, err := strconv.Atoi(timeoutStr); err == nil && timeoutSec > 0 {
+			logf.Log.V(1).Info("Using custom memory HTTP timeout", "seconds", timeoutSec)
+			return time.Duration(timeoutSec) * time.Second
+		}
+	}
+	return DefaultTimeoutSeconds * time.Second
+}
 
 type MemoryInterface interface {
 	AddMessages(ctx context.Context, queryID string, messages []Message) error
 	GetMessages(ctx context.Context) ([]Message, error)
+	NotifyCompletion(ctx context.Context) error
+	StreamChunk(ctx context.Context, chunk interface{}) error
 	Close() error
 }
 
@@ -31,6 +48,7 @@ type Config struct {
 	MaxRetries int
 	RetryDelay time.Duration
 	SessionId  string
+	QueryName  string
 }
 
 type MessagesRequest struct {
@@ -56,7 +74,7 @@ type MessagesResponse struct {
 
 func DefaultConfig() Config {
 	return Config{
-		Timeout:    DefaultTimeout,
+		Timeout:    getMemoryTimeout(),
 		MaxRetries: MaxRetries,
 		RetryDelay: RetryDelay,
 	}
@@ -70,9 +88,12 @@ func NewMemoryWithConfig(ctx context.Context, k8sClient client.Client, memoryNam
 	return NewHTTPMemory(ctx, k8sClient, memoryName, namespace, recorder, config)
 }
 
-func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *arkv1alpha1.MemoryRef, namespace string, recorder EventEmitter, sessionId string) (MemoryInterface, error) {
+func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *arkv1alpha1.MemoryRef, namespace string, recorder EventEmitter, sessionId, queryName string) (MemoryInterface, error) {
 	config := DefaultConfig()
 	config.SessionId = sessionId
+	config.QueryName = queryName
+
+	var memoryName, memoryNamespace string
 
 	if memoryRef == nil {
 		// Try to load "default" memory from the same namespace
@@ -81,11 +102,18 @@ func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *
 			// If default memory doesn't exist, use noop memory
 			return NewNoopMemory(), nil
 		}
-		return NewMemoryWithConfig(ctx, k8sClient, "default", namespace, recorder, config)
+		memoryName, memoryNamespace = "default", namespace
+	} else {
+		memoryName = memoryRef.Name
+		memoryNamespace = resolveNamespace(memoryRef.Namespace, namespace)
 	}
 
-	memoryNamespace := resolveNamespace(memoryRef.Namespace, namespace)
-	return NewMemoryWithConfig(ctx, k8sClient, memoryRef.Name, memoryNamespace, recorder, config)
+	memory, err := NewMemoryWithConfig(ctx, k8sClient, memoryName, memoryNamespace, recorder, config)
+	if err != nil {
+		return nil, err
+	}
+
+	return memory, nil
 }
 
 func getMemoryResource(ctx context.Context, k8sClient client.Client, name, namespace string) (*arkv1alpha1.Memory, error) {

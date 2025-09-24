@@ -12,7 +12,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	"mckinsey.com/ark/internal/genai"
 )
 
 // SetupAgentWebhookWithManager registers the webhook for Agent in the manager.
@@ -83,29 +82,9 @@ const (
 )
 
 func (v *AgentCustomValidator) validateAgentModel(ctx context.Context, agent *arkv1alpha1.Agent) error {
-	modelValidationExceptions := []string{
-		ExecutionEngineA2A,
-	}
-
-	// Skip model validation for execution engines that run on external servers
-	if agent.Spec.ExecutionEngine != nil {
-		for _, exception := range modelValidationExceptions {
-			if agent.Spec.ExecutionEngine.Name == exception {
-				return nil
-			}
-		}
-	}
-
-	modelName, namespace := genai.ResolveModelSpec(agent.Spec.ModelRef, agent.Namespace)
-
-	err := v.ValidateLoadModel(ctx, modelName, namespace)
-	if err != nil {
-		if agent.Spec.ModelRef == nil {
-			return fmt.Errorf("no model specified for agent and no 'default' model found in namespace %s: %v", namespace, err)
-		}
-		return fmt.Errorf("model %s not found in namespace %s: %v", modelName, namespace, err)
-	}
-
+	// Model validation is now handled at runtime via status conditions
+	// Agents without valid models will show as Available: False
+	// This allows for eventual consistency when models are created after agents
 	return nil
 }
 

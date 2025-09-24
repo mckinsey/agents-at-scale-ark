@@ -2,9 +2,26 @@
 Metrics calculation logic
 """
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from enum import Enum
+from kubernetes import client
 
 logger = logging.getLogger(__name__)
+
+
+class PricingAnnotations:
+    """Constants for model pricing annotations"""
+    INPUT_COST = "pricing.ark.mckinsey.com/input-cost"
+    OUTPUT_COST = "pricing.ark.mckinsey.com/output-cost"
+    CURRENCY = "pricing.ark.mckinsey.com/currency"
+    UNIT = "pricing.ark.mckinsey.com/unit"
+
+
+class PricingUnit(Enum):
+    """Enum for pricing unit types"""
+    PER_MILLION_TOKENS = "per-million-tokens"
+    PER_THOUSAND_TOKENS = "per-thousand-tokens"
+    PER_HUNDRED_TOKENS = "per-hundred-tokens"
 
 
 class MetricsCalculator:
@@ -215,7 +232,9 @@ class MetricsCalculator:
                 return
             
             # Get pricing for the model
+            logger.debug(f"Model name for pricing lookup: '{model_name}'")
             pricing = self._get_model_pricing(model_name)
+            logger.debug(f"Pricing found: {pricing}")
             
             # Calculate cost components
             input_cost = (prompt_tokens / 1000) * pricing["input"]
@@ -239,22 +258,90 @@ class MetricsCalculator:
             metrics["totalCost"] = 0.0
     
     def _get_model_pricing(self, model_name: str) -> Dict[str, float]:
-        """Get pricing for a specific model"""
-        # Clean model name for lookup
+        """Get pricing for a specific model, checking annotations first"""
+        # Try to get pricing from model annotations first
+        annotation_pricing = self._get_model_pricing_from_annotations(model_name)
+        if annotation_pricing:
+            logger.debug(f"Using annotation-based pricing for model '{model_name}': {annotation_pricing}")
+            return annotation_pricing
+
+        # Fallback to hardcoded pricing dictionary
         clean_name = model_name.lower().strip()
-        
+
         # Check exact match first
         if clean_name in self.model_pricing:
+            logger.debug(f"Using hardcoded pricing for model '{model_name}': {self.model_pricing[clean_name]}")
             return self.model_pricing[clean_name]
-        
+
         # Check partial matches
         for model, pricing in self.model_pricing.items():
             if model in clean_name or clean_name in model:
+                logger.debug(f"Using partial match pricing for model '{model_name}' (matched '{model}'): {pricing}")
                 return pricing
-        
+
         # Default to GPT-4 pricing if model not found
         logger.warning(f"Unknown model '{model_name}', using GPT-4 pricing")
         return self.model_pricing["gpt-4"]
+
+    def _get_model_pricing_from_annotations(self, model_name: str) -> Optional[Dict[str, float]]:
+        """Get pricing from model resource annotations"""
+        try:
+            # Use Custom Objects API to get model resource
+            custom_api = client.CustomObjectsApi()
+
+            # Try default namespace first, then search other namespaces if needed
+            namespaces_to_check = ["default", "ark-system"]
+
+            for namespace in namespaces_to_check:
+                try:
+                    model = custom_api.get_namespaced_custom_object(
+                        group="ark.mckinsey.com",
+                        version="v1alpha1",
+                        namespace=namespace,
+                        plural="models",
+                        name=model_name
+                    )
+
+                    # Extract pricing annotations
+                    metadata = model.get('metadata', {})
+                    annotations = metadata.get('annotations', {})
+
+                    input_cost_str = annotations.get(PricingAnnotations.INPUT_COST)
+                    output_cost_str = annotations.get(PricingAnnotations.OUTPUT_COST)
+                    unit = annotations.get(PricingAnnotations.UNIT, PricingUnit.PER_MILLION_TOKENS.value)
+
+                    if input_cost_str is not None and output_cost_str is not None:
+                        input_cost = float(input_cost_str)
+                        output_cost = float(output_cost_str)
+
+                        # Convert to per-1k-tokens (standard format)
+                        if unit == PricingUnit.PER_MILLION_TOKENS.value:
+                            input_cost = input_cost / 1000
+                            output_cost = output_cost / 1000
+                        elif unit == PricingUnit.PER_THOUSAND_TOKENS.value:
+                            # Already in per-1k format, no conversion needed
+                            pass
+                        elif unit == PricingUnit.PER_HUNDRED_TOKENS.value:
+                            input_cost = input_cost * 10
+                            output_cost = output_cost * 10
+                        else:
+                            logger.warning(f"Unknown pricing unit '{unit}' for model '{model_name}', assuming per-thousand-tokens")
+
+                        logger.debug(f"Found model '{model_name}' in namespace '{namespace}' with annotation pricing")
+                        return {"input": input_cost, "output": output_cost}
+
+                except Exception as e:
+                    # Continue to next namespace if not found in this one
+                    logger.debug(f"Model '{model_name}' not found in namespace '{namespace}': {e}")
+                    continue
+
+            # Model not found in any namespace
+            logger.debug(f"Model '{model_name}' not found in any namespace or missing pricing annotations")
+            return None
+
+        except Exception as e:
+            logger.warning(f"Failed to lookup model pricing annotations for '{model_name}': {e}")
+            return None
     
     def _get_score_weights(self) -> Dict[str, float]:
         """Get scoring weights from parameters or defaults"""

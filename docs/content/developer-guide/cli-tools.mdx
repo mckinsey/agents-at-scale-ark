@@ -5,7 +5,7 @@ description: Command-line interfaces for interacting with ARK agents, teams, and
 
 # CLI Tools
 
-ARK provides two command-line tools for different use cases. For basic Kubernetes operations, see [Kubernetes Integration](/concepts/kubernetes).
+ARK provides two command-line tools for different use cases.
 
 ## Overview
 
@@ -15,20 +15,30 @@ The primary tool for querying agents and teams, plus CRUD operations on ARK reso
 ### [ark](#ark-cli) - ARK Management Interface
 Interactive dashboard and system status monitoring tool.
 
-### [k9s](#k9s) - Terminal-based Kubernetes UI
-Visual interface for managing Kubernetes resources including ARK agents, teams, and models.
-
-### [kubectl](#kubectl) - Kubernetes Command-line Tool
-Essential tool for managing Kubernetes clusters and ARK resources.
-
 ## fark
 
 `fark` is the primary CLI tool for querying agents and teams, plus managing ARK resources.
 
 ### Installation
 
+#### From GitHub Release (Recommended)
 ```bash
-# Build and install from repository root
+# Download latest release for your platform
+# Linux/macOS
+curl -L https://github.com/mckinsey/agents-at-scale-ark/releases/latest/download/fark_$(uname)_$(uname -m | sed 's/x86_64/x86_64/;s/aarch64/arm64/').tar.gz | tar xz
+sudo mv fark /usr/local/bin/
+
+# Windows: Download fark_Windows_x86_64.zip from releases page
+
+# Verify installation
+fark --help
+```
+
+#### From Source
+```bash
+# Clone and build from repository
+git clone https://github.com/mckinsey/agents-at-scale-ark.git
+cd agents-at-scale-ark
 make fark-install
 
 # Verify installation
@@ -180,51 +190,7 @@ ark --help
 Launch the interactive menu interface:
 
 ```bash
-# Start interactive menu (no arguments)
 ark
-
-# The menu provides:
-# 🏷️  Dashboard
-# 🔍 Status Check
-# 👋 Exit
-```
-
-### Status Checking
-
-Quick health checks of your ARK installation:
-
-```bash
-# Comprehensive status check (via menu or direct command)
-ark check status
-
-# Or select "🔍 Status Check" from the interactive menu
-ark
-```
-
-### Cluster Operations
-
-```bash
-# Get cluster type
-ark cluster get-type
-
-# Get cluster IP
-ark cluster get-ip
-
-# Get cluster IP with verbose output
-ark cluster get-ip --verbose
-
-# Use specific context
-ark cluster get-ip --context minikube
-```
-
-### Development Mode
-
-```bash
-# Run in development mode from repository root
-make ark-cli-dev
-
-# Or from tools/ark-cli directory
-npm run dev
 ```
 
 ## Common Use Cases
@@ -375,7 +341,3 @@ alias kgp='kubectl get pods'
 alias kgs='kubectl get svc'
 alias kgn='kubectl get nodes'
 ```
-
----
-
-**Next**: Learn about [Compatible Models](/concepts/models) and AI provider integration.
