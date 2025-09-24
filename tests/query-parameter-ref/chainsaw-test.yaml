@@ -36,6 +36,9 @@ spec:
               name: mock-openai
             status:
               phase: Running
+              conditions:
+              - type: Ready
+                status: "True"
       - assert:
           resource:
             apiVersion: v1

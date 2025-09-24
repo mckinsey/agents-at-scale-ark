@@ -10,6 +10,13 @@ data:
   server.js: |
     const http = require('http');
     const server = http.createServer((req, res) => {
+      // Handle health check
+      if (req.url === '/health') {
+        res.writeHead(200);
+        res.end('OK');
+        return;
+      }
+
       let body = '';
       req.on('data', chunk => {
         body += chunk.toString();
@@ -70,6 +77,12 @@ spec:
     command: ["node", "/app/server.js"]
     ports:
     - containerPort: 8080
+    readinessProbe:
+      httpGet:
+        path: /health
+        port: 8080
+      initialDelaySeconds: 2
+      periodSeconds: 5
     volumeMounts:
     - name: server-code
       mountPath: /app
