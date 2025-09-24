@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 const defaultSelectorPrompt = `You are in a role play game. The following roles are available:
@@ -153,12 +155,12 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 		if t.MaxTurns != nil && turn+1 >= *t.MaxTurns {
 			turnTracker.TeamTurn(ctx, "MaxTurns", t.FullName(), t.Strategy, turn+1)
 			// Log the maxTurns limit for observability, but return success with accumulated messages
-			t.Recorder.EmitEvent(ctx, "Warning", "TeamMaxTurnsReached", BaseEvent{
+			t.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "TeamMaxTurnsReached", BaseEvent{
 				Name: t.FullName(),
 				Metadata: map[string]string{
-					"strategy":  t.Strategy,
-					"maxTurns":  fmt.Sprintf("%d", *t.MaxTurns),
-					"teamName":  t.FullName(),
+					"strategy": t.Strategy,
+					"maxTurns": fmt.Sprintf("%d", *t.MaxTurns),
+					"teamName": t.FullName(),
 				},
 			})
 			return newMessages, nil

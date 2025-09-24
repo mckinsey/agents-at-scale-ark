@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -99,9 +100,9 @@ func (t *Team) executeRoundRobin(ctx context.Context, userInput Message, history
 		if t.MaxTurns != nil && messageCount >= *t.MaxTurns {
 			turnTracker := NewExecutionRecorder(t.Recorder)
 			turnTracker.TeamTurn(ctx, "MaxTurns", t.FullName(), t.Strategy, messageCount)
-			// Log the maxTurns limit for observability, but return success with accumulated messages
-			// This preserves monitoring/alerting capabilities
-			t.Recorder.EmitEvent(ctx, "Warning", "TeamMaxTurnsReached", BaseEvent{
+
+			// Log maxTurns reached and return success with accumulated messages
+			t.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "TeamMaxTurnsReached", BaseEvent{
 				Name: t.FullName(),
 				Metadata: map[string]string{
 					"strategy":     t.Strategy,
@@ -121,8 +122,8 @@ func (t *Team) executeRoundRobin(ctx context.Context, userInput Message, history
 				return newMessages, nil
 			}
 
-			// Log the error but continue with next agent (making ark resilient)
-			t.Recorder.EmitEvent(ctx, "Warning", "TeamMemberFailed", BaseEvent{
+			// Fail immediately on any genuine error - emit event for visibility in events view
+			t.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "TeamMemberFailed", BaseEvent{
 				Name: member.GetName(),
 				Metadata: map[string]string{
 					"error":        err.Error(),
@@ -132,9 +133,10 @@ func (t *Team) executeRoundRobin(ctx context.Context, userInput Message, history
 					"teamName":     t.FullName(),
 				},
 			})
+			return newMessages, fmt.Errorf("agent %s failed in team %s: %w", member.GetName(), t.FullName(), err)
 		}
 
-		messageCount++                                   // Increment message count (attempted message)
+		messageCount++                                   // Increment message count
 		memberIndex = (memberIndex + 1) % len(t.Members) // Move to next agent in round-robin
 	}
 }
