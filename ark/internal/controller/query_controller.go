@@ -488,7 +488,7 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 
 	// Get input messages and marshal to JSON for comprehensive telemetry
 	var inputValue string
-	
+
 	var err error
 	metadata := map[string]string{"targetType": target.Type, "targetName": target.Name}
 

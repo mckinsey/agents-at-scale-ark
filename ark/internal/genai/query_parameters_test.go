@@ -32,7 +32,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 				Type: "user",
 			},
 		}
-		
+
 		// Set the input using the RawExtension helper
 		err := query.Spec.SetInputString("Hello, how are you?")
 		require.NoError(t, err)
@@ -85,7 +85,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 				},
 			},
 		}
-		
+
 		// Set the input using the RawExtension helper
 		err := query.Spec.SetInputString("What's the weather in {{.location}}?")
 		require.NoError(t, err)
@@ -111,7 +111,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 				Type: "messages",
 			},
 		}
-		
+
 		// Set the messages using the RawExtension helper
 		inputMessages := []arkv1alpha1.Message{
 			{
@@ -159,7 +159,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 				Type: "messages",
 			},
 		}
-		
+
 		// Set the messages using the RawExtension helper
 		inputMessages := []arkv1alpha1.Message{
 			{
@@ -199,7 +199,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 				Type: "messages",
 			},
 		}
-		
+
 		// Set the messages using the RawExtension helper
 		inputMessages := []arkv1alpha1.Message{
 			{
@@ -231,7 +231,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 				// Type is empty, should default to "user"
 			},
 		}
-		
+
 		// Set the input using the RawExtension helper
 		err := query.Spec.SetInputString("Default behavior test")
 		require.NoError(t, err)
@@ -270,7 +270,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 				},
 			},
 		}
-		
+
 		// Set the input using the RawExtension helper
 		err := query.Spec.SetInputString("Hello {{.missing_param}}")
 		require.NoError(t, err)
@@ -292,7 +292,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 				Type: "messages",
 			},
 		}
-		
+
 		// Set empty messages array using the RawExtension helper
 		err := query.Spec.SetInputMessages([]arkv1alpha1.Message{})
 		require.NoError(t, err)
@@ -320,7 +320,7 @@ func BenchmarkGetQueryInputMessages(b *testing.B) {
 			Type: "user",
 		},
 	}
-	
+
 	// Set input for user query using RawExtension helper
 	err := userQuery.Spec.SetInputString("Hello, this is a benchmark test message")
 	require.NoError(b, err)
@@ -335,7 +335,7 @@ func BenchmarkGetQueryInputMessages(b *testing.B) {
 			Type: "messages",
 		},
 	}
-	
+
 	// Set input for messages query using RawExtension helper
 	benchMessages := []arkv1alpha1.Message{
 		{Role: "user", Content: "Hello!"},

@@ -46,11 +46,11 @@ var _ = Describe("Query Controller", func() {
 						},
 					},
 				}
-				
+
 				// Set input using RawExtension helper
 				err := resource.Spec.SetInputString("test input question")
 				Expect(err).Should(BeNil())
-				
+
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})

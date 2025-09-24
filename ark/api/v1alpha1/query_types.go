@@ -143,12 +143,12 @@ func (q *QuerySpec) GetInputString() (string, error) {
 	if q.Type != "" && q.Type != "user" {
 		return "", fmt.Errorf("cannot get string input for type=%s, expected type=user or empty", q.Type)
 	}
-	
+
 	var inputString string
 	if err := json.Unmarshal(q.Input.Raw, &inputString); err != nil {
 		return "", fmt.Errorf("failed to unmarshal input as string: %w", err)
 	}
-	
+
 	return inputString, nil
 }
 
@@ -157,12 +157,12 @@ func (q *QuerySpec) GetInputMessages() ([]Message, error) {
 	if q.Type != "messages" {
 		return nil, fmt.Errorf("cannot get message input for type=%s, expected type=messages", q.Type)
 	}
-	
+
 	var messages []Message
 	if err := json.Unmarshal(q.Input.Raw, &messages); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal input as messages: %w", err)
 	}
-	
+
 	return messages, nil
 }
 
@@ -172,7 +172,7 @@ func (q *QuerySpec) SetInputString(input string) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal string input: %w", err)
 	}
-	
+
 	// Set type to "user" if not already set, or keep empty for default behavior
 	if q.Type == "" {
 		q.Type = "user" // Make it explicit
@@ -187,7 +187,7 @@ func (q *QuerySpec) SetInputMessages(messages []Message) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal message input: %w", err)
 	}
-	
+
 	q.Type = "messages"
 	q.Input.Raw = inputBytes
 	return nil

@@ -681,11 +681,11 @@ var _ = Describe("Evaluation Controller", func() {
 					},
 				},
 			}
-			
+
 			// Set input using RawExtension helper
 			err := query.Spec.SetInputString("What is 2+2?")
 			Expect(err).Should(BeNil())
-			
+
 			Expect(k8sClient.Create(ctx, query)).Should(Succeed())
 
 			query.Status.Phase = statusDone
@@ -784,11 +784,11 @@ var _ = Describe("Evaluation Controller", func() {
 					},
 				},
 			}
-			
+
 			// Set input using RawExtension helper
 			err := query.Spec.SetInputString("What is 2+2?")
 			Expect(err).Should(BeNil())
-			
+
 			Expect(k8sClient.Create(ctx, query)).Should(Succeed())
 
 			evaluation := &arkv1alpha1.Evaluation{

@@ -140,7 +140,7 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 		if err != nil {
 			return nil, fmt.Errorf("failed to get input string: %w", err)
 		}
-		
+
 		// Resolve input with template parameters and create a single user message
 		resolvedInput, err := ResolveQueryInput(ctx, k8sClient, query.Namespace, inputString, query.Spec.Parameters)
 		if err != nil {
@@ -153,7 +153,7 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 		if err != nil {
 			return nil, fmt.Errorf("failed to get input messages: %w", err)
 		}
-		
+
 		// Convert CRD messages to genai.Message format
 		var messages []Message
 		for _, msg := range crdMessages {

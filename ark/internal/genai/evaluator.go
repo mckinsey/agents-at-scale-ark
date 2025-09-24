@@ -168,7 +168,7 @@ func buildEvaluationRequest(ctx context.Context, k8sClient client.Client, query 
 	if err != nil {
 		return EvaluationRequest{}, fmt.Errorf("failed to process query input: %w", err)
 	}
-	
+
 	// Build evaluation request with unified message format
 	return EvaluationRequest{
 		QueryID:   string(query.UID),
