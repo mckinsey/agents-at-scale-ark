@@ -1,9 +1,11 @@
 apiVersion: v2
 name: ark-tenant
-description: Helm chart for provisioning Ark tenant namespaces and service accounts with RBAC
+description: >-
+  Helm chart for provisioning Ark tenant namespaces and service accounts with
+  RBAC
 type: application
-version: 0.1.33
-appVersion: "0.1.33"
+version: 0.1.35
+appVersion: 0.1.35
 keywords:
   - ark
   - tenant
