@@ -5,6 +5,8 @@ import (
 	"strconv"
 
 	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/shared"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func applyPropertiesToParams(properties map[string]string, params *openai.ChatCompletionNewParams) {
@@ -70,4 +72,22 @@ func getIntProperty(properties map[string]string, key string, defaultValue int) 
 		}
 	}
 	return defaultValue
+}
+
+// applyStructuredOutputToParams applies structured output schema to OpenAI parameters
+func applyStructuredOutputToParams(outputSchema *runtime.RawExtension, schemaName string, params *openai.ChatCompletionNewParams) {
+	if outputSchema != nil && outputSchema.Raw != nil {
+		var schemaObj interface{}
+		if err := json.Unmarshal(outputSchema.Raw, &schemaObj); err == nil {
+			params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{
+				OfJSONSchema: &shared.ResponseFormatJSONSchemaParam{
+					JSONSchema: shared.ResponseFormatJSONSchemaJSONSchemaParam{
+						Name:   schemaName,
+						Strict: openai.Bool(true),
+						Schema: schemaObj,
+					},
+				},
+			}
+		}
+	}
 }

@@ -2,12 +2,10 @@ package genai
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
-	"github.com/openai/openai-go/shared"
 	"k8s.io/apimachinery/pkg/runtime"
 	"mckinsey.com/ark/internal/common"
 )
@@ -46,20 +44,7 @@ func (ap *AzureProvider) ChatCompletion(ctx context.Context, messages []Message,
 	}
 
 	// Apply structured output schema if provided
-	if ap.outputSchema != nil && ap.outputSchema.Raw != nil {
-		var schemaObj interface{}
-		if err := json.Unmarshal(ap.outputSchema.Raw, &schemaObj); err == nil {
-			params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{
-				OfJSONSchema: &shared.ResponseFormatJSONSchemaParam{
-					JSONSchema: shared.ResponseFormatJSONSchemaJSONSchemaParam{
-						Name:   ap.schemaName,
-						Strict: openai.Bool(true),
-						Schema: schemaObj,
-					},
-				},
-			}
-		}
-	}
+	applyStructuredOutputToParams(ap.outputSchema, ap.schemaName, &params)
 
 	client := ap.createClient(ctx)
 	return client.Chat.Completions.New(ctx, params)
@@ -85,20 +70,7 @@ func (ap *AzureProvider) prepareStreamParams(messages []Message, n int64, tools 
 	}
 
 	// Apply structured output schema if provided
-	if ap.outputSchema != nil && ap.outputSchema.Raw != nil {
-		var schemaObj interface{}
-		if err := json.Unmarshal(ap.outputSchema.Raw, &schemaObj); err == nil {
-			params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{
-				OfJSONSchema: &shared.ResponseFormatJSONSchemaParam{
-					JSONSchema: shared.ResponseFormatJSONSchemaJSONSchemaParam{
-						Name:   ap.schemaName,
-						Strict: openai.Bool(true),
-						Schema: schemaObj,
-					},
-				},
-			}
-		}
-	}
+	applyStructuredOutputToParams(ap.outputSchema, ap.schemaName, &params)
 
 	return params
 }
