@@ -50,7 +50,9 @@ data:
         }
       });
     });
-    server.listen(8080);
+    server.listen(8080, () => {
+      console.log('Mock OpenAI server running on port 8080');
+    });
 ---
 # Run the mock-open server as a service, using the code above.
 apiVersion: v1

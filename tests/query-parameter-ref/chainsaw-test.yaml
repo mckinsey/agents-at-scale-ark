@@ -36,9 +36,7 @@ spec:
               name: mock-openai
             status:
               phase: Running
-              conditions:
-              - type: Ready
-                status: "True"
+              (contains(conditions[?type == 'Ready'].status, 'True')): true
       - assert:
           resource:
             apiVersion: v1
