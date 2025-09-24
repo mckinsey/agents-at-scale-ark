@@ -204,11 +204,12 @@ async def list_memory_messages(
                 # Convert each database record to response format
                 for msg_record in messages:
                     all_messages.append(MemoryMessageResponse(
-                        timestamp=msg_record.get("created_at"),
+                        timestamp=msg_record.get("timestamp"),
                         memoryName=memory_name,
                         sessionId=msg_record.get("session_id"),
                         queryId=msg_record.get("query_id"),
-                        message=msg_record.get("message")
+                        message=msg_record.get("message"),
+                        sequence=msg_record.get("sequence")
                     ))
             
             except Exception as e:
@@ -216,8 +217,9 @@ async def list_memory_messages(
                 # Continue processing other memories
                 continue
         
-        # Sort by timestamp descending (most recent first)
-        all_messages.sort(key=lambda x: x.timestamp or "", reverse=True)
+        # Sort by sequence number descending (newest first) to maintain proper chronological order
+        # This ensures messages appear in the correct order regardless of timestamp precision
+        all_messages.sort(key=lambda x: x.sequence or 0, reverse=True)
         
         return MemoryMessageListResponse(
             items=all_messages,

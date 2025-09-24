@@ -46,6 +46,8 @@ app:
       value: ""
     - name: NEXT_PUBLIC_TOKEN_REFRESH_INTERVAL_MS
       value: "600000" #10 mins
+    - name: NEXT_PUBLIC_FALLBACK_INACTIVITY_TIMEOUT
+      value: "1800000" #30 mins
     - name: AUTH_MODE
       value: "open"
   
@@ -78,21 +80,49 @@ service:
   port: 3000
   targetPort: 3000
 
-# Gateway configuration for HTTPRoute
-gateway:
-  # Namespace where localhost-gateway is installed
-  namespace: ark-system
-  # Gateway name to reference
-  name: localhost-gateway
+# Ingress configuration (legacy routing method)
+# Disabled by default. Use this for traditional Kubernetes Ingress routing.
+# For newer deployments, consider using HTTPRoute (below) with Gateway API instead.
+ingress:
+  enabled: false
+  className: ""  # e.g., "nginx", "traefik", "kong"
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: dashboard.example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: dashboard-tls
+  #    hosts:
+  #      - dashboard.example.local
 
-# HTTPRoute configuration
-routes:
-- name: dashboard-root
-  hostname: "127.0.0.1.nip.io"
-  description: "Routes root domain traffic to dashboard"
-- name: dashboard
-  hostname: "dashboard.127.0.0.1.nip.io"
-  description: "Routes dashboard service traffic"
-- name: dashboard-default
-  hostname: "dashboard.default.127.0.0.1.nip.io"
-  description: "Routes dashboard with explicit namespace"
+# HTTPRoute configuration (Gateway API - modern routing method)
+# Disabled by default. This is the preferred routing method for Kubernetes 1.23+
+# with Gateway API CRDs installed. Example values below show localhost development setup.
+httpRoute:
+  enabled: false
+  annotations: {}
+    # Custom annotations can be added here
+  # Gateway references
+  parentRefs:
+    - name: localhost-gateway
+      namespace: ark-system
+      # sectionName: http  # optional, for specific listener
+  # Hostnames this route matches
+  hostnames:
+    - "127.0.0.1.nip.io"
+    - "dashboard.127.0.0.1.nip.io"
+    - "dashboard.default.127.0.0.1.nip.io"
+  # Routing rules (if not specified, defaults to routing all paths to the service)
+  # rules:
+  #   - matches:
+  #       - path:
+  #           type: PathPrefix
+  #           value: /
+  #     backendRefs:
+  #       - name: ark-dashboard
+  #         port: 3000

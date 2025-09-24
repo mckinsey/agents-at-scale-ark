@@ -35,6 +35,7 @@ describe('ARK Cluster Memory API', () => {
       expect(getResponse.status).toBe(200);
       expect(getResponse.body.messages).toHaveLength(1);
       expect(getResponse.body.messages[0].message).toEqual(message);
+      expect(getResponse.body.messages[0].sequence).toBe(1);
     });
 
     test('should add multiple messages sequentially', async () => {
@@ -55,6 +56,8 @@ describe('ARK Cluster Memory API', () => {
       expect(response.body.messages).toHaveLength(2);
       expect(response.body.messages[0].message).toEqual(message1);
       expect(response.body.messages[1].message).toEqual(message2);
+      expect(response.body.messages[0].sequence).toBe(1);
+      expect(response.body.messages[1].sequence).toBe(2);
     });
 
     test('should return error for missing message', async () => {
@@ -88,6 +91,8 @@ describe('ARK Cluster Memory API', () => {
       expect(getResponse.body.messages).toHaveLength(2);
       expect(getResponse.body.messages[0].message).toEqual(messages[0]);
       expect(getResponse.body.messages[1].message).toEqual(messages[1]);
+      expect(getResponse.body.messages[0].sequence).toBe(1);
+      expect(getResponse.body.messages[1].sequence).toBe(2);
     });
 
     test('should return error for invalid messages array', async () => {
@@ -122,6 +127,38 @@ describe('ARK Cluster Memory API', () => {
       const response2 = await request(app).get('/messages?session_id=session2');
       expect(response2.body.messages).toHaveLength(1);
       expect(response2.body.messages[0].message).toEqual(message2);
+    });
+  });
+
+  describe('Sequence Number Ordering', () => {
+    test('should maintain correct sequence order across sessions', async () => {
+      const message1 = { role: 'user', content: 'First message' };
+      const message2 = { role: 'user', content: 'Second message' };
+      const message3 = { role: 'user', content: 'Third message' };
+
+      // Add messages in different sessions
+      await request(app)
+        .post('/messages')
+        .send({ session_id: 'session1', query_id: 'q1', messages: [message1] });
+
+      await request(app)
+        .post('/messages')
+        .send({ session_id: 'session2', query_id: 'q2', messages: [message2] });
+
+      await request(app)
+        .post('/messages')
+        .send({ session_id: 'session1', query_id: 'q1', messages: [message3] });
+
+      // Get all messages (no session filter)
+      const response = await request(app).get('/messages');
+
+      expect(response.status).toBe(200);
+      expect(response.body.messages).toHaveLength(3);
+      
+      // Messages should be in sequence order (1, 2, 3)
+      expect(response.body.messages[0].sequence).toBe(1);
+      expect(response.body.messages[1].sequence).toBe(2);
+      expect(response.body.messages[2].sequence).toBe(3);
     });
   });
 

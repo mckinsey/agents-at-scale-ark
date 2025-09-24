@@ -35,10 +35,12 @@ import { NamespaceEditor } from "@/components/editors"
 import { UserDetails } from "./user"
 import { signout } from "@/lib/auth/signout"
 import { useNamespace } from "@/providers/NamespaceProvider"
+import { useUser } from "@/providers/UserProvider"
 
 export function AppSidebar() {
   const router = useRouter()
   const pathname = usePathname()
+  const { user } = useUser()
 
   const {
     availableNamespaces,
@@ -52,6 +54,7 @@ export function AppSidebar() {
   const [loading, setLoading] = useState(true)
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
   const [namespaceEditorOpen, setNamespaceEditorOpen] = useState(false)
+
   const isPlaceholderSection = (key: string): boolean => {
     const placeholderKeys: string[] = []
     return placeholderKeys.includes(key)
@@ -279,32 +282,34 @@ export function AppSidebar() {
             </p>
             <p>Kubernetes {systemInfo.kubernetes_version}</p>
           </div>)}
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton className="h-12">
-                    <UserDetails/>
-                    <ChevronsUpDownIcon className="ml-auto"/>
-                  </SidebarMenuButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  side="right"
-                  align="end"
-                  className="w-[--radix-popper-anchor-width]"
-                >
-                  <DropdownMenuLabel>
-                    <UserDetails/>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator/>
-                  <DropdownMenuItem onClick={signout}>
-                    <LogOut/>
-                    <span>Sign out</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </SidebarMenuItem>
-          </SidebarMenu>
+          {user && (
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <SidebarMenuButton className="h-12">
+                      <UserDetails user={user}/>
+                      <ChevronsUpDownIcon className="ml-auto"/>
+                    </SidebarMenuButton>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    side="right"
+                    align="end"
+                    className="w-[--radix-popper-anchor-width]"
+                  >
+                    <DropdownMenuLabel>
+                      <UserDetails user={user}/>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator/>
+                    <DropdownMenuItem onClick={signout}>
+                      <LogOut/>
+                      <span>Sign out</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          )}
         </SidebarFooter>
       </Sidebar>
       

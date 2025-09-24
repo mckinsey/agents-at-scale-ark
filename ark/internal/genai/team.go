@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -86,33 +87,57 @@ func (t *Team) executeRoundRobin(ctx context.Context, userInput Message, history
 	messages := slices.Clone(history)
 	var newMessages []Message
 
-	for turn := 0; ; turn++ {
+	messageCount := 0 // Count individual agent messages
+	memberIndex := 0  // Track which agent should speak next
+
+	for {
 		// Check if context was cancelled
 		if ctx.Err() != nil {
 			return newMessages, ctx.Err()
 		}
 
-		turnTracker := NewExecutionRecorder(t.Recorder)
-		turnTracker.TeamTurn(ctx, "Start", t.FullName(), t.Strategy, turn)
+		// Check maxTurns before executing
+		if t.MaxTurns != nil && messageCount >= *t.MaxTurns {
+			turnTracker := NewExecutionRecorder(t.Recorder)
+			turnTracker.TeamTurn(ctx, "MaxTurns", t.FullName(), t.Strategy, messageCount)
 
-		for i, member := range t.Members {
-			// Check if context was cancelled before each member execution
-			if ctx.Err() != nil {
-				return newMessages, ctx.Err()
-			}
-
-			if err := t.executeMemberAndAccumulate(ctx, member, userInput, &messages, &newMessages, i); err != nil {
-				if IsTerminateTeam(err) {
-					return newMessages, nil
-				}
-				return newMessages, err
-			}
+			// Log maxTurns reached and return success with accumulated messages
+			t.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "TeamMaxTurnsReached", BaseEvent{
+				Name: t.FullName(),
+				Metadata: map[string]string{
+					"strategy":     t.Strategy,
+					"maxTurns":     fmt.Sprintf("%d", *t.MaxTurns),
+					"teamName":     t.FullName(),
+					"messageCount": fmt.Sprintf("%d", messageCount),
+				},
+			})
+			return newMessages, nil
 		}
 
-		if t.MaxTurns != nil && turn+1 >= *t.MaxTurns {
-			turnTracker.TeamTurn(ctx, "MaxTurns", t.FullName(), t.Strategy, turn+1)
-			return newMessages, fmt.Errorf("team round-robin MaxTurns reached %s", t.GetName())
+		// Execute current agent
+		member := t.Members[memberIndex]
+
+		if err := t.executeMemberAndAccumulate(ctx, member, userInput, &messages, &newMessages, messageCount); err != nil {
+			if IsTerminateTeam(err) {
+				return newMessages, nil
+			}
+
+			// Fail immediately on any genuine error - emit event for visibility in events view
+			t.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "TeamMemberFailed", BaseEvent{
+				Name: member.GetName(),
+				Metadata: map[string]string{
+					"error":        err.Error(),
+					"memberIndex":  fmt.Sprintf("%d", memberIndex),
+					"messageCount": fmt.Sprintf("%d", messageCount),
+					"strategy":     t.Strategy,
+					"teamName":     t.FullName(),
+				},
+			})
+			return newMessages, fmt.Errorf("agent %s failed in team %s: %w", member.GetName(), t.FullName(), err)
 		}
+
+		messageCount++                                   // Increment message count
+		memberIndex = (memberIndex + 1) % len(t.Members) // Move to next agent in round-robin
 	}
 }
 

@@ -584,14 +584,14 @@ class TeamGenerator {
         );
         console.log(
           chalk.gray(
-            `  3. Deploy with: helm upgrade --install ${config.projectName} .`
+            `  3. Deploy with: helm upgrade --install ${config.projectName} . --namespace ${config.projectName}`
           )
         );
         console.log(chalk.gray(`  4. Test with: kubectl get teams,queries`));
       } else {
         console.log(
           chalk.gray(
-            `  2. Deploy with: helm upgrade --install ${config.projectName} .`
+            `  2. Deploy with: helm upgrade --install ${config.projectName} . --namespace ${config.projectName}`
           )
         );
         console.log(chalk.gray(`  3. Test with: kubectl get teams`));

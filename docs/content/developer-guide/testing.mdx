@@ -448,6 +448,18 @@ Services typically combine HTTP API testing with ARK integration testing:
 
 This validates both the service's HTTP API functionality and its integration with ARK resources.
 
+## Testing Completions API Calls
+
+If you need to validate or verify the values of parameters sent to an LLM endpoint, a simple echo server or similar can be set up as a model. This can be used as 'deterministic' LLM that gives predicatable output.
+
+As an example, this test at:
+
+```
+https://github.com/mckinsey/agents-at-scale-ark/tree/main/tests/query-parameter-ref
+```
+
+Is used to check whether the parameters provided via a query to an agent are expanded correctly. Rather than asking the LLM to give back a response in a prompt, which is brittle, a mock LLM server is used which echos back the response - this can then be validated deterministically by checking the `query.Responses` field. The mock server is defined in `a00-mock-server.yaml`.
+
 ## Chainsaw Functions and Expressions
 
 ### Basic Expressions

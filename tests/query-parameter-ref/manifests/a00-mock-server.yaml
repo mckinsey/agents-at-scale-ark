@@ -1,0 +1,96 @@
+# This configmap contains the source code for a simple Node.js server that
+# simulates an OpenAI chat completions endpoint (i.e. a model). This model
+# essentially echos back chat input into chat response - allowing you to
+# deterministically test and verify the exact input sent to a model.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mock-openai-server
+data:
+  server.js: |
+    const http = require('http');
+    const server = http.createServer((req, res) => {
+      console.log(`${req.method} ${req.url}`);
+
+      // Handle health check
+      if (req.url === '/health') {
+        res.writeHead(200);
+        res.end('OK');
+        return;
+      }
+
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk.toString();
+      });
+      req.on('end', () => {
+        try {
+          const request = JSON.parse(body);
+          const promptContent = request.messages ?
+            JSON.stringify(request.messages) :
+            request.prompt || '';
+
+          const response = {
+            id: "mock-" + Date.now(),
+            object: "chat.completion",
+            created: Math.floor(Date.now() / 1000),
+            model: request.model || "echo-model",
+            choices: [{
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "ECHO:" + promptContent
+              },
+              finish_reason: "stop"
+            }]
+          };
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(response));
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: e.message }));
+        }
+      });
+    });
+    server.listen(8080, () => {
+      console.log('Mock OpenAI server running on port 8080');
+    });
+---
+# Run the mock-open server as a service, using the code above.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-openai
+spec:
+  selector:
+    app: mock-openai
+  ports:
+  - port: 80
+    targetPort: 8080
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mock-openai
+  labels:
+    app: mock-openai
+spec:
+  containers:
+  - name: server
+    image: node:18-alpine
+    command: ["node", "/app/server.js"]
+    ports:
+    - containerPort: 8080
+    readinessProbe:
+      httpGet:
+        path: /health
+        port: 8080
+      initialDelaySeconds: 2
+      periodSeconds: 5
+    volumeMounts:
+    - name: server-code
+      mountPath: /app
+  volumes:
+  - name: server-code
+    configMap:
+      name: mock-openai-server

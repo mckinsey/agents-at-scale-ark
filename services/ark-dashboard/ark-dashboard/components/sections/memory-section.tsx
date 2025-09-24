@@ -45,6 +45,7 @@ export function MemorySection({
     sessionId: string;
     queryId: string;
     message: { role: string; content: string; name?: string };
+    sequence?: number;
   }[]>([]);
   const [loading, setLoading] = useState(true);
   const [availableMemories, setAvailableMemories] = useState<MemoryResource[]>([]);
@@ -114,9 +115,10 @@ export function MemorySection({
           })
         ]);
         
-        // Sort messages by timestamp (newest first)
+        // Sort by sequence number descending (newest first) to maintain proper chronological order
+        // This ensures messages appear in the correct order regardless of timestamp precision
         const sortedMessages = messagesData.sort((a, b) => 
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          (b.sequence || 0) - (a.sequence || 0)
         );
         
         setTotalMessages(sortedMessages.length);
