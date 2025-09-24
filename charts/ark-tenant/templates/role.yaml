@@ -114,6 +114,7 @@ rules:
   - deployments
   - replicasets
   - statefulsets
+  - daemonsets
   verbs:
   - create
   - delete
@@ -128,6 +129,20 @@ rules:
   resources:
   - jobs
   - cronjobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+# Networking resources
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  - ingresses
   verbs:
   - create
   - delete
