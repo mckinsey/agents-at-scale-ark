@@ -71,6 +71,7 @@ $(ARK_DASHBOARD_STAMP_INSTALL): $(ARK_DASHBOARD_STAMP_BUILD) $$(ARK_API_STAMP_IN
 		--create-namespace \
 		--set app.image.repository=$(DASHBOARD_IMAGE) \
 		--set app.image.tag=$(DASHBOARD_TAG) \
+		--set httpRoute.enabled=true \
 		--wait \
 		--timeout=5m
 	@echo "ark-dashboard installed successfully"

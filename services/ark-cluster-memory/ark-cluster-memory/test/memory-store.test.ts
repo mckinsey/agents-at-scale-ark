@@ -90,6 +90,58 @@ describe('MemoryStore', () => {
     });
   });
 
+  describe('Sequence Numbers', () => {
+    test('should assign sequential numbers to messages', () => {
+      store.addMessage('test-session', { content: 'First message' });
+      store.addMessage('test-session', { content: 'Second message' });
+      
+      const allMessages = store.getAllMessages();
+      expect(allMessages).toHaveLength(2);
+      expect(allMessages[0].sequence).toBe(1);
+      expect(allMessages[1].sequence).toBe(2);
+    });
+
+    test('should assign correct sequence numbers for batch messages', () => {
+      const messages = [
+        { role: 'user', content: 'First message' },
+        { role: 'assistant', content: 'Second message' }
+      ];
+      
+      store.addMessages('test-session', messages);
+      
+      const allMessages = store.getAllMessages();
+      expect(allMessages).toHaveLength(2);
+      expect(allMessages[0].sequence).toBe(1);
+      expect(allMessages[1].sequence).toBe(2);
+    });
+
+    test('should assign correct sequence numbers for messages with metadata', () => {
+      const messages = [
+        { role: 'user', content: 'First message' },
+        { role: 'assistant', content: 'Second message' }
+      ];
+      
+      store.addMessagesWithMetadata('test-session', 'query1', messages);
+      
+      const allMessages = store.getAllMessages();
+      expect(allMessages).toHaveLength(2);
+      expect(allMessages[0].sequence).toBe(1);
+      expect(allMessages[1].sequence).toBe(2);
+    });
+
+    test('should maintain sequence order across different sessions', () => {
+      store.addMessage('session1', { content: 'Message 1' });
+      store.addMessage('session2', { content: 'Message 2' });
+      store.addMessage('session1', { content: 'Message 3' });
+      
+      const allMessages = store.getAllMessages();
+      expect(allMessages).toHaveLength(3);
+      expect(allMessages[0].sequence).toBe(1);
+      expect(allMessages[1].sequence).toBe(2);
+      expect(allMessages[2].sequence).toBe(3);
+    });
+  });
+
   describe('Stats and Health', () => {
     test('should return service stats', () => {
       store.addMessage('session1', 'message1');

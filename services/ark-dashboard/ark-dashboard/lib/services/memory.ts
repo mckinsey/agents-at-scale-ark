@@ -116,6 +116,7 @@ export const memoryService = {
     sessionId: string;
     queryId: string;
     message: { role: string; content: string; name?: string };
+    sequence?: number;
   }[]> {
     try {
       let url = `/api/v1/namespaces/${namespace}/memory-messages`;

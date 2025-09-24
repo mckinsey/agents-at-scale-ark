@@ -26,6 +26,7 @@ class MemoryMessageResponse(BaseModel):
     sessionId: str
     queryId: Optional[str] = None
     message: dict  # Raw JSON message object
+    sequence: Optional[int] = None
 
 
 class MemoryMessageListResponse(BaseModel):

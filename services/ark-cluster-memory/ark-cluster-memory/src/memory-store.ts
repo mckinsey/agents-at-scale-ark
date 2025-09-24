@@ -44,7 +44,8 @@ export class MemoryStore {
       timestamp: new Date().toISOString(),
       session_id: sessionID,
       query_id: '', // Legacy method without query_id
-      message
+      message,
+      sequence: this.messages.length + 1
     };
     
     this.messages.push(storedMessage);
@@ -68,11 +69,12 @@ export class MemoryStore {
     const isNewSession = !this.messages.some(m => m.session_id === sessionID);
 
     const timestamp = new Date().toISOString();
-    const storedMessages = messages.map(msg => ({
+    const storedMessages = messages.map((msg, index) => ({
       timestamp,
       session_id: sessionID,
       query_id: '', // Legacy method without query_id
-      message: msg
+      message: msg,
+      sequence: this.messages.length + index + 1
     }));
     
     this.messages.push(...storedMessages);
@@ -102,11 +104,12 @@ export class MemoryStore {
     const isNewSession = !this.messages.some(m => m.session_id === sessionID);
 
     const timestamp = new Date().toISOString();
-    const storedMessages = messages.map(msg => ({
+    const storedMessages = messages.map((msg, index) => ({
       timestamp,
       session_id: sessionID,
       query_id: queryID,
-      message: msg
+      message: msg,
+      sequence: this.messages.length + index + 1
     }));
     
     this.messages.push(...storedMessages);
