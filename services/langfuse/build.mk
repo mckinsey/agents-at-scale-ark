@@ -46,7 +46,8 @@ $(LANGFUSE_STAMP_INSTALL): | $(OUT)
 	cd $(LANGFUSE_SERVICE_DIR)/chart && helm dependency update
 	helm upgrade --install $(LANGFUSE_HELM_RELEASE) $(LANGFUSE_SERVICE_DIR)/chart -n $(LANGFUSE_NAMESPACE) --create-namespace \
 		--set demo.project.publicKey=$(LANGFUSE_PUBLIC_KEY) \
-		--set demo.project.secretKey=$(LANGFUSE_SECRET_KEY)
+		--set demo.project.secretKey=$(LANGFUSE_SECRET_KEY) \
+		--set httpRoute.enabled=true
 	$(MAKE) $(LANGFUSE_SERVICE_NAME)-deploy-otel-headers
 	@touch $@
 
