@@ -684,7 +684,7 @@ var _ = Describe("Evaluation Controller", func() {
 
 			// Set input using RawExtension helper
 			err := query.Spec.SetInputString("What is 2+2?")
-			Expect(err).Should(BeNil())
+			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(k8sClient.Create(ctx, query)).Should(Succeed())
 
@@ -787,7 +787,7 @@ var _ = Describe("Evaluation Controller", func() {
 
 			// Set input using RawExtension helper
 			err := query.Spec.SetInputString("What is 2+2?")
-			Expect(err).Should(BeNil())
+			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(k8sClient.Create(ctx, query)).Should(Succeed())
 

@@ -131,10 +131,10 @@ func ResolveBodyTemplate(ctx context.Context, k8sClient client.Client, namespace
 func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClient client.Client) ([]Message, error) {
 	queryType := query.Spec.Type
 	if queryType == "" {
-		queryType = "user" // default type
+		queryType = RoleUser // default type
 	}
 
-	if queryType == "user" {
+	if queryType == RoleUser {
 		// For 'user' type (default), get input string using helper method
 		inputString, err := query.Spec.GetInputString()
 		if err != nil {
@@ -158,11 +158,11 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 		var messages []Message
 		for _, msg := range crdMessages {
 			switch msg.Role {
-			case "user":
+			case RoleUser:
 				messages = append(messages, NewUserMessage(msg.Content))
-			case "assistant":
+			case RoleAssistant:
 				messages = append(messages, NewAssistantMessage(msg.Content))
-			case "system":
+			case RoleSystem:
 				messages = append(messages, NewSystemMessage(msg.Content))
 			default:
 				// For unknown roles, default to user

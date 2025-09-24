@@ -10,6 +10,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+const (
+	// QueryTypeUser represents a query with string input
+	QueryTypeUser = "user"
+	// QueryTypeMessages represents a query with Message array input
+	QueryTypeMessages = "messages"
+)
+
 // Message represents a single message in a conversation
 type Message struct {
 	// +kubebuilder:validation:Required
@@ -140,8 +147,8 @@ type QueryList struct {
 
 // GetInputString returns the input as a string when type="user" or type is empty (default)
 func (q *QuerySpec) GetInputString() (string, error) {
-	if q.Type != "" && q.Type != "user" {
-		return "", fmt.Errorf("cannot get string input for type=%s, expected type=user or empty", q.Type)
+	if q.Type != "" && q.Type != QueryTypeUser {
+		return "", fmt.Errorf("cannot get string input for type=%s, expected type=%s or empty", q.Type, QueryTypeUser)
 	}
 
 	var inputString string
@@ -154,8 +161,8 @@ func (q *QuerySpec) GetInputString() (string, error) {
 
 // GetInputMessages returns the input as []Message when type="messages"
 func (q *QuerySpec) GetInputMessages() ([]Message, error) {
-	if q.Type != "messages" {
-		return nil, fmt.Errorf("cannot get message input for type=%s, expected type=messages", q.Type)
+	if q.Type != QueryTypeMessages {
+		return nil, fmt.Errorf("cannot get message input for type=%s, expected type=%s", q.Type, QueryTypeMessages)
 	}
 
 	var messages []Message
@@ -173,9 +180,9 @@ func (q *QuerySpec) SetInputString(input string) error {
 		return fmt.Errorf("failed to marshal string input: %w", err)
 	}
 
-	// Set type to "user" if not already set, or keep empty for default behavior
+	// Set type to QueryTypeUser if not already set, or keep empty for default behavior
 	if q.Type == "" {
-		q.Type = "user" // Make it explicit
+		q.Type = QueryTypeUser // Make it explicit
 	}
 	q.Input.Raw = inputBytes
 	return nil
@@ -188,7 +195,7 @@ func (q *QuerySpec) SetInputMessages(messages []Message) error {
 		return fmt.Errorf("failed to marshal message input: %w", err)
 	}
 
-	q.Type = "messages"
+	q.Type = QueryTypeMessages
 	q.Input.Raw = inputBytes
 	return nil
 }
@@ -196,9 +203,9 @@ func (q *QuerySpec) SetInputMessages(messages []Message) error {
 // GetInputAsGeneric returns the input as either string or []Message based on type
 func (q *QuerySpec) GetInputAsGeneric() (interface{}, error) {
 	switch q.Type {
-	case "user", "": // Empty type defaults to user/string input
+	case QueryTypeUser, "": // Empty type defaults to user/string input
 		return q.GetInputString()
-	case "messages":
+	case QueryTypeMessages:
 		return q.GetInputMessages()
 	default:
 		return nil, fmt.Errorf("unknown input type: %s", q.Type)
