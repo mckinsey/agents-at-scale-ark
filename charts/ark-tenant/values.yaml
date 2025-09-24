@@ -23,13 +23,9 @@ rbac:
   #   name: developers
 
 # Note on Controller Impersonation:
-# The Ark controller needs permission to impersonate the service account created above.
-# This is configured in the ark-controller chart, not here.
-#
-# Recommended approach:
-# 1. Use 'ark-tenant' consistently across all namespaces (default)
-# 2. For development: Set controller's rbac.impersonation.allowAll=true
-# 3. For production: Add 'system:serviceaccount:{namespace}:ark-tenant' to controller's serviceAccounts list
+# The Ark controller can impersonate the service account created above when
+# rbac.impersonation.enabled=true (default) in the ark-controller chart.
+# Using consistent names like 'ark-tenant' across namespaces simplifies management.
 
 # Resource quota configuration (optional)
 resourceQuota:

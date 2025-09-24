@@ -24,16 +24,6 @@ These two components provide the functionality you need to develop, deploy, and 
 
 Your applications can communicate directly with the ark-controller using any Kubernetes client library.
 
-#### Prerequisites
-
-Before installing ark-controller, ensure you have the following:
-
-- **Docker**: Container runtime for building the controller image
-- **Kubernetes cluster**: A running Kubernetes cluster (e.g. kind, minikube, Orbstack, Docker Desktop)
-- **Helm 3.x**: Package manager for Kubernetes applications
-- **kubectl**: Command-line tool for interacting with Kubernetes
-- **Go** programming language (for cli)
-
 #### Installation Steps
 
 ##### Step 1: Install cert-manager (Required for webhook certificates)
@@ -181,77 +171,36 @@ This creates a ClusterRoleBinding that connects your GitHub repository identity 
 
 ## The Ark Controller
 
-By default, the `ark-controller` is deployed into the `ark-system` namespace. When the controller is executing a query, it will impersonate the user account provided in `query.serviceAccount` field (`default` is used if no service account is specified).
-
-The out-of-the-box installation allows the `ark-controller` to impersonate any service account (`allowAll: true`) for easier setup and development. For production deployments, this should be restricted to specific service accounts:
+By default, the `ark-controller` is deployed into the `ark-system` namespace. When the controller executes a query, it can optionally impersonate the service account specified in the `query.serviceAccount` field.
 
 ```yaml
 # values.yaml
 rbac:
-  # Creates ClusterRole and ClusterRoleBinding for the controller
   enable: true
   impersonation:
-    # Default: Allow impersonation of ANY service account (easier setup)
-    allowAll: true
-
-    # For production: Restrict to specific service accounts
-    # IMPORTANT: Must use full format: system:serviceaccount:namespace:name
-    # Recommendation: Use consistent naming like 'ark-tenant' across namespaces
-    # allowAll: false
-    # serviceAccounts:
-    #   - system:serviceaccount:default:default
-    #   - system:serviceaccount:tenant-1:ark-tenant
-    #   - system:serviceaccount:tenant-2:ark-tenant
-    #   - system:serviceaccount:production:ark-tenant
+    enabled: true  # Allow impersonation when requested by queries
 ```
 
-To restrict impersonation for production:
-
-```bash
-# Install or upgrade with restricted service account list
-# Note: Must use full Kubernetes service account format
-helm upgrade --install ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
-  --namespace ark-system \
-  --create-namespace \
-  --set rbac.impersonation.allowAll=false \
-  --set-string rbac.impersonation.serviceAccounts='{system:serviceaccount:default:default,system:serviceaccount:tenant-1:ark-tenant,system:serviceaccount:tenant-2:ark-tenant}'
-```
-
-When provisioning new tenant namespaces, Ark provides the `ark-tenant` Helm chart that automatically sets up all necessary RBAC resources, service accounts, and optional resource controls within that namespace.
-
-The chart creates namespace-scoped permissions that prevent cross-tenant access. However, the default permissions are broad and suitable primarily for development environments. For production multi-tenant scenarios, cluster administrators should customize the chart values to apply the principle of least privilege for each tenant's specific requirements.
+When enabled (default), the controller can impersonate any service account specified in queries. When disabled, queries can only run with the controller's own identity.
 
 ### Setting Up Tenant Namespaces
 
-The `ark-tenant` Helm chart can be used to create or provision a namespace with the required RBAC configuration:
+The `ark-tenant` Helm chart provisions namespaces with the required RBAC configuration:
 
 ```bash
-# Using the recommended 'ark-tenant' naming convention
 helm install ark-tenant oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-tenant \
   -n tenant-1 \
   --create-namespace \
   --set serviceAccount.name=ark-tenant
 ```
 
-If not specified, the service account `default` will be used. This will create:
-
+This creates:
 - The namespace (if it doesn't exist)
 - The service account
 - An `ark-tenant-role` with Ark and Kubernetes permissions
-- A RoleBinding linking the service account to the `ark-tenant-role`
+- A RoleBinding linking the service account to the role
 
 Additional options include resource quotas and network policies, which are documented in the chart.
-
-By default, the Ark controller can impersonate any service account (`allowAll: true`). If you've restricted this for production (see [The Ark Controller](#the-ark-controller)), add the new service account to the allowed list:
-
-```bash
-# Add the new tenant's service account to the allowed list
-# Using consistent 'ark-tenant' naming simplifies management
-helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
-  -n ark-system \
-  --set rbac.impersonation.allowAll=false \
-  --set-string rbac.impersonation.serviceAccounts='{system:serviceaccount:default:default,system:serviceaccount:tenant-1:ark-tenant,system:serviceaccount:tenant-2:ark-tenant}'
-```
 
 ### Using the Tenant Service Account
 
@@ -264,46 +213,13 @@ metadata:
   name: my-query
   namespace: tenant-1
 spec:
-  # Specify the service account
-  serviceAccount: tenant-1-sa  
+  serviceAccount: ark-tenant  # Optional - omit to use controller identity
   input: "Hello from tenant-1"
   targets:
     - type: agent
       name: my-agent
 ```
 
-With the default `allowAll: true` configuration, queries can use any service account in any namespace without additional setup. For production environments with restricted impersonation, the ark-tenant chart provides proper RBAC configuration for tenant namespaces.
+When no service account is specified, the query runs with the controller's identity. This is suitable for development and single-tenant deployments.
 
-### Production Multi-Tenancy Pattern
-
-For production deployments with restricted impersonation, we recommend using a consistent service account naming convention:
-
-1. **Use the same service account name** (e.g., `ark-tenant`) across all tenant namespaces
-2. **List all authorized namespace/account combinations** in the controller configuration
-3. **Update the controller when adding new tenants**
-
-Example workflow for adding a new tenant:
-
-```bash
-# Step 1: Create the tenant namespace with standard service account
-helm install ark-tenant-3 oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-tenant \
-  -n tenant-3 \
-  --create-namespace \
-  --set serviceAccount.name=ark-tenant
-
-# Step 2: Get current authorized accounts
-CURRENT_ACCOUNTS=$(helm get values ark-controller -n ark-system -o json | jq -r '.rbac.impersonation.serviceAccounts | join(",")')
-
-# Step 3: Add the new tenant and update controller
-helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
-  -n ark-system \
-  --reuse-values \
-  --set rbac.impersonation.allowAll=false \
-  --set-string rbac.impersonation.serviceAccounts="{${CURRENT_ACCOUNTS},system:serviceaccount:tenant-3:ark-tenant}"
-```
-
-This naming convention approach:
-- Simplifies tenant onboarding with predictable patterns
-- Makes it clear which namespaces have Ark access
-- Maintains security by explicitly listing authorized accounts
-- Avoids the complexity of managing unique service account names per namespace
+> Note: Future releases will move query execution to per-namespace executor pods, eliminating the need for service account impersonation.

@@ -164,7 +164,7 @@ deploy: manifests ## Deploy controller and cert-manager to the K8s cluster speci
 		--set crds.enabled=true
 	kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
 	../scripts/build-and-push.sh -i $(IMAGE) -t $(IMAGE_TAG) -f Dockerfile -c . -b VERSION=$(VERSION) -b GIT_COMMIT=$(GIT_COMMIT)
-	# Deploy controller with permissive impersonation for development
+	# Deploy controller with impersonation enabled for development
 	helm upgrade --install ark-controller ./dist/chart \
 		--namespace ark-system \
 		--create-namespace \
@@ -173,7 +173,7 @@ deploy: manifests ## Deploy controller and cert-manager to the K8s cluster speci
 		--set controllerManager.container.image.tag=$(IMAGE_TAG) \
 		--set controllerManager.container.image.pullPolicy=IfNotPresent \
 		--set rbac.enable=true \
-		--set rbac.impersonation.allowAll=true
+		--set rbac.impersonation.enabled=true
 
 .PHONY: undeploy
 undeploy: ## Remove ARK controller from the cluster
