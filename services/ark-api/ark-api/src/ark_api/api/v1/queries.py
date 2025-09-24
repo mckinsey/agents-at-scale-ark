@@ -1,5 +1,6 @@
 """API routes for Query resources."""
 
+import json
 from datetime import datetime
 from fastapi import APIRouter
 from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
@@ -36,10 +37,7 @@ def query_to_response(query: dict) -> QueryResponse:
     # Get query type and determine input field
     spec = query["spec"]
     query_type = spec.get('type', 'user')
-    if query_type == 'user':
-        input_value = spec.get("input", "")
-    else:
-        input_value = spec.get("messages", [])
+    input_value = spec.get("input", "" if query_type == 'user' else [])
     
     return QueryResponse(
         name=query["metadata"]["name"],
@@ -60,10 +58,7 @@ def query_to_detail_response(query: dict) -> QueryDetailResponse:
     
     # Get query type and determine input field
     query_type = spec.get('type', 'user')
-    if query_type == 'user':
-        input_value = spec.get("input", "")
-    else:
-        input_value = spec.get("messages", [])
+    input_value = spec.get("input", "" if query_type == 'user' else [])
     
     return QueryDetailResponse(
         name=metadata["name"],
@@ -114,13 +109,13 @@ async def create_query(
             "type": getattr(query, 'type', 'user')
         }
         
-        # Handle input based on type
+        # Handle input based on type - pass raw data for RawExtension
         if spec["type"] == "user":
-            # For string input
+            # For string input, pass as string
             spec["input"] = query.input if isinstance(query.input, str) else str(query.input)
         else:
-            # Convert Message objects to dict format for CRD (messages type)
-            spec["messages"] = [
+            # Convert Message objects to dict array for RawExtension input field
+            spec["input"] = [
                 {"role": msg.role, "content": msg.content} 
                 for msg in query.input
             ]
