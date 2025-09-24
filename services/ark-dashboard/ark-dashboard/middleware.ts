@@ -63,10 +63,13 @@ export default auth(async (req: NextRequestWithAuth) => {
   if (!req.auth) {
     //If the user is trying to access a page other than the signin page, set it as the callback url.
     if(req.nextUrl.pathname !== SIGNIN_PATH) {
+      const baseURL = process.env.BASE_URL
+
       const newUrl = new URL(
-        `${SIGNIN_PATH}?callbackUrl=${encodeURIComponent(req.url)}`,
-        req.nextUrl.origin
+        `${SIGNIN_PATH}?callbackUrl=${encodeURIComponent(baseURL!)}`,
+        baseURL
       )
+
       return NextResponse.redirect(newUrl)
     }
     return NextResponse.next()

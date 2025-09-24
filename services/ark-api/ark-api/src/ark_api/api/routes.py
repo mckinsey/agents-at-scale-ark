@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
-from ..models.kubernetes import NamespaceResponse, NamespaceListResponse
+from ark_sdk.models.kubernetes import NamespaceResponse, NamespaceListResponse
 
 logger = logging.getLogger(__name__)
 

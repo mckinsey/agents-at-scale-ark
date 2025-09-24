@@ -62,7 +62,24 @@ npm run generate:api
 
 # This generate:
 # lib/api/generated/types.ts
-```
+
+
+## Local Development Workflow
+
+When developing new functionality in `ark-sdk`, follow this workflow:
+
+1. Add new functionality to overlay files in `lib/ark-sdk/gen_sdk/overlay/python/ark_sdk/`.
+
+2. Build & Test - Run `make ark-sdk-build` to generate the wheel file, then `make ark-sdk-test` to verify changes work correctly.
+
+3. Use in Services - Copy the generated wheel to your service's `out/` directory and test with `devspace dev` to verify integration. The service will automatically use the local wheel file instead of the PyPI version.
+
+## Production Deployment
+
+1. Deploy to PyPI - Trigger deployment via GitHub Actions to publish new version to PyPI.
+
+2. Update Services - Update consuming services' `pyproject.toml` to use the new ark-sdk version, then rebuild and deploy.
+
 
 ## Adding Custom SDK Functionality
 

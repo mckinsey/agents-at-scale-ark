@@ -554,6 +554,7 @@ jobs:
           - { name: ark-dashboard, path: services/ark-dashboard/chart }
           - { name: ark-mcp, path: services/ark-mcp/chart }
           - { name: localhost-gateway, path: services/localhost-gateway/chart }
+          - { name: ark-tenant, path: charts/ark-tenant }
     steps:
       - uses: actions/checkout@v4
 
