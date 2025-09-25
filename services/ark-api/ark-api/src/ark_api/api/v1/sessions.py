@@ -16,7 +16,8 @@ from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/namespaces/{namespace}/sessions", tags=["sessions"])
+router = APIRouter(
+    prefix="/sessions", tags=["sessions"])
 
 # CRD configuration
 VERSION = "v1alpha1"
@@ -25,7 +26,7 @@ VERSION = "v1alpha1"
 @router.get("", response_model=SessionListResponse)
 @handle_k8s_errors(operation="list", resource_type="sessions")
 async def list_sessions(
-    namespace: str,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
     memory: Optional[str] = Query(None, description="Filter by memory name")
 ) -> SessionListResponse:
     """List all sessions in a namespace, optionally filtered by memory."""

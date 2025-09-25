@@ -98,11 +98,11 @@ export function EvaluationEditor({
         
         try {
           const [evaluatorsData, queriesData, agentsData, teamsData, modelsData] = await Promise.all([
-            safe("evaluatorsGetAll", evaluatorsService.getAll(namespace), []),
-            safe("queriesGetAll", queriesService.list(namespace), { items: [], count: 0 }),
-            safe("agentsGetAll", agentsService.getAll(namespace), []),
-            safe("teamsGetAll", teamsService.getAll(namespace), []),
-            safe("modelsGetAll", modelsService.getAll(namespace), [])
+            safe("evaluatorsGetAll", evaluatorsService.getAll(), []),
+            safe("queriesGetAll", queriesService.list(), { items: [], count: 0 }),
+            safe("agentsGetAll", agentsService.getAll(), []),
+            safe("teamsGetAll", teamsService.getAll(), []),
+            safe("modelsGetAll", modelsService.getAll(), [])
           ])
           setEvaluators(evaluatorsData)
           setQueries(queriesData.items)
@@ -130,7 +130,7 @@ export function EvaluationEditor({
       if (evaluation && isEditing) {
         try {
           // Fetch detailed evaluation data with spec
-          const detailedEvaluation = await evaluationsService.getDetailsByName(namespace, evaluation.name)
+          const detailedEvaluation = await evaluationsService.getDetailsByName(evaluation.name)
           if (detailedEvaluation) {
             setName(detailedEvaluation.name)
             setMode((detailedEvaluation.spec?.mode as EvaluationType) || "direct")

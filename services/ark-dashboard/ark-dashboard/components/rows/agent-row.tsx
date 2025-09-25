@@ -87,7 +87,7 @@ export function AgentRow({
 
         <AvailabilityStatusBadge
           status={agent.available}
-          eventsLink={`/events?namespace=${namespace}&kind=Agent&name=${agent.name}&page=1`}
+          eventsLink={`/events&kind=Agent&name=${agent.name}&page=1`}
         />
 
         <div className="flex items-center gap-1 flex-shrink-0">

@@ -191,7 +191,7 @@ export function EventsSection({ namespace, page, limit, type, kind, name }: Even
   };
 
   const handleEventClick = (event: Event) => {
-    router.push(`/event/${event.name}?namespace=${namespace}`);
+    router.push(`/event/${event.name}`);
   };
 
   // Helper functions

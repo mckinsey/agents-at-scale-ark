@@ -69,8 +69,8 @@ def generate_versioned_client(api_version: str, resources: List[Dict[str, Any]])
 
 class {class_name}(_ARKClient):
     """ARK client for API version {api_version}"""
-    
-    def __init__(self, namespace: str = "default"):
+
+    def __init__(self, namespace: Optional[str] = None):
         super().__init__(namespace)
         
 {resource_inits_str}

@@ -34,24 +34,24 @@ interface ToolListResponse {
 // Service for tool operations
 export const toolsService = {
   // Get all tools in a namespace
-  async getAll(namespace: string): Promise<Tool[]> {
-    const response = await apiClient.get<ToolListResponse>(`/api/v1/namespaces/${namespace}/tools`)
+  async getAll(): Promise<Tool[]> {
+    const response = await apiClient.get<ToolListResponse>(`/api/v1/tools`)
     return response.items.map(item => ({ ...item, id: item.name }))
   },
 
   // Get detailed tool information including schema
-  async getDetail(namespace: string, toolName: string): Promise<ToolDetail> {
-    const response = await apiClient.get<ToolDetail>(`/api/v1/namespaces/${namespace}/tools/${toolName}`)
+  async getDetail(toolName: string): Promise<ToolDetail> {
+    const response = await apiClient.get<ToolDetail>(`/api/v1/tools/${toolName}`)
     return response
   },
 
   // Delete a tool
-  async delete(namespace: string, identifier: string): Promise<void> {
-    await apiClient.delete(`/api/v1/namespaces/${namespace}/tools/${identifier}`)
+  async delete(identifier: string): Promise<void> {
+    await apiClient.delete(`/api/v1/tools/${identifier}`)
   },
 
   // Create a new tool
-  async create(namespace: string, tool: {
+  async create(tool: {
     name: string;
     type: string;
     description: string;
@@ -80,10 +80,9 @@ export const toolsService = {
     };
     const payload = {
       name,
-      namespace,
       annotations,
       spec
     };
-    await apiClient.post(`/api/v1/namespaces/${namespace}/tools`, payload);
+    await apiClient.post(`/api/v1/tools`, payload);
   }
 }

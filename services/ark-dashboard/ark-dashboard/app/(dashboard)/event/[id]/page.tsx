@@ -188,7 +188,7 @@ function EventDetailContent() {
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink href={`/events?namespace=${namespace}`}>
+              <BreadcrumbLink href={`/events`}>
                 Events
               </BreadcrumbLink>
             </BreadcrumbItem>
@@ -202,7 +202,7 @@ function EventDetailContent() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => router.push(`/events?namespace=${namespace}`)}
+            onClick={() => router.push(`/events`)}
           >
             Back to Events
           </Button>

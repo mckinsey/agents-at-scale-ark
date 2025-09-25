@@ -552,7 +552,7 @@ export const EvaluationsSection = forwardRef<
 
   const handleDelete = async (evaluationName: string) => {
     try {
-      await evaluationsService.delete(namespace, evaluationName);
+      await evaluationsService.delete(evaluationName);
       toast({
         variant: "success",
         title: "Evaluation Deleted",
@@ -574,7 +574,7 @@ export const EvaluationsSection = forwardRef<
 
   const handleCancel = async (evaluationName: string) => {
     try {
-      await evaluationsService.cancel(namespace, evaluationName);
+      await evaluationsService.cancel(evaluationName);
       toast({
         variant: "success",
         title: "Evaluation Canceled",
@@ -605,7 +605,6 @@ export const EvaluationsSection = forwardRef<
           id: string;
         };
         await evaluationsService.update(
-          namespace,
           updateRequest.id,
           updateRequest
         );
@@ -616,7 +615,7 @@ export const EvaluationsSection = forwardRef<
         });
       } else {
         const createRequest = evaluation as EvaluationCreateRequest;
-        await evaluationsService.create(namespace, createRequest);
+        await evaluationsService.create(createRequest);
         toast({
           variant: "success",
           title: "Evaluation Created",
@@ -746,7 +745,7 @@ export const EvaluationsSection = forwardRef<
                     className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/30 cursor-pointer"
                     onClick={() => {
                       router.push(
-                        `/evaluation/${evaluation.name}?namespace=${namespace}`
+                        `/evaluation/${evaluation.name}`
                       );
                     }}
                   >

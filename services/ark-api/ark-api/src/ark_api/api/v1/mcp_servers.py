@@ -1,7 +1,8 @@
 """Kubernetes MCP servers API endpoints."""
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from typing import Optional
 from ark_sdk.models.mcp_server_v1alpha1 import MCPServerV1alpha1
 from ark_sdk.models.mcp_server_v1alpha1_spec import MCPServerV1alpha1Spec
 
@@ -18,7 +19,8 @@ from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/namespaces/{namespace}/mcp-servers", tags=["mcp-servers"])
+router = APIRouter(
+    prefix="/mcp-servers", tags=["mcp-servers"])
 
 # CRD configuration
 VERSION = "v1alpha1"
@@ -78,7 +80,7 @@ def mcp_server_to_detail_response(mcp_server: dict) -> MCPServerDetailResponse:
 
 @router.get("", response_model=MCPServerListResponse)
 @handle_k8s_errors(operation="list", resource_type="mcp server")
-async def list_mcp_servers(namespace: str) -> MCPServerListResponse:
+async def list_mcp_servers(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> MCPServerListResponse:
     """
     List all MCPServer CRs in a namespace.
     
@@ -103,7 +105,7 @@ async def list_mcp_servers(namespace: str) -> MCPServerListResponse:
 
 @router.post("", response_model=MCPServerDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="create", resource_type="mcp server")
-async def create_mcp_server(namespace: str, body: MCPServerCreateRequest) -> MCPServerDetailResponse:
+async def create_mcp_server(body: MCPServerCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> MCPServerDetailResponse:
     """
     Create a new MCPServer CR.
     
@@ -136,7 +138,7 @@ async def create_mcp_server(namespace: str, body: MCPServerCreateRequest) -> MCP
 
 @router.get("/{mcp_server_name}", response_model=MCPServerDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="mcp server")
-async def get_mcp_server(namespace: str, mcp_server_name: str) -> MCPServerDetailResponse:
+async def get_mcp_server(mcp_server_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> MCPServerDetailResponse:
     """
     Get a specific MCPServer CR by name.
     
@@ -155,7 +157,7 @@ async def get_mcp_server(namespace: str, mcp_server_name: str) -> MCPServerDetai
 
 @router.put("/{mcp_server_name}", response_model=MCPServerDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="update", resource_type="mcp server")
-async def update_mcp_server(namespace: str, mcp_server_name: str, body: MCPServerUpdateRequest) -> MCPServerDetailResponse:
+async def update_mcp_server(mcp_server_name: str, body: MCPServerUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> MCPServerDetailResponse:
     """
     Update a MCPServer CR by name.
     
@@ -192,7 +194,7 @@ async def update_mcp_server(namespace: str, mcp_server_name: str, body: MCPServe
 
 @router.delete("/{mcp_server_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="mcp server")
-async def delete_mcp_server(namespace: str, mcp_server_name: str) -> None:
+async def delete_mcp_server(mcp_server_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> None:
     """
     Delete a MCPServer CR by name.
     

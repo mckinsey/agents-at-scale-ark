@@ -4,7 +4,6 @@ import unittest
 import unittest.mock
 from unittest.mock import Mock, patch, AsyncMock
 from fastapi.testclient import TestClient
-from kubernetes_asyncio.client.rest import ApiException
 
 # Set environment variable to skip authentication before importing the app
 os.environ["AUTH_MODE"] = "open"
@@ -92,7 +91,7 @@ class TestAgentsEndpoint(unittest.TestCase):
         mock_client.agents.a_list = AsyncMock(return_value=[mock_agent1, mock_agent2])
         
         # Make the request
-        response = self.client.get("/v1/namespaces/default/agents")
+        response = self.client.get("/v1/agents?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -123,7 +122,7 @@ class TestAgentsEndpoint(unittest.TestCase):
         mock_client.agents.a_list = AsyncMock(return_value=[])
         
         # Make the request
-        response = self.client.get("/v1/namespaces/test-namespace/agents")
+        response = self.client.get("/v1/agents?namespace=test-namespace")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -165,7 +164,7 @@ class TestAgentsEndpoint(unittest.TestCase):
             "parameters": [{"name": "temperature", "value": "0.7"}],
             "tools": [{"type": "built-in", "name": "calculator"}]
         }
-        response = self.client.post("/v1/namespaces/default/agents", json=request_data)
+        response = self.client.post("/v1/agents?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -199,7 +198,7 @@ class TestAgentsEndpoint(unittest.TestCase):
         
         # Make the request with only required field
         request_data = {"name": "minimal-agent"}
-        response = self.client.post("/v1/namespaces/default/agents", json=request_data)
+        response = self.client.post("/v1/agents?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -233,7 +232,7 @@ class TestAgentsEndpoint(unittest.TestCase):
         mock_client.agents.a_get = AsyncMock(return_value=mock_agent)
         
         # Make the request
-        response = self.client.get("/v1/namespaces/default/agents/test-agent")
+        response = self.client.get("/v1/agents/test-agent?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -283,7 +282,7 @@ class TestAgentsEndpoint(unittest.TestCase):
             "prompt": "Updated prompt",
             "modelRef": {"name": "gpt-4"}
         }
-        response = self.client.put("/v1/namespaces/default/agents/test-agent", json=request_data)
+        response = self.client.put("/v1/agents/test-agent?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -329,7 +328,7 @@ class TestAgentsEndpoint(unittest.TestCase):
         
         # Make the request - only update description
         request_data = {"description": "Updated description only"}
-        response = self.client.put("/v1/namespaces/default/agents/test-agent", json=request_data)
+        response = self.client.put("/v1/agents/test-agent?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -349,7 +348,7 @@ class TestAgentsEndpoint(unittest.TestCase):
         mock_client.agents.a_delete = AsyncMock(return_value=None)
         
         # Make the request
-        response = self.client.delete("/v1/namespaces/default/agents/test-agent")
+        response = self.client.delete("/v1/agents/test-agent?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 204)
@@ -402,7 +401,7 @@ class TestModelsEndpoint(unittest.TestCase):
         mock_client.models.a_list = AsyncMock(return_value=[mock_model1, mock_model2])
         
         # Make the request
-        response = self.client.get("/v1/namespaces/default/models")
+        response = self.client.get("/v1/models?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -433,7 +432,7 @@ class TestModelsEndpoint(unittest.TestCase):
         mock_client.models.a_list = AsyncMock(return_value=[])
         
         # Make the request
-        response = self.client.get("/v1/namespaces/test-namespace/models")
+        response = self.client.get("/v1/models?namespace=test-namespace")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -478,7 +477,7 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
-        response = self.client.post("/v1/namespaces/default/models", json=request_data)
+        response = self.client.post("/v1/models?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -528,7 +527,7 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
-        response = self.client.post("/v1/namespaces/default/models", json=request_data)
+        response = self.client.post("/v1/models?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -580,7 +579,7 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
-        response = self.client.post("/v1/namespaces/default/models", json=request_data)
+        response = self.client.post("/v1/models?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -623,7 +622,7 @@ class TestModelsEndpoint(unittest.TestCase):
         mock_client.models.a_get = AsyncMock(return_value=mock_model)
         
         # Make the request
-        response = self.client.get("/v1/namespaces/default/models/gpt-4-model")
+        response = self.client.get("/v1/models/gpt-4-model?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -687,7 +686,7 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
-        response = self.client.put("/v1/namespaces/default/models/gpt-model", json=request_data)
+        response = self.client.put("/v1/models/gpt-model?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -740,7 +739,7 @@ class TestModelsEndpoint(unittest.TestCase):
         
         # Make the request - only update model
         request_data = {"model": "gpt-4"}
-        response = self.client.put("/v1/namespaces/default/models/gpt-model", json=request_data)
+        response = self.client.put("/v1/models/gpt-model?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -760,7 +759,7 @@ class TestModelsEndpoint(unittest.TestCase):
         mock_client.models.a_delete = AsyncMock(return_value=None)
         
         # Make the request
-        response = self.client.delete("/v1/namespaces/default/models/gpt-model")
+        response = self.client.delete("/v1/models/gpt-model?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 204)
@@ -807,7 +806,7 @@ class TestQueriesEndpoint(unittest.TestCase):
         mock_client.queries.a_list = AsyncMock(return_value=[mock_query1, mock_query2])
         
         # Make the request
-        response = self.client.get("/v1/namespaces/default/queries")
+        response = self.client.get("/v1/queries?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -836,7 +835,7 @@ class TestQueriesEndpoint(unittest.TestCase):
         mock_client.queries.a_list = AsyncMock(return_value=[])
         
         # Make the request
-        response = self.client.get("/v1/namespaces/test-namespace/queries")
+        response = self.client.get("/v1/queries?namespace=test-namespace")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -868,7 +867,7 @@ class TestQueriesEndpoint(unittest.TestCase):
             "name": "simple-query",
             "input": "What is 2+2?"
         }
-        response = self.client.post("/v1/namespaces/default/queries", json=request_data)
+        response = self.client.post("/v1/queries?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -908,7 +907,7 @@ class TestQueriesEndpoint(unittest.TestCase):
                 {"name": "gpt-4", "type": "model"}
             ]
         }
-        response = self.client.post("/v1/namespaces/default/queries", json=request_data)
+        response = self.client.post("/v1/queries?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -954,7 +953,7 @@ class TestQueriesEndpoint(unittest.TestCase):
             "sessionId": "session-123",
             "targets": [{"name": "assistant", "type": "agent"}]
         }
-        response = self.client.post("/v1/namespaces/default/queries", json=request_data)
+        response = self.client.post("/v1/queries?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -990,7 +989,7 @@ class TestQueriesEndpoint(unittest.TestCase):
         mock_client.queries.a_get = AsyncMock(return_value=mock_query)
         
         # Make the request
-        response = self.client.get("/v1/namespaces/default/queries/test-query")
+        response = self.client.get("/v1/queries/test-query?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1039,7 +1038,7 @@ class TestQueriesEndpoint(unittest.TestCase):
             "input": "New question",
             "sessionId": "new-session"
         }
-        response = self.client.put("/v1/namespaces/default/queries/test-query", json=request_data)
+        response = self.client.put("/v1/queries/test-query?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1087,7 +1086,7 @@ class TestQueriesEndpoint(unittest.TestCase):
         
         # Make the request - only update memory
         request_data = {"memory": {"name": "new-memory"}}
-        response = self.client.put("/v1/namespaces/default/queries/test-query", json=request_data)
+        response = self.client.put("/v1/queries/test-query?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1107,7 +1106,7 @@ class TestQueriesEndpoint(unittest.TestCase):
         mock_client.queries.a_delete = AsyncMock(return_value=None)
         
         # Make the request
-        response = self.client.delete("/v1/namespaces/default/queries/test-query")
+        response = self.client.delete("/v1/queries/test-query?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 204)
@@ -1160,7 +1159,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         mock_client.teams.a_list = AsyncMock(return_value=[mock_team1, mock_team2])
         
         # Make the request
-        response = self.client.get("/v1/namespaces/default/teams")
+        response = self.client.get("/v1/teams?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1192,7 +1191,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         mock_client.teams.a_list = AsyncMock(return_value=[])
         
         # Make the request
-        response = self.client.get("/v1/namespaces/test-namespace/teams")
+        response = self.client.get("/v1/teams?namespace=test-namespace")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1232,7 +1231,7 @@ class TestTeamsEndpoint(unittest.TestCase):
             ],
             "strategy": "sequential"
         }
-        response = self.client.post("/v1/namespaces/default/teams", json=request_data)
+        response = self.client.post("/v1/teams?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1290,7 +1289,7 @@ class TestTeamsEndpoint(unittest.TestCase):
                 ]
             }
         }
-        response = self.client.post("/v1/namespaces/default/teams", json=request_data)
+        response = self.client.post("/v1/teams?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1339,7 +1338,7 @@ class TestTeamsEndpoint(unittest.TestCase):
                 "selectorPrompt": "Choose the best agent for the task"
             }
         }
-        response = self.client.post("/v1/namespaces/default/teams", json=request_data)
+        response = self.client.post("/v1/teams?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1377,7 +1376,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         mock_client.teams.a_get = AsyncMock(return_value=mock_team)
         
         # Make the request
-        response = self.client.get("/v1/namespaces/default/teams/dev-team")
+        response = self.client.get("/v1/teams/dev-team?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1434,7 +1433,7 @@ class TestTeamsEndpoint(unittest.TestCase):
             ],
             "strategy": "parallel"
         }
-        response = self.client.put("/v1/namespaces/default/teams/test-team", json=request_data)
+        response = self.client.put("/v1/teams/test-team?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1482,7 +1481,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         
         # Make the request - only update maxTurns
         request_data = {"maxTurns": 10}
-        response = self.client.put("/v1/namespaces/default/teams/test-team", json=request_data)
+        response = self.client.put("/v1/teams/test-team?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1502,7 +1501,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         mock_client.teams.a_delete = AsyncMock(return_value=None)
         
         # Make the request
-        response = self.client.delete("/v1/namespaces/default/teams/test-team")
+        response = self.client.delete("/v1/teams/test-team?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 204)

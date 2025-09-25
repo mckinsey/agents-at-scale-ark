@@ -29,9 +29,9 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }, TeamsSecti
       setLoading(true)
       try {
         const [teamsData, agentsData, modelsData] = await Promise.all([
-          teamsService.getAll(namespace),
-          agentsService.getAll(namespace),
-          modelsService.getAll(namespace)
+          teamsService.getAll(),
+          agentsService.getAll(),
+          modelsService.getAll()
         ])
         setTeams(teamsData)
         setAgents(agentsData)
@@ -56,7 +56,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }, TeamsSecti
       if (team.id) {
         // This is an update
         const updateRequest = team as TeamUpdateRequest & { id: string }
-        await teamsService.updateById(namespace, updateRequest.id, updateRequest)
+        await teamsService.updateById(updateRequest.id, updateRequest)
         toast({
           variant: "success",
           title: "Team Updated",
@@ -65,7 +65,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }, TeamsSecti
       } else {
         // This is a create
         const createRequest = team as TeamCreateRequest
-        await teamsService.create(namespace, createRequest)
+        await teamsService.create(createRequest)
         toast({
           variant: "success",
           title: "Team Created",
@@ -73,7 +73,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }, TeamsSecti
         })
       }
       // Reload data
-      const updatedTeams = await teamsService.getAll(namespace)
+      const updatedTeams = await teamsService.getAll()
       setTeams(updatedTeams)
     } catch (error) {
       toast({
@@ -90,14 +90,14 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }, TeamsSecti
       if (!team) {
         throw new Error("Team not found")
       }
-      await teamsService.deleteById(namespace, id)
+      await teamsService.deleteById(id)
       toast({
         variant: "success",
         title: "Team Deleted",
         description: `Successfully deleted ${team.name}`
       })
       // Reload data
-      const updatedTeams = await teamsService.getAll(namespace)
+      const updatedTeams = await teamsService.getAll()
       setTeams(updatedTeams)
     } catch (error) {
       toast({

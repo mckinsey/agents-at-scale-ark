@@ -57,7 +57,7 @@ export function ModelEditor({ open, onOpenChange, model, onSave, namespace }: Mo
   // Fetch secrets when dialog opens
   useEffect(() => {
     if (open && namespace) {
-      secretsService.getAll(namespace).then(setSecrets).catch(console.error)
+      secretsService.getAll().then(setSecrets).catch(console.error)
     }
   }, [open, namespace])
 

@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
 import {
   ColumnDef,
   flexRender,
@@ -240,9 +239,6 @@ function DataTable<TData, TValue>({
 }
 
 function ServicesContent() {
-  const searchParams = useSearchParams()
-  const namespace = searchParams.get("namespace") || "default"
-  
   const [services, setServices] = useState<ArkService[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -252,7 +248,7 @@ function ServicesContent() {
       setLoading(true)
       setError(null)
       try {
-        const data = await arkServicesService.getAll(namespace)
+        const data = await arkServicesService.getAll()
         setServices(data.items)
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load ARK services")
@@ -262,7 +258,7 @@ function ServicesContent() {
     }
 
     fetchServices()
-  }, [namespace])
+  }, [])
 
   if (loading) {
     return (

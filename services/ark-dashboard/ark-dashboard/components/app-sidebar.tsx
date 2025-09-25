@@ -83,7 +83,7 @@ export function AppSidebar() {
 
 
   const navigateToSection = (sectionKey: string) => {
-    router.push(`/${sectionKey}?namespace=${namespace}`)
+    router.push(`/${sectionKey}`)
   }
 
   const getCurrentSection = () => {

@@ -13,10 +13,10 @@ export const useGetAllEvaluationsWithDetails = ({
     queryFn: async () => {
       try {
         // Try enhanced fetch first
-        return await evaluationsService.getAllWithDetails(namespace, enhanced);
+        return await evaluationsService.getAllWithDetails(enhanced);
       } catch {
         // Fallback to basic fetch
-        return await evaluationsService.getAll(namespace);
+        return await evaluationsService.getAll();
       }
     },
     enabled: !!namespace

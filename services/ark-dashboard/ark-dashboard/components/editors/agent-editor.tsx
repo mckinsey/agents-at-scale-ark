@@ -88,7 +88,7 @@ export function AgentEditor({
       const loadTools = async () => {
         setToolsLoading(true);
         try {
-          const tools = await toolsService.getAll(namespace);
+          const tools = await toolsService.getAll();
           const missingTools = agent?.tools?.filter(
             (agentTool) => !tools.some((t) => t.name === agentTool.name)
           ) as Tool[];

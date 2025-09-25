@@ -22,7 +22,6 @@ import { useRouter } from "next/navigation"
 
 interface EvaluationStatusIndicatorProps {
   queryName: string
-  namespace: string
   compact?: boolean
   enhanced?: boolean
 }
@@ -67,9 +66,8 @@ const getStatusConfig = (status: QueryEvaluationSummary['status']) => {
   }
 }
 
-export function EvaluationStatusIndicator({ 
-  queryName, 
-  namespace, 
+export function EvaluationStatusIndicator({
+  queryName,
   compact = false,
   enhanced = false
 }: EvaluationStatusIndicatorProps) {
@@ -80,7 +78,7 @@ export function EvaluationStatusIndicator({
 
   const loadSummary = useCallback(async () => {
     try {
-      const data = await evaluationsService.getEvaluationSummary(namespace, queryName, enhanced)
+      const data = await evaluationsService.getEvaluationSummary(queryName, enhanced)
       setSummary(data)
       setError(null)
     } catch (error) {
@@ -88,7 +86,7 @@ export function EvaluationStatusIndicator({
       setError('Failed to load evaluation status')
       setSummary(null)
     }
-  }, [namespace, queryName, enhanced])
+  }, [queryName, enhanced])
 
   useEffect(() => {
     const initialLoad = async () => {
@@ -104,7 +102,7 @@ export function EvaluationStatusIndicator({
     e.stopPropagation()
     // Navigate to evaluations page with query filter
     const enhancedParam = enhanced ? '&enhanced=true' : ''
-    router.push(`/evaluations?namespace=${namespace}&query=${encodeURIComponent(queryName)}${enhancedParam}`)
+    router.push(`/evaluations&query=${encodeURIComponent(queryName)}${enhancedParam}`)
   }
 
   if (loading) {

@@ -49,9 +49,9 @@ export const AgentsSection = forwardRef<
       setLoading(true);
       try {
         const [agentsData, teamsData, modelsData] = await Promise.all([
-          agentsService.getAll(namespace),
-          teamsService.getAll(namespace),
-          modelsService.getAll(namespace)
+          agentsService.getAll(),
+          teamsService.getAll(),
+          modelsService.getAll()
         ]);
         setAgents(agentsData);
         setTeams(teamsData);
@@ -82,7 +82,6 @@ export const AgentsSection = forwardRef<
         // This is an update
         const updateRequest = agent as AgentUpdateRequest & { id: string };
         await agentsService.updateById(
-          namespace,
           updateRequest.id,
           updateRequest
         );
@@ -94,7 +93,7 @@ export const AgentsSection = forwardRef<
       } else {
         // This is a create
         const createRequest = agent as AgentCreateRequest;
-        await agentsService.create(namespace, createRequest);
+        await agentsService.create(createRequest);
         toast({
           variant: "success",
           title: "Agent Created",
@@ -102,7 +101,7 @@ export const AgentsSection = forwardRef<
         });
       }
       // Reload data
-      const updatedAgents = await agentsService.getAll(namespace);
+      const updatedAgents = await agentsService.getAll();
       setAgents(updatedAgents);
     } catch (error) {
       toast({
@@ -122,14 +121,14 @@ export const AgentsSection = forwardRef<
       if (!agent) {
         throw new Error("Agent not found");
       }
-      await agentsService.deleteById(namespace, id);
+      await agentsService.deleteById(id);
       toast({
         variant: "success",
         title: "Agent Deleted",
         description: `Successfully deleted ${agent.name}`
       });
       // Reload data
-      const updatedAgents = await agentsService.getAll(namespace);
+      const updatedAgents = await agentsService.getAll();
       setAgents(updatedAgents);
     } catch (error) {
       toast({

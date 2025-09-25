@@ -248,6 +248,9 @@ class ARKResourceClient(Generic[T]):
 
 class _ARKClient:
     """Base ARK client class"""
-    
-    def __init__(self, namespace: str = "default"):
+
+    def __init__(self, namespace: Optional[str] = None):
+        if namespace is None:
+            from ark_sdk.k8s import get_context
+            namespace = get_context()["namespace"]
         self.namespace = namespace

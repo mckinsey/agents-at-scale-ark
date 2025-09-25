@@ -48,16 +48,16 @@ export type Agent = AgentDetailResponseWithA2A & { id: string };
 // CRUD Operations
 export const agentsService = {
   // Get all agents
-  async getAll(namespace: string): Promise<Agent[]> {
+  async getAll(): Promise<Agent[]> {
     const response = await apiClient.get<AgentListResponse>(
-      `/api/v1/namespaces/${namespace}/agents`
+      `/api/v1/agents`
     );
 
     // Map the response items to include id for UI compatibility
     const agents = await Promise.all(
       response.items.map(async (item) => {
         // Fetch detailed info for each agent to get full data
-        const detailed = await agentsService.getByName(namespace, item.name);
+        const detailed = await agentsService.getByName(item.name);
         return detailed!;
       })
     );
@@ -66,10 +66,10 @@ export const agentsService = {
   },
 
   // Get a single agent by name
-  async getByName(namespace: string, name: string): Promise<Agent | null> {
+  async getByName(name: string): Promise<Agent | null> {
     try {
       const response = await apiClient.get<AgentDetailResponse>(
-        `/api/v1/namespaces/${namespace}/agents/${name}`
+        `/api/v1/agents/${name}`
       );
       return {
         ...response,
@@ -84,16 +84,16 @@ export const agentsService = {
   },
 
   // Get a single agent by ID (for UI compatibility - ID is actually the name)
-  async getById(namespace: string, id: number | string): Promise<Agent | null> {
+  async getById(id: number | string): Promise<Agent | null> {
     // Convert numeric ID to string name
     const name = String(id);
-    return agentsService.getByName(namespace, name);
+    return agentsService.getByName(name);
   },
 
   // Create a new agent
-  async create(namespace: string, agent: AgentCreateRequest): Promise<Agent> {
+  async create(agent: AgentCreateRequest): Promise<Agent> {
     const response = await apiClient.post<AgentDetailResponse>(
-      `/api/v1/namespaces/${namespace}/agents`,
+      `/api/v1/agents`,
       agent
     );
     return {
@@ -104,13 +104,12 @@ export const agentsService = {
 
   // Update an existing agent
   async update(
-    namespace: string,
     name: string,
     updates: AgentUpdateRequest
   ): Promise<Agent | null> {
     try {
       const response = await apiClient.put<AgentDetailResponse>(
-        `/api/v1/namespaces/${namespace}/agents/${name}`,
+        `/api/v1/agents/${name}`,
         updates
       );
       return {
@@ -127,18 +126,17 @@ export const agentsService = {
 
   // Update by ID (for UI compatibility)
   async updateById(
-    namespace: string,
     id: number | string,
     updates: AgentUpdateRequest
   ): Promise<Agent | null> {
     const name = String(id);
-    return agentsService.update(namespace, name, updates);
+    return agentsService.update(name, updates);
   },
 
   // Delete an agent
-  async delete(namespace: string, name: string): Promise<boolean> {
+  async delete(name: string): Promise<boolean> {
     try {
-      await apiClient.delete(`/api/v1/namespaces/${namespace}/agents/${name}`);
+      await apiClient.delete(`/api/v1/agents/${name}`);
       return true;
     } catch (error) {
       if ((error as AxiosError).response?.status === 404) {
@@ -149,8 +147,8 @@ export const agentsService = {
   },
 
   // Delete by ID (for UI compatibility)
-  async deleteById(namespace: string, id: number | string): Promise<boolean> {
+  async deleteById(id: number | string): Promise<boolean> {
     const name = String(id);
-    return agentsService.delete(namespace, name);
+    return agentsService.delete(name);
   }
 };
