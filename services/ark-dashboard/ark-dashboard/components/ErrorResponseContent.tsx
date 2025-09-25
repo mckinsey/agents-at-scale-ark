@@ -106,22 +106,32 @@ export function ErrorResponseContent({ query, viewMode, namespace }: ErrorRespon
       };
     }
 
-    // Fallback to generic error
-    return {
-      type: 'Unknown Error',
-      message: 'Query failed - no specific error details available',
-      details: {
-        phase: query.status?.phase,
-        responses: query.status?.responses?.length || 0,
-        timestamp: query.creationTimestamp
-      }
-    };
+    // Only show error if query is actually failed/error
+    if (query.status?.phase === 'failed' || query.status?.phase === 'error') {
+      return {
+        type: 'Unknown Error',
+        message: 'Query failed - no specific error details available',
+        details: {
+          phase: query.status?.phase,
+          responses: query.status?.responses?.length || 0,
+          timestamp: query.creationTimestamp
+        }
+      };
+    }
+    
+    // For running queries, return null to not show error
+    return null;
   };
 
   const errorDetails = getErrorDetails();
 
   if (loading) {
     return <div className="text-center text-muted-foreground py-4 text-sm">Loading error details...</div>;
+  }
+
+  // If no error details (e.g., for running queries), don't show anything
+  if (!errorDetails) {
+    return null;
   }
 
   if (viewMode === 'details') {
