@@ -79,6 +79,7 @@ spec:
     - name: agent-seq
       type: agent
   strategy: "sequential"
+  maxTurns: 5  # Optional: limit execution to prevent infinite loops
 ```
 
 ### Execution Strategies
@@ -90,6 +91,70 @@ spec:
 ### Member Types
 - **agent**: Reference to an Agent resource
 - **team**: Reference to another Team resource (nested teams)
+
+### Turn Limiting with `maxTurns`
+
+The optional `maxTurns` field controls how many execution turns a team can perform before terminating, preventing infinite loops and ensuring predictable execution. When the turn limit is reached, the team completes successfully with all accumulated responses.
+
+#### How `maxTurns` Works by Strategy
+
+- **round-robin**: Limits the total number of individual agent messages. With 3 agents and `maxTurns: 5`, agents take turns until 5 messages are generated total.
+- **selector**: Limits the number of selection rounds. Each round involves selecting and executing one agent.
+- **graph**: Limits the number of edge traversals through the execution graph.
+- **sequential**: Not applicable (sequential execution naturally terminates after all agents complete once).
+
+#### Configuration Examples
+
+```yaml
+# Prevent infinite round-robin cycling
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: round-robin-team
+spec:
+  strategy: round-robin
+  maxTurns: 10  # Stop after 10 agent messages
+  members:
+    - name: brainstormer
+      type: agent
+    - name: critic
+      type: agent
+    - name: coordinator
+      type: agent
+```
+
+```yaml
+# Limit selector iterations
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: selector-team
+spec:
+  strategy: selector
+  maxTurns: 3  # Stop after 3 selection rounds
+  selector:
+    selectorPrompt: "Choose the best agent for: {{.Input}}"
+  members:
+    - name: research-agent
+      type: agent
+    - name: analysis-agent
+      type: agent
+```
+
+#### Behavior on Turn Limit
+
+When `maxTurns` is reached:
+1. Team execution stops gracefully
+2. All responses generated up to the limit are returned
+3. A warning event is emitted for observability: `TeamMaxTurnsReached`
+4. The team query completes successfully (not as an error)
+
+#### Best Practices
+
+- **Always set `maxTurns`** for `round-robin` and `selector` strategies to prevent infinite loops
+- **Start with conservative limits** (5-10 turns) and adjust based on team behavior
+- **Monitor warning events** to detect when teams hit turn limits frequently
+- **Consider the team size** when setting limits for round-robin teams
 
 ### Advanced Features
 Teams support complex workflows including:
