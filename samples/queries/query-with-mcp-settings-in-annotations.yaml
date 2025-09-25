@@ -7,7 +7,7 @@ spec:
   modelRef:
     name: default
   tools:
-    - name: filesystem-list-directory
+    - name: filesystem-directory-tree
       type: custom
 ---
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -15,10 +15,10 @@ kind: Query
 metadata:
   name: query-with-mcp-settings-in-annotations
   annotations:
-    mcpInit:
-      'ark-system/filesystem': '[{"name": "set_base_directory", "arguments": {"path": "shared"}}]'
+    "ark.mckinsey.com/mcp-server-settings": |
+      {"ark-system/filesystem": {"toolCalls": [{"name": "set_base_directory", "arguments": {"path": "./shared"}}]}}
 spec:
-  input: Read current root directory (./) using the filesystem tool.
+  input: Which folders can you see use the filesystem tool? Call directory-tree with path ".".
   targets:
   - type: agent
     name: query-with-mcp-settings-in-annotations

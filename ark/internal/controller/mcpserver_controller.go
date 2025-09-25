@@ -197,7 +197,8 @@ func (r *MCPServerReconciler) createMCPClient(ctx context.Context, mcpServer *ar
 		}
 		headers = resolvedHeaders
 	}
-	mcpClient, err := genai.NewMCPClient(ctx, mcpURL, headers, mcpServer.Spec.Transport)
+	// MCP settings are not needed for listing tools, etc.
+	mcpClient, err := genai.NewMCPClient(ctx, mcpURL, headers, mcpServer.Spec.Transport, genai.MCPSettings{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create MCP client: %w", err)
 	}

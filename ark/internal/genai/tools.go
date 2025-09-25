@@ -179,28 +179,11 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall, recorder Even
 type ToolRegistry struct {
 	tools       map[string]ToolDefinition
 	executors   map[string]ToolExecutor
-	mcpPool     *MCPClientPool // One MCP client pool per agent
-	mcpSettings map[string]MCPSessionSettings
+	mcpPool     *MCPClientPool         // One MCP client pool per agent
+	mcpSettings map[string]MCPSettings // MCP settings per MCP server (namespace/name)
 }
 
-func extractMCPSettings(annotations map[string]string) map[string]MCPSessionSettings {
-	mcpSettings := make(map[string]MCPSessionSettings)
-
-	if annotations == nil || annotations["mcpInit"] == "" {
-		return mcpSettings
-	}
-
-	err := json.Unmarshal([]byte(annotations["mcpInit"]), &mcpSettings)
-	if err != nil {
-		logf.Log.Error(err, "failed to parse MCP annotations, skipping")
-	}
-
-	return mcpSettings
-}
-
-func NewToolRegistry(annotations map[string]string) *ToolRegistry {
-	mcpSettings := extractMCPSettings(annotations)
-
+func NewToolRegistry(mcpSettings map[string]MCPSettings) *ToolRegistry {
 	return &ToolRegistry{
 		tools:       make(map[string]ToolDefinition),
 		executors:   make(map[string]ToolExecutor),
@@ -276,7 +259,7 @@ func (tr *ToolRegistry) ToOpenAITools() []openai.ChatCompletionToolParam {
 }
 
 // GetMCPPool returns the MCP client pool for this tool registry
-func (tr *ToolRegistry) GetMCPPool() (*MCPClientPool, map[string]MCPSessionSettings) {
+func (tr *ToolRegistry) GetMCPPool() (*MCPClientPool, map[string]MCPSettings) {
 	return tr.mcpPool, tr.mcpSettings
 }
 

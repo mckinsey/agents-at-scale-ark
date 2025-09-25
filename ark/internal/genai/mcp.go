@@ -20,7 +20,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-type MCPSessionSettings = []*mcp.CallToolParams
+type MCPSettings struct {
+	ToolCalls []mcp.CallToolParams `json:"toolCalls,omitempty"`
+}
 
 type MCPClient struct {
 	baseURL string
@@ -28,32 +30,48 @@ type MCPClient struct {
 	client  *mcp.ClientSession
 }
 
-func NewMCPClient(ctx context.Context, baseURL string, headers map[string]string, transportType string) (*MCPClient, error) {
-	return createMCPClientWithRetry(ctx, baseURL, headers, transportType, 5, 120*time.Second)
+func NewMCPClient(ctx context.Context, baseURL string, headers map[string]string, transportType string, mcpSetting MCPSettings) (*MCPClient, error) {
+	log := logf.FromContext(ctx)
+
+	mcpClient, err := createMCPClientWithRetry(ctx, baseURL, headers, transportType, 5, 120*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(mcpSetting.ToolCalls) > 0 {
+		for _, setting := range mcpSetting.ToolCalls {
+			log.Info("Applying MCP tool call setting", "server", setting.Name, "arguments", setting.Arguments)
+			mcpClient.client.CallTool(ctx, &setting)
+		}
+	} else {
+		log.Info("No MCP tool call settings to apply")
+	}
+
+	return mcpClient, nil
 }
 
-func createSSEClient(baseURL string, headers map[string]string) (*mcp.Client, error) {
+func createSSEClient() (*mcp.Client, error) {
 	// SSE transport not yet supported in official SDK
 	// Fall back to HTTP streamable transport
-	return createHTTPClient(baseURL, headers)
+	return nil, fmt.Errorf("SSE transport not supported in MCP client")
 }
 
-func createHTTPClient(baseURL string, headers map[string]string) (*mcp.Client, error) {
+func createHTTPClient() (*mcp.Client, error) {
 	impl := &mcp.Implementation{
-		Name:    "ark-controller",
-		Version: "1.0.0",
+		Name:    arkv1alpha1.GroupVersion.Group,
+		Version: arkv1alpha1.GroupVersion.Version,
 	}
 
 	mcpClient := mcp.NewClient(impl, nil)
 	return mcpClient, nil
 }
 
-func createMCPClientByTransport(baseURL string, headers map[string]string, transportType string) (*mcp.Client, error) {
+func createMCPClientByTransport(transportType string) (*mcp.Client, error) {
 	switch transportType {
 	case "sse":
-		return createSSEClient(baseURL, headers)
+		return createSSEClient()
 	case "http":
-		return createHTTPClient(baseURL, headers)
+		return createHTTPClient()
 	default:
 		return nil, fmt.Errorf("unsupported transport type: %s", transportType)
 	}
@@ -87,7 +105,7 @@ func createTransport(baseURL string, headers map[string]string) mcp.Transport {
 	}
 
 	return &mcp.StreamableClientTransport{
-		Endpoint:   baseURL,
+		Endpoint:   baseURL + "/mcp",
 		HTTPClient: httpClient,
 		MaxRetries: 5,
 	}
@@ -124,7 +142,7 @@ func attemptMCPConnection(ctx, connectCtx context.Context, mcpClient *mcp.Client
 func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[string]string, transportType string, maxRetries int, timeout time.Duration) (*MCPClient, error) {
 	log := logf.FromContext(ctx)
 
-	mcpClient, err := createMCPClientByTransport(baseURL, headers, transportType)
+	mcpClient, err := createMCPClientByTransport(transportType)
 	if err != nil {
 		return nil, err
 	}
@@ -205,9 +223,8 @@ func (c *MCPClient) ListTools(ctx context.Context) ([]*mcp.Tool, error) {
 
 // MCP Tool Executor
 type MCPExecutor struct {
-	MCPClient   *MCPClient
-	ToolName    string
-	MCPSettings MCPSessionSettings
+	MCPClient *MCPClient
+	ToolName  string
 }
 
 func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall, recorder EventEmitter) (ToolResult, error) {
