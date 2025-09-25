@@ -781,7 +781,7 @@ function QueryDetailContent() {
                     Phase
                   </td>
                   <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                    {isNew ? "—" : (query.status?.phase || "draft")}
+                    {isNew ? "—" : query.status?.phase}
                   </td>
                 </tr>
                 <tr className="border-b border-gray-100 dark:border-gray-800">
@@ -963,7 +963,7 @@ function QueryDetailContent() {
               </div>
             ) : null}
             
-            {!isNew && (query.status?.phase === 'failed' || query.status?.phase === 'error') && (
+            {!isNew && (
             <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
               Note: Events expire after a certain amount of time and may no longer be available for viewing.
             </div>

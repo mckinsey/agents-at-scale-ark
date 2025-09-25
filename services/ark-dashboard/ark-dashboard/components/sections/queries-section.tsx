@@ -43,9 +43,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
   }));
 
   const getStatus = (query: QueryResponse) => {
-    const phase = (query.status as { phase?: string })?.phase;
-    if (!phase) return "draft";
-    return phase;
+    return (query.status as { phase?: string })?.phase || "—";
   };
 
   const {
