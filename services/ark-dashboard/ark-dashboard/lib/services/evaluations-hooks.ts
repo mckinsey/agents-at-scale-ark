@@ -1,15 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { evaluationsService } from "./evaluations";
 
-export const useGetAllEvaluationsWithDetails = ({
-  namespace,
-  enhanced = false
-}: {
-  namespace: string;
+type Props = {
   enhanced?: boolean;
-}) => {
+}
+
+export const useGetAllEvaluationsWithDetails = ({ enhanced = false }: Props) => {
   return useQuery({
-    queryKey: ["get-all-evaluations-with-details", namespace, enhanced],
+    queryKey: ["get-all-evaluations-with-details", enhanced],
     queryFn: async () => {
       try {
         // Try enhanced fetch first
@@ -18,7 +16,6 @@ export const useGetAllEvaluationsWithDetails = ({
         // Fallback to basic fetch
         return await evaluationsService.getAll();
       }
-    },
-    enabled: !!namespace
+    }
   });
 };

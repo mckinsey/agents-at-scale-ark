@@ -8,11 +8,7 @@ import { teamsService, agentsService, modelsService, type Team, type TeamCreateR
 import { TeamCard } from "@/components/cards"
 import { useDelayedLoading } from "@/lib/hooks"
 
-interface TeamsSectionProps {
-  namespace: string
-}
-
-export const TeamsSection = forwardRef<{ openAddEditor: () => void }, TeamsSectionProps>(function TeamsSection({ namespace }, ref) {
+export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function TeamsSection(_, ref) {
   const [teams, setTeams] = useState<Team[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
   const [models, setModels] = useState<Model[]>([])
@@ -49,7 +45,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }, TeamsSecti
     }
 
     loadData()
-  }, [namespace])
+  }, [])
 
   const handleSaveTeam = async (team: (TeamCreateRequest | TeamUpdateRequest) & { id?: string }) => {
     try {
@@ -129,7 +125,6 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }, TeamsSecti
                 models={models} 
                 onUpdate={handleSaveTeam}
                 onDelete={handleDeleteTeam}
-                namespace={namespace}
               />
             ))}
           </div>

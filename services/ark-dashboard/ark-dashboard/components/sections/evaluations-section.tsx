@@ -34,7 +34,6 @@ type EvaluationCreateRequest = components["schemas"]["EvaluationCreateRequest"];
 type EvaluationUpdateRequest = components["schemas"]["EvaluationUpdateRequest"];
 
 interface EvaluationsSectionProps {
-  namespace: string;
   initialQueryFilter?: string | null;
 }
 
@@ -89,7 +88,7 @@ const StatusDot = ({
 export const EvaluationsSection = forwardRef<
   { openAddEditor: () => void },
   EvaluationsSectionProps
->(function EvaluationsSection({ namespace, initialQueryFilter }, ref) {
+>(function EvaluationsSection({ initialQueryFilter }, ref) {
   const [evaluations, setEvaluations] = useState<
     (Evaluation | EvaluationDetailResponse)[]
   >([]);
@@ -126,7 +125,7 @@ export const EvaluationsSection = forwardRef<
     isError: listEvaluationsError,
     error: listEvaluationsErrorObject,
     refetch: loadEvaluations
-  } = useGetAllEvaluationsWithDetails({ namespace });
+  } = useGetAllEvaluationsWithDetails({});
 
   useEffect(() => {
     if (listEvaluationsData && !listEvaluationsError) {
@@ -913,7 +912,6 @@ export const EvaluationsSection = forwardRef<
         onOpenChange={setEditorOpen}
         evaluation={editingEvaluation}
         onSave={handleSaveEvaluation}
-        namespace={namespace}
       />
     </div>
   );

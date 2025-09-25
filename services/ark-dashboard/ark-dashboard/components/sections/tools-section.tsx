@@ -262,7 +262,6 @@ export const ToolsSection = forwardRef<
                               tool={tool}
                               onDelete={handleDelete}
                               onInfo={handleInfo}
-                              namespace={namespace}
                               deleteDisabled={toolData.inUse}
                               deleteDisabledReason={
                                 toolData.inUse

@@ -240,14 +240,12 @@ export function EvaluationEditor({
           ...(queryRef && {
             queryRef: {
               name: queryRef,
-              namespace,
               ...(targetRef && { responseTarget: `${targetType}:${targetRef}` })
             }
           })
         },
         evaluator: {
-          name: evaluatorRef,
-          namespace
+          name: evaluatorRef
         },
         ...(isEditing && { id: evaluation.name })
       }
