@@ -117,7 +117,7 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
   // Load events when URL params change
   useEffect(() => {
     // Create a filter string to compare
-    const filterString = JSON.stringify({ namespace, page, limit, type, kind, name });
+    const filterString = JSON.stringify({ page, limit, type, kind, name });
 
     // Only load if filters have actually changed
     if (lastLoadedFilters.current !== filterString) {

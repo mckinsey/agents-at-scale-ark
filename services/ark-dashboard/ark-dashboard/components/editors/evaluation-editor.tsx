@@ -121,7 +121,7 @@ export function EvaluationEditor({
       }
       loadData()
     }
-  }, [open, namespace])
+  }, [open])
 
   useEffect(() => {
     const loadEvaluationDetails = async () => {
@@ -175,7 +175,7 @@ export function EvaluationEditor({
     if (open) {
       loadEvaluationDetails()
     }
-  }, [evaluation, isEditing, namespace, open, initialEvaluator, initialQueryRef])
+  }, [evaluation, isEditing, open, initialEvaluator, initialQueryRef])
 
   const handleSubmit = async () => {
     if (!evaluatorRef) {

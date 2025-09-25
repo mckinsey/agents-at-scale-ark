@@ -160,7 +160,6 @@ export function AgentRow({
         models={models}
         teams={teams}
         onSave={onUpdate || (() => {})}
-        namespace={namespace}
       />
       {onDelete && (
         <ConfirmationDialog
