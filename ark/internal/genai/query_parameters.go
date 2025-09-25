@@ -165,7 +165,7 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 			case RoleSystem:
 				messages = append(messages, NewSystemMessage(msg.Content))
 			default:
-    			return nil, fmt.Errorf("unsupported message role: %s", msg.Role)
+				return nil, fmt.Errorf("unsupported message role: %s", msg.Role)
 			}
 		}
 		return messages, nil
