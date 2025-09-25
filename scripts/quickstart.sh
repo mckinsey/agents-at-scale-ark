@@ -46,6 +46,12 @@ quickstart() {
     version=$(cat version.txt | tr -d '\n')
     echo -e "${green}ark${nc} quickstart ${white}v${version}${nc}"
 
+    if [ "${FORCE:-false}" != true ]; then
+        echo -e "Using quickstart is deprecated. Use ${yellow}ark install${nc} instead."
+        echo -e "If you'd like to continue with quickstart, use ${yellow}make quickstart-force${nc} to continue."
+        exit 0
+    fi
+
     # Log environment configuration
     [ -n "${ARK_QUICKSTART_PROMPT_YES}" ] && echo "ARK_QUICKSTART_PROMPT_YES: ${ARK_QUICKSTART_PROMPT_YES}"
     [ -n "${ARK_QUICKSTART_MODEL_TYPE}" ] && echo "ARK_QUICKSTART_MODEL_TYPE: ${ARK_QUICKSTART_MODEL_TYPE}"
