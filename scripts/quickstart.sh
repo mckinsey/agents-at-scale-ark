@@ -7,6 +7,10 @@ set -e -o pipefail
 # Configuration
 ARK_CONTROLLER_NAME="ark-controller"
 
+# Common tool installation directories
+LOCAL_BIN_DIR="$HOME/.local/bin"
+SYSTEM_BIN_DIR="/usr/local/bin"
+
 # Colors for output
 green='\033[0;32m'
 red='\033[0;31m'
@@ -15,6 +19,63 @@ white='\033[1;37m'
 blue='\033[0;34m'
 purple='\033[0;35m'
 nc='\033[0m'
+
+# Helper function to check if a directory is in PATH
+is_in_path() {
+    local dir="$1"
+    case ":$PATH:" in
+        *:"$dir":*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Helper function to add directory to PATH if not present
+add_to_path() {
+    local dir="$1"
+    local shell_config="$2"
+    
+    if [ ! -d "$dir" ]; then
+        echo -e "${yellow}warning${nc}: Directory $dir does not exist, skipping PATH addition"
+        return 1
+    fi
+    
+    if ! is_in_path "$dir"; then
+        echo -e "${yellow}note${nc}: Adding $dir to PATH..."
+        export PATH="$dir:$PATH"
+        
+        # Update shell config file
+        if [ -n "$shell_config" ] && [ -f "$shell_config" ]; then
+            if ! grep -q "export PATH.*$dir" "$shell_config"; then
+                echo "export PATH=\"$dir:\$PATH\"" >> "$shell_config"
+                echo -e "${green}✔${nc} Added $dir to $shell_config"
+            fi
+        fi
+    fi
+}
+
+# Helper function to detect shell configuration file
+detect_shell_config() {
+    if [ -n "$ZSH_VERSION" ]; then
+        echo "$HOME/.zshrc"
+    elif [ -f "$HOME/.bash_profile" ]; then
+        echo "$HOME/.bash_profile"
+    else
+        echo "$HOME/.bashrc"
+    fi
+}
+
+# Ensure common tool directories are in PATH
+ensure_common_paths() {
+    local shell_config
+    shell_config=$(detect_shell_config)
+    
+    # Add local and system bin directories to PATH
+    add_to_path "$LOCAL_BIN_DIR" "$shell_config"
+    add_to_path "$SYSTEM_BIN_DIR" "$shell_config"
+    
+    # Add Java to PATH
+    add_to_path "/opt/homebrew/opt/openjdk/bin" "$shell_config"
+}
 
 # Helper function for prompts with auto-confirm support
 prompt_user() {
@@ -41,6 +102,9 @@ quickstart() {
         echo -e "${red}error${nc}: must run from project root directory"
         exit 1
     fi
+
+    # Ensure common paths are available
+    ensure_common_paths
 
     # Show version banner
     version=$(cat version.txt | tr -d '\n')
@@ -75,7 +139,6 @@ quickstart() {
     check_tool "fark" "make fark-build && make fark-install"
     check_tool "ark" "make ark-cli-install"
     check_tool "java" "brew install openjdk"
-    check_tool "java" "brew install openjdk" "java -version"
     check_optional_tool "k9s" "brew install k9s"
     check_optional_tool "chainsaw" "brew tap kyverno/chainsaw https://github.com/kyverno/chainsaw && brew install kyverno/chainsaw/chainsaw"
 
@@ -388,35 +451,59 @@ check_optional_tool() {
     fi
 }
 
+# Helper function to ensure tool is accessible after installation
+ensure_tool_in_path() {
+    local tool_name="$1"
+    local shell_config
+    shell_config=$(detect_shell_config)
+    
+    # Check common locations for the tool
+    for location in "$LOCAL_BIN_DIR/$tool_name" "$SYSTEM_BIN_DIR/$tool_name"; do
+        if [ -x "$location" ]; then
+            local dir
+            dir=$(dirname "$location")
+            add_to_path "$dir" "$shell_config"
+            return 0
+        fi
+    done
+    
+    echo -e "${yellow}warning${nc}: Could not find $tool_name in expected locations"
+    return 1
+}
+
 # Helper function to check and optionally install tools
 check_tool() {
     local tool_name="$1"
     local install_cmd="$2"
     local check_cmd="${3:-$tool_name}"
 
-    # set command_flags to have "-v" if check_cmd has no spaces
-    local command_flags=(); ! (echo "$check_cmd" | grep -q ' ') && command_flags=("-v")
-
-    if command $command_flags $check_cmd > /dev/null 2>&1; then
+    # Check if tool is available in PATH
+    if command -v "$check_cmd" > /dev/null 2>&1; then
         echo -e "${green}✔${nc} $tool_name installed"
         return 0
-    else
-        echo -e "${yellow}warning${nc}: $tool_name not found"
-        if prompt_yes_no "install $tool_name? (Y/n): "; then
-            echo "installing $tool_name..."
-            if eval "$install_cmd" > /dev/null 2>&1; then
-                echo -e "${green}✔${nc} $tool_name installed successfully"
-                return 0
-            else
-                echo -e "${red}error${nc}: failed to install $tool_name"
-                echo "install manually with: $install_cmd"
-                exit 1
+    fi
+
+    echo -e "${yellow}warning${nc}: $tool_name not found"
+    if prompt_yes_no "install $tool_name? (Y/n): "; then
+        echo "installing $tool_name..."
+        if eval "$install_cmd" > /dev/null 2>&1; then
+            echo -e "${green}✔${nc} $tool_name installed successfully"
+            
+            # Post-installation PATH check and fix
+            if [ "$tool_name" = "fark" ] || [ "$tool_name" = "ark" ]; then
+                ensure_tool_in_path "$tool_name"
             fi
+            
+            return 0
         else
-            echo -e "${red}error${nc}: $tool_name is required for development"
-            echo "install with: $install_cmd"
+            echo -e "${red}error${nc}: failed to install $tool_name"
+            echo "install manually with: $install_cmd"
             exit 1
         fi
+    else
+        echo -e "${red}error${nc}: $tool_name is required for development"
+        echo "install with: $install_cmd"
+        exit 1
     fi
 }
 
@@ -424,53 +511,33 @@ check_tool() {
 build_and_install_fark() {
     echo "building and installing fark CLI tool..."
     
-    # Check if we have the fark service directory
     if [ ! -d "tools/fark" ]; then
         echo -e "${yellow}warning${nc}: fark service directory not found"
-        echo "skipping fark installation"
         return 0
     fi
     
-    echo "building fark CLI tool..."
     if (make fark-build) > /dev/null 2>&1; then
         echo -e "${green}✔${nc} fark built successfully"
         
-        mkdir -p "$HOME/.local/bin" 2>/dev/null || true
+        mkdir -p "$LOCAL_BIN_DIR" 2>/dev/null || true
         
-        if cp out/fark/fark "$HOME/.local/bin/fark" > /dev/null 2>&1 && chmod +x "$HOME/.local/bin/fark" > /dev/null 2>&1; then
-            echo -e "${green}✔${nc} fark installed to $HOME/.local/bin/fark"
-            
-            if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
-                echo ""
-                echo -e "${yellow}note${nc}: Please add $HOME/.local/bin to your PATH if not already added:"
-                echo '  export PATH="$HOME/.local/bin:$PATH"'
-
-                export PATH="$HOME/.local/bin:$PATH"
-                echo -e "${green}✔${nc} Added to PATH for this session"
-            fi
+        if cp out/fark/fark "$LOCAL_BIN_DIR/fark" > /dev/null 2>&1 && chmod +x "$LOCAL_BIN_DIR/fark" > /dev/null 2>&1; then
+            echo -e "${green}✔${nc} fark installed to $LOCAL_BIN_DIR/fark"
+            add_to_path "$LOCAL_BIN_DIR" "$(detect_shell_config)"
             return 0
         else
-            echo -e "${yellow}warning${nc}: failed to install fark to $HOME/.local/bin"
-            
-            if cp out/fark/fark /usr/local/bin/fark > /dev/null 2>&1 && chmod +x /usr/local/bin/fark > /dev/null 2>&1; then
-                echo -e "${green}✔${nc} fark installed to /usr/local/bin"
+            echo -e "${yellow}warning${nc}: failed to install fark to $LOCAL_BIN_DIR"
+            if cp out/fark/fark "$SYSTEM_BIN_DIR/fark" > /dev/null 2>&1 && chmod +x "$SYSTEM_BIN_DIR/fark" > /dev/null 2>&1; then
+                echo -e "${green}✔${nc} fark installed to $SYSTEM_BIN_DIR"
+                add_to_path "$SYSTEM_BIN_DIR" "$(detect_shell_config)"
                 return 0
             else
-                if sudo cp out/fark/fark /usr/local/bin/fark > /dev/null 2>&1 && sudo chmod +x /usr/local/bin/fark > /dev/null 2>&1; then
-                    echo -e "${green}✔${nc} fark installed to /usr/local/bin (with sudo)"
-                    return 0
-                else
-                    echo -e "${yellow}warning${nc}: failed to install fark"
-                    echo "you can manually copy with one of these commands:"
-                    echo "  mkdir -p \$HOME/.local/bin && cp out/fark/fark \$HOME/.local/bin/fark && chmod +x \$HOME/.local/bin/fark"
-                    echo "  sudo cp out/fark/fark /usr/local/bin/fark && sudo chmod +x /usr/local/bin/fark"
-                    return 1
-                fi
+                echo -e "${red}error${nc}: failed to install fark"
+                return 1
             fi
         fi
     else
         echo -e "${yellow}warning${nc}: failed to build fark"
-        echo "you can build manually with: make fark-build"
         return 1
     fi
 }
