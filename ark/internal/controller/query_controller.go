@@ -587,10 +587,7 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 	}
 
 	// Execute agent with the last message as the current input and previous messages as context
-	currentMessage := inputMessages[len(inputMessages)-1]
-	contextMessages := make([]genai.Message, 0, len(memoryMessages)+len(inputMessages)-1)
-	contextMessages = append(contextMessages, memoryMessages...)
-	contextMessages = append(contextMessages, inputMessages[:len(inputMessages)-1]...)
+	currentMessage, contextMessages := genai.PrepareExecutionMessages(inputMessages, memoryMessages)
 
 	responseMessages, err := agent.Execute(ctx, currentMessage, contextMessages)
 	if err != nil {
@@ -598,9 +595,7 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 	}
 
 	// Save all new messages (input + response) to memory
-	newMessages := make([]genai.Message, 0, len(inputMessages)+len(responseMessages))
-	newMessages = append(newMessages, inputMessages...)
-	newMessages = append(newMessages, responseMessages...)
+	newMessages := genai.PrepareNewMessagesForMemory(inputMessages, responseMessages)
 	if err := memory.AddMessages(ctx, query.Name, newMessages); err != nil {
 		return nil, fmt.Errorf("failed to save new messages to memory: %w", err)
 	}
@@ -627,10 +622,7 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 	}
 
 	// Execute team with the last message as the current input and previous messages as context
-	currentMessage := inputMessages[len(inputMessages)-1]
-	contextMessages := make([]genai.Message, 0, len(historyMessages)+len(inputMessages)-1)
-	contextMessages = append(contextMessages, historyMessages...)
-	contextMessages = append(contextMessages, inputMessages[:len(inputMessages)-1]...)
+	currentMessage, contextMessages := genai.PrepareExecutionMessages(inputMessages, historyMessages)
 
 	responseMessages, err := team.Execute(ctx, currentMessage, contextMessages)
 	if err != nil {
@@ -638,9 +630,7 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 	}
 
 	// Save all new messages (input + response) to memory
-	newMessages := make([]genai.Message, 0, len(inputMessages)+len(responseMessages))
-	newMessages = append(newMessages, inputMessages...)
-	newMessages = append(newMessages, responseMessages...)
+	newMessages := genai.PrepareNewMessagesForMemory(inputMessages, responseMessages)
 	if err := memory.AddMessages(ctx, query.Name, newMessages); err != nil {
 		return nil, fmt.Errorf("failed to save new messages to memory: %w", err)
 	}
@@ -667,9 +657,7 @@ func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Qu
 	}
 
 	// Append all input messages to conversation history
-	allMessages := make([]genai.Message, 0, len(historyMessages)+len(inputMessages))
-	allMessages = append(allMessages, historyMessages...)
-	allMessages = append(allMessages, inputMessages...)
+	allMessages := genai.PrepareModelMessages(inputMessages, historyMessages)
 
 	// Create operation tracker for the model call
 	modelTracker := genai.NewOperationTracker(tokenCollector, ctx, "ModelCall", modelName, map[string]string{
@@ -702,9 +690,7 @@ func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Qu
 	responseMessages := []genai.Message{assistantMessage}
 
 	// Save all new messages (input + response) to memory
-	newMessages := make([]genai.Message, 0, len(inputMessages)+len(responseMessages))
-	newMessages = append(newMessages, inputMessages...)
-	newMessages = append(newMessages, responseMessages...)
+	newMessages := genai.PrepareNewMessagesForMemory(inputMessages, responseMessages)
 	if err := memory.AddMessages(ctx, query.Name, newMessages); err != nil {
 		return nil, fmt.Errorf("failed to save new messages to memory: %w", err)
 	}
