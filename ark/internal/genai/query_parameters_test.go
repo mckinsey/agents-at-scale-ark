@@ -187,37 +187,34 @@ func TestGetQueryInputMessages(t *testing.T) {
 		assert.Equal(t, "Hello!", messages[1].OfUser.Content.OfString.Value)
 	})
 
-	t.Run("messages type with unknown role defaults to user", func(t *testing.T) {
-		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+       t.Run("messages type with unknown role returns error", func(t *testing.T) {
+	       k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-		query := arkv1alpha1.Query{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-query",
-				Namespace: "test-ns",
-			},
-			Spec: arkv1alpha1.QuerySpec{
-				Type: "messages",
-			},
-		}
+	       query := arkv1alpha1.Query{
+		       ObjectMeta: metav1.ObjectMeta{
+			       Name:      "test-query",
+			       Namespace: "test-ns",
+		       },
+		       Spec: arkv1alpha1.QuerySpec{
+			       Type: "messages",
+		       },
+	       }
 
-		// Set the messages using the RawExtension helper
-		inputMessages := []arkv1alpha1.Message{
-			{
-				Role:    "unknown-role",
-				Content: "This should become a user message",
-			},
-		}
-		err := query.Spec.SetInputMessages(inputMessages)
-		require.NoError(t, err)
+	       // Set the messages using the RawExtension helper
+	       inputMessages := []arkv1alpha1.Message{
+		       {
+			       Role:    "unknown-role",
+			       Content: "This should become a user message",
+		       },
+	       }
+	       err := query.Spec.SetInputMessages(inputMessages)
+	       require.NoError(t, err)
 
-		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
-		require.NoError(t, err)
-		require.Len(t, messages, 1)
-
-		// Check that unknown role defaults to user
-		assert.NotNil(t, messages[0].OfUser)
-		assert.Equal(t, "This should become a user message", messages[0].OfUser.Content.OfString.Value)
-	})
+	       messages, err := GetQueryInputMessages(ctx, query, k8sClient)
+	       require.Error(t, err)
+	       assert.Contains(t, err.Error(), "unsupported message role: unknown-role")
+	       assert.Nil(t, messages)
+       })
 
 	t.Run("empty type defaults to user", func(t *testing.T) {
 		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
