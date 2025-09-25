@@ -36,7 +36,6 @@ type EvaluationUpdateRequest = components["schemas"]["EvaluationUpdateRequest"]
 
 interface QueryEvaluationActionsProps {
   queryName: string
-  namespace: string
 }
 
 const getStatusConfig = (status: QueryEvaluationSummary['status']) => {
@@ -54,7 +53,7 @@ const getStatusConfig = (status: QueryEvaluationSummary['status']) => {
   }
 }
 
-export function QueryEvaluationActions({ queryName, namespace }: QueryEvaluationActionsProps) {
+export function QueryEvaluationActions({ queryName }: QueryEvaluationActionsProps) {
   const [summary, setSummary] = useState<QueryEvaluationSummary | null>(null)
   const [evaluators, setEvaluators] = useState<Evaluator[]>([])
   const [loading, setLoading] = useState(true)
@@ -80,7 +79,7 @@ export function QueryEvaluationActions({ queryName, namespace }: QueryEvaluation
     }
 
     loadData()
-  }, [queryName, namespace])
+  }, [queryName])
 
   const handleViewEvaluations = () => {
     router.push(`/evaluations&query=${encodeURIComponent(queryName)}`)
@@ -216,7 +215,6 @@ export function QueryEvaluationActions({ queryName, namespace }: QueryEvaluation
         onOpenChange={setEditorOpen}
         evaluation={null}
         onSave={handleSaveEvaluation}
-        namespace={namespace}
         initialEvaluator={selectedEvaluator}
         initialQueryRef={queryName}
       />

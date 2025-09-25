@@ -6,6 +6,7 @@ from fastapi import APIRouter, Query
 from kubernetes_asyncio import client
 from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio.client.rest import ApiException
+from ark_sdk.k8s import get_context
 
 from ...models.events import EventListResponse, EventResponse, event_to_response
 from .exceptions import handle_k8s_errors
@@ -79,7 +80,6 @@ async def list_events(
         EventListResponse: List of events in the namespace
     """
     if namespace is None:
-        from ark_sdk.k8s import get_context
         namespace = get_context()["namespace"]
 
     async with ApiClient() as api_client:
@@ -129,7 +129,6 @@ async def get_event(
         EventResponse: The requested event details
     """
     if namespace is None:
-        from ark_sdk.k8s import get_context
         namespace = get_context()["namespace"]
 
     async with ApiClient() as api_client:

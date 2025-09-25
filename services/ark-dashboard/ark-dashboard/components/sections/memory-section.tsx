@@ -27,12 +27,10 @@ import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { Database, MessageSquare, ChevronDown } from "lucide-react";
 
 interface MemorySectionProps {
-  readonly namespace: string;
   readonly initialFilters?: Partial<MemoryFilters>;
 }
 
 export function MemorySection({
-  namespace: _namespace,
   initialFilters
 }: MemorySectionProps) {
   const router = useRouter();

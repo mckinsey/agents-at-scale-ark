@@ -1,7 +1,6 @@
 "use client"
 
 import { AgentsSection } from "@/components/sections/agents-section"
-import { useSearchParams } from "next/navigation"
 import { Suspense, useRef } from "react"
 import {
   Breadcrumb,
@@ -15,8 +14,6 @@ import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 
 function AgentsContent() {
-  const searchParams = useSearchParams()
-  const namespace = searchParams.get("namespace") || "default"
   const agentsSectionRef = useRef<{ openAddEditor: () => void }>(null)
 
   return (
@@ -39,7 +36,7 @@ function AgentsContent() {
         </div>
       </header>
       <div className="flex flex-1 flex-col">
-        <AgentsSection ref={agentsSectionRef} namespace={namespace} />
+        <AgentsSection ref={agentsSectionRef} />
       </div>
     </>
   )

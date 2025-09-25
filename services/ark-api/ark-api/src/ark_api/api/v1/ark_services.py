@@ -7,6 +7,7 @@ from fastapi import APIRouter, Query, HTTPException
 from kubernetes_asyncio import client
 from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio.client.rest import ApiException
+from ark_sdk.k8s import get_context
 
 from ...models.ark_services import (
     ArkService,
@@ -145,7 +146,6 @@ async def list_ark_services(
         ArkServiceListResponse: List of ARK services in the namespace
     """
     if namespace is None:
-        from ark_sdk.k8s import get_context
         namespace = get_context()["namespace"]
 
     helm_releases = await get_helm_releases(namespace)

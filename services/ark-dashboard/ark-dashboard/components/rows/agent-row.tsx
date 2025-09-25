@@ -33,7 +33,6 @@ interface AgentRowProps {
     agent: (AgentCreateRequest | AgentUpdateRequest) & { id?: string }
   ) => void;
   readonly   onDelete?: (id: string) => void;
-  readonly   namespace: string;
 }
 
 export function AgentRow({
@@ -41,8 +40,7 @@ export function AgentRow({
   teams,
   models,
   onUpdate,
-  onDelete,
-  namespace
+  onDelete
 }: AgentRowProps) {
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(agent.name);
@@ -141,7 +139,7 @@ export function AgentRow({
                   size="sm"
                   className={cn("h-8 w-8 p-0", isChatOpen && "text-primary")}
                   onClick={() =>
-                    toggleFloatingChat(agent.name, "agent", namespace)
+                    toggleFloatingChat(agent.name, "agent")
                   }
                 >
                   <MessageCircle

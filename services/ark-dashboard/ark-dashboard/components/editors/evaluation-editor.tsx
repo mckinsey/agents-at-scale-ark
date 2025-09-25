@@ -48,7 +48,6 @@ interface EvaluationEditorProps {
   onSave: (
     evaluation: (EvaluationCreateRequest | EvaluationUpdateRequest) & { id?: string }
   ) => void
-  namespace: string
   initialEvaluator?: string
   initialQueryRef?: string
 }
@@ -58,7 +57,6 @@ export function EvaluationEditor({
   onOpenChange,
   evaluation,
   onSave,
-  namespace,
   initialEvaluator,
   initialQueryRef
 }: EvaluationEditorProps) {

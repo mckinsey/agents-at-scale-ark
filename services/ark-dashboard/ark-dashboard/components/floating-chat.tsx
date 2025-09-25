@@ -22,13 +22,12 @@ interface FloatingChatProps {
   id: string
   name: string
   type: ChatType
-  namespace: string
   position: number
   onClose: () => void
 }
 
 
-export default function FloatingChat({ name, type, namespace, position, onClose }: FloatingChatProps) {
+export default function FloatingChat({ name, type, position, onClose }: FloatingChatProps) {
   const [chatMessages, setChatMessages] = useState<ChatMessageData[]>([])
   const [currentMessage, setCurrentMessage] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)

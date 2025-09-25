@@ -26,7 +26,6 @@ interface AgentCardProps {
     agent: (AgentCreateRequest | AgentUpdateRequest) & { id?: string }
   ) => void;
   onDelete?: (id: string) => void;
-  namespace: string;
 }
 
 export function AgentCard({
@@ -34,8 +33,7 @@ export function AgentCard({
   teams,
   models,
   onUpdate,
-  onDelete,
-  namespace
+  onDelete
 }: AgentCardProps) {
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(agent.name);
@@ -73,7 +71,7 @@ export function AgentCard({
   actions.push({
     icon: MessageCircle,
     label: "Chat with agent",
-    onClick: () => toggleFloatingChat(agent.name, "agent", namespace),
+    onClick: () => toggleFloatingChat(agent.name, "agent"),
     className: isChatOpen ? "fill-current" : ""
   });
 
@@ -96,7 +94,6 @@ export function AgentCard({
               eventsLink={{
                 href: "/events",
                 query: {
-                  namespace,
                   kind: 'Agent',
                   name: agent.name,
                   page: 1
@@ -113,7 +110,6 @@ export function AgentCard({
         models={models}
         teams={teams}
         onSave={onUpdate || (() => {})}
-        namespace={namespace}
       />
       {onDelete && (
         <ConfirmationDialog

@@ -19,14 +19,10 @@ import { useDelayedLoading } from "@/lib/hooks";
 import { AgentRow } from "@/components/rows/agent-row";
 import { ToggleSwitch, type ToggleOption } from "@/components/ui/toggle-switch";
 
-interface AgentsSectionProps {
-  namespace: string;
-}
-
 export const AgentsSection = forwardRef<
   { openAddEditor: () => void },
-  AgentsSectionProps
->(function AgentsSection({ namespace }, ref) {
+  object
+>(function AgentsSection({}, ref) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [models, setModels] = useState<Model[]>([]);
@@ -72,7 +68,7 @@ export const AgentsSection = forwardRef<
     };
 
     loadData();
-  }, [namespace]);
+  }, []);
 
   const handleSaveAgent = async (
     agent: (AgentCreateRequest | AgentUpdateRequest) & { id?: string }
@@ -171,7 +167,6 @@ export const AgentsSection = forwardRef<
                   models={models}
                   onUpdate={handleSaveAgent}
                   onDelete={handleDeleteAgent}
-                  namespace={namespace}
                 />
               ))}
             </div>
@@ -188,7 +183,6 @@ export const AgentsSection = forwardRef<
                   models={models}
                   onUpdate={handleSaveAgent}
                   onDelete={handleDeleteAgent}
-                  namespace={namespace}
                 />
               ))}
             </div>
@@ -203,7 +197,6 @@ export const AgentsSection = forwardRef<
         models={models}
         teams={teams}
         onSave={handleSaveAgent}
-        namespace={namespace}
       />
     </>
   );

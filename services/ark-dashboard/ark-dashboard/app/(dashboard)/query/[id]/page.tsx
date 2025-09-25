@@ -296,7 +296,6 @@ function QueryDetailContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const queryId = params.id as string
-  const namespace = searchParams.get("namespace") || "default"
   const targetTool = searchParams.get("target_tool")
   const isNew = queryId === 'new'
   const mode = isNew ? 'new' : 'view'
@@ -455,7 +454,7 @@ function QueryDetailContent() {
       // For new queries, initialize with empty object
       setQuery({
         name: '',
-        namespace: namespace,
+        namespace: '',
         input: '',
         targets: [],
         status: null
@@ -529,7 +528,7 @@ function QueryDetailContent() {
     }
 
     loadQuery()
-  }, [namespace, queryId, isNew, targetTool])
+  }, [queryId, isNew, targetTool])
 
   // Fetch tool schema when exactly one tool is selected
   useEffect(() => {
@@ -543,7 +542,7 @@ function QueryDetailContent() {
     } else {
       setToolSchema(null)
     }
-  }, [query?.targets, namespace])
+  }, [query?.targets])
 
   if (loading) {
     return (
@@ -586,9 +585,8 @@ function QueryDetailContent() {
         </Breadcrumb>
         <div className="ml-auto flex gap-2">
           {!isNew && (
-            <QueryEvaluationActions 
-              queryName={queryId} 
-              namespace={namespace} 
+            <QueryEvaluationActions
+              queryName={queryId}
             />
           )}
           {isNew && (
@@ -954,10 +952,9 @@ function QueryDetailContent() {
                   </div>
                 </div>
                 <div className="p-3">
-                  <ErrorResponseContent 
+                  <ErrorResponseContent
                     query={query}
                     viewMode={errorViewMode}
-                    namespace={namespace}
                   />
                 </div>
               </div>
