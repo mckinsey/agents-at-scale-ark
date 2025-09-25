@@ -781,7 +781,7 @@ function QueryDetailContent() {
                     Phase
                   </td>
                   <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                    {query.status?.phase || "pending"}
+                    {isNew ? "—" : (query.status?.phase || "draft")}
                   </td>
                 </tr>
                 <tr className="border-b border-gray-100 dark:border-gray-800">
@@ -926,8 +926,7 @@ function QueryDetailContent() {
                   ))}
                 </div>
               </div>
-            ) : (
-              /* Error Section - show when there's an error or no responses */
+            ) : !isNew && (query.status?.phase === 'failed' || query.status?.phase === 'error') ? (
               <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
                 <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
                   <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Error</h3>
@@ -962,11 +961,13 @@ function QueryDetailContent() {
                   />
                 </div>
               </div>
-            )}
+            ) : null}
             
+            {!isNew && (query.status?.phase === 'failed' || query.status?.phase === 'error') && (
             <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
               Note: Events expire after a certain amount of time and may no longer be available for viewing.
             </div>
+            )}
           </div>
         </ScrollArea>
       </div>
