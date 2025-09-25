@@ -133,13 +133,8 @@ quickstart() {
     # Check ark controller status, will warn the user if not deployed.
     check_ark_controller
 
-    # Webhook health check
-    echo "testing webhook connectivity..."
-    if ! kubectl get agent sample-agent >/dev/null 2>&1; then
-        echo -e "${yellow}warning${nc}: webhook may not be ready, restarting controller..."
-        kubectl delete pod -l app.kubernetes.io/name=ark-controller -n ark-system
-        kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=ark-controller -n ark-system --timeout=60s
-    fi
+    # Wait for webhook to be ready
+    sleep 5
 
     # Check for default model (cluster is now running and kubectl should work)
     if kubectl get model default >/dev/null 2>&1; then
@@ -516,6 +511,8 @@ check_ark_controller() {
             # Wait for controller to be ready before webhook validation can work
             kubectl wait --for=condition=available deployment/${ARK_CONTROLLER_NAME} -n ark-system --timeout=300s
             echo -e "${green}✔${nc} ark controller deployed"
+            # Wait for webhook server to fully initialize
+            sleep 10
         else
             echo -e "${yellow}warning${nc}: skipping ark controller deployment"
         fi
