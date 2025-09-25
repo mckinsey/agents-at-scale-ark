@@ -13,6 +13,7 @@ import asyncio
 from typing import List, Optional, Dict, Any, TypeVar, Generic, Type
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
+from ark_sdk.k8s import get_context
 import yaml
 import json
 
@@ -251,6 +252,5 @@ class _ARKClient:
 
     def __init__(self, namespace: Optional[str] = None):
         if namespace is None:
-            from ark_sdk.k8s import get_context
             namespace = get_context()["namespace"]
         self.namespace = namespace
