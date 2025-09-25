@@ -630,7 +630,7 @@ function QueryDetailContent() {
             <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Query</h3>
-                <a href={`/events&kind=Query&name=${query.name}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+                <a href={`/events?kind=Query&name=${query.name}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
                   View Events
                 </a>
               </div>
