@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	// QueryTypeUser represents a query with string input
+	// QueryTypeUser represents a query with string input that gets converted to a single message with role="user"
 	QueryTypeUser = "user"
-	// QueryTypeMessages represents a query with Message array input
+	// QueryTypeMessages represents a query with an array of Message objects, each with explicit role and content
 	QueryTypeMessages = "messages"
 )
 
