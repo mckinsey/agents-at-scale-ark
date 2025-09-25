@@ -119,26 +119,13 @@ export interface paths {
         };
         /**
          * List Secrets
-         * @description List all Kubernetes secrets in a namespace.
-         *
-         *     Args:
-         *         namespace: The namespace to list secrets from
-         *
-         *     Returns:
-         *         SecretListResponse: List of all secrets in the namespace
+         * @description List all secrets in namespace using ark-sdk.
          */
         get: operations["list_secrets_v1_namespaces__namespace__secrets_get"];
         put?: never;
         /**
          * Create Secret
-         * @description Create a new Kubernetes secret.
-         *
-         *     Args:
-         *         namespace: The namespace to create the secret in
-         *         body: The secret creation request
-         *
-         *     Returns:
-         *         SecretDetailResponse: The created secret details
+         * @description Create a new secret using ark-sdk.
          */
         post: operations["create_secret_v1_namespaces__namespace__secrets_post"];
         delete?: never;
@@ -156,37 +143,18 @@ export interface paths {
         };
         /**
          * Get Secret
-         * @description Get a specific Kubernetes secret by name.
-         *
-         *     Args:
-         *         namespace: The namespace to get the secret from
-         *         secret_name: The name of the secret
-         *
-         *     Returns:
-         *         SecretDetailResponse: The secret details with total data length
+         * @description Get a specific secret using ark-sdk.
          */
         get: operations["get_secret_v1_namespaces__namespace__secrets__secret_name__get"];
         /**
          * Update Secret
-         * @description Update a Kubernetes secret by name.
-         *
-         *     Args:
-         *         namespace: The namespace containing the secret
-         *         secret_name: The name of the secret
-         *         body: The secret update request
-         *
-         *     Returns:
-         *         SecretDetailResponse: The updated secret details
+         * @description Update a secret using ark-sdk.
          */
         put: operations["update_secret_v1_namespaces__namespace__secrets__secret_name__put"];
         post?: never;
         /**
          * Delete Secret
-         * @description Delete a Kubernetes secret by name.
-         *
-         *     Args:
-         *         namespace: The namespace containing the secret
-         *         secret_name: The name of the secret
+         * @description Delete a secret using ark-sdk.
          */
         delete: operations["delete_secret_v1_namespaces__namespace__secrets__secret_name__delete"];
         options?: never;
@@ -2256,6 +2224,8 @@ export interface components {
             message: {
                 [key: string]: unknown;
             };
+            /** Sequence */
+            sequence?: number | null;
         };
         /**
          * MemoryResponse
@@ -3514,11 +3484,13 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": unknown;
+                };
             };
             /** @description Validation Error */
             422: {
