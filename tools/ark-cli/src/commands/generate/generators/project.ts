@@ -17,7 +17,7 @@ import {
   CLI_CONFIG,
 } from '../config.js';
 import {SecurityUtils} from '../../../lib/security.js';
-import {EnhancedPrompts, ProgressIndicator} from '../../../lib/progress.js';
+import ora from 'ora';
 
 interface ProjectConfig {
   name: string;
@@ -98,75 +98,48 @@ class ProjectGenerator {
     destination: string,
     options: GeneratorOptions
   ): Promise<void> {
-    const progress = new ProgressIndicator('ARK Agent Project Generator');
-
-    // Add steps to progress indicator
-    progress.addStep('prerequisites', 'Checking prerequisites');
-    progress.addStep('configuration', 'Gathering project configuration');
-    if (!options.skipModels) {
-      progress.addStep('models', 'Configuring model providers');
-    }
-    if (!options.skipGit) {
-      progress.addStep('git', 'Setting up git repository');
-    }
-    progress.addStep('generation', 'Generating project files');
-    progress.addStep('completion', 'Finalizing project setup');
+    console.log(chalk.blue(`\n🚀 ARK Agent Project Generator\n`));
+    const spinner = ora('Checking prerequisites').start();
 
     try {
       // Check prerequisites
-      progress.startStep('prerequisites');
       await this.checkPrerequisites();
-      progress.completeStep('prerequisites', 'Prerequisites validated');
+      spinner.succeed('Prerequisites validated');
 
       // Get project configuration
-      progress.startStep('configuration');
+      spinner.start('Gathering project configuration');
       const config = await this.getProjectConfig(name, destination, options);
-      progress.completeStep(
-        'configuration',
-        `Project "${config.name}" configured`
-      );
+      spinner.succeed(`Project "${config.name}" configured`);
 
       // Discover and configure models (only if not skipped)
       if (config.configureModels) {
-        progress.startStep('models');
+        spinner.start('Configuring model providers');
         await this.configureModels(config);
-        progress.completeStep(
-          'models',
-          `Model provider: ${config.selectedModels || 'none'}`
-        );
-      } else {
-        progress.skipStep('models', 'Model configuration skipped');
+        spinner.succeed(`Model provider: ${config.selectedModels || 'none'}`);
       }
 
       // Configure git if requested (only if not skipped)
       if (config.initGit) {
-        progress.startStep('git');
+        spinner.start('Setting up git repository');
         await this.configureGit(config);
-        progress.completeStep('git', 'Git repository configured');
-      } else {
-        progress.skipStep('git', 'Git setup skipped');
+        spinner.succeed('Git repository configured');
       }
 
       // Generate the project
-      progress.startStep('generation');
+      spinner.start('Generating project files');
       await this.generateProject(config);
-      progress.completeStep('generation', 'Project files created');
+      spinner.succeed('Project files created');
 
       // Finalize
-      progress.startStep('completion');
+      spinner.start('Finalizing project setup');
       this.showNextSteps(config);
-      progress.completeStep('completion', 'Project ready');
+      spinner.succeed('Project ready');
 
-      progress.complete('Project generation');
+      console.log(chalk.green(`\n✅ Project generation completed\n`));
     } catch (error) {
-      // Find the current step and mark it as failed
-      const currentStep = progress['steps'].find((s) => s.status === 'running');
-      if (currentStep) {
-        progress.failStep(
-          currentStep.name,
-          `Failed: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
+      spinner.fail(
+        `Failed: ${error instanceof Error ? error.message : String(error)}`
+      );
       throw error;
     }
   }
@@ -180,8 +153,10 @@ class ProjectGenerator {
       requirements.push({tool: 'git', available: true, required: false});
     } catch {
       requirements.push({tool: 'git', available: false, required: false});
-      EnhancedPrompts.showWarning(
-        'Git not found - git features will be disabled'
+      console.log(
+        chalk.yellow(
+          '⚠️  Warning: Git not found - git features will be disabled'
+        )
       );
     }
 
@@ -200,11 +175,15 @@ class ProjectGenerator {
     }
 
     if (missingDeploymentTools.length > 0) {
-      EnhancedPrompts.showInfo(
-        `Optional tools not found: ${missingDeploymentTools.join(', ')}`
+      console.log(
+        chalk.blue(
+          `ℹ️  Optional tools not found: ${missingDeploymentTools.join(', ')}`
+        )
       );
-      EnhancedPrompts.showTip(
-        'Install kubectl and helm later to deploy your project to a cluster'
+      console.log(
+        chalk.cyan(
+          '💡 Tip: Install kubectl and helm later to deploy your project to a cluster'
+        )
       );
     }
   }
@@ -214,7 +193,9 @@ class ProjectGenerator {
     destination: string,
     options: GeneratorOptions
   ): Promise<ProjectConfig> {
-    EnhancedPrompts.showSeparator('Project Configuration');
+    console.log(chalk.gray(`\n${'─'.repeat(50)}`));
+    console.log(chalk.cyan('Project Configuration'));
+    console.log(chalk.gray(`${'─'.repeat(50)}\n`));
 
     // Use command line options if provided, otherwise prompt
     let projectType = options.projectType;
