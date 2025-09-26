@@ -254,6 +254,17 @@
         "doc",
         "code"
       ]
+    },
+    {
+      "login": "amanvr",
+      "name": "Aman Ramkumar",
+      "avatar_url": "https://avatars.githubusercontent.com/u/12898227?v=4",
+      "profile": "https://github.com/amanvr",
+      "contributions": [
+        "code",
+        "bug",
+        "doc"
+      ]
     }
   ],
   "contributorsPerLine": 7,
