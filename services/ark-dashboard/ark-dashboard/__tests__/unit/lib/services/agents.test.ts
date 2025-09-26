@@ -14,7 +14,6 @@ vi.mock('@/lib/api/client', () => ({
 }))
 
 describe('agentsService', () => {
-  const namespace = 'test-namespace'
   const mockAgent: AgentDetailResponse = {
     name: 'test-agent',
     displayName: 'Test Agent',
@@ -42,11 +41,11 @@ describe('agentsService', () => {
       vi.mocked(apiClient.get).mockResolvedValueOnce({ ...mockAgent, name: 'agent1' })
       vi.mocked(apiClient.get).mockResolvedValueOnce({ ...mockAgent, name: 'agent2' })
 
-      const result = await agentsService.getAll(namespace)
+      const result = await agentsService.getAll()
 
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/namespaces/${namespace}/agents`)
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/namespaces/${namespace}/agents/agent1`)
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/namespaces/${namespace}/agents/agent2`)
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents`)
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents/agent1`)
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents/agent2`)
       
       expect(result).toHaveLength(2)
       expect(result[0]).toMatchObject({ id: 'agent1', name: 'agent1' })
@@ -58,10 +57,10 @@ describe('agentsService', () => {
     it('should fetch agent by name and add id field', async () => {
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockAgent)
 
-      const result = await agentsService.getByName(namespace, 'test-agent')
+      const result = await agentsService.getByName('test-agent')
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        `/api/v1/namespaces/${namespace}/agents/test-agent`
+        `/api/v1/agents/test-agent`
       )
       expect(result).toMatchObject({
         ...mockAgent,
@@ -74,7 +73,7 @@ describe('agentsService', () => {
       error.response = { status: 404 }
       vi.mocked(apiClient.get).mockRejectedValueOnce(error)
 
-      const result = await agentsService.getByName(namespace, 'non-existent')
+      const result = await agentsService.getByName('non-existent')
 
       expect(result).toBeNull()
     })
@@ -83,7 +82,7 @@ describe('agentsService', () => {
       const error = new Error('Server error')
       vi.mocked(apiClient.get).mockRejectedValueOnce(error)
 
-      await expect(agentsService.getByName(namespace, 'test-agent')).rejects.toThrow(
+      await expect(agentsService.getByName('test-agent')).rejects.toThrow(
         'Server error'
       )
     })
@@ -93,10 +92,10 @@ describe('agentsService', () => {
     it('should convert numeric ID to string and call getByName', async () => {
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockAgent)
 
-      const result = await agentsService.getById(namespace, 123)
+      const result = await agentsService.getById(123)
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        `/api/v1/namespaces/${namespace}/agents/123`
+        `/api/v1/agents/123`
       )
       expect(result).toMatchObject({ id: 'test-agent' })
     })
@@ -104,10 +103,10 @@ describe('agentsService', () => {
     it('should handle string IDs', async () => {
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockAgent)
 
-      await agentsService.getById(namespace, 'string-id')
+      await agentsService.getById('string-id')
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        `/api/v1/namespaces/${namespace}/agents/string-id`
+        `/api/v1/agents/string-id`
       )
     })
   })
@@ -125,10 +124,10 @@ describe('agentsService', () => {
         name: 'new-agent',
       })
 
-      const result = await agentsService.create(namespace, createRequest)
+      const result = await agentsService.create(createRequest)
 
       expect(apiClient.post).toHaveBeenCalledWith(
-        `/api/v1/namespaces/${namespace}/agents`,
+        `/api/v1/agents`,
         createRequest
       )
       expect(result).toMatchObject({
@@ -147,10 +146,10 @@ describe('agentsService', () => {
         displayName: 'Updated Agent',
       })
 
-      const result = await agentsService.update(namespace, 'test-agent', updates)
+      const result = await agentsService.update('test-agent', updates)
 
       expect(apiClient.put).toHaveBeenCalledWith(
-        `/api/v1/namespaces/${namespace}/agents/test-agent`,
+        `/api/v1/agents/test-agent`,
         updates
       )
       expect(result).toMatchObject({
@@ -164,7 +163,7 @@ describe('agentsService', () => {
       error.response = { status: 404 }
       vi.mocked(apiClient.put).mockRejectedValueOnce(error)
 
-      const result = await agentsService.update(namespace, 'non-existent', {})
+      const result = await agentsService.update('non-existent', {})
 
       expect(result).toBeNull()
     })
@@ -175,10 +174,10 @@ describe('agentsService', () => {
       const updates = { displayName: 'Updated' }
       vi.mocked(apiClient.put).mockResolvedValueOnce(mockAgent)
 
-      await agentsService.updateById(namespace, 123, updates)
+      await agentsService.updateById(123, updates)
 
       expect(apiClient.put).toHaveBeenCalledWith(
-        `/api/v1/namespaces/${namespace}/agents/123`,
+        `/api/v1/agents/123`,
         updates
       )
     })
@@ -188,10 +187,10 @@ describe('agentsService', () => {
     it('should delete agent and return true', async () => {
       vi.mocked(apiClient.delete).mockResolvedValueOnce(undefined)
 
-      const result = await agentsService.delete(namespace, 'test-agent')
+      const result = await agentsService.delete('test-agent')
 
       expect(apiClient.delete).toHaveBeenCalledWith(
-        `/api/v1/namespaces/${namespace}/agents/test-agent`
+        `/api/v1/agents/test-agent`
       )
       expect(result).toBe(true)
     })
@@ -201,7 +200,7 @@ describe('agentsService', () => {
       error.response = { status: 404 }
       vi.mocked(apiClient.delete).mockRejectedValueOnce(error)
 
-      const result = await agentsService.delete(namespace, 'non-existent')
+      const result = await agentsService.delete('non-existent')
 
       expect(result).toBe(false)
     })
@@ -210,7 +209,7 @@ describe('agentsService', () => {
       const error = new Error('Server error')
       vi.mocked(apiClient.delete).mockRejectedValueOnce(error)
 
-      await expect(agentsService.delete(namespace, 'test-agent')).rejects.toThrow(
+      await expect(agentsService.delete('test-agent')).rejects.toThrow(
         'Server error'
       )
     })
@@ -220,10 +219,10 @@ describe('agentsService', () => {
     it('should convert ID to string and call delete', async () => {
       vi.mocked(apiClient.delete).mockResolvedValueOnce(undefined)
 
-      const result = await agentsService.deleteById(namespace, 123)
+      const result = await agentsService.deleteById(123)
 
       expect(apiClient.delete).toHaveBeenCalledWith(
-        `/api/v1/namespaces/${namespace}/agents/123`
+        `/api/v1/agents/123`
       )
       expect(result).toBe(true)
     })

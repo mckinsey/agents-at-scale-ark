@@ -40,7 +40,7 @@ export const A2AServersSection = forwardRef<
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await A2AServersService.getAll(namespace);
+      const data = await A2AServersService.getAll();
       setA2AServers(data);
     } catch (error) {
       console.error("Failed to load A2A servers:", error);
@@ -53,7 +53,7 @@ export const A2AServersSection = forwardRef<
     } finally {
       setLoading(false);
     }
-  }, [namespace]);
+  }, []);
 
   useEffect(() => {
     void loadData();
@@ -66,7 +66,7 @@ export const A2AServersSection = forwardRef<
 
   const handleSave = async (config: A2AServerConfiguration) => {
     try {
-      await A2AServersService.create(namespace, config);
+      await A2AServersService.create(config);
       toast({
         variant: "success",
         title: "A2A Server Created",

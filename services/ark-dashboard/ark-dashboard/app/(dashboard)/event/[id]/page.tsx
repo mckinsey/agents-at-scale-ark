@@ -21,7 +21,7 @@ import {
 import { toast } from "@/components/ui/use-toast";
 import type { Event } from "@/lib/services/events";
 import { eventsService } from "@/lib/services/events";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 // Reusable styles for table field headings
@@ -126,10 +126,8 @@ function EventTypeField({ label, value, tooltip }: EventFieldProps) {
 
 function EventDetailContent() {
   const params = useParams();
-  const searchParams = useSearchParams();
   const router = useRouter();
   const eventId = params.id as string;
-  const namespace = searchParams.get("namespace") || "default";
 
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
@@ -137,7 +135,7 @@ function EventDetailContent() {
   useEffect(() => {
     const loadEvent = async () => {
       try {
-        const eventData = await eventsService.get(namespace, eventId);
+        const eventData = await eventsService.get(eventId);
         setEvent(eventData);
       } catch (error) {
         toast({
@@ -154,7 +152,7 @@ function EventDetailContent() {
     };
 
     loadEvent();
-  }, [namespace, eventId]);
+  }, [eventId]);
 
   if (loading) {
     return (
@@ -188,7 +186,7 @@ function EventDetailContent() {
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink href={`/events?namespace=${namespace}`}>
+              <BreadcrumbLink href={`/events`}>
                 Events
               </BreadcrumbLink>
             </BreadcrumbItem>
@@ -202,7 +200,7 @@ function EventDetailContent() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => router.push(`/events?namespace=${namespace}`)}
+            onClick={() => router.push(`/events`)}
           >
             Back to Events
           </Button>

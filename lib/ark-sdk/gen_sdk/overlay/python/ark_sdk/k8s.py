@@ -113,8 +113,10 @@ async def init_k8s():
 
 class SecretClient:
     """Kubernetes Secret management client."""
-    
-    def __init__(self, namespace: str = "default"):
+
+    def __init__(self, namespace: Optional[str] = None):
+        if namespace is None:
+            namespace = get_context()["namespace"]
         self.namespace = namespace
     
     def validate_and_encode_token(self, string_data: dict) -> dict:

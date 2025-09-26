@@ -296,7 +296,6 @@ function QueryDetailContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const queryId = params.id as string
-  const namespace = searchParams.get("namespace") || "default"
   const targetTool = searchParams.get("target_tool")
   const isNew = queryId === 'new'
   const mode = isNew ? 'new' : 'view'
@@ -422,7 +421,7 @@ function QueryDetailContent() {
         })
       }
 
-      const savedQuery = await queriesService.create(namespace, queryData)
+      const savedQuery = await queriesService.create(queryData)
       
       toast({
         title: "Query Executed",
@@ -430,7 +429,7 @@ function QueryDetailContent() {
       })
       
       // Navigate to the created query
-      router.push(`/query/${savedQuery.name}?namespace=${namespace}`)
+      router.push(`/query/${savedQuery.name}`)
     } catch (error) {
       console.error('Failed to save query:', error)
       toast({
@@ -455,7 +454,7 @@ function QueryDetailContent() {
       // For new queries, initialize with empty object
       setQuery({
         name: '',
-        namespace: namespace,
+        namespace: '',
         input: '',
         targets: [],
         status: null
@@ -468,11 +467,11 @@ function QueryDetailContent() {
         setMemoriesLoading(true)
         try {
           const [agents, models, teams, tools, memories] = await Promise.all([
-            agentsService.getAll(namespace),
-            modelsService.getAll(namespace),
-            teamsService.getAll(namespace),
-            toolsService.getAll(namespace),
-            memoriesService.getAll(namespace)
+            agentsService.getAll(),
+            modelsService.getAll(),
+            teamsService.getAll(),
+            toolsService.getAll(),
+            memoriesService.getAll()
           ])
 
           const targets = [
@@ -511,7 +510,7 @@ function QueryDetailContent() {
 
     const loadQuery = async () => {
       try {
-        const queryData = await queriesService.get(namespace, queryId)
+        const queryData = await queriesService.get(queryId)
         setQuery(queryData as TypedQueryDetailResponse)
         
         // Set streaming state based on annotation
@@ -529,7 +528,7 @@ function QueryDetailContent() {
     }
 
     loadQuery()
-  }, [namespace, queryId, isNew, targetTool])
+  }, [queryId, isNew, targetTool])
 
   // Fetch tool schema when exactly one tool is selected
   useEffect(() => {
@@ -537,13 +536,13 @@ function QueryDetailContent() {
     
     if (selectedTools.length === 1) {
       const toolName = selectedTools[0].name
-      toolsService.getDetail(namespace, toolName)
+      toolsService.getDetail(toolName)
         .then(setToolSchema)
         .catch(() => setToolSchema(null)) // Silent failure
     } else {
       setToolSchema(null)
     }
-  }, [query?.targets, namespace])
+  }, [query?.targets])
 
   if (loading) {
     return (
@@ -574,7 +573,7 @@ function QueryDetailContent() {
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink href={`/queries?namespace=${namespace}`}>
+              <BreadcrumbLink href={`/queries`}>
                 Queries
               </BreadcrumbLink>
             </BreadcrumbItem>
@@ -586,9 +585,8 @@ function QueryDetailContent() {
         </Breadcrumb>
         <div className="ml-auto flex gap-2">
           {!isNew && (
-            <QueryEvaluationActions 
-              queryName={queryId} 
-              namespace={namespace} 
+            <QueryEvaluationActions
+              queryName={queryId}
             />
           )}
           {isNew && (
@@ -596,7 +594,7 @@ function QueryDetailContent() {
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => router.push(`/query/new?namespace=${namespace}`)}
+                onClick={() => router.push(`/query/new`)}
               >
                 New Query
               </Button>
@@ -614,7 +612,7 @@ function QueryDetailContent() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => router.push(`/query/new?namespace=${namespace}`)}
+              onClick={() => router.push(`/query/new`)}
             >
               New Query
             </Button>
@@ -632,7 +630,7 @@ function QueryDetailContent() {
             <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Query</h3>
-                <a href={`/events?namespace=${namespace}&kind=Query&name=${query.name}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+                <a href={`/events?kind=Query&name=${query.name}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
                   View Events
                 </a>
               </div>
@@ -954,10 +952,9 @@ function QueryDetailContent() {
                   </div>
                 </div>
                 <div className="p-3">
-                  <ErrorResponseContent 
+                  <ErrorResponseContent
                     query={query}
                     viewMode={errorViewMode}
-                    namespace={namespace}
                   />
                 </div>
               </div>

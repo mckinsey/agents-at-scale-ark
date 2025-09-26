@@ -7,16 +7,21 @@ from typing import Optional, Dict, Any, List
 import uuid
 from datetime import datetime
 
-from ..types import EvaluationParameters, UnifiedEvaluationRequest, EvaluationResponse, TokenUsage
-from ..core.interface import OSSEvaluationProvider
-from ..core.config import PlatformConfiguration
+from ...types import EvaluationParameters, UnifiedEvaluationRequest, EvaluationResponse, TokenUsage
+from ...core.interface import OSSEvaluationProvider
+from ...core.config import PlatformConfiguration
 
 logger = logging.getLogger(__name__)
 
 
 class LangfuseProvider(OSSEvaluationProvider):
     """
-    Langfuse evaluation provider that integrates with Langfuse platform for tracing and evaluation.
+    Hybrid provider that uses RAGAS for evaluation and Langfuse for tracing/observability.
+
+    Note: Langfuse Python SDK does not provide built-in LLM-as-a-Judge evaluators.
+    This provider combines:
+    - RAGAS: Actual evaluation logic and scoring
+    - Langfuse: Tracing, observability, and score recording
     """
     
     def __init__(self, shared_session=None):
@@ -184,7 +189,8 @@ class LangfuseProvider(OSSEvaluationProvider):
     
     async def _run_evaluations(self, client, trace, request: UnifiedEvaluationRequest) -> Dict[str, float]:
         """
-        Run evaluation metrics using RAGAS (Retrieval Augmented Generation Assessment) with Azure OpenAI.
+        Run evaluation metrics using RAGAS and record results to Langfuse for observability.
+        Note: Langfuse is used for tracing only - actual evaluation is done by RAGAS.
         """
         scores = {}
         
@@ -209,28 +215,35 @@ class LangfuseProvider(OSSEvaluationProvider):
                 logger.warning("Missing input or output for evaluation")
                 return {"error": 0.0}
             
-            # Use dedicated RAGAS adapter
-            from .ragas_adapter import RagasAdapter
-            
+            # Use RAGAS for actual evaluation, Langfuse for tracing/observability
+            from ..ragas.ragas_adapter import RagasAdapter
+            from .langfuse_trace_adapter import LangfuseTraceAdapter
+
+            # Run RAGAS evaluation
             ragas_adapter = RagasAdapter()
             ragas_scores = await ragas_adapter.evaluate(input_text, output_text, metrics, request.parameters)
+
+            # Record RAGAS results to Langfuse trace using trace adapter
+            trace_adapter = LangfuseTraceAdapter(langfuse_client=client)
+            await trace_adapter.record_scores_to_trace(
+                trace=trace,
+                scores=ragas_scores,
+                metadata={
+                    "evaluator": "ragas",
+                    "evaluation_type": "hybrid_ragas_langfuse",
+                    "metrics": metrics
+                }
+            )
             
-            # Record scores in Langfuse
-            for metric, score_value in ragas_scores.items():
-                trace.score(
-                    name=metric,
-                    value=score_value,
-                    comment=f"RAGAS evaluation for {metric} using Azure OpenAI",
-                    data_type="NUMERIC"
-                )
-                scores[metric] = score_value
-            
-            logger.info(f"Evaluated {len(metrics)} metrics with RAGAS: {scores}")
-            
+            # Return RAGAS scores (scores are already recorded to Langfuse trace above)
+            scores = ragas_scores
+
+            logger.info(f"Evaluated {len(metrics)} metrics with RAGAS and recorded to Langfuse: {scores}")
+
         except Exception as e:
-            logger.error(f"Error running RAGAS evaluations: {e}")
+            logger.error(f"Error running RAGAS evaluations or recording to Langfuse: {e}")
             # Return a default failed score
             scores["error"] = 0.0
-        
+
         return scores
     

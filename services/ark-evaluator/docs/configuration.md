@@ -123,7 +123,7 @@ Weights must sum to 1.0:
 
 | Parameter | Type | Default | Options | Description |
 |-----------|------|---------|---------|-------------|
-| `provider` | string | "ark" | "ark", "langfuse" | Evaluation provider to use |
+| `provider` | string | "ark" | "ark", "ragas", "langfuse" | Evaluation provider to use |
 
 #### Evaluation Scope
 
@@ -165,7 +165,67 @@ Weights must sum to 1.0:
 }
 ```
 
-### Langfuse Provider Parameters
+### RAGAS Provider Parameters
+
+The RAGAS provider offers standalone RAGAS evaluation without external dependencies. Choose either Azure OpenAI or OpenAI configuration.
+
+#### Azure OpenAI Configuration
+
+| Parameter | Type | Required | Description | Example |
+|-----------|------|----------|-------------|---------|
+| `azure.api_key` | string | Yes | Azure OpenAI API key | `"${AZURE_OPENAI_API_KEY}"` |
+| `azure.endpoint` | string | Yes | Azure OpenAI endpoint URL | `"https://myinstance.openai.azure.com/"` |
+| `azure.api_version` | string | Yes | Azure OpenAI API version | `"2024-02-01"` |
+| `azure.deployment_name` | string | Yes | GPT model deployment name | `"gpt-4"` |
+| `azure.embedding_deployment` | string | No | Embedding model deployment | `"text-embedding-ada-002"` |
+
+#### OpenAI Configuration
+
+| Parameter | Type | Required | Description | Example |
+|-----------|------|----------|-------------|---------|
+| `openai.api_key` | string | Yes | OpenAI API key | `"${OPENAI_API_KEY}"` |
+| `openai.base_url` | string | Yes | OpenAI API base URL | `"https://api.openai.com/v1"` |
+| `openai.model` | string | No | GPT model name | `"gpt-4"` (default) |
+| `openai.embedding_model` | string | No | Embedding model name | `"text-embedding-ada-002"` (default) |
+
+#### Evaluation Configuration
+
+| Parameter | Type | Default | Description | Example |
+|-----------|------|---------|-------------|---------|
+| `metrics` | string | `"relevance,correctness"` | Comma-separated RAGAS metrics | `"relevance,correctness,faithfulness"` |
+| `threshold` | string | `"0.7"` | Passing threshold (0.0-1.0) | `"0.8"` |
+| `temperature` | string | `"0.1"` | Model temperature | `"0.0"` |
+
+**Supported RAGAS Metrics:**
+- `relevance` - How relevant the response is to the input
+- `correctness` - Factual accuracy of the response
+- `faithfulness` - How faithful the response is to provided context
+- `similarity` - Semantic similarity between response and expected answer
+
+#### Example Configuration
+
+```yaml
+parameters:
+  provider: "ragas"
+
+  # Azure OpenAI (choose one)
+  azure.api_key: "${AZURE_OPENAI_API_KEY}"
+  azure.endpoint: "${AZURE_OPENAI_ENDPOINT}"
+  azure.api_version: "2024-02-01"
+  azure.deployment_name: "gpt-4"
+
+  # OR OpenAI (choose one)
+  # openai.api_key: "${OPENAI_API_KEY}"
+  # openai.base_url: "https://api.openai.com/v1"
+  # openai.model: "gpt-4"
+
+  # Evaluation settings
+  metrics: "relevance,correctness,faithfulness"
+  threshold: "0.8"
+  temperature: "0.1"
+```
+
+### Langfuse Provider Parameters (Hybrid)
 
 #### Required Parameters
 

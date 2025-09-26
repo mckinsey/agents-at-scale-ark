@@ -56,7 +56,6 @@ interface AgentEditorProps {
   onSave: (
     agent: (AgentCreateRequest | AgentUpdateRequest) & { id?: string }
   ) => void;
-  namespace: string;
 }
 
 export function AgentEditor({
@@ -64,8 +63,7 @@ export function AgentEditor({
   onOpenChange,
   agent,
   models,
-  onSave,
-  namespace
+  onSave
 }: Readonly<AgentEditorProps>) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -88,7 +86,7 @@ export function AgentEditor({
       const loadTools = async () => {
         setToolsLoading(true);
         try {
-          const tools = await toolsService.getAll(namespace);
+          const tools = await toolsService.getAll();
           const missingTools = agent?.tools?.filter(
             (agentTool) => !tools.some((t) => t.name === agentTool.name)
           ) as Tool[];
@@ -104,7 +102,7 @@ export function AgentEditor({
       };
       loadTools();
     }
-  }, [open, namespace, agent?.tools]);
+  }, [open, agent?.tools]);
 
   useEffect(() => {
     if (agent) {
@@ -146,8 +144,7 @@ export function AgentEditor({
         executionEngine:
           !agent.isA2A && executionEngineName
             ? {
-                name: executionEngineName,
-                namespace: namespace
+                name: executionEngineName
               }
             : undefined,
         prompt: !agent.isA2A ? prompt || undefined : undefined,
@@ -171,8 +168,7 @@ export function AgentEditor({
             : undefined,
         executionEngine: executionEngineName
           ? {
-              name: executionEngineName,
-              namespace: namespace
+              name: executionEngineName
             }
           : undefined,
         prompt: prompt || undefined,

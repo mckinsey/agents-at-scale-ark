@@ -7,20 +7,19 @@ import { useRouter } from "next/navigation"
 interface ChatMessageProps extends Pick<ChatMessageData, "role" | "content" | "status" | "queryName"> {
   className?: string
   viewMode?: 'text' | 'markdown'
-  namespace?: string
 }
 
-export function ChatMessage({ role, content, status, className, viewMode = 'text', queryName, namespace }: Readonly<ChatMessageProps>) {
+export function ChatMessage({ role, content, status, className, viewMode = 'text', queryName }: Readonly<ChatMessageProps>) {
   const isUser = role === "user"
   const isFailed = status === "failed"
   const markdownContent = useMarkdownProcessor(content)
   const router = useRouter()
 
-  const showErrorIcon = isFailed && queryName && namespace
+  const showErrorIcon = isFailed && queryName
 
   const handleErrorIconClick = () => {
-    if (queryName && namespace) {
-      const eventsUrl = getResourceEventsUrl(namespace, "Query", queryName)
+    if (queryName) {
+      const eventsUrl = getResourceEventsUrl("Query", queryName)
       router.push(eventsUrl)
     }
   }

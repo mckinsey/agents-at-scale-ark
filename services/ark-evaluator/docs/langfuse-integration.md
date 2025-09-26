@@ -1,15 +1,46 @@
-# Langfuse + RAGAS Integration
+# Langfuse + RAGAS Hybrid Integration
 
-ARK Evaluator provides advanced evaluation capabilities through integration with Langfuse tracing platform and RAGAS (Retrieval Augmented Generation Assessment) evaluation framework, with comprehensive Azure OpenAI support.
+ARK Evaluator provides hybrid evaluation capabilities that combine RAGAS evaluation with Langfuse tracing and observability. This provider offers comprehensive evaluation with full tracing capabilities.
 
 ## Overview
 
-This integration combines three powerful technologies:
-- **Langfuse**: Tracing and evaluation platform for LLM applications
-- **RAGAS**: Specialized evaluation framework for RAG and LLM applications
+**Note**: For standalone RAGAS evaluation without tracing overhead, see the [RAGAS Provider](ragas-provider.md) documentation.
+
+This hybrid integration combines three powerful technologies:
+- **Langfuse**: Tracing and evaluation platform for LLM applications with full observability
+- **RAGAS**: Specialized evaluation framework providing the actual evaluation metrics
 - **Azure OpenAI**: Enterprise-grade AI models with enhanced security and compliance
 
-The integration provides sophisticated evaluation capabilities with automatic tracing, metrics collection, and comprehensive scoring across multiple dimensions.
+The hybrid approach provides sophisticated evaluation capabilities with automatic tracing, metrics collection, comprehensive scoring, and complete evaluation lineage in Langfuse.
+
+## Provider Comparison
+
+| Feature | Langfuse Provider (Hybrid) | RAGAS Provider (Standalone) |
+|---------|---------------------------|------------------------------|
+| **Evaluation Engine** | ✅ RAGAS metrics | ✅ RAGAS metrics |
+| **Performance** | 🐌 Slower (includes tracing) | ⚡ Faster (no tracing overhead) |
+| **Observability** | ✅ Full Langfuse tracing | ❌ None |
+| **Dependencies** | 📦📦 RAGAS + Langfuse | 📦 RAGAS only |
+| **Configuration** | 🟡 Medium complexity | 🟢 Simple |
+| **Use Case** | Development, debugging, monitoring | Production, batch processing |
+
+### When to Use Langfuse Provider
+
+✅ **Choose Langfuse Provider when you need:**
+- Complete evaluation tracing and observability
+- Debugging and development workflows
+- Evaluation lineage and audit trails
+- Integration with Langfuse dashboards
+- Research and experimentation
+
+### When to Use RAGAS Provider
+
+✅ **Choose RAGAS Provider when you need:**
+- High-performance evaluation without overhead
+- Simple, minimal configuration
+- Batch processing or high-throughput scenarios
+- Production evaluation pipelines
+- Minimal dependencies
 
 ## Architecture
 

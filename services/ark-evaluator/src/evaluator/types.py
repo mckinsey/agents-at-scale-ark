@@ -114,6 +114,7 @@ class EvaluationParameters(BaseModel):
             "scope": "scope",
             "min-score": "min_score",
             "min_score": "min_score",
+            "threshold": "min_score",
             "max-tokens": "max_tokens",
             "max_tokens": "max_tokens",
             "temperature": "temperature",
@@ -167,7 +168,13 @@ class EvaluationParameters(BaseModel):
     def get_scope_list(self) -> List[str]:
         """Get scope as a list of individual scope values"""
         if not self.scope or self.scope == "all":
-            return [scope.value for scope in EvaluationScope if scope.value != "all"]
+            # Return only the base evaluation scopes (exclude "all" and RAGAS-specific metrics)
+            base_scopes = [
+                "relevance", "accuracy", "conciseness", "completeness",
+                "clarity", "usefulness", "appropriateness", "compliance",
+                "refusal_handling"
+            ]
+            return base_scopes
         return [scope.strip() for scope in self.scope.split(",")]
     
     def to_dict(self) -> Dict[str, Any]:

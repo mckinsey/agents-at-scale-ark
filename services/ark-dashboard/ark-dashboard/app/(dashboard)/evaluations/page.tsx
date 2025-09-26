@@ -17,7 +17,6 @@ import { EvaluationsSection } from "@/components/sections"
 
 function EvaluationsContent() {
   const searchParams = useSearchParams()
-  const namespace = searchParams.get("namespace") || "default"
   const queryFilter = searchParams.get("query")
   const evaluationsSectionRef = useRef<{ openAddEditor: () => void }>(null)
 
@@ -48,7 +47,6 @@ function EvaluationsContent() {
       <div className="flex flex-1 flex-col gap-4 p-4">
         <EvaluationsSection 
           ref={evaluationsSectionRef} 
-          namespace={namespace} 
           initialQueryFilter={queryFilter}
         />
       </div>

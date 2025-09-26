@@ -27,3 +27,9 @@ class RagasAdapter:
         Run RAGAS evaluation using the refactored implementation.
         """
         return await self._adapter.evaluate(input_text, output_text, metrics, params)
+
+    def get_validation_results(self):
+        """
+        Get validation results from the refactored implementation.
+        """
+        return self._adapter.get_validation_results()

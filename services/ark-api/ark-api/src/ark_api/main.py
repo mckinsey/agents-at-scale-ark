@@ -6,15 +6,15 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from kubernetes_asyncio import client
-
-# Load environment variables from .env file
 from dotenv import load_dotenv
-load_dotenv()
 
 from .api import router
 from .core.config import setup_logging
 from .auth.middleware import AuthMiddleware
 from ark_sdk.k8s import init_k8s
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Initialize logging
 logger = setup_logging()

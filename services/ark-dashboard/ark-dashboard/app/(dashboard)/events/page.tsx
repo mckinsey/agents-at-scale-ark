@@ -9,7 +9,6 @@ import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 
 type SearchParams = {
-  namespace?: string
   page?: string
   limit?: string
   type?: string
@@ -19,7 +18,6 @@ type SearchParams = {
 
 const defaultPage = 1;
 const defaultLimit = 10;
-const defaultNamespace = "default";
 
 export default async function EventsPage({
   searchParams
@@ -29,7 +27,6 @@ export default async function EventsPage({
   const filters = (await searchParams)
 
   const parsedFilters = {
-    namespace: filters.namespace || defaultNamespace,
     page: filters.page ? parseInt(filters.page, 10): defaultPage,
     limit: filters.limit ? parseInt(filters.limit, 10): defaultLimit,
     type: filters.type,

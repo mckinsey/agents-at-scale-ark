@@ -1,7 +1,8 @@
 """API routes for Query resources."""
 
 from datetime import datetime
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from typing import Optional
 from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
 from ark_sdk.models.query_v1alpha1_spec import QueryV1alpha1Spec
 
@@ -17,7 +18,7 @@ from ...models.queries import (
 from .exceptions import handle_k8s_errors
 
 router = APIRouter(
-    prefix="/namespaces/{namespace}/queries",
+    prefix="/queries",
     tags=["queries"]
 )
 
@@ -71,7 +72,7 @@ def query_to_detail_response(query: dict) -> QueryDetailResponse:
 
 @router.get("", response_model=QueryListResponse)
 @handle_k8s_errors(operation="list", resource_type="query")
-async def list_queries(namespace: str) -> QueryListResponse:
+async def list_queries(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> QueryListResponse:
     """List all queries in a namespace."""
     async with with_ark_client(namespace, VERSION) as ark_client:
         result = await ark_client.queries.a_list()
@@ -87,8 +88,8 @@ async def list_queries(namespace: str) -> QueryListResponse:
 @router.post("", response_model=QueryDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="query")
 async def create_query(
-    namespace: str,
-    query: QueryCreateRequest
+    query: QueryCreateRequest,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
 ) -> QueryDetailResponse:
     """Create a new query."""
     async with with_ark_client(namespace, VERSION) as ark_client:
@@ -140,7 +141,7 @@ async def create_query(
 
 @router.get("/{query_name}", response_model=QueryDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="query")
-async def get_query(namespace: str, query_name: str) -> QueryDetailResponse:
+async def get_query(query_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> QueryDetailResponse:
     """Get a specific query."""
     async with with_ark_client(namespace, VERSION) as ark_client:
         result = await ark_client.queries.a_get(query_name)
@@ -151,9 +152,9 @@ async def get_query(namespace: str, query_name: str) -> QueryDetailResponse:
 @router.put("/{query_name}", response_model=QueryDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="query")
 async def update_query(
-    namespace: str,
     query_name: str,
-    query: QueryUpdateRequest
+    query: QueryUpdateRequest,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
 ) -> QueryDetailResponse:
     """Update a specific query."""
     async with with_ark_client(namespace, VERSION) as ark_client:
@@ -201,7 +202,7 @@ async def update_query(
 
 @router.patch("/{query_name}/cancel", response_model=QueryDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="query")
-async def cancel_query(namespace: str, query_name: str) -> QueryDetailResponse:
+async def cancel_query(query_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> QueryDetailResponse:
     """Cancel a specific query by setting spec.cancel to true."""
     async with with_ark_client(namespace, VERSION) as ark_client:
         patch = {"spec": {"cancel": True}}
@@ -210,7 +211,7 @@ async def cancel_query(namespace: str, query_name: str) -> QueryDetailResponse:
 
 @router.delete("/{query_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="query")
-async def delete_query(namespace: str, query_name: str) -> None:
+async def delete_query(query_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> None:
     """Delete a specific query."""
     async with with_ark_client(namespace, VERSION) as ark_client:
         await ark_client.queries.a_delete(query_name)

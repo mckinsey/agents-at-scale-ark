@@ -19,6 +19,66 @@ Content-Type: application/json
 Accept: application/json
 ```
 
+## Provider Metric Discovery Endpoints
+
+ARK Evaluator provides APIs to discover supported metrics and their field requirements for different evaluation providers.
+
+### GET /providers/{provider}/metrics
+
+Returns all supported metrics for a specific provider.
+
+**Path Parameters:**
+- `provider` - Provider name (e.g., "ragas", "langfuse")
+
+**Response:**
+```json
+{
+  "provider": "ragas",
+  "metrics": [
+    {
+      "name": "relevance",
+      "description": "Measures how relevant the answer is to the question",
+      "ragas_name": "answer_relevancy"
+    },
+    {
+      "name": "context_precision",
+      "description": "Measures precision of retrieved context",
+      "ragas_name": "llm_context_precision_without_reference"
+    }
+  ]
+}
+```
+
+### GET /providers/{provider}/metrics/{metric}
+
+Returns detailed field requirements for a specific metric.
+
+**Path Parameters:**
+- `provider` - Provider name (e.g., "ragas")
+- `metric` - Metric name (e.g., "relevance", "context_precision")
+
+**Response:**
+```json
+{
+  "provider": "ragas",
+  "metric": {
+    "name": "relevance",
+    "description": "Measures how relevant the answer is to the question",
+    "ragas_name": "answer_relevancy",
+    "required_fields": ["user_input", "response"],
+    "optional_fields": [],
+    "field_mappings": {
+      "input_text": "user_input",
+      "output_text": "response"
+    }
+  }
+}
+```
+
+**Error Responses:**
+- `404` - Provider or metric not found
+- `500` - Internal server error
+
 ## Health Check Endpoints
 
 ### GET /health
@@ -75,7 +135,7 @@ LLM-as-a-Judge evaluation endpoint for subjective quality assessment.
     "output": "string - the response to evaluate"
   },
   "parameters": {
-    "provider": "ark | langfuse",
+    "provider": "ark | ragas | langfuse",
     "scope": "all | relevance,accuracy,completeness,clarity,usefulness",
     "threshold": "0.7",
     "min_score": "0.7",
@@ -100,14 +160,59 @@ LLM-as-a-Judge evaluation endpoint for subjective quality assessment.
     }
   },
   "parameters": {
-    "provider": "ark | langfuse",
+    "provider": "ark | ragas | langfuse",
     "scope": "all | specific metrics",
     "threshold": "0.7"
   }
 }
 ```
 
-#### Langfuse Provider Parameters
+#### RAGAS Provider Parameters
+
+For `provider: "ragas"`, choose either Azure OpenAI or OpenAI configuration:
+
+**Azure OpenAI Configuration:**
+```json
+{
+  "parameters": {
+    "provider": "ragas",
+
+    // Azure OpenAI Configuration (required)
+    "azure.api_key": "${AZURE_OPENAI_API_KEY}",
+    "azure.endpoint": "${AZURE_OPENAI_ENDPOINT}",
+    "azure.api_version": "2024-02-01",
+    "azure.deployment_name": "gpt-4",
+    "azure.embedding_deployment": "text-embedding-ada-002",
+
+    // Evaluation Configuration
+    "metrics": "relevance,correctness,faithfulness",
+    "threshold": "0.8",
+    "temperature": "0.1"
+  }
+}
+```
+
+**OpenAI Configuration:**
+```json
+{
+  "parameters": {
+    "provider": "ragas",
+
+    // OpenAI Configuration (required)
+    "openai.api_key": "${OPENAI_API_KEY}",
+    "openai.base_url": "https://api.openai.com/v1",
+    "openai.model": "gpt-4",
+    "openai.embedding_model": "text-embedding-ada-002",
+
+    // Evaluation Configuration
+    "metrics": "relevance,correctness",
+    "threshold": "0.7",
+    "temperature": "0.0"
+  }
+}
+```
+
+#### Langfuse Provider Parameters (Hybrid)
 
 For `provider: "langfuse"`, additional parameters are required:
 
@@ -289,14 +394,43 @@ Deterministic metrics-based evaluation endpoint for objective performance assess
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `provider` | string | "ark" | Evaluation provider (ark, langfuse) |
+| `provider` | string | "ark" | Evaluation provider (ark, ragas, langfuse) |
 | `scope` | string | "all" | Evaluation criteria to assess |
 | `temperature` | string | "0.1" | LLM temperature for consistency |
 | `max_tokens` | string | "500" | Maximum tokens for evaluation |
 | `context` | string | null | Additional context for evaluation |
 | `context_source` | string | null | Source of the provided context |
 
-### Langfuse Parameters
+### RAGAS Parameters
+
+#### Azure OpenAI Configuration
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `azure.api_key` | string | Yes | Azure OpenAI API key |
+| `azure.endpoint` | string | Yes | Azure OpenAI endpoint URL |
+| `azure.api_version` | string | Yes | Azure OpenAI API version |
+| `azure.deployment_name` | string | Yes | GPT model deployment name |
+| `azure.embedding_deployment` | string | No | Embedding model deployment |
+
+#### OpenAI Configuration
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `openai.api_key` | string | Yes | OpenAI API key |
+| `openai.base_url` | string | Yes | OpenAI API base URL |
+| `openai.model` | string | No | GPT model name (default: "gpt-4") |
+| `openai.embedding_model` | string | No | Embedding model (default: "text-embedding-ada-002") |
+
+#### RAGAS Evaluation Configuration
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `metrics` | string | "relevance,correctness" | Comma-separated RAGAS metrics |
+| `threshold` | string | "0.7" | Passing threshold (0.0-1.0) |
+| `temperature` | string | "0.1" | Model temperature |
+
+### Langfuse Parameters (Hybrid)
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -365,7 +499,7 @@ Deterministic metrics-based evaluation endpoint for objective performance assess
 #### Invalid Provider
 ```json
 {
-  "detail": "No provider registered for evaluation type 'invalid_provider'. Available types: ['ark', 'langfuse']"
+  "detail": "No provider registered for evaluation type 'invalid_provider'. Available types: ['ark', 'ragas', 'langfuse']"
 }
 ```
 

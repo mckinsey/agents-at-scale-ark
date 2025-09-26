@@ -19,14 +19,10 @@ import { useDelayedLoading } from "@/lib/hooks";
 import { AgentRow } from "@/components/rows/agent-row";
 import { ToggleSwitch, type ToggleOption } from "@/components/ui/toggle-switch";
 
-interface AgentsSectionProps {
-  namespace: string;
-}
-
 export const AgentsSection = forwardRef<
   { openAddEditor: () => void },
-  AgentsSectionProps
->(function AgentsSection({ namespace }, ref) {
+  object
+>(function AgentsSection({}, ref) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [models, setModels] = useState<Model[]>([]);
@@ -49,9 +45,9 @@ export const AgentsSection = forwardRef<
       setLoading(true);
       try {
         const [agentsData, teamsData, modelsData] = await Promise.all([
-          agentsService.getAll(namespace),
-          teamsService.getAll(namespace),
-          modelsService.getAll(namespace)
+          agentsService.getAll(),
+          teamsService.getAll(),
+          modelsService.getAll()
         ]);
         setAgents(agentsData);
         setTeams(teamsData);
@@ -72,7 +68,7 @@ export const AgentsSection = forwardRef<
     };
 
     loadData();
-  }, [namespace]);
+  }, []);
 
   const handleSaveAgent = async (
     agent: (AgentCreateRequest | AgentUpdateRequest) & { id?: string }
@@ -82,7 +78,6 @@ export const AgentsSection = forwardRef<
         // This is an update
         const updateRequest = agent as AgentUpdateRequest & { id: string };
         await agentsService.updateById(
-          namespace,
           updateRequest.id,
           updateRequest
         );
@@ -94,7 +89,7 @@ export const AgentsSection = forwardRef<
       } else {
         // This is a create
         const createRequest = agent as AgentCreateRequest;
-        await agentsService.create(namespace, createRequest);
+        await agentsService.create(createRequest);
         toast({
           variant: "success",
           title: "Agent Created",
@@ -102,7 +97,7 @@ export const AgentsSection = forwardRef<
         });
       }
       // Reload data
-      const updatedAgents = await agentsService.getAll(namespace);
+      const updatedAgents = await agentsService.getAll();
       setAgents(updatedAgents);
     } catch (error) {
       toast({
@@ -122,14 +117,14 @@ export const AgentsSection = forwardRef<
       if (!agent) {
         throw new Error("Agent not found");
       }
-      await agentsService.deleteById(namespace, id);
+      await agentsService.deleteById(id);
       toast({
         variant: "success",
         title: "Agent Deleted",
         description: `Successfully deleted ${agent.name}`
       });
       // Reload data
-      const updatedAgents = await agentsService.getAll(namespace);
+      const updatedAgents = await agentsService.getAll();
       setAgents(updatedAgents);
     } catch (error) {
       toast({
@@ -172,7 +167,6 @@ export const AgentsSection = forwardRef<
                   models={models}
                   onUpdate={handleSaveAgent}
                   onDelete={handleDeleteAgent}
-                  namespace={namespace}
                 />
               ))}
             </div>
@@ -189,7 +183,6 @@ export const AgentsSection = forwardRef<
                   models={models}
                   onUpdate={handleSaveAgent}
                   onDelete={handleDeleteAgent}
-                  namespace={namespace}
                 />
               ))}
             </div>
@@ -204,7 +197,6 @@ export const AgentsSection = forwardRef<
         models={models}
         teams={teams}
         onSave={handleSaveAgent}
-        namespace={namespace}
       />
     </>
   );

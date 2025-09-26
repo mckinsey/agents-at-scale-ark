@@ -72,7 +72,7 @@ export function EvaluatorEditForm({
     const loadModels = async () => {
       setModelsLoading(true);
       try {
-        const modelsData = await modelsService.getAll(namespace);
+        const modelsData = await modelsService.getAll();
         setModels(modelsData);
       } catch (error) {
         toast({

@@ -7,65 +7,61 @@ type QueryCreateRequest = components["schemas"]["QueryCreateRequest"];
 type QueryUpdateRequest = components["schemas"]["QueryUpdateRequest"];
 
 export const queriesService = {
-  async list(namespace: string): Promise<QueryListResponse> {
+  async list(): Promise<QueryListResponse> {
     const response = await apiClient.get<QueryListResponse>(
-      `/api/v1/namespaces/${namespace}/queries`
+      `/api/v1/queries`
     );
     return response;
   },
 
   async get(
-    namespace: string,
     queryName: string
   ): Promise<QueryDetailResponse> {
     const response = await apiClient.get<QueryDetailResponse>(
-      `/api/v1/namespaces/${namespace}/queries/${queryName}`
+      `/api/v1/queries/${queryName}`
     );
     return response;
   },
 
   async create(
-    namespace: string,
     query: QueryCreateRequest
   ): Promise<QueryDetailResponse> {
     const response = await apiClient.post<QueryDetailResponse>(
-      `/api/v1/namespaces/${namespace}/queries`,
+      `/api/v1/queries`,
       query
     );
     return response;
   },
 
   async update(
-    namespace: string,
     queryName: string,
     query: QueryUpdateRequest
   ): Promise<QueryDetailResponse> {
     const response = await apiClient.put<QueryDetailResponse>(
-      `/api/v1/namespaces/${namespace}/queries/${queryName}`,
+      `/api/v1/queries/${queryName}`,
       query
     );
     return response;
   },
 
-  async delete(namespace: string, queryName: string): Promise<void> {
+  async delete(queryName: string): Promise<void> {
     await apiClient.delete(
-      `/api/v1/namespaces/${namespace}/queries/${queryName}`
+      `/api/v1/queries/${queryName}`
     );
   },
 
   async cancel(
-    namespace: string,
     queryName: string
   ): Promise<QueryDetailResponse> {
     const response = await apiClient.patch<QueryDetailResponse>(
-      `/api/v1/namespaces/${namespace}/queries/${queryName}/cancel`
+      `/api/v1/queries/${queryName}/cancel`
     );
     return response;
   },
 
-  async getStatus(namespace: string, queryName: string): Promise<string> {
+  async getStatus(queryName: string): Promise<string> {
     try {
-      const query = await this.get(namespace, queryName);
+      const query = await this.get(queryName);
       return (query.status as { phase?: string })?.phase || "unknown";
     } catch (error) {
       console.error(`Failed to get status for query ${queryName}:`, error);
@@ -74,14 +70,13 @@ export const queriesService = {
   },
 
   async streamQueryStatus(
-    namespace: string,
     queryName: string,
     onUpdate: (status: string, query?: QueryDetailResponse) => void
   ): Promise<{ terminal: boolean; finalStatus: string }> {
     return new Promise((resolve) => {
       const pollStatus = async () => {
         try {
-          const query = await this.get(namespace, queryName);
+          const query = await this.get(queryName);
           const status =
             (query.status as { phase?: string })?.phase || "unknown";
 

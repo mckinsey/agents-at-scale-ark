@@ -34,7 +34,7 @@ export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSec
     const loadData = async () => {
       setLoading(true)
       try {
-        const modelsData = await modelsService.getAll(namespace)
+        const modelsData = await modelsService.getAll()
         setModels(modelsData)
       } catch (error) {
         console.error("Failed to load data:", error)
@@ -56,7 +56,7 @@ export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSec
       if ('id' in model) {
         // Update existing model
         const { id, ...updateData } = model
-        await modelsService.updateById(namespace, id, updateData)
+        await modelsService.updateById(id, updateData)
         toast({
           variant: "success",
           title: "Model Updated",
@@ -64,7 +64,7 @@ export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSec
         })
       } else {
         // Create new model
-        await modelsService.create(namespace, model)
+        await modelsService.create(model)
         toast({
           variant: "success",
           title: "Model Created",
@@ -72,7 +72,7 @@ export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSec
         })
       }
       // Reload data
-      const updatedModels = await modelsService.getAll(namespace)
+      const updatedModels = await modelsService.getAll()
       setModels(updatedModels)
     } catch (error) {
       toast({
@@ -89,14 +89,14 @@ export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSec
       if (!model) {
         throw new Error("Model not found")
       }
-      await modelsService.deleteById(namespace, id)
+      await modelsService.deleteById(id)
       toast({
         variant: "success",
         title: "Model Deleted",
         description: `Successfully deleted ${model.name}`
       })
       // Reload data
-      const updatedModels = await modelsService.getAll(namespace)
+      const updatedModels = await modelsService.getAll()
       setModels(updatedModels)
     } catch (error) {
       toast({
