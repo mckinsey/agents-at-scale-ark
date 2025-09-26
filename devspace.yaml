@@ -72,6 +72,8 @@ deployments:
             requests:
               memory: "256Mi"
               cpu: "200m"
+        httpRoute:
+          enabled: true
 
   ark-dashboard:
     namespace: default
@@ -91,6 +93,8 @@ deployments:
             requests:
               memory: "256Mi"
               cpu: "200m"
+        httpRoute:
+          enabled: true
 
   ark-controller:
     namespace: ark-system

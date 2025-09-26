@@ -1,7 +1,8 @@
 """Kubernetes A2A servers API endpoints."""
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from typing import Optional
 from ark_sdk.models.a2_a_server_v1prealpha1 import A2AServerV1prealpha1
 from ark_sdk.models.a2_a_server_v1prealpha1_spec import A2AServerV1prealpha1Spec
 
@@ -18,7 +19,8 @@ from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/namespaces/{namespace}/a2a-servers", tags=["a2a-servers"])
+router = APIRouter(
+    prefix="/a2a-servers", tags=["a2a-servers"])
 
 # CRD configuration
 VERSION = "v1prealpha1" 
@@ -75,7 +77,7 @@ def a2a_server_to_detail_response(a2a_server: dict) -> A2AServerDetailResponse:
 
 @router.get("", response_model=A2AServerListResponse)
 @handle_k8s_errors(operation="list", resource_type="a2a server")
-async def list_a2a_servers(namespace: str) -> A2AServerListResponse:
+async def list_a2a_servers(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> A2AServerListResponse:
     """
     List all A2AServer CRs in a namespace.
     
@@ -100,7 +102,7 @@ async def list_a2a_servers(namespace: str) -> A2AServerListResponse:
 
 @router.post("", response_model=A2AServerDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="create", resource_type="a2a server")
-async def create_a2a_server(namespace: str, body: A2AServerCreateRequest) -> A2AServerDetailResponse:
+async def create_a2a_server(body: A2AServerCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> A2AServerDetailResponse:
     """
     Create a new A2AServer CR.
     
@@ -133,7 +135,7 @@ async def create_a2a_server(namespace: str, body: A2AServerCreateRequest) -> A2A
 
 @router.get("/{a2a_server_name}", response_model=A2AServerDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="a2a server")
-async def get_a2a_server(namespace: str, a2a_server_name: str) -> A2AServerDetailResponse:
+async def get_a2a_server(a2a_server_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> A2AServerDetailResponse:
     """
     Get a specific A2AServer CR by name.
     
@@ -152,7 +154,7 @@ async def get_a2a_server(namespace: str, a2a_server_name: str) -> A2AServerDetai
 
 @router.put("/{a2a_server_name}", response_model=A2AServerDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="update", resource_type="a2a server")
-async def update_a2a_server(namespace: str, a2a_server_name: str, body: A2AServerUpdateRequest) -> A2AServerDetailResponse:
+async def update_a2a_server(a2a_server_name: str, body: A2AServerUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> A2AServerDetailResponse:
     """
     Update a A2AServer CR by name.
     
@@ -189,7 +191,7 @@ async def update_a2a_server(namespace: str, a2a_server_name: str, body: A2AServe
 
 @router.delete("/{a2a_server_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="a2a server")
-async def delete_a2a_server(namespace: str, a2a_server_name: str) -> None:
+async def delete_a2a_server(a2a_server_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> None:
     """
     Delete a A2AServer CR by name.
     

@@ -81,6 +81,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/downloa
 echo "=== Installing ARK Controller ==="
 cd "${REPO_ROOT}/ark"
 
+# Deploy controller with impersonation enabled for E2E tests
 helm upgrade --install ark-controller ./dist/chart \
   --namespace ark-system \
   --create-namespace \
@@ -88,10 +89,8 @@ helm upgrade --install ark-controller ./dist/chart \
   --set controllerManager.container.image.repository="${REGISTRY}/ark-controller" \
   --set controllerManager.container.image.tag="${ARK_IMAGE_TAG}" \
   --set controllerManager.container.image.pullPolicy=IfNotPresent \
-  --set rbac.enable=true
-
-kubectl apply -f config/rbac/ark_tenant_role.yaml
-kubectl apply -f config/rbac/ark_tenant_role_binding.yaml
+  --set rbac.enable=true \
+  --set rbac.impersonation.enabled=true
 
 # Apply coverage configuration if requested
 if [ "${INSTALL_COVERAGE}" = "true" ]; then

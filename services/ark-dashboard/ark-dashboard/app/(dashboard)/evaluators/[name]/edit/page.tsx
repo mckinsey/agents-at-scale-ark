@@ -38,7 +38,6 @@ function EvaluatorEditContent({
     const loadEvaluator = async () => {
       try {
         const data = await evaluatorsService.getDetailsByName(
-          namespace,
           evaluatorName
         );
         setEvaluator(data);
@@ -51,7 +50,7 @@ function EvaluatorEditContent({
               ? error.message
               : "An unexpected error occurred"
         });
-        router.push(`/evaluators?namespace=${namespace}`);
+        router.push(`/evaluators`);
       } finally {
         setLoading(false);
       }
@@ -63,13 +62,13 @@ function EvaluatorEditContent({
   const handleSave = async (data: Record<string, unknown>) => {
     setSaving(true);
     try {
-      await evaluatorsService.update(namespace, evaluatorName, data);
+      await evaluatorsService.update(evaluatorName, data);
       toast({
         variant: "success",
         title: "Evaluator Updated",
         description: "Successfully updated the evaluator"
       });
-      router.push(`/evaluators?namespace=${namespace}`);
+      router.push(`/evaluators`);
     } catch (error) {
       toast({
         variant: "destructive",
@@ -85,7 +84,7 @@ function EvaluatorEditContent({
   };
 
   const handleCancel = () => {
-    router.push(`/evaluators?namespace=${namespace}`);
+    router.push(`/evaluators`);
   };
 
   if (loading) {
@@ -115,7 +114,7 @@ function EvaluatorEditContent({
             </BreadcrumbItem>
             <BreadcrumbSeparator className="hidden md:block" />
             <BreadcrumbItem>
-              <BreadcrumbLink href={`/evaluators?namespace=${namespace}`}>
+              <BreadcrumbLink href={`/evaluators`}>
                 Evaluators
               </BreadcrumbLink>
             </BreadcrumbItem>

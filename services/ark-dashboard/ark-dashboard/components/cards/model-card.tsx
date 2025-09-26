@@ -74,7 +74,7 @@ export function ModelCard({
             <div className="w-full">{description}</div>
             <AvailabilityStatusBadge
               status={model.available}
-              eventsLink={`/events?namespace=${namespace}&kind=Model&name=${model.name}&page=1`}
+              eventsLink={`/events?kind=Model&name=${model.name}&page=1`}
             />
           </div>
         }

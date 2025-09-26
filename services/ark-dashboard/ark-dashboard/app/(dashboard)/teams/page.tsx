@@ -1,7 +1,6 @@
 "use client"
 
 import { TeamsSection } from "@/components/sections/teams-section"
-import { useSearchParams } from "next/navigation"
 import { Suspense, useRef } from "react"
 import {
   Breadcrumb,
@@ -15,8 +14,6 @@ import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 
 function TeamsContent() {
-  const searchParams = useSearchParams()
-  const namespace = searchParams.get("namespace") || "default"
   const teamsSectionRef = useRef<{ openAddEditor: () => void }>(null)
 
   return (
@@ -39,7 +36,7 @@ function TeamsContent() {
         </div>
       </header>
       <div className="flex flex-1 flex-col">
-        <TeamsSection ref={teamsSectionRef} namespace={namespace} />
+        <TeamsSection ref={teamsSectionRef} />
       </div>
     </>
   )

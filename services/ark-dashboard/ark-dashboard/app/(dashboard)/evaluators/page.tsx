@@ -1,7 +1,6 @@
 "use client"
 
 import { Suspense, useRef } from "react"
-import { useSearchParams } from "next/navigation"
 import { Plus } from "lucide-react"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import {
@@ -16,8 +15,6 @@ import { Button } from "@/components/ui/button"
 import { EvaluatorsSection } from "@/components/sections"
 
 function EvaluatorsContent() {
-  const searchParams = useSearchParams()
-  const namespace = searchParams.get("namespace") || "default"
   const evaluatorsSectionRef = useRef<{ openAddEditor: () => void }>(null)
 
   return (
@@ -45,7 +42,7 @@ function EvaluatorsContent() {
         </div>
       </header>
       <div className="flex flex-1 flex-col gap-4 p-4">
-        <EvaluatorsSection ref={evaluatorsSectionRef} namespace={namespace} />
+        <EvaluatorsSection ref={evaluatorsSectionRef} />
       </div>
     </>
   )

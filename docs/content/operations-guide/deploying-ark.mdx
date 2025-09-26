@@ -1,6 +1,6 @@
-# Deploying ARK
+# Deploying Ark
 
-Deploy ARK locally using quickstart or to remote clusters with registry-based deployment.
+Deploy Ark locally using quickstart or to remote clusters with registry-based deployment.
 
 ## Local Deployment
 
@@ -14,69 +14,9 @@ make quickstart
 
 This builds the containers locally and deploys them to a local cluster. More details are in the [Getting Started](../../quickstart) guide. 
 
-### Deploying only ark-controller and fark
+## Deploying via Helm
 
-This guide focuses on just two essential components for working with ARK:
-1. **ark-controller** - The core Kubernetes operator that manages your AI agents
-2. **fark** - A command-line tool for testing and interacting with agents
-
-These two components provide the functionality you need to develop, deploy, and run AI agents on the ARK core. The controller handles all the orchestration and execution, while the CLI gives you a simple way to test and interact with your agents during development.
-
-Your applications can communicate directly with the ark-controller using any Kubernetes client library.
-
-#### Prerequisites
-
-Before installing ark-controller, ensure you have the following:
-
-- **Docker**: Container runtime for building the controller image
-- **Kubernetes cluster**: A running Kubernetes cluster (e.g. kind, minikube, Orbstack, Docker Desktop)
-- **Helm 3.x**: Package manager for Kubernetes applications
-- **kubectl**: Command-line tool for interacting with Kubernetes
-- **Go** programming language (for cli)
-
-#### Installation Steps
-
-##### Step 1: Install cert-manager (Required for webhook certificates)
-
-```bash
-helm repo add jetstack https://charts.jetstack.io --force-update
-helm repo update
-helm upgrade --install cert-manager jetstack/cert-manager \
-    --namespace cert-manager \
-    --create-namespace \
-    --set crds.enabled=true
-
-# Wait for cert-manager to be ready
-kubectl wait --for=condition=ready pod \
-    -l app.kubernetes.io/name=cert-manager \
-    -n cert-manager --timeout=60s
-```
-
-##### Step 2: Build and Deploy
-Build the ark-controller docker image and deploy the ark-controller to your Kubernetes cluster using Helm
-
-```bash
-cd ark
-docker build -t ark-controller .
-helm install ark-controller dist/chart --namespace ark-system --create-namespace
-```
-
-##### Step 3: Install fark cli
-
-```bash
-cd tools/fark
-go build -o ark ./cmd/fark
-cp fark /usr/local/bin
-fark
-```
-
-Now, you're all set to get started with [Creating and Managing Agents](https://mckinsey.github.io/agents-at-scale-ark/user-guide/agents/)
-
-## Helm Deployment with GHCR
-
-Ark can be deployed using the Helm charts that are attached to all [releases](https://github.com/mckinsey/agents-at-scale-ark/releases/) and deployed to the [charts packages](https://github.com/orgs/mckinsey/packages?repo_name=agents-at-scale-ark). By default the chart uses the latest images available on the release.
-
-### Prerequisites
+Ark can be deployed using the Helm charts that are attached to all [releases](https://github.com/mckinsey/agents-at-scale-ark/releases/) and deployed to the [charts packages](https://github.com/orgs/mckinsey/packages?repo_name=agents-at-scale-ark). By default the chart uses the latest images available on the release. This process, including the deployment of prerequisites can also be run via the `ark install` command.
 
 Install prerequisites on your remote cluster:
 
@@ -93,8 +33,6 @@ helm upgrade --install cert-manager jetstack/cert-manager \
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
 ```
 
-### Deploy ARK
-
 Deploy the Ark controller:
 
 ```bash
@@ -105,13 +43,24 @@ helm upgrade --install \
   --set rbac.enable=true
 ```
 
-In most cases, you will want to install the `ark-api` and `ark-dashboard` services as well. When running on a local cluster you may also want to install the `localhost-gateway`:
+In many cases, you will want to install the `ark-api` and `ark-dashboard` services as well. When running on a local cluster you may also want to install the `localhost-gateway`:
 
 ```bash
 helm upgrade --install ark-api oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api
 helm upgrade --install ark-dashboard oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-dashboard
 helm upgrade --install localhost-gateway oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/localhost-gateway
 ```
+
+The `fark` (Fast Agentic Runtime Kit) CLI can be built from source:
+
+```bash
+cd tools/fark
+go build -o ark ./cmd/fark
+cp fark /usr/local/bin
+fark
+```
+
+Or installed via the [GitHub Releases](https://github.com/mckinsey/agents-at-scale-ark/releases)
 
 ### Deploying from a Private Regsitry
 
@@ -144,7 +93,7 @@ export VERSION=0.1.21
 ./scripts/deploy/transfer-ark-containers.sh
 ```
 
-## Check Version
+## Checking Ark Version and Status
 
 Once deployed, you can check the running version:
 
@@ -155,24 +104,22 @@ helm list -n ark-system
 # Via deployment labels  
 kubectl get deployment ark-controller -n ark-system \
   -o jsonpath='{.metadata.labels.app\.kubernetes\.io/version}'
-
-# Via pod environment variable
-kubectl get pod -n ark-system -l control-plane=ark-controller \
-  -o jsonpath='{.items[0].spec.containers[0].env[?(@.name=="VERSION")].value}'
 ```
+
+The Ark CLI can be used to show the status of all running Ark services and their versions, with the `ark status` command.
 
 ## Cluster Preparation for CI/CD Deployments
 
-Before using GitHub Actions to deploy ARK to a cluster, platform administrators need to set up the required RBAC permissions.
+Before using GitHub Actions to deploy Ark to a cluster, platform administrators need to set up the required RBAC permissions.
 
-ARK includes a standard deployer role in [`ark/config/rbac/ark-deployer-role.yaml`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/ark/config/rbac/ark-deployer-role.yaml) that defines the minimum permissions required for deployments. This role allows creating namespaces, deploying services, installing CRDs, and configuring webhooks.
+Ark includes a standard deployer role in [`ark/config/rbac/ark-deployer-role.yaml`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/ark/config/rbac/ark-deployer-role.yaml) that defines the minimum permissions required for deployments. This role allows creating namespaces, deploying services, installing CRDs, and configuring webhooks.
 
 ### Setup Process
 
-Apply the standard ARK deployer role and then bind to the repository - this will ensure that your GitHub Actions will be able to deploy Ark. In many cases you will have to specify the specific runner via `runs_on` but this will depend on your organization's OIDC configuration:
+Apply the standard Ark deployer role and then bind to the repository - this will ensure that your GitHub Actions will be able to deploy Ark. In many cases you will have to specify the specific runner via `runs_on` but this will depend on your organization's OIDC configuration:
 
 ```bash
-# Create the 'ark deployer' role, which has the necessary permissions to
+# Create the ark deployer role, which has the necessary permissions to
 # deploy Ark.
 kubectl apply -f ark/config/rbac/ark-deployer-role.yaml
 
@@ -183,24 +130,59 @@ kubectl apply -f ark/config/rbac/ark-deployer-role.yaml
 
 This creates a ClusterRoleBinding that connects your GitHub repository identity (via OIDC) to the deployment permissions.
 
-## Tenancy and Ark Namespaces
+## The Ark Controller
 
-By default, the `ark-controller` is deployed into the `ark-system` namespace. When the controller is excecuting a query, it will impersonate the user account provided in `query.serviceAccount` field (`default` is used if no service account is specified).
-
-The out-of-the-box installation gives the `ark-controller` permissions to impersonate the `default` service account from all namespaces. This can be configured or changed in the Helm chart like so:
+By default, the `ark-controller` is deployed into the `ark-system` namespace. When the controller executes a query, it can optionally impersonate the service account specified in the `query.serviceAccount` field. Impersonation is nenabled by default and can be configured via the `ark-controller` chart values:
 
 ```yaml
-# values.yaml
+# values.yaml for ark-controller
 rbac:
-impersonation:
-  allowedServiceAccounts:
-    - default
+  enable: true
+  impersonation:
+    # Allow impersonation when requested by queries.
+    enabled: true
 ```
 
-When provisioning new tenant namespaces, ARK provides a secure role that grants access to essential Kubernetes resources (pods, services, deployments, secrets, configmaps) and all ARK resources (agents, models, queries, teams, tools) within that namespace only.
+When enabled (default), the controller can impersonate any service account specified in queries. When disabled, queries can only run with the controller's own identity. If no `serviceAccount` is specified for a query, no impersonation will occur and the `ark-controller` will execute the query using its own service account.
 
-This role prevents privilege escalation and cross-tenant access while allowing tenants to deploy typical workloads alongside their ARK agents.
+### Setting Up Tenant Namespaces
 
-This is suitable for local development but not for larger multi-tenant scenarios. As a starting point for how multi-tenacy can be enabled, you can copy the `ark-tenant-role` (Role) and `ark-tenant-binding` (RoleBinding) from the `default` namespace to each new tenant namespace, updating the namespace field in the RoleBinding metadata.
+The `ark-tenant` Helm chart provisions namespaces with the required RBAC configuration:
 
-Tenants using the default service account will then have appropriate permissions to create and manage ARK resources. Note that this also gives a large number of permissions to core K8S resources, which is convenient for local development but not suitable for production use - tenant roles should be configured and managed by experienced cluster administrators.
+```bash
+helm install ark-tenant oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-tenant \
+  -n tenant-1 \
+  --create-namespace \
+  --set serviceAccount.name=ark-tenant
+```
+
+This creates:
+- The namespace (if it doesn't exist)
+- The service account
+- An `ark-tenant-role` with Ark and Kubernetes permissions
+- A RoleBinding linking the service account to the role
+
+Additional options include resource quotas and network policies, which are documented in the chart.
+
+### Using the Tenant Service Account
+
+Configure queries to use the service account:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: my-query
+  namespace: tenant-1
+spec:
+  # Optional - omit to use controller identity.
+  serviceAccount: ark-tenant  
+  input: "Hello from tenant-1"
+  targets:
+    - type: agent
+      name: my-agent
+```
+
+When no service account is specified, the query runs with the controller's identity. This is suitable for development and single-tenant deployments.
+
+> Note: Future releases will move query execution to per-namespace executor pods, eliminating the need for service account impersonation.

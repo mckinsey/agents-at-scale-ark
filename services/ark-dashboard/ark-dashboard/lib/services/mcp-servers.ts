@@ -63,28 +63,28 @@ export interface MCPServerConfiguration {
 // Service for MCP server operations
 export const mcpServersService = {
   // Get all MCP servers in a namespace
-  async getAll(namespace: string): Promise<MCPServer[]> {
-    const response = await apiClient.get<MCPServerListResponse>(`/api/v1/namespaces/${namespace}/mcp-servers`)
+  async getAll(): Promise<MCPServer[]> {
+    const response = await apiClient.get<MCPServerListResponse>(`/api/v1/mcp-servers`)
     return response.items
   },
 
-  async get(namespace: string, mcpServerName:string): Promise<MCPServer> {
-    const response = await apiClient.get<MCPServer>(`/api/v1/namespaces/${namespace}/mcp-servers/${mcpServerName}`)
+  async get(mcpServerName:string): Promise<MCPServer> {
+    const response = await apiClient.get<MCPServer>(`/api/v1/mcp-servers/${mcpServerName}`)
     return response
   },
 
   // Delete an MCP server
-  async delete(namespace: string, identifier: string): Promise<void> {
-    await apiClient.delete(`/api/v1/namespaces/${namespace}/mcp-servers/${identifier}`)
+  async delete(identifier: string): Promise<void> {
+    await apiClient.delete(`/api/v1/mcp-servers/${identifier}`)
   },
 
-  async create(namespace:string, mcpSever: MCPServerConfiguration): Promise<MCPServer> {
-    const response = await apiClient.post<MCPServer>(`/api/v1/namespaces/${namespace}/mcp-servers`, mcpSever)
+  async create(mcpSever: MCPServerConfiguration): Promise<MCPServer> {
+    const response = await apiClient.post<MCPServer>(`/api/v1/mcp-servers`, mcpSever)
     return response;
   },
 
-  async update(namespace: string, mcpServerName:string, spec:{spec: MCPServerSpec}): Promise<MCPServer> {
-    const response = await apiClient.put<MCPServer>(`/api/v1/namespaces/${namespace}/mcp-servers/${mcpServerName}`, spec)
+  async update(mcpServerName:string, spec:{spec: MCPServerSpec}): Promise<MCPServer> {
+    const response = await apiClient.put<MCPServer>(`/api/v1/mcp-servers/${mcpServerName}`, spec)
     return response
   }
 

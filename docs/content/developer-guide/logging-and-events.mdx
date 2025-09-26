@@ -64,12 +64,16 @@ Use Logging For:
 - Internal debugging and troubleshooting
 - Detailed operational information
 - Development insights
+- Expected failures (log as INFO, not ERROR)
 
 As an example, controllers log operational details:
 
 ```go
 log.Info("Memory processed successfully", "memory", memory.Name, "address", resolvedAddress)
 log.Error(err, "failed to resolve ExecutionEngine address", "executionEngine", executionEngine.Name)
+
+// Expected failures like probe failures are INFO, not ERROR
+log.Info("model probe failed", "model", model.Name, "status", errorMessage)
 ```
 
 ## How to log events
@@ -85,3 +89,29 @@ import (
 r.Recorder.Event(&query, corev1.EventTypeNormal, "QueryLLMCallComplete", eventData)
 r.Recorder.Event(&query, corev1.EventTypeWarning, "QueryExecutionFailed", fmt.Sprintf("Error: %v", err))
 ```
+
+### Stable Messages for Conditions and Events
+
+Event and condition messages must be simple strings, not JSON. Importantly, condition messages must be stable - they should not include request-specific details that change on every attempt. This is because controllers watch for status changes. If a condition message includes changing details (like RequestIDs), it triggers unnecessary reconciliation loops.
+
+For example, in this case a request ID is tracked, the condition message will change and reconcillation will be retriggered (creating a 'tight-loop' and lots of noise / performance issues):
+
+```go
+r.setCondition(&model, "Available", metav1.ConditionFalse, "ModelProbeFailed",
+    error) // error includes request id...
+```
+
+Compare to this example:
+
+```go
+r.setCondition(&model, "Available", metav1.ConditionFalse, "ModelProbeFailed",
+    error.Message) // error.Message is stable...
+```
+
+This will show the following line in 'events', which is much clearer as it shows 'x9 over 10' and keeps the view clean:
+
+```
+Warning  ModelProbeFailed  64s (x9 over 10m)  model-controller  The security token included in the request is invalid. (403)
+```
+
+The full details of the error can be stored in the logs instead.

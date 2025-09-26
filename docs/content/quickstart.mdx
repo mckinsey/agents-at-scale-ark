@@ -1,39 +1,48 @@
 ---
 title: Getting Started
-description: Get ARK running in 5 minutes
 ---
 
-import Image from 'next/image'
+# Quickstart
 
-# Getting Started
-
-Get ARK running in your Kubernetes cluster in just a few minutes using our automated quickstart.
-
-## Installing Ark
-
-You can set up a local `.ark.env` file to run the quickstart with all the needed configuration. If this file is missing the quickstart command will ask you for configuration interactively:
+Ensure you have [Node.js](https://nodejs.org/en/download) and [Helm](https://helm.sh/docs/intro/install/) installed. Then run the following commands to install Ark:
 
 ```bash
-# Optionally create a local config file.
-cp .ark.env.local .ark.env
+# Install the 'ark' CLI:
+npm install -g @agents-at-scale/ark
 
-# Clone the repository.
-git clone git@github.com:mckinsey/agents-at-scale-ark.git
-cd agents-at-scale
+# Install Ark:
+ark install
 
-# Install all dependencies and set-up Ark
-make quickstart
+# Optionally configure a 'default' model to use for agents:
+ark models create default
 
-# Test your first agent
-fark agent sample-agent "Hello! Tell me about yourself."
+# Run the dashboard:
+ark dashboard
 ```
 
-That's it! ARK is now running with a sample agent ready to use.
+In most cases the default installation options will be sufficient. This will install the Ark dependencies, the controller, the APIs and the dashboard. You can optionally setup a `default` model that will be the default used by agents. You will need a Kubernetes cluster to install Ark into, you can use [Minikube](https://minikube.sigs.k8s.io/docs/start), [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/), [Docker Desktop](https://docs.docker.com/desktop/kubernetes/) or similar to run a local cluster. The `install` command will warn if any required dependencies are missing.
 
-To run the [ARK Dashboard](/user-guide/dashboard):
+You can also install the [Fark](../developer-guide/cli-tools.mdx) (Fast Agentic Runtime Kit) CLI tool to manage agents, run queries and more.
 
-```bash
-make dashboard
-```
+## Installing Ark on Windows
 
-You can then open the Dashboard at: http://127.0.0.1.nip.io:8080/
+Ark requires a Kubernetes cluster to run. On Windows, you have several options:
+
+### Using WSL2 (Recommended)
+
+1. Install [WSL2](https://docs.microsoft.com/en-us/windows/wsl/install) with Ubuntu or another Linux distribution
+2. Install Docker Desktop with WSL2 backend enabled
+3. Enable Kubernetes in Docker Desktop settings
+4. Follow the standard installation steps above
+
+### Using Docker Desktop
+
+1. Install [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/)
+2. Enable Kubernetes in Docker Desktop Settings → Kubernetes → Enable Kubernetes
+3. Follow the standard installation steps above
+
+### Using Minikube
+
+1. Install [Minikube](https://minikube.sigs.k8s.io/docs/start/) for Windows
+2. Start Minikube: `minikube start`
+3. Follow the standard installation steps

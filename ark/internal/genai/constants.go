@@ -1,5 +1,10 @@
 package genai
 
+// Common string constants
+const (
+	TrueString = "true"
+)
+
 // Model type constants
 const (
 	ModelTypeAzure   = "azure"

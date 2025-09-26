@@ -144,21 +144,16 @@ runs:
         IMAGE_REPO="${{ inputs.image_repository }}"
         IMAGE_TAG="${{ inputs.clean_version }}"
         set -euo pipefail
+        # Deploy with permissive impersonation by default
         helm upgrade --install ark-controller "${CHART}" \
           --namespace "${{ inputs.namespace }}" \
           --create-namespace \
           --set rbac.enable=${{ inputs.rbac_enable }} \
+          --set rbac.impersonation.enabled=true \
           --timeout="${{ inputs.timeout }}" \
           $( [ -n "${IMAGE_REPO}" ] && echo "--set controllerManager.container.image.repository=${IMAGE_REPO}" ) \
           $( [ -n "${IMAGE_TAG}" ] && echo "--set controllerManager.container.image.tag=${IMAGE_TAG}" ) \
           $( [ -n "${{ inputs.container_registry_server }}" ] && echo "--set containerRegistry.enabled=true --set containerRegistry.server=${{ inputs.container_registry_server }} --set containerRegistry.username=${{ inputs.container_registry_username }} --set containerRegistry.password=${{ inputs.container_registry_password }}" )
-
-    - name: Apply additional RBAC manifests
-      if: ${{ inputs.rbac_enable == 'true' }}
-      shell: bash
-      run: |
-        kubectl apply -f ark/config/rbac/ark_tenant_role.yaml || true
-        kubectl apply -f ark/config/rbac/ark_tenant_role_binding.yaml || true
 
     - name: Wait for deployment readiness
       shell: bash

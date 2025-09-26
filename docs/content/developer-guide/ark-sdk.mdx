@@ -44,9 +44,9 @@ Mechanically, the process works like this:
 # Changes are made in the ark CRDs at:
 #   config/crd/bases/*.yaml:
 
-# The Python SDK is regenerated from the CRDs. The CRDs are converted into 
+# The Python SDK is regenerated from the CRDs. The CRDs are converted into
 # an OpenAI spec and then this regenerated the ark sdk types:
-make ark-sdk
+make ark-sdk-build
 
 # Consumers of the ark api update their code. When a CRD change is made and the
 # sdk is regenerated, the ark-api models must be updated (manually).
@@ -62,7 +62,28 @@ npm run generate:api
 
 # This generate:
 # lib/api/generated/types.ts
-```
+
+
+## Local Development Workflow
+
+When developing new functionality in `ark-sdk`, follow this workflow:
+
+1. Add new functionality to overlay files in `lib/ark-sdk/gen_sdk/overlay/python/ark_sdk/`.
+
+2. Build & Test - Run `make ark-sdk-build` to generate the wheel file, then `make ark-sdk-test` to verify changes work correctly.
+
+3. Use in Services - Copy the generated wheel to your service's `out/` directory and test with `devspace dev` to verify integration. The service will automatically use the local wheel file instead of the PyPI version.
+
+## Production Deployment
+
+1. Deploy to PyPI - Trigger deployment via GitHub Actions to publish new version to PyPI.
+
+2. Update Services - Update consuming services' `pyproject.toml` to use the new ark-sdk version, then rebuild and deploy.
+
+
+## Adding Custom SDK Functionality
+
+To add custom functionality to the ARK SDK, place Python modules in `lib/ark-sdk/gen_sdk/overlay/python/ark_sdk/` and run `make ark-sdk-build`. The build system automatically tracks overlay files and rebuilds when they change, copying them into the generated SDK package.
 
 ## Usage
 

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Query
 from ark_sdk.models.evaluation_v1alpha1 import EvaluationV1alpha1
 from ...core.constants import GROUP
 from ark_sdk.client import with_ark_client
-from typing import Union
+from typing import Union, Optional
 
 from ...models.evaluations import (
     EvaluationListResponse,
@@ -22,7 +22,7 @@ from ...models.evaluations import (
 from .exceptions import handle_k8s_errors
 
 router = APIRouter(
-    prefix="/namespaces/{namespace}/evaluations",
+    prefix="/evaluations",
     tags=["evaluations"]
 )
 
@@ -33,9 +33,9 @@ VERSION = "v1alpha1"
 @router.get("")
 @handle_k8s_errors(operation="list", resource_type="evaluation")
 async def list_evaluations(
-    namespace: str,
     enhanced: bool = Query(False, description="Include enhanced metadata from annotations"),
-    query_ref: str = Query(None, description="Filter evaluations by query reference name")
+    query_ref: str = Query(None, description="Filter evaluations by query reference name"),
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
 ) -> Union[EvaluationListResponse, EnhancedEvaluationListResponse]:
     """List all evaluations in a namespace."""
     async with with_ark_client(namespace, VERSION) as ark_client:
@@ -68,8 +68,8 @@ async def list_evaluations(
 @router.post("", response_model=EvaluationDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="evaluation")
 async def create_evaluation(
-    namespace: str,
-    evaluation: EvaluationCreateRequest
+    evaluation: EvaluationCreateRequest,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
 ) -> EvaluationDetailResponse:
     """Create a new evaluation."""
     async with with_ark_client(namespace, VERSION) as ark_client:
@@ -140,9 +140,9 @@ async def create_evaluation(
 @router.get("/{name}")
 @handle_k8s_errors(operation="get", resource_type="evaluation")
 async def get_evaluation(
-    namespace: str, 
     name: str,
-    enhanced: bool = Query(False, description="Include enhanced metadata from annotations")
+    enhanced: bool = Query(False, description="Include enhanced metadata from annotations"),
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
 ) -> Union[EvaluationDetailResponse, EnhancedEvaluationDetailResponse]:
     """Get details of a specific evaluation."""
     async with with_ark_client(namespace, VERSION) as ark_client:
@@ -157,9 +157,9 @@ async def get_evaluation(
 @router.put("/{name}", response_model=EvaluationDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="evaluation")
 async def update_evaluation(
-    namespace: str,
     name: str,
-    evaluation: EvaluationUpdateRequest
+    evaluation: EvaluationUpdateRequest,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
 ) -> EvaluationDetailResponse:
     """Update an existing evaluation."""
     async with with_ark_client(namespace, VERSION) as ark_client:
@@ -233,7 +233,7 @@ async def update_evaluation(
 
 @router.delete("/{name}")
 @handle_k8s_errors(operation="delete", resource_type="evaluation")
-async def delete_evaluation(namespace: str, name: str) -> dict:
+async def delete_evaluation(name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> dict:
     """Delete an evaluation."""
     async with with_ark_client(namespace, VERSION) as ark_client:
         await ark_client.evaluations.a_delete(name)
@@ -242,7 +242,7 @@ async def delete_evaluation(namespace: str, name: str) -> dict:
 
 @router.patch("/{name}/cancel")
 @handle_k8s_errors(operation="cancel", resource_type="evaluation")
-async def cancel_evaluation(namespace: str, name: str) -> EvaluationDetailResponse:
+async def cancel_evaluation(name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> EvaluationDetailResponse:
     """Cancel a running evaluation."""
     async with with_ark_client(namespace, VERSION) as ark_client:
         # Get existing evaluation

@@ -1,7 +1,8 @@
 """Kubernetes tools API endpoints."""
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from typing import Optional
 from ark_sdk.models.tool_v1alpha1 import ToolV1alpha1
 from ark_sdk.models.tool_v1alpha1_spec import ToolV1alpha1Spec
 
@@ -18,7 +19,8 @@ from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/namespaces/{namespace}/tools", tags=["tools"])
+router = APIRouter(
+    prefix="/tools", tags=["tools"])
 
 # CRD configuration
 VERSION = "v1alpha1"
@@ -57,7 +59,7 @@ def tool_to_detail_response(tool: dict) -> ToolDetailResponse:
 
 @router.get("", response_model=ToolListResponse)
 @handle_k8s_errors(operation="list", resource_type="tool")
-async def list_tools(namespace: str) -> ToolListResponse:
+async def list_tools(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ToolListResponse:
     """
     List all Tool CRs in a namespace.
     
@@ -82,7 +84,7 @@ async def list_tools(namespace: str) -> ToolListResponse:
 
 @router.post("", response_model=ToolDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="create", resource_type="tool")
-async def create_tool(namespace: str, body: ToolCreateRequest) -> ToolDetailResponse:
+async def create_tool(body: ToolCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ToolDetailResponse:
     """
     Create a new Tool CR.
     
@@ -115,7 +117,7 @@ async def create_tool(namespace: str, body: ToolCreateRequest) -> ToolDetailResp
 
 @router.get("/{tool_name}", response_model=ToolDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="tool")
-async def get_tool(namespace: str, tool_name: str) -> ToolDetailResponse:
+async def get_tool(tool_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ToolDetailResponse:
     """
     Get a specific Tool CR by name.
     
@@ -134,7 +136,7 @@ async def get_tool(namespace: str, tool_name: str) -> ToolDetailResponse:
 
 @router.put("/{tool_name}", response_model=ToolDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="update", resource_type="tool")
-async def update_tool(namespace: str, tool_name: str, body: ToolUpdateRequest) -> ToolDetailResponse:
+async def update_tool(tool_name: str, body: ToolUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ToolDetailResponse:
     """
     Update a Tool CR by name.
     
@@ -171,7 +173,7 @@ async def update_tool(namespace: str, tool_name: str, body: ToolUpdateRequest) -
 
 @router.delete("/{tool_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="tool")
-async def delete_tool(namespace: str, tool_name: str) -> None:
+async def delete_tool(tool_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> None:
     """
     Delete a Tool CR by name.
     

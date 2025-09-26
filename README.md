@@ -23,21 +23,33 @@
 
 ## Quickstart
 
-Clone the repository and run the quickstart:
+Ensure you have [Node.js](https://nodejs.org/en/download) and [Helm](https://helm.sh/docs/intro/install/) installed. Then run the following commands to install Ark:
 
 ```bash
-git clone https://github.com/mckinsey/agents-at-scale-ark.git
-cd agents-at-scale-ark
-make quickstart
+# Install the 'ark' CLI:
+npm install -g @agents-at-scale/ark
+
+# Install Ark:
+ark install
+
+# Optionally configure a 'default' model to use for agents:
+ark models create default
+
+# Run the dashboard:
+ark dashboard
 ```
+
+In most cases the default installation options will be sufficient. This will install the Ark dependencies, the controller, the APIs and the dashboard. You can optionally setup a `default` model that will be the default used by agents. You will need a Kubernetes cluster to install Ark into, you can use [Minikube](https://minikube.sigs.k8s.io/docs/start), [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/), [Docker Desktop](https://docs.docker.com/desktop/kubernetes/) or similar to run a local cluster. The `install` command will warn if any required dependencies are missing.
 
 User guides, developer guides, operations guides and API reference documentation is all available at:
 
 https://mckinsey.github.io/agents-at-scale-ark/
 
-We are transitioning this project to our open-source repository. During this process we will be moving documentation URLs, artifact registries, etc. Some builds, artifacts and pipelines may be impacted.
+The [Quickstart](https://mckinsey.github.io/agents-at-scale-ark/quickstart/) guide will walk you through the process of configuring a model, creating an agent and running basic queries.
 
-## What is ARK?
+To troubleshoot an installation, run `ark status`.
+
+## What is Ark?
 
 ARK codifies patterns and practices developed across dozens of client agentic application projects. These projects span multiple sectors, functions, and technology stacks. Through this experience, we identified recurring challenges around platform-agnostic operations for agentic resources and the need for standardized deployment and management approaches.
 
@@ -52,4 +64,3 @@ As a technical preview release, this software may contain incomplete features, e
 ## Credits
 
 The initial design and implementation of Ark was led by [Roman Galeev](https://github.com/Roman-Galeev), [Dave Kerr](https://github.com/dwmkerr), and [Chris Madden](https://github.com/cm94242).
-

@@ -33,7 +33,7 @@ function EvaluationDetailContent() {
             </BreadcrumbItem>
             <BreadcrumbSeparator className="hidden md:block" />
             <BreadcrumbItem>
-              <BreadcrumbLink href={`/evaluations?namespace=${namespace}`}>
+              <BreadcrumbLink href={`/evaluations`}>
                 Evaluations
               </BreadcrumbLink>
             </BreadcrumbItem>

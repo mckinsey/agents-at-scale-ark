@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -49,7 +48,7 @@ type QueryReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=models,verbs=get;list
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=evaluators,verbs=get;list
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;list;watch;patch
-// +kubebuilder:rbac:groups="",resources=serviceaccounts,resourceNames=default,verbs=impersonate
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=impersonate
 
 func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
@@ -191,7 +190,7 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		return
 	}
 
-	responses, err := r.reconcileQueue(opCtx, obj, impersonatedClient, memory, tokenCollector)
+	responses, eventStream, err := r.reconcileQueue(opCtx, obj, impersonatedClient, memory, tokenCollector)
 	if err != nil {
 		queryTracker.Fail(err)
 		_ = r.updateStatus(opCtx, &obj, statusError)
@@ -227,7 +226,34 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		_ = r.updateStatusWithDuration(opCtx, &obj, statusEvaluating, duration)
 		cleanupCache = false
 	} else {
+		r.finalizeEventStream(opCtx, eventStream)
 		_ = r.updateStatusWithDuration(opCtx, &obj, statusDone, duration)
+	}
+}
+
+// finalizeEventStream sends the completion message to the event stream and
+// closes its connection.
+func (r *QueryReconciler) finalizeEventStream(ctx context.Context, eventStream genai.EventStreamInterface) {
+	if eventStream == nil {
+		return
+	}
+
+	log := logf.FromContext(ctx)
+
+	// Notify event stream that streaming is complete. This ensures that
+	// clients connected to the stream receive the completion event and
+	// will close their connection.
+	if completionErr := eventStream.NotifyCompletion(ctx); completionErr != nil {
+		// If we cannot close the event stream, log and error but don't
+		// fail - the final message will still be available in the
+		// query response.
+		log.Error(completionErr, "Failed to notify query completion to event stream")
+	}
+
+	// Close the event stream. If this fails, we log and error but don't
+	// fail the query, as the final message is still recorded.
+	if closeErr := eventStream.Close(); closeErr != nil {
+		log.Error(closeErr, "Failed to close event stream")
 	}
 }
 
@@ -382,10 +408,32 @@ func (r *QueryReconciler) resolveEvaluatorSelector(ctx context.Context, selector
 	return evaluators, nil
 }
 
-func (r *QueryReconciler) reconcileQueue(ctx context.Context, query arkv1alpha1.Query, impersonatedClient client.Client, memory genai.MemoryInterface, tokenCollector *genai.TokenUsageCollector) ([]arkv1alpha1.Response, error) {
+func (r *QueryReconciler) reconcileQueue(ctx context.Context, query arkv1alpha1.Query, impersonatedClient client.Client, memory genai.MemoryInterface, tokenCollector *genai.TokenUsageCollector) ([]arkv1alpha1.Response, genai.EventStreamInterface, error) {
+	// Create event stream if streaming is requested
+	var eventStream genai.EventStreamInterface
+	if genai.IsStreamingEnabled(query) {
+		sessionId := query.Spec.SessionId
+		if sessionId == "" {
+			sessionId = string(query.UID)
+		}
+
+		var err error
+		eventStream, err = genai.NewEventStreamForQuery(ctx, r.Client, query.Namespace, sessionId, query.Name)
+		if err != nil {
+			// Configuration error - fail the query
+			return nil, nil, fmt.Errorf("streaming configuration error: %w", err)
+		}
+
+		if eventStream == nil {
+			// No streaming service configured - just warn
+			logf.FromContext(ctx).Info("Streaming requested but no streaming service configured",
+				"query", query.Name,
+				"namespace", query.Namespace)
+		}
+	}
 	targets, err := r.resolveTargets(ctx, query, impersonatedClient)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve targets: %w", err)
+		return nil, nil, fmt.Errorf("failed to resolve targets: %w", err)
 	}
 
 	var allResponses []arkv1alpha1.Response
@@ -396,7 +444,7 @@ func (r *QueryReconciler) reconcileQueue(ctx context.Context, query arkv1alpha1.
 		wg.Add(1)
 		go func(target arkv1alpha1.QueryTarget) {
 			defer wg.Done()
-			responses, err := r.executeTarget(ctx, query, target, impersonatedClient, memory, tokenCollector)
+			responses, err := r.executeTarget(ctx, query, target, impersonatedClient, memory, eventStream, tokenCollector)
 			resultChan <- targetResult{responses, err, target}
 		}(target)
 	}
@@ -406,7 +454,7 @@ func (r *QueryReconciler) reconcileQueue(ctx context.Context, query arkv1alpha1.
 
 	for result := range resultChan {
 		if result.err != nil {
-			return nil, result.err
+			return nil, eventStream, result.err
 		}
 		// Skip targets that were delegated to external execution engines (messages == nil)
 		if result.messages != nil {
@@ -419,7 +467,7 @@ func (r *QueryReconciler) reconcileQueue(ctx context.Context, query arkv1alpha1.
 		}
 	}
 
-	return allResponses, nil
+	return allResponses, eventStream, nil
 }
 
 // messageToText extracts text content from a single OpenAI message format structure.
@@ -474,10 +522,9 @@ func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query
 	}
 }
 
-func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget, impersonatedClient client.Client, memory genai.MemoryInterface, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) {
+func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) {
 	// Store query in context for access in deeper call stacks
 	ctx = context.WithValue(ctx, genai.QueryContextKey, &query)
-
 	// Create trace based on target type with input/output at trace level
 	tracer := telemetry.NewTraceContext()
 	ctx, span := tracer.StartSpan(ctx, fmt.Sprintf("query.%s", target.Type),
@@ -488,6 +535,17 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 		attribute.String("input.value", query.Spec.Input),
 	)
 	defer span.End()
+
+	// Add query and session context for streaming metadata
+	queryID := string(query.UID)
+	sessionID := query.Spec.SessionId
+	ctx = genai.WithQueryContext(ctx, queryID, sessionID, query.Name)
+
+	// Add execution metadata for streaming
+	targetString := fmt.Sprintf("%s/%s", target.Type, target.Name)
+	ctx = genai.WithExecutionMetadata(ctx, map[string]interface{}{
+		"target": targetString,
+	})
 
 	timeout := 5 * time.Minute
 	if query.Spec.Timeout != nil {
@@ -501,11 +559,11 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 
 	switch target.Type {
 	case "agent":
-		messages, err = r.executeAgent(execCtx, query, target.Name, impersonatedClient, memory, tokenCollector)
+		messages, err = r.executeAgent(execCtx, query, target.Name, impersonatedClient, memory, eventStream, tokenCollector)
 	case "team":
-		messages, err = r.executeTeam(execCtx, query, target.Name, impersonatedClient, memory, tokenCollector)
+		messages, err = r.executeTeam(execCtx, query, target.Name, impersonatedClient, memory, eventStream, tokenCollector)
 	case "model":
-		messages, err = r.executeModel(execCtx, query, target.Name, impersonatedClient, memory, tokenCollector)
+		messages, err = r.executeModel(execCtx, query, target.Name, impersonatedClient, memory, eventStream, tokenCollector)
 	case "tool":
 		messages, err = r.executeTool(execCtx, query, target.Name, impersonatedClient, tokenCollector)
 	default:
@@ -538,7 +596,7 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 	return messages, err
 }
 
-func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Query, agentName string, impersonatedClient client.Client, memory genai.MemoryInterface, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) {
+func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Query, agentName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) {
 	var agentCRD arkv1alpha1.Agent
 	agentKey := types.NamespacedName{Name: agentName, Namespace: query.Namespace}
 
@@ -546,8 +604,11 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 		return nil, fmt.Errorf("unable to get %v, error:%w", agentKey, err)
 	}
 
-	log := logf.FromContext(ctx)
-	log.Info("executing agent", "agent", agentCRD.Name)
+	// Add agent to execution metadata
+	// This ensures that clients can see the specific agent being queried when streaming
+	ctx = genai.WithExecutionMetadata(ctx, map[string]interface{}{
+		"agent": agentName,
+	})
 
 	// Regular agent execution
 	agent, err := genai.MakeAgent(ctx, impersonatedClient, &agentCRD, tokenCollector)
@@ -567,7 +628,7 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 
 	userMessage := genai.NewUserMessage(resolvedInput)
 
-	responseMessages, err := agent.Execute(ctx, userMessage, messages)
+	responseMessages, err := agent.Execute(ctx, userMessage, messages, memory, eventStream)
 	if err != nil {
 		return nil, err
 	}
@@ -581,7 +642,7 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 	return responseMessages, nil
 }
 
-func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Query, teamName string, impersonatedClient client.Client, memory genai.MemoryInterface, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) {
+func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Query, teamName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) {
 	var teamCRD arkv1alpha1.Team
 	teamKey := types.NamespacedName{Name: teamName, Namespace: query.Namespace}
 
@@ -607,7 +668,7 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 
 	userMessage := genai.NewUserMessage(resolvedInput)
 
-	responseMessages, err := team.Execute(ctx, userMessage, messages)
+	responseMessages, err := team.Execute(ctx, userMessage, messages, memory, eventStream)
 	if err != nil {
 		return nil, err
 	}
@@ -621,7 +682,7 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 	return responseMessages, nil
 }
 
-func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Query, modelName string, impersonatedClient client.Client, memory genai.MemoryInterface, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) {
+func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Query, modelName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) {
 	var modelCRD arkv1alpha1.Model
 	modelKey := types.NamespacedName{Name: modelName, Namespace: query.Namespace}
 
@@ -653,33 +714,44 @@ func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Qu
 
 	// Create operation tracker for the model call
 	modelTracker := genai.NewOperationTracker(tokenCollector, ctx, "ModelCall", modelName, map[string]string{
-		"model": modelName,
-		"type":  "direct",
+		"model":     modelName,
+		"type":      "direct",
+		"streaming": fmt.Sprintf("%t", eventStream != nil),
 	})
 
-	// Call model directly with chat completion
-	completion, err := model.ChatCompletion(ctx, allMessages, nil)
-	if err != nil {
-		modelTracker.Fail(err)
-		return nil, fmt.Errorf("model chat completion failed: %w", err)
+	var responseMessages []genai.Message
+
+	if eventStream != nil {
+		// Execute with streaming
+		// Token usage is tracked within executeModelWithStreaming via the modelTracker
+		var err error
+		responseMessages, err = r.executeModelWithStreaming(ctx, model, allMessages, eventStream, modelTracker)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		completion, err := model.ChatCompletion(ctx, allMessages, nil, 1)
+		if err != nil {
+			modelTracker.Fail(err)
+			return nil, fmt.Errorf("model chat completion failed: %w", err)
+		}
+
+		// Extract and track token usage
+		tokenUsage := genai.TokenUsage{
+			PromptTokens:     completion.Usage.PromptTokens,
+			CompletionTokens: completion.Usage.CompletionTokens,
+			TotalTokens:      completion.Usage.TotalTokens,
+		}
+		modelTracker.CompleteWithTokens(tokenUsage)
+
+		if len(completion.Choices) == 0 {
+			return nil, fmt.Errorf("model returned no completion choices")
+		}
+
+		choice := completion.Choices[0]
+		assistantMessage := genai.NewAssistantMessage(choice.Message.Content)
+		responseMessages = []genai.Message{assistantMessage}
 	}
-
-	// Extract and track token usage
-	tokenUsage := genai.TokenUsage{
-		PromptTokens:     completion.Usage.PromptTokens,
-		CompletionTokens: completion.Usage.CompletionTokens,
-		TotalTokens:      completion.Usage.TotalTokens,
-	}
-	modelTracker.CompleteWithTokens("", tokenUsage)
-
-	if len(completion.Choices) == 0 {
-		return nil, fmt.Errorf("model returned no completion choices")
-	}
-
-	choice := completion.Choices[0]
-	assistantMessage := genai.NewAssistantMessage(choice.Message.Content)
-
-	responseMessages := []genai.Message{assistantMessage}
 
 	// Save new messages to memory (user message + response messages)
 	newMessages := append([]genai.Message{userMessage}, responseMessages...)
@@ -772,16 +844,17 @@ func (r *QueryReconciler) loadInitialMessages(ctx context.Context, memory genai.
 }
 
 func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Client, error) {
-	// Skip impersonation in dev mode
-	if os.Getenv("SKIP_IMPERSONATION") == "true" {
+	// If no service account specified, use controller's own identity.
+	// This allows queries to run without impersonation when not needed,
+	// and supports local development where impersonation isn't available.
+	serviceAccount := query.Spec.ServiceAccount
+	if serviceAccount == "" {
 		return r.Client, nil
 	}
 
-	serviceAccount := query.Spec.ServiceAccount
-	if serviceAccount == "" {
-		serviceAccount = "default"
-	}
-
+	// Impersonate the specified service account.
+	// Note: This requires rbac.impersonation.enabled=true in the Helm chart.
+	// Future architecture will move this to per-namespace query executor pods.
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
@@ -853,10 +926,41 @@ func (r *QueryReconciler) executeEvaluation(ctx context.Context, obj arkv1alpha1
 		}
 	} else {
 		obj.Status.Evaluations = evaluationResults
+
 		if updateErr := r.updateStatus(ctx, &obj, statusDone); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
 	}
+}
+
+func (r *QueryReconciler) executeModelWithStreaming(ctx context.Context, model *genai.Model, messages []genai.Message, eventStream genai.EventStreamInterface, modelTracker *genai.OperationTracker) ([]genai.Message, error) {
+	// Call model with streaming enabled
+	completion, err := model.ChatCompletion(ctx, messages, eventStream, 1)
+	if err != nil {
+		modelTracker.Fail(err)
+		return nil, fmt.Errorf("model streaming completion failed: %w", err)
+	}
+
+	// Extract and track token usage
+	tokenUsage := genai.TokenUsage{
+		PromptTokens:     completion.Usage.PromptTokens,
+		CompletionTokens: completion.Usage.CompletionTokens,
+		TotalTokens:      completion.Usage.TotalTokens,
+	}
+	modelTracker.CompleteWithTokens(tokenUsage)
+
+	if len(completion.Choices) == 0 {
+		return nil, fmt.Errorf("model returned no completion choices")
+	}
+
+	choice := completion.Choices[0]
+
+	// Create the assistant message with the full response (preserves tool calls if present)
+	// This matches the non-streaming path but uses the full message instead of just content
+	assistantMessage := genai.Message(choice.Message.ToParam())
+	responseMessages := []genai.Message{assistantMessage}
+
+	return responseMessages, nil
 }
 
 func (r *QueryReconciler) SetupWithManager(mgr ctrl.Manager) error {

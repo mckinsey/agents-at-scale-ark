@@ -164,6 +164,7 @@ deploy: manifests ## Deploy controller and cert-manager to the K8s cluster speci
 		--set crds.enabled=true
 	kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
 	../scripts/build-and-push.sh -i $(IMAGE) -t $(IMAGE_TAG) -f Dockerfile -c . -b VERSION=$(VERSION) -b GIT_COMMIT=$(GIT_COMMIT)
+	# Deploy controller with impersonation enabled for development
 	helm upgrade --install ark-controller ./dist/chart \
 		--namespace ark-system \
 		--create-namespace \
@@ -171,16 +172,12 @@ deploy: manifests ## Deploy controller and cert-manager to the K8s cluster speci
 		--set controllerManager.container.image.repository=$(IMAGE) \
 		--set controllerManager.container.image.tag=$(IMAGE_TAG) \
 		--set controllerManager.container.image.pullPolicy=IfNotPresent \
-		--set rbac.enable=true
-	# Apply default namespace RBAC separately (not included in Helm chart)
-	$(KUBECTL) apply -f config/rbac/ark_tenant_role.yaml
-	$(KUBECTL) apply -f config/rbac/ark_tenant_role_binding.yaml
+		--set rbac.enable=true \
+		--set rbac.impersonation.enabled=true
 
 .PHONY: undeploy
 undeploy: ## Remove ARK controller from the cluster
 	helm uninstall ark-controller -n ark-system --ignore-not-found
-	$(KUBECTL) delete -f config/rbac/ark_tenant_role_binding.yaml --ignore-not-found=true
-	$(KUBECTL) delete -f config/rbac/ark_tenant_role.yaml --ignore-not-found=true
 	# Clean up ARK CRDs that might conflict with Helm ownership
 	$(KUBECTL) get crd -o name | grep ark.mckinsey.com | xargs -r $(KUBECTL) delete --ignore-not-found=true || true
 	# Clean up ARK ClusterRoles and ClusterRoleBindings that might conflict with Helm ownership

@@ -13,9 +13,6 @@ apiVersion: ark.mckinsey.com/v1alpha1
 kind: Memory
 metadata:
   name: ark-cluster-memory
-  annotations:
-    # Enable event streaming support for this memory service
-    ark.mckinsey.com/memory-event-stream-enabled: "true"
 spec:
   # The address of the service that handles memory API calls.
   address:
@@ -28,12 +25,6 @@ spec:
         port: 8080
 ```
 
-### Annotations
-
-- **`ark.mckinsey.com/memory-event-stream-enabled`** - When set to `"true"`, enables event streaming capabilities for this memory service. This annotation is used to configure the Memory resource as a streaming resource, allowing real-time message delivery during query execution. See the detailed [Streaming Developer Guide](/developer-guide/queries/streaming).
-
-  > **Note:** In a future release, streaming functionality will be extracted into a dedicated resource type. For detailed information about implementing and using streaming, see the [Streaming Developer Guide](/developer-guide/queries/streaming).
-
 ## Usage
 
 Memory can be specified in a query resource. If a Memory resource named `default` exists in the namespace, it will be automatically selected for queries that don't explicitly specify a memory.
@@ -45,9 +36,6 @@ apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
   name: chat-with-memory
-  annotations:
-    # Enable streaming for real-time response delivery
-    ark.mckinsey.com/streaming-enabled: "true"
 spec:
   input: "What did we discuss earlier?"
   targets:
@@ -67,7 +55,6 @@ fark query --input "Continue our conversation" --session-id "my-conversation-ses
 
 When creating a query in the dashboard it is also possible to specify the memory resource. Note that in the dashbhoard 'chat' window, no memory is used, messages are simply stored client-side as is common for chat applications.
 
-
 ## Memory API Specification
 
 Memory is implemented as a simple HTTP server:
@@ -78,9 +65,6 @@ Memory is implemented as a simple HTTP server:
 | GET | `/messages` | Retrieve messages with optional filtering |
 | GET | `/sessions` | List all session IDs |
 | GET | `/health` | Health check |
-| GET | `/stream/{query_id}` | **Optional:** Server-Sent Events stream |
-| POST | `/stream/{query_id}` | **Optional:** Receive streaming chunks |
-| POST | `/stream/{query_id}/complete` | **Optional:** Mark query execution complete |
 
 ### Store Messages
 
@@ -145,14 +129,3 @@ Returns object with session IDs:
 ```json
 {"sessions": ["session-1", "session-2", "session-3"]}
 ```
-
-
-## ARK Cluster Memory
-
-The ARK Cluster Memory service provides an in-memory storage implementation with streaming support:
-
-```bash
-make ark-cluster-memory-install
-```
-
-It stores messages in memory and supports real-time streaming via Server-Sent Events (SSE).

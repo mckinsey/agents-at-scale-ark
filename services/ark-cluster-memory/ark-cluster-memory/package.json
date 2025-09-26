@@ -1,6 +1,6 @@
 {
   "name": "ark-cluster-memory",
-  "version": "0.1.33",
+  "version": "0.1.35",
   "description": "Ark in-cluster memory for memory and streaming data",
   "main": "dist/main.js",
   "type": "module",

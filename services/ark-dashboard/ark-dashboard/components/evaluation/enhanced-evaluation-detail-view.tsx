@@ -126,7 +126,6 @@ export function EnhancedEvaluationDetailView({
   const loadEvaluation = useCallback(async () => {
     try {
       const data = await evaluationsService.getEnhancedDetailsByName(
-        namespace,
         evaluationId
       );
       setEvaluation(data);
@@ -140,7 +139,7 @@ export function EnhancedEvaluationDetailView({
             : "An unexpected error occurred"
       });
     }
-  }, [namespace, evaluationId]);
+  }, [evaluationId]);
 
   useEffect(() => {
     const initialLoad = async () => {
@@ -157,7 +156,7 @@ export function EnhancedEvaluationDetailView({
 
     setCanceling(true);
     try {
-      await evaluationsService.cancel(namespace, evaluation.name);
+      await evaluationsService.cancel(evaluation.name);
       toast({
         variant: "default",
         title: "Evaluation Canceled",

@@ -1,6 +1,6 @@
 {
   "name": "y",
-  "version": "0.1.34",
+  "version": "0.1.35",
   "description": "QB Agentic Runtime Docs",
   "main": "index.js",
   "scripts": {

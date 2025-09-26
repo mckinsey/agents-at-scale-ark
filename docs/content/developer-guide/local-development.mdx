@@ -70,8 +70,14 @@ kubectl apply -f config/crd/bases/ark.mckinsey.com_queries.yaml
 Regenerate the Ark SDK with the updated resource types based on the CRDS:
 
 ```bash
-TODO snippet
+make ark-sdk-build
 ```
+
+This will:
+- Convert CRDs to OpenAPI spec
+- Generate Python client from OpenAPI
+- Apply overlay files for custom functionality
+- Build the Python wheel
 
 More details on how the Ark SDK is generated and used is at the [Ark SDK Developer Guide](/developer-guide/ark-sdk).
 
