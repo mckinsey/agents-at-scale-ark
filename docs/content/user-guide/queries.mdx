@@ -15,6 +15,38 @@ A query is a request to execute a task using an agent or team. It contains:
 - **Target**: Which agent or team should process the request
 - **Output**: The response from the agent or team
 
+### Query Input Schema (Key Elements)
+
+The most important fields for controlling queries are:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: my-query
+  namespace: default
+spec:
+  type: user | messages   # (optional) 'user' for string input (default), 'messages' for array of messages
+  input:                  # The actual input to the agent/team
+    # If type is 'user' or omitted:
+    "A single string prompt or question."
+    # If type is 'messages':
+    - role: user         # 'user', 'assistant', 'system', or provider-specific
+      content: "Message text"
+    - role: assistant
+      content: "Response text"
+    # ...more messages as needed
+  targets:
+    - type: agent | team | model | tool
+      name: my-target
+```
+
+**Notes:**
+- `type` is optional; if omitted, it defaults to `user` (string input).
+- For `type: messages`, `input` must be an array of objects with `role` and `content` fields.
+- Supported roles: `user`, `assistant`, `system`, and provider-specific roles.
+
+
 ## Using kubectl
 
 You can create queries using either a single string input or a structured conversation (messages array). See the examples below:
