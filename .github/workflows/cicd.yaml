@@ -46,6 +46,42 @@ jobs:
         with:
           docker-cicd-cache-registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY }}
 
+  # Code quality scan with SonarQube
+  # NOTE: This job is currently disabled - waiting for enterprise SonarQube configuration to be applied
+  sonar_scan:
+    if: false  # Disabled until enterprise configuration is ready
+    runs-on: [ self-hosted, Linux ]
+    env:
+      SONAR_TOKEN: ${{ secrets.SONARQUBE_TOKEN }}
+      SONAR_HOST_URL: ${{ vars.SONARQUBE_HOST_URL }}
+      PROJECT_KEY: ${{ secrets.SONARQUBE_PROJECT_KEY }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@master
+      - if: ${{ github.base_ref == null }}
+        name: Sonar Scan
+        run: |
+          docker run -i --user `id -u` --rm -e SONAR_TOKEN -e SONAR_HOST_URL \
+          -v `pwd`:/app -w /app sonarsource/sonar-scanner-cli:5.0.1 \
+            -Dsonar.projectKey=$PROJECT_KEY \
+            -Dsonar.sources=./ -Dsonar.branch.name=`echo "${{ github.ref }}" | cut -b 12-` \
+            -Dsonar.qualitygate.wait=false
+      - if: ${{ github.base_ref != null }}
+        name: Sonar Scan on PR
+        env:
+          pr_key: ${{ github.event.number }}
+          pr_branch: ${{ github.head_ref }}
+          pr_base: ${{ github.base_ref }}
+        run: |
+          docker run -i --user `id -u` --rm -e SONAR_TOKEN -e SONAR_HOST_URL \
+          -v `pwd`:/app -w /app sonarsource/sonar-scanner-cli:5.0.1 \
+            -Dsonar.projectKey=$PROJECT_KEY \
+            -Dsonar.sources=./ \
+            -Dsonar.pullrequest.key="$pr_key" \
+            -Dsonar.pullrequest.branch="$pr_branch" \
+            -Dsonar.pullrequest.base="$pr_base" \
+            -Dsonar.qualitygate.wait=false
+
   # Security scan with JFrog Xray
   jfrog-xray-scan:
     runs-on: ubuntu-24.04

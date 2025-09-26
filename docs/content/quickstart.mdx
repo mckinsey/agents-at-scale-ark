@@ -20,29 +20,16 @@ ark models create default
 ark dashboard
 ```
 
-In most cases the default installation options will be sufficient. This will install the Ark dependencies, the controller, the APIs and the dashboard. You can optionally setup a `default` model that will be the default used by agents. You will need a Kubernetes cluster to install Ark into, you can use [Minikube](https://minikube.sigs.k8s.io/docs/start), [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/), [Docker Desktop](https://docs.docker.com/desktop/kubernetes/) or similar to run a local cluster. The `install` command will warn if any required dependencies are missing.
+You will need a Kubernetes cluster to install Ark into, you can use [Minikube](https://minikube.sigs.k8s.io/docs/start), [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/), [Docker Desktop](https://docs.docker.com/desktop/kubernetes/) or similar to run a local cluster. The `install` command will warn if any required dependencies are missing.
+
+In most cases the default installation options will be sufficient. This will install the Ark dependencies, the controller, the APIs and the dashboard. You can optionally setup a `default` model that will be the default used by agents.
+
+Detailed instructions on how to install specific componets, configure RBAC, setup CI/CD deployments and deploy to remote clusters are available in the [Deploying Ark](../operations-guide/deploying-ark) operations guide.
+
+## Installing Fark
 
 You can also install the [Fark](../developer-guide/cli-tools.mdx) (Fast Agentic Runtime Kit) CLI tool to manage agents, run queries and more.
 
-## Installing Ark on Windows
+## Windows Installation
 
-Ark requires a Kubernetes cluster to run. On Windows, you have several options:
-
-### Using WSL2 (Recommended)
-
-1. Install [WSL2](https://docs.microsoft.com/en-us/windows/wsl/install) with Ubuntu or another Linux distribution
-2. Install Docker Desktop with WSL2 backend enabled
-3. Enable Kubernetes in Docker Desktop settings
-4. Follow the standard installation steps above
-
-### Using Docker Desktop
-
-1. Install [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/)
-2. Enable Kubernetes in Docker Desktop Settings → Kubernetes → Enable Kubernetes
-3. Follow the standard installation steps above
-
-### Using Minikube
-
-1. Install [Minikube](https://minikube.sigs.k8s.io/docs/start/) for Windows
-2. Start Minikube: `minikube start`
-3. Follow the standard installation steps
+To run Ark on Windows, you can run Kubernetes in [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/), [Minikube](https://minikube.sigs.k8s.io/docs/start/) or other Kubernetes cluster providers. In most cases you will have to enable [WSL2](https://docs.microsoft.com/en-us/windows/wsl/install). Additional instructions and troubleshooting guides are in the [Installing Ark on Windows](../reference/troubleshooting#installing-ark-on-windows) section of the [Troubleshooting](../reference/troubleshooting) guide.
