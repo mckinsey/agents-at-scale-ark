@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
-import { AlertCircle, Plus, ChevronRight, ChevronsUpDown, Check, ChevronsUpDownIcon, LogOut } from "lucide-react"
+import { AlertCircle, Plus, ChevronRight, ChevronsUpDown, Check, ChevronsUpDownIcon, LogOut, Home } from "lucide-react"
 import { useRouter, usePathname } from "next/navigation"
 import { CONFIGURATION_SECTIONS, OPERATION_SECTIONS, RUNTIME_SECTIONS } from "@/lib/constants/dashboard-icons"
 import {
@@ -47,7 +47,7 @@ export function AppSidebar() {
     createNamespace,
     isPending,
     namespace,
-    namespaceResolved,
+    isNamespaceResolved,
     setNamespace
   } = useNamespace()
   
@@ -87,8 +87,7 @@ export function AppSidebar() {
   }
 
   const getCurrentSection = () => {
-    const path = pathname.split('/')[1]
-    return path || 'agents'
+    return pathname.split('/')[1]
   }
 
   return (
@@ -150,6 +149,15 @@ export function AppSidebar() {
                 </DropdownMenuContent>
               </DropdownMenu>
             </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => navigateToSection('')}
+                isActive={getCurrentSection() === ''}
+              >
+                <Home />
+                <span>Home</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
         
@@ -170,12 +178,12 @@ export function AppSidebar() {
                   <SidebarMenu>
                     {CONFIGURATION_SECTIONS.map((item) => {
                       const isPlaceholder = isPlaceholderSection(item.key)
-                      const isDisabled = !namespaceResolved || loading || isPlaceholder
+                      const isDisabled = !isNamespaceResolved || loading || isPlaceholder
                       const isActive = getCurrentSection() === item.key
                       return (
                         <SidebarMenuItem key={item.key}>
                           <SidebarMenuButton
-                            onClick={() => !isPlaceholder && namespaceResolved && navigateToSection(item.key)}
+                            onClick={() => !isPlaceholder && isNamespaceResolved && navigateToSection(item.key)}
                             isActive={isActive}
                             disabled={isDisabled}
                           >
@@ -207,12 +215,12 @@ export function AppSidebar() {
                   <SidebarMenu>
                     {RUNTIME_SECTIONS.map((item) => {
                       const isPlaceholder = isPlaceholderSection(item.key)
-                      const isDisabled = !namespaceResolved || loading || isPlaceholder
+                      const isDisabled = !isNamespaceResolved || loading || isPlaceholder
                       const isActive = getCurrentSection() === item.key
                       return (
                         <SidebarMenuItem key={item.key}>
                           <SidebarMenuButton
-                            onClick={() => !isPlaceholder && namespaceResolved && navigateToSection(item.key)}
+                            onClick={() => !isPlaceholder && isNamespaceResolved && navigateToSection(item.key)}
                             isActive={isActive}
                             disabled={isDisabled}
                           >
@@ -244,12 +252,12 @@ export function AppSidebar() {
                   <SidebarMenu>
                     {OPERATION_SECTIONS.map((item) => {
                       const isPlaceholder = isPlaceholderSection(item.key)
-                      const isDisabled = !namespaceResolved || loading || isPlaceholder
+                      const isDisabled = !isNamespaceResolved || loading || isPlaceholder
                       const isActive = getCurrentSection() === item.key
                       return (
                         <SidebarMenuItem key={item.key}>
                           <SidebarMenuButton
-                            onClick={() => !isPlaceholder && namespaceResolved && navigateToSection(item.key)}
+                            onClick={() => !isPlaceholder && isNamespaceResolved && navigateToSection(item.key)}
                             isActive={isActive}
                             disabled={isDisabled}
                           >
