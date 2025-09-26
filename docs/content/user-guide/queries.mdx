@@ -17,30 +17,79 @@ A query is a request to execute a task using an agent or team. It contains:
 
 ## Using kubectl
 
-Create a query using a YAML file:
+You can create queries using either a single string input or a structured conversation (messages array). See the examples below:
+
+### String Input (type: user or default)
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: my-query
+  name: conversation-string-user
+  namespace: default
 spec:
-  input: "What's the weather like in New York?"
+  type: user
+  input: "User: Calculate 1+1.\n\nAgent: To calculate 1 + 1, the sum is equal to 2.\n\nUser: Calculate 2+2.\n\nAgent: To calculate 2 + 2, the sum is equal to 4.\n\nUser: What is the sum of all previous sums?"
   targets:
-  - type: agent
-    name: weather-agent
+    - type: agent
+      name: math
 ```
 
-Apply the query:
+Or, omitting the type (defaults to user):
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: conversation-string-default
+  namespace: default
+spec:
+  input: "User: Calculate 1+1.\n\nAgent: To calculate 1 + 1, the sum is equal to 2.\n\nUser: Calculate 2+2.\n\nAgent: To calculate 2 + 2, the sum is equal to 4.\n\nUser: What is the sum of all previous sums?"
+  targets:
+    - type: agent
+      name: math
+```
+
+### Messages Input (type: messages)
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: conversation-messages
+  namespace: default
+spec:
+  type: messages
+  input:
+    - role: user
+      content: "Calculate 1+1."
+    - role: assistant
+      content: "2"
+    - role: user
+      content: "Calculate 2+2."
+    - role: assistant
+      content: "4"
+    - role: user
+      content: "What is the sum of all previous sums?"
+  targets:
+    - type: agent
+      name: math
+```
+
+Apply a query using kubectl:
 
 ```bash
-kubectl apply -f my-query.yaml
+kubectl apply -f samples/queries/query-conversation-string-user.yaml
+kubectl apply -f samples/queries/query-conversation-string-default.yaml
+kubectl apply -f samples/queries/query-conversation-messages.yaml
 ```
 
 Check the result:
 
 ```bash
-kubectl get query my-query -o yaml
+kubectl get query conversation-string-user -o yaml
+kubectl get query conversation-string-default -o yaml
+kubectl get query conversation-messages -o yaml
 ```
 
 ## Using fark CLI
