@@ -94,13 +94,6 @@ speedups = [
     { name = "brotlicffi", marker = "platform_python_implementation != 'CPython'" },
 ]
 
-[package.optional-dependencies]
-speedups = [
-    { name = "aiodns" },
-    { name = "brotli", marker = "platform_python_implementation == 'CPython'" },
-    { name = "brotlicffi", marker = "platform_python_implementation != 'CPython'" },
-]
-
 [[package]]
 name = "aiosignal"
 version = "1.4.0"
