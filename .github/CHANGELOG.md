@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.1.36](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.35...v0.1.36) (2025-09-26)
+
+
+### Features
+
+* 284 - implement standalone RagasProvider with comprehensive OSS evaluation architecture ([#161](https://github.com/mckinsey/agents-at-scale-ark/issues/161)) ([c4d18ee](https://github.com/mckinsey/agents-at-scale-ark/commit/c4d18eeb46c69c1d638cdd99bcfcd4bceaaf1f8e))
+* Add ARK Dashboard homepage with metrics cards ([#190](https://github.com/mckinsey/agents-at-scale-ark/issues/190)) ([acd5a4c](https://github.com/mckinsey/agents-at-scale-ark/commit/acd5a4c1e91cf8aa613d27017749d8be0416da37))
+* add streaming support for query execution ([#162](https://github.com/mckinsey/agents-at-scale-ark/issues/162)) ([77f7f7f](https://github.com/mckinsey/agents-at-scale-ark/commit/77f7f7f14ae3101780b74dc8049d7e2c58f5b768))
+* replace make quickstart with ark install, improved ark cli, improved install docs ([#188](https://github.com/mckinsey/agents-at-scale-ark/issues/188)) ([e51e296](https://github.com/mckinsey/agents-at-scale-ark/commit/e51e296ab9a71b3f82070b5e2b6e620cced2d728))
+
+
+### Bug Fixes
+
+* add webhook initialization delay in quickstart ([#196](https://github.com/mckinsey/agents-at-scale-ark/issues/196)) ([3429362](https://github.com/mckinsey/agents-at-scale-ark/commit/34293627c75216dc92c76b6744e565c1fcc2d1c6))
+* CI/CD workflow issues ([#182](https://github.com/mckinsey/agents-at-scale-ark/issues/182)) ([f2c01e5](https://github.com/mckinsey/agents-at-scale-ark/commit/f2c01e5e8e90638e62e65e652ccd6c0bd1824eca))
+* devspace httproutes missing ([#187](https://github.com/mckinsey/agents-at-scale-ark/issues/187)) ([1860dac](https://github.com/mckinsey/agents-at-scale-ark/commit/1860dacd4d32836f8030ab82df15f165df704e55))
+* make namespace parameter optional across all API endpoints ([#191](https://github.com/mckinsey/agents-at-scale-ark/issues/191)) ([9c068c1](https://github.com/mckinsey/agents-at-scale-ark/commit/9c068c1f2ec6f9807aa04a717ab08117553da1a6))
+* **models:** improve model probe stability and observability ([#186](https://github.com/mckinsey/agents-at-scale-ark/issues/186)) ([e6e506b](https://github.com/mckinsey/agents-at-scale-ark/commit/e6e506bb694f544cb84c46039872f68ba60fd562))
+* New query display bug fix ([#185](https://github.com/mckinsey/agents-at-scale-ark/issues/185)) ([5d5e6f4](https://github.com/mckinsey/agents-at-scale-ark/commit/5d5e6f421178fd83e1e07c3b7e2aebbf2a37c785))
+
 ## [0.1.35](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.34...v0.1.35) (2025-09-24)
 
 
