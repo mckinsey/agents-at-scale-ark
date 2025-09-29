@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 export function isValidKubernetesName(name: string): boolean {
   if (!name || name.length === 0 || name.length > 253) {
     return false;
@@ -18,6 +20,23 @@ export function isValidKubernetesName(name: string): boolean {
 
   return true;
 }
+
+export const kubernetesNameSchema = z.string()
+  .min(1, {
+    message: "Name is required"
+  })
+  .max(253, {
+    message: "Name must be 253 characters or less"
+  })
+  .regex(/^[a-z0-9]/, {
+    message: "Name must start with a lowercase letter or number"
+  })
+  .regex(/[a-z0-9]$/, {
+    message: "Name must end with a lowercase letter or number"
+  })
+  .regex(/^[a-z0-9-]+$/, {
+    message: "Name can only contain lowercase letters, numbers, and hyphens"
+  });
 
 export function getKubernetesNameError(name: string): string | null {
   if (!name || name.length === 0) {
@@ -44,4 +63,23 @@ export function getKubernetesNameError(name: string): string | null {
   }
 
   return null;
+}
+
+export const kubernetesSecretNameSchema = z.string()
+  .min(1, {
+    message: "Name is required"
+  })
+  .max(253, {
+    message: "Name must be 253 characters or less"
+  })
+  .regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/, {
+    message: "Name must consist of lowercase alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character"
+  });
+
+// Kubernetes secret name validation
+// Must consist of lower case alphanumeric characters, '-' or '.', 
+// and must start and end with an alphanumeric character
+export function isValidK8sSecretName(name: string): boolean {
+  const k8sNameRegex = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/
+  return k8sNameRegex.test(name) && name.length <= 253
 }

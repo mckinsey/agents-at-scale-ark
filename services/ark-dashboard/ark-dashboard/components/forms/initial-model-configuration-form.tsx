@@ -1,0 +1,692 @@
+"use client";
+
+import { toast } from "@/components/ui/use-toast";
+import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useState } from "react";
+import { Control, useForm, UseFormReturn } from "react-hook-form";
+import { z } from 'zod'
+import { zodResolver } from '@hookform/resolvers/zod';
+import { kubernetesNameSchema, kubernetesSecretNameSchema } from "@/lib/utils/kubernetes-validation";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useCreateSecret, useGetAllSecrets } from "@/lib/services/secrets-hooks";
+import { Plus } from "lucide-react";
+import { ModelCreateRequest, Secret } from "@/lib/services";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from "@/components/ui/dialog";
+import { useCreateModel } from "@/lib/services/models-hooks";
+import { Spinner } from "@/components/ui/spinner";
+
+const openaiSchema = z.object({
+  name: kubernetesNameSchema,
+  type: z.literal("openai"),
+  model: z.string().min(1, { message: "Model is required" }),
+  secret: z.string().min(1, { message: "Secret is required" }),
+  baseUrl: z.string().min(1, { message: "Base URL is required" })
+})
+
+const azureSchema = z.object({
+  name: kubernetesNameSchema,
+  type: z.literal("azure"),
+  model: z.string().min(1, { message: "Name is required" }),
+  secret: z.string().min(1, { message: "Name is required" }),
+  baseUrl: z.string().min(1, { message: "Name is required" }),
+  azureApiVersion: z.string().nullish()
+})
+
+const bedrockSchema = z.object({
+  name: kubernetesNameSchema,
+  type: z.literal("bedrock"),
+  model: z.string().min(1, { message: "Name is required" }),
+  bedrockAccessKeyIdSecretName: z.string().min(1, { message: "Access Key ID Secret is required" }),
+  bedrockSecretAccessKeySecretName: z.string().min(1, { message: "Secret Access Key Secret is required" }),
+  region: z.string().nullish(),
+  modelARN: z.string().nullish()
+})
+
+const schema = z.discriminatedUnion("type", [
+  openaiSchema,
+  azureSchema,
+  bedrockSchema
+]);
+
+type FormValues = z.infer<typeof schema>
+
+function getResetValues(currentFormValues: FormValues): FormValues {
+  switch (currentFormValues.type) {
+    case "openai":
+      return {
+        name: currentFormValues.name,
+        type: currentFormValues.type,
+        model: currentFormValues.model,
+        secret: currentFormValues.secret ?? '',
+        baseUrl: currentFormValues.baseUrl ?? ''
+      }
+    case "azure":
+      return {
+        name: currentFormValues.name,
+        type: currentFormValues.type,
+        model: currentFormValues.model,
+        secret: currentFormValues.secret ?? '',
+        baseUrl: currentFormValues.baseUrl ?? '',
+        azureApiVersion: ''
+      }
+    case "bedrock":
+      return {
+        name: currentFormValues.name,
+        type: currentFormValues.type,
+        model: currentFormValues.model,
+        bedrockAccessKeyIdSecretName: '',
+        bedrockSecretAccessKeySecretName: '',
+        region: '',
+        modelARN: ''
+      }
+  }
+}
+
+const formId = "initialModelConfiguratorForm"
+
+export function InitialModelConfiguratorForm() {
+  const form = useForm<FormValues>({
+    mode: 'onChange',
+    resolver: zodResolver(schema),
+    defaultValues: {
+      name: '',
+      type: 'openai',
+      model: '',
+      secret: '',
+      baseUrl: ''
+    }
+  })
+
+  const type = form.watch('type')
+
+  const {
+    data: secrets,
+    isPending: isSecretsPending,
+    error: secretsError
+  } = useGetAllSecrets()
+
+  const { mutate, isPending } = useCreateModel()
+
+  useEffect(() => {
+    if (secretsError) {
+      toast({
+        variant: "destructive",
+        title: "Failed to get secrets",
+        description:
+          secretsError instanceof Error
+            ? secretsError.message
+            : "An unexpected error occurred"
+      });
+    }
+  }, [secretsError]);
+
+  useEffect(() => {
+    const currentValues = form.getValues()
+    form.reset(getResetValues(currentValues))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type])
+
+  const onSubmit = (formValues: FormValues) => {
+    const config = createConfig(formValues)
+    mutate({
+      name: formValues.name,
+      type: formValues.type,
+      model: formValues.model,
+      config
+    })
+  }
+
+  return (
+    <SecretDialogProvider>
+      <div className="py-8">
+        <h3 className="text-xl font-semibold text-balance mb-4">Start by configuring a model</h3>
+        <p className="text-muted-foreground text-pretty max-w-2xl">
+          Get started with ARK by adding your first model. Once configured, you can create agents,
+          organize teams, and monitor your AI infrastructure.
+        </p>
+      </div>
+      <Card className="max-w-[calc(100%-2rem)] md:w-md md:max-w-md shrink-0">
+        <CardHeader>
+          <CardTitle>Create New Model</CardTitle>
+          <CardDescription>Fill in the information for the new model.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form id={formId} onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name='name'
+                render={({ field, fieldState }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="e.g., gpt-4-turbo"
+                        className={fieldState.error ? "border-red-500" : undefined}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='type'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="openai">OpenAI</SelectItem>
+                        <SelectItem value="azure">Azure OpenAI</SelectItem>
+                        <SelectItem value="bedrock">AWS Bedrock</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='model'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Model</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder={type === "openai" ? "e.g., gpt-4-turbo-preview" : type === "azure" ? "e.g., gpt-4" : "e.g., anthropic.claude-v2"} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {type === 'openai' && (
+                <OpenAISpecificFields
+                  isSecretsPending={isSecretsPending}
+                  secrets={secrets}
+                  control={form.control}
+                />
+              )}
+              {type === 'azure' && (
+                <AzureSpecificFields
+                  isSecretsPending={isSecretsPending}
+                  secrets={secrets}
+                  control={form.control}
+                />
+              )}
+              {type === 'bedrock' && (
+                <AWSBedrockSpecificFields
+                  isSecretsPending={isSecretsPending}
+                  secrets={secrets}
+                  control={form.control}
+                />
+              )}
+            </form>
+          </Form>
+        </CardContent>
+        <CardFooter className="justify-end">
+          <Button type="submit" form={formId} disabled={isPending}>
+            {isPending ? (<>
+              <Spinner size="sm" className="mx-auto my-2" />
+              <span>Creating Model...</span>
+            </>) : (<span>Create Model</span>)}
+          </Button>
+
+        </CardFooter>
+      </Card>
+      <CreateNewSecretDialog />
+    </SecretDialogProvider>
+  )
+}
+
+type OpenAISpecificFieldsProps = {
+  isSecretsPending: boolean;
+  secrets?: Secret[]
+  control: Control<FormValues, unknown, FormValues>
+}
+
+function OpenAISpecificFields({ isSecretsPending, secrets, control }: OpenAISpecificFieldsProps) {
+  return (
+    <>
+      <FormField
+        control={control}
+        name='secret'
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Secret</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value}>
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a secret" />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                {
+                  isSecretsPending ? (
+                    <Spinner size="sm" className="mx-auto my-2" />
+                  ) : (
+                    <>
+                      {secrets?.map((secret) => (
+                        <SelectItem key={secret.name} value={secret.name}>
+                          {secret.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )
+                }
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <CreateNewSecretButton />
+      <FormField
+        control={control}
+        name='baseUrl'
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Base URL</FormLabel>
+            <FormControl>
+              <Input {...field} value={field.value || ''} placeholder="https://api.openai.com/v1" />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </>
+  )
+}
+
+type AzureSpecificFieldsProps = {
+  isSecretsPending: boolean;
+  secrets?: Secret[]
+  control: Control<FormValues, unknown, FormValues>
+}
+
+function AzureSpecificFields({ control, isSecretsPending, secrets }: AzureSpecificFieldsProps) {
+  return (
+    <>
+      <FormField
+        control={control}
+        name='secret'
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Secret</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value}>
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a secret" />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                {
+                  isSecretsPending ? (
+                    <Spinner size="sm" className="mx-auto my-2" />
+                  ) : (
+                    <>
+                      {secrets?.map((secret) => (
+                        <SelectItem key={secret.name} value={secret.name}>
+                          {secret.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )
+                }
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <CreateNewSecretButton />
+      <FormField
+        control={control}
+        name='baseUrl'
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Base URL</FormLabel>
+            <FormControl>
+              <Input {...field} placeholder="https://your-resource.openai.azure.com/" />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={control}
+        name='azureApiVersion'
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>API Version (Optional)</FormLabel>
+            <FormControl>
+              <Input {...field} value={field.value ?? ""} placeholder="2023-05-15" />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </>
+  )
+}
+
+type AWSBedrockSpecificFieldsProps = {
+  isSecretsPending: boolean;
+  secrets?: Secret[]
+  control: Control<FormValues, unknown, FormValues>
+}
+
+function AWSBedrockSpecificFields({ control, isSecretsPending, secrets }: AWSBedrockSpecificFieldsProps) {
+  return (
+    <>
+      <FormField
+        control={control}
+        name='bedrockAccessKeyIdSecretName'
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Access Key ID Secret</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value}>
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a secret for Access Key ID" />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                {
+                  isSecretsPending ? (
+                    <Spinner size="sm" className="mx-auto my-2" />
+                  ) : (
+                    <>
+                      {secrets?.map((secret) => (
+                        <SelectItem key={secret.name} value={secret.name}>
+                          {secret.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )
+                }
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={control}
+        name='bedrockSecretAccessKeySecretName'
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Secret Access Key Secret</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value}>
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a secret for Secret Access Key" />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                {
+                  isSecretsPending ? (
+                    <Spinner size="sm" className="mx-auto my-2" />
+                  ) : (
+                    <>
+                      {secrets?.map((secret) => (
+                        <SelectItem key={secret.name} value={secret.name}>
+                          {secret.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )
+                }
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <CreateNewSecretButton />
+      <FormField
+        control={control}
+        name='region'
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Region (Optional)</FormLabel>
+            <FormControl>
+              <Input {...field} value={field.value ?? ""} placeholder="us-east-1" />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={control}
+        name='modelARN'
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Model ARN (Optional)</FormLabel>
+            <FormControl>
+              <Input {...field} value={field.value ?? ""} placeholder="arn:aws:bedrock:..." />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </>
+  )
+}
+
+const newSecretSchema = z.object({
+  name: kubernetesSecretNameSchema,
+  password: z.string().min(1, "Password is required")
+})
+
+type NewSecretData = z.infer<typeof newSecretSchema>
+
+interface SecretDialogContext {
+  form: UseFormReturn<NewSecretData, unknown, NewSecretData>;
+  isPending: boolean;
+  handleSubmit: (formValues: NewSecretData) => void
+}
+
+const SecretDialogContext = createContext<SecretDialogContext | undefined>(
+  undefined
+);
+
+function SecretDialogProvider({ children }: PropsWithChildren) {
+  const [isOpen, setIsOpen] = useState(false)
+
+  const form = useForm<NewSecretData>({
+    mode: 'onChange',
+    resolver: zodResolver(newSecretSchema),
+    defaultValues: {
+      name: '',
+      password: ''
+    }
+  })
+
+  const toggleDialog = useCallback(() => {
+    setIsOpen(prev => !prev)
+  }, [])
+
+  const { mutate, isPending } = useCreateSecret({ onSuccess: toggleDialog })
+
+  const handleSubmit = useCallback((formValues: NewSecretData) => {
+    mutate(formValues)
+  }, [mutate])
+
+  const handleOpenChange = useCallback((open: boolean) => {
+    if (open) {
+      form.reset()
+    }
+    toggleDialog()
+  }, [toggleDialog, form])
+
+  return (
+    <SecretDialogContext.Provider value={{
+      form,
+      isPending,
+      handleSubmit
+    }}>
+      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+        {children}
+      </Dialog>
+    </SecretDialogContext.Provider>
+  );
+};
+
+function useSecretDialog() {
+  const context = useContext(SecretDialogContext);
+  if (!context) {
+    throw new Error('useSecretDialog must be used within a SecretDialogProvider');
+  }
+
+  return context;
+};
+
+function CreateNewSecretButton() {
+  return (
+    <DialogTrigger asChild>
+      <Button type="button" variant="outline" size="sm" className="w-full">
+        <Plus className="h-3 w-3 mr-2" />
+        Create New Secret
+      </Button>
+    </DialogTrigger>
+  )
+}
+
+
+function CreateNewSecretDialog() {
+  const { form, handleSubmit, isPending } = useSecretDialog()
+
+  return (
+    <DialogContent className="sm:max-w-[425px]">
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(handleSubmit)}>
+          <DialogHeader>
+            <DialogTitle>Add Secret</DialogTitle>
+            <DialogDescription>
+              Enter the details for the new secret.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <FormField
+              control={form.control}
+              name='name'
+              render={({ field }) => (
+                <FormItem>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <FormLabel>Name</FormLabel>
+                    <FormControl className="col-span-3 space-y-1">
+                      <Input {...field} placeholder="e.g. api-key-production" />
+                    </FormControl>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='password'
+              render={({ field }) => (
+                <FormItem>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <FormLabel>Password</FormLabel>
+                    <FormControl className="col-span-3 space-y-1">
+                      <Input {...field}
+                        type="password"
+                        placeholder="Enter the secret password"
+                      />
+                    </FormControl>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button type="submit" disabled={isPending}>
+              {isPending ? (<>
+                <Spinner size="sm" className="mx-auto my-2" />
+                <span>Creating Secret...</span>
+              </>) : (<span>Create Secret</span>)}
+            </Button>
+          </DialogFooter>
+        </form>
+      </Form>
+    </DialogContent>
+  )
+}
+
+function createConfig(formValues: FormValues): ModelCreateRequest["config"] {
+  const config: ModelCreateRequest["config"] = {}
+  switch (formValues.type) {
+    case "openai":
+      config.openai = {
+        apiKey: {
+          valueFrom: {
+            secretKeyRef: {
+              name: formValues.secret,
+              key: "token"
+            }
+          }
+        },
+        baseUrl: formValues.baseUrl
+      }
+      return config
+    case "azure":
+      config.azure = {
+        apiKey: {
+          valueFrom: {
+            secretKeyRef: {
+              name: formValues.secret,
+              key: "token"
+            }
+          }
+        },
+        baseUrl: formValues.baseUrl,
+        ...(formValues.azureApiVersion && { apiVersion: formValues.azureApiVersion })
+      }
+      return config
+    case "bedrock":
+      config.bedrock = {
+        accessKeyId: {
+          valueFrom: {
+            secretKeyRef: {
+              name: formValues.bedrockAccessKeyIdSecretName,
+              key: "accessKeyId"
+            }
+          }
+        },
+        secretAccessKey: {
+          valueFrom: {
+            secretKeyRef: {
+              name: formValues.bedrockSecretAccessKeySecretName,
+              key: "secretAccessKey"
+            }
+          }
+        },
+        ...(formValues.region && { region: formValues.region }),
+        ...(formValues.modelARN && { modelArn: formValues.modelARN })
+      }
+      return config
+  }
+}
