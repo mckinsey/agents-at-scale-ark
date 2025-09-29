@@ -1,6 +1,7 @@
 """API routes for Evaluator resources."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from typing import Optional
 from ark_sdk.models.evaluator_v1alpha1 import EvaluatorV1alpha1
 from ark_sdk.models.evaluator_v1alpha1_spec import EvaluatorV1alpha1Spec
 from ark_sdk.models.evaluator_v1alpha1_spec_address import EvaluatorV1alpha1SpecAddress
@@ -22,7 +23,7 @@ from ...models.evaluators import (
 from .exceptions import handle_k8s_errors
 
 router = APIRouter(
-    prefix="/namespaces/{namespace}/evaluators",
+    prefix="/evaluators",
     tags=["evaluators"]
 )
 
@@ -32,7 +33,7 @@ VERSION = "v1alpha1"
 
 @router.get("", response_model=EvaluatorListResponse)
 @handle_k8s_errors(operation="list", resource_type="evaluator")
-async def list_evaluators(namespace: str) -> EvaluatorListResponse:
+async def list_evaluators(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> EvaluatorListResponse:
     """List all evaluators in a namespace."""
     async with with_ark_client(namespace, VERSION) as ark_client:
         result = await ark_client.evaluators.a_list()
@@ -48,8 +49,8 @@ async def list_evaluators(namespace: str) -> EvaluatorListResponse:
 @router.post("", response_model=EvaluatorDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="evaluator")
 async def create_evaluator(
-    namespace: str,
-    evaluator: EvaluatorCreateRequest
+    evaluator: EvaluatorCreateRequest,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
 ) -> EvaluatorDetailResponse:
     """Create a new evaluator."""
     async with with_ark_client(namespace, VERSION) as ark_client:
@@ -143,7 +144,7 @@ async def create_evaluator(
 
 @router.get("/{name}", response_model=EvaluatorDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="evaluator")
-async def get_evaluator(namespace: str, name: str) -> EvaluatorDetailResponse:
+async def get_evaluator(name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> EvaluatorDetailResponse:
     """Get details of a specific evaluator."""
     async with with_ark_client(namespace, VERSION) as ark_client:
         result = await ark_client.evaluators.a_get(name)
@@ -153,9 +154,9 @@ async def get_evaluator(namespace: str, name: str) -> EvaluatorDetailResponse:
 @router.put("/{name}", response_model=EvaluatorDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="evaluator")
 async def update_evaluator(
-    namespace: str,
     name: str,
-    evaluator: EvaluatorUpdateRequest
+    evaluator: EvaluatorUpdateRequest,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
 ) -> EvaluatorDetailResponse:
     """Update an existing evaluator."""
     async with with_ark_client(namespace, VERSION) as ark_client:
@@ -251,7 +252,7 @@ async def update_evaluator(
 
 @router.delete("/{name}")
 @handle_k8s_errors(operation="delete", resource_type="evaluator")
-async def delete_evaluator(namespace: str, name: str) -> dict:
+async def delete_evaluator(name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> dict:
     """Delete an evaluator."""
     async with with_ark_client(namespace, VERSION) as ark_client:
         await ark_client.evaluators.a_delete(name)

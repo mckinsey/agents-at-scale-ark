@@ -11,62 +11,32 @@ metadata:
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: {{ .Values.serviceAccount.name }}-helm-reader
-  annotations:
-    {{- with .Values.global.annotations }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
-rules:
-  # Permission to list namespaces (cluster-scoped resource)
-  - apiGroups: [""]
-    resources: ["namespaces"]
-    verbs: ["get", "list"]
-  # Permission to read secrets across all namespaces for Helm releases
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["get", "list"]
-  # Permission to read events across all namespaces
-  - apiGroups: [""]
-    resources: ["events"]
-    verbs: ["get", "list"]
-  # Permission to read HTTPRoutes across all namespaces
-  - apiGroups: ["gateway.networking.k8s.io"]
-    resources: ["httproutes"]
-    verbs: ["get", "list"]
-  # Permission to read Gateways across all namespaces for port information
-  - apiGroups: ["gateway.networking.k8s.io"]
-    resources: ["gateways"]
-    verbs: ["get", "list"]
-
----
-apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ .Values.serviceAccount.name }}-secret-reader
+  name: {{ .Values.serviceAccount.name }}-role
   namespace: {{ .Release.Namespace }}
   annotations:
     {{- with .Values.global.annotations }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 rules:
-  # Permission to manage secrets in the same namespace
+  # Core resources for Helm releases and events
   - apiGroups: [""]
-    resources: ["secrets"]
+    resources: ["secrets", "events"]
     verbs: ["get", "list", "create", "update", "patch", "delete"]
-
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: {{ .Values.serviceAccount.name }}-ark-resources
-  annotations:
-    {{- with .Values.global.annotations }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
-rules:
-  # Permission to access ark.mckinsey.com resources across all namespaces
+  # Permission to read configmaps to load ark-config-streaming configuration
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+  # Permission to read services to get the address of the configured streaming service
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list"]
+  # Gateway API resources
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["httproutes", "gateways"]
+    verbs: ["get", "list"]
+  # Ark resources
   - apiGroups: ["ark.mckinsey.com"]
     resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories", "evaluations", "evaluators"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
@@ -75,7 +45,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ .Values.serviceAccount.name }}-secret-binding
+  name: {{ .Values.serviceAccount.name }}-binding
   namespace: {{ .Release.Namespace }}
   annotations:
     {{- with .Values.global.annotations }}
@@ -87,42 +57,6 @@ subjects:
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: Role
-  name: {{ .Values.serviceAccount.name }}-secret-reader
-  apiGroup: rbac.authorization.k8s.io
-
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: {{ .Values.serviceAccount.name }}-helm-binding
-  annotations:
-    {{- with .Values.global.annotations }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
-subjects:
-  - kind: ServiceAccount
-    name: {{ .Values.serviceAccount.name }}
-    namespace: {{ .Release.Namespace }}
-roleRef:
-  kind: ClusterRole
-  name: {{ .Values.serviceAccount.name }}-helm-reader
-  apiGroup: rbac.authorization.k8s.io
-
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: {{ .Values.serviceAccount.name }}-ark-binding
-  annotations:
-    {{- with .Values.global.annotations }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
-subjects:
-  - kind: ServiceAccount
-    name: {{ .Values.serviceAccount.name }}
-    namespace: {{ .Release.Namespace }}
-roleRef:
-  kind: ClusterRole
-  name: {{ .Values.serviceAccount.name }}-ark-resources
+  name: {{ .Values.serviceAccount.name }}-role
   apiGroup: rbac.authorization.k8s.io
 {{- end }}

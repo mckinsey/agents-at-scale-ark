@@ -22,13 +22,12 @@ interface FloatingChatProps {
   id: string
   name: string
   type: ChatType
-  namespace: string
   position: number
   onClose: () => void
 }
 
 
-export default function FloatingChat({ name, type, namespace, position, onClose }: FloatingChatProps) {
+export default function FloatingChat({ name, type, position, onClose }: FloatingChatProps) {
   const [chatMessages, setChatMessages] = useState<ChatMessageData[]>([])
   const [currentMessage, setCurrentMessage] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
@@ -76,7 +75,7 @@ export default function FloatingChat({ name, type, namespace, position, onClose 
     
     while (!pollingStopped) {
       try {
-        const result = await chatService.getQueryResult(namespace, queryName)
+        const result = await chatService.getQueryResult(queryName)
 
         // Check if terminal state with response
         if (result.terminal) {
@@ -160,7 +159,6 @@ export default function FloatingChat({ name, type, namespace, position, onClose 
       
       // Submit the query with history
       const query = await chatService.submitChatQuery(
-        namespace,
         fullQuery,
         type,
         name,
@@ -305,7 +303,6 @@ export default function FloatingChat({ name, type, namespace, position, onClose 
                   status={message.status}
                   viewMode={viewMode}
                   queryName={message.queryName}
-                  namespace={namespace}
                 />
               ) : null
             ))}

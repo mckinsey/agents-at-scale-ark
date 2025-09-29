@@ -14,7 +14,6 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 
 function MemoryContent() {
   const searchParams = useSearchParams()
-  const namespace = searchParams.get("namespace") || "default"
 
   // Extract filter parameters from URL
   const initialFilters = {
@@ -36,7 +35,7 @@ function MemoryContent() {
         </Breadcrumb>
       </header>
       <div className="flex flex-1 flex-col">
-        <MemorySection namespace={namespace} initialFilters={initialFilters} />
+        <MemorySection initialFilters={initialFilters} />
       </div>
     </>
   )

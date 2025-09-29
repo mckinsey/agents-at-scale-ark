@@ -19,21 +19,21 @@ export const evaluatorsService = {
   /**
    * Get all evaluators in a namespace
    */
-  async getAll(namespace: string): Promise<Evaluator[]> {
+  async getAll(): Promise<Evaluator[]> {
     const response = await apiClient.get<EvaluatorListResponse>(
-      `/api/v1/namespaces/${namespace}/evaluators`
+      `/api/v1/evaluators`
     )
-    
+
     return response.items || []
   },
 
   /**
    * Get a single evaluator by name (basic response)
    */
-  async getByName(namespace: string, name: string): Promise<Evaluator | null> {
+  async getByName(name: string): Promise<Evaluator | null> {
     try {
       const response = await apiClient.get<EvaluatorResponse>(
-        `/api/v1/namespaces/${namespace}/evaluators/${name}`
+        `/api/v1/evaluators/${name}`
       )
       return response
     } catch (error) {
@@ -47,10 +47,10 @@ export const evaluatorsService = {
   /**
    * Get detailed evaluator information by name (includes spec)
    */
-  async getDetailsByName(namespace: string, name: string): Promise<EvaluatorDetailResponse | null> {
+  async getDetailsByName(name: string): Promise<EvaluatorDetailResponse | null> {
     try {
       const response = await apiClient.get<EvaluatorDetailResponse>(
-        `/api/v1/namespaces/${namespace}/evaluators/${name}`
+        `/api/v1/evaluators/${name}`
       )
       return response
     } catch (error) {
@@ -64,22 +64,22 @@ export const evaluatorsService = {
   /**
    * Create a new evaluator
    */
-  async create(namespace: string, evaluator: EvaluatorCreateRequest): Promise<Evaluator> {
+  async create(evaluator: EvaluatorCreateRequest): Promise<Evaluator> {
     const response = await apiClient.post<EvaluatorResponse>(
-      `/api/v1/namespaces/${namespace}/evaluators`,
+      `/api/v1/evaluators`,
       evaluator
     )
-    
+
     return response as Evaluator
   },
 
   /**
    * Update an existing evaluator
    */
-  async update(namespace: string, name: string, updates: EvaluatorUpdateRequest): Promise<Evaluator | null> {
+  async update(name: string, updates: EvaluatorUpdateRequest): Promise<Evaluator | null> {
     try {
       const response = await apiClient.put<EvaluatorResponse>(
-        `/api/v1/namespaces/${namespace}/evaluators/${name}`,
+        `/api/v1/evaluators/${name}`,
         updates
       )
       return response
@@ -94,10 +94,10 @@ export const evaluatorsService = {
   /**
    * Delete an evaluator
    */
-  async delete(namespace: string, name: string): Promise<boolean> {
+  async delete(name: string): Promise<boolean> {
     try {
       await apiClient.delete(
-        `/api/v1/namespaces/${namespace}/evaluators/${name}`
+        `/api/v1/evaluators/${name}`
       )
       return true
     } catch (error) {

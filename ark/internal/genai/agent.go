@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
@@ -36,7 +37,7 @@ func (a *Agent) FullName() string {
 }
 
 // Execute executes the agent with optional event emission for tool calls
-func (a *Agent) Execute(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
+func (a *Agent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
 	if a.Model == nil {
 		return nil, fmt.Errorf("agent %s has no model configured", a.FullName())
 	}
@@ -63,7 +64,7 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 		return a.executeWithExecutionEngine(ctx, userInput, history)
 	}
 
-	return a.executeLocally(ctx, userInput, history)
+	return a.executeLocally(ctx, userInput, history, memory, eventStream)
 }
 
 func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
@@ -102,7 +103,8 @@ func (a *Agent) prepareMessages(ctx context.Context, userInput Message, history 
 	return agentMessages, nil
 }
 
-func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, tools []openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+// executeModelCall executes a single model call with optional streaming support.
+func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, tools []openai.ChatCompletionToolParam, eventStream EventStreamInterface) (*openai.ChatCompletion, error) {
 	llmTracker := NewOperationTracker(a.Recorder, ctx, "LLMCall", a.Model.Model, map[string]string{
 		"agent": a.FullName(),
 		"model": a.Model.Model,
@@ -113,7 +115,7 @@ func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, t
 	// Truncate schema name to 64 chars for OpenAI API compatibility - name is purely an identifier
 	a.Model.SchemaName = fmt.Sprintf("%.64s", fmt.Sprintf("namespace-%s-agent-%s", a.Namespace, a.Name))
 
-	response, err := a.Model.ChatCompletion(ctx, agentMessages, tools)
+	response, err := a.Model.ChatCompletion(ctx, agentMessages, eventStream, 1, tools)
 	if err != nil {
 		llmTracker.Fail(err)
 		return nil, fmt.Errorf("agent %s execution failed: %w", a.FullName(), err)
@@ -124,7 +126,7 @@ func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, t
 		CompletionTokens: response.Usage.CompletionTokens,
 		TotalTokens:      response.Usage.TotalTokens,
 	}
-	llmTracker.CompleteWithTokens("", tokenUsage)
+	llmTracker.CompleteWithTokens(tokenUsage)
 
 	if len(response.Choices) == 0 {
 		return nil, fmt.Errorf("agent %s received empty response", a.FullName())
@@ -198,7 +200,7 @@ func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCom
 }
 
 // executeLocally executes the agent using the built-in OpenAI-compatible engine
-func (a *Agent) executeLocally(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
+func (a *Agent) executeLocally(ctx context.Context, userInput Message, history []Message, _ MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
 	var tools []openai.ChatCompletionToolParam
 	if a.Tools != nil {
 		tools = a.Tools.ToOpenAITools()
@@ -216,7 +218,7 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 			return newMessages, ctx.Err()
 		}
 
-		response, err := a.executeModelCall(ctx, agentMessages, tools)
+		response, err := a.executeModelCall(ctx, agentMessages, tools, eventStream)
 		if err != nil {
 			return nil, err
 		}
@@ -232,6 +234,8 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 		}
 
 		if err := a.executeToolCalls(ctx, choice.Message.ToolCalls, &agentMessages, &newMessages); err != nil {
+			logger := logf.FromContext(ctx)
+			logger.Error(err, "Tool execution failed", "agent", a.FullName())
 			return newMessages, err
 		}
 	}

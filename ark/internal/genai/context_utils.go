@@ -12,6 +12,13 @@ const (
 	queryNameKey contextKey = "queryName"
 	// QueryContextKey is used to pass the Query resource through context to agents
 	QueryContextKey contextKey = "queryContext"
+	// Execution metadata keys for streaming
+	// These values are sent back with streaming chunks in the 'ark' metadata field,
+	// allowing callers to differentiate the source of chunks (e.g., specific agents in a team query)
+	targetKey contextKey = "target" // Original query target (e.g., "team/my-team")
+	teamKey   contextKey = "team"   // Current team name
+	agentKey  contextKey = "agent"  // Current agent name
+	modelKey  contextKey = "model"  // Current model name
 )
 
 func WithQueryContext(ctx context.Context, queryID, sessionID, queryName string) context.Context {
@@ -37,4 +44,43 @@ func getSessionID(ctx context.Context) string {
 		}
 	}
 	return ""
+}
+
+// WithExecutionMetadata adds execution metadata to context for streaming
+func WithExecutionMetadata(ctx context.Context, metadata map[string]interface{}) context.Context {
+	// Avoid nested context in loop by accumulating in temporary variable
+	tmpCtx := ctx
+	for key, value := range metadata {
+		switch key {
+		case "target":
+			tmpCtx = context.WithValue(tmpCtx, targetKey, value) //nolint:fatcontext // accumulating context values
+		case "team":
+			tmpCtx = context.WithValue(tmpCtx, teamKey, value)
+		case "agent":
+			tmpCtx = context.WithValue(tmpCtx, agentKey, value)
+		case "model":
+			tmpCtx = context.WithValue(tmpCtx, modelKey, value)
+		}
+	}
+	return tmpCtx
+}
+
+// GetExecutionMetadata retrieves execution metadata from context
+func GetExecutionMetadata(ctx context.Context) map[string]interface{} {
+	metadata := make(map[string]interface{})
+
+	if val := ctx.Value(targetKey); val != nil {
+		metadata["target"] = val
+	}
+	if val := ctx.Value(teamKey); val != nil {
+		metadata["team"] = val
+	}
+	if val := ctx.Value(agentKey); val != nil {
+		metadata["agent"] = val
+	}
+	if val := ctx.Value(modelKey); val != nil {
+		metadata["model"] = val
+	}
+
+	return metadata
 }

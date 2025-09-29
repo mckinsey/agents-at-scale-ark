@@ -62,8 +62,8 @@ export const ToolsSection = forwardRef<
       setLoading(true);
       try {
         const [toolsData, agentsData] = await Promise.all([
-          toolsService.getAll(namespace),
-          agentsService.getAll(namespace)
+          toolsService.getAll(),
+          agentsService.getAll()
         ]);
         setTools(toolsData);
         setAgents(agentsData);
@@ -105,7 +105,7 @@ export const ToolsSection = forwardRef<
       return;
     }
     try {
-      await toolsService.delete(namespace, identifier);
+      await toolsService.delete(identifier);
       setTools(tools.filter((tool) => (tool.name || tool.type) !== identifier));
       toast({
         variant: "success",
@@ -139,14 +139,14 @@ export const ToolsSection = forwardRef<
     url?: string;
   }) => {
     try {
-      await toolsService.create(namespace, toolSpec);
+      await toolsService.create(toolSpec);
       toast({
         variant: "success",
         title: "Tool Created",
         description: `Successfully created ${toolSpec.name}`
       });
 
-      const updatedTools = await toolsService.getAll(namespace);
+      const updatedTools = await toolsService.getAll();
       setTools(updatedTools);
     } catch (error) {
       toast({
@@ -262,7 +262,6 @@ export const ToolsSection = forwardRef<
                               tool={tool}
                               onDelete={handleDelete}
                               onInfo={handleInfo}
-                              namespace={namespace}
                               deleteDisabled={toolData.inUse}
                               deleteDisabledReason={
                                 toolData.inUse

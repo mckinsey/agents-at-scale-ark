@@ -23,14 +23,6 @@ type MemoryRef struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
-type EvaluatorRef struct {
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
-	// +kubebuilder:validation:Optional
-	Namespace string `json:"namespace,omitempty"`
-}
-
 type QuerySpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
@@ -44,10 +36,6 @@ type QuerySpec struct {
 	Selector *metav1.LabelSelector `json:"selector,omitempty"`
 	// +kubebuilder:validation:Optional
 	Memory *MemoryRef `json:"memory,omitempty"`
-	// +kubebuilder:validation:Optional
-	Evaluators []EvaluatorRef `json:"evaluators,omitempty"`
-	// +kubebuilder:validation:Optional
-	EvaluatorSelector *metav1.LabelSelector `json:"evaluatorSelector,omitempty"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MinLength=1
 	ServiceAccount string `json:"serviceAccount,omitempty"`
@@ -76,7 +64,6 @@ type Response struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Duration",type=string,JSONPath=`.status.duration`
-// +kubebuilder:printcolumn:name="Evaluations",type=integer,JSONPath=`.status.evaluations.length`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 type Query struct {
@@ -87,13 +74,6 @@ type Query struct {
 	Status QueryStatus `json:"status,omitempty"`
 }
 
-type EvaluationResult struct {
-	EvaluatorName string            `json:"evaluatorName,omitempty"`
-	Score         string            `json:"score,omitempty"`
-	Passed        bool              `json:"passed,omitempty"`
-	Metadata      map[string]string `json:"metadata,omitempty"`
-}
-
 type TokenUsage struct {
 	PromptTokens     int64 `json:"promptTokens,omitempty"`
 	CompletionTokens int64 `json:"completionTokens,omitempty"`
@@ -102,11 +82,10 @@ type TokenUsage struct {
 
 type QueryStatus struct {
 	// +kubebuilder:default="pending"
-	// +kubebuilder:validation:Enum=pending;running;evaluating;error;done;canceled
-	Phase       string             `json:"phase,omitempty"`
-	Responses   []Response         `json:"responses,omitempty"`
-	Evaluations []EvaluationResult `json:"evaluations,omitempty"`
-	TokenUsage  TokenUsage         `json:"tokenUsage,omitempty"`
+	// +kubebuilder:validation:Enum=pending;running;error;done;canceled
+	Phase      string     `json:"phase,omitempty"`
+	Responses  []Response `json:"responses,omitempty"`
+	TokenUsage TokenUsage `json:"tokenUsage,omitempty"`
 	// +kubebuilder:validation:Optional
 	Duration *metav1.Duration `json:"duration,omitempty"`
 }

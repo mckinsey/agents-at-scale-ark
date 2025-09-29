@@ -2,11 +2,11 @@ import chalk from 'chalk';
 import inquirer from 'inquirer';
 import path from 'path';
 import fs from 'fs';
-import { Generator, GeneratorOptions } from '../index.js';
-import { TemplateEngine, TemplateVariables } from '../templateEngine.js';
-import { TemplateDiscovery } from '../templateDiscovery.js';
-import { toKebabCase, validateNameStrict } from '../utils/nameUtils.js';
-import { getCurrentProjectInfo } from '../utils/projectUtils.js';
+import {Generator, GeneratorOptions} from '../index.js';
+import {TemplateEngine, TemplateVariables} from '../templateEngine.js';
+import {TemplateDiscovery} from '../templateDiscovery.js';
+import {toKebabCase, validateNameStrict} from '../utils/nameUtils.js';
+import {getCurrentProjectInfo} from '../utils/projectUtils.js';
 import {
   ErrorHandler,
   TemplateError,
@@ -55,7 +55,7 @@ class AgentGenerator {
     _options: GeneratorOptions
   ): Promise<AgentConfig> {
     // Validate that we're in a project directory and get project info
-    const { projectName, projectDir } = getCurrentProjectInfo();
+    const {projectName, projectDir} = getCurrentProjectInfo();
 
     // Validate and normalize agent name
     const agentName = toKebabCase(name);
@@ -70,7 +70,7 @@ class AgentGenerator {
         chalk.yellow(`⚠️  Agent file already exists: ${agentFilePath}`)
       );
 
-      const { overwrite } = await inquirer.prompt([
+      const {overwrite} = await inquirer.prompt([
         {
           type: 'confirm',
           name: 'overwrite',
@@ -92,7 +92,7 @@ class AgentGenerator {
     }
 
     // Ask if user wants to create a query for the agent
-    const { createQuery } = await inquirer.prompt([
+    const {createQuery} = await inquirer.prompt([
       {
         type: 'confirm',
         name: 'createQuery',

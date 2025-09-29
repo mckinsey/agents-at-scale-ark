@@ -337,7 +337,6 @@ spec:
                 enum:
                 - pending
                 - running
-                - evaluating
                 - error
                 - done
                 - canceled

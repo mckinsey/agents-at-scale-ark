@@ -38,14 +38,11 @@ memory:
   port: 8080
   # Maximum message size in bytes (10MB)
   maxMessageSize: 10485760
-  
-  # Streaming configuration
-  # The ark-cluster-memory service fully supports streaming via Server-Sent Events (SSE),
-  # allowing real-time delivery of query responses as they are generated.
-  # However, streaming is currently disabled until the query controller's streaming
-  # implementation is integrated. Once the controller supports streaming execution,
-  # set this to true to enable end-to-end streaming support.
-  enableStreaming: false
+
+# Streaming configuration
+streaming:
+  # Enable streaming support via ConfigMap (creates 'ark-config-streaming' when enabled)
+  enabled: true
 
 # Persistence configuration
 persistence:

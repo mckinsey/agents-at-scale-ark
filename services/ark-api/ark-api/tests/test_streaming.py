@@ -1,6 +1,4 @@
-import pytest
 import json
-from datetime import datetime
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import CompletionUsage, Choice
 from ark_api.utils.streaming import create_single_chunk_sse_response

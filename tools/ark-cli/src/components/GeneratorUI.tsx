@@ -17,7 +17,7 @@ const GeneratorUI: React.FC = () => {
   const {exit} = useApp();
   const generatorChoices = getUIGeneratorChoices();
 
-  useInput((input, key) => {
+  useInput((input: string, key: any) => {
     if (key.escape || input === 'q') {
       // Exit the UI
       exit();

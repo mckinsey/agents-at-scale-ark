@@ -23,6 +23,8 @@ type Team struct {
 	Recorder    EventEmitter
 	Client      client.Client
 	Namespace   string
+	memory      MemoryInterface
+	eventStream EventStreamInterface
 }
 
 // FullName returns the namespace/name format for the team
@@ -30,10 +32,14 @@ func (t *Team) FullName() string {
 	return t.Namespace + "/" + t.Name
 }
 
-func (t *Team) Execute(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
+func (t *Team) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
 	if len(t.Members) == 0 {
 		return nil, fmt.Errorf("team %s has no members configured", t.FullName())
 	}
+
+	// Store memory and streaming parameters for member execution
+	t.memory = memory
+	t.eventStream = eventStream
 
 	teamTracker := NewOperationTracker(t.Recorder, ctx, "TeamExecution", t.FullName(), map[string]string{
 		"strategy":    t.Strategy,
@@ -146,7 +152,7 @@ func (t *Team) GetName() string {
 }
 
 func (t *Team) GetType() string {
-	return "team"
+	return string(teamKey)
 }
 
 func (t *Team) GetDescription() string {
@@ -222,7 +228,7 @@ func (t *Team) executeWithTracking(tracker *OperationTracker, execFunc func(cont
 	}
 
 	if teamTokenUsage.TotalTokens > 0 {
-		tracker.CompleteWithTokens("", teamTokenUsage)
+		tracker.CompleteWithTokens(teamTokenUsage)
 	} else {
 		tracker.Complete("")
 	}
@@ -231,6 +237,12 @@ func (t *Team) executeWithTracking(tracker *OperationTracker, execFunc func(cont
 
 // executeMemberAndAccumulate executes a member and accumulates new messages
 func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember, userInput Message, messages, newMessages *[]Message, turn int) error {
+	// Add team and current member to execution metadata for streaming
+	ctx = WithExecutionMetadata(ctx, map[string]interface{}{
+		"team":  t.Name,
+		"agent": member.GetName(),
+	})
+
 	memberTracker := NewOperationTracker(t.Recorder, ctx, "TeamMember", member.GetName(), map[string]string{
 		"team":       t.FullName(),
 		"memberType": member.GetType(),
@@ -240,7 +252,7 @@ func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember
 		"strategy":   t.Strategy,
 	})
 
-	memberNewMessages, err := member.Execute(ctx, userInput, *messages)
+	memberNewMessages, err := member.Execute(ctx, userInput, *messages, t.memory, t.eventStream)
 	if err != nil {
 		if IsTerminateTeam(err) {
 			memberTracker.CompleteWithTermination(err.Error())
@@ -263,7 +275,7 @@ func loadTeamMember(ctx context.Context, k8sClient client.Client, memberSpec ark
 	key := types.NamespacedName{Name: memberSpec.Name, Namespace: namespace}
 
 	switch memberSpec.Type {
-	case "agent":
+	case string(agentKey):
 		var agentCRD arkv1alpha1.Agent
 		if err := k8sClient.Get(ctx, key, &agentCRD); err != nil {
 			return nil, fmt.Errorf("failed to get agent %s for team %s: %w", memberSpec.Name, teamName, err)

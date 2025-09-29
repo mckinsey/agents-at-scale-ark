@@ -6,10 +6,9 @@ interface ErrorResponseContentProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any;
   viewMode: 'events' | 'details';
-  namespace: string;
 }
 
-export function ErrorResponseContent({ query, viewMode, namespace }: ErrorResponseContentProps) {
+export function ErrorResponseContent({ query, viewMode }: ErrorResponseContentProps) {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -17,7 +16,7 @@ export function ErrorResponseContent({ query, viewMode, namespace }: ErrorRespon
     const loadEvents = async () => {
       try {
         // Try to get events for this specific query
-        const eventData = await eventsService.getAll(namespace, {
+        const eventData = await eventsService.getAll({
           name: query.name
         });
         setEvents(eventData.items);
@@ -25,7 +24,7 @@ export function ErrorResponseContent({ query, viewMode, namespace }: ErrorRespon
         // If no events found for this query, try to get recent error events
         if (eventData.items.length === 0) {
           console.log('No events found for query, trying to get recent error events');
-          const recentEvents = await eventsService.getAll(namespace, {
+          const recentEvents = await eventsService.getAll({
             type: 'Warning'
           });
           setEvents(recentEvents.items);
@@ -42,7 +41,7 @@ export function ErrorResponseContent({ query, viewMode, namespace }: ErrorRespon
     if (query.name) {
       loadEvents();
     }
-  }, [query.name, namespace]);
+  }, [query.name]);
 
   const getErrorDetails = () => {
     // Find error events - look for ToolCallError, QueryResolveError, etc.
@@ -106,22 +105,32 @@ export function ErrorResponseContent({ query, viewMode, namespace }: ErrorRespon
       };
     }
 
-    // Fallback to generic error
-    return {
-      type: 'Unknown Error',
-      message: 'Query failed - no specific error details available',
-      details: {
-        phase: query.status?.phase,
-        responses: query.status?.responses?.length || 0,
-        timestamp: query.creationTimestamp
-      }
-    };
+    // Only show error if query is actually failed/error
+    if (query.status?.phase === 'failed' || query.status?.phase === 'error') {
+      return {
+        type: 'Unknown Error',
+        message: 'Query failed - no specific error details available',
+        details: {
+          phase: query.status?.phase,
+          responses: query.status?.responses?.length || 0,
+          timestamp: query.creationTimestamp
+        }
+      };
+    }
+    
+    // For running queries, return null to not show error
+    return null;
   };
 
   const errorDetails = getErrorDetails();
 
   if (loading) {
     return <div className="text-center text-muted-foreground py-4 text-sm">Loading error details...</div>;
+  }
+
+  // If no error details (e.g., for running queries), don't show anything
+  if (!errorDetails) {
+    return null;
   }
 
   if (viewMode === 'details') {

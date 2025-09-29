@@ -1,0 +1,87 @@
+# Troubleshooting
+
+Troubleshooting guide for challenges when installing or using Ark.
+
+## Installing Ark on Windows
+
+Ark requires a Kubernetes cluster to run. There are a number of potential issues that can arise from permissions, organizational policies and so on, particularly around running Hypervisors (which is needed to run services like Docker and local Kubernetes clusters).
+
+**WSL and Docker**
+
+In most cases, you should install and enable [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install) with Ubuntu or another Linux distribution.
+
+You should then install [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/). Hyper-V must be enabled. Enable Hyper-V and restart. Verify in "Task Manager" → "Performance" → "CPU" that "Virtualization" shows as "Enabled".
+
+**Kubernetes Cluster**
+
+Docker Desktop for Windows has Kubernetes support, go to wDocker Desktop Settings → Kubernetes → Enable Kubernetes.
+
+Another option is [Minikube](https://minikube.sigs.k8s.io/docs/start/) for Windows. Install and start with `minikube start`.
+
+**Windows Installation Troubleshooting**
+
+Many Windows installation issues stem from enterprise security policies and restricted environments. Potential issues are:
+
+- Virtualization disabled - Hyper-V is often disabled by policy for security reasons
+- Restricted user permissions - Standard users may not be able to modify system settings
+- Security software - Endpoint protection may flag container operations as suspicious
+
+**Node.js Installation Hangs**
+
+Has been seen on some Windows installs. When the hang happens, terminate the installer, you can typically run `npm install -g @agents-at-scale/ark` and then install as normal, if not retry the Node.js installation.
+
+**Missing Dependencies**
+
+If `ark status` shows missing `kubectl` or `helm` then you local cluster is not setup, follow the guides above. The easiest way to install dependencies is via Chocolatey:
+
+```powershell
+# Install Chocolatey first (requires PowerShell as Administrator)
+Set-ExecutionPolicy Bypass -Scope Process -Force
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# Install the core dependencies.
+choco install docker
+choco install helm
+
+# Install minikube if you want to use this as your cluster - this'll also install
+# the kubectl binary.
+choco install minikube
+
+# Other cluster options are Kind and so on.
+# choco install kind
+```
+
+**Minikube fails with "Hyper-V PowerShell Module is not available"**
+
+Enable Hyper-V (requires restart):
+
+```powershell
+Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Tools-All -All
+```
+
+If the error persists after restart, check if your organization has a specific tool or process for enabling Hyper-V. May require BIOS-level virtualization to be enabled.
+
+**Minikube "IP not found" Errors**
+
+Update WSL, delete and recreate the minikube cluster:
+
+```powershell
+wsl --update
+minikube delete
+minikube start
+```
+
+If using Docker Desktop, ensure it's running with proper permissions
+
+**Security Software Blocking Operations**
+
+If you are unable to install Hyper-V, WSL2, Docker or Kubernetes you may need to work with your organizations IT department to request access to services.
+
+**Download Failures**
+
+Failed downloads, network errors, disconnects and so on for packages or installations can sometimes be due to corporate VPN issues, which may be able to be temporarily disabled.
+
+**Avoiding Kubernetes on Windows**
+
+If Kubernetes or Docker cannot be run in your environment, the best solution would be to run a remote Kubernetes cluster, on AWS/GCP or similar. Check the [Operations Guide](../../operations-guide/deploying-ark) on how to do this.

@@ -24,6 +24,8 @@ type BedrockModel struct {
 	ModelArn        string
 	Properties      map[string]string
 	client          *bedrockruntime.Client
+	outputSchema    *runtime.RawExtension
+	schemaName      string
 }
 
 type bedrockMessage struct {
@@ -106,13 +108,22 @@ func (bm *BedrockModel) initClient(ctx context.Context) error {
 	return nil
 }
 
-func (bm *BedrockModel) ChatCompletion(ctx context.Context, messages []Message, tools []openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+func (bm *BedrockModel) SetOutputSchema(schema *runtime.RawExtension, schemaName string) {
+	bm.outputSchema = schema
+	bm.schemaName = schemaName
+}
+
+func (bm *BedrockModel) ChatCompletion(ctx context.Context, messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+	var toolsParam []openai.ChatCompletionToolParam
+	if len(tools) > 0 {
+		toolsParam = tools[0]
+	}
 	if err := bm.initClient(ctx); err != nil {
 		return nil, err
 	}
 
 	bedrockMessages, systemPrompt := bm.convertMessages(messages)
-	bedrockTools := bm.convertTools(tools)
+	bedrockTools := bm.convertTools(toolsParam)
 
 	request := bm.buildRequest(bedrockMessages, systemPrompt, bedrockTools)
 
@@ -151,7 +162,45 @@ func (bm *BedrockModel) ChatCompletion(ctx context.Context, messages []Message, 
 }
 
 func (bm *BedrockModel) ChatCompletionWithSchema(ctx context.Context, messages []Message, outputSchema *runtime.RawExtension, schemaName string, tools []openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
-	return bm.ChatCompletion(ctx, messages, tools)
+	return bm.ChatCompletion(ctx, messages, 1, tools)
+}
+
+func (bm *BedrockModel) ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+	// Per OpenAI spec, when streaming is requested for a model that doesn't support it,
+	// return the complete response as a single chunk
+	completion, err := bm.ChatCompletion(ctx, messages, n, tools...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert the completion to a single streaming chunk
+	// We send the full content in one chunk as per the OpenAI fallback spec
+	for _, choice := range completion.Choices {
+		chunk := &openai.ChatCompletionChunk{
+			ID:      completion.ID,
+			Object:  "chat.completion.chunk",
+			Created: completion.Created,
+			Model:   completion.Model,
+			Choices: []openai.ChatCompletionChunkChoice{
+				{
+					Index: choice.Index,
+					Delta: openai.ChatCompletionChunkChoiceDelta{
+						Content: choice.Message.Content,
+						Role:    "assistant",
+					},
+					FinishReason: choice.FinishReason,
+				},
+			},
+		}
+
+		// Send the chunk via the stream callback
+		if err := streamFunc(chunk); err != nil {
+			return nil, err
+		}
+	}
+
+	// Return the original completion
+	return completion, nil
 }
 
 func (bm *BedrockModel) buildRequest(messages []bedrockMessage, systemPrompt string, tools []bedrockTool) bedrockRequest {

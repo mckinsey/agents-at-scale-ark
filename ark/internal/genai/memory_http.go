@@ -15,58 +15,18 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// Simple message structure for fallback parsing
-type simpleMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content,omitempty"`
-}
-
-// unmarshalMessageRobust tries discriminated union first, then falls back to simple role/content extraction
-func unmarshalMessageRobust(rawJSON json.RawMessage) (openai.ChatCompletionMessageParamUnion, error) {
-	// Step 1: Try discriminated union first (the normal case)
-	var openaiMessage openai.ChatCompletionMessageParamUnion
-	if err := json.Unmarshal(rawJSON, &openaiMessage); err == nil {
-		return openaiMessage, nil
-	}
-
-	// Step 2: Fallback - try to extract role/content from simple format
-	var simple simpleMessage
-	if err := json.Unmarshal(rawJSON, &simple); err != nil {
-		return openai.ChatCompletionMessageParamUnion{}, fmt.Errorf("malformed JSON: %v", err)
-	}
-
-	// Step 3: Validate role is present (any role is acceptable for future compatibility)
-	if simple.Role == "" {
-		return openai.ChatCompletionMessageParamUnion{}, fmt.Errorf("missing required 'role' field")
-	}
-
-	// Step 4: Convert simple format to proper OpenAI message based on known roles
-	// For unknown roles, try user message as fallback (most permissive)
-	switch simple.Role {
-	case RoleUser:
-		return openai.UserMessage(simple.Content), nil
-	case RoleAssistant:
-		return openai.AssistantMessage(simple.Content), nil
-	case RoleSystem:
-		return openai.SystemMessage(simple.Content), nil
-	default:
-		// Future-proof: accept any role by treating as user message
-		// The OpenAI SDK will handle validation of the actual role
-		return openai.UserMessage(simple.Content), nil
-	}
-}
-
+// HTTPMemory handles memory operations for ARK queries
 type HTTPMemory struct {
 	client     client.Client
 	httpClient *http.Client
 	baseURL    string
 	sessionId  string
-	queryName  string
 	name       string
 	namespace  string
 	recorder   EventEmitter
 }
 
+// NewHTTPMemory creates a new HTTP-based memory implementation
 func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, namespace string, recorder EventEmitter, config Config) (MemoryInterface, error) {
 	if k8sClient == nil || memoryName == "" || namespace == "" {
 		return nil, fmt.Errorf("invalid parameters")
@@ -87,6 +47,7 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 		sessionId = string(memory.UID)
 	}
 
+	// Create HTTP client with timeout for memory operations
 	httpClient := common.NewHTTPClientWithLogging(ctx)
 	if config.Timeout > 0 {
 		httpClient.Timeout = config.Timeout
@@ -97,7 +58,6 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 		httpClient: httpClient,
 		baseURL:    strings.TrimSuffix(*memory.Status.LastResolvedAddress, "/"),
 		sessionId:  sessionId,
-		queryName:  config.QueryName,
 		name:       memoryName,
 		namespace:  namespace,
 		recorder:   recorder,
@@ -139,6 +99,7 @@ func (m *HTTPMemory) resolveAndUpdateAddress(ctx context.Context) error {
 	return nil
 }
 
+// AddMessages stores messages to the memory backend
 func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages []Message) error {
 	if len(messages) == 0 {
 		return nil
@@ -199,6 +160,7 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 	return nil
 }
 
+// GetMessages retrieves messages from the memory backend
 func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 	// Resolve address dynamically
 	if err := m.resolveAndUpdateAddress(ctx); err != nil {
@@ -256,6 +218,7 @@ func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 	return messages, nil
 }
 
+// Close closes the HTTP client connections
 func (m *HTTPMemory) Close() error {
 	if m.httpClient != nil {
 		m.httpClient.CloseIdleConnections()
@@ -263,16 +226,43 @@ func (m *HTTPMemory) Close() error {
 	return nil
 }
 
-// NotifyCompletion notifies the memory service that the query has completed
-// This is part of the streaming API which will be fully implemented in a future release
-func (m *HTTPMemory) NotifyCompletion(ctx context.Context) error {
-	// No-op for now - will be implemented when streaming is fully supported
-	return nil
+// unmarshalMessageRobust tries discriminated union first, then falls back to simple role/content extraction
+func unmarshalMessageRobust(rawJSON json.RawMessage) (openai.ChatCompletionMessageParamUnion, error) {
+	// Step 1: Try discriminated union first (the normal case)
+	var openaiMessage openai.ChatCompletionMessageParamUnion
+	if err := json.Unmarshal(rawJSON, &openaiMessage); err == nil {
+		return openaiMessage, nil
+	}
+
+	// Step 2: Fallback - try to extract role/content from simple format
+	var simple simpleMessage
+	if err := json.Unmarshal(rawJSON, &simple); err != nil {
+		return openai.ChatCompletionMessageParamUnion{}, fmt.Errorf("malformed JSON: %v", err)
+	}
+
+	// Step 3: Validate role is present (any role is acceptable for future compatibility)
+	if simple.Role == "" {
+		return openai.ChatCompletionMessageParamUnion{}, fmt.Errorf("missing required 'role' field")
+	}
+
+	// Step 4: Convert simple format to proper OpenAI message based on known roles
+	// For unknown roles, try user message as fallback (most permissive)
+	switch simple.Role {
+	case RoleUser:
+		return openai.UserMessage(simple.Content), nil
+	case RoleAssistant:
+		return openai.AssistantMessage(simple.Content), nil
+	case RoleSystem:
+		return openai.SystemMessage(simple.Content), nil
+	default:
+		// Future-proof: accept any role by treating as user message
+		// The OpenAI SDK will handle validation of the actual role
+		return openai.UserMessage(simple.Content), nil
+	}
 }
 
-// StreamChunk sends a streaming chunk to the memory service
-// This is part of the streaming API which will be fully implemented in a future release
-func (m *HTTPMemory) StreamChunk(ctx context.Context, chunk interface{}) error {
-	// No-op for now - will be implemented when streaming is fully supported
-	return nil
+// Simple message structure for fallback parsing
+type simpleMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content,omitempty"`
 }

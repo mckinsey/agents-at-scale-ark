@@ -1,0 +1,64 @@
+---
+title: Using the ARK CLI
+description: Chat with ARK agents from your terminal
+---
+
+# Using the ARK CLI
+
+## Installation
+
+```bash
+npm install -g @agents-at-scale/ark
+```
+
+## Basic Usage
+
+```bash
+# Enable tab completion (add to ~/.bashrc or ~/.zshrc)
+eval "$(ark completion bash)"      # For bash
+eval "$(ark completion zsh)"       # For zsh
+
+# Install ark - or install and wait for it to be ready.
+ark install
+ark install -y --wait-for-ready=5m  # chooses 'yes' for each option
+
+# Show ark status.
+ark status
+
+# Start interactive chat
+ark chat
+
+# Chat with a specific target
+ark chat agent/math
+
+# Show current config.
+ark config
+
+# Uninstall ark.
+ark uninstall
+```
+
+Then query any agent:
+
+```
+> @weather What's the weather today?
+> @math Calculate 15 * 23
+```
+
+That's it! The CLI maintains conversation context and lets you interact with any deployed ARK agents.
+
+## Local Development
+
+```bash
+# Navigate to the CLI source
+cd tools/ark-cli
+
+# Create global symlink
+npm link --force
+
+# Run directly or with live reload
+ark         # Run the CLI
+npm run dev # Or run with live reload
+```
+
+Changes to the source code will instantly reflect when you run `ark` commands.

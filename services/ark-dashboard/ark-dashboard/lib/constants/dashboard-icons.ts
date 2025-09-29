@@ -21,7 +21,7 @@ export interface DashboardSection {
   group: "configurations" | "operations" | "runtime";
 }
 
-export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
+export const DASHBOARD_SECTIONS = {
   // Configurations - order: Agents, Teams, Models, Secrets
   agents: {
     key: "agents",
@@ -105,7 +105,7 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     icon: Settings,
     group: "runtime"
   }
-} as const;
+} as const satisfies Record<string, DashboardSection>;
 
 // Type-safe keys
 export type DashboardSectionKey = keyof typeof DASHBOARD_SECTIONS;

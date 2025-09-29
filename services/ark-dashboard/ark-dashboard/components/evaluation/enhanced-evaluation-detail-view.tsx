@@ -70,13 +70,6 @@ const StatusBadge = ({ status, onCancel }: StatusBadgeProps) => {
           icon: Play,
           label: "Running"
         };
-      case "evaluating":
-        return {
-          color:
-            "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-          icon: BarChart3,
-          label: "Evaluating"
-        };
       case "canceled":
         return {
           color:
@@ -95,7 +88,7 @@ const StatusBadge = ({ status, onCancel }: StatusBadgeProps) => {
   };
 
   const { color, icon: Icon, label } = getStatusInfo();
-  const canCancel = status === "running" || status === "evaluating";
+  const canCancel = status === "running";
 
   return (
     <div className="flex items-center gap-2">
@@ -126,7 +119,6 @@ export function EnhancedEvaluationDetailView({
   const loadEvaluation = useCallback(async () => {
     try {
       const data = await evaluationsService.getEnhancedDetailsByName(
-        namespace,
         evaluationId
       );
       setEvaluation(data);
@@ -140,7 +132,7 @@ export function EnhancedEvaluationDetailView({
             : "An unexpected error occurred"
       });
     }
-  }, [namespace, evaluationId]);
+  }, [evaluationId]);
 
   useEffect(() => {
     const initialLoad = async () => {
@@ -157,7 +149,7 @@ export function EnhancedEvaluationDetailView({
 
     setCanceling(true);
     try {
-      await evaluationsService.cancel(namespace, evaluation.name);
+      await evaluationsService.cancel(evaluation.name);
       toast({
         variant: "default",
         title: "Evaluation Canceled",

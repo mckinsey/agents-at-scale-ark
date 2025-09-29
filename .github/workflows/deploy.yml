@@ -134,7 +134,7 @@ jobs:
         run: |
           REGISTRY="${{ vars.DOCKER_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}"
           IMAGE="${{ matrix.image }}"
-          VERSION="${{ needs.check_version.outputs.clean_version }}"
+          VERSION="${{ needs.resolve_version.outputs.clean_version }}"
           
           echo "Tagging and pushing $REGISTRY/$IMAGE:$VERSION as 'latest'"
           docker buildx imagetools create \
@@ -205,6 +205,7 @@ jobs:
           - ark-dashboard
           - ark-mcp
           - localhost-gateway
+          - ark-tenant
     steps:
       - name: Validate version tag exists
         run: |

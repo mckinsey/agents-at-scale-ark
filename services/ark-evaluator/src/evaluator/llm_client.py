@@ -19,10 +19,16 @@ class LLMClient:
             if self._session_lock is None:
                 import asyncio
                 self._session_lock = asyncio.Lock()
-            
+
             async with self._session_lock:
                 if self.session is None:
-                    self.session = aiohttp.ClientSession()
+                    timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_connect=10, sock_read=10)
+                    connector = aiohttp.TCPConnector(
+                        force_close=True,
+                        enable_cleanup_closed=True,
+                        ttl_dns_cache=0  # Disable DNS caching
+                    )
+                    self.session = aiohttp.ClientSession(timeout=timeout, connector=connector)
         return self.session
     
     async def close(self):

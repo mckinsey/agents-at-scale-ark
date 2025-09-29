@@ -29,7 +29,6 @@ interface TeamCardProps {
     team: (TeamCreateRequest | TeamUpdateRequest) & { id?: string }
   ) => void;
   onDelete?: (id: string) => void;
-  namespace: string;
 }
 
 export function TeamCard({
@@ -37,8 +36,7 @@ export function TeamCard({
   agents,
   models,
   onUpdate,
-  onDelete,
-  namespace
+  onDelete
 }: TeamCardProps) {
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(team.name);
@@ -75,7 +73,7 @@ export function TeamCard({
   actions.push({
     icon: MessageCircle,
     label: "Chat with team",
-    onClick: () => toggleFloatingChat(team.name, "team", namespace),
+    onClick: () => toggleFloatingChat(team.name, "team"),
     className: isChatOpen ? "fill-current" : ""
   });
 

@@ -1,0 +1,30 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ark-tenant.fullname" . }}-netpol
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-tenant.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from within the namespace
+  - from:
+    - podSelector: {}
+  {{- if .Values.networkPolicy.allowNamespaces }}
+  # Allow traffic from specified namespaces
+  {{- range .Values.networkPolicy.allowNamespaces }}
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ . }}
+  {{- end }}
+  {{- end }}
+  egress:
+  # Allow all egress traffic (can be restricted as needed)
+  - {}
+{{- end }}

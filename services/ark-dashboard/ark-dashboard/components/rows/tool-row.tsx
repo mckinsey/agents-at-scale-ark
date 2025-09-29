@@ -45,9 +45,7 @@ export function ToolRow(props: ToolRowProps) {
 
   const handleQueryTool = () => {
     router.push(
-      `/query/new?namespace=${props.namespace || "default"}&target_tool=${
-        tool.name
-      }`
+      `/query/new?target_tool=${tool.name}`
     );
   };
 

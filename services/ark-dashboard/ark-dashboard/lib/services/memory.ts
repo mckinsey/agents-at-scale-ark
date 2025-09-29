@@ -58,11 +58,11 @@ interface MemoryListResponse {
 
 export const memoryService = {
   // Get all memory resources in a namespace
-  async getMemoryResources(namespace: string): Promise<MemoryResource[]> {
+  async getMemoryResources(): Promise<MemoryResource[]> {
     try {
-      const url = `/api/v1/namespaces/${namespace}/memories`;
+      const url = `/api/v1/memories`;
       const response = await apiClient.get<MemoryListResponse>(url);
-      
+
       return response?.items || [];
     } catch (error) {
       console.error("Failed to fetch memory resources:", error);
@@ -71,11 +71,11 @@ export const memoryService = {
   },
 
   // Get all sessions across all memories
-  async getSessions(namespace: string): Promise<{ sessionId: string; memoryName: string }[]> {
+  async getSessions(): Promise<{ sessionId: string; memoryName: string }[]> {
     try {
-      const url = `/api/v1/namespaces/${namespace}/sessions`;
+      const url = `/api/v1/sessions`;
       const response = await apiClient.get<{ items: { sessionId: string; memoryName: string }[] }>(url);
-      
+
       return response?.items || [];
     } catch (error) {
       console.error("Failed to fetch sessions:", error);
@@ -85,15 +85,14 @@ export const memoryService = {
 
   // Get stored conversation messages for a specific session
   async getSessionConversation(
-    namespace: string,
     memoryName: string,
     sessionId: string
   ): Promise<SessionConversation | null> {
     try {
       // Use the new ARK API endpoint for memory messages
-      const apiUrl = `/api/v1/namespaces/${namespace}/memories/${memoryName}/sessions/${sessionId}/messages`;
+      const apiUrl = `/api/v1/memories/${memoryName}/sessions/${sessionId}/messages`;
       const response = await apiClient.get<{ messages: StoredMessage[] }>(apiUrl);
-      
+
       return {
         sessionId,
         memoryName,
@@ -108,7 +107,6 @@ export const memoryService = {
 
   // Get all memory messages using the new consolidated endpoint
   async getAllMemoryMessages(
-    namespace: string,
     filters?: { memory?: string; session?: string; query?: string }
   ): Promise<{
     timestamp: string;
@@ -119,17 +117,17 @@ export const memoryService = {
     sequence?: number;
   }[]> {
     try {
-      let url = `/api/v1/namespaces/${namespace}/memory-messages`;
+      let url = `/api/v1/memory-messages`;
       const params = new URLSearchParams();
-      
+
       if (filters?.memory) params.append('memory', filters.memory);
       if (filters?.session) params.append('session', filters.session);
       if (filters?.query) params.append('query', filters.query);
-      
+
       if (params.toString()) {
         url += `?${params.toString()}`;
       }
-      
+
       const response = await apiClient.get<{
         items: {
           timestamp: string;

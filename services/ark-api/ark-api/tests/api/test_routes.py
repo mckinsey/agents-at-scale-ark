@@ -4,7 +4,6 @@ import unittest
 import unittest.mock
 from unittest.mock import Mock, patch, AsyncMock
 from fastapi.testclient import TestClient
-from kubernetes_asyncio.client.rest import ApiException
 
 # Set environment variable to skip authentication before importing the app
 os.environ["AUTH_MODE"] = "open"
@@ -51,518 +50,6 @@ class TestNamespacesEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][1]["name"], "kube-system")
     
 
-class TestSecretsEndpoint(unittest.TestCase):
-    """Test cases for the /namespaces/{namespace}/secrets endpoint."""
-    
-    def setUp(self):
-        """Set up test client."""
-        from ark_api.main import app
-        self.client = TestClient(app)
-    
-    @patch('ark_api.api.v1.secrets.ApiClient')
-    @patch('ark_api.api.v1.secrets.client.CoreV1Api')
-    def test_list_secrets_success(self, mock_v1_api, mock_api_client):
-        """Test successful secret listing."""
-        # Setup async context manager mock
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-        
-        # Mock secret objects
-        mock_secret1 = Mock()
-        mock_secret1.metadata.name = "my-secret"
-        mock_secret1.metadata.uid = "uuid-1234-5678"
-        mock_secret1.metadata.annotations = {}
-        
-        mock_secret2 = Mock()
-        mock_secret2.metadata.name = "app-config"
-        mock_secret2.metadata.uid = "uuid-abcd-efgh"
-        mock_secret2.metadata.annotations = {}
-        
-        # Mock the API response
-        mock_api_instance = mock_v1_api.return_value
-        mock_response = Mock()
-        mock_response.items = [mock_secret1, mock_secret2]
-        mock_api_instance.list_namespaced_secret = AsyncMock(return_value=mock_response)
-        
-        # Make the request
-        response = self.client.get("/v1/namespaces/default/secrets")
-        
-        # Assert response
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data["count"], 2)
-        self.assertEqual(len(data["items"]), 2)
-        
-        # Check first secret
-        self.assertEqual(data["items"][0]["name"], "my-secret")
-        self.assertEqual(data["items"][0]["id"], "uuid-1234-5678")
-        
-        # Check second secret
-        self.assertEqual(data["items"][1]["name"], "app-config")
-        self.assertEqual(data["items"][1]["id"], "uuid-abcd-efgh")
-        
-        # Verify namespace parameter was passed correctly
-        mock_api_instance.list_namespaced_secret.assert_called_once_with("default")
-    
-    @patch('ark_api.api.v1.secrets.ApiClient')
-    @patch('ark_api.api.v1.secrets.client.CoreV1Api')
-    def test_list_secrets_empty(self, mock_v1_api, mock_api_client):
-        """Test listing secrets when none exist in the namespace."""
-        # Setup async context manager mock
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-        
-        # Mock empty response
-        mock_api_instance = mock_v1_api.return_value
-        mock_response = Mock()
-        mock_response.items = []
-        mock_api_instance.list_namespaced_secret = AsyncMock(return_value=mock_response)
-        
-        # Make the request
-        response = self.client.get("/v1/namespaces/empty-namespace/secrets")
-        
-        # Assert response
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data["count"], 0)
-        self.assertEqual(data["items"], [])
-        
-        # Verify namespace parameter was passed correctly
-        mock_api_instance.list_namespaced_secret.assert_called_once_with("empty-namespace")
-    
-    @patch('ark_api.api.v1.secrets.ApiClient')
-    @patch('ark_api.api.v1.secrets.client.CoreV1Api')
-    def test_list_secrets_kubernetes_api_error(self, mock_v1_api, mock_api_client):
-        """Test handling of Kubernetes API errors."""
-        # Setup async context manager mock
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-        
-        # Mock API exception for namespace not found
-        mock_api_instance = mock_v1_api.return_value
-        mock_api_instance.list_namespaced_secret = AsyncMock(side_effect=ApiException(
-            status=404,
-            reason="Not Found"
-        ))
-        
-        # Make the request
-        response = self.client.get("/v1/namespaces/nonexistent/secrets")
-        
-        # Assert response
-        self.assertEqual(response.status_code, 404)
-        data = response.json()
-        self.assertIn("Kubernetes API error", data["detail"])
-        self.assertIn("Not Found", data["detail"])
-    
-    @patch('ark_api.api.v1.secrets.ApiClient')
-    @patch('ark_api.api.v1.secrets.client.CoreV1Api')
-    def test_list_secrets_forbidden_error(self, mock_v1_api, mock_api_client):
-        """Test handling of forbidden access errors."""
-        # Setup async context manager mock
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-        
-        # Mock API exception for forbidden access
-        mock_api_instance = mock_v1_api.return_value
-        mock_api_instance.list_namespaced_secret = AsyncMock(side_effect=ApiException(
-            status=403,
-            reason="Forbidden"
-        ))
-        
-        # Make the request
-        response = self.client.get("/v1/namespaces/restricted-namespace/secrets")
-        
-        # Assert response
-        self.assertEqual(response.status_code, 403)
-        data = response.json()
-        self.assertIn("Kubernetes API error", data["detail"])
-        self.assertIn("Forbidden", data["detail"])
-    
-    @patch('ark_api.api.v1.secrets.ApiClient')
-    @patch('ark_api.api.v1.secrets.client.CoreV1Api')
-    def test_list_secrets_with_special_characters_in_namespace(self, mock_v1_api, mock_api_client):
-        """Test listing secrets with special characters in namespace name."""
-        # Setup async context manager mock
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-        
-        # Mock response with secrets
-        mock_secret = Mock()
-        mock_secret.metadata.name = "secret-in-special-namespace"
-        mock_secret.metadata.uid = "uuid-special"
-        mock_secret.metadata.annotations = {}
-        
-        mock_api_instance = mock_v1_api.return_value
-        mock_response = Mock()
-        mock_response.items = [mock_secret]
-        mock_api_instance.list_namespaced_secret = AsyncMock(return_value=mock_response)
-        
-        # Make the request with special characters in namespace
-        response = self.client.get("/v1/namespaces/test-namespace-123_prod/secrets")
-        
-        # Assert response
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data["count"], 1)
-        self.assertEqual(data["items"][0]["name"], "secret-in-special-namespace")
-        
-        # Verify namespace parameter was passed correctly
-        mock_api_instance.list_namespaced_secret.assert_called_once_with("test-namespace-123_prod")
-
-
-class TestSecretGetEndpoint(unittest.TestCase):
-    """Test cases for the GET /namespaces/{namespace}/secrets/{secret_name} endpoint."""
-    
-    def setUp(self):
-        """Set up test client."""
-        from ark_api.main import app
-        self.client = TestClient(app)
-    
-    @patch('ark_api.api.v1.secrets.ApiClient')
-    @patch('ark_api.api.v1.secrets.client.CoreV1Api')
-    def test_get_secret_success(self, mock_v1_api, mock_api_client):
-        """Test successfully retrieving a secret."""
-        # Setup async context manager mock
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-        
-        # Mock the secret response
-        mock_secret = Mock()
-        mock_secret.metadata.name = "test-secret"
-        mock_secret.metadata.uid = "uuid-12345"
-        mock_secret.metadata.annotations = {}
-        mock_secret.type = "Opaque"
-        mock_secret.data = {"token": "dGVzdC10b2tlbg=="}  # base64 encoded "test-token"
-        
-        mock_api_instance = mock_v1_api.return_value
-        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=mock_secret)
-        
-        # Make the request
-        response = self.client.get("/v1/namespaces/default/secrets/test-secret")
-        
-        # Assert response
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data["name"], "test-secret")
-        self.assertEqual(data["id"], "uuid-12345")
-        self.assertEqual(data["type"], "Opaque")
-        self.assertEqual(data["secret_length"], 10)  # length of "test-token"
-
-
-class TestSecretCreateEndpoint(unittest.TestCase):
-    """Test cases for the POST /namespaces/{namespace}/secrets endpoint."""
-    
-    def setUp(self):
-        """Set up test client."""
-        from ark_api.main import app
-        self.client = TestClient(app)
-    
-    @patch('ark_api.api.v1.secrets.ApiClient')
-    @patch('ark_api.api.v1.secrets.client.CoreV1Api')
-    def test_create_secret_success(self, mock_v1_api, mock_api_client):
-        """Test successful secret creation with token."""
-        # Setup async context manager mock
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-        
-        # Mock the created secret response
-        mock_secret = Mock()
-        mock_secret.metadata.name = "test-secret"
-        mock_secret.metadata.uid = "uuid-12345"
-        mock_secret.metadata.annotations = {"ark.mckinsey.com/dashboard-icon": "icons/gemini.png"}
-        mock_secret.type = "Opaque"
-        mock_secret.data = {"token": "dGVzdC10b2tlbg=="}  # base64 encoded "test-token"
-        
-        mock_api_instance = mock_v1_api.return_value
-        mock_api_instance.create_namespaced_secret = AsyncMock(return_value=mock_secret)
-        
-        # Make the request
-        request_data = {
-            "name": "test-secret",
-            "string_data": {"token": "test-token"}
-        }
-        response = self.client.post("/v1/namespaces/default/secrets", json=request_data)
-        
-        # Assert response
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data["name"], "test-secret")
-        self.assertEqual(data["id"], "uuid-12345")
-        self.assertEqual(data["type"], "Opaque")
-        self.assertEqual(data["secret_length"], 10)  # length of "test-token"
-        self.assertEqual(data["annotations"], {"ark.mckinsey.com/dashboard-icon": "icons/gemini.png"})
-        
-        # Verify the secret was created with base64 encoded token
-        create_call = mock_api_instance.create_namespaced_secret.call_args
-        created_secret = create_call[1]['body']
-        self.assertEqual(created_secret.string_data["token"], "test-token")
-    
-    @patch('ark_api.api.v1.secrets.ApiClient')
-    @patch('ark_api.api.v1.secrets.client.CoreV1Api')
-    def test_create_secret_with_already_base64_token(self, mock_v1_api, mock_api_client):
-        """Test creating secret with already base64 encoded token."""
-        # Setup async context manager mock
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-        
-        # Mock the created secret response
-        mock_secret = Mock()
-        mock_secret.metadata.name = "test-secret"
-        mock_secret.metadata.uid = "uuid-12345"
-        mock_secret.metadata.annotations = {}
-        mock_secret.type = "Opaque"
-        mock_secret.data = {"token": "YWxyZWFkeS1lbmNvZGVk"}  # already base64
-        
-        mock_api_instance = mock_v1_api.return_value
-        mock_api_instance.create_namespaced_secret = AsyncMock(return_value=mock_secret)
-        
-        # Make the request with already base64 encoded token
-        request_data = {
-            "name": "test-secret",
-            "string_data": {"token": "YWxyZWFkeS1lbmNvZGVk"}  # already base64
-        }
-        response = self.client.post("/v1/namespaces/default/secrets", json=request_data)
-        
-        # Assert response
-        self.assertEqual(response.status_code, 200)
-        
-        # Verify the token was not double-encoded
-        create_call = mock_api_instance.create_namespaced_secret.call_args
-        created_secret = create_call[1]['body']
-        self.assertEqual(created_secret.string_data["token"], "already-encoded")
-    
-    def test_create_secret_invalid_fields(self):
-        """Test creating secret with invalid fields."""
-        # Make the request with additional fields
-        request_data = {
-            "name": "test-secret",
-            "string_data": {
-                "token": "test-token",
-                "password": "should-not-be-allowed"
-            }
-        }
-        response = self.client.post("/v1/namespaces/default/secrets", json=request_data)
-        
-        # Assert response
-        self.assertEqual(response.status_code, 400)
-        data = response.json()
-        self.assertIn("Only 'token' field is allowed", data["detail"])
-        self.assertIn("password", data["detail"])
-    
-    def test_create_secret_empty_data(self):
-        """Test creating secret with empty string_data."""
-        # Make the request with empty data
-        request_data = {
-            "name": "test-secret",
-            "string_data": {}
-        }
-        response = self.client.post("/v1/namespaces/default/secrets", json=request_data)
-        
-        # Assert response
-        self.assertEqual(response.status_code, 400)
-        data = response.json()
-        self.assertEqual(data["detail"], "Secret data cannot be empty")
-    
-    @patch('ark_api.api.v1.secrets.ApiClient')
-    @patch('ark_api.api.v1.secrets.client.CoreV1Api')
-    def test_create_secret_kubernetes_conflict(self, mock_v1_api, mock_api_client):
-        """Test handling of Kubernetes conflict error."""
-        # Setup async context manager mock
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-        
-        # Mock API exception
-        mock_api_instance = mock_v1_api.return_value
-        mock_api_instance.create_namespaced_secret = AsyncMock(side_effect=ApiException(
-            status=409,
-            reason="Conflict"
-        ))
-        
-        # Make the request
-        request_data = {
-            "name": "existing-secret",
-            "string_data": {"token": "test-token"}
-        }
-        response = self.client.post("/v1/namespaces/default/secrets", json=request_data)
-        
-        # Assert response
-        self.assertEqual(response.status_code, 409)
-        data = response.json()
-        self.assertIn("already exists", data["detail"])
-
-
-class TestSecretUpdateEndpoint(unittest.TestCase):
-    """Test cases for the PUT /namespaces/{namespace}/secrets/{secret_name} endpoint."""
-    
-    def setUp(self):
-        """Set up test client."""
-        from ark_api.main import app
-        self.client = TestClient(app)
-    
-    @patch('ark_api.api.v1.secrets.ApiClient')
-    @patch('ark_api.api.v1.secrets.client.CoreV1Api')
-    def test_update_secret_success(self, mock_v1_api, mock_api_client):
-        """Test successful secret update with token."""
-        # Setup async context manager mock
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-        
-        # Mock the updated secret response
-        mock_secret = Mock()
-        mock_secret.metadata.name = "test-secret"
-        mock_secret.metadata.uid = "uuid-12345"
-        mock_secret.metadata.annotations = {}
-        mock_secret.type = "Opaque"
-        mock_secret.data = {"token": "bmV3LXRva2Vu"}  # base64 encoded "new-token"
-        
-        mock_api_instance = mock_v1_api.return_value
-        mock_api_instance.patch_namespaced_secret = AsyncMock(return_value=mock_secret)
-        
-        # Make the request
-        request_data = {
-            "string_data": {"token": "new-token"}
-        }
-        response = self.client.put("/v1/namespaces/default/secrets/test-secret", json=request_data)
-        
-        # Assert response
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data["name"], "test-secret")
-        self.assertEqual(data["id"], "uuid-12345")
-        self.assertEqual(data["type"], "Opaque")
-        self.assertEqual(data["secret_length"], 9)  # length of "new-token"
-        
-        # Verify the secret was updated with base64 encoded token
-        patch_call = mock_api_instance.patch_namespaced_secret.call_args
-        self.assertEqual(patch_call[1]['name'], "test-secret")
-        self.assertEqual(patch_call[1]['namespace'], "default")
-        patched_secret = patch_call[1]['body']
-        self.assertEqual(patched_secret.string_data["token"], "new-token")
-    
-    def test_update_secret_invalid_fields(self):
-        """Test updating secret with invalid fields."""
-        # Make the request with additional fields
-        request_data = {
-            "string_data": {
-                "token": "new-token",
-                "apiKey": "should-not-be-allowed"
-            }
-        }
-        response = self.client.put("/v1/namespaces/default/secrets/test-secret", json=request_data)
-        
-        # Assert response
-        self.assertEqual(response.status_code, 400)
-        data = response.json()
-        self.assertIn("Only 'token' field is allowed", data["detail"])
-        self.assertIn("apiKey", data["detail"])
-    
-    @patch('ark_api.api.v1.secrets.ApiClient')
-    @patch('ark_api.api.v1.secrets.client.CoreV1Api')
-    def test_update_secret_not_found(self, mock_v1_api, mock_api_client):
-        """Test updating non-existent secret."""
-        # Setup async context manager mock
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-        
-        # Mock API exception
-        mock_api_instance = mock_v1_api.return_value
-        mock_api_instance.patch_namespaced_secret = AsyncMock(side_effect=ApiException(
-            status=404,
-            reason="Not Found"
-        ))
-        
-        # Make the request
-        request_data = {
-            "string_data": {"token": "new-token"}
-        }
-        response = self.client.put("/v1/namespaces/default/secrets/nonexistent", json=request_data)
-        
-        # Assert response
-        self.assertEqual(response.status_code, 404)
-        data = response.json()
-        self.assertIn("not found", data["detail"])
-
-
-class TestSecretDeleteEndpoint(unittest.TestCase):
-    """Test cases for the DELETE /namespaces/{namespace}/secrets/{secret_name} endpoint."""
-    
-    def setUp(self):
-        """Set up test client."""
-        from ark_api.main import app
-        self.client = TestClient(app)
-    
-    @patch('ark_api.api.v1.secrets.ApiClient')
-    @patch('ark_api.api.v1.secrets.client.CoreV1Api')
-    def test_delete_secret_success(self, mock_v1_api, mock_api_client):
-        """Test successful secret deletion."""
-        # Setup async context manager mock
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-        
-        # Mock successful deletion (no return value)
-        mock_api_instance = mock_v1_api.return_value
-        mock_api_instance.delete_namespaced_secret = AsyncMock(return_value=None)
-        
-        # Make the request
-        response = self.client.delete("/v1/namespaces/default/secrets/test-secret")
-        
-        # Assert response
-        self.assertEqual(response.status_code, 204)
-        
-        # Verify the delete was called correctly
-        mock_api_instance.delete_namespaced_secret.assert_called_once()
-        delete_call = mock_api_instance.delete_namespaced_secret.call_args
-        self.assertEqual(delete_call[1]['name'], "test-secret")
-        self.assertEqual(delete_call[1]['namespace'], "default")
-    
-    @patch('ark_api.api.v1.secrets.ApiClient')
-    @patch('ark_api.api.v1.secrets.client.CoreV1Api')
-    def test_delete_secret_not_found(self, mock_v1_api, mock_api_client):
-        """Test deleting non-existent secret."""
-        # Setup async context manager mock
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-        
-        # Mock API exception
-        mock_api_instance = mock_v1_api.return_value
-        mock_api_instance.delete_namespaced_secret = AsyncMock(side_effect=ApiException(
-            status=404,
-            reason="Not Found"
-        ))
-        
-        # Make the request
-        response = self.client.delete("/v1/namespaces/default/secrets/nonexistent")
-        
-        # Assert response
-        self.assertEqual(response.status_code, 404)
-        data = response.json()
-        self.assertIn("not found", data["detail"])
-    
-    @patch('ark_api.api.v1.secrets.ApiClient')
-    @patch('ark_api.api.v1.secrets.client.CoreV1Api')
-    def test_delete_secret_forbidden(self, mock_v1_api, mock_api_client):
-        """Test deleting secret without permissions."""
-        # Setup async context manager mock
-        mock_api_client_instance = AsyncMock()
-        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-        
-        # Mock API exception
-        mock_api_instance = mock_v1_api.return_value
-        mock_api_instance.delete_namespaced_secret = AsyncMock(side_effect=ApiException(
-            status=403,
-            reason="Forbidden"
-        ))
-        
-        # Make the request
-        response = self.client.delete("/v1/namespaces/restricted/secrets/protected-secret")
-        
-        # Assert response
-        self.assertEqual(response.status_code, 403)
-        data = response.json()
-        self.assertIn("Kubernetes API error", data["detail"])
-        self.assertIn("Forbidden", data["detail"])
-
-
 class TestAgentsEndpoint(unittest.TestCase):
     """Test cases for the /namespaces/{namespace}/agents endpoint."""
     
@@ -604,7 +91,7 @@ class TestAgentsEndpoint(unittest.TestCase):
         mock_client.agents.a_list = AsyncMock(return_value=[mock_agent1, mock_agent2])
         
         # Make the request
-        response = self.client.get("/v1/namespaces/default/agents")
+        response = self.client.get("/v1/agents?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -635,7 +122,7 @@ class TestAgentsEndpoint(unittest.TestCase):
         mock_client.agents.a_list = AsyncMock(return_value=[])
         
         # Make the request
-        response = self.client.get("/v1/namespaces/test-namespace/agents")
+        response = self.client.get("/v1/agents?namespace=test-namespace")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -677,7 +164,7 @@ class TestAgentsEndpoint(unittest.TestCase):
             "parameters": [{"name": "temperature", "value": "0.7"}],
             "tools": [{"type": "built-in", "name": "calculator"}]
         }
-        response = self.client.post("/v1/namespaces/default/agents", json=request_data)
+        response = self.client.post("/v1/agents?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -711,7 +198,7 @@ class TestAgentsEndpoint(unittest.TestCase):
         
         # Make the request with only required field
         request_data = {"name": "minimal-agent"}
-        response = self.client.post("/v1/namespaces/default/agents", json=request_data)
+        response = self.client.post("/v1/agents?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -745,7 +232,7 @@ class TestAgentsEndpoint(unittest.TestCase):
         mock_client.agents.a_get = AsyncMock(return_value=mock_agent)
         
         # Make the request
-        response = self.client.get("/v1/namespaces/default/agents/test-agent")
+        response = self.client.get("/v1/agents/test-agent?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -795,7 +282,7 @@ class TestAgentsEndpoint(unittest.TestCase):
             "prompt": "Updated prompt",
             "modelRef": {"name": "gpt-4"}
         }
-        response = self.client.put("/v1/namespaces/default/agents/test-agent", json=request_data)
+        response = self.client.put("/v1/agents/test-agent?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -841,7 +328,7 @@ class TestAgentsEndpoint(unittest.TestCase):
         
         # Make the request - only update description
         request_data = {"description": "Updated description only"}
-        response = self.client.put("/v1/namespaces/default/agents/test-agent", json=request_data)
+        response = self.client.put("/v1/agents/test-agent?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -861,7 +348,7 @@ class TestAgentsEndpoint(unittest.TestCase):
         mock_client.agents.a_delete = AsyncMock(return_value=None)
         
         # Make the request
-        response = self.client.delete("/v1/namespaces/default/agents/test-agent")
+        response = self.client.delete("/v1/agents/test-agent?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 204)
@@ -914,7 +401,7 @@ class TestModelsEndpoint(unittest.TestCase):
         mock_client.models.a_list = AsyncMock(return_value=[mock_model1, mock_model2])
         
         # Make the request
-        response = self.client.get("/v1/namespaces/default/models")
+        response = self.client.get("/v1/models?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -945,7 +432,7 @@ class TestModelsEndpoint(unittest.TestCase):
         mock_client.models.a_list = AsyncMock(return_value=[])
         
         # Make the request
-        response = self.client.get("/v1/namespaces/test-namespace/models")
+        response = self.client.get("/v1/models?namespace=test-namespace")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -990,7 +477,7 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
-        response = self.client.post("/v1/namespaces/default/models", json=request_data)
+        response = self.client.post("/v1/models?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1040,7 +527,7 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
-        response = self.client.post("/v1/namespaces/default/models", json=request_data)
+        response = self.client.post("/v1/models?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1092,7 +579,7 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
-        response = self.client.post("/v1/namespaces/default/models", json=request_data)
+        response = self.client.post("/v1/models?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1135,7 +622,7 @@ class TestModelsEndpoint(unittest.TestCase):
         mock_client.models.a_get = AsyncMock(return_value=mock_model)
         
         # Make the request
-        response = self.client.get("/v1/namespaces/default/models/gpt-4-model")
+        response = self.client.get("/v1/models/gpt-4-model?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1199,7 +686,7 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
-        response = self.client.put("/v1/namespaces/default/models/gpt-model", json=request_data)
+        response = self.client.put("/v1/models/gpt-model?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1252,7 +739,7 @@ class TestModelsEndpoint(unittest.TestCase):
         
         # Make the request - only update model
         request_data = {"model": "gpt-4"}
-        response = self.client.put("/v1/namespaces/default/models/gpt-model", json=request_data)
+        response = self.client.put("/v1/models/gpt-model?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1272,7 +759,7 @@ class TestModelsEndpoint(unittest.TestCase):
         mock_client.models.a_delete = AsyncMock(return_value=None)
         
         # Make the request
-        response = self.client.delete("/v1/namespaces/default/models/gpt-model")
+        response = self.client.delete("/v1/models/gpt-model?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 204)
@@ -1319,7 +806,7 @@ class TestQueriesEndpoint(unittest.TestCase):
         mock_client.queries.a_list = AsyncMock(return_value=[mock_query1, mock_query2])
         
         # Make the request
-        response = self.client.get("/v1/namespaces/default/queries")
+        response = self.client.get("/v1/queries?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1348,7 +835,7 @@ class TestQueriesEndpoint(unittest.TestCase):
         mock_client.queries.a_list = AsyncMock(return_value=[])
         
         # Make the request
-        response = self.client.get("/v1/namespaces/test-namespace/queries")
+        response = self.client.get("/v1/queries?namespace=test-namespace")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1380,7 +867,7 @@ class TestQueriesEndpoint(unittest.TestCase):
             "name": "simple-query",
             "input": "What is 2+2?"
         }
-        response = self.client.post("/v1/namespaces/default/queries", json=request_data)
+        response = self.client.post("/v1/queries?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1420,7 +907,7 @@ class TestQueriesEndpoint(unittest.TestCase):
                 {"name": "gpt-4", "type": "model"}
             ]
         }
-        response = self.client.post("/v1/namespaces/default/queries", json=request_data)
+        response = self.client.post("/v1/queries?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1466,7 +953,7 @@ class TestQueriesEndpoint(unittest.TestCase):
             "sessionId": "session-123",
             "targets": [{"name": "assistant", "type": "agent"}]
         }
-        response = self.client.post("/v1/namespaces/default/queries", json=request_data)
+        response = self.client.post("/v1/queries?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1502,7 +989,7 @@ class TestQueriesEndpoint(unittest.TestCase):
         mock_client.queries.a_get = AsyncMock(return_value=mock_query)
         
         # Make the request
-        response = self.client.get("/v1/namespaces/default/queries/test-query")
+        response = self.client.get("/v1/queries/test-query?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1551,7 +1038,7 @@ class TestQueriesEndpoint(unittest.TestCase):
             "input": "New question",
             "sessionId": "new-session"
         }
-        response = self.client.put("/v1/namespaces/default/queries/test-query", json=request_data)
+        response = self.client.put("/v1/queries/test-query?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1599,7 +1086,7 @@ class TestQueriesEndpoint(unittest.TestCase):
         
         # Make the request - only update memory
         request_data = {"memory": {"name": "new-memory"}}
-        response = self.client.put("/v1/namespaces/default/queries/test-query", json=request_data)
+        response = self.client.put("/v1/queries/test-query?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1619,7 +1106,7 @@ class TestQueriesEndpoint(unittest.TestCase):
         mock_client.queries.a_delete = AsyncMock(return_value=None)
         
         # Make the request
-        response = self.client.delete("/v1/namespaces/default/queries/test-query")
+        response = self.client.delete("/v1/queries/test-query?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 204)
@@ -1672,7 +1159,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         mock_client.teams.a_list = AsyncMock(return_value=[mock_team1, mock_team2])
         
         # Make the request
-        response = self.client.get("/v1/namespaces/default/teams")
+        response = self.client.get("/v1/teams?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1704,7 +1191,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         mock_client.teams.a_list = AsyncMock(return_value=[])
         
         # Make the request
-        response = self.client.get("/v1/namespaces/test-namespace/teams")
+        response = self.client.get("/v1/teams?namespace=test-namespace")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1744,7 +1231,7 @@ class TestTeamsEndpoint(unittest.TestCase):
             ],
             "strategy": "sequential"
         }
-        response = self.client.post("/v1/namespaces/default/teams", json=request_data)
+        response = self.client.post("/v1/teams?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1802,7 +1289,7 @@ class TestTeamsEndpoint(unittest.TestCase):
                 ]
             }
         }
-        response = self.client.post("/v1/namespaces/default/teams", json=request_data)
+        response = self.client.post("/v1/teams?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1851,7 +1338,7 @@ class TestTeamsEndpoint(unittest.TestCase):
                 "selectorPrompt": "Choose the best agent for the task"
             }
         }
-        response = self.client.post("/v1/namespaces/default/teams", json=request_data)
+        response = self.client.post("/v1/teams?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1889,7 +1376,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         mock_client.teams.a_get = AsyncMock(return_value=mock_team)
         
         # Make the request
-        response = self.client.get("/v1/namespaces/default/teams/dev-team")
+        response = self.client.get("/v1/teams/dev-team?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1946,7 +1433,7 @@ class TestTeamsEndpoint(unittest.TestCase):
             ],
             "strategy": "parallel"
         }
-        response = self.client.put("/v1/namespaces/default/teams/test-team", json=request_data)
+        response = self.client.put("/v1/teams/test-team?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -1994,7 +1481,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         
         # Make the request - only update maxTurns
         request_data = {"maxTurns": 10}
-        response = self.client.put("/v1/namespaces/default/teams/test-team", json=request_data)
+        response = self.client.put("/v1/teams/test-team?namespace=default", json=request_data)
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -2014,7 +1501,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         mock_client.teams.a_delete = AsyncMock(return_value=None)
         
         # Make the request
-        response = self.client.delete("/v1/namespaces/default/teams/test-team")
+        response = self.client.delete("/v1/teams/test-team?namespace=default")
         
         # Assert response
         self.assertEqual(response.status_code, 204)

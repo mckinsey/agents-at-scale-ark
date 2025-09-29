@@ -225,9 +225,9 @@ export class InputValidator {
     if (!kebabRegex.test(trimmed)) {
       const suggestions = [];
       const normalized = trimmed
+        .replace(/([a-z])([A-Z])/g, '$1-$2') // Handle camelCase first
         .toLowerCase()
         .replace(/[\s_]+/g, '-')
-        .replace(/([a-z])([A-Z])/g, '$1-$2')
         .replace(/-{2,}/g, '-') // Replace 2+ consecutive hyphens with single hyphen (ReDoS-safe)
         .replace(/^-/, '') // Remove single leading hyphen (ReDoS-safe)
         .replace(/-$/, ''); // Remove single trailing hyphen (ReDoS-safe)

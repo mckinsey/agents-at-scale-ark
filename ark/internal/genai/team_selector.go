@@ -80,7 +80,7 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		NewUserMessage("Select the next participant to respond."),
 	}
 
-	response, err := model.ChatCompletion(ctx, selectorMessages, nil)
+	response, err := model.ChatCompletion(ctx, selectorMessages, nil, 1)
 	if err != nil {
 		return nil, 0, fmt.Errorf("selector model call failed: %w", err)
 	}

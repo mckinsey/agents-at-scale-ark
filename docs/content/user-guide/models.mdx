@@ -1,0 +1,63 @@
+---
+title: Models
+description: Create, modify, and manage models
+---
+
+# Models
+
+Models represent the configuration for a large-language model, such as OpenAI GPT and Claude Opus.
+
+Ark agents can be configured to use any model and will use the model named `default` if a specific model is not specified.
+
+You can quickly configure a model by running `ark dashboard` and going to the 'Models' page.
+
+## Creating Models
+
+Create a [Model Resource](../../reference/resources/models.mdx). As an example. this is how you would configure the an OpenAI gpt-4o-mini model:
+
+```bash
+# First, create a secret with your OpenAI API key.
+# Secrets are the recommended way to store sensitive data.
+kubectl create secret generic default-model-secret \
+  --from-literal=api-key='YOUR_OPENAI_API_KEY'
+
+# Create the model resource, which uses the configured secret for its API
+# key.
+cat <<EOF | kubectl apply -f -
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: default
+spec:
+  type: openai
+  model:
+    value: gpt-4o-mini
+  config:
+    openai:
+      baseUrl:
+        value: "https://api.openai.com/v1"
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: default-model-secret
+            key: api-key
+EOF
+```
+
+You can then query the model directly:
+
+```bash
+ark query model/default "Explain how AI large language models work"
+```
+
+You can also create a model with the command `ark models create`. For example, to create the `default` model use:
+
+```bash
+ark models create default
+```
+
+You will then be asked to provide the model configuration, API key, etc.
+
+---
+
+**Ready to create agents?** Move to the [Agents](/user-guide/agents) guide.

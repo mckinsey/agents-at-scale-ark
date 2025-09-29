@@ -19,9 +19,6 @@ import { useListQueries } from "@/lib/services/queries-hooks";
 import { Button } from "../ui/button";
 
 type QueryResponse = components["schemas"]["QueryResponse"];
-interface QueriesSectionProps {
-  namespace: string;
-}
 
 type SortField = "createdAt" | "none";
 type SortDirection = "asc" | "desc";
@@ -29,7 +26,7 @@ type SortDirection = "asc" | "desc";
 // NEW: view mode for the Output column
 type OutputViewMode = 'content' | 'raw';
 
-export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesSectionProps>(function QueriesSection({ namespace }, ref) {
+export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function QueriesSection(_, ref) {
   const [queries, setQueries] = useState<QueryResponse[]>([]);
   const [sortField, setSortField] = useState<SortField>('createdAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -38,12 +35,12 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
 
   useImperativeHandle(ref, () => ({
     openAddEditor: () => {
-      router.push(`/query/new?namespace=${namespace}`);
+      router.push(`/query/new`);
     }
   }));
 
   const getStatus = (query: QueryResponse) => {
-    return (query.status as { phase?: string })?.phase || "pending";
+    return (query.status as { phase?: string })?.phase || "—";
   };
 
   const {
@@ -53,7 +50,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
     isError: listQueriesError,
     error: listQueriesErrorObject,
     refetch: loadQueries
-  } = useListQueries(namespace);
+  } = useListQueries();
 
   useEffect(() => {
     if (listQueriesData && !listQueriesError) {
@@ -198,14 +195,12 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
       | "done"
       | "error"
       | "running"
-      | "evaluating"
       | "canceled"
       | "default";
     const variant = [
       "done",
       "error",
       "running",
-      "evaluating",
       "canceled"
     ].includes(status || "")
       ? normalizedStatus
@@ -223,13 +218,13 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
 
   const handleDelete = async (queryName: string) => {
     try {
-      await queriesService.delete(namespace, queryName);
+      await queriesService.delete(queryName);
       toast({
         variant: "success",
         title: "Query Deleted",
         description: "Successfully deleted query"
       });
-      const data = await queriesService.list(namespace);
+      const data = await queriesService.list();
       setQueries(data.items);
     } catch (error) {
       console.error("Failed to delete query:", error);
@@ -246,13 +241,13 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
 
   const handleCancel = async (queryName: string) => {
     try {
-      await queriesService.cancel(namespace, queryName);
+      await queriesService.cancel(queryName);
       toast({
         variant: "success",
         title: "Query Canceled",
         description: "Successfully canceled query"
       });
-      const data = await queriesService.list(namespace);
+      const data = await queriesService.list();
       setQueries(data.items);
     } catch (error) {
       console.error("Failed to cancel query:", error);
@@ -384,7 +379,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
                             className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/30 cursor-pointer"
                             onClick={() =>
                               router.push(
-                                `/query/${query.name}?namespace=${namespace}`
+                                `/query/${query.name}`
                               )
                             }
                           >
@@ -439,7 +434,6 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
                               <div className="flex items-center justify-center">
                                 <EvaluationStatusIndicator
                                   queryName={query.name}
-                                  namespace={namespace}
                                   compact={true}
                                 />
                               </div>
@@ -453,7 +447,6 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const eventsUrl = getResourceEventsUrl(
-                                      namespace,
                                       "Query",
                                       query.name
                                     );
@@ -492,7 +485,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
 });
 
 interface StatusDotProps {
-  variant: "done" | "error" | "running" | "evaluating" | "canceled" | "default";
+  variant: "done" | "error" | "running" | "canceled" | "default";
   onCancel?: () => void;
 }
 
@@ -505,8 +498,6 @@ function StatusDot({ variant, onCancel }: StatusDotProps) {
         return "bg-red-300";
       case "running":
         return "bg-blue-300";
-      case "evaluating":
-        return "bg-yellow-300";
       case "canceled":
         return "bg-gray-300";
       default:
@@ -522,8 +513,6 @@ function StatusDot({ variant, onCancel }: StatusDotProps) {
         return "Error";
       case "running":
         return "Running";
-      case "evaluating":
-        return "Evaluating";
       case "canceled":
         return "Canceled";
       default:

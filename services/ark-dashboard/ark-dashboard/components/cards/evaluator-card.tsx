@@ -9,13 +9,11 @@ import type { Evaluator } from "@/lib/services"
 interface EvaluatorCardProps {
   evaluator: Evaluator
   onDelete?: (id: string) => void
-  namespace: string
 }
 
 export function EvaluatorCard({
   evaluator,
-  onDelete,
-  namespace
+  onDelete
 }: EvaluatorCardProps) {
   const router = useRouter()
 
@@ -23,7 +21,7 @@ export function EvaluatorCard({
     {
       icon: Pencil,
       label: "Edit evaluator",
-      onClick: () => router.push(`/evaluators/${evaluator.name}/edit?namespace=${namespace}`)
+      onClick: () => router.push(`/evaluators/${evaluator.name}/edit`)
     }
   ]
 

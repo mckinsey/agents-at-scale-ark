@@ -1,14 +1,13 @@
-import { Command } from 'commander';
+import {Command} from 'commander';
+import type {ArkConfig} from '../../lib/config.js';
 
-import { createGetIpCommand } from './get-ip.js';
-import { createGetTypeCommand } from './get-type.js';
+import {createGetCommand} from './get.js';
 
-export function createClusterCommand(): Command {
+export function createClusterCommand(_: ArkConfig): Command {
   const cluster = new Command('cluster');
   cluster.description('Cluster management commands');
 
-  cluster.addCommand(createGetTypeCommand());
-  cluster.addCommand(createGetIpCommand());
+  cluster.addCommand(createGetCommand());
 
   return cluster;
 }

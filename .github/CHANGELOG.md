@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.1.36](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.35...v0.1.36) (2025-09-26)
+
+
+### Features
+
+* 284 - implement standalone RagasProvider with comprehensive OSS evaluation architecture ([#161](https://github.com/mckinsey/agents-at-scale-ark/issues/161)) ([c4d18ee](https://github.com/mckinsey/agents-at-scale-ark/commit/c4d18eeb46c69c1d638cdd99bcfcd4bceaaf1f8e))
+* Add ARK Dashboard homepage with metrics cards ([#190](https://github.com/mckinsey/agents-at-scale-ark/issues/190)) ([acd5a4c](https://github.com/mckinsey/agents-at-scale-ark/commit/acd5a4c1e91cf8aa613d27017749d8be0416da37))
+* add streaming support for query execution ([#162](https://github.com/mckinsey/agents-at-scale-ark/issues/162)) ([77f7f7f](https://github.com/mckinsey/agents-at-scale-ark/commit/77f7f7f14ae3101780b74dc8049d7e2c58f5b768))
+* replace make quickstart with ark install, improved ark cli, improved install docs ([#188](https://github.com/mckinsey/agents-at-scale-ark/issues/188)) ([e51e296](https://github.com/mckinsey/agents-at-scale-ark/commit/e51e296ab9a71b3f82070b5e2b6e620cced2d728))
+
+
+### Bug Fixes
+
+* add webhook initialization delay in quickstart ([#196](https://github.com/mckinsey/agents-at-scale-ark/issues/196)) ([3429362](https://github.com/mckinsey/agents-at-scale-ark/commit/34293627c75216dc92c76b6744e565c1fcc2d1c6))
+* CI/CD workflow issues ([#182](https://github.com/mckinsey/agents-at-scale-ark/issues/182)) ([f2c01e5](https://github.com/mckinsey/agents-at-scale-ark/commit/f2c01e5e8e90638e62e65e652ccd6c0bd1824eca))
+* devspace httproutes missing ([#187](https://github.com/mckinsey/agents-at-scale-ark/issues/187)) ([1860dac](https://github.com/mckinsey/agents-at-scale-ark/commit/1860dacd4d32836f8030ab82df15f165df704e55))
+* make namespace parameter optional across all API endpoints ([#191](https://github.com/mckinsey/agents-at-scale-ark/issues/191)) ([9c068c1](https://github.com/mckinsey/agents-at-scale-ark/commit/9c068c1f2ec6f9807aa04a717ab08117553da1a6))
+* **models:** improve model probe stability and observability ([#186](https://github.com/mckinsey/agents-at-scale-ark/issues/186)) ([e6e506b](https://github.com/mckinsey/agents-at-scale-ark/commit/e6e506bb694f544cb84c46039872f68ba60fd562))
+* New query display bug fix ([#185](https://github.com/mckinsey/agents-at-scale-ark/issues/185)) ([5d5e6f4](https://github.com/mckinsey/agents-at-scale-ark/commit/5d5e6f421178fd83e1e07c3b7e2aebbf2a37c785))
+
+## [0.1.35](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.34...v0.1.35) (2025-09-24)
+
+
+### Features
+
+* add ark-cluster-memory service for in-memory message storage ([#151](https://github.com/mckinsey/agents-at-scale-ark/issues/151)) ([b5d70bd](https://github.com/mckinsey/agents-at-scale-ark/commit/b5d70bd3cd6486a8159f9445153130f0790ea3e0))
+* Added secret management to ark-sdk ([#175](https://github.com/mckinsey/agents-at-scale-ark/issues/175)) ([f8abb19](https://github.com/mckinsey/agents-at-scale-ark/commit/f8abb198fe5b12c33f2f619d2accb3603ae31866))
+* Agents can reference Query Parameters ([#140](https://github.com/mckinsey/agents-at-scale-ark/issues/140)) ([33e1a2d](https://github.com/mckinsey/agents-at-scale-ark/commit/33e1a2de0914d713399c232761ae08273b5737b8))
+* **charts:** add http gateway and ingress opt-in support ([#179](https://github.com/mckinsey/agents-at-scale-ark/issues/179)) ([cdfb1ed](https://github.com/mckinsey/agents-at-scale-ark/commit/cdfb1edd7f9489841725cd31ef70c98add9e5680))
+* model status refresh interval and conditions ([#72](https://github.com/mckinsey/agents-at-scale-ark/issues/72)) ([850a49d](https://github.com/mckinsey/agents-at-scale-ark/commit/850a49d83bd00ee659c9189277ec6646ecd139bd))
+* simplified impersonation model, ark tenant chart, deployment improvements ([#139](https://github.com/mckinsey/agents-at-scale-ark/issues/139)) ([0d394b9](https://github.com/mckinsey/agents-at-scale-ark/commit/0d394b988b6c77a1e80a5c4e9ac59d2a015625f3))
+
+
+### Bug Fixes
+
+* add multi-platform fark binaries to releases and improve installation docs ([#136](https://github.com/mckinsey/agents-at-scale-ark/issues/136)) ([ced0c7a](https://github.com/mckinsey/agents-at-scale-ark/commit/ced0c7a4a5fad3443954469bb4084ae47c703203))
+* agent availability conditions ([#157](https://github.com/mckinsey/agents-at-scale-ark/issues/157)) ([209a4a6](https://github.com/mckinsey/agents-at-scale-ark/commit/209a4a62bdfa0e50eb8e94f996566619699626ff))
+* enable service account token mounting for ark-mcp ([#169](https://github.com/mckinsey/agents-at-scale-ark/issues/169)) ([b50d838](https://github.com/mckinsey/agents-at-scale-ark/commit/b50d83801851c8089a275271c399bf38cb29baef))
+* Fix for round robin strategy in teams ([#135](https://github.com/mckinsey/agents-at-scale-ark/issues/135)) ([3653d92](https://github.com/mckinsey/agents-at-scale-ark/commit/3653d92221d539cb9bac8c33ed0b6cce49bd60b9))
+* improve query-parameter-ref test with mock OpenAI server ([#177](https://github.com/mckinsey/agents-at-scale-ark/issues/177)) ([3a43454](https://github.com/mckinsey/agents-at-scale-ark/commit/3a43454bacf2e23bb44dc03f40720739fbaad183))
+* status condition not met for model ([#159](https://github.com/mckinsey/agents-at-scale-ark/issues/159)) ([273101a](https://github.com/mckinsey/agents-at-scale-ark/commit/273101a351f41fe7231f06a91b0d4665b3662c3a))
+* time stamp in memory logs ([#164](https://github.com/mckinsey/agents-at-scale-ark/issues/164)) ([c06bb37](https://github.com/mckinsey/agents-at-scale-ark/commit/c06bb371fac76e0fb67c9c1cf71c67bda8cfd31b))
+
 ## [0.1.34](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.33...v0.1.34) (2025-09-19)
 
 

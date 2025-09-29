@@ -110,8 +110,6 @@ class QueryUpdateRequest(BaseModel):
     timeout: Optional[str] = None
     ttl: Optional[str] = None
     cancel: Optional[bool] = None
-    evaluators: Optional[List[Memory]] = None
-    evaluatorSelector: Optional[LabelSelector] = None
 
 
 class QueryDetailResponse(BaseModel):
@@ -128,7 +126,5 @@ class QueryDetailResponse(BaseModel):
     timeout: Optional[str] = None
     ttl: Optional[str] = None
     cancel: Optional[bool] = None
-    evaluators: Optional[List[Memory]] = None  # Using Memory model as it has same structure (name, namespace)
-    evaluatorSelector: Optional[LabelSelector] = None
     metadata: Optional[Dict[str, Any]] = None
     status: Optional[Dict[str, Any]] = None

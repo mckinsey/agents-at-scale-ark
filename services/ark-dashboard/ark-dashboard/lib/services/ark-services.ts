@@ -7,9 +7,9 @@ export type ArkServiceListResponse = components['schemas']['ArkServiceListRespon
 
 export const arkServicesService = {
   /**
-   * Get all ARK services in a namespace
+   * Get all ARK services
    */
-  async getAll(namespace: string): Promise<ArkServiceListResponse> {
-    return apiClient.get<ArkServiceListResponse>(`/api/v1/namespaces/${namespace}/ark-services`);
+  async getAll(): Promise<ArkServiceListResponse> {
+    return apiClient.get<ArkServiceListResponse>(`/api/v1/ark-services`);
   }
 };

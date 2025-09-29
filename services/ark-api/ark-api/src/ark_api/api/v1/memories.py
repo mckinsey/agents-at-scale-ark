@@ -24,7 +24,8 @@ from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/namespaces/{namespace}/memories", tags=["memories"])
+router = APIRouter(
+    prefix="/memories", tags=["memories"])
 
 # CRD configuration
 VERSION = "v1alpha1"
@@ -73,7 +74,7 @@ def memory_to_detail_response(memory) -> MemoryDetailResponse:
 
 @router.get("", response_model=MemoryListResponse)
 @handle_k8s_errors(operation="list", resource_type="memory")
-async def list_memories(namespace: str) -> MemoryListResponse:
+async def list_memories(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> MemoryListResponse:
     """List all memories in a namespace."""
     async with with_ark_client(namespace, VERSION) as client:
         memories = await client.memories.a_list()
@@ -84,7 +85,7 @@ async def list_memories(namespace: str) -> MemoryListResponse:
 
 @router.get("/{name}", response_model=MemoryDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="memory")
-async def get_memory(namespace: str, name: str) -> MemoryDetailResponse:
+async def get_memory(name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> MemoryDetailResponse:
     """Get a specific memory by name."""
     async with with_ark_client(namespace, VERSION) as client:
         memory = await client.memories.a_get(name)
@@ -93,7 +94,7 @@ async def get_memory(namespace: str, name: str) -> MemoryDetailResponse:
 
 @router.post("", response_model=MemoryDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="memory")
-async def create_memory(namespace: str, memory_request: MemoryCreateRequest) -> MemoryDetailResponse:
+async def create_memory(memory_request: MemoryCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> MemoryDetailResponse:
     """Create a new memory."""
     async with with_ark_client(namespace, VERSION) as client:
         memory_obj = MemoryV1alpha1(
@@ -110,7 +111,7 @@ async def create_memory(namespace: str, memory_request: MemoryCreateRequest) -> 
 
 @router.put("/{name}", response_model=MemoryDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="memory")
-async def update_memory(namespace: str, name: str, memory_request: MemoryUpdateRequest) -> MemoryDetailResponse:
+async def update_memory(name: str, memory_request: MemoryUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> MemoryDetailResponse:
     """Update an existing memory."""
     async with with_ark_client(namespace, VERSION) as client:
         # Get existing memory
@@ -136,7 +137,7 @@ async def update_memory(namespace: str, name: str, memory_request: MemoryUpdateR
 
 @router.delete("/{name}")
 @handle_k8s_errors(operation="delete", resource_type="memory")
-async def delete_memory(namespace: str, name: str) -> dict:
+async def delete_memory(name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> dict:
     """Delete a memory."""
     async with with_ark_client(namespace, VERSION) as client:
         await client.memories.a_delete(name)
@@ -145,7 +146,7 @@ async def delete_memory(namespace: str, name: str) -> dict:
 
 @router.get("/{name}/sessions/{session_id}/messages")
 @handle_k8s_errors(operation="get", resource_type="memory")
-async def get_memory_messages(namespace: str, name: str, session_id: str) -> dict:
+async def get_memory_messages(name: str, session_id: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> dict:
     """Get messages for a specific session from a memory resource."""
     async with with_ark_client(namespace, VERSION) as client:
         memory = await client.memories.a_get(name)
@@ -162,13 +163,13 @@ async def get_memory_messages(namespace: str, name: str, session_id: str) -> dic
 
 
 # Add this as a separate router to avoid conflicts with existing prefix
-memory_messages_router = APIRouter(prefix="/namespaces/{namespace}", tags=["memory-messages"])
+memory_messages_router = APIRouter(prefix="/memory-messages", tags=["memory-messages"])
 
 
-@memory_messages_router.get("/memory-messages", response_model=MemoryMessageListResponse)
+@memory_messages_router.get("", response_model=MemoryMessageListResponse)
 @handle_k8s_errors(operation="list", resource_type="memory-messages")
 async def list_memory_messages(
-    namespace: str,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
     memory: Optional[str] = Query(None, description="Filter by memory name"),
     session: Optional[str] = Query(None, description="Filter by session ID"),
     query: Optional[str] = Query(None, description="Filter by query ID")

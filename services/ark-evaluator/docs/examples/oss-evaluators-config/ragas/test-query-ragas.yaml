@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-query-ragas
+  namespace: default
+spec:
+  description: "Test query for standalone RAGAS evaluation"
+  targets:
+  - type: agent
+    name: test-agent
+  input: "What is the capital of France?"
+  output: "The capital of France is Paris."
