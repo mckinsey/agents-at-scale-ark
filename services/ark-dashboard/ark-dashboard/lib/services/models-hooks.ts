@@ -11,7 +11,11 @@ export const useGetAllModels = () => {
   });
 };
 
-export const useCreateModel = () => {
+type useCreateModelProps = {
+  onSuccess?: () => void;
+}
+
+export const useCreateModel = (props?: useCreateModelProps) => {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -24,6 +28,10 @@ export const useCreateModel = () => {
       })
 
       queryClient.invalidateQueries({ queryKey: [GET_ALL_MODELS_QUERY_KEY] })
+
+      if (props?.onSuccess) {
+        props.onSuccess()
+      }
     },
     onError: (error, data) => {
       const getMessage = () => {

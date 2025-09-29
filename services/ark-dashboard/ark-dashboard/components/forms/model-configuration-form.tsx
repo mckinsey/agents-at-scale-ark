@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { useCreateModel } from "@/lib/services/models-hooks";
 import { Spinner } from "@/components/ui/spinner";
+import { useRouter } from "next/navigation";
 
 const openaiSchema = z.object({
   name: kubernetesNameSchema,
@@ -94,9 +95,10 @@ function getResetValues(currentFormValues: FormValues): FormValues {
   }
 }
 
-const formId = "initialModelConfiguratorForm"
+const formId = "modelConfiguratorForm"
 
-export function InitialModelConfiguratorForm() {
+export function ModelConfiguratorForm() {
+  const router = useRouter()
   const form = useForm<FormValues>({
     mode: 'onChange',
     resolver: zodResolver(schema),
@@ -117,7 +119,13 @@ export function InitialModelConfiguratorForm() {
     error: secretsError
   } = useGetAllSecrets()
 
-  const { mutate, isPending } = useCreateModel()
+  const handleSuccess = useCallback(() => {
+    router.push("/models")
+  }, [router])
+
+  const { mutate, isPending } = useCreateModel({
+    onSuccess: handleSuccess
+  })
 
   useEffect(() => {
     if (secretsError) {
@@ -150,16 +158,9 @@ export function InitialModelConfiguratorForm() {
 
   return (
     <SecretDialogProvider>
-      <div className="py-8">
-        <h3 className="text-xl font-semibold text-balance mb-4">Start by configuring a model</h3>
-        <p className="text-muted-foreground text-pretty max-w-2xl">
-          Get started with ARK by adding your first model. Once configured, you can create agents,
-          organize teams, and monitor your AI infrastructure.
-        </p>
-      </div>
       <Card className="max-w-[calc(100%-2rem)] md:w-md md:max-w-md shrink-0">
         <CardHeader>
-          <CardTitle>Create New Model</CardTitle>
+          <CardTitle>Add New Model</CardTitle>
           <CardDescription>Fill in the information for the new model.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -245,8 +246,8 @@ export function InitialModelConfiguratorForm() {
           <Button type="submit" form={formId} disabled={isPending}>
             {isPending ? (<>
               <Spinner size="sm" className="mx-auto my-2" />
-              <span>Creating Model...</span>
-            </>) : (<span>Create Model</span>)}
+              <span>Adding Model...</span>
+            </>) : (<span>Add Model</span>)}
           </Button>
 
         </CardFooter>
@@ -270,7 +271,7 @@ function OpenAISpecificFields({ isSecretsPending, secrets, control }: OpenAISpec
         name='secret'
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Secret</FormLabel>
+            <FormLabel>API Key</FormLabel>
             <Select onValueChange={field.onChange} value={field.value}>
               <FormControl>
                 <SelectTrigger>
@@ -329,7 +330,7 @@ function AzureSpecificFields({ control, isSecretsPending, secrets }: AzureSpecif
         name='secret'
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Secret</FormLabel>
+            <FormLabel>API Key</FormLabel>
             <Select onValueChange={field.onChange} value={field.value}>
               <FormControl>
                 <SelectTrigger>
@@ -493,7 +494,7 @@ function AWSBedrockSpecificFields({ control, isSecretsPending, secrets }: AWSBed
 
 const newSecretSchema = z.object({
   name: kubernetesSecretNameSchema,
-  password: z.string().min(1, "Password is required")
+  password: z.string().min(1, "Value is required")
 })
 
 type NewSecretData = z.infer<typeof newSecretSchema>
@@ -563,8 +564,8 @@ function CreateNewSecretButton() {
   return (
     <DialogTrigger asChild>
       <Button type="button" variant="outline" size="sm" className="w-full">
-        <Plus className="h-3 w-3 mr-2" />
-        Create New Secret
+        <Plus className="h-4 w-4" />
+        Add New Secret
       </Button>
     </DialogTrigger>
   )
@@ -579,7 +580,7 @@ function CreateNewSecretDialog() {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(handleSubmit)}>
           <DialogHeader>
-            <DialogTitle>Add Secret</DialogTitle>
+            <DialogTitle>Add New Secret</DialogTitle>
             <DialogDescription>
               Enter the details for the new secret.
             </DialogDescription>
@@ -606,11 +607,11 @@ function CreateNewSecretDialog() {
               render={({ field }) => (
                 <FormItem>
                   <div className="grid grid-cols-4 items-center gap-4">
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel>Value</FormLabel>
                     <FormControl className="col-span-3 space-y-1">
                       <Input {...field}
                         type="password"
-                        placeholder="Enter the secret password"
+                        placeholder="Enter the secret token"
                       />
                     </FormControl>
                   </div>
@@ -626,8 +627,8 @@ function CreateNewSecretDialog() {
             <Button type="submit" disabled={isPending}>
               {isPending ? (<>
                 <Spinner size="sm" className="mx-auto my-2" />
-                <span>Creating Secret...</span>
-              </>) : (<span>Create Secret</span>)}
+                <span>Adding Secret...</span>
+              </>) : (<span>Add Secret</span>)}
             </Button>
           </DialogFooter>
         </form>
