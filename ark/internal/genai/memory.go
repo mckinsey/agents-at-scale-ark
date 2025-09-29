@@ -38,8 +38,6 @@ func getMemoryTimeout() time.Duration {
 type MemoryInterface interface {
 	AddMessages(ctx context.Context, queryID string, messages []Message) error
 	GetMessages(ctx context.Context) ([]Message, error)
-	NotifyCompletion(ctx context.Context) error
-	StreamChunk(ctx context.Context, chunk interface{}) error
 	Close() error
 }
 

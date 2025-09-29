@@ -1,0 +1,47 @@
+# Service account configuration
+serviceAccount:
+  # Create a service account
+  create: true
+  # Name of the service account
+  # Default is 'ark-tenant' - use this consistent name across all tenant namespaces
+  name: ark-tenant
+  # Annotations to add to the service account
+  annotations: {}
+
+# RBAC configuration
+rbac:
+  # Create RBAC resources (Role and RoleBinding) in the tenant namespace
+  create: true
+
+  # Additional subjects for the RoleBinding (optional)
+  # These subjects will also be granted the tenant role permissions
+  additionalSubjects: []
+  # Example:
+  # - kind: User
+  #   name: jane.doe@example.com
+  # - kind: Group
+  #   name: developers
+
+# Note on Controller Impersonation:
+# The Ark controller can impersonate the service account created above when
+# rbac.impersonation.enabled=true (default) in the ark-controller chart.
+# Using consistent names like 'ark-tenant' across namespaces simplifies management.
+
+# Resource quota configuration (optional)
+resourceQuota:
+  enabled: false
+  limits:
+    cpu: "10"
+    memory: "20Gi"
+    persistentvolumeclaims: "10"
+    pods: "50"
+    services: "10"
+
+# Network policy configuration (optional)
+networkPolicy:
+  enabled: false
+  # Allow traffic from these namespaces
+  allowNamespaces: []
+  # Example:
+  # - ark-system
+  # - monitoring

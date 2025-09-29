@@ -3,7 +3,8 @@ import logging
 import json
 import re
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from typing import Optional
 from ark_sdk.models.agent_v1alpha1 import AgentV1alpha1
 
 from ark_sdk.client import with_ark_client
@@ -16,12 +17,13 @@ from ...models.agents import (
     AgentDetailResponse,
     ModelRef
 )
+from ...models.common import extract_availability_from_conditions
 from ...constants.annotations import A2A_SERVER_ADDRESS_ANNOTATION
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/namespaces/{namespace}/agents", tags=["agents"])
+router = APIRouter(prefix="/agents", tags=["agents"])
 
 # CRD configuration
 VERSION = "v1alpha1"
@@ -31,19 +33,23 @@ def agent_to_response(agent: dict) -> AgentResponse:
     metadata = agent.get("metadata", {})
     spec = agent.get("spec", {})
     status = agent.get("status", {})
-    
+
     # Extract model ref name if exists
     model_ref = "default"
     if spec.get("modelRef"):
         model_ref = spec["modelRef"].get("name")
-    
+
+    # Extract availability from conditions
+    conditions = status.get("conditions", [])
+    availability = extract_availability_from_conditions(conditions, "Available")
+
     return AgentResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
         description=spec.get("description"),
         model_ref=model_ref,
         prompt=spec.get("prompt"),
-        status=status.get("phase"),
+        available=availability,
         annotations=metadata.get("annotations", {})
     )
 
@@ -73,6 +79,10 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
             logger.warning(f"Failed to parse skills annotation for agent {metadata.get('name', '')}")
             skills = []
     
+    # Extract availability from conditions
+    conditions = status.get("conditions", [])
+    availability = extract_availability_from_conditions(conditions, "Available")
+
     return AgentDetailResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
@@ -84,6 +94,7 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
         tools=spec.get("tools"),
         skills=skills,
         isA2A=is_a2a,
+        available=availability,
         status=status,
         annotations=annotations
     )
@@ -91,12 +102,12 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
 
 @router.get("", response_model=AgentListResponse)
 @handle_k8s_errors(operation="list", resource_type="agent")
-async def list_agents(namespace: str) -> AgentListResponse:
+async def list_agents(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> AgentListResponse:
     """
     List all Agent CRs in a namespace.
-    
+
     Args:
-        namespace: The namespace to list agents from
+        namespace: The namespace to list agents from (defaults to current context)
         
     Returns:
         AgentListResponse: List of all agents in the namespace
@@ -116,7 +127,7 @@ async def list_agents(namespace: str) -> AgentListResponse:
 
 @router.post("", response_model=AgentDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="agent")
-async def create_agent(namespace: str, body: AgentCreateRequest) -> AgentDetailResponse:
+async def create_agent(body: AgentCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> AgentDetailResponse:
     """
     Create a new Agent CR.
     
@@ -163,7 +174,7 @@ async def create_agent(namespace: str, body: AgentCreateRequest) -> AgentDetailR
 
 @router.get("/{agent_name}", response_model=AgentDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="agent")
-async def get_agent(namespace: str, agent_name: str) -> AgentDetailResponse:
+async def get_agent(agent_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> AgentDetailResponse:
     """
     Get a specific Agent CR by name.
     
@@ -182,7 +193,7 @@ async def get_agent(namespace: str, agent_name: str) -> AgentDetailResponse:
 
 @router.put("/{agent_name}", response_model=AgentDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="agent")
-async def update_agent(namespace: str, agent_name: str, body: AgentUpdateRequest) -> AgentDetailResponse:
+async def update_agent(agent_name: str, body: AgentUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> AgentDetailResponse:
     """
     Update an Agent CR by name.
     
@@ -233,7 +244,7 @@ async def update_agent(namespace: str, agent_name: str, body: AgentUpdateRequest
 
 @router.delete("/{agent_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="agent")
-async def delete_agent(namespace: str, agent_name: str) -> None:
+async def delete_agent(agent_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> None:
     """
     Delete an Agent CR by name.
     

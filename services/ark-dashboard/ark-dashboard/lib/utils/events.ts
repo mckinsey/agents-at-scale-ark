@@ -6,9 +6,8 @@ import type { EventFilters } from "@/lib/services/events"
  * @param filters - Optional filters to apply (type, kind, name)
  * @returns URL string for the events page with query parameters
  */
-export function getEventsPageUrl(namespace: string, filters?: Partial<EventFilters>): string {
+export function getEventsPageUrl(filters?: Partial<EventFilters>): string {
   const params = new URLSearchParams()
-  params.set('namespace', namespace)
   
   if (filters?.type) params.set('type', filters.type)
   if (filters?.kind) params.set('kind', filters.kind)
@@ -24,8 +23,8 @@ export function getEventsPageUrl(namespace: string, filters?: Partial<EventFilte
  * @param resourceName - The resource name
  * @returns URL string for filtered events page
  */
-export function getResourceEventsUrl(namespace: string, resourceKind: string, resourceName: string): string {
-  return getEventsPageUrl(namespace, {
+export function getResourceEventsUrl(resourceKind: string, resourceName: string): string {
+  return getEventsPageUrl({
     kind: resourceKind,
     name: resourceName
   })

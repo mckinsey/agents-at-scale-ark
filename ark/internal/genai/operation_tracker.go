@@ -61,11 +61,7 @@ func (t *OperationTracker) CompleteWithMetadata(result string, additionalMetadat
 	t.emitCompletionWithMetadata(corev1.EventTypeNormal, t.operation+"Complete", "", TokenUsage{}, additionalMetadata)
 }
 
-func (t *OperationTracker) CompleteWithTokens(result string, tokenUsage TokenUsage) {
-	log := logf.FromContext(t.ctx)
-	if log.V(3).Enabled() && result != "" {
-		log.V(3).Info("operation response with tokens", "operation", t.operation, "name", t.name, "response", result, "tokens", tokenUsage.TotalTokens)
-	}
+func (t *OperationTracker) CompleteWithTokens(tokenUsage TokenUsage) {
 	t.emitCompletion(corev1.EventTypeNormal, t.operation+"Complete", "", tokenUsage)
 }
 

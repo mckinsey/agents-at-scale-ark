@@ -22,25 +22,25 @@ export type Team = TeamDetailResponse & { id: string }
 // CRUD Operations
 export const teamsService = {
   // Get all teams
-  async getAll(namespace: string): Promise<Team[]> {
-    const response = await apiClient.get<TeamListResponse>(`/api/v1/namespaces/${namespace}/teams`)
-    
+  async getAll(): Promise<Team[]> {
+    const response = await apiClient.get<TeamListResponse>(`/api/v1/teams`)
+
     // Map the response items to include id for UI compatibility
     const teams = await Promise.all(
       response.items.map(async (item) => {
         // Fetch detailed info for each team to get full data
-        const detailed = await teamsService.getByName(namespace, item.name)
+        const detailed = await teamsService.getByName(item.name)
         return detailed!
       })
     )
-    
+
     return teams
   },
 
   // Get a single team by name
-  async getByName(namespace: string, name: string): Promise<Team | null> {
+  async getByName(name: string): Promise<Team | null> {
     try {
-      const response = await apiClient.get<TeamDetailResponse>(`/api/v1/namespaces/${namespace}/teams/${name}`)
+      const response = await apiClient.get<TeamDetailResponse>(`/api/v1/teams/${name}`)
       return {
         ...response,
         id: response.name // Use name as id for UI compatibility
@@ -54,15 +54,15 @@ export const teamsService = {
   },
 
   // Get a single team by ID (for UI compatibility - ID is actually the name)
-  async getById(namespace: string, id: number | string): Promise<Team | null> {
+  async getById(id: number | string): Promise<Team | null> {
     // Convert numeric ID to string name
     const name = String(id)
-    return teamsService.getByName(namespace, name)
+    return teamsService.getByName(name)
   },
 
   // Create a new team
-  async create(namespace: string, team: TeamCreateRequest): Promise<Team> {
-    const response = await apiClient.post<TeamDetailResponse>(`/api/v1/namespaces/${namespace}/teams`, team)
+  async create(team: TeamCreateRequest): Promise<Team> {
+    const response = await apiClient.post<TeamDetailResponse>(`/api/v1/teams`, team)
     return {
       ...response,
       id: response.name
@@ -70,9 +70,9 @@ export const teamsService = {
   },
 
   // Update an existing team
-  async update(namespace: string, name: string, updates: TeamUpdateRequest): Promise<Team | null> {
+  async update(name: string, updates: TeamUpdateRequest): Promise<Team | null> {
     try {
-      const response = await apiClient.put<TeamDetailResponse>(`/api/v1/namespaces/${namespace}/teams/${name}`, updates)
+      const response = await apiClient.put<TeamDetailResponse>(`/api/v1/teams/${name}`, updates)
       return {
         ...response,
         id: response.name
@@ -86,15 +86,15 @@ export const teamsService = {
   },
 
   // Update by ID (for UI compatibility)
-  async updateById(namespace: string, id: number | string, updates: TeamUpdateRequest): Promise<Team | null> {
+  async updateById(id: number | string, updates: TeamUpdateRequest): Promise<Team | null> {
     const name = String(id)
-    return teamsService.update(namespace, name, updates)
+    return teamsService.update(name, updates)
   },
 
   // Delete a team
-  async delete(namespace: string, name: string): Promise<boolean> {
+  async delete(name: string): Promise<boolean> {
     try {
-      await apiClient.delete(`/api/v1/namespaces/${namespace}/teams/${name}`)
+      await apiClient.delete(`/api/v1/teams/${name}`)
       return true
     } catch (error) {
       if ((error as AxiosError).response?.status === 404) {
@@ -105,8 +105,8 @@ export const teamsService = {
   },
 
   // Delete by ID (for UI compatibility)
-  async deleteById(namespace: string, id: number | string): Promise<boolean> {
+  async deleteById(id: number | string): Promise<boolean> {
     const name = String(id)
-    return teamsService.delete(namespace, name)
+    return teamsService.delete(name)
   }
 }

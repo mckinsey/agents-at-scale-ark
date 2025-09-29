@@ -46,6 +46,42 @@ jobs:
         with:
           docker-cicd-cache-registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY }}
 
+  # Code quality scan with SonarQube
+  # NOTE: This job is currently disabled - waiting for enterprise SonarQube configuration to be applied
+  sonar_scan:
+    if: false  # Disabled until enterprise configuration is ready
+    runs-on: [ self-hosted, Linux ]
+    env:
+      SONAR_TOKEN: ${{ secrets.SONARQUBE_TOKEN }}
+      SONAR_HOST_URL: ${{ vars.SONARQUBE_HOST_URL }}
+      PROJECT_KEY: ${{ secrets.SONARQUBE_PROJECT_KEY }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@master
+      - if: ${{ github.base_ref == null }}
+        name: Sonar Scan
+        run: |
+          docker run -i --user `id -u` --rm -e SONAR_TOKEN -e SONAR_HOST_URL \
+          -v `pwd`:/app -w /app sonarsource/sonar-scanner-cli:5.0.1 \
+            -Dsonar.projectKey=$PROJECT_KEY \
+            -Dsonar.sources=./ -Dsonar.branch.name=`echo "${{ github.ref }}" | cut -b 12-` \
+            -Dsonar.qualitygate.wait=false
+      - if: ${{ github.base_ref != null }}
+        name: Sonar Scan on PR
+        env:
+          pr_key: ${{ github.event.number }}
+          pr_branch: ${{ github.head_ref }}
+          pr_base: ${{ github.base_ref }}
+        run: |
+          docker run -i --user `id -u` --rm -e SONAR_TOKEN -e SONAR_HOST_URL \
+          -v `pwd`:/app -w /app sonarsource/sonar-scanner-cli:5.0.1 \
+            -Dsonar.projectKey=$PROJECT_KEY \
+            -Dsonar.sources=./ \
+            -Dsonar.pullrequest.key="$pr_key" \
+            -Dsonar.pullrequest.branch="$pr_branch" \
+            -Dsonar.pullrequest.base="$pr_base" \
+            -Dsonar.qualitygate.wait=false
+
   # Security scan with JFrog Xray
   jfrog-xray-scan:
     runs-on: ubuntu-24.04
@@ -168,7 +204,7 @@ jobs:
             prebuild: "make ark-evaluator-deps"
           - path: services/executor-langchain
             image: executor-langchain
-            prebuild: "make executor-langchain-deps && mkdir -p services/executor-langchain/build-context && cp out/executor-common/dist/executor_common-*.whl services/executor-langchain/build-context/"
+            prebuild: "make executor-langchain-deps && mkdir -p services/executor-langchain/build-context && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/executor-langchain/build-context/"
           - path: services/ark-cluster-memory/ark-cluster-memory
             image: ark-cluster-memory
           - path: samples/agent-hosting/hosted-langchain-agents
@@ -326,7 +362,7 @@ jobs:
           echo "ARK_QUICKSTART_BASE_URL=$ARK_QUICKSTART_BASE_URL"
           echo "ARK_QUICKSTART_API_VERSION=$ARK_QUICKSTART_API_VERSION"
           echo "ARK_QUICKSTART_API_KEY=***"
-          make quickstart
+          make quickstart-force
       - name: Test end-to-end query
         run: |
           # Test the soon-to-be-deprecated query script (still used in quickstart).
@@ -554,6 +590,7 @@ jobs:
           - { name: ark-dashboard, path: services/ark-dashboard/chart }
           - { name: ark-mcp, path: services/ark-mcp/chart }
           - { name: localhost-gateway, path: services/localhost-gateway/chart }
+          - { name: ark-tenant, path: charts/ark-tenant }
     steps:
       - uses: actions/checkout@v4
 
@@ -623,6 +660,19 @@ jobs:
           cd tools/ark-cli
           npm ci
           npm run build
+
+      - name: Run tests and collect coverage
+        run: |
+          cd tools/ark-cli
+          npm test
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: ${{ github.repository }}
+          directory: tools/ark-cli/artifacts/coverage
+          name: ark-cli
 
       - name: Create NPM package tarball
         run: |
@@ -810,6 +860,7 @@ jobs:
           - ark-dashboard
           - ark-mcp
           - localhost-gateway
+          - ark-tenant
     steps:
       - uses: actions/checkout@v4
 

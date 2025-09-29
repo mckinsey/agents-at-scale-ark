@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -214,29 +213,6 @@ func callEvaluatorHTTPEndpoint(ctx context.Context, address, endpoint string, re
 	return resp, nil
 }
 
-func callEvaluatorHTTP(ctx context.Context, address string, request EvaluationRequest) (*EvaluationResponse, error) {
-	resp, err := callEvaluatorHTTPEndpoint(ctx, address, "", request, 30*time.Second)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			logf.Log.Error(closeErr, "failed to close response body")
-		}
-	}()
-
-	var response EvaluationResponse
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to decode evaluation response: %w", err)
-	}
-
-	if response.Error != "" {
-		return nil, fmt.Errorf("evaluator returned error: %s", response.Error)
-	}
-
-	return &response, nil
-}
-
 // CallUnifiedEvaluator performs evaluation using the new unified endpoint
 func CallUnifiedEvaluator(ctx context.Context, k8sClient client.Client, evaluatorRef arkv1alpha1.EvaluationEvaluatorRef, request UnifiedEvaluationRequest, namespace string, timeout time.Duration) (*EvaluationResponse, error) {
 	log := logf.FromContext(ctx)
@@ -302,28 +278,4 @@ func callUnifiedEvaluatorHTTP(ctx context.Context, address string, request Unifi
 	logf.Log.Info("Unified evaluator response", "score", response.Score, "passed", response.Passed, "metadata", response.Metadata, "metadata_count", len(response.Metadata), "timeout_used", timeout)
 
 	return &response, nil
-}
-
-func callEvaluatorWithErrorHandling(ctx context.Context, k8sClient client.Client, query arkv1alpha1.Query, evaluatorRef arkv1alpha1.EvaluatorRef, recorder EventEmitter) arkv1alpha1.EvaluationResult {
-	result, err := CallSingleEvaluator(ctx, k8sClient, query, evaluatorRef, recorder)
-	if err != nil {
-		return arkv1alpha1.EvaluationResult{
-			EvaluatorName: evaluatorRef.Name,
-			Score:         "0",
-			Passed:        false,
-			Metadata:      map[string]string{"error": err.Error()},
-		}
-	}
-
-	if result != nil {
-		result.EvaluatorName = evaluatorRef.Name
-		return *result
-	}
-
-	return arkv1alpha1.EvaluationResult{
-		EvaluatorName: evaluatorRef.Name,
-		Score:         "0",
-		Passed:        false,
-		Metadata:      map[string]string{"error": "no result returned"},
-	}
 }

@@ -78,6 +78,7 @@ $(ARK_API_A2A_STAMP_INSTALL): $(ARK_API_A2A_STAMP_BUILD) $$(ARK_API_STAMP_INSTAL
 		--create-namespace \
 		--set app.image.repository=$(ARK_API_A2A_IMAGE) \
 		--set app.image.tag=$(ARK_API_A2A_TAG) \
+		--set httpRoute.enabled=true \
 		--wait \
 		--timeout=5m
 	@echo "ark-api-a2a installed successfully!"

@@ -1,7 +1,6 @@
 "use client"
 
 import { QueriesSection } from "@/components/sections/queries-section"
-import { useSearchParams } from "next/navigation"
 import { Suspense, useRef } from "react"
 import {
   Breadcrumb,
@@ -15,8 +14,6 @@ import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 
 function QueriesContent() {
-  const searchParams = useSearchParams()
-  const namespace = searchParams.get("namespace") || "default"
   const queriesSectionRef = useRef<{ openAddEditor: () => void }>(null)
   return (
     <>
@@ -38,7 +35,7 @@ function QueriesContent() {
         </div>
       </header>
       <div className="flex flex-1 flex-col">
-        <QueriesSection ref={queriesSectionRef} namespace={namespace} />
+        <QueriesSection ref={queriesSectionRef} />
       </div>
     </>
   )

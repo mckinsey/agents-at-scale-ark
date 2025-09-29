@@ -7,7 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip";
-import { AgentPhaseBadge } from "@/components/ui/agent-phase-badge";
+import { AvailabilityStatusBadge } from "@/components/ui/availability-status-badge";
 import { useChatState } from "@/lib/chat-context";
 import { toggleFloatingChat } from "@/lib/chat-events";
 import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
@@ -33,7 +33,6 @@ interface AgentRowProps {
     agent: (AgentCreateRequest | AgentUpdateRequest) & { id?: string }
   ) => void;
   readonly   onDelete?: (id: string) => void;
-  readonly   namespace: string;
 }
 
 export function AgentRow({
@@ -41,8 +40,7 @@ export function AgentRow({
   teams,
   models,
   onUpdate,
-  onDelete,
-  namespace
+  onDelete
 }: AgentRowProps) {
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(agent.name);
@@ -85,7 +83,10 @@ export function AgentRow({
           {isA2A && <span>A2A Agent</span>}
         </div>
 
-        <AgentPhaseBadge agent={agent} />
+        <AvailabilityStatusBadge
+          status={agent.available}
+          eventsLink={`/events?kind=Agent&name=${agent.name}&page=1`}
+        />
 
         <div className="flex items-center gap-1 flex-shrink-0">
           {onUpdate && (
@@ -138,7 +139,7 @@ export function AgentRow({
                   size="sm"
                   className={cn("h-8 w-8 p-0", isChatOpen && "text-primary")}
                   onClick={() =>
-                    toggleFloatingChat(agent.name, "agent", namespace)
+                    toggleFloatingChat(agent.name, "agent")
                   }
                 >
                   <MessageCircle
@@ -159,7 +160,6 @@ export function AgentRow({
         models={models}
         teams={teams}
         onSave={onUpdate || (() => {})}
-        namespace={namespace}
       />
       {onDelete && (
         <ConfirmationDialog

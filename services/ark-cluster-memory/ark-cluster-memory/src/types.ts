@@ -5,6 +5,7 @@ export interface StoredMessage {
   session_id: string;
   query_id: string;
   message: Message;
+  sequence: number;
 }
 
 export interface AddMessageRequest {

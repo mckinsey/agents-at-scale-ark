@@ -69,11 +69,13 @@ def generate_versioned_client(api_version: str, resources: List[Dict[str, Any]])
 
 class {class_name}(_ARKClient):
     """ARK client for API version {api_version}"""
-    
-    def __init__(self, namespace: str = "default"):
+
+    def __init__(self, namespace: Optional[str] = None):
         super().__init__(namespace)
         
 {resource_inits_str}
+        
+{generate_secret_client_addition()}
 '''
 
 
@@ -92,3 +94,10 @@ def generate_yaml_routing(resources: List[Dict[str, Any]]) -> str:
         conditions.append(condition)
     
     return '\n        '.join(conditions)
+
+
+def generate_secret_client_addition() -> str:
+    """Generate secret client addition for versioned clients."""
+    return '''        # Add secret client
+        from .k8s import SecretClient
+        self.secrets = SecretClient(namespace)'''

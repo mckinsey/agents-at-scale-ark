@@ -13,10 +13,9 @@ interface ToolCardProps {
   onInfo?: (tool: Tool) => void
   deleteDisabled?: boolean
   deleteDisabledReason?: string
-  namespace?: string
 }
 
-export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisabledReason, namespace }: ToolCardProps) {
+export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisabledReason }: ToolCardProps) {
   const router = useRouter();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const actions: BaseCardAction[] = []
@@ -45,7 +44,7 @@ export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisable
   actions.push({
     icon: MessageCircle,
     label: "Query tool",
-    onClick: () => router.push(`/query/new?namespace=${namespace || 'default'}&target_tool=${tool.name}`)
+    onClick: () => router.push(`/query/new?target_tool=${tool.name}`)
   });
 
   return (

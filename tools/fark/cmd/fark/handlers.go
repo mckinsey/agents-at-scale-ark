@@ -12,21 +12,17 @@ import (
 )
 
 type TargetQueryRequest struct {
-	Name              string                  `json:"name"`
-	Input             string                  `json:"input"`
-	Parameters        []arkv1alpha1.Parameter `json:"parameters,omitempty"`
-	SessionId         string                  `json:"sessionId,omitempty"`
-	Evaluators        []string                `json:"evaluators,omitempty"`
-	EvaluatorSelector []string                `json:"evaluatorSelector,omitempty"`
+	Name       string                  `json:"name"`
+	Input      string                  `json:"input"`
+	Parameters []arkv1alpha1.Parameter `json:"parameters,omitempty"`
+	SessionId  string                  `json:"sessionId,omitempty"`
 }
 
 type TriggerQueryRequest struct {
-	QueryName         string                  `json:"queryName"`
-	InputOverride     string                  `json:"inputOverride,omitempty"`
-	Parameters        []arkv1alpha1.Parameter `json:"parameters,omitempty"`
-	SessionId         string                  `json:"sessionId,omitempty"`
-	Evaluators        []string                `json:"evaluators,omitempty"`
-	EvaluatorSelector []string                `json:"evaluatorSelector,omitempty"`
+	QueryName     string                  `json:"queryName"`
+	InputOverride string                  `json:"inputOverride,omitempty"`
+	Parameters    []arkv1alpha1.Parameter `json:"parameters,omitempty"`
+	SessionId     string                  `json:"sessionId,omitempty"`
 }
 
 func parseTargetQueryRequest(r *http.Request) (*TargetQueryRequest, error) {
@@ -173,7 +169,7 @@ func handleQueryResourceWithName(config *Config, resourceType ResourceType, w ht
 
 	// Create query targets
 	targets := []arkv1alpha1.QueryTarget{{Type: string(resourceType)[:len(resourceType)-1], Name: req.Name}}
-	query, err := createQuery(req.Input, targets, config.Namespace, req.Parameters, req.SessionId, req.Evaluators, req.EvaluatorSelector)
+	query, err := createQuery(req.Input, targets, config.Namespace, req.Parameters, req.SessionId)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to create query: %v", err), http.StatusInternalServerError)
 		return
@@ -229,7 +225,7 @@ func handleTriggerQueryWithName(config *Config, w http.ResponseWriter, r *http.R
 	}
 
 	// Create triggered query
-	newQuery, err := createTriggerQuery(existingQuery, input, params, req.SessionId, req.Evaluators, req.EvaluatorSelector)
+	newQuery, err := createTriggerQuery(existingQuery, input, params, req.SessionId)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to create trigger query: %v", err), http.StatusInternalServerError)
 		return

@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 
 import "./globals.css";
 import localFont from "next/font/local";
-import { auth } from "@/auth";
-import { SessionProvider } from "next-auth/react";
+import { Toaster } from "@/components/ui/toaster";
+import { SSOModeProvider, OpenModeProvider } from "@/providers/AuthProviders";
+import { GlobalProviders } from "@/providers/GlobalProviders";
 
 const geistSans = localFont({
   src: [
@@ -51,16 +52,18 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await auth()
+  const isSSOEnabled = process.env.AUTH_MODE === "sso";
+  const AuthProvider = isSSOEnabled ? SSOModeProvider : OpenModeProvider;
 
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <SessionProvider session={session}>
-          {children}
-        </SessionProvider>
+        <AuthProvider>
+          <GlobalProviders>{children}</GlobalProviders>
+        </AuthProvider>
+        <Toaster />
       </body>
     </html>
   );

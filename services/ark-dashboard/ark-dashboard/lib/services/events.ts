@@ -84,13 +84,11 @@ function buildEventApiParams(filters: EventFilters): URLSearchParams {
 
 // Helper function to log API request details
 function logApiRequest(
-  namespace: string,
   filters: EventFilters,
   params: URLSearchParams,
   url: string
 ): void {
   console.log("Building events API request with params:", {
-    namespace,
     filters,
     paramsEntries: [...params.entries()].map(([k, v]) => `${k}=${v}`),
     originalParams: params.toString()
@@ -156,9 +154,8 @@ function calculateTotalCount(
 }
 
 export const eventsService = {
-  // Get all events in a namespace with optional filters
+  // Get all events with optional filters
   async getAll(
-    namespace: string,
     filters?: EventFilters
   ): Promise<{ items: Event[]; total: number }> {
     try {
@@ -166,11 +163,11 @@ export const eventsService = {
       const params = buildEventApiParams(effectiveFilters);
 
       const queryString = params.toString();
-      const url = `/api/v1/namespaces/${namespace}/events${
+      const url = `/api/v1/events${
         queryString ? `?${queryString}` : ""
       }`;
 
-      logApiRequest(namespace, effectiveFilters, params, url);
+      logApiRequest(effectiveFilters, params, url);
 
       const response = await apiClient.get<EventListResponse>(url);
 
@@ -198,9 +195,9 @@ export const eventsService = {
   },
 
   // Get a single event by name
-  async get(namespace: string, eventName: string): Promise<Event> {
+  async get(eventName: string): Promise<Event> {
     try {
-      const url = `/api/v1/namespaces/${namespace}/events/${eventName}`;
+      const url = `/api/v1/events/${eventName}`;
       const response = await apiClient.get<EventApiResponse>(url);
 
       return mapEventApiResponseToEvent(response);
@@ -211,9 +208,9 @@ export const eventsService = {
   },
 
   // Helper to fetch events for filter population
-  async _getEventsForFilters(namespace: string): Promise<Event[]> {
+  async _getEventsForFilters(): Promise<Event[]> {
     try {
-      const result = await this.getAll(namespace, { limit: 200 });
+      const result = await this.getAll({ limit: 200 });
       return result.items;
     } catch (error) {
       console.error("Failed to fetch events for filters:", error);
@@ -222,13 +219,13 @@ export const eventsService = {
   },
 
   // Get all filter options
-  async getAllFilterOptions(namespace: string): Promise<{
+  async getAllFilterOptions(): Promise<{
     types: string[];
     kinds: string[];
     names: string[];
   }> {
     try {
-      const events = await this._getEventsForFilters(namespace);
+      const events = await this._getEventsForFilters();
 
       const types = new Set(events.map((event) => event.type).filter(Boolean));
       const kinds = new Set(

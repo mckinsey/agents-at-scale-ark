@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,26 +14,7 @@ import (
 	"mckinsey.com/ark/internal/annotations"
 )
 
-func parseEvaluatorSelector(selectorStrings []string) (*metav1.LabelSelector, error) {
-	if len(selectorStrings) == 0 {
-		return nil, nil
-	}
-
-	matchLabels := make(map[string]string)
-	for _, selector := range selectorStrings {
-		parts := strings.SplitN(selector, "=", 2)
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid evaluator selector format: %s (expected key=value)", selector)
-		}
-		matchLabels[parts[0]] = parts[1]
-	}
-
-	return &metav1.LabelSelector{
-		MatchLabels: matchLabels,
-	}, nil
-}
-
-func createQuery(input string, targets []arkv1alpha1.QueryTarget, namespace string, params []arkv1alpha1.Parameter, sessionId string, evaluators []string, evaluatorSelectorStrings []string) (*arkv1alpha1.Query, error) {
+func createQuery(input string, targets []arkv1alpha1.QueryTarget, namespace string, params []arkv1alpha1.Parameter, sessionId string) (*arkv1alpha1.Query, error) {
 	queryName := fmt.Sprintf("query-%d", time.Now().Unix())
 
 	spec := &arkv1alpha1.QuerySpec{
@@ -49,7 +29,14 @@ func createQuery(input string, targets []arkv1alpha1.QueryTarget, namespace stri
 		Namespace: namespace,
 	}
 
-	return getQuery(evaluators, evaluatorSelectorStrings, spec, queryObjectMeta)
+	return &arkv1alpha1.Query{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "ark.mckinsey.com/v1alpha1",
+			Kind:       "Query",
+		},
+		ObjectMeta: *queryObjectMeta,
+		Spec:       *spec,
+	}, nil
 }
 
 func submitQuery(config *Config, query *arkv1alpha1.Query) error {
@@ -151,19 +138,17 @@ func getSessionId(provided, existing string) string {
 	return existing
 }
 
-func createTriggerQuery(existingQuery *arkv1alpha1.Query, input string, params []arkv1alpha1.Parameter, sessionId string, evaluators []string, evaluatorSelectorStrings []string) (*arkv1alpha1.Query, error) {
+func createTriggerQuery(existingQuery *arkv1alpha1.Query, input string, params []arkv1alpha1.Parameter, sessionId string) (*arkv1alpha1.Query, error) {
 	queryName := fmt.Sprintf("trigger-%d", time.Now().Unix())
 
 	spec := &arkv1alpha1.QuerySpec{
-		Input:             input,
-		Targets:           existingQuery.Spec.Targets,
-		Selector:          existingQuery.Spec.Selector,
-		Parameters:        params,
-		Memory:            existingQuery.Spec.Memory,
-		ServiceAccount:    existingQuery.Spec.ServiceAccount,
-		SessionId:         getSessionId(sessionId, existingQuery.Spec.SessionId),
-		Evaluators:        existingQuery.Spec.Evaluators,
-		EvaluatorSelector: existingQuery.Spec.EvaluatorSelector,
+		Input:          input,
+		Targets:        existingQuery.Spec.Targets,
+		Selector:       existingQuery.Spec.Selector,
+		Parameters:     params,
+		Memory:         existingQuery.Spec.Memory,
+		ServiceAccount: existingQuery.Spec.ServiceAccount,
+		SessionId:      getSessionId(sessionId, existingQuery.Spec.SessionId),
 	}
 
 	queryObjectMeta := &metav1.ObjectMeta{
@@ -174,34 +159,12 @@ func createTriggerQuery(existingQuery *arkv1alpha1.Query, input string, params [
 		},
 	}
 
-	return getQuery(evaluators, evaluatorSelectorStrings, spec, queryObjectMeta)
-}
-
-func getQuery(evaluators []string, evaluatorSelectorStrings []string, spec *arkv1alpha1.QuerySpec, objectMeta *metav1.ObjectMeta) (*arkv1alpha1.Query, error) {
-	if len(evaluators) > 0 {
-		evaluatorRefs := make([]arkv1alpha1.EvaluatorRef, len(evaluators))
-		for i, evaluator := range evaluators {
-			evaluatorRefs[i] = arkv1alpha1.EvaluatorRef{
-				Name: evaluator,
-			}
-		}
-		spec.Evaluators = evaluatorRefs
-	}
-
-	if len(evaluatorSelectorStrings) > 0 {
-		evaluatorSelector, err := parseEvaluatorSelector(evaluatorSelectorStrings)
-		if err != nil {
-			return nil, err
-		}
-		spec.EvaluatorSelector = evaluatorSelector
-	}
-
 	return &arkv1alpha1.Query{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "ark.mckinsey.com/v1alpha1",
 			Kind:       "Query",
 		},
-		ObjectMeta: *objectMeta,
+		ObjectMeta: *queryObjectMeta,
 		Spec:       *spec,
 	}, nil
 }

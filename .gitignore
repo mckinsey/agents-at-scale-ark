@@ -6,7 +6,7 @@
 scratch.md
 .ark.env
 .env
-tools/fark/fark
+tools/fark/bin/fark
 services/a2agw/a2agw
 .artifacts/
 local.mk
@@ -136,7 +136,6 @@ services/ark-dashboard/ark-dashboard/node_modules/
 # build output directory
 out/
 lib/ark-sdk/uv.lock
-lib/executor-common/uv.lock
 *.whl
 *.toml.bak
 

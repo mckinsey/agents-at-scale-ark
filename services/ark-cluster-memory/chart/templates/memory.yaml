@@ -7,15 +7,6 @@ metadata:
   {{- else }}
   name: {{ include "ark-cluster-memory.fullname" . }}
   {{- end }}
-  annotations:
-    {{- if .Values.memory.enableStreaming }}
-    # Enable event streaming support for real-time query response streaming.
-    # The ark-cluster-memory service fully implements SSE streaming, but this
-    # annotation should only be enabled once the query controller's streaming
-    # execution is integrated. When enabled, clients using OpenAI completions API
-    # with stream=true will receive Server-Sent Events for live response updates.
-    ark.mckinsey.com/memory-event-stream-enabled: "true"
-    {{- end }}
   labels:
     {{- include "ark-cluster-memory.labels" . | nindent 4 }}
 spec:

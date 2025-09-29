@@ -1,6 +1,6 @@
 "use client"
 
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useState , useEffect} from "react";
 import {
   Breadcrumb,
@@ -21,8 +21,6 @@ const FIELD_HEADING_STYLES = "px-3 py-2 text-xs font-medium text-gray-600 dark:t
 
 export default function ToolDetailsPage() {
   const params = useParams();
-  const searchParams = useSearchParams();
-  const namespace = searchParams.get("namespace") || "default";
   const [loading, setLoading] = useState(true);
   const [tool, setTool] = useState<ToolDetail | null>(null);
   const toolName = params.name as string;
@@ -33,7 +31,7 @@ export default function ToolDetailsPage() {
 
       setLoading(true);
       try {
-        const toolData = await toolsService.getDetail("default", toolName); // Fetch tool details
+        const toolData = await toolsService.getDetail(toolName); // Fetch tool details
         setTool(toolData);
       } catch (error) {
         console.error("Failed to fetch tool details:", error);
@@ -58,7 +56,7 @@ export default function ToolDetailsPage() {
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-            <BreadcrumbLink href={`/tools?namespace=${namespace}`}>
+            <BreadcrumbLink href={`/tools`}>
                 Tools
             </BreadcrumbLink>
             </BreadcrumbItem>

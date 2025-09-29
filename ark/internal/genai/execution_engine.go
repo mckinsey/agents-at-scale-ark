@@ -229,7 +229,7 @@ func (c *ExecutionEngineClient) Execute(ctx context.Context, engineRef *arkv1alp
 
 	// Collect token usage from execution engine response if present
 	if response.TokenUsage.TotalTokens > 0 {
-		engineTracker.CompleteWithTokens("", response.TokenUsage)
+		engineTracker.CompleteWithTokens(response.TokenUsage)
 	}
 
 	// Convert response messages back to internal format

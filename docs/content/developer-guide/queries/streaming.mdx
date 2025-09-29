@@ -149,27 +149,27 @@ All OpenAI-compatible chunks are passed through as-is, including text content, t
 
 If a query target does not support streaming (as is currently the case for some models), then as-per the OpenAI specification the streaming APIs will return the entire response in a single chunk at the end of query execution.
 
-### Event Streaming Backend
+### Event Streaming Service
 
-A `Memory` resource that implements the [Event Stream API](#event-stream-api) provides the streaming backend. Set the `ark.mckinsey.com/memory-event-stream-enabled` annotation to indicate that a memory supports streaming:
+An Event Streaming Service is any service that implements the [Event Stream API](#event-stream-api). To configure event streaming, deploy a ConfigMap that specifies the service that should be used:
 
 ```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Memory
+apiVersion: v1
+kind: ConfigMap
 metadata:
-  name: streaming-memory
-  annotations:
-    # Indicates that this memory service offers the event stream API.
-    ark.mckinsey.com/memory-event-stream-enabled: "true"
-spec:
-  address:
-    valueFrom:
-      serviceRef:
-        name: streaming-memory
-        port: 8080
+  name: ark-config-streaming
+  namespace: default
+data:
+  enabled: "true"
+  serviceRef: |
+    name: ark-cluster-memory  # Service that implements the Event Stream API
+    port: "http"              # Port name from the service definition
+    namespace: ""             # Optional: namespace (defaults to current namespace)
 ```
 
-The `ark-cluster-memory` service implements this API. In future releases, a dedicated EventStream resource will be introduced. 
+When this ConfigMap is present and `enabled` is set to `"true"`, the Query Controller will use the specified service for event streaming. If the ConfigMap is not present or `enabled` is `"false"`, streaming is disabled. If a query is issued with the `streaming-enabled` annotation set to `true` and no event streaming service is available, a warning will be logged.
+
+The `ark-cluster-memory` service implements this API when deployed with streaming enabled. 
 
 ### Tool/Function Calling in Streams
 

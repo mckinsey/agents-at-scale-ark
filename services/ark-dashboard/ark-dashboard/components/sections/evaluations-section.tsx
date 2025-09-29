@@ -34,7 +34,6 @@ type EvaluationCreateRequest = components["schemas"]["EvaluationCreateRequest"];
 type EvaluationUpdateRequest = components["schemas"]["EvaluationUpdateRequest"];
 
 interface EvaluationsSectionProps {
-  namespace: string;
   initialQueryFilter?: string | null;
 }
 
@@ -45,7 +44,7 @@ const StatusDot = ({
   variant,
   onCancel
 }: {
-  variant: "done" | "error" | "running" | "evaluating" | "canceled" | "default";
+  variant: "done" | "error" | "running" | "canceled" | "default";
   onCancel?: () => void;
 }) => {
   const getColor = () => {
@@ -56,8 +55,6 @@ const StatusDot = ({
         return "bg-red-500";
       case "running":
         return "bg-blue-500 animate-pulse";
-      case "evaluating":
-        return "bg-yellow-500 animate-pulse";
       case "canceled":
         return "bg-gray-500";
       default:
@@ -89,7 +86,7 @@ const StatusDot = ({
 export const EvaluationsSection = forwardRef<
   { openAddEditor: () => void },
   EvaluationsSectionProps
->(function EvaluationsSection({ namespace, initialQueryFilter }, ref) {
+>(function EvaluationsSection({ initialQueryFilter }, ref) {
   const [evaluations, setEvaluations] = useState<
     (Evaluation | EvaluationDetailResponse)[]
   >([]);
@@ -126,7 +123,7 @@ export const EvaluationsSection = forwardRef<
     isError: listEvaluationsError,
     error: listEvaluationsErrorObject,
     refetch: loadEvaluations
-  } = useGetAllEvaluationsWithDetails({ namespace });
+  } = useGetAllEvaluationsWithDetails({});
 
   useEffect(() => {
     if (listEvaluationsData && !listEvaluationsError) {
@@ -525,14 +522,12 @@ export const EvaluationsSection = forwardRef<
       | "done"
       | "error"
       | "running"
-      | "evaluating"
       | "canceled"
       | "default";
     const variant = [
       "done",
       "error",
       "running",
-      "evaluating",
       "canceled"
     ].includes(status || "")
       ? normalizedStatus
@@ -542,7 +537,7 @@ export const EvaluationsSection = forwardRef<
       <StatusDot
         variant={variant}
         onCancel={
-          status === "running" || status === "evaluating"
+          status === "running"
             ? () => handleCancel(evaluationName)
             : undefined
         }
@@ -552,7 +547,7 @@ export const EvaluationsSection = forwardRef<
 
   const handleDelete = async (evaluationName: string) => {
     try {
-      await evaluationsService.delete(namespace, evaluationName);
+      await evaluationsService.delete(evaluationName);
       toast({
         variant: "success",
         title: "Evaluation Deleted",
@@ -574,7 +569,7 @@ export const EvaluationsSection = forwardRef<
 
   const handleCancel = async (evaluationName: string) => {
     try {
-      await evaluationsService.cancel(namespace, evaluationName);
+      await evaluationsService.cancel(evaluationName);
       toast({
         variant: "success",
         title: "Evaluation Canceled",
@@ -605,7 +600,6 @@ export const EvaluationsSection = forwardRef<
           id: string;
         };
         await evaluationsService.update(
-          namespace,
           updateRequest.id,
           updateRequest
         );
@@ -616,7 +610,7 @@ export const EvaluationsSection = forwardRef<
         });
       } else {
         const createRequest = evaluation as EvaluationCreateRequest;
-        await evaluationsService.create(namespace, createRequest);
+        await evaluationsService.create(createRequest);
         toast({
           variant: "success",
           title: "Evaluation Created",
@@ -746,7 +740,7 @@ export const EvaluationsSection = forwardRef<
                     className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/30 cursor-pointer"
                     onClick={() => {
                       router.push(
-                        `/evaluation/${evaluation.name}?namespace=${namespace}`
+                        `/evaluation/${evaluation.name}`
                       );
                     }}
                   >
@@ -914,7 +908,6 @@ export const EvaluationsSection = forwardRef<
         onOpenChange={setEditorOpen}
         evaluation={editingEvaluation}
         onSave={handleSaveEvaluation}
-        namespace={namespace}
       />
     </div>
   );

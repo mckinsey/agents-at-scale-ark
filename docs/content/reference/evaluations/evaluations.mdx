@@ -103,23 +103,6 @@ spec:
     responseIndex: 0  # Evaluate first response (optional)
 ```
 
-### Query-Driven Evaluation (Deprecated)
-
-Query-driven evaluation is triggered automatically when a query references an evaluator. This happens after the query completes:
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: auto-evaluated-query
-spec:
-  input: "Analyze renewable energy trends"
-  targets:
-    - type: agent
-      name: research-agent
-  evaluator:
-    name: evaluator-llm  # Triggers automatic evaluation after query completion
-```
 
 ### Selector-Based Evaluation (Automatic)
 
@@ -363,12 +346,6 @@ parameters:
 4. **Scoring**: Response scored against specified criteria
 5. **Completion**: Evaluation marked as "done" with results
 
-### Query-Driven Evaluation Flow (Automatic)
-1. **Query Execution**: Query runs normally and generates responses
-2. **Evaluation Phase**: Query status transitions to "evaluating"
-3. **AI Assessment**: Evaluator automatically analyzes all responses
-4. **Quality Scoring**: Overall assessment provided
-5. **Completion**: Query marked as "done" after evaluation
 
 ## Automatic Context Extraction
 

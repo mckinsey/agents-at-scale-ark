@@ -13,7 +13,6 @@ This page provides detailed specifications for each ARK custom resource.
 |----------|-------------|-------------|
 | [Agent](/reference/resources/agent) | `ark.mckinsey.com/v1alpha1` | AI agents with prompts and tools |
 | [Team](#teams) | `ark.mckinsey.com/v1alpha1` | Teams of agents with execution strategies |
-| [Model](#models) | `ark.mckinsey.com/v1alpha1` | LLM service configurations |
 | [Query](#queries) | `ark.mckinsey.com/v1alpha1` | Queries to agents or teams |
 | [MCPServer](#mcp-servers) | `ark.mckinsey.com/v1alpha1` | Model Context Protocol servers |
 | [Evaluator](#evaluators) | `ark.mckinsey.com/v1alpha1` | AI-powered query assessment services |
@@ -59,6 +58,7 @@ spec:
 - **Base URLs**: Custom endpoints for different providers
 - **API Versions**: Provider-specific API versions
 - **Model Parameters**: Temperature, max tokens, etc.
+
 
 ## Teams
 
@@ -124,7 +124,7 @@ spec:
 - **Template Parameters**: Use variables in query input
 - **Timeout Control**: Set maximum execution time
 - **Multiple Targets**: Send same query to multiple agents/teams
-- **Evaluators**: Automatic assessment of query results
+- **Evaluation Integration**: Use with dedicated Evaluation CRDs for post-hoc assessment
 
 
 
@@ -136,10 +136,10 @@ For non-deterministic cases, they use the "LLM-as-a-Judge" pattern to automatica
 
 ### How Evaluators Work
 
-- **Optional Integration**: Queries can optionally reference an Evaluator for quality assessment
+- **Service Integration**: Evaluators define assessment services that can be referenced by Evaluation CRDs
 - **LLM-as-a-Judge**: Evaluators use AI models to assess response quality across multiple criteria
-- **Automatic Triggering**: When a query completes, if an evaluator is specified, the query enters "evaluating" phase
-- **Quality Gating**: Only after successful evaluation is the query marked as "done"
+- **Automatic Evaluation**: Evaluators can use selectors to automatically create evaluations for matching queries
+- **Post-hoc Assessment**: Evaluations analyze completed queries without affecting query execution
 
 ### Specification
 ```yaml
@@ -414,50 +414,6 @@ spec:
         weight: 1
 ```
 
-### Using Evaluators in Queries (DEPRECATED)
-
-Reference an evaluator in your query to enable automatic assessment:
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: research-query
-spec:
-  input: "Analyze renewable energy trends"
-  targets:
-    - type: agent
-      name: research-agent
-  evaluator:
-    name: llm-evaluator
-```
-
-### Evaluation Process
-
-1. **Query Execution**: Agent processes the query and generates response
-2. **Evaluation Trigger**: Query enters "evaluating" phase
-3. **Assessment**: Evaluator analyzes response quality using configured criteria
-4. **Scoring**: Evaluator provides numerical score and qualitative feedback
-5. **Completion**: Query marked as "done" with evaluation results
-
-### Evaluation Results
-
-Evaluation results are stored in the Query status:
-
-```yaml
-status:
-  phase: done
-  evaluations:
-  - evaluatorName: llm-evaluator
-    passed: true
-    score: "0.85"
-    metadata:
-      reasoning: "Response provides comprehensive analysis with supporting data"
-      criteria:
-        accuracy: "high"
-        completeness: "good"
-        relevance: "excellent"
-```
 
 ## A2A Servers
 

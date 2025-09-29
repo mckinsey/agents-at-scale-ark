@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
-import { AlertCircle, Plus, ChevronRight, ChevronsUpDown, Check, ChevronsUpDownIcon, LogOut } from "lucide-react"
+import { AlertCircle, Plus, ChevronRight, ChevronsUpDown, Check, ChevronsUpDownIcon, LogOut, Home } from "lucide-react"
 import { useRouter, usePathname } from "next/navigation"
 import { CONFIGURATION_SECTIONS, OPERATION_SECTIONS, RUNTIME_SECTIONS } from "@/lib/constants/dashboard-icons"
 import {
@@ -30,22 +30,31 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu"
-import { toast } from "@/components/ui/use-toast"
-import { namespacesService, systemInfoService, type Namespace, type SystemInfo } from "@/lib/services"
+import { systemInfoService, type SystemInfo } from "@/lib/services"
 import { NamespaceEditor } from "@/components/editors"
 import { UserDetails } from "./user"
 import { signout } from "@/lib/auth/signout"
+import { useNamespace } from "@/providers/NamespaceProvider"
+import { useUser } from "@/providers/UserProvider"
 
 export function AppSidebar() {
   const router = useRouter()
   const pathname = usePathname()
+  const { user } = useUser()
+
+  const {
+    availableNamespaces,
+    createNamespace,
+    isPending,
+    namespace,
+    isNamespaceResolved,
+    setNamespace
+  } = useNamespace()
   
-  const [namespaces, setNamespaces] = useState<Namespace[]>([])
   const [loading, setLoading] = useState(true)
-  const [namespaceResolved, setNamespaceResolved] = useState(false)
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
-  const [namespace, setNamespace] = useState("default")
   const [namespaceEditorOpen, setNamespaceEditorOpen] = useState(false)
+
   const isPlaceholderSection = (key: string): boolean => {
     const placeholderKeys: string[] = []
     return placeholderKeys.includes(key)
@@ -56,29 +65,8 @@ export function AppSidebar() {
       setLoading(true)
       try {
         // Load system info and get current context
-        const [systemData, context] = await Promise.all([
-          systemInfoService.get(),
-          namespacesService.getContext()
-        ])
-
+        const systemData = await systemInfoService.get()
         setSystemInfo(systemData)
-
-        // Use the detected namespace from context (backend handles fallback)
-        const selectedNamespace = context.namespace
-
-        // Show only the current namespace
-        const currentNamespaceOnly = [{
-          name: selectedNamespace,
-          id: 0
-        }]
-
-        setNamespaces(currentNamespaceOnly)
-        setNamespace(selectedNamespace)
-        setNamespaceResolved(true)
-
-        // Update URL to reflect the detected namespace
-        const currentPath = pathname
-        router.push(`${currentPath}?namespace=${selectedNamespace}`)
       } catch (error) {
         console.error("Failed to load initial data:", error)
       } finally {
@@ -89,45 +77,17 @@ export function AppSidebar() {
     loadInitialData()
   }, [router, pathname])
 
-
-  const handleNamespaceSelect = (selectedNamespace: string) => {
-    setNamespace(selectedNamespace)
-    // Update the URL with the new namespace
-    const currentPath = pathname
-    router.push(`${currentPath}?namespace=${selectedNamespace}`)
-  }
-
-  const handleCreateNamespace = async (name: string) => {
-    try {
-      await namespacesService.create(name)
-      toast({
-        variant: "success",
-        title: "Namespace Created",
-        description: `Successfully created namespace ${name}`
-      })
-      
-      // Always in single namespace mode, show only the newly created namespace
-      const newNamespace = { name, id: 0 }
-      setNamespaces([newNamespace])
-      
-      handleNamespaceSelect(name)
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Create Namespace",
-        description: error instanceof Error ? error.message : "An unexpected error occurred"
-      })
-    }
+  const handleCreateNamespace = (name: string) => {
+    createNamespace(name)
   }
 
 
   const navigateToSection = (sectionKey: string) => {
-    router.push(`/${sectionKey}?namespace=${namespace}`)
+    router.push(`/${sectionKey}`)
   }
 
   const getCurrentSection = () => {
-    const path = pathname.split('/')[1]
-    return path || 'agents'
+    return pathname.split('/')[1]
   }
 
   return (
@@ -148,11 +108,11 @@ export function AppSidebar() {
                     <div className="flex flex-col gap-0.5 leading-none">
                       <span className="font-medium">ARK Dashboard</span>
                       <span className="text-xs">
-                        {loading ? "Loading..." : namespaces.length === 0 ? "No namespaces" : namespace}
+                        {isPending ? "Loading..." : availableNamespaces.length === 0 ? "No namespaces" : namespace}
                       </span>
                     </div>
                     <ChevronsUpDown className="ml-auto" />
-                    {namespaces.length === 0 && !loading && (
+                    {availableNamespaces.length === 0 && !loading && (
                       <AlertCircle className="h-4 w-4 text-red-500" />
                     )}
                   </SidebarMenuButton>
@@ -166,14 +126,14 @@ export function AppSidebar() {
                   <DropdownMenuSeparator />
                   {loading ? (
                     <DropdownMenuItem disabled>Loading namespaces...</DropdownMenuItem>
-                  ) : namespaces.length === 0 ? (
+                  ) : availableNamespaces.length === 0 ? (
                     <DropdownMenuItem disabled>No namespaces available</DropdownMenuItem>
                   ) : (
                     <>
-                      {namespaces.map(ns => (
+                      {availableNamespaces.map(ns => (
                         <DropdownMenuItem
                           key={ns.name}
-                          onSelect={() => handleNamespaceSelect(ns.name)}
+                          onSelect={() => setNamespace(ns.name)}
                         >
                           {ns.name}
                           {ns.name === namespace && <Check className="ml-auto h-4 w-4" />}
@@ -188,6 +148,15 @@ export function AppSidebar() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => navigateToSection('')}
+                isActive={getCurrentSection() === ''}
+              >
+                <Home />
+                <span>Home</span>
+              </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
@@ -209,12 +178,12 @@ export function AppSidebar() {
                   <SidebarMenu>
                     {CONFIGURATION_SECTIONS.map((item) => {
                       const isPlaceholder = isPlaceholderSection(item.key)
-                      const isDisabled = !namespaceResolved || loading || isPlaceholder
+                      const isDisabled = !isNamespaceResolved || loading || isPlaceholder
                       const isActive = getCurrentSection() === item.key
                       return (
                         <SidebarMenuItem key={item.key}>
                           <SidebarMenuButton
-                            onClick={() => !isPlaceholder && namespaceResolved && navigateToSection(item.key)}
+                            onClick={() => !isPlaceholder && isNamespaceResolved && navigateToSection(item.key)}
                             isActive={isActive}
                             disabled={isDisabled}
                           >
@@ -246,12 +215,12 @@ export function AppSidebar() {
                   <SidebarMenu>
                     {RUNTIME_SECTIONS.map((item) => {
                       const isPlaceholder = isPlaceholderSection(item.key)
-                      const isDisabled = !namespaceResolved || loading || isPlaceholder
+                      const isDisabled = !isNamespaceResolved || loading || isPlaceholder
                       const isActive = getCurrentSection() === item.key
                       return (
                         <SidebarMenuItem key={item.key}>
                           <SidebarMenuButton
-                            onClick={() => !isPlaceholder && namespaceResolved && navigateToSection(item.key)}
+                            onClick={() => !isPlaceholder && isNamespaceResolved && navigateToSection(item.key)}
                             isActive={isActive}
                             disabled={isDisabled}
                           >
@@ -283,12 +252,12 @@ export function AppSidebar() {
                   <SidebarMenu>
                     {OPERATION_SECTIONS.map((item) => {
                       const isPlaceholder = isPlaceholderSection(item.key)
-                      const isDisabled = !namespaceResolved || loading || isPlaceholder
+                      const isDisabled = !isNamespaceResolved || loading || isPlaceholder
                       const isActive = getCurrentSection() === item.key
                       return (
                         <SidebarMenuItem key={item.key}>
                           <SidebarMenuButton
-                            onClick={() => !isPlaceholder && namespaceResolved && navigateToSection(item.key)}
+                            onClick={() => !isPlaceholder && isNamespaceResolved && navigateToSection(item.key)}
                             isActive={isActive}
                             disabled={isDisabled}
                           >
@@ -321,32 +290,34 @@ export function AppSidebar() {
             </p>
             <p>Kubernetes {systemInfo.kubernetes_version}</p>
           </div>)}
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton className="h-12">
-                    <UserDetails/>
-                    <ChevronsUpDownIcon className="ml-auto"/>
-                  </SidebarMenuButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  side="right"
-                  align="end"
-                  className="w-[--radix-popper-anchor-width]"
-                >
-                  <DropdownMenuLabel>
-                    <UserDetails/>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator/>
-                  <DropdownMenuItem onClick={signout}>
-                    <LogOut/>
-                    <span>Sign out</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </SidebarMenuItem>
-          </SidebarMenu>
+          {user && (
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <SidebarMenuButton className="h-12">
+                      <UserDetails user={user}/>
+                      <ChevronsUpDownIcon className="ml-auto"/>
+                    </SidebarMenuButton>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    side="right"
+                    align="end"
+                    className="w-[--radix-popper-anchor-width]"
+                  >
+                    <DropdownMenuLabel>
+                      <UserDetails user={user}/>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator/>
+                    <DropdownMenuItem onClick={signout}>
+                      <LogOut/>
+                      <span>Sign out</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          )}
         </SidebarFooter>
       </Sidebar>
       

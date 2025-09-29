@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -22,6 +23,8 @@ type Team struct {
 	Recorder    EventEmitter
 	Client      client.Client
 	Namespace   string
+	memory      MemoryInterface
+	eventStream EventStreamInterface
 }
 
 // FullName returns the namespace/name format for the team
@@ -29,10 +32,14 @@ func (t *Team) FullName() string {
 	return t.Namespace + "/" + t.Name
 }
 
-func (t *Team) Execute(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
+func (t *Team) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
 	if len(t.Members) == 0 {
 		return nil, fmt.Errorf("team %s has no members configured", t.FullName())
 	}
+
+	// Store memory and streaming parameters for member execution
+	t.memory = memory
+	t.eventStream = eventStream
 
 	teamTracker := NewOperationTracker(t.Recorder, ctx, "TeamExecution", t.FullName(), map[string]string{
 		"strategy":    t.Strategy,
@@ -86,33 +93,57 @@ func (t *Team) executeRoundRobin(ctx context.Context, userInput Message, history
 	messages := slices.Clone(history)
 	var newMessages []Message
 
-	for turn := 0; ; turn++ {
+	messageCount := 0 // Count individual agent messages
+	memberIndex := 0  // Track which agent should speak next
+
+	for {
 		// Check if context was cancelled
 		if ctx.Err() != nil {
 			return newMessages, ctx.Err()
 		}
 
-		turnTracker := NewExecutionRecorder(t.Recorder)
-		turnTracker.TeamTurn(ctx, "Start", t.FullName(), t.Strategy, turn)
+		// Check maxTurns before executing
+		if t.MaxTurns != nil && messageCount >= *t.MaxTurns {
+			turnTracker := NewExecutionRecorder(t.Recorder)
+			turnTracker.TeamTurn(ctx, "MaxTurns", t.FullName(), t.Strategy, messageCount)
 
-		for i, member := range t.Members {
-			// Check if context was cancelled before each member execution
-			if ctx.Err() != nil {
-				return newMessages, ctx.Err()
-			}
-
-			if err := t.executeMemberAndAccumulate(ctx, member, userInput, &messages, &newMessages, i); err != nil {
-				if IsTerminateTeam(err) {
-					return newMessages, nil
-				}
-				return newMessages, err
-			}
+			// Log maxTurns reached and return success with accumulated messages
+			t.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "TeamMaxTurnsReached", BaseEvent{
+				Name: t.FullName(),
+				Metadata: map[string]string{
+					"strategy":     t.Strategy,
+					"maxTurns":     fmt.Sprintf("%d", *t.MaxTurns),
+					"teamName":     t.FullName(),
+					"messageCount": fmt.Sprintf("%d", messageCount),
+				},
+			})
+			return newMessages, nil
 		}
 
-		if t.MaxTurns != nil && turn+1 >= *t.MaxTurns {
-			turnTracker.TeamTurn(ctx, "MaxTurns", t.FullName(), t.Strategy, turn+1)
-			return newMessages, fmt.Errorf("team round-robin MaxTurns reached %s", t.GetName())
+		// Execute current agent
+		member := t.Members[memberIndex]
+
+		if err := t.executeMemberAndAccumulate(ctx, member, userInput, &messages, &newMessages, messageCount); err != nil {
+			if IsTerminateTeam(err) {
+				return newMessages, nil
+			}
+
+			// Fail immediately on any genuine error - emit event for visibility in events view
+			t.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "TeamMemberFailed", BaseEvent{
+				Name: member.GetName(),
+				Metadata: map[string]string{
+					"error":        err.Error(),
+					"memberIndex":  fmt.Sprintf("%d", memberIndex),
+					"messageCount": fmt.Sprintf("%d", messageCount),
+					"strategy":     t.Strategy,
+					"teamName":     t.FullName(),
+				},
+			})
+			return newMessages, fmt.Errorf("agent %s failed in team %s: %w", member.GetName(), t.FullName(), err)
 		}
+
+		messageCount++                                   // Increment message count
+		memberIndex = (memberIndex + 1) % len(t.Members) // Move to next agent in round-robin
 	}
 }
 
@@ -121,7 +152,7 @@ func (t *Team) GetName() string {
 }
 
 func (t *Team) GetType() string {
-	return "team"
+	return string(teamKey)
 }
 
 func (t *Team) GetDescription() string {
@@ -197,7 +228,7 @@ func (t *Team) executeWithTracking(tracker *OperationTracker, execFunc func(cont
 	}
 
 	if teamTokenUsage.TotalTokens > 0 {
-		tracker.CompleteWithTokens("", teamTokenUsage)
+		tracker.CompleteWithTokens(teamTokenUsage)
 	} else {
 		tracker.Complete("")
 	}
@@ -206,6 +237,12 @@ func (t *Team) executeWithTracking(tracker *OperationTracker, execFunc func(cont
 
 // executeMemberAndAccumulate executes a member and accumulates new messages
 func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember, userInput Message, messages, newMessages *[]Message, turn int) error {
+	// Add team and current member to execution metadata for streaming
+	ctx = WithExecutionMetadata(ctx, map[string]interface{}{
+		"team":  t.Name,
+		"agent": member.GetName(),
+	})
+
 	memberTracker := NewOperationTracker(t.Recorder, ctx, "TeamMember", member.GetName(), map[string]string{
 		"team":       t.FullName(),
 		"memberType": member.GetType(),
@@ -215,7 +252,7 @@ func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember
 		"strategy":   t.Strategy,
 	})
 
-	memberNewMessages, err := member.Execute(ctx, userInput, *messages)
+	memberNewMessages, err := member.Execute(ctx, userInput, *messages, t.memory, t.eventStream)
 	if err != nil {
 		if IsTerminateTeam(err) {
 			memberTracker.CompleteWithTermination(err.Error())
@@ -238,7 +275,7 @@ func loadTeamMember(ctx context.Context, k8sClient client.Client, memberSpec ark
 	key := types.NamespacedName{Name: memberSpec.Name, Namespace: namespace}
 
 	switch memberSpec.Type {
-	case "agent":
+	case string(agentKey):
 		var agentCRD arkv1alpha1.Agent
 		if err := k8sClient.Get(ctx, key, &agentCRD); err != nil {
 			return nil, fmt.Errorf("failed to get agent %s for team %s: %w", memberSpec.Name, teamName, err)

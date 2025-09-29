@@ -21,9 +21,7 @@ Object.defineProperty(global, 'crypto', {
   writable: true,
 })
 
-describe('chatService', () => {
-  const namespace = 'test-namespace'
-  
+describe('chatService', () => {  
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -49,10 +47,10 @@ describe('chatService', () => {
         targets: [{ type: 'AGENT', name: 'agent1' }],
       }
 
-      const result = await chatService.createQuery(namespace, queryRequest)
+      const result = await chatService.createQuery(queryRequest)
 
       expect(apiClient.post).toHaveBeenCalledWith(
-        `/api/v1/namespaces/${namespace}/queries/`,
+        `/api/v1/queries/`,
         {
           ...queryRequest,
           targets: [{ type: 'agent', name: 'agent1' }],
@@ -72,10 +70,10 @@ describe('chatService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockQuery)
 
-      const result = await chatService.getQuery(namespace, 'test-query')
+      const result = await chatService.getQuery('test-query')
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        `/api/v1/namespaces/${namespace}/queries/test-query`
+        `/api/v1/queries/test-query`
       )
       expect(result).toEqual(mockQuery)
     })
@@ -85,7 +83,7 @@ describe('chatService', () => {
       error.response = { status: 404 }
       vi.mocked(apiClient.get).mockRejectedValueOnce(error)
 
-      const result = await chatService.getQuery(namespace, 'non-existent')
+      const result = await chatService.getQuery('non-existent')
 
       expect(result).toBeNull()
     })
@@ -103,7 +101,6 @@ describe('chatService', () => {
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse)
 
       const result = await chatService.submitChatQuery(
-        namespace,
         'Hello',
         'agent',
         'test-agent',
@@ -111,7 +108,7 @@ describe('chatService', () => {
       )
 
       expect(apiClient.post).toHaveBeenCalledWith(
-        `/api/v1/namespaces/${namespace}/queries/`,
+        `/api/v1/queries/`,
         {
           name: 'chat-query-mock-uuid',
           type: 'user',
@@ -137,7 +134,7 @@ describe('chatService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockQuery)
 
-      const result = await chatService.getQueryResult(namespace, 'test-query')
+      const result = await chatService.getQueryResult('test-query')
 
       expect(result).toEqual({
         status: 'done',
@@ -158,7 +155,7 @@ describe('chatService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockQuery)
 
-      const result = await chatService.getQueryResult(namespace, 'test-query')
+      const result = await chatService.getQueryResult('test-query')
 
       expect(result).toEqual({
         status: 'running',
@@ -178,7 +175,7 @@ describe('chatService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockQuery)
 
-      const result = await chatService.getQueryResult(namespace, 'test-query')
+      const result = await chatService.getQueryResult('test-query')
 
       expect(result).toEqual({
         status: 'unknown',
@@ -190,7 +187,7 @@ describe('chatService', () => {
     it('should handle errors', async () => {
       vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('Network error'))
 
-      const result = await chatService.getQueryResult(namespace, 'test-query')
+      const result = await chatService.getQueryResult('test-query')
 
       expect(result).toEqual({
         status: 'error',
@@ -221,7 +218,6 @@ describe('chatService', () => {
 
       const onUpdate = vi.fn()
       const stop = await chatService.streamQueryStatus(
-        namespace,
         'test-query',
         onUpdate,
         100
@@ -248,7 +244,6 @@ describe('chatService', () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       
       const stop = await chatService.streamQueryStatus(
-        namespace,
         'test-query',
         onUpdate,
         100
@@ -282,7 +277,6 @@ describe('chatService', () => {
 
       const onUpdate = vi.fn()
       const stop = await chatService.streamQueryStatus(
-        namespace,
         'test-query',
         onUpdate,
         100
@@ -313,7 +307,7 @@ describe('chatService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockListResponse)
 
-      const result = await chatService.getChatHistory(namespace, 'session-123')
+      const result = await chatService.getChatHistory('session-123')
 
       expect(result).toHaveLength(3)
       expect(result[0].name).toBe('chat-query-1000')
@@ -336,10 +330,10 @@ describe('chatService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockResponse)
 
-      const result = await chatService.listQueries(namespace)
+      const result = await chatService.listQueries()
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        `/api/v1/namespaces/${namespace}/queries/`
+        `/api/v1/queries/`
       )
       expect(result).toEqual(mockResponse)
     })
@@ -356,10 +350,10 @@ describe('chatService', () => {
       vi.mocked(apiClient.put).mockResolvedValueOnce(mockResponse)
 
       const updates = { input: 'Updated input' }
-      const result = await chatService.updateQuery(namespace, 'test-query', updates)
+      const result = await chatService.updateQuery('test-query', updates)
 
       expect(apiClient.put).toHaveBeenCalledWith(
-        `/api/v1/namespaces/${namespace}/queries/test-query`,
+        `/api/v1/queries/test-query`,
         updates
       )
       expect(result).toEqual(mockResponse)
@@ -370,7 +364,7 @@ describe('chatService', () => {
       error.response = { status: 404 }
       vi.mocked(apiClient.put).mockRejectedValueOnce(error)
 
-      const result = await chatService.updateQuery(namespace, 'non-existent', {})
+      const result = await chatService.updateQuery('non-existent', {})
 
       expect(result).toBeNull()
     })
@@ -380,10 +374,10 @@ describe('chatService', () => {
     it('should delete query and return true', async () => {
       vi.mocked(apiClient.delete).mockResolvedValueOnce(undefined)
 
-      const result = await chatService.deleteQuery(namespace, 'test-query')
+      const result = await chatService.deleteQuery('test-query')
 
       expect(apiClient.delete).toHaveBeenCalledWith(
-        `/api/v1/namespaces/${namespace}/queries/test-query`
+        `/api/v1/queries/test-query`
       )
       expect(result).toBe(true)
     })
@@ -393,7 +387,7 @@ describe('chatService', () => {
       error.response = { status: 404 }
       vi.mocked(apiClient.delete).mockRejectedValueOnce(error)
 
-      const result = await chatService.deleteQuery(namespace, 'non-existent')
+      const result = await chatService.deleteQuery('non-existent')
 
       expect(result).toBe(false)
     })

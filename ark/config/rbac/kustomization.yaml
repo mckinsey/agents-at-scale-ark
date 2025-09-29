@@ -44,7 +44,4 @@ resources:
 - agent_admin_role.yaml
 - agent_editor_role.yaml
 - agent_viewer_role.yaml
-# Tenant namespace permissions for quickstart scenarios (applied separately due to namespace: default)
-# - ark_tenant_role.yaml
-# - ark_tenant_role_binding.yaml
 

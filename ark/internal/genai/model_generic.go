@@ -9,8 +9,9 @@ import (
 )
 
 type ChatCompletionProvider interface {
-	ChatCompletion(ctx context.Context, messages []Message, tools []openai.ChatCompletionToolParam) (*openai.ChatCompletion, error)
-	ChatCompletionWithSchema(ctx context.Context, messages []Message, outputSchema *runtime.RawExtension, schemaName string, tools []openai.ChatCompletionToolParam) (*openai.ChatCompletion, error)
+	ChatCompletion(ctx context.Context, messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error)
+	ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error)
+	SetOutputSchema(schema *runtime.RawExtension, schemaName string)
 }
 
 type ConfigProvider interface {
@@ -26,14 +27,18 @@ type Model struct {
 	SchemaName   string
 }
 
-func (m *Model) ChatCompletion(ctx context.Context, messages []Message, tools []openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStream EventStreamInterface, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
 	if m.Provider == nil {
 		return nil, nil
 	}
 
 	// Create telemetry span for all model calls
 	tracer := telemetry.NewTraceContext()
-	ctx, span := tracer.StartSpan(ctx, "llm.chat_completion")
+	spanType := "llm.chat_completion"
+	if eventStream != nil {
+		spanType = "llm.chat_completion_stream"
+	}
+	ctx, span := tracer.StartSpan(ctx, spanType)
 	defer span.End()
 
 	// Set input and model details
@@ -44,13 +49,23 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, tools []
 	telemetry.SetLLMCompletionInput(span, otelMessages)
 	telemetry.AddModelDetails(span, m.Model, m.Type, telemetry.ExtractProviderFromType(m.Type), m.Properties)
 
-	// Call the appropriate provider method based on schema presence
 	var response *openai.ChatCompletion
 	var err error
-	if m.OutputSchema == nil {
-		response, err = m.Provider.ChatCompletion(ctx, messages, tools)
+
+	// Set output schema if provided
+	if m.OutputSchema != nil {
+		m.Provider.SetOutputSchema(m.OutputSchema, m.SchemaName)
+	}
+
+	// Use streaming if event stream is provided
+	if eventStream != nil {
+		response, err = m.Provider.ChatCompletionStream(ctx, messages, n, func(chunk *openai.ChatCompletionChunk) error {
+			// Wrap chunk with ARK metadata
+			chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, m.Model)
+			return eventStream.StreamChunk(ctx, chunkWithMeta)
+		}, tools...)
 	} else {
-		response, err = m.Provider.ChatCompletionWithSchema(ctx, messages, m.OutputSchema, m.SchemaName, tools)
+		response, err = m.Provider.ChatCompletion(ctx, messages, n, tools...)
 	}
 
 	if err != nil {

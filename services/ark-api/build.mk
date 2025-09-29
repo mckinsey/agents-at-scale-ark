@@ -78,16 +78,23 @@ $(ARK_API_STAMP_BUILD): $(ARK_API_STAMP_TEST) $(ARK_SDK_WHL)
 # Install target
 $(ARK_API_SERVICE_NAME)-install: $(ARK_API_STAMP_INSTALL) # HELP: Deploy ARK API server to cluster
 $(ARK_API_STAMP_INSTALL): $(ARK_API_STAMP_BUILD) $$(LOCALHOST_GATEWAY_STAMP_INSTALL)
-	@echo "Installing ark-api..."
+	echo "Installing ark-api..."
 	@mkdir -p $(ARK_API_SERVICE_DIR)/ark-api/out
 	cp $(ARK_SDK_WHL) $(ARK_API_SERVICE_DIR)/ark-api/out/
+	# Update pyproject.toml to use local wheel file
+	cd $(ARK_API_SERVICE_DIR)/ark-api && \
+	sed -i.bak 's|path = "../../out/ark-sdk/py-sdk/dist/ark_sdk-.*\.whl"|path = "./out/ark_sdk-$(shell cat $(BUILD_ROOT)/version.txt)-py3-none-any.whl"|' pyproject.toml && \
+	uv remove ark_sdk || true && \
+	uv add ./out/ark_sdk-$(shell cat $(BUILD_ROOT)/version.txt)-py3-none-any.whl && \
+	rm -f uv.lock && uv sync
+	cd ${ARK_API_SERVICE_DIR}
 	./scripts/build-and-push.sh -i $(ARK_API_IMAGE) -t $(ARK_API_TAG) -f $(ARK_API_SERVICE_DIR)/Dockerfile -c $(ARK_API_SERVICE_DIR)
-	@rm -rf $(ARK_API_SERVICE_DIR)/ark-api/out
 	helm upgrade --install $(ARK_API_SERVICE_NAME) $(ARK_API_SERVICE_DIR)/chart \
 		--namespace $(ARK_API_NAMESPACE) \
 		--create-namespace \
 		--set app.image.repository=$(ARK_API_IMAGE) \
 		--set app.image.tag=$(ARK_API_TAG) \
+		--set httpRoute.enabled=true \
 		--wait \
 		--timeout=5m
 	@echo "ark-api installed successfully"

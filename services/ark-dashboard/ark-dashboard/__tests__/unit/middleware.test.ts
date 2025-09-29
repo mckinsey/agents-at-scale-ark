@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NextResponse } from 'next/server';
 import middleware from '@/middleware';
 import type { NextRequestWithAuth } from '@/auth';
@@ -24,6 +24,13 @@ vi.mock('@/auth', () => ({
 describe('middleware default export', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Set required environment variables
+    process.env.BASE_URL = 'https://example.com';
+  });
+
+  afterEach(() => {
+    // Clean up environment variables
+    delete process.env.BASE_URL;
   });
 
   const createMockRequest = (pathname: string): NextRequestWithAuth => {
@@ -52,7 +59,7 @@ describe('middleware default export', () => {
       await (middleware as any)(request);
 
       expect(NextResponse.redirect).toHaveBeenCalledWith(
-        new URL('/api/auth/signin?callbackUrl=https%3A%2F%2Fexample.com%2Fdashboard', 'https://example.com')
+        new URL('/api/auth/signin?callbackUrl=https%3A%2F%2Fexample.com', 'https://example.com')
       );
     });
 

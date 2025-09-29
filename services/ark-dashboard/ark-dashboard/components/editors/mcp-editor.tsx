@@ -94,7 +94,7 @@ export function McpEditor({
   };
 
   const getMpcServerDetails = useCallback(async () => {
-    const mcpServerData = await mcpServersService.get(namespace, mcpServer?.name ?? '');
+    const mcpServerData = await mcpServersService.get(mcpServer?.name ?? '');
     setBaseUrl(mcpServerData?.spec?.address?.value ?? '');
     setTransport(mcpServerData?.spec?.transport ?? 'http');
   
@@ -115,7 +115,7 @@ export function McpEditor({
       );
       setHeaders(transformedHeaders);
     }
-  }, [namespace, mcpServer?.name]);
+  }, [mcpServer?.name]);
   
 
   useEffect(() => {
@@ -187,7 +187,7 @@ export function McpEditor({
   // Fetch secrets when dialog opens
   useEffect(() => {
     if (open && namespace) {
-      secretsService.getAll(namespace).then(setSecrets).catch(console.error);
+      secretsService.getAll().then(setSecrets).catch(console.error);
     }
   }, [open, namespace]);
 

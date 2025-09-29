@@ -1,95 +1,43 @@
-# ARK CLI
+<div align="center">
+  <h1 align="center"><code>ark</code></h1>
+  <h4 align="center">Ark Command Line Interface</h4>
 
-Interactive terminal interface for ARK agents.
+  <hr>
 
-## Prerequisites
+  <p align="center">
+    <a href="#quickstart">Quickstart</a> •
+    <a href="https://mckinsey.github.io/agents-at-scale-ark/">Documentation</a>
+  </p>
+  <p align="center">
+    <a href="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/cicd.yaml"><img src="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/cicd.yaml/badge.svg" alt="CI/CD"></a>
+    <a href="https://www.npmjs.com/package/@agents-at-scale/ark"><img src="https://img.shields.io/npm/v/@agents-at-scale/ark.svg" alt="npm version"></a>
+  </p>
+</div>
 
-1. **ARK system deployed** in your Kubernetes cluster
-2. **Gateway setup** for service discovery:
-   ```bash
-   # From agents-at-scale project root
-   make localhost-gateway-install
-   ```
+## Quickstart
 
-## Installation
-
-```bash
-cd tools/ark-cli
-npm run build
-npm install -g .
-```
-
-## Usage
+Ensure you have [Node.js](https://nodejs.org/en/download) and [Helm](https://helm.sh/docs/intro/install/) installed. Then run the following commands to install Ark:
 
 ```bash
-# Interactive mode (no arguments)
-ark
+# Install the 'ark' CLI:
+npm install -g @agents-at-scale/ark
 
-# Show help
-ark --help
-ark cluster --help
+# Install Ark:
+ark install
 
-# Check system status
-ark check status
+# Optionally configure a 'default' model to use for agents:
+ark models create default
 
-# Generate (project, agent, team, etc)
-ark generate
-
-# Cluster operations
-ark cluster get-type
-ark cluster get-ip
-ark cluster get-ip --verbose
-ark cluster get-ip --context minikube
-
-# Show shell autocomplete options.
-ark autocomplete
-```
-
-## Configuration
-
-ARK CLI automatically detects services via:
-
-1. **localhost-gateway** (when running) - `*.127.0.0.1.nip.io:8080`
-2. **Kubernetes service discovery** - for internal services
-3. **Default localhost URLs** - fallback
-
-Settings stored in `~/.config/ark-cli/config.json`
-
-## Development
-
-**Note:** All make commands must be run from the repository root directory.
-
-```bash
-# From repository root
-make ark-cli-install         # Build and install globally
-make ark-cli-build           # Build only
-make clean                   # Clean build artifacts and stamp files
-make ark-cli-uninstall       # Remove global installation
-
-# From tools/ark-cli directory
-npm run lint         # Run linting and formatting
-npm run lint:check   # Check linting without fixing
-```
-
-## Troubleshooting
-
-Enable debug logging to see detailed configuration discovery and service resolution:
-
-```bash
-# Debug configuration discovery and service resolution
-DEBUG=ark:config ark check status
-
-# Debug all ARK CLI components
-DEBUG=ark:* ark check status
-
-# Keep debug enabled for multiple commands
-export DEBUG=ark:config
-ark check status
+# Run the dashboard:
 ark dashboard
 ```
 
-**Common debug scenarios:**
+In most cases the default installation options will be sufficient. This will install the Ark dependencies, the controller, the APIs and the dashboard. You can optionally setup a `default` model that will be the default used by agents. You will need a Kubernetes cluster to install Ark into, you can use [Minikube](https://minikube.sigs.k8s.io/docs/start), [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/), [Docker Desktop](https://docs.docker.com/desktop/kubernetes/) or similar to run a local cluster. The `install` command will warn if any required dependencies are missing.
 
-- **Wrong URL detected**: See which discovery method is being used
-- **Service timeouts**: Check localhost-gateway and kubernetes connectivity
-- **Config issues**: Trace fallback logic through multiple discovery methods
+User guides, developer guides, operations guides and API reference documentation is all available at:
+
+https://mckinsey.github.io/agents-at-scale-ark/
+
+The [Quickstart](https://mckinsey.github.io/agents-at-scale-ark/quickstart/) guide will walk you through the process of configuring a model, creating an agent and running basic queries.
+
+To troubleshoot an installation, run `ark status`.

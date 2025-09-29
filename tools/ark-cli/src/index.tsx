@@ -1,73 +1,74 @@
-#!/usr/bin/env node
+#!/usr/bin/env NODE_NO_WARNINGS=1 node
 
-import chalk from 'chalk';
-import { Command } from 'commander';
-import { render } from 'ink';
-import { createRequire } from 'module';
+import {Command} from 'commander';
+import {render} from 'ink';
+import {createRequire} from 'module';
 
 const require = createRequire(import.meta.url);
 const packageJson = require('../package.json');
 
-import { createClusterCommand } from './commands/cluster/index.js';
-import { createCompletionCommand } from './commands/completion.js';
-import { createGenerateCommand } from './commands/generate/index.js';
-import { createConfigCommand } from './commands/config.js';
-import { StatusChecker } from './components/statusChecker.js';
-import { ConfigManager } from './config.js';
-import { ArkClient } from './lib/arkClient.js';
+import output from './lib/output.js';
+import {startup} from './lib/startup.js';
+import type {ArkConfig} from './lib/config.js';
+import {createAgentsCommand} from './commands/agents/index.js';
+import {createChatCommand} from './commands/chat/index.js';
+import {createClusterCommand} from './commands/cluster/index.js';
+import {createCompletionCommand} from './commands/completion/index.js';
+import {createDashboardCommand} from './commands/dashboard/index.js';
+import {createDocsCommand} from './commands/docs/index.js';
+import {createGenerateCommand} from './commands/generate/index.js';
+import {createInstallCommand} from './commands/install/index.js';
+import {createModelsCommand} from './commands/models/index.js';
+import {createQueryCommand} from './commands/query/index.js';
+import {createUninstallCommand} from './commands/uninstall/index.js';
+import {createStatusCommand} from './commands/status/index.js';
+import {createConfigCommand} from './commands/config/index.js';
+import {createTargetsCommand} from './commands/targets/index.js';
+import {createTeamsCommand} from './commands/teams/index.js';
+import {createToolsCommand} from './commands/tools/index.js';
+import {createRoutesCommand} from './commands/routes/index.js';
 import MainMenu from './ui/MainMenu.js';
-import { StatusFormatter } from './ui/statusFormatter.js';
 
-function showMainMenu() {
-  console.clear();
-  render(<MainMenu />);
-}
-
-async function handleStatusCheck() {
-  try {
-    const configManager = new ConfigManager();
-    const apiBaseUrl = await configManager.getApiBaseUrl();
-    const serviceUrls = await configManager.getServiceUrls();
-    const arkClient = new ArkClient(apiBaseUrl);
-
-    const statusChecker = new StatusChecker(arkClient);
-
-    const statusData = await statusChecker.checkAll(serviceUrls, apiBaseUrl);
-    StatusFormatter.printStatus(statusData);
-    process.exit(0); // Exit cleanly after showing status
-  } catch (error) {
-    console.error(chalk.red('Failed to check status:'), error);
-    process.exit(1);
+function showMainMenu(config: ArkConfig) {
+  const app = render(<MainMenu config={config} />);
+  // Store app instance globally so MainMenu can access it
+  interface GlobalWithInkApp {
+    inkApp?: ReturnType<typeof render>;
   }
+  (globalThis as GlobalWithInkApp).inkApp = app;
 }
 
 async function main() {
+  // Initialize CLI - check requirements and load config
+  const config = await startup();
+
   const program = new Command();
   program
     .name(packageJson.name)
     .description(packageJson.description)
     .version(packageJson.version);
 
-  program.addCommand(createClusterCommand());
-  program.addCommand(createCompletionCommand());
-  program.addCommand(createGenerateCommand());
-  program.addCommand(createConfigCommand());
-
-  // Add check status command
-  const checkCommand = new Command('check');
-  checkCommand.description('Check various ARK system components');
-
-  checkCommand
-    .command('status')
-    .description('Check system status')
-    .action(handleStatusCheck);
-
-  program.addCommand(checkCommand);
+  program.addCommand(createAgentsCommand(config));
+  program.addCommand(createChatCommand(config));
+  program.addCommand(createClusterCommand(config));
+  program.addCommand(createCompletionCommand(config));
+  program.addCommand(createDashboardCommand(config));
+  program.addCommand(createDocsCommand(config));
+  program.addCommand(createGenerateCommand(config));
+  program.addCommand(createInstallCommand(config));
+  program.addCommand(createModelsCommand(config));
+  program.addCommand(createQueryCommand(config));
+  program.addCommand(createUninstallCommand(config));
+  program.addCommand(createStatusCommand());
+  program.addCommand(createConfigCommand(config));
+  program.addCommand(createTargetsCommand(config));
+  program.addCommand(createTeamsCommand(config));
+  program.addCommand(createToolsCommand(config));
+  program.addCommand(createRoutesCommand(config));
 
   // If no args provided, show interactive menu
   if (process.argv.length === 2) {
-    console.log();
-    showMainMenu();
+    showMainMenu(config);
     return;
   }
 
@@ -75,6 +76,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(chalk.red('Failed to start ARK CLI:'), error);
+  output.error('failed to start ark cli: ', error);
   process.exit(1);
 });

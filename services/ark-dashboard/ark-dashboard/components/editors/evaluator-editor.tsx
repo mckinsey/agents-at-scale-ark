@@ -57,15 +57,13 @@ interface EvaluatorEditorProps {
   onSave: (
     evaluator: (EvaluatorCreateRequest | EvaluatorUpdateRequest) & { id?: string }
   ) => void
-  namespace: string
 }
 
 export function EvaluatorEditor({
   open,
   onOpenChange,
   evaluator,
-  onSave,
-  namespace
+  onSave
 }: EvaluatorEditorProps) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
@@ -84,7 +82,7 @@ export function EvaluatorEditor({
       const loadModels = async () => {
         setModelsLoading(true)
         try {
-          const modelsData = await modelsService.getAll(namespace)
+          const modelsData = await modelsService.getAll()
           setModels(modelsData)
         } catch (error) {
           toast({
@@ -98,7 +96,7 @@ export function EvaluatorEditor({
       }
       loadModels()
     }
-  }, [open, namespace])
+  }, [open])
 
   useEffect(() => {
     const loadEvaluatorDetails = async () => {
@@ -106,7 +104,7 @@ export function EvaluatorEditor({
         setEvaluatorLoading(true)
         try {
           // Fetch detailed evaluator data with spec
-          const detailedEvaluator = await evaluatorsService.getDetailsByName(namespace, evaluator.name)
+          const detailedEvaluator = await evaluatorsService.getDetailsByName(evaluator.name)
           if (detailedEvaluator) {
             setName(detailedEvaluator.name)
             setDescription(detailedEvaluator.spec?.description as string || "")
@@ -175,7 +173,7 @@ export function EvaluatorEditor({
     if (open) {
       loadEvaluatorDetails()
     }
-  }, [evaluator, isEditing, namespace, open])
+  }, [evaluator, isEditing, open])
 
   const addParameter = () => {
     setParameters([...parameters, { name: "", value: "" }])

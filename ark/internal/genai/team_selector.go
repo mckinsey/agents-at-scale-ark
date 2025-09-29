@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 const defaultSelectorPrompt = `You are in a role play game. The following roles are available:
@@ -78,7 +80,7 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		NewUserMessage("Select the next participant to respond."),
 	}
 
-	response, err := model.ChatCompletion(ctx, selectorMessages, nil)
+	response, err := model.ChatCompletion(ctx, selectorMessages, nil, 1)
 	if err != nil {
 		return nil, 0, fmt.Errorf("selector model call failed: %w", err)
 	}
@@ -152,7 +154,16 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 
 		if t.MaxTurns != nil && turn+1 >= *t.MaxTurns {
 			turnTracker.TeamTurn(ctx, "MaxTurns", t.FullName(), t.Strategy, turn+1)
-			return newMessages, fmt.Errorf("team selector MaxTurns reached %s", t.GetName())
+			// Log the maxTurns limit for observability, but return success with accumulated messages
+			t.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "TeamMaxTurnsReached", BaseEvent{
+				Name: t.FullName(),
+				Metadata: map[string]string{
+					"strategy": t.Strategy,
+					"maxTurns": fmt.Sprintf("%d", *t.MaxTurns),
+					"teamName": t.FullName(),
+				},
+			})
+			return newMessages, nil
 		}
 	}
 }

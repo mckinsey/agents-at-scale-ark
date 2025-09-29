@@ -27,12 +27,10 @@ import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { Database, MessageSquare, ChevronDown } from "lucide-react";
 
 interface MemorySectionProps {
-  readonly namespace: string;
   readonly initialFilters?: Partial<MemoryFilters>;
 }
 
 export function MemorySection({
-  namespace,
   initialFilters
 }: MemorySectionProps) {
   const router = useRouter();
@@ -45,6 +43,7 @@ export function MemorySection({
     sessionId: string;
     queryId: string;
     message: { role: string; content: string; name?: string };
+    sequence?: number;
   }[]>([]);
   const [loading, setLoading] = useState(true);
   const [availableMemories, setAvailableMemories] = useState<MemoryResource[]>([]);
@@ -105,18 +104,19 @@ export function MemorySection({
 
       try {
         const [memoriesData, sessionsData, messagesData] = await Promise.all([
-          memoryService.getMemoryResources(namespace),
-          memoryService.getSessions(namespace),
-          memoryService.getAllMemoryMessages(namespace, {
+          memoryService.getMemoryResources(),
+          memoryService.getSessions(),
+          memoryService.getAllMemoryMessages({
             memory: filters.memoryName && filters.memoryName !== "all" ? filters.memoryName : undefined,
             session: filters.sessionId && filters.sessionId !== "all" ? filters.sessionId : undefined,
             query: filters.queryId && filters.queryId !== "all" ? filters.queryId : undefined
           })
         ]);
         
-        // Sort messages by timestamp (newest first)
+        // Sort by sequence number descending (newest first) to maintain proper chronological order
+        // This ensures messages appear in the correct order regardless of timestamp precision
         const sortedMessages = messagesData.sort((a, b) => 
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          (b.sequence || 0) - (a.sequence || 0)
         );
         
         setTotalMessages(sortedMessages.length);
@@ -144,7 +144,7 @@ export function MemorySection({
         setLoading(false);
       }
     },
-    [namespace, filters]
+    [filters]
   );
 
   useEffect(() => {

@@ -3,6 +3,8 @@ package genai
 import (
 	"context"
 	"fmt"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 func (t *Team) executeGraph(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
@@ -55,7 +57,16 @@ func (t *Team) executeGraph(ctx context.Context, userInput Message, history []Me
 
 		if t.MaxTurns != nil && turns+1 >= *t.MaxTurns {
 			turnTracker.TeamTurn(ctx, "MaxTurns", t.FullName(), t.Strategy, turns+1)
-			return newMessages, fmt.Errorf("team graph MaxTurns %d reached for team %s", *t.MaxTurns, t.GetName())
+			// Log the maxTurns limit for observability, but return success with accumulated messages
+			t.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "TeamMaxTurnsReached", BaseEvent{
+				Name: t.FullName(),
+				Metadata: map[string]string{
+					"strategy": t.Strategy,
+					"maxTurns": fmt.Sprintf("%d", *t.MaxTurns),
+					"teamName": t.FullName(),
+				},
+			})
+			return newMessages, nil
 		}
 	}
 

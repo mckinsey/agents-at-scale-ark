@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import inquirer from 'inquirer';
 import path from 'path';
 import {fileURLToPath} from 'url';
+import type {ArkConfig} from '../../lib/config.js';
 import {
   createProjectGenerator,
   createAgentGenerator,
@@ -70,7 +71,7 @@ function getDefaultDestination(): string {
   }
 }
 
-export function createGenerateCommand(): Command {
+export function createGenerateCommand(_: ArkConfig): Command {
   const generate = new Command('generate');
   generate
     .alias('g')

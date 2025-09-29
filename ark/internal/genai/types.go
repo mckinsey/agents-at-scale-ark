@@ -32,7 +32,7 @@ func ToolMessage[T string | []openai.ChatCompletionContentPartTextParam](content
 }
 
 type TeamMember interface {
-	Execute(ctx context.Context, userInput Message, history []Message) ([]Message, error)
+	Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) ([]Message, error)
 	GetName() string
 	GetType() string
 	GetDescription() string

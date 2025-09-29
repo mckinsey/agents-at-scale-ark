@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Bot, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { BaseCard, type BaseCardAction } from "./base-card";
-import { AgentPhaseBadge } from "@/components/ui/agent-phase-badge";
+import { AvailabilityStatusBadge } from "@/components/ui/availability-status-badge";
 import { getCustomIcon } from "@/lib/utils/icon-resolver";
 import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import { toggleFloatingChat } from "@/lib/chat-events";
@@ -26,7 +26,6 @@ interface AgentCardProps {
     agent: (AgentCreateRequest | AgentUpdateRequest) & { id?: string }
   ) => void;
   onDelete?: (id: string) => void;
-  namespace: string;
 }
 
 export function AgentCard({
@@ -34,8 +33,7 @@ export function AgentCard({
   teams,
   models,
   onUpdate,
-  onDelete,
-  namespace
+  onDelete
 }: AgentCardProps) {
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(agent.name);
@@ -73,7 +71,7 @@ export function AgentCard({
   actions.push({
     icon: MessageCircle,
     label: "Chat with agent",
-    onClick: () => toggleFloatingChat(agent.name, "agent", namespace),
+    onClick: () => toggleFloatingChat(agent.name, "agent"),
     className: isChatOpen ? "fill-current" : ""
   });
 
@@ -91,7 +89,17 @@ export function AgentCard({
               {!isA2A && <span>Model: {modelName}</span>}
               {isA2A && <span>A2A Agent</span>}
             </div>
-            <AgentPhaseBadge agent={agent} />
+            <AvailabilityStatusBadge
+              status={agent.available}
+              eventsLink={{
+                href: "/events",
+                query: {
+                  kind: 'Agent',
+                  name: agent.name,
+                  page: 1
+                }
+              }}
+            />
           </div>
         }
       />
@@ -102,7 +110,6 @@ export function AgentCard({
         models={models}
         teams={teams}
         onSave={onUpdate || (() => {})}
-        namespace={namespace}
       />
       {onDelete && (
         <ConfirmationDialog

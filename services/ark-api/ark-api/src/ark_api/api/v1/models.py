@@ -1,7 +1,8 @@
 """Kubernetes models API endpoints."""
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from typing import Optional
 
 from ark_sdk.client import with_ark_client
 
@@ -12,31 +13,15 @@ from ...models.models import (
     ModelUpdateRequest,
     ModelDetailResponse
 )
+from ...models.common import extract_availability_from_conditions
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/namespaces/{namespace}/models", tags=["models"])
+router = APIRouter(prefix="/models", tags=["models"])
 
 # CRD configuration
 VERSION = "v1alpha1"
-
-def _determine_model_status(status: dict) -> str:
-    """Determine model status from Kubernetes conditions."""
-    conditions = status.get("conditions", [])
-
-    model_available = None
-    for condition in conditions:
-        if condition.get("type") == "ModelAvailable":
-            model_available = condition.get("status")
-            break
-
-    if model_available == "True":
-        return "ready"
-    elif model_available == "False":
-        return "error"
-    else:
-        return "pending"
 
 def model_to_response(model: dict) -> ModelResponse:
     """Convert a Kubernetes Model CR to a response model."""
@@ -44,14 +29,16 @@ def model_to_response(model: dict) -> ModelResponse:
     spec = model.get("spec", {})
     status = model.get("status", {})
 
-    status_value = _determine_model_status(status)
+    # Extract availability from conditions
+    conditions = status.get("conditions", [])
+    availability = extract_availability_from_conditions(conditions, "ModelAvailable")
 
     return ModelResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
         type=spec.get("type", ""),
         model=spec.get("model", {}).get("value", "") if isinstance(spec.get("model"), dict) else "",
-        status=status_value,
+        available=availability,
         annotations=metadata.get("annotations", {})
     )
 
@@ -62,7 +49,9 @@ def model_to_detail_response(model: dict) -> ModelDetailResponse:
     spec = model.get("spec", {})
     status = model.get("status", {})
 
-    status_value = _determine_model_status(status)
+    # Extract availability from conditions
+    conditions = status.get("conditions", [])
+    availability = extract_availability_from_conditions(conditions, "ModelAvailable")
     
     # Process config to preserve value/valueFrom structure
     raw_config = spec.get("config", {})
@@ -85,7 +74,7 @@ def model_to_detail_response(model: dict) -> ModelDetailResponse:
         type=spec.get("type", ""),
         model=spec.get("model", {}).get("value", "") if isinstance(spec.get("model"), dict) else spec.get("model", ""),
         config=processed_config,
-        status=status_value,
+        available=availability,
         resolved_address=status.get("resolvedAddress"),
         annotations=metadata.get("annotations", {})
     )
@@ -93,7 +82,7 @@ def model_to_detail_response(model: dict) -> ModelDetailResponse:
 
 @router.get("", response_model=ModelListResponse)
 @handle_k8s_errors(operation="list", resource_type="model")
-async def list_models(namespace: str) -> ModelListResponse:
+async def list_models(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ModelListResponse:
     """
     List all Model CRs in a namespace.
     
@@ -118,7 +107,7 @@ async def list_models(namespace: str) -> ModelListResponse:
 
 @router.post("", response_model=ModelDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="model")
-async def create_model(namespace: str, body: ModelCreateRequest) -> ModelDetailResponse:
+async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ModelDetailResponse:
     """
     Create a new Model CR.
     
@@ -190,7 +179,7 @@ async def create_model(namespace: str, body: ModelCreateRequest) -> ModelDetailR
 
 @router.get("/{model_name}", response_model=ModelDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="model")
-async def get_model(namespace: str, model_name: str) -> ModelDetailResponse:
+async def get_model(model_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ModelDetailResponse:
     """
     Get a specific Model CR by name.
     
@@ -209,7 +198,7 @@ async def get_model(namespace: str, model_name: str) -> ModelDetailResponse:
 
 @router.put("/{model_name}", response_model=ModelDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="model")
-async def update_model(namespace: str, model_name: str, body: ModelUpdateRequest) -> ModelDetailResponse:
+async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ModelDetailResponse:
     """
     Update a Model CR by name.
     
@@ -279,7 +268,7 @@ async def update_model(namespace: str, model_name: str, body: ModelUpdateRequest
 
 @router.delete("/{model_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="model")
-async def delete_model(namespace: str, model_name: str) -> None:
+async def delete_model(model_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> None:
     """
     Delete a Model CR by name.
     

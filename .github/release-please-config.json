@@ -63,11 +63,6 @@
         },
         {
           "type": "toml",
-          "path": "lib/executor-common/pyproject.toml",
-          "jsonpath": "project.version"
-        },
-        {
-          "type": "toml",
           "path": "services/ark-evaluator/pyproject.toml",
           "jsonpath": "project.version"
         },
@@ -173,6 +168,16 @@
           "type": "json",
           "path": "services/ark-cluster-memory/ark-cluster-memory/package.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "charts/ark-tenant/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "charts/ark-tenant/Chart.yaml",
+          "jsonpath": "$.appVersion"
         }
       ]
     }
