@@ -40,11 +40,8 @@ func NewMCPClient(ctx context.Context, baseURL string, headers map[string]string
 
 	if len(mcpSetting.ToolCalls) > 0 {
 		for _, setting := range mcpSetting.ToolCalls {
-			log.Info("Applying MCP tool call setting", "server", setting.Name, "arguments", setting.Arguments)
 			mcpClient.client.CallTool(ctx, &setting)
 		}
-	} else {
-		log.Info("No MCP tool call settings to apply")
 	}
 
 	return mcpClient, nil
