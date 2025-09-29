@@ -252,10 +252,12 @@ export function ModelConfiguratorForm() {
             disabled={isPending}
             className="w-full"
           >
-            {isPending ? (<>
-              <Spinner size="sm" className="mx-auto my-2" />
-              <span>Adding Model...</span>
-            </>) : (<span>Add Model</span>)}
+            {
+              isPending ? (<>
+                <Spinner size="sm" />
+                <span>Adding Model...</span>
+              </>) : (<span>Add Model</span>)
+            }
           </Button>
 
         </section>
