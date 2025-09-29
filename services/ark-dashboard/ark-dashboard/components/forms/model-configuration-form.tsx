@@ -8,7 +8,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { kubernetesNameSchema, kubernetesSecretNameSchema } from "@/lib/utils/kubernetes-validation";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCreateSecret, useGetAllSecrets } from "@/lib/services/secrets-hooks";
 import { Plus } from "lucide-react";
@@ -158,12 +157,16 @@ export function ModelConfiguratorForm() {
 
   return (
     <SecretDialogProvider>
-      <Card className="max-w-[calc(100%-2rem)] md:w-md md:max-w-md shrink-0">
-        <CardHeader>
-          <CardTitle>Add New Model</CardTitle>
-          <CardDescription>Fill in the information for the new model.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <div className="md:w-md md:max-w-md shrink-0 space-y-4">
+        <section>
+          <div className="text-lg leading-none font-semibold">
+            Add New Model
+          </div>
+          <span className="text-muted-foreground text-sm text-pretty">
+            Fill in the information for the new model.
+          </span>
+        </section>
+        <section>
           <Form {...form}>
             <form id={formId} onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
@@ -241,17 +244,22 @@ export function ModelConfiguratorForm() {
               )}
             </form>
           </Form>
-        </CardContent>
-        <CardFooter className="justify-end">
-          <Button type="submit" form={formId} disabled={isPending}>
+        </section>
+        <section className="mt-8">
+          <Button
+            type="submit"
+            form={formId}
+            disabled={isPending}
+            className="w-full"
+          >
             {isPending ? (<>
               <Spinner size="sm" className="mx-auto my-2" />
               <span>Adding Model...</span>
             </>) : (<span>Add Model</span>)}
           </Button>
 
-        </CardFooter>
-      </Card>
+        </section>
+      </div>
       <CreateNewSecretDialog />
     </SecretDialogProvider>
   )
@@ -591,12 +599,10 @@ function CreateNewSecretDialog() {
               name='name'
               render={({ field }) => (
                 <FormItem>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <FormLabel>Name</FormLabel>
-                    <FormControl className="col-span-3 space-y-1">
-                      <Input {...field} placeholder="e.g. api-key-production" />
-                    </FormControl>
-                  </div>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder="e.g. api-key-production" />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -606,15 +612,13 @@ function CreateNewSecretDialog() {
               name='password'
               render={({ field }) => (
                 <FormItem>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <FormLabel>Value</FormLabel>
-                    <FormControl className="col-span-3 space-y-1">
-                      <Input {...field}
-                        type="password"
-                        placeholder="Enter the secret token"
-                      />
-                    </FormControl>
-                  </div>
+                  <FormLabel>Value</FormLabel>
+                  <FormControl>
+                    <Input {...field}
+                      type="password"
+                      placeholder="Enter the secret token"
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
