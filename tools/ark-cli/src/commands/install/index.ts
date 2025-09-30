@@ -8,6 +8,7 @@ import output from '../../lib/output.js';
 import {
   getInstallableServices,
   arkDependencies,
+  arkServices,
   type ArkService,
 } from '../../arkServices.js';
 import {isArkReady} from '../../lib/arkStatus.js';
@@ -127,6 +128,11 @@ export async function installArk(
         checked: true,
       },
       {
+        name: `agents-at-scale ${chalk.gray('- Agents @ Scale Platform')}`,
+        value: 'agents-at-scale',
+        checked: false,
+      },
+      {
         name: `localhost-gateway ${chalk.gray('- Gateway for local access')}`,
         value: 'localhost-gateway',
         checked: true,
@@ -236,11 +242,11 @@ export async function installArk(
     }
 
     // Install selected services
-    const services = getInstallableServices();
-    for (const service of Object.values(services)) {
-      // Check if this service was selected
-      const serviceKey = service.helmReleaseName;
-      if (!selectedComponents.includes(serviceKey)) {
+    for (const serviceName of selectedComponents) {
+      const service = Object.values(arkServices).find(
+        (s) => s.helmReleaseName === serviceName
+      );
+      if (!service || !service.chartPath) {
         continue;
       }
 

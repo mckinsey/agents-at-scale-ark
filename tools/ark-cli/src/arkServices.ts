@@ -155,6 +155,15 @@ export const arkServices: ServiceCollection = {
     k8sDevDeploymentName: 'ark-mcp-devspace',
   },
 
+  'agents-at-scale': {
+    name: 'agents-at-scale',
+    helmReleaseName: 'agents-at-scale',
+    description: 'Agents @ Scale Platform',
+    enabled: false,
+    chartPath: 'oci://ghcr.io/mck-private/qb-fm-labs-legacyx/charts/legacyx:3.48.4',
+    installArgs: [],
+  },
+
   'localhost-gateway': {
     name: 'localhost-gateway',
     helmReleaseName: 'localhost-gateway',
