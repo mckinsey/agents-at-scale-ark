@@ -7,6 +7,14 @@ images:
     dockerfile: ./Dockerfile
     context: .
 
+pipelines:
+  deploy: |-
+    build_images --all
+    create_deployments --all
+  dev: |-
+    create_deployments --all
+    start_dev --all
+
 deployments:
   ark-controller:
     namespace: ark-system

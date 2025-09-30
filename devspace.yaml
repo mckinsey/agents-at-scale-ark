@@ -20,12 +20,8 @@ dependencies:
 pipelines:
   deploy: |-
     run_dependency_pipelines --all --pipeline=deploy
-    build_images --all
-    create_deployments --all
   dev: |-
     run_dependency_pipelines --all --pipeline=dev
-    create_deployments --all
-    start_dev --all
 
 # Hooks for pre-build setup
 hooks:
