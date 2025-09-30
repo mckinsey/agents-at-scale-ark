@@ -362,7 +362,7 @@ jobs:
           echo "ARK_QUICKSTART_BASE_URL=$ARK_QUICKSTART_BASE_URL"
           echo "ARK_QUICKSTART_API_VERSION=$ARK_QUICKSTART_API_VERSION"
           echo "ARK_QUICKSTART_API_KEY=***"
-          make quickstart-force
+          make quickstart
       - name: Test end-to-end query
         run: |
           # Test the soon-to-be-deprecated query script (still used in quickstart).
