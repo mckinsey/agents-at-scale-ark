@@ -64,8 +64,8 @@ export default function HomePage() {
             Monitor and manage your AI infrastructure from one central location.
           </p>
         </section>
-        {models?.length === 0 && <section>
-          <Link href="/models/new">
+        {!models?.some(m => m.name === 'default') && <section>
+          <Link href="/models/new?name=default">
             <Alert variant='warning' className="flex gap-2 flex-row flex-wrap">
               <div className="flex items-center gap-1">
                 <AlertTriangleIcon className="w-4 h-4" />

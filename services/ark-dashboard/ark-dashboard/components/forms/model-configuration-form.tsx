@@ -96,13 +96,17 @@ function getResetValues(currentFormValues: FormValues): FormValues {
 
 const formId = "modelConfiguratorForm"
 
-export function ModelConfiguratorForm() {
+type ModelConfiguratorFormProps = {
+  defaultName?: string
+}
+
+export function ModelConfiguratorForm({ defaultName }: ModelConfiguratorFormProps) {
   const router = useRouter()
   const form = useForm<FormValues>({
     mode: 'onChange',
     resolver: zodResolver(schema),
     defaultValues: {
-      name: '',
+      name: defaultName || '',
       type: 'openai',
       model: '',
       secret: '',

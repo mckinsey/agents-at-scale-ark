@@ -3,7 +3,17 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbP
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
-export default function CreateModelPage() {
+type SearchParams = {
+  name?: string
+}
+
+type Props = {
+  searchParams: Promise<SearchParams>
+}
+
+export default async function CreateModelPage({ searchParams }: Props) {
+  const params = (await searchParams)
+
   return (
     <div className="min-h-screen">
       <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
@@ -30,7 +40,7 @@ export default function CreateModelPage() {
         </Breadcrumb>
       </header>
       <main className="container px-6 py-8">
-        <ModelConfiguratorForm />
+        <ModelConfiguratorForm defaultName={params.name} />
       </main>
     </div>
   )
