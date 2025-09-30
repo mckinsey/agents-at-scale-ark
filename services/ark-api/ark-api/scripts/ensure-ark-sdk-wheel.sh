@@ -15,6 +15,8 @@ echo "Building ARK SDK wheel..."
 
 make ark-sdk-build
 rm -rf services/ark-api/out
-mkdir -p services/ark-api/out
+rm -rf services/ark-api/ark-api/out
+mkdir -p services/ark-api/out services/ark-api/ark-api/out
 cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/out/
+cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/
 echo "ARK SDK wheel ready"

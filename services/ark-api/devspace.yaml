@@ -20,7 +20,7 @@ pipelines:
 # Hooks for pre-build setup
 hooks:
   - command: ./ark-api/scripts/ensure-ark-sdk-wheel.sh
-    events: ["before:dev", "before:deploy"]
+    events: ["before:dev", "before:build:*"]
 
 deployments:
   ark-api:

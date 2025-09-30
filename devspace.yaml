@@ -23,9 +23,4 @@ pipelines:
   dev: |-
     run_dependency_pipelines --all --pipeline=dev
 
-# Hooks for pre-build setup
-hooks:
-  - command: ./services/ark-api/ark-api/scripts/ensure-ark-sdk-wheel.sh
-    events: ["before:dev", "before:deploy"]
-
 
