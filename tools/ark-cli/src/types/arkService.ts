@@ -3,6 +3,7 @@ export interface ArkService {
   helmReleaseName: string;
   description: string;
   enabled: boolean;
+  category: string;
   namespace?: string;
   chartPath?: string;
   installArgs?: string[];

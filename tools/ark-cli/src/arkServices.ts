@@ -82,6 +82,7 @@ const defaultArkServices: ServiceCollection = {
     helmReleaseName: 'ark-controller',
     description: 'Core Ark controller for managing AI resources',
     enabled: true,
+    category: 'core',
     namespace: 'ark-system',
     chartPath: `${REGISTRY_BASE}/ark-controller`,
     installArgs: ['--create-namespace', '--set', 'rbac.enable=true'],
@@ -94,7 +95,7 @@ const defaultArkServices: ServiceCollection = {
     helmReleaseName: 'ark-api',
     description: 'API layer for interacting with Ark resources',
     enabled: true,
-    // namespace: undefined - uses current context namespace
+    category: 'service',
     chartPath: `${REGISTRY_BASE}/ark-api`,
     installArgs: [],
     k8sServiceName: 'ark-api',
@@ -109,6 +110,7 @@ const defaultArkServices: ServiceCollection = {
     helmReleaseName: 'ark-dashboard',
     description: 'Ark Dashboard',
     enabled: true,
+    category: 'service',
     // namespace: undefined - uses current context namespace
     chartPath: `${REGISTRY_BASE}/ark-dashboard`,
     installArgs: [],
@@ -124,6 +126,7 @@ const defaultArkServices: ServiceCollection = {
     helmReleaseName: 'ark-api-a2a',
     description: 'Ark API agent-to-agent communication service',
     enabled: false, // Disabled - not currently used
+    category: 'service',
     // namespace: undefined - uses current context namespace
     // Note: This service might be installed as part of ark-api or separately
   },
@@ -133,6 +136,7 @@ const defaultArkServices: ServiceCollection = {
     helmReleaseName: 'ark-mcp',
     description: 'Ark Model Context Protocol server',
     enabled: true,
+    category: 'service',
     // namespace: undefined - uses current context namespace
     chartPath: `${REGISTRY_BASE}/ark-mcp`,
     installArgs: [],
@@ -145,6 +149,7 @@ const defaultArkServices: ServiceCollection = {
     helmReleaseName: 'agents-at-scale',
     description: 'Agents @ Scale Platform',
     enabled: false,
+    category: 'service',
     chartPath: 'oci://ghcr.io/mck-private/qb-fm-labs-legacyx/charts/legacyx',
     installArgs: [],
   },
@@ -154,6 +159,7 @@ const defaultArkServices: ServiceCollection = {
     helmReleaseName: 'localhost-gateway',
     description: 'Gateway for local development clusters',
     enabled: false, // Disabled - not needed for most users
+    category: 'service',
     namespace: 'ark-system',
     chartPath: `${REGISTRY_BASE}/localhost-gateway`,
     installArgs: [],

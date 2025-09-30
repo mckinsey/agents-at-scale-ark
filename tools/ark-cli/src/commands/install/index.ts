@@ -93,6 +93,14 @@ export async function installArk(
     );
 
     // Build choices for the checkbox prompt
+    const coreServices = Object.values(arkServices)
+      .filter(s => s.category === 'core')
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const otherServices = Object.values(arkServices)
+      .filter(s => s.category === 'service')
+      .sort((a, b) => a.name.localeCompare(b.name));
+
     const allChoices = [
       new inquirer.Separator(chalk.bold('──── Dependencies ────')),
       {
@@ -106,37 +114,17 @@ export async function installArk(
         checked: true,
       },
       new inquirer.Separator(chalk.bold('──── Ark Core ────')),
-      {
-        name: `ark-controller ${chalk.gray('- Core Ark controller')}`,
-        value: 'ark-controller',
-        checked: true,
-      },
+      ...coreServices.map((service) => ({
+        name: `${service.name} ${chalk.gray(`- ${service.description}`)}`,
+        value: service.helmReleaseName,
+        checked: Boolean(service.enabled),
+      })),
       new inquirer.Separator(chalk.bold('──── Ark Services ────')),
-      {
-        name: `ark-api ${chalk.gray('- API service')}`,
-        value: 'ark-api',
-        checked: true,
-      },
-      {
-        name: `ark-dashboard ${chalk.gray('- Web dashboard')}`,
-        value: 'ark-dashboard',
-        checked: true,
-      },
-      {
-        name: `ark-mcp ${chalk.gray('- MCP services')}`,
-        value: 'ark-mcp',
-        checked: true,
-      },
-      {
-        name: `agents-at-scale ${chalk.gray('- Agents @ Scale Platform')}`,
-        value: 'agents-at-scale',
-        checked: false,
-      },
-      {
-        name: `localhost-gateway ${chalk.gray('- Gateway for local access')}`,
-        value: 'localhost-gateway',
-        checked: true,
-      },
+      ...otherServices.map((service) => ({
+        name: `${service.name} ${chalk.gray(`- ${service.description}`)}`,
+        value: service.helmReleaseName,
+        checked: Boolean(service.enabled),
+      })),
     ];
 
     let selectedComponents: string[] = [];
