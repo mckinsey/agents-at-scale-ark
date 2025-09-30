@@ -50,7 +50,7 @@ func NewMCPClient(ctx context.Context, baseURL string, headers map[string]string
 func createSSEClient() (*mcp.Client, error) {
 	// SSE transport not yet supported in official SDK
 	// Fall back to HTTP streamable transport
-	return nil, fmt.Errorf("SSE transport not supported in MCP client")
+	return createHTTPClient()
 }
 
 func createHTTPClient() (*mcp.Client, error) {
