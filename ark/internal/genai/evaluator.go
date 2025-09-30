@@ -85,22 +85,6 @@ func resolveEvaluatorAddress(ctx context.Context, k8sClient client.Client, evalu
 	return address, nil
 }
 
-func buildEvaluationRequest(ctx context.Context, k8sClient client.Client, query arkv1alpha1.Query) (EvaluationRequest, error) {
-	// Convert input to unified message format (handles both string and message array inputs)
-	messages, err := GetQueryInputMessages(ctx, query, k8sClient)
-	if err != nil {
-		return EvaluationRequest{}, fmt.Errorf("failed to process query input: %w", err)
-	}
-
-	// Build evaluation request with unified message format
-	return EvaluationRequest{
-		QueryID:   string(query.UID),
-		Input:     messages,
-		Responses: query.Status.Responses,
-		Query:     query,
-	}, nil
-}
-
 func callEvaluatorHTTPEndpoint(ctx context.Context, address, endpoint string, request any, timeout time.Duration) (*http.Response, error) {
 	requestBody, err := json.Marshal(request)
 	if err != nil {
