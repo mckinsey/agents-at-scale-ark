@@ -31,8 +31,6 @@ type MCPClient struct {
 }
 
 func NewMCPClient(ctx context.Context, baseURL string, headers map[string]string, transportType string, mcpSetting MCPSettings) (*MCPClient, error) {
-	log := logf.FromContext(ctx)
-
 	mcpClient, err := createMCPClientWithRetry(ctx, baseURL, headers, transportType, 5, 120*time.Second)
 	if err != nil {
 		return nil, err
