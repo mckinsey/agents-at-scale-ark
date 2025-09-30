@@ -1,0 +1,54 @@
+# DevSpace configuration for ark service
+version: v2beta1
+
+images:
+  ark-controller:
+    image: ark-controller
+    dockerfile: ./Dockerfile
+    context: .
+
+deployments:
+  ark-controller:
+    namespace: ark-system
+    helm:
+      chart:
+        path: ./dist/chart
+      values:
+        controllerManager:
+          container:
+            image:
+              repository: ${runtime.images.ark-controller.image}
+              tag: ${runtime.images.ark-controller.tag}
+            resources:
+              limits:
+                memory: "2048Mi"
+                cpu: "2000m"
+              requests:
+                memory: "256Mi"
+                cpu: "200m"
+          # Override security context for development
+          securityContext:
+            runAsNonRoot: false
+
+
+dev:
+  ark-controller:
+    imageSelector: ark-controller
+    devImage: golang:1.24-bookworm
+    command:
+      ["sh", "-c", "cd /app && go run cmd/main.go --leader-elect=false"]
+    namespace: ark-system
+    logs:
+      lastLines: 50
+    # File synchronization for hot reload
+    sync:
+      - path: .:/app
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+        onUpload:
+          restartContainer: true
+    # Enable SSH for IDE integration
+    ssh:
+      enabled: true
+
