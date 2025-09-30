@@ -92,12 +92,12 @@ func (r *ToolRegistry) registerCustomTool(ctx context.Context, k8sClient client.
 	return nil
 }
 
-func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *MCPClientPool, McpSettings map[string]MCPSettings) (ToolExecutor, error) {
+func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *MCPClientPool, mcpSettings map[string]MCPSettings) (ToolExecutor, error) {
 	switch tool.Spec.Type {
 	case ToolTypeHTTP:
 		return createHTTPExecutor(k8sClient, tool, namespace)
 	case ToolTypeMCP:
-		return createMCPExecutor(ctx, k8sClient, tool, namespace, mcpPool, McpSettings)
+		return createMCPExecutor(ctx, k8sClient, tool, namespace, mcpPool, mcpSettings)
 	case ToolTypeAgent:
 		return createAgentExecutor(ctx, k8sClient, tool, namespace)
 	default:
@@ -178,7 +178,6 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 		mcpServerCRD.Spec.Transport,
 		mcpSettings,
 	)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to get or create MCP client for tool %s: %w", tool.Name, err)
 	}

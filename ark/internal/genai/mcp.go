@@ -38,7 +38,9 @@ func NewMCPClient(ctx context.Context, baseURL string, headers map[string]string
 
 	if len(mcpSetting.ToolCalls) > 0 {
 		for _, setting := range mcpSetting.ToolCalls {
-			mcpClient.client.CallTool(ctx, &setting)
+			if _, err := mcpClient.client.CallTool(ctx, &setting); err != nil {
+				return nil, fmt.Errorf("failed to execute MCP setting tool call %s: %w", setting.Name, err)
+			}
 		}
 	}
 

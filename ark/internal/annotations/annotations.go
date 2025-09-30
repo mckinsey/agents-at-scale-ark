@@ -21,7 +21,6 @@ const (
 
 // MCP annotations
 const (
-	MCPServerName     = ARKPrefix + "mcp-server-name"
 	MCPServerSettings = ARKPrefix + "mcp-server-settings"
 )
 
