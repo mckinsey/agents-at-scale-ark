@@ -289,12 +289,12 @@ export function AppSidebar() {
                   <SidebarMenu>
                     {SERVICE_SECTIONS.map((item) => {
                       const isPlaceholder = isPlaceholderSection(item.key)
-                      const isDisabled = !namespaceResolved || loading || isPlaceholder
+                      const isDisabled = !isNamespaceResolved || loading || isPlaceholder
                       const isActive = getCurrentSection() === item.key
                       return (
                         <SidebarMenuItem key={item.key}>
                           <SidebarMenuButton
-                            onClick={() => !isPlaceholder && namespaceResolved && navigateToSection(item.key)}
+                            onClick={() => !isPlaceholder && isNamespaceResolved && navigateToSection(item.key)}
                             isActive={isActive}
                             disabled={isDisabled}
                           >
