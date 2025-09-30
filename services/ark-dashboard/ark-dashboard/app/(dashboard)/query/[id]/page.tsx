@@ -82,11 +82,11 @@ function ResponseContent({ content, viewMode, rawJson }: { content: string, view
   }
   
 
-  if (viewMode === "markdown") {
+  if (viewMode === "content") {
     return <div className="text-sm">{markdownContent}</div>;
   }
 
-  if (viewMode === 'content') {
+  if (viewMode === 'text') {
     return (
       <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900/50 p-3">
         {content || "No content"}
