@@ -29,9 +29,6 @@ docs: # run the documentation site with live-reload
 quickstart: # HELP: get everything up and running and ready to go
 	@./scripts/quickstart.sh
 
-quickstart-force: # Force quickstart to run
-	@FORCE=true ./scripts/quickstart.sh -f
-
 .PHONY: quickstart-reconfigure-default-model
 quickstart-reconfigure-default-model: # HELP: reconfigure the default model with fresh credentials
 	@./scripts/quickstart-reconfigure-default-model.sh

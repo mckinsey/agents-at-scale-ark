@@ -28,18 +28,9 @@ make localhost-gateway-install
 ```
 
 ## Start the dev environment
-
-Each search contains their own devspace config. You can either start the entire project by doing
 ```bash
 devspace dev
 ```
-
-or start individual services
-
-```bash
-devspace dev --dependency ark-api
-```
-
 - ark-api and ark-dashboard deploy to namespace: default
 - ark-controller deploys to namespace: ark-system
 
