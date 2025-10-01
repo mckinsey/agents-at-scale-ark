@@ -7,6 +7,22 @@ images:
     dockerfile: Dockerfile
     context: .
 
+dependencies:
+  ark-sdk:
+    path: ../../lib/ark-sdk
+
+pipelines:
+  deploy: |-
+    run_dependency_pipelines --all --pipeline=deploy
+    ./sync-ark-sdk.sh
+    build_images --all
+    create_deployments --all
+  dev: |-
+    run_dependency_pipelines --all --pipeline=dev
+    ./sync-ark-sdk.sh
+    create_deployments --all
+    start_dev --all
+
 deployments:
   ark-api:
     namespace: default
