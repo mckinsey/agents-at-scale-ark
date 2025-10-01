@@ -69,8 +69,10 @@ $(ARK_API_SERVICE_NAME)-build: $(ARK_API_STAMP_BUILD) # HELP: Build ARK API serv
 $(ARK_API_STAMP_BUILD): $(ARK_API_STAMP_TEST) $(ARK_SDK_WHL)
 	@mkdir -p $(ARK_API_SERVICE_DIR)/ark-api/out
 	cp $(ARK_SDK_WHL) $(ARK_API_SERVICE_DIR)/ark-api/out/
+	cp $(BUILD_ROOT)/uv.lock $(ARK_API_SERVICE_DIR)/ark-api/
 	cd $(ARK_API_SERVICE_DIR) && docker build -t $(ARK_API_IMAGE):$(ARK_API_TAG) .
 	@rm -rf $(ARK_API_SERVICE_DIR)/ark-api/out
+	@rm -f $(ARK_API_SERVICE_DIR)/ark-api/uv.lock
 	@touch $@
 
 # Install target
