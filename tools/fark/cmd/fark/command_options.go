@@ -28,12 +28,12 @@ func (c *ExecutionContext) getLogger() *zap.Logger {
 }
 
 type TargetCommand struct {
-	TargetType   string
-	TargetName   string
-	Input        string
-	Timeout      time.Duration
-	Parameters   []string
-	SessionId    string
+	TargetType string
+	TargetName string
+	Input      string
+	Timeout    time.Duration
+	Parameters []string
+	SessionId  string
 	ExecutionContext
 }
 
@@ -50,7 +50,7 @@ func (c *TargetCommand) Run() error {
 	}
 
 	targets := []arkv1alpha1.QueryTarget{{Type: c.TargetType, Name: c.TargetName}}
-	query, err := createQuery(c.Input, targets, c.Namespace, params, c.SessionId)
+	query, err := createQuery(runtime.RawExtension{Raw: []byte(c.Input)}, targets, c.Namespace, params, c.SessionId)
 	if err != nil {
 		return fmt.Errorf("failed to create query: %v", err)
 	}
@@ -109,9 +109,9 @@ func (c *TriggerCommand) Run() error {
 		if err != nil {
 			return fmt.Errorf("failed to read input file: %v", err)
 		}
-		queryInput = content
+		queryInput = runtime.RawExtension{Raw: []byte(content)}
 	} else if c.InputOverride != "" {
-		queryInput = c.InputOverride
+		queryInput = runtime.RawExtension{Raw: []byte(c.InputOverride)}
 	}
 
 	params := existingQuery.Spec.Parameters
