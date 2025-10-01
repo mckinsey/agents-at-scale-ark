@@ -5,7 +5,7 @@ import { createContext, Dispatch, PropsWithChildren, SetStateAction, useCallback
 import { Control, useForm, UseFormReturn, UseFormSetValue } from "react-hook-form";
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod';
-import { kubernetesNameSchema, kubernetesSecretNameSchema } from "@/lib/utils/kubernetes-validation";
+import { kubernetesNameSchema } from "@/lib/utils/kubernetes-validation";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -516,7 +516,7 @@ function AWSBedrockSpecificFields({ control, isSecretsPending, secrets }: AWSBed
 }
 
 const newSecretSchema = z.object({
-  name: kubernetesSecretNameSchema,
+  name: kubernetesNameSchema,
   password: z.string().min(1, "Value is required")
 })
 

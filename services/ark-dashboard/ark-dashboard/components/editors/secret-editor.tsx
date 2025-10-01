@@ -11,7 +11,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { Secret } from "@/lib/services/secrets"
-import { isValidK8sSecretName } from "@/lib/utils/kubernetes-validation"
+import { kubernetesNameSchema } from "@/lib/utils/kubernetes-validation"
 
 interface SecretEditorProps {
   open: boolean
@@ -42,7 +42,7 @@ export function SecretEditor({ open, onOpenChange, secret, onSave, existingSecre
     }
 
     // Check Kubernetes naming rules
-    if (!isValidK8sSecretName(value)) {
+    if (!kubernetesNameSchema.safeParse(value).success) {
       setNameError("Name must consist of lowercase alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character (max 253 chars)")
       return false
     }
