@@ -370,6 +370,115 @@ jobs:
           # Test fark.
           fark agent sample-agent "confirm you have read this message"
 
+  e2e-ark-cli:
+    needs: [setup-container-cache-registry, build-containers]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          # Install yq
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+          # Install helm
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+          # Install k9s
+          curl -sS https://webinstall.dev/k9s | bash
+          export PATH="$HOME/.local/bin:$PATH"
+
+          # Install gettext for envsubst
+          sudo apt-get update && sudo apt-get install -y gettext
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "ark/go.mod"
+          cache-dependency-path: "ark/go.sum"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+
+      - name: Configure K3s registry authentication
+        run: |
+          sudo mkdir -p /etc/rancher/k3s
+          cat <<EOF | sudo tee /etc/rancher/k3s/registries.yaml
+          mirrors:
+            ghcr.io:
+              endpoint:
+                - "https://ghcr.io"
+          configs:
+            ghcr.io:
+              auth:
+                username: ${{ github.actor }}
+                password: ${{ secrets.GITHUB_TOKEN }}
+          EOF
+
+      - name: Setup K3s cluster
+        uses: ./.github/actions/setup-k3s
+        with:
+          metrics-enabled: false
+          traefik-enabled: false
+          k3s-channel: latest
+
+      - name: Install Ark CLI
+        run: |
+          # Build and install ark CLI using npm
+          cd tools/ark-cli
+          npm install
+          npm run build
+          npm link
+
+          # Verify installation
+          ark --version
+      - name: Check Version and Status
+        run: |
+          # Check the status.
+          ark status
+
+          # Check the version.
+          ark version
+
+      - name: Install Ark using CLI
+        run: |
+          # Use ark install command with default settings
+          # The CLI will use ghcr images by default
+          ark install --yes
+
+      - name: Wait for ARK components to be ready
+        run: |
+          echo "Waiting for ark-controller to be ready..."
+          kubectl wait --for=condition=ready pod -l control-plane=ark-controller -n ark-system --timeout=300s
+
+          echo "Waiting for ark-api to be ready..."
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=ark-api --timeout=300s
+
+      - name: Create default model
+        env:
+          ARK_MODEL_TYPE: azure
+          ARK_MODEL_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
+          ARK_MODEL_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
+          ARK_MODEL_API_VERSION: 2024-12-01-preview
+          ARK_MODEL_VERSION: gpt-4.1-mini
+        run: |
+          echo "Creating default model with Azure OpenAI..."
+          ark models create default --yes
+
+      - name: List models
+        run: |
+          echo "Listing all models..."
+          ark models ls
+
+      - name: Test query execution
+        run: |
+          echo "Testing query to model/default..."
+          ark query model/default "Hello, please confirm you received this test message"
+
   e2e-smoke-test:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
