@@ -1,8 +1,8 @@
 "use client";
 
 import { toast } from "@/components/ui/use-toast";
-import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useState } from "react";
-import { Control, useForm, UseFormReturn } from "react-hook-form";
+import { createContext, Dispatch, PropsWithChildren, SetStateAction, useCallback, useContext, useEffect, useState } from "react";
+import { Control, useForm, UseFormReturn, UseFormSetValue } from "react-hook-form";
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod';
 import { kubernetesNameSchema, kubernetesSecretNameSchema } from "@/lib/utils/kubernetes-validation";
@@ -10,7 +10,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCreateSecret, useGetAllSecrets } from "@/lib/services/secrets-hooks";
-import { Plus } from "lucide-react";
 import { ModelCreateRequest, Secret } from "@/lib/services";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +25,8 @@ import {
 import { useCreateModel } from "@/lib/services/models-hooks";
 import { Spinner } from "@/components/ui/spinner";
 import { useRouter } from "next/navigation";
+import { SecretDetailResponse } from "@/lib/services/secrets";
+import { KeysOfUnion } from "@/lib/types/utils";
 
 const openaiSchema = z.object({
   name: kubernetesNameSchema,
@@ -160,7 +161,7 @@ export function ModelConfiguratorForm({ defaultName }: ModelConfiguratorFormProp
   }
 
   return (
-    <SecretDialogProvider>
+    <SecretDialogProvider formValueSetter={form.setValue}>
       <div className="md:w-md md:max-w-md shrink-0 space-y-4">
         <section>
           <div className="text-lg leading-none font-semibold">
@@ -263,7 +264,6 @@ export function ModelConfiguratorForm({ defaultName }: ModelConfiguratorFormProp
               </>) : (<span>Add Model</span>)
             }
           </Button>
-
         </section>
       </div>
       <CreateNewSecretDialog />
@@ -288,9 +288,12 @@ function OpenAISpecificFields({ isSecretsPending, secrets, control }: OpenAISpec
             <FormLabel>API Key</FormLabel>
             <Select onValueChange={field.onChange} value={field.value}>
               <FormControl>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a secret" />
-                </SelectTrigger>
+                <div className="flex gap-4">
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a secret" />
+                  </SelectTrigger>
+                  <CreateNewSecretButton fieldName="secret" />
+                </div>
               </FormControl>
               <SelectContent>
                 {
@@ -312,7 +315,6 @@ function OpenAISpecificFields({ isSecretsPending, secrets, control }: OpenAISpec
           </FormItem>
         )}
       />
-      <CreateNewSecretButton />
       <FormField
         control={control}
         name='baseUrl'
@@ -320,7 +322,7 @@ function OpenAISpecificFields({ isSecretsPending, secrets, control }: OpenAISpec
           <FormItem>
             <FormLabel>Base URL</FormLabel>
             <FormControl>
-              <Input {...field} value={field.value || ''} placeholder="https://api.openai.com/v1" />
+              <Input {...field} value={field.value ?? ""} placeholder="https://api.openai.com/v1" />
             </FormControl>
             <FormMessage />
           </FormItem>
@@ -347,9 +349,12 @@ function AzureSpecificFields({ control, isSecretsPending, secrets }: AzureSpecif
             <FormLabel>API Key</FormLabel>
             <Select onValueChange={field.onChange} value={field.value}>
               <FormControl>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a secret" />
-                </SelectTrigger>
+                <div className="flex gap-4">
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a secret" />
+                  </SelectTrigger>
+                  <CreateNewSecretButton fieldName="secret" />
+                </div>
               </FormControl>
               <SelectContent>
                 {
@@ -371,7 +376,6 @@ function AzureSpecificFields({ control, isSecretsPending, secrets }: AzureSpecif
           </FormItem>
         )}
       />
-      <CreateNewSecretButton />
       <FormField
         control={control}
         name='baseUrl'
@@ -379,7 +383,7 @@ function AzureSpecificFields({ control, isSecretsPending, secrets }: AzureSpecif
           <FormItem>
             <FormLabel>Base URL</FormLabel>
             <FormControl>
-              <Input {...field} placeholder="https://your-resource.openai.azure.com/" />
+              <Input {...field} value={field.value ?? ""} placeholder="https://your-resource.openai.azure.com/" />
             </FormControl>
             <FormMessage />
           </FormItem>
@@ -419,9 +423,12 @@ function AWSBedrockSpecificFields({ control, isSecretsPending, secrets }: AWSBed
             <FormLabel>Access Key ID Secret</FormLabel>
             <Select onValueChange={field.onChange} value={field.value}>
               <FormControl>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a secret for Access Key ID" />
-                </SelectTrigger>
+                <div className="flex gap-4">
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a secret for Access Key ID" />
+                  </SelectTrigger>
+                  <CreateNewSecretButton fieldName="bedrockAccessKeyIdSecretName" />
+                </div>
               </FormControl>
               <SelectContent>
                 {
@@ -451,9 +458,12 @@ function AWSBedrockSpecificFields({ control, isSecretsPending, secrets }: AWSBed
             <FormLabel>Secret Access Key Secret</FormLabel>
             <Select onValueChange={field.onChange} value={field.value}>
               <FormControl>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a secret for Secret Access Key" />
-                </SelectTrigger>
+                <div className="flex gap-4">
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a secret for Secret Access Key" />
+                  </SelectTrigger>
+                  <CreateNewSecretButton fieldName="bedrockSecretAccessKeySecretName" />
+                </div>
               </FormControl>
               <SelectContent>
                 {
@@ -475,7 +485,6 @@ function AWSBedrockSpecificFields({ control, isSecretsPending, secrets }: AWSBed
           </FormItem>
         )}
       />
-      <CreateNewSecretButton />
       <FormField
         control={control}
         name='region'
@@ -513,18 +522,26 @@ const newSecretSchema = z.object({
 
 type NewSecretData = z.infer<typeof newSecretSchema>
 
+type FormFields = KeysOfUnion<FormValues>
+
 interface SecretDialogContext {
   form: UseFormReturn<NewSecretData, unknown, NewSecretData>;
   isPending: boolean;
-  handleSubmit: (formValues: NewSecretData) => void
+  handleSubmit: (formValues: NewSecretData) => void;
+  setFieldToSet: Dispatch<SetStateAction<FormFields | undefined>>
 }
 
 const SecretDialogContext = createContext<SecretDialogContext | undefined>(
   undefined
 );
 
-function SecretDialogProvider({ children }: PropsWithChildren) {
+type SecretDialogProviderProps = {
+  formValueSetter: UseFormSetValue<FormValues>
+}
+
+function SecretDialogProvider({ children, formValueSetter }: PropsWithChildren<SecretDialogProviderProps>) {
   const [isOpen, setIsOpen] = useState(false)
+  const [fieldToSet, setFieldToSet] = useState<FormFields | undefined>(undefined)
 
   const form = useForm<NewSecretData>({
     mode: 'onChange',
@@ -539,7 +556,15 @@ function SecretDialogProvider({ children }: PropsWithChildren) {
     setIsOpen(prev => !prev)
   }, [])
 
-  const { mutate, isPending } = useCreateSecret({ onSuccess: toggleDialog })
+  const handleSuccess = useCallback((data: SecretDetailResponse) => {
+    if (fieldToSet) {
+      formValueSetter(fieldToSet, data.name)
+      setFieldToSet(undefined)
+    }
+    toggleDialog()
+  }, [toggleDialog, formValueSetter, fieldToSet])
+
+  const { mutate, isPending } = useCreateSecret({ onSuccess: handleSuccess })
 
   const handleSubmit = useCallback((formValues: NewSecretData) => {
     mutate(formValues)
@@ -556,7 +581,8 @@ function SecretDialogProvider({ children }: PropsWithChildren) {
     <SecretDialogContext.Provider value={{
       form,
       isPending,
-      handleSubmit
+      handleSubmit,
+      setFieldToSet
     }}>
       <Dialog open={isOpen} onOpenChange={handleOpenChange}>
         {children}
@@ -574,12 +600,21 @@ function useSecretDialog() {
   return context;
 };
 
-function CreateNewSecretButton() {
+type CreateNewSecretButtonProps = {
+  fieldName: FormFields
+}
+
+function CreateNewSecretButton({ fieldName }: CreateNewSecretButtonProps) {
+  const { setFieldToSet } = useSecretDialog()
+
+  const handleClick = useCallback(() => {
+    setFieldToSet(fieldName)
+  }, [setFieldToSet, fieldName])
+
   return (
-    <DialogTrigger asChild>
-      <Button type="button" variant="outline" size="sm" className="w-full">
-        <Plus className="h-4 w-4" />
-        Add New Secret
+    <DialogTrigger asChild onClick={handleClick}>
+      <Button type="button" variant="outline" size="default" className="">
+        Add New
       </Button>
     </DialogTrigger>
   )
@@ -683,7 +718,7 @@ function createConfig(formValues: FormValues): ModelCreateRequest["config"] {
           valueFrom: {
             secretKeyRef: {
               name: formValues.bedrockAccessKeyIdSecretName,
-              key: "accessKeyId"
+              key: "token"
             }
           }
         },
@@ -691,7 +726,7 @@ function createConfig(formValues: FormValues): ModelCreateRequest["config"] {
           valueFrom: {
             secretKeyRef: {
               name: formValues.bedrockSecretAccessKeySecretName,
-              key: "secretAccessKey"
+              key: "token"
             }
           }
         },
