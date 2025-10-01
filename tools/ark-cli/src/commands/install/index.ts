@@ -244,8 +244,8 @@ export async function installArk(
 
         console.log(); // Add blank line after command output
       } catch {
-        // Continue with remaining services on error
         console.log(); // Add blank line after error output
+        process.exit(1);
       }
     }
   } else {
@@ -280,8 +280,8 @@ export async function installArk(
         await installService(service, options.verbose);
         console.log(); // Add blank line after command output
       } catch {
-        // Continue with remaining services on error
         console.log(); // Add blank line after error output
+        process.exit(1);
       }
     }
   }
