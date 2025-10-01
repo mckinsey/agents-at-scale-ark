@@ -17,29 +17,21 @@ dependencies:
 #   postgres-memory:
 #     path: ./services/postgres-memory
 
+# Vars - To disable, set environment variables before the devspace commands
+#        For example: ENABLE_CERT_MANAGER=false devspace dev
 vars:
   ENABLE_CERT_MANAGER:
-    source: input
-    question: "Enable cert-manager?"
-    default: "Yes"
-    options:
-      - Yes
-      - No
-    noCache: true
+    source: env
+    default: true
   ENABLE_GATEWAY_API_CRDS:
-    source: input
-    question: "Enable Gateway API CRD's?"
-    default: "Yes"
-    options:
-      - Yes
-      - No
-    noCache: true
+    source: env
+    default: true
 
 profiles:
   - name: enable-cert-manager
     activation:
     - vars:
-        ENABLE_CERT_MANAGER: "Yes"
+        ENABLE_CERT_MANAGER: true
     patches:
     - op: add
       path: dependencies
@@ -49,7 +41,7 @@ profiles:
   - name: enable-gateway-api
     activation:
       - vars:
-          ENABLE_GATEWAY_API_CRDS: "Yes"
+          ENABLE_GATEWAY_API_CRDS: true
     patches:
       - op: add
         path: dependencies

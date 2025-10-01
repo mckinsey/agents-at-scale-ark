@@ -16,7 +16,7 @@ dependencies = [
     "pyhelm3>=0.4.0",
     "coverage>=7.10.4",
     "pytest>=8.4.2",
-    "ark-sdk"
+    "ark-sdk",
 ]
 
 [tool.uv]
