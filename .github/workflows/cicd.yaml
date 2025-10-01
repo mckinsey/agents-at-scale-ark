@@ -432,7 +432,7 @@ jobs:
           cd tools/ark-cli
           npm install
           npm run build
-          npm link
+          npm install -g .
 
           # Verify installation
           ark --version
