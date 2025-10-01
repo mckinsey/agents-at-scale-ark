@@ -57,3 +57,22 @@ services:
 ```
 
 This example enables the `localhost-gateway` service (disabled by default) and changes the namespace for `ark-controller`.
+
+### Installing Agents @ Scale
+
+To install the Agents @ Scale platform with JFrog container registry credentials:
+
+```yaml
+services:
+  agents-at-scale:
+    enabled: true
+    installArgs:
+      - --set
+      - containerRegistry.enabled=true
+      - --set
+      - containerRegistry.username=YOUR_USERNAME
+      - --set
+      - containerRegistry.password=YOUR_PASSWORD
+```
+
+Replace `YOUR_USERNAME` and `YOUR_PASSWORD` with your JFrog credentials.
