@@ -1,0 +1,82 @@
+# DevSpace configuration for ark-api service
+version: v2beta1
+
+images:
+  ark-api:
+    image: ark-api
+    dockerfile: Dockerfile
+    context: .
+
+dependencies:
+  ark-sdk:
+    path: ../../lib/ark-sdk
+
+pipelines:
+  deploy: |-
+    run_dependency_pipelines --all --pipeline=deploy
+    ./sync-ark-sdk.sh
+    build_images --all
+    create_deployments --all
+  dev: |-
+    run_dependency_pipelines --all --pipeline=dev
+    ./sync-ark-sdk.sh
+    create_deployments --all
+    start_dev --all
+
+deployments:
+  ark-api:
+    namespace: default
+    helm:
+      chart:
+        path: ./chart
+      values:
+        app:
+          image:
+            repository: ${runtime.images.ark-api.image}
+            tag: ${runtime.images.ark-api.tag}
+          # Override resources for local development
+          resources:
+            limits:
+              memory: "1024Mi"
+              cpu: "1000m"
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+        httpRoute:
+          enabled: true
+
+dev:
+  ark-api:
+    imageSelector: ark-api
+    devImage: python:3.12-slim
+    # Install dependencies and start API server with hot reload
+    command:
+      [
+        "sh",
+        "-c",
+        "cd /app/ark-api && apt-get update && apt-get install -y curl && curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash && pip install uv && uv add file://$(ls /app/out/ark_sdk-*.whl) && uv sync && uv run uvicorn ark_api.main:app --host 0.0.0.0 --port 8000 --reload",
+      ]
+    namespace: default
+    # Stream logs instead of terminal
+    logs:
+      lastLines: 50
+    # File synchronization for hot reload
+    sync:
+      - path: .:/app
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+      - path: ./out:/app/out/
+        startContainer: true
+        disableDownload: true
+        onUpload:
+          restartContainer: true
+      - path: ../../ark:/workspace
+        excludePaths:
+          - bin/
+          - out/
+          - .git/
+    # Enable SSH for IDE integration
+    ssh:
+      enabled: true
+

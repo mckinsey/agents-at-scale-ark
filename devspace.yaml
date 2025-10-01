@@ -5,197 +5,22 @@ version: v2beta1
 dependencies:
   ark-cluster-memory:
     path: ./services/ark-cluster-memory
-    pipeline: dev
+  ark-api:
+    path: ./services/ark-api
+  ark-dashboard:
+    path: ./services/ark-dashboard
+  ark:
+    path: ./ark
 #   ark-mcp:
 #     path: ./services/ark-mcp
 #     pipeline: dev
 #   postgres-memory:
 #     path: ./services/postgres-memory
 
-# Hooks for pre-build setup
-hooks:
-  - command: ./services/ark-api/ark-api/scripts/ensure-ark-sdk-wheel.sh
-    events: ["before:dev", "before:deploy"]
-
-# Deployment pipelines define the workflow for different commands
 pipelines:
-  # 'devspace deploy' - Build and deploy production images
   deploy: |-
-    # Deploy any dependencies.
-    run_dependency_pipelines --all --set-flag pipeline=deploy
-    # Build the ark controller and ark service images.
-    build_images --all
-    # Deploy the ark controller and services.
-    create_deployments --all
-
-  # 'devspace dev' - DevSpace recommended dev workflow: deploy production, override with dev images, file sync
+    run_dependency_pipelines --all --pipeline=deploy
   dev: |-
-    # Note that 'dev' doesn't seem to work here.
-    run_dependency_pipelines --all --set-flag pipeline=dev
-    create_deployments --all
-    start_dev --all
+    run_dependency_pipelines --all --pipeline=dev
 
-# Image build configuration
-images:
-  ark-api:
-    image: ark-api
-    dockerfile: ./services/ark-api/Dockerfile
-    context: ./services/ark-api
 
-  ark-dashboard:
-    image: ark-dashboard
-    dockerfile: ./services/ark-dashboard/Dockerfile
-    context: ./services/ark-dashboard
-
-  ark-controller:
-    image: ark-controller
-    dockerfile: ./ark/Dockerfile
-    context: ./ark
-
-# Kubernetes deployments
-deployments:
-  ark-api:
-    namespace: default
-    helm:
-      chart:
-        path: ./services/ark-api/chart
-      values:
-        app:
-          image:
-            repository: ${runtime.images.ark-api.image}
-            tag: ${runtime.images.ark-api.tag}
-          # Override resources for local development
-          resources:
-            limits:
-              memory: "1024Mi"
-              cpu: "1000m"
-            requests:
-              memory: "256Mi"
-              cpu: "200m"
-        httpRoute:
-          enabled: true
-
-  ark-dashboard:
-    namespace: default
-    helm:
-      chart:
-        path: ./services/ark-dashboard/chart
-      values:
-        app:
-          image:
-            repository: ${runtime.images.ark-dashboard.image}
-            tag: ${runtime.images.ark-dashboard.tag}
-          # Override resources for local development
-          resources:
-            limits:
-              memory: "3072Mi"
-              cpu: "2000m"
-            requests:
-              memory: "256Mi"
-              cpu: "200m"
-        httpRoute:
-          enabled: true
-
-  ark-controller:
-    namespace: ark-system
-    helm:
-      chart:
-        path: ./ark/dist/chart
-      values:
-        controllerManager:
-          container:
-            image:
-              repository: ${runtime.images.ark-controller.image}
-              tag: ${runtime.images.ark-controller.tag}
-            resources:
-              limits:
-                memory: "2048Mi"
-                cpu: "2000m"
-              requests:
-                memory: "256Mi"
-                cpu: "200m"
-          # Override security context for development
-          securityContext:
-            runAsNonRoot: false
-
-# Development configuration - active during 'devspace dev'
-dev:
-  ark-api:
-    imageSelector: ark-api
-    devImage: python:3.12-slim
-    # Install dependencies and start API server with hot reload
-    command:
-      [
-        "sh",
-        "-c",
-        "cd /app/ark-api && apt-get update && apt-get install -y curl && curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash && pip install uv && uv add file://$(ls /app/out/ark_sdk-*.whl) && uv sync && uv run uvicorn ark_api.main:app --host 0.0.0.0 --port 8000 --reload",
-      ]
-    namespace: default
-    # Stream logs instead of terminal
-    logs:
-      lastLines: 50
-    # File synchronization for hot reload
-    sync:
-      - path: ./services/ark-api:/app
-        startContainer: true
-        disableDownload: true
-        uploadExcludeFile: .dockerignore
-      - path: ./services/ark-api/out:/app/out/
-        startContainer: true
-        disableDownload: true
-        onUpload:
-          restartContainer: true
-      - path: ./ark:/workspace
-        excludePaths:
-          - bin/
-          - out/
-          - .git/
-    # Enable SSH for IDE integration
-    ssh:
-      enabled: true
-
-  ark-controller:
-    imageSelector: ark-controller
-    devImage: golang:1.24-bookworm
-    command:
-      ["sh", "-c", "cd /app && go run cmd/main.go --leader-elect=false"]
-    namespace: ark-system
-    logs:
-      lastLines: 50
-    # File synchronization for hot reload
-    sync:
-      - path: ./ark:/app
-        startContainer: true
-        disableDownload: true
-        uploadExcludeFile: .dockerignore
-        onUpload:
-          restartContainer: true
-    # Enable SSH for IDE integration
-    ssh:
-      enabled: true
-
-  ark-dashboard:
-    imageSelector: ark-dashboard
-    devImage: node:24-alpine
-    env:
-      - name: NODE_ENV
-        value: development
-    command:
-      [
-        "sh",
-        "-c",
-        "cd /app/ark-dashboard && npm install -g pnpm && pnpm install && pnpm run dev",
-      ]
-    namespace: default
-    # Stream logs instead of terminal
-    logs:
-      lastLines: 50
-    # File synchronization for hot reload
-    sync:
-      - path: ./services/ark-dashboard:/app
-        startContainer: true
-        disableDownload: true
-        uploadExcludeFile: .dockerignore
-    # Enable SSH for IDE integration
-    ssh:
-      enabled: true
