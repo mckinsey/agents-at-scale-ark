@@ -43,7 +43,7 @@ export const useCreateModel = (props?: useCreateModelProps) => {
 
       toast({
         variant: "destructive",
-        title: `Failed to create Secret: ${data.name}`,
+        title: `Failed to create Model: ${data.name}`,
         description: getMessage()
       })
     }
