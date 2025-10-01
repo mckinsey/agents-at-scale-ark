@@ -6,6 +6,7 @@ on:
   pull_request:
     branches: ["main"]
     types: [opened, synchronize, reopened]
+    # change to create pr
   workflow_dispatch:
 
 # Release please will create pull requests, update the changelog, and cicd will
