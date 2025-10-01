@@ -482,10 +482,19 @@ jobs:
           # The CLI will use ghcr images by default
           ark install --yes
 
-      - name: Wait for ARK controller to be ready
+      - name: Wait for ARK components to be ready
         run: |
           echo "Waiting for ark-controller to be ready..."
           kubectl wait --for=condition=ready pod -l control-plane=ark-controller -n ark-system --timeout=300s
+
+          echo "Waiting for ark-api to be ready..."
+          kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=300s
+
+          echo "Waiting for ark-dashboard to be ready..."
+          kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=300s
+
+          echo "Waiting for ark-mcp to be ready..."
+          kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=300s
 
       - name: Create default model
         env:
