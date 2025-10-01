@@ -20,18 +20,26 @@ dependencies:
 vars:
   ENABLE_CERT_MANAGER:
     source: input
-    question: "Enable cert-manager? (Y/n)"
-    default: "Y"
+    question: "Enable cert-manager?"
+    default: "Yes"
+    options:
+      - Yes
+      - No
+    noCache: true
   ENABLE_GATEWAY_API_CRDS:
     source: input
-    question: "Enable Gateway API CRD's? (Y/n)"
-    default: "Y"
+    question: "Enable Gateway API CRD's?"
+    default: "Yes"
+    options:
+      - Yes
+      - No
+    noCache: true
 
 profiles:
   - name: enable-cert-manager
     activation:
     - vars:
-        ENABLE_CERT_MANAGER: "Y"
+        ENABLE_CERT_MANAGER: "Yes"
     patches:
     - op: add
       path: dependencies
@@ -41,7 +49,7 @@ profiles:
   - name: enable-gateway-api
     activation:
       - vars:
-          ENABLE_GATEWAY_API_CRDS: "Y"
+          ENABLE_GATEWAY_API_CRDS: "Yes"
     patches:
       - op: add
         path: dependencies
