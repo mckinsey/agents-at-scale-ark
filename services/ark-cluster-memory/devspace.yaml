@@ -5,7 +5,6 @@ pipelines:
   deploy: |-
     build_images --all
     create_deployments --all
-  
   dev: |-
     create_deployments --all
     start_dev --all
