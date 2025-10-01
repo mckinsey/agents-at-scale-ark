@@ -427,14 +427,22 @@ jobs:
           k3s-channel: latest
 
       - name: Install Ark CLI
+        timeout-minutes: 5
         run: |
+          set -x
           # Build and install ark CLI using npm
+          echo "=== Installing dependencies ==="
           cd tools/ark-cli
           npm install
+
+          echo "=== Building CLI ==="
           npm run build
+
+          echo "=== Installing globally ==="
           npm install -g .
 
-          # Verify installation
+          echo "=== Verifying installation ==="
+          which ark
           ark --version
       - name: Check Version and Status
         run: |
