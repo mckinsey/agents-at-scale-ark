@@ -1,16 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState, useEffect } from "react"
 import { Plus, Copy, Check } from "lucide-react"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbList,
-  BreadcrumbPage
-} from "@/components/ui/breadcrumb"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { PageHeader } from "@/components/common/page-header"
 import {
   Table,
   TableBody,
@@ -25,7 +18,8 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip"
-import { apiKeysService, type APIKey, type APIKeyCreateResponse } from "@/lib/services"
+import { type APIKey, type APIKeyCreateResponse } from "@/lib/services"
+import { useListAPIKeys, useDeleteAPIKey } from "@/lib/services/api-keys-hooks"
 import { AddAPIKeyDialog } from "@/components/dialogs/add-api-key-dialog"
 import { APIKeyCreatedDialog } from "@/components/dialogs/api-key-created-dialog"
 import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog"
@@ -138,46 +132,20 @@ function DataTable({
 }
 
 function APIKeysContent() {
-  const [apiKeys, setApiKeys] = useState<APIKey[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [createdApiKey, setCreatedApiKey] = useState<APIKeyCreateResponse | null>(null)
   const [successDialogOpen, setSuccessDialogOpen] = useState(false)
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false)
   const [apiKeyToRevoke, setApiKeyToRevoke] = useState<APIKey | null>(null)
-  const [revoking, setRevoking] = useState(false)
 
-  useEffect(() => {
-    const loadApiKeys = async () => {
-      try {
-        setLoading(true)
-        const response = await apiKeysService.getAll()
-        setApiKeys(response.items)
-      } catch (err) {
-        console.error("Failed to load API keys:", err)
-        setError(err instanceof Error ? err.message : "Failed to load API keys")
-      } finally {
-        setLoading(false)
-      }
-    }
+  const { data: apiKeysData, isLoading: loading, error } = useListAPIKeys()
+  const deleteAPIKeyMutation = useDeleteAPIKey()
 
-    loadApiKeys()
-  }, [])
+  const apiKeys = apiKeysData?.items || []
 
   const handleApiKeyCreated = (response: APIKeyCreateResponse) => {
     setCreatedApiKey(response)
     setSuccessDialogOpen(true)
-    // Refresh the list
-    const loadApiKeys = async () => {
-      try {
-        const response = await apiKeysService.getAll()
-        setApiKeys(response.items)
-      } catch (err) {
-        console.error("Failed to refresh API keys:", err)
-      }
-    }
-    loadApiKeys()
   }
 
   const handleRevoke = (apiKey: APIKey) => {
@@ -189,38 +157,22 @@ function APIKeysContent() {
     if (!apiKeyToRevoke) return
 
     try {
-      setRevoking(true)
-      await apiKeysService.delete(apiKeyToRevoke.public_key)
-      
-      // Remove from local state
-      setApiKeys(prev => prev.filter(key => key.id !== apiKeyToRevoke.id))
-      
+      await deleteAPIKeyMutation.mutateAsync(apiKeyToRevoke.public_key)
       // Close dialog
       setRevokeDialogOpen(false)
       setApiKeyToRevoke(null)
-      
     } catch (err) {
       console.error("Failed to revoke API key:", err)
       // TODO: Show error message to user
-    } finally {
-      setRevoking(false)
     }
   }
 
   if (loading) {
     return (
       <>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbPage>Service API Keys</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </header>
+        <PageHeader
+          breadcrumbs={[{ label: "Service API Keys" }]}
+        />
         <div className="flex flex-1 flex-col">
           <main className="flex-1 overflow-auto p-4">
             <div className="text-center py-8">
@@ -235,22 +187,14 @@ function APIKeysContent() {
   if (error) {
     return (
       <>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbPage>Service API Keys</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </header>
+        <PageHeader
+          breadcrumbs={[{ label: "Service API Keys" }]}
+        />
         <div className="flex flex-1 flex-col">
           <main className="flex-1 overflow-auto p-4">
             <div className="text-red-600 bg-red-50 border border-red-200 rounded-md p-4">
               <p className="font-medium">Error loading API keys</p>
-              <p className="text-sm mt-1">{error}</p>
+              <p className="text-sm mt-1">{error instanceof Error ? error.message : String(error)}</p>
             </div>
           </main>
         </div>
@@ -260,17 +204,9 @@ function APIKeysContent() {
 
   return (
     <>
-      <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-        <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbPage>Service API Keys</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-        <div className="ml-auto">
+      <PageHeader
+        breadcrumbs={[{ label: "Service API Keys" }]}
+        actions={
           <Button 
             size="sm"
             onClick={() => setAddDialogOpen(true)}
@@ -278,8 +214,8 @@ function APIKeysContent() {
             <Plus className="h-4 w-4 mr-2" />
             Add API Key
           </Button>
-        </div>
-      </header>
+        }
+      />
       <div className="flex flex-1 flex-col">
         <main className="flex-1 overflow-auto p-4">
           <DataTable data={apiKeys} onRevoke={handleRevoke} />
@@ -307,7 +243,7 @@ function APIKeysContent() {
             ? `Revoke API key "${apiKeyToRevoke.name}" (${apiKeyToRevoke.public_key})? This action cannot be undone and will immediately invalidate the key.`
             : ""
         }
-        confirmText={revoking ? "Revoking..." : "Revoke"}
+        confirmText={deleteAPIKeyMutation.isPending ? "Revoking..." : "Revoke"}
         cancelText="Cancel"
         onConfirm={confirmRevoke}
         variant="destructive"

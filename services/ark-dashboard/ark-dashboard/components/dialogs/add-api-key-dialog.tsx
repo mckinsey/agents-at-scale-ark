@@ -1,6 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -10,9 +13,22 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog"
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { apiKeysService, type APIKeyCreateRequest, type APIKeyCreateResponse } from "@/lib/services"
+import { type APIKeyCreateRequest, type APIKeyCreateResponse } from "@/lib/services"
+import { useCreateAPIKey } from "@/lib/services/api-keys-hooks"
+
+const formSchema = z.object({
+  name: z.string().min(1, "Name is required").max(100, "Name must be less than 100 characters"),
+  expires_at: z.string().optional(),
+})
 
 interface AddAPIKeyDialogProps {
   open: boolean
@@ -21,33 +37,31 @@ interface AddAPIKeyDialogProps {
 }
 
 export function AddAPIKeyDialog({ open, onOpenChange, onSuccess }: AddAPIKeyDialogProps) {
-  const [name, setName] = useState("")
-  const [expiresAt, setExpiresAt] = useState("")
-  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  const createAPIKeyMutation = useCreateAPIKey()
+  
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: "",
+      expires_at: "",
+    },
+  })
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!name.trim()) {
-      setError("Name is required")
-      return
-    }
-
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
-      setLoading(true)
       setError(null)
       
       const request: APIKeyCreateRequest = {
-        name: name.trim(),
-        expires_at: expiresAt ? new Date(expiresAt).toISOString() : null
+        name: values.name.trim(),
+        expires_at: values.expires_at ? new Date(values.expires_at).toISOString() : null
       }
       
-      const response = await apiKeysService.create(request)
+      const response = await createAPIKeyMutation.mutateAsync(request)
       
       // Reset form
-      setName("")
-      setExpiresAt("")
+      form.reset()
       
       // Close dialog and show success
       onOpenChange(false)
@@ -56,14 +70,11 @@ export function AddAPIKeyDialog({ open, onOpenChange, onSuccess }: AddAPIKeyDial
     } catch (err) {
       console.error("Failed to create API key:", err)
       setError(err instanceof Error ? err.message : "Failed to create API key")
-    } finally {
-      setLoading(false)
     }
   }
 
   const handleCancel = () => {
-    setName("")
-    setExpiresAt("")
+    form.reset()
     setError(null)
     onOpenChange(false)
   }
@@ -78,58 +89,73 @@ export function AddAPIKeyDialog({ open, onOpenChange, onSuccess }: AddAPIKeyDial
           </DialogDescription>
         </DialogHeader>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Name *</Label>
-            <Input
-              id="name"
-              placeholder="Enter a descriptive name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={loading}
-              required
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name *</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Enter a descriptive name"
+                      disabled={createAPIKeyMutation.isPending}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="expires-at">Expires At (optional)</Label>
-            <Input
-              id="expires-at"
-              type="datetime-local"
-              value={expiresAt}
-              onChange={(e) => setExpiresAt(e.target.value)}
-              disabled={loading}
+            
+            <FormField
+              control={form.control}
+              name="expires_at"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Expires At (optional)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="datetime-local"
+                      disabled={createAPIKeyMutation.isPending}
+                      {...field}
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground">
+                    Leave empty for no expiration
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-            <p className="text-xs text-muted-foreground">
-              Leave empty for no expiration
-            </p>
-          </div>
-          
-          {error && (
-            <div className="text-red-600 bg-red-50 border border-red-200 rounded-md p-3">
-              <p className="text-sm">{error}</p>
-            </div>
-          )}
-          
-          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleCancel}
-              disabled={loading}
-              className="w-full sm:w-auto"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={loading || !name.trim()}
-              className="w-full sm:w-auto"
-            >
-              {loading ? "Creating..." : "Create API Key"}
-            </Button>
-          </DialogFooter>
-        </form>
+            
+            {error && (
+              <div className="text-red-600 bg-red-50 border border-red-200 rounded-md p-3">
+                <p className="text-sm">{error}</p>
+              </div>
+            )}
+            
+            <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCancel}
+                disabled={createAPIKeyMutation.isPending}
+                className="w-full sm:w-auto"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={createAPIKeyMutation.isPending}
+                className="w-full sm:w-auto"
+              >
+                {createAPIKeyMutation.isPending ? "Creating..." : "Create API Key"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )

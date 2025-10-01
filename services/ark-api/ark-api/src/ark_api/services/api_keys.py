@@ -28,6 +28,14 @@ API_KEY_EXPIRES_AT_ANNOTATION = "ark.mckinsey.com/expires-at"
 API_KEY_LAST_USED_ANNOTATION = "ark.mckinsey.com/last-used-at"
 API_KEY_DELETED_AT_ANNOTATION = "ark.mckinsey.com/deleted-at"
 
+# API Key generation constants
+# These values determine the length of the random token portion of API keys
+# 32 bytes = 43 characters in base64url encoding (pk-ark- prefix adds 6 chars = 49 total)
+# 48 bytes = 64 characters in base64url encoding (sk-ark- prefix adds 6 chars = 70 total)
+# These lengths provide sufficient entropy for security while keeping keys manageable
+PUBLIC_KEY_TOKEN_LENGTH = 32  # bytes for public key token generation
+SECRET_KEY_TOKEN_LENGTH = 48  # bytes for secret key token generation
+
 
 class APIKeyService:
     """Service for managing API keys stored as Kubernetes secrets."""
@@ -46,8 +54,8 @@ class APIKeyService:
         Returns:
             Tuple of (public_key, secret_key)
         """
-        public_key = f"pk-ark-{secrets.token_urlsafe(32)}"
-        secret_key = f"sk-ark-{secrets.token_urlsafe(48)}"
+        public_key = f"pk-ark-{secrets.token_urlsafe(PUBLIC_KEY_TOKEN_LENGTH)}"
+        secret_key = f"sk-ark-{secrets.token_urlsafe(SECRET_KEY_TOKEN_LENGTH)}"
         return public_key, secret_key
     
     def _hash_secret_key(self, secret_key: str) -> str:

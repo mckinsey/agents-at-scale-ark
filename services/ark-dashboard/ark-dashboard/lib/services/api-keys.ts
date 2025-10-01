@@ -3,31 +3,13 @@
  */
 
 import { apiClient } from '../api/client';
+import type { components } from '../api/generated/types';
 
-// API Key interfaces matching backend models
-export interface APIKey {
-  id: string;
-  name: string;
-  public_key: string;
-  created_at: string;
-  last_used_at: string | null;
-  expires_at: string | null;
-  is_active: boolean;
-}
-
-export interface APIKeyCreateRequest {
-  name: string;
-  expires_at?: string | null;
-}
-
-export interface APIKeyCreateResponse extends APIKey {
-  secret_key: string; // Only shown once during creation
-}
-
-export interface APIKeyListResponse {
-  items: APIKey[];
-  count: number;
-}
+// Use generated types from OpenAPI
+export type APIKey = components['schemas']['APIKeyResponse'];
+export type APIKeyCreateRequest = components['schemas']['APIKeyCreateRequest'];
+export type APIKeyCreateResponse = components['schemas']['APIKeyCreateResponse'];
+export type APIKeyListResponse = components['schemas']['APIKeyListResponse'];
 
 // API Key service following ARK Dashboard patterns
 export const apiKeysService = {
