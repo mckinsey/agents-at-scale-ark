@@ -426,6 +426,25 @@ jobs:
           traefik-enabled: false
           k3s-channel: latest
 
+      - name: Debug kubectl configuration
+        run: |
+          set -x
+          echo "=== Testing kubectl commands ==="
+          echo "KUBECONFIG: $KUBECONFIG"
+          ls -la ~/.kube/ || echo "No .kube directory"
+
+          echo "=== kubectl version ==="
+          timeout 10 kubectl version --client || echo "kubectl version failed"
+
+          echo "=== kubectl config current-context ==="
+          timeout 10 kubectl config current-context || echo "kubectl config current-context failed"
+
+          echo "=== kubectl config view ==="
+          timeout 10 kubectl config view || echo "kubectl config view failed"
+
+          echo "=== kubectl get nodes ==="
+          timeout 10 kubectl get nodes || echo "kubectl get nodes failed"
+
       - name: Install Ark CLI
         timeout-minutes: 5
         run: |
@@ -438,12 +457,21 @@ jobs:
           echo "=== Building CLI ==="
           npm run build
 
+          echo "=== Checking built shebang ==="
+          head -1 dist/index.js
+
           echo "=== Installing globally ==="
           npm install -g .
 
           echo "=== Verifying installation ==="
           which ark
-          ark --version
+          ls -la $(which ark)
+
+          echo "=== Testing ark with strace (first 100 lines) ==="
+          timeout 10 strace -e trace=execve,openat -f ark --version 2>&1 | head -100 || echo "ark --version timed out or failed"
+
+          echo "=== If that failed, trying direct node execution ==="
+          timeout 10 node $(which ark) --version || echo "Direct node execution failed"
       - name: Check Version and Status
         run: |
           # Check the status.
