@@ -2,6 +2,12 @@ import request from 'supertest';
 import app from '../src/server.js';
 
 describe('ARK Cluster Memory API', () => {
+  afterEach(async () => {
+      const getResponse = await request(app).delete('/messages');
+      expect(getResponse.status).toBe(200);
+      expect(getResponse.body.message).toEqual("Memory purged");
+   });
+
   describe('Health Check', () => {
     test('GET /health should return OK', async () => {
       const response = await request(app).get('/health');

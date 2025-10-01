@@ -152,8 +152,9 @@ func createTriggerQuery(existingQuery *arkv1alpha1.Query, input runtime.RawExten
 	}
 
 	queryObjectMeta := &metav1.ObjectMeta{
-		Name:      queryName,
-		Namespace: existingQuery.Namespace,
+		Name:        queryName,
+		Namespace:   existingQuery.Namespace,
+		Annotations: existingQuery.ObjectMeta.Annotations,
 		Labels: map[string]string{
 			annotations.TriggeredFrom: existingQuery.Name,
 		},
