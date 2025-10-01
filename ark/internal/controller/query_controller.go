@@ -690,9 +690,14 @@ func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Qu
 	return responseMessages, nil
 }
 
-func (r *QueryReconciler) executeTool(ctx context.Context, query arkv1alpha1.Query, toolName string, impersonatedClient client.Client, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) { //nolint:unparam
+func (r *QueryReconciler) executeTool(ctx context.Context, crd arkv1alpha1.Query, toolName string, impersonatedClient client.Client, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) { //nolint:unparam
 	// tokenCollector parameter is kept for consistency with other execute methods but not used since tools don't consume tokens
 	log := logf.FromContext(ctx)
+
+	query, err := genai.MakeQuery(&crd)
+	if err != nil {
+		return nil, fmt.Errorf("unable to make query from CRD, error:%w", err)
+	}
 
 	var toolCRD arkv1alpha1.Tool
 	toolKey := types.NamespacedName{Name: toolName, Namespace: query.Namespace}
@@ -702,7 +707,7 @@ func (r *QueryReconciler) executeTool(ctx context.Context, query arkv1alpha1.Que
 	}
 
 	// Resolve query input with template parameters (this will be the tool arguments)
-	resolvedInput, err := genai.ResolveQueryInput(ctx, impersonatedClient, query.Namespace, query.Spec.Input, query.Spec.Parameters)
+	resolvedInput, err := genai.ResolveQueryInput(ctx, impersonatedClient, query.Namespace, query.Input, query.Parameters)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve query input: %w", err)
 	}
@@ -724,7 +729,7 @@ func (r *QueryReconciler) executeTool(ctx context.Context, query arkv1alpha1.Que
 		Type: "function",
 	}
 
-	toolRegistry := genai.NewToolRegistry()
+	toolRegistry := genai.NewToolRegistry(query.McpSettings)
 	defer func() {
 		if err := toolRegistry.Close(); err != nil {
 			// Log the error but don't fail the request since tool execution already succeeded
@@ -735,7 +740,8 @@ func (r *QueryReconciler) executeTool(ctx context.Context, query arkv1alpha1.Que
 
 	toolDefinition := genai.CreateToolFromCRD(&toolCRD)
 	// Pass the tool registry's MCP pool to CreateToolExecutor
-	executor, err := genai.CreateToolExecutor(ctx, impersonatedClient, &toolCRD, query.Namespace, toolRegistry.GetMCPPool())
+	mcpPool, McpSettings := toolRegistry.GetMCPPool()
+	executor, err := genai.CreateToolExecutor(ctx, impersonatedClient, &toolCRD, query.Namespace, mcpPool, McpSettings)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tool executor: %w", err)
 	}

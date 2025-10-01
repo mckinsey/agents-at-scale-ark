@@ -293,7 +293,15 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		}
 	}
 
-	tools := NewToolRegistry()
+	queryCrd, ok := ctx.Value(QueryContextKey).(*arkv1alpha1.Query)
+	if !ok {
+		return nil, fmt.Errorf("missing query context for agent %s/%s", crd.Namespace, crd.Name)
+	}
+	query, err := MakeQuery(queryCrd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make query from context for agent %s/%s: %w", crd.Namespace, crd.Name, err)
+	}
+	tools := NewToolRegistry(query.McpSettings)
 
 	if err := tools.registerTools(ctx, k8sClient, crd); err != nil {
 		return nil, err

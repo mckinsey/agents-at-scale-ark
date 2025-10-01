@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -197,7 +197,8 @@ func (r *MCPServerReconciler) createMCPClient(ctx context.Context, mcpServer *ar
 		}
 		headers = resolvedHeaders
 	}
-	mcpClient, err := genai.NewMCPClient(ctx, mcpURL, headers, mcpServer.Spec.Transport)
+	// MCP settings are not needed for listing tools, etc.
+	mcpClient, err := genai.NewMCPClient(ctx, mcpURL, headers, mcpServer.Spec.Transport, genai.MCPSettings{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create MCP client: %w", err)
 	}
@@ -232,7 +233,7 @@ func (r *MCPServerReconciler) finalizeMCPServerProcessing(ctx context.Context, m
 	return ctrl.Result{RequeueAfter: mcpServer.Spec.PollInterval.Duration}, nil
 }
 
-func (r *MCPServerReconciler) createTools(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, mcpTools []mcp.Tool) error {
+func (r *MCPServerReconciler) createTools(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, mcpTools []*mcp.Tool) error {
 	log := logf.FromContext(ctx)
 
 	existingTools, err := r.listAllMCPTools(ctx, mcpServer.Namespace, mcpServer.Name)
@@ -247,7 +248,7 @@ func (r *MCPServerReconciler) createTools(ctx context.Context, mcpServer *arkv1a
 
 	for _, mcpTool := range mcpTools {
 		toolName := r.generateToolName(mcpServer.Name, mcpTool.Name)
-		tool := r.buildToolCRD(mcpServer, mcpTool, toolName)
+		tool := r.buildToolCRD(mcpServer, *mcpTool, toolName)
 		toolMap[toolName] = true
 		if err := r.createOrUpdateSingleTool(ctx, tool, toolName, mcpServer.Name); err != nil {
 			log.Error(err, "Failed to create tool", "tool", toolName, "mcpServer", mcpServer.Name, "namespace", mcpServer.Namespace)
@@ -347,8 +348,8 @@ func (r *MCPServerReconciler) generateToolName(mcpServerName, toolName string) s
 	return fmt.Sprintf("%s-%s", mcpServerName, sanitizedToolName)
 }
 
-func (r *MCPServerReconciler) convertInputSchemaToRawExtension(schema mcp.ToolInputSchema) *runtime.RawExtension {
-	if schema.Type == "" && len(schema.Properties) == 0 && len(schema.Required) == 0 {
+func (r *MCPServerReconciler) convertInputSchemaToRawExtension(schema any) *runtime.RawExtension {
+	if schema == nil {
 		return nil
 	}
 	bytes, err := json.Marshal(schema)

@@ -130,8 +130,13 @@ class TestUnifiedEndpoints:
         assert call_args.queryRef.name == "test-query"
         assert call_args.queryRef.namespace == "default"
     
-    def test_evaluate_batch_endpoint_not_implemented(self, client):
+    def test_evaluate_batch_endpoint_not_implemented(self, client, mock_evaluator):
         """Test /evaluate endpoint with batch type returns not implemented"""
+
+        # Mock the evaluator response
+        mock_response = Mock()
+        mock_evaluator.evaluate_query_ref = AsyncMock(return_value=mock_response)
+
         request_data = {
             "type": "batch",
             "config": {

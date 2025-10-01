@@ -168,6 +168,8 @@ jobs:
           args: "--version"
 
       - run: make -j24 build-all
+
+      - run: make -j24 services-test-all
       
       - uses: ./.github/actions/collect-coverage
         with:

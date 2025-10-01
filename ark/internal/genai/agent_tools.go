@@ -24,14 +24,17 @@ func NewMCPClientPool() *MCPClientPool {
 }
 
 // GetOrCreateClient returns an existing MCP client or creates a new one for the given server
-func (p *MCPClientPool) GetOrCreateClient(ctx context.Context, serverName, serverNamespace, serverURL string, headers map[string]string, transport string) (*MCPClient, error) {
+func (p *MCPClientPool) GetOrCreateClient(ctx context.Context, serverName, serverNamespace, serverURL string, headers map[string]string, transport string, mcpSettings map[string]MCPSettings) (*MCPClient, error) {
 	key := fmt.Sprintf("%s/%s", serverNamespace, serverName)
 	if mcpClient, exists := p.clients[key]; exists {
 		return mcpClient, nil
 	}
 
+	// Get MCP settings for this server if available
+	mcpSetting := mcpSettings[key]
+
 	// Create new client for this MCP server
-	mcpClient, err := NewMCPClient(ctx, serverURL, headers, transport)
+	mcpClient, err := NewMCPClient(ctx, serverURL, headers, transport, mcpSetting)
 	if err != nil {
 		return nil, err
 	}
@@ -89,12 +92,12 @@ func (r *ToolRegistry) registerCustomTool(ctx context.Context, k8sClient client.
 	return nil
 }
 
-func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *MCPClientPool) (ToolExecutor, error) {
+func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *MCPClientPool, mcpSettings map[string]MCPSettings) (ToolExecutor, error) {
 	switch tool.Spec.Type {
 	case ToolTypeHTTP:
 		return createHTTPExecutor(k8sClient, tool, namespace)
 	case ToolTypeMCP:
-		return createMCPExecutor(ctx, k8sClient, tool, namespace, mcpPool)
+		return createMCPExecutor(ctx, k8sClient, tool, namespace, mcpPool, mcpSettings)
 	case ToolTypeAgent:
 		return createAgentExecutor(ctx, k8sClient, tool, namespace)
 	default:
@@ -132,7 +135,7 @@ func createHTTPExecutor(k8sClient client.Client, tool *arkv1alpha1.Tool, namespa
 	}, nil
 }
 
-func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *MCPClientPool) (ToolExecutor, error) {
+func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *MCPClientPool, mcpSettings map[string]MCPSettings) (ToolExecutor, error) {
 	if tool.Spec.MCP == nil {
 		return nil, fmt.Errorf("mcp spec is required for tool %s", tool.Name)
 	}
@@ -173,6 +176,7 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 		mcpURL,
 		headers,
 		mcpServerCRD.Spec.Transport,
+		mcpSettings,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get or create MCP client for tool %s: %w", tool.Name, err)
@@ -186,7 +190,7 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 
 func (r *ToolRegistry) registerSingleCustomTool(ctx context.Context, k8sClient client.Client, tool arkv1alpha1.Tool, namespace string, functions []arkv1alpha1.ToolFunction) error {
 	toolDef := CreateToolFromCRD(&tool)
-	executor, err := CreateToolExecutor(ctx, k8sClient, &tool, namespace, r.mcpPool)
+	executor, err := CreateToolExecutor(ctx, k8sClient, &tool, namespace, r.mcpPool, r.mcpSettings)
 	if err != nil {
 		return err
 	}
