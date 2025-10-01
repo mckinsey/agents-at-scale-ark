@@ -1,0 +1,2 @@
+[tool.uv.workspace]
+members = ["out/ark-sdk/py-sdk", "services/ark-api/ark-api"]
