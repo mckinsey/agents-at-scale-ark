@@ -76,7 +76,9 @@ export function showNoClusterError(): void {
  */
 async function hasKubernetesContext(): Promise<boolean> {
   try {
-    const {stdout} = await execa('kubectl', ['config', 'current-context']);
+    const {stdout} = await execa('kubectl', ['config', 'current-context'], {
+      timeout: 5000,
+    });
     return stdout.trim().length > 0;
   } catch {
     return false;
@@ -98,7 +100,9 @@ export async function startup(): Promise<ArkConfig> {
   const hasContext = await hasKubernetesContext();
   if (hasContext) {
     try {
-      const {stdout} = await execa('kubectl', ['config', 'current-context']);
+      const {stdout} = await execa('kubectl', ['config', 'current-context'], {
+        timeout: 5000,
+      });
       config.clusterInfo = {
         type: 'unknown', // We don't detect cluster type here - too slow
         context: stdout.trim(),
