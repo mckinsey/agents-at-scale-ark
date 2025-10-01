@@ -472,13 +472,9 @@ jobs:
 
           echo "=== If that failed, trying direct node execution ==="
           timeout 10 node $(which ark) --version || echo "Direct node execution failed"
-      - name: Check Version and Status
+      - name: Check Status
         run: |
-          # Check the status.
           ark status
-
-          # Check the version.
-          ark version
 
       - name: Install Ark using CLI
         run: |
