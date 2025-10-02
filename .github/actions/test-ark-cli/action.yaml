@@ -91,23 +91,10 @@ runs:
           --api-key "${{ inputs.azure-openai-key }}" \
           --api-version "${{ inputs.model-api-version }}" \
           --yes
-        ark models list
 
-        echo "Waiting for model to be available..."
-        for i in {1..30}; do
-          AVAILABLE=$(ark models list -o json | jq -r '.[] | select(.metadata.name == "default") | .status.available')
-          echo "Model available: $AVAILABLE"
-          if [ "$AVAILABLE" = "true" ]; then
-            echo "Model is ready"
-            break
-          fi
-          sleep 10
-        done
-
-        if [ "$AVAILABLE" != "true" ]; then
-          echo "Model did not become available"
-          exit 1
-        fi
+        kubectl wait --for=jsonpath='{.status.conditions[?(@.type=="ModelAvailable")].status}'=True \
+          model/default \
+          --timeout=5m
 
     - name: Run Query
       shell: bash
