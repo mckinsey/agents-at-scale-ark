@@ -21,6 +21,7 @@ dependencies = [
     "datasets>=2.14.0",
     "pandas>=2.0.0",
     "nest-asyncio>=1.5.0",
+    "Pillow>=10.0.0",
     "ark-sdk",
 ]
 

@@ -2,35 +2,20 @@
  * Centralized ARK service definitions used by both install and status commands
  */
 
-export interface ArkService {
-  name: string;
-  helmReleaseName: string;
-  description: string;
-  enabled: boolean; // Whether this service is enabled
-  namespace?: string; // Optional - if undefined, uses current namespace
-  chartPath?: string;
-  installArgs?: string[];
-  k8sServiceName?: string;
-  k8sServicePort?: number;
-  k8sPortForwardLocalPort?: number;
-  k8sDeploymentName?: string;
-  k8sDevDeploymentName?: string;
-}
+import {loadConfig} from './lib/config.js';
+import type {
+  ArkService,
+  ServiceCollection,
+  ArkDependency,
+  DependencyCollection,
+} from './types/arkService.js';
 
-export interface ServiceCollection {
-  [key: string]: ArkService;
-}
-
-export interface ArkDependency {
-  name: string;
-  command: string;
-  args: string[];
-  description: string;
-}
-
-export interface DependencyCollection {
-  [key: string]: ArkDependency;
-}
+export type {
+  ArkService,
+  ServiceCollection,
+  ArkDependency,
+  DependencyCollection,
+};
 
 const REGISTRY_BASE = 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts';
 
@@ -89,14 +74,15 @@ export const arkDependencies: DependencyCollection = {
 };
 
 /**
- * Core ARK services with their installation and status check configurations
+ * Default ARK services with their installation and status check configurations
  */
-export const arkServices: ServiceCollection = {
+const defaultArkServices: ServiceCollection = {
   'ark-controller': {
     name: 'ark-controller',
     helmReleaseName: 'ark-controller',
     description: 'Core Ark controller for managing AI resources',
     enabled: true,
+    category: 'core',
     namespace: 'ark-system',
     chartPath: `${REGISTRY_BASE}/ark-controller`,
     installArgs: ['--create-namespace', '--set', 'rbac.enable=true'],
@@ -109,7 +95,7 @@ export const arkServices: ServiceCollection = {
     helmReleaseName: 'ark-api',
     description: 'API layer for interacting with Ark resources',
     enabled: true,
-    // namespace: undefined - uses current context namespace
+    category: 'service',
     chartPath: `${REGISTRY_BASE}/ark-api`,
     installArgs: [],
     k8sServiceName: 'ark-api',
@@ -124,6 +110,7 @@ export const arkServices: ServiceCollection = {
     helmReleaseName: 'ark-dashboard',
     description: 'Ark Dashboard',
     enabled: true,
+    category: 'service',
     // namespace: undefined - uses current context namespace
     chartPath: `${REGISTRY_BASE}/ark-dashboard`,
     installArgs: [],
@@ -139,6 +126,7 @@ export const arkServices: ServiceCollection = {
     helmReleaseName: 'ark-api-a2a',
     description: 'Ark API agent-to-agent communication service',
     enabled: false, // Disabled - not currently used
+    category: 'service',
     // namespace: undefined - uses current context namespace
     // Note: This service might be installed as part of ark-api or separately
   },
@@ -148,6 +136,7 @@ export const arkServices: ServiceCollection = {
     helmReleaseName: 'ark-mcp',
     description: 'Ark Model Context Protocol server',
     enabled: true,
+    category: 'service',
     // namespace: undefined - uses current context namespace
     chartPath: `${REGISTRY_BASE}/ark-mcp`,
     installArgs: [],
@@ -155,16 +144,46 @@ export const arkServices: ServiceCollection = {
     k8sDevDeploymentName: 'ark-mcp-devspace',
   },
 
+  'agents-at-scale': {
+    name: 'agents-at-scale',
+    helmReleaseName: 'agents-at-scale',
+    description: 'Agents @ Scale Platform',
+    enabled: false,
+    category: 'service',
+    chartPath: 'oci://ghcr.io/mck-private/qb-fm-labs-legacyx/charts/legacyx',
+    installArgs: [],
+  },
+
   'localhost-gateway': {
     name: 'localhost-gateway',
     helmReleaseName: 'localhost-gateway',
     description: 'Gateway for local development clusters',
     enabled: false, // Disabled - not needed for most users
+    category: 'service',
     namespace: 'ark-system',
     chartPath: `${REGISTRY_BASE}/localhost-gateway`,
     installArgs: [],
   },
 };
+
+function applyConfigOverrides(
+  defaults: ServiceCollection
+): ServiceCollection {
+  const config = loadConfig();
+  const overrides = config?.services || {};
+  const result: ServiceCollection = {};
+
+  for (const [key, service] of Object.entries(defaults)) {
+    result[key] = overrides[key] ? {...service, ...overrides[key]} : service;
+  }
+
+  return result;
+}
+
+/**
+ * Core ARK services - initialized with defaults and config overrides applied
+ */
+export const arkServices: ServiceCollection = applyConfigOverrides(defaultArkServices);
 
 /**
  * Get services that can be installed via Helm charts (only enabled services)

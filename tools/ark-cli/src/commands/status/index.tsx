@@ -10,6 +10,11 @@ import {
 import {StatusData, ServiceStatus} from '../../lib/types.js';
 import {fetchVersionInfo} from '../../lib/versions.js';
 import type {ArkVersionInfo} from '../../lib/versions.js';
+import {waitForServicesReady, type WaitProgress} from '../../lib/waitForReady.js';
+import {arkServices} from '../../arkServices.js';
+import type {ArkService} from '../../types/arkService.js';
+import output from '../../lib/output.js';
+import {parseTimeoutToSeconds} from '../../lib/timeout.js';
 
 /**
  * Enrich service with formatted details including version/revision
@@ -272,7 +277,10 @@ function buildStatusSections(
   return sections;
 }
 
-export async function checkStatus() {
+export async function checkStatus(
+  serviceNames?: string[],
+  options?: {waitForReady?: string}
+) {
   const spinner = ora('Checking system status').start();
 
   try {
@@ -293,6 +301,67 @@ export async function checkStatus() {
 
     const sections = buildStatusSections(statusData, versionInfo);
     StatusFormatter.printSections(sections);
+
+    if (options?.waitForReady) {
+      const timeoutSeconds = parseTimeoutToSeconds(options.waitForReady);
+
+      let servicesToWait: ArkService[] = [];
+      if (serviceNames && serviceNames.length > 0) {
+        servicesToWait = serviceNames
+          .map((name) => Object.values(arkServices).find((s) => s.name === name))
+          .filter((s): s is ArkService =>
+            s !== undefined &&
+            s.k8sDeploymentName !== undefined &&
+            s.namespace !== undefined
+          );
+
+        if (servicesToWait.length === 0) {
+          output.error(`No valid services found matching: ${serviceNames.join(', ')}`);
+          process.exit(1);
+        }
+      } else {
+        servicesToWait = Object.values(arkServices).filter(
+          (s) => s.enabled && s.category === 'core' && s.k8sDeploymentName && s.namespace
+        );
+      }
+
+      console.log();
+      const waitSpinner = ora(
+        `Waiting for services to be ready (timeout: ${timeoutSeconds}s)...`
+      ).start();
+
+      const statusMap = new Map<string, boolean>();
+      servicesToWait.forEach((s) => statusMap.set(s.name, false));
+
+      const startTime = Date.now();
+      const result = await waitForServicesReady(
+        servicesToWait,
+        timeoutSeconds,
+        (progress: WaitProgress) => {
+          statusMap.set(progress.serviceName, progress.ready);
+
+          const elapsed = Math.floor((Date.now() - startTime) / 1000);
+          const lines = servicesToWait.map((s) => {
+            const ready = statusMap.get(s.name);
+            const icon = ready ? '✓' : '⋯';
+            const status = ready ? 'ready' : 'waiting...';
+            const color = ready ? chalk.green : chalk.yellow;
+            return `  ${color(icon)} ${chalk.bold(s.name)} ${chalk.blue(`(${s.namespace})`)} - ${status}`;
+          });
+
+          waitSpinner.text = `Waiting for services to be ready (${elapsed}/${timeoutSeconds}s)...\n${lines.join('\n')}`;
+        }
+      );
+
+      if (result) {
+        waitSpinner.succeed('All services are ready');
+        process.exit(0);
+      } else {
+        waitSpinner.fail(`Services did not become ready within ${timeoutSeconds} seconds`);
+        process.exit(1);
+      }
+    }
+
     process.exit(0);
   } catch (error) {
     spinner.fail('Failed to check status');
@@ -305,7 +374,12 @@ export function createStatusCommand(): Command {
   const statusCommand = new Command('status');
   statusCommand
     .description('Check ARK system status')
-    .action(() => checkStatus());
+    .argument('[services...]', 'specific services to check (optional)')
+    .option(
+      '--wait-for-ready <timeout>',
+      'wait for services to be ready (e.g., 30s, 2m, 1h)'
+    )
+    .action((services, options) => checkStatus(services, options));
 
   return statusCommand;
 }
