@@ -58,7 +58,6 @@ runs:
 
     - name: Install Ark CLI
       shell: bash
-      timeout-minutes: 5
       run: |
         set -x
         cd tools/ark-cli
