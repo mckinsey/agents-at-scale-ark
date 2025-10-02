@@ -197,7 +197,7 @@ jobs:
             prebuild: "make ark-api-a2a-deps && mkdir -p services/ark-api-a2a/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api-a2a/out/"
           - path: services/ark-api
             image: ark-api
-            prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/ && cp uv.lock services/ark-api/ark-api/"
+            prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
           - path: services/ark-dashboard
             image: ark-dashboard
             prebuild: "make ark-dashboard-deps"
@@ -213,7 +213,7 @@ jobs:
             image: hosted-langchain-agents
           - path: services/ark-mcp
             image: ark-mcp
-            prebuild: "make ark-mcp-deps && mkdir -p services/ark-mcp/ark-mcp/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-mcp/ark-mcp/out/ && cp uv.lock services/ark-mcp/ark-mcp/"
+            prebuild: "make ark-mcp-deps && mkdir -p services/ark-mcp/ark-mcp/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-mcp/ark-mcp/out/"
     steps:
       - uses: actions/checkout@v4
 
