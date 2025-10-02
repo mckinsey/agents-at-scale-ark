@@ -15,74 +15,39 @@ A query is a request to execute a task using an agent or team. It contains:
 - **Target**: Which agent or team should process the request
 - **Output**: The response from the agent or team
 
-### Query Input Schema (Key Elements)
+### User Messages
 
-The most important fields for controlling queries are:
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: my-query
-  namespace: default
-spec:
-  type: user | messages   # (optional) 'user' for string input (default), 'messages' for array of messages
-  input:                  # The actual input to the agent/team
-    # If type is 'user' or omitted:
-    "A single string prompt or question."
-    # If type is 'messages':
-    - role: user         # 'user', 'assistant', 'system', or provider-specific
-      content: "Message text"
-    - role: assistant
-      content: "Response text"
-    # ...more messages as needed
-  targets:
-    - type: agent | team | model | tool
-      name: my-target
-```
-
-**Notes:**
-- `type` is optional; if omitted, it defaults to `user` (string input).
-- For `type: messages`, `input` must be an array of objects with `role` and `content` fields.
-- Supported roles: `user`, `assistant`, `system`, and provider-specific roles.
-
-
-## Using kubectl
-
-You can create queries using either a single string input or a structured conversation (messages array). See the examples below:
-
-### String Input (type: user or default)
+If a `type` is not specified, then the input of a query is a single user message:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: conversation-string-user
-  namespace: default
+  name: query-simple
 spec:
-  type: user
-  input: "User: Calculate 1+1.\n\nAgent: To calculate 1 + 1, the sum is equal to 2.\n\nUser: Calculate 2+2.\n\nAgent: To calculate 2 + 2, the sum is equal to 4.\n\nUser: What is the sum of all previous sums?"
+  input: "What is the capital of France"
   targets:
     - type: agent
-      name: math
+      name: sample-agent
 ```
 
-Or, omitting the type (defaults to user):
+Apply this sample query with:
 
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: conversation-string-default
-  namespace: default
-spec:
-  input: "User: Calculate 1+1.\n\nAgent: To calculate 1 + 1, the sum is equal to 2.\n\nUser: Calculate 2+2.\n\nAgent: To calculate 2 + 2, the sum is equal to 4.\n\nUser: What is the sum of all previous sums?"
-  targets:
-    - type: agent
-      name: math
+```bash
+# Create the 'sample agent' if you haven't already, then run the query.
+kubectl apply -f samples/agents/sample-agent.yaml
+kubectl apply -f samples/queries/query-simple.yaml
 ```
 
-### Messages Input (type: messages)
+Check the result:
+
+```bash
+kubectl get query query-simple -o yaml
+```
+
+### Structured Conversations
+
+The `messages` query type can be used to input a structured conversation (messages array):
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -105,24 +70,30 @@ spec:
       content: "What is the sum of all previous sums?"
   targets:
     - type: agent
-      name: math
+      name: sample-agent
 ```
 
-Apply a query using kubectl:
+Apply this query using kubectl:
 
 ```bash
-kubectl apply -f samples/queries/query-conversation-string-user.yaml
-kubectl apply -f samples/queries/query-conversation-string-default.yaml
+# Create the 'sample agent' if you haven't already, then run the query.
+kubectl apply -f samples/agents/sample-agent.yaml
 kubectl apply -f samples/queries/query-conversation-messages.yaml
 ```
 
 Check the result:
 
 ```bash
-kubectl get query conversation-string-user -o yaml
-kubectl get query conversation-string-default -o yaml
 kubectl get query conversation-messages -o yaml
 ```
+
+The `messages` input type allows you to build up conversation context, by adding the response of each query into an OpenAI message object array.
+
+Notes:
+
+- `type` is optional; if omitted, it defaults to `user` (string input).
+- For `type: messages`, `input` must be an array of objects with `role` and `content` fields.
+- Supported roles: `user`, `assistant`, `system`, and provider-specific roles.
 
 ## Using fark CLI
 
@@ -176,6 +147,7 @@ curl -X POST http://localhost:8000/openai/v1/chat/completions \
 ```
 
 Response:
+
 ```json
 {
   "id": "query-abc123",

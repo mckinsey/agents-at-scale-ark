@@ -18,4 +18,4 @@ spec:
       content: "What is the sum of all previous sums?"
   targets:
     - type: agent
-      name: math
+      name: sample-agent
