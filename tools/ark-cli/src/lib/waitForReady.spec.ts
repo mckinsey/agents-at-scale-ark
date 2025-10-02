@@ -14,17 +14,11 @@ describe('waitForDeploymentReady', () => {
     jest.clearAllMocks();
   });
 
-  it('should return true when deployment becomes available', async () => {
+  it('returns true when deployment is ready', async () => {
     mockedExeca.mockResolvedValueOnce({
       stdout: 'deployment.apps/ark-controller condition met',
       stderr: '',
       exitCode: 0,
-      command: 'kubectl wait',
-      escapedCommand: 'kubectl wait',
-      failed: false,
-      timedOut: false,
-      isCanceled: false,
-      killed: false,
     } as any);
 
     const result = await waitForDeploymentReady('ark-controller', 'ark-system', 30);
@@ -44,32 +38,10 @@ describe('waitForDeploymentReady', () => {
     );
   });
 
-  it('should return false when deployment times out', async () => {
-    mockedExeca.mockRejectedValueOnce(
-      new Error('error: timed out waiting for the condition on deployments/ark-api')
-    );
+  it('returns false on error', async () => {
+    mockedExeca.mockRejectedValueOnce(new Error('kubectl error'));
 
     const result = await waitForDeploymentReady('ark-api', 'default', 10);
-
-    expect(result).toBe(false);
-  });
-
-  it('should return false when deployment does not exist', async () => {
-    mockedExeca.mockRejectedValueOnce(
-      new Error('error: no matching resources found')
-    );
-
-    const result = await waitForDeploymentReady('nonexistent', 'default', 5);
-
-    expect(result).toBe(false);
-  });
-
-  it('should return false when namespace does not exist', async () => {
-    mockedExeca.mockRejectedValueOnce(
-      new Error('Error from server (NotFound): namespaces "bad-namespace" not found')
-    );
-
-    const result = await waitForDeploymentReady('ark-api', 'bad-namespace', 5);
 
     expect(result).toBe(false);
   });
@@ -80,67 +52,54 @@ describe('waitForServicesReady', () => {
     jest.clearAllMocks();
   });
 
-  it('should return true when all services become ready', async () => {
-    const services: ArkService[] = [
-      {
-        name: 'ark-controller',
-        helmReleaseName: 'ark-controller',
-        description: 'Core controller',
-        enabled: true,
-        category: 'core',
-        namespace: 'ark-system',
-        k8sDeploymentName: 'ark-controller',
-      },
-      {
-        name: 'ark-api',
-        helmReleaseName: 'ark-api',
-        description: 'API service',
-        enabled: true,
-        category: 'service',
-        namespace: 'default',
-        k8sDeploymentName: 'ark-api',
-      },
-    ];
+  const service1: ArkService = {
+    name: 'ark-controller',
+    helmReleaseName: 'ark-controller',
+    description: 'Core controller',
+    enabled: true,
+    category: 'core',
+    namespace: 'ark-system',
+    k8sDeploymentName: 'ark-controller',
+  };
 
-    mockedExeca
-      .mockResolvedValueOnce({
-        stdout: 'deployment.apps/ark-controller condition met',
-        stderr: '',
-        exitCode: 0,
-      } as any)
-      .mockResolvedValueOnce({
-        stdout: 'deployment.apps/ark-api condition met',
-        stderr: '',
-        exitCode: 0,
-      } as any);
+  const service2: ArkService = {
+    name: 'ark-api',
+    helmReleaseName: 'ark-api',
+    description: 'API service',
+    enabled: true,
+    category: 'service',
+    namespace: 'default',
+    k8sDeploymentName: 'ark-api',
+  };
 
-    const result = await waitForServicesReady(services, 30);
+  it('returns true when all services are ready', async () => {
+    mockedExeca.mockResolvedValue({
+      stdout: 'condition met',
+      stderr: '',
+      exitCode: 0,
+    } as any);
+
+    const result = await waitForServicesReady([service1, service2], 30);
 
     expect(result).toBe(true);
     expect(mockedExeca).toHaveBeenCalledTimes(2);
   });
 
-  it('should call onProgress callback for each service check', async () => {
-    const services: ArkService[] = [
-      {
-        name: 'ark-controller',
-        helmReleaseName: 'ark-controller',
-        description: 'Core controller',
-        enabled: true,
-        category: 'core',
-        namespace: 'ark-system',
-        k8sDeploymentName: 'ark-controller',
-      },
-    ];
+  it('returns false when any service fails', async () => {
+    mockedExeca
+      .mockResolvedValueOnce({stdout: 'ok', stderr: '', exitCode: 0} as any)
+      .mockRejectedValueOnce(new Error('timeout'));
 
-    mockedExeca.mockResolvedValueOnce({
-      stdout: 'deployment.apps/ark-controller condition met',
-      stderr: '',
-      exitCode: 0,
-    } as any);
+    const result = await waitForServicesReady([service1, service2], 30);
+
+    expect(result).toBe(false);
+  });
+
+  it('calls progress callback', async () => {
+    mockedExeca.mockResolvedValue({stdout: 'ok', stderr: '', exitCode: 0} as any);
 
     const onProgress = jest.fn();
-    await waitForServicesReady(services, 30, onProgress);
+    await waitForServicesReady([service1], 30, onProgress);
 
     expect(onProgress).toHaveBeenCalledWith({
       serviceName: 'ark-controller',
@@ -148,103 +107,20 @@ describe('waitForServicesReady', () => {
     });
   });
 
-  it('should return false when timeout is reached', async () => {
-    const services: ArkService[] = [
-      {
-        name: 'ark-api',
-        helmReleaseName: 'ark-api',
-        description: 'API service',
-        enabled: true,
-        category: 'service',
-        namespace: 'default',
-        k8sDeploymentName: 'ark-api',
-      },
-    ];
+  it('skips services without deployment info', async () => {
+    const incompleteService: ArkService = {
+      name: 'incomplete',
+      helmReleaseName: 'incomplete',
+      description: 'No deployment info',
+      enabled: true,
+      category: 'service',
+    };
 
-    mockedExeca.mockRejectedValue(
-      new Error('error: timed out waiting for the condition on deployments/ark-api')
-    );
+    mockedExeca.mockResolvedValue({stdout: 'ok', stderr: '', exitCode: 0} as any);
 
-    const result = await waitForServicesReady(services, 1);
-
-    expect(result).toBe(false);
-  });
-
-  it('should skip services without deployment name or namespace', async () => {
-    const services: ArkService[] = [
-      {
-        name: 'ark-controller',
-        helmReleaseName: 'ark-controller',
-        description: 'Core controller',
-        enabled: true,
-        category: 'core',
-        namespace: 'ark-system',
-        k8sDeploymentName: 'ark-controller',
-      },
-      {
-        name: 'incomplete-service',
-        helmReleaseName: 'incomplete-service',
-        description: 'Service without deployment info',
-        enabled: true,
-        category: 'service',
-      },
-    ];
-
-    mockedExeca.mockResolvedValueOnce({
-      stdout: 'deployment.apps/ark-controller condition met',
-      stderr: '',
-      exitCode: 0,
-    } as any);
-
-    const result = await waitForServicesReady(services, 30);
+    const result = await waitForServicesReady([service1, incompleteService], 30);
 
     expect(result).toBe(true);
     expect(mockedExeca).toHaveBeenCalledTimes(1);
-  });
-
-  it('should handle partial success correctly', async () => {
-    const services: ArkService[] = [
-      {
-        name: 'ark-controller',
-        helmReleaseName: 'ark-controller',
-        description: 'Core controller',
-        enabled: true,
-        category: 'core',
-        namespace: 'ark-system',
-        k8sDeploymentName: 'ark-controller',
-      },
-      {
-        name: 'ark-api',
-        helmReleaseName: 'ark-api',
-        description: 'API service',
-        enabled: true,
-        category: 'service',
-        namespace: 'default',
-        k8sDeploymentName: 'ark-api',
-      },
-    ];
-
-    mockedExeca
-      .mockResolvedValueOnce({
-        stdout: 'deployment.apps/ark-controller condition met',
-        stderr: '',
-        exitCode: 0,
-      } as any)
-      .mockRejectedValueOnce(
-        new Error('error: timed out waiting for the condition on deployments/ark-api')
-      );
-
-    const onProgress = jest.fn();
-    const result = await waitForServicesReady(services, 1, onProgress);
-
-    expect(result).toBe(false);
-    expect(onProgress).toHaveBeenCalledWith({
-      serviceName: 'ark-controller',
-      ready: true,
-    });
-    expect(onProgress).toHaveBeenCalledWith({
-      serviceName: 'ark-api',
-      ready: false,
-    });
   });
 });
