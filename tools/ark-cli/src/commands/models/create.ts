@@ -2,7 +2,19 @@ import {execa} from 'execa';
 import inquirer from 'inquirer';
 import output from '../../lib/output.js';
 
-export async function createModel(modelName?: string): Promise<boolean> {
+export interface CreateModelOptions {
+  type?: string;
+  model?: string;
+  baseUrl?: string;
+  apiKey?: string;
+  apiVersion?: string;
+  yes?: boolean;
+}
+
+export async function createModel(
+  modelName?: string,
+  options: CreateModelOptions = {}
+): Promise<boolean> {
   // Step 1: Get model name if not provided
   if (!modelName) {
     const nameAnswer = await inquirer.prompt([
@@ -29,68 +41,90 @@ export async function createModel(modelName?: string): Promise<boolean> {
     await execa('kubectl', ['get', 'model', modelName!], {stdio: 'pipe'});
     output.warning(`model ${modelName} already exists`);
 
-    const {overwrite} = await inquirer.prompt([
-      {
-        type: 'confirm',
-        name: 'overwrite',
-        message: `overwrite existing model ${modelName}?`,
-        default: false,
-      },
-    ]);
+    if (!options.yes) {
+      const {overwrite} = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'overwrite',
+          message: `overwrite existing model ${modelName}?`,
+          default: false,
+        },
+      ]);
 
-    if (!overwrite) {
-      output.info('model creation cancelled');
-      return false;
+      if (!overwrite) {
+        output.info('model creation cancelled');
+        return false;
+      }
     }
   } catch {
     // Model doesn't exist, continue
   }
 
-  // Step 2: Choose model type
-  const {modelType} = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'modelType',
-      message: 'select model provider:',
-      choices: [
-        {name: 'Azure OpenAI', value: 'azure'},
-        {name: 'OpenAI', value: 'openai'},
-      ],
-      default: 'azure',
-    },
-  ]);
-
-  // Step 3: Get common parameters
-  const commonAnswers = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'modelVersion',
-      message: 'model version:',
-      default: 'gpt-4o-mini',
-    },
-    {
-      type: 'input',
-      name: 'baseUrl',
-      message: 'base URL:',
-      validate: (input) => {
-        if (!input) return 'base URL is required';
-        try {
-          new URL(input);
-          return true;
-        } catch {
-          return 'please enter a valid URL';
-        }
+  // Step 2: Get model type
+  let modelType = options.type;
+  if (!modelType) {
+    const answer = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'modelType',
+        message: 'select model provider:',
+        choices: [
+          {name: 'Azure OpenAI', value: 'azure'},
+          {name: 'OpenAI', value: 'openai'},
+        ],
+        default: 'azure',
       },
-    },
-  ]);
+    ]);
+    modelType = answer.modelType;
+  }
 
-  // Remove trailing slash from base URL
-  const baseUrl = commonAnswers.baseUrl.replace(/\/$/, '');
+  // Step 3: Get model name
+  let model = options.model;
+  if (!model) {
+    const answer = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'model',
+        message: 'model:',
+        default: 'gpt-4o-mini',
+      },
+    ]);
+    model = answer.model;
+  }
 
-  // Step 4: Get provider-specific parameters
-  let apiVersion = '';
-  if (modelType === 'azure') {
-    const azureAnswers = await inquirer.prompt([
+  // Step 4: Get base URL
+  let baseUrl = options.baseUrl;
+  if (!baseUrl) {
+    const answer = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'baseUrl',
+        message: 'base URL:',
+        validate: (input) => {
+          if (!input) return 'base URL is required';
+          try {
+            new URL(input);
+            return true;
+          } catch {
+            return 'please enter a valid URL';
+          }
+        },
+      },
+    ]);
+    baseUrl = answer.baseUrl;
+  }
+
+  // Validate and clean base URL
+  if (!baseUrl) {
+    output.error('base URL is required');
+    return false;
+  }
+  baseUrl = baseUrl.replace(/\/$/, '');
+
+  // Step 5: Get API version (Azure only)
+  let apiVersion = options.apiVersion || '';
+  if (modelType === 'azure' && !options.apiVersion) {
+    const answer = await inquirer.prompt([
       {
         type: 'input',
         name: 'apiVersion',
@@ -98,22 +132,26 @@ export async function createModel(modelName?: string): Promise<boolean> {
         default: '2024-12-01-preview',
       },
     ]);
-    apiVersion = azureAnswers.apiVersion;
+    apiVersion = answer.apiVersion;
   }
 
-  // Step 5: Get API key (password input)
-  const {apiKey} = await inquirer.prompt([
-    {
-      type: 'password',
-      name: 'apiKey',
-      message: 'API key:',
-      mask: '*',
-      validate: (input) => {
-        if (!input) return 'API key is required';
-        return true;
+  // Step 6: Get API key
+  let apiKey = options.apiKey;
+  if (!apiKey) {
+    const answer = await inquirer.prompt([
+      {
+        type: 'password',
+        name: 'apiKey',
+        message: 'API key:',
+        mask: '*',
+        validate: (input) => {
+          if (!input) return 'API key is required';
+          return true;
+        },
       },
-    },
-  ]);
+    ]);
+    apiKey = answer.apiKey;
+  }
 
   // Step 6: Create the Kubernetes secret
   const secretName = `${modelName}-model-api-key`;
@@ -159,7 +197,7 @@ export async function createModel(modelName?: string): Promise<boolean> {
     spec: {
       type: modelType,
       model: {
-        value: commonAnswers.modelVersion,
+        value: model,
       },
       config: {} as Record<string, unknown>,
     },
