@@ -5,7 +5,6 @@ metadata:
   labels:
     evaluated: "true"
 spec:
-  skip: true
   description: Test weather agent evaluation is using tools as expected
   steps:
   - name: step-1
