@@ -36,62 +36,27 @@ export async function waitForServicesReady(
   timeoutSeconds: number,
   onProgress?: (progress: WaitProgress) => void
 ): Promise<boolean> {
-  const startTime = Date.now();
-  const endTime = startTime + timeoutSeconds * 1000;
-  const checkInterval = 5000;
+  const validServices = services.filter(
+    (s) => s.k8sDeploymentName && s.namespace
+  );
 
-  const serviceStatus = new Map<string, boolean>();
-  services.forEach((s) => serviceStatus.set(s.name, false));
+  const checkPromises = validServices.map(async (service) => {
+    const isReady = await waitForDeploymentReady(
+      service.k8sDeploymentName!,
+      service.namespace!,
+      timeoutSeconds
+    );
 
-  while (Date.now() < endTime) {
-    let allReady = true;
-
-    for (const service of services) {
-      if (serviceStatus.get(service.name)) {
-        continue;
-      }
-
-      if (!service.k8sDeploymentName || !service.namespace) {
-        continue;
-      }
-
-      const remainingTime = Math.floor((endTime - Date.now()) / 1000);
-      if (remainingTime <= 0) {
-        allReady = false;
-        break;
-      }
-
-      const isReady = await waitForDeploymentReady(
-        service.k8sDeploymentName,
-        service.namespace,
-        Math.min(checkInterval / 1000, remainingTime)
-      );
-
-      serviceStatus.set(service.name, isReady);
-
-      if (onProgress) {
-        onProgress({
-          serviceName: service.name,
-          ready: isReady,
-        });
-      }
-
-      if (!isReady) {
-        allReady = false;
-      }
+    if (onProgress) {
+      onProgress({
+        serviceName: service.name,
+        ready: isReady,
+      });
     }
 
-    if (allReady) {
-      return true;
-    }
+    return isReady;
+  });
 
-    const remainingTime = endTime - Date.now();
-    if (remainingTime > 0) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, Math.min(checkInterval, remainingTime))
-      );
-    }
-  }
-
-  return false;
+  const results = await Promise.all(checkPromises);
+  return results.every((ready) => ready);
 }
