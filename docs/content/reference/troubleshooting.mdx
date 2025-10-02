@@ -2,7 +2,35 @@
 
 Troubleshooting guide for challenges when installing or using Ark.
 
-## Installing Ark on Windows
+## Ark Installation
+
+This section covers common issues and solutions when installing Ark on various platforms.
+
+### Prerequisites
+
+Before installing Ark, ensure you have:
+- [Node.js](https://nodejs.org/en/download) (v18 or later)
+- A Kubernetes cluster (e.g.,  [Docker Desktop](https://docs.docker.com/desktop/), [Minikube](https://minikube.sigs.k8s.io/docs/start/), [Kind](https://kind.sigs.k8s.io/), or [Orbstack](https://orbstack.dev/)).
+- kubectl and Helm
+
+The easiest way to install dependencies on macOS:
+
+```bash
+brew install node kubectl helm
+
+# Install a cluster such as:
+# brew install minikube
+# brew install kind
+# brew install orbstack
+```
+
+Verify your cluster context:
+
+```bash
+kubectl config get-contexts
+```
+
+### Installing Ark on Windows
 
 Ark requires a Kubernetes cluster to run. There are a number of potential issues that can arise from permissions, organizational policies and so on, particularly around running Hypervisors (which is needed to run services like Docker and local Kubernetes clusters).
 

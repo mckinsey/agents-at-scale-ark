@@ -1,0 +1,24 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: query-with-mcp-settings-in-annotations
+spec:
+  prompt: "You are a helpful assistant that can read files from a filesystem"
+  modelRef:
+    name: default
+  tools:
+    - name: filesystem-directory-tree
+      type: custom
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: query-with-mcp-settings-in-annotations
+  annotations:
+    "ark.mckinsey.com/mcp-server-settings": |
+      {"ark-system/filesystem": {"toolCalls": [{"name": "set_base_directory", "arguments": {"path": "./shared"}}]}}
+spec:
+  input: Which folders can you see use the filesystem tool? Call directory-tree with path ".".
+  targets:
+  - type: agent
+    name: query-with-mcp-settings-in-annotations

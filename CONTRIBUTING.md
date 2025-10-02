@@ -83,6 +83,11 @@ Libraries and SDKs currently exist for:
 - Python
 - Node.JS
 
+## Contributing to docs
+You can help us improve the [documentation](https://mckinsey.github.io/agents-at-scale-ark/) online. A contribution to the docs is often the easiest way to get started contributing to the project.
+
+In order to preview the docs locally, you can run `make docs` in the root of the project. This will run the documentation site with live-reload, and you can then view the docs at `http://localhost:3000`.
+
 ## Guidelines for contributing developers
 
 Note that any contributions you make will be under the Agents At Scale [license](./LICENSE).
