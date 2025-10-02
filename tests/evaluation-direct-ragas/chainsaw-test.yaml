@@ -5,7 +5,6 @@ metadata:
   labels:
     evaluated: "true"
 spec:
-  skip: true
   description: Test direct evaluation functionality with input/output pairs
   steps:
   - name: step-1
