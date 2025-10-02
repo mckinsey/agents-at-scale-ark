@@ -47,9 +47,7 @@ $(eval $(call CLEAN_STAMPS_TEMPLATE,$(ARK_API_SERVICE_NAME)))
 $(ARK_API_SERVICE_NAME)-deps: $(ARK_API_STAMP_DEPS)
 $(ARK_API_STAMP_DEPS): $(ARK_API_SERVICE_SOURCE_DIR)/pyproject.toml $(ARK_SDK_WHL) | $(OUT)
 	@mkdir -p $(dir $@)
-	cd $(ARK_API_SERVICE_SOURCE_DIR) && uv remove ark_sdk || true && \
-	uv add $(ARK_SDK_WHL) && \
-	rm -f uv.lock && uv sync
+	cd $(ARK_API_SERVICE_SOURCE_DIR) && rm -f uv.lock && uv sync
 	@touch $@
 
 # OpenAPI generation (side effect of test)
@@ -71,8 +69,10 @@ $(ARK_API_SERVICE_NAME)-build: $(ARK_API_STAMP_BUILD) # HELP: Build ARK API serv
 $(ARK_API_STAMP_BUILD): $(ARK_API_STAMP_TEST) $(ARK_SDK_WHL)
 	@mkdir -p $(ARK_API_SERVICE_DIR)/ark-api/out
 	cp $(ARK_SDK_WHL) $(ARK_API_SERVICE_DIR)/ark-api/out/
+	cp $(BUILD_ROOT)/uv.lock $(ARK_API_SERVICE_DIR)/ark-api/
 	cd $(ARK_API_SERVICE_DIR) && docker build -t $(ARK_API_IMAGE):$(ARK_API_TAG) .
 	@rm -rf $(ARK_API_SERVICE_DIR)/ark-api/out
+	@rm -f $(ARK_API_SERVICE_DIR)/ark-api/uv.lock
 	@touch $@
 
 # Install target
@@ -112,7 +112,7 @@ $(ARK_API_SERVICE_NAME)-uninstall: # HELP: Remove ARK API server from cluster
 
 # Dev target
 $(ARK_API_SERVICE_NAME)-dev: $(ARK_API_STAMP_TEST) $(ARK_API_STAMP_DEPS) # HELP: Run ARK API server in development mode
-	cd $(ARK_API_SERVICE_SOURCE_DIR) && uv add $(ARK_SDK_WHL) && uv sync && \
-	PYTHONPATH=../../../lib/ark-sdk/gen_sdk/overlay/python:$$PYTHONPATH CORS_ORIGINS=$(CORS_ORIGINS) uv run python -m uvicorn --host 0.0.0.0 --port 8000 --reload src.ark_api.main:app
+	cd $(ARK_API_SERVICE_SOURCE_DIR) && uv sync && \
+	CORS_ORIGINS=$(CORS_ORIGINS) uv run python -m uvicorn --host 0.0.0.0 --port 8000 --reload src.ark_api.main:app
 
 
