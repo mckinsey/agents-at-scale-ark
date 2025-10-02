@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/openai/openai-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -113,19 +114,10 @@ func TestGetQueryInputMessages(t *testing.T) {
 		}
 
 		// Set the messages using the RawExtension helper
-		inputMessages := []arkv1alpha1.Message{
-			{
-				Role:    "user",
-				Content: "Hello!",
-			},
-			{
-				Role:    "assistant",
-				Content: "Hi there! How can I help you?",
-			},
-			{
-				Role:    "user",
-				Content: "What's the weather like?",
-			},
+		inputMessages := []openai.ChatCompletionMessageParamUnion{
+			openai.UserMessage("Hello!"),
+			openai.AssistantMessage("Hi there! How can I help you?"),
+			openai.UserMessage("What's the weather like?"),
 		}
 		err := query.Spec.SetInputMessages(inputMessages)
 		require.NoError(t, err)
@@ -161,15 +153,9 @@ func TestGetQueryInputMessages(t *testing.T) {
 		}
 
 		// Set the messages using the RawExtension helper
-		inputMessages := []arkv1alpha1.Message{
-			{
-				Role:    "system",
-				Content: "You are a helpful assistant.",
-			},
-			{
-				Role:    "user",
-				Content: "Hello!",
-			},
+		inputMessages := []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage("You are a helpful assistant."),
+			openai.UserMessage("Hello!"),
 		}
 		err := query.Spec.SetInputMessages(inputMessages)
 		require.NoError(t, err)
@@ -187,7 +173,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 		assert.Equal(t, "Hello!", messages[1].OfUser.Content.OfString.Value)
 	})
 
-	t.Run("messages type with unknown role returns error", func(t *testing.T) {
+	t.Run("messages type with tool message", func(t *testing.T) {
 		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 		query := arkv1alpha1.Query{
@@ -201,19 +187,16 @@ func TestGetQueryInputMessages(t *testing.T) {
 		}
 
 		// Set the messages using the RawExtension helper
-		inputMessages := []arkv1alpha1.Message{
-			{
-				Role:    "unknown-role",
-				Content: "This should become a user message",
-			},
+		inputMessages := []openai.ChatCompletionMessageParamUnion{
+			openai.ToolMessage("Tool result", "call_123"),
 		}
 		err := query.Spec.SetInputMessages(inputMessages)
 		require.NoError(t, err)
 
 		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "unsupported message role: unknown-role")
-		assert.Nil(t, messages)
+		require.NoError(t, err)
+		require.Len(t, messages, 1)
+		assert.NotNil(t, messages[0].OfTool)
 	})
 
 	t.Run("empty type defaults to user", func(t *testing.T) {
@@ -291,7 +274,7 @@ func TestGetQueryInputMessages(t *testing.T) {
 		}
 
 		// Set empty messages array using the RawExtension helper
-		err := query.Spec.SetInputMessages([]arkv1alpha1.Message{})
+		err := query.Spec.SetInputMessages([]openai.ChatCompletionMessageParamUnion{})
 		require.NoError(t, err)
 
 		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
@@ -334,10 +317,10 @@ func BenchmarkGetQueryInputMessages(b *testing.B) {
 	}
 
 	// Set input for messages query using RawExtension helper
-	benchMessages := []arkv1alpha1.Message{
-		{Role: "user", Content: "Hello!"},
-		{Role: "assistant", Content: "Hi there! How can I help you?"},
-		{Role: "user", Content: "This is a benchmark test"},
+	benchMessages := []openai.ChatCompletionMessageParamUnion{
+		openai.UserMessage("Hello!"),
+		openai.AssistantMessage("Hi there! How can I help you?"),
+		openai.UserMessage("This is a benchmark test"),
 	}
 	err = messagesQuery.Spec.SetInputMessages(benchMessages)
 	require.NoError(b, err)

@@ -146,27 +146,16 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve query input: %w", err)
 		}
-		userMessage := NewUserMessage(resolvedInput)
-		return []Message{userMessage}, nil
+		return []Message{NewUserMessage(resolvedInput)}, nil
 	} else {
-		crdMessages, err := query.Spec.GetInputMessages()
+		openaiMessages, err := query.Spec.GetInputMessages()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get input messages: %w", err)
 		}
 
-		// Convert CRD messages to genai.Message format
-		var messages []Message
-		for _, msg := range crdMessages {
-			switch msg.Role {
-			case RoleUser:
-				messages = append(messages, NewUserMessage(msg.Content))
-			case RoleAssistant:
-				messages = append(messages, NewAssistantMessage(msg.Content))
-			case RoleSystem:
-				messages = append(messages, NewSystemMessage(msg.Content))
-			default:
-				return nil, fmt.Errorf("unsupported message role: %s", msg.Role)
-			}
+		messages := make([]Message, len(openaiMessages))
+		for i := range openaiMessages {
+			messages[i] = Message(openaiMessages[i])
 		}
 		return messages, nil
 	}
