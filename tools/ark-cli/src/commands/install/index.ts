@@ -11,9 +11,10 @@ import {
   arkServices,
   type ArkService,
 } from '../../arkServices.js';
-import {isArkReady} from '../../lib/arkStatus.js';
 import {printNextSteps} from '../../lib/nextSteps.js';
 import ora from 'ora';
+import {waitForServicesReady, type WaitProgress} from '../../lib/waitForReady.js';
+import {parseTimeoutToSeconds} from '../../lib/timeout.js';
 
 async function installService(service: ArkService, verbose: boolean = false) {
   const helmArgs = [
@@ -293,42 +294,46 @@ export async function installArk(
 
   // Wait for Ark to be ready if requested
   if (options.waitForReady) {
-    // Parse timeout value (e.g., '30s', '2m', '60')
-    const parseTimeout = (value: string): number => {
-      const match = value.match(/^(\d+)([sm])?$/);
-      if (!match) {
-        throw new Error('Invalid timeout format. Use format like 30s or 2m');
-      }
-      const num = parseInt(match[1], 10);
-      const unit = match[2] || 's';
-      return unit === 'm' ? num * 60 : num;
-    };
-
     try {
-      const timeoutSeconds = parseTimeout(options.waitForReady);
-      const startTime = Date.now();
-      const endTime = startTime + timeoutSeconds * 1000;
+      const timeoutSeconds = parseTimeoutToSeconds(options.waitForReady);
+
+      const servicesToWait = Object.values(arkServices).filter(
+        (s) => s.enabled && s.category === 'core' && s.k8sDeploymentName && s.namespace
+      );
 
       const spinner = ora(
         `Waiting for Ark to be ready (timeout: ${timeoutSeconds}s)...`
       ).start();
 
-      while (Date.now() < endTime) {
-        if (await isArkReady()) {
-          spinner.succeed('Ark is ready!');
-          return;
+      const statusMap = new Map<string, boolean>();
+      servicesToWait.forEach((s) => statusMap.set(s.name, false));
+
+      const startTime = Date.now();
+      const result = await waitForServicesReady(
+        servicesToWait,
+        timeoutSeconds,
+        (progress: WaitProgress) => {
+          statusMap.set(progress.serviceName, progress.ready);
+
+          const elapsed = Math.floor((Date.now() - startTime) / 1000);
+          const lines = servicesToWait.map((s) => {
+            const ready = statusMap.get(s.name);
+            const icon = ready ? '✓' : '⋯';
+            const status = ready ? 'ready' : 'waiting...';
+            const color = ready ? chalk.green : chalk.yellow;
+            return `  ${color(icon)} ${chalk.bold(s.name)} ${chalk.blue(`(${s.namespace})`)} - ${status}`;
+          });
+
+          spinner.text = `Waiting for Ark to be ready (${elapsed}/${timeoutSeconds}s)...\n${lines.join('\n')}`;
         }
+      );
 
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        spinner.text = `Waiting for Ark to be ready (${elapsed}/${timeoutSeconds}s)...`;
-
-        // Wait 2 seconds before checking again
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+      if (result) {
+        spinner.succeed('Ark is ready!');
+      } else {
+        spinner.fail(`Ark did not become ready within ${timeoutSeconds} seconds`);
+        process.exit(1);
       }
-
-      // Timeout reached
-      spinner.fail(`Ark did not become ready within ${timeoutSeconds} seconds`);
-      process.exit(1);
     } catch (error) {
       output.error(
         `Failed to wait for ready: ${error instanceof Error ? error.message : 'Unknown error'}`
