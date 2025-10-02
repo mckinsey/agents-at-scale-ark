@@ -39,14 +39,11 @@ describe('createModel', () => {
     // Prompts for model details
     mockInquirer.prompt
       .mockResolvedValueOnce({modelType: 'openai'})
-      .mockResolvedValueOnce({
-        modelVersion: 'gpt-4',
-        baseUrl: 'https://api.openai.com/',
-      })
+      .mockResolvedValueOnce({model: 'gpt-4'})
+      .mockResolvedValueOnce({baseUrl: 'https://api.openai.com/'})
       .mockResolvedValueOnce({apiKey: 'secret-key'});
 
     // Secret operations succeed
-    mockExeca.mockResolvedValueOnce({}); // delete secret (may not exist)
     mockExeca.mockResolvedValueOnce({}); // create secret
     mockExeca.mockResolvedValueOnce({}); // apply model
 
@@ -59,7 +56,7 @@ describe('createModel', () => {
       {stdio: 'pipe'}
     );
     expect(mockOutput.success).toHaveBeenCalledWith(
-      'model test-model created successfully'
+      'model test-model created'
     );
   });
 
@@ -67,10 +64,8 @@ describe('createModel', () => {
     mockInquirer.prompt
       .mockResolvedValueOnce({modelName: 'prompted-model'})
       .mockResolvedValueOnce({modelType: 'azure'})
-      .mockResolvedValueOnce({
-        modelVersion: 'gpt-4',
-        baseUrl: 'https://azure.com',
-      })
+      .mockResolvedValueOnce({model: 'gpt-4'})
+      .mockResolvedValueOnce({baseUrl: 'https://azure.com'})
       .mockResolvedValueOnce({apiVersion: '2024-12-01'})
       .mockResolvedValueOnce({apiKey: 'secret'});
 
@@ -95,10 +90,8 @@ describe('createModel', () => {
     mockInquirer.prompt
       .mockResolvedValueOnce({overwrite: true})
       .mockResolvedValueOnce({modelType: 'openai'})
-      .mockResolvedValueOnce({
-        modelVersion: 'gpt-4',
-        baseUrl: 'https://api.openai.com',
-      })
+      .mockResolvedValueOnce({model: 'gpt-4'})
+      .mockResolvedValueOnce({baseUrl: 'https://api.openai.com'})
       .mockResolvedValueOnce({apiKey: 'secret'});
 
     mockExeca.mockResolvedValue({}); // remaining kubectl ops
@@ -126,13 +119,10 @@ describe('createModel', () => {
 
     mockInquirer.prompt
       .mockResolvedValueOnce({modelType: 'openai'})
-      .mockResolvedValueOnce({
-        modelVersion: 'gpt-4',
-        baseUrl: 'https://api.openai.com',
-      })
+      .mockResolvedValueOnce({model: 'gpt-4'})
+      .mockResolvedValueOnce({baseUrl: 'https://api.openai.com'})
       .mockResolvedValueOnce({apiKey: 'secret'});
 
-    mockExeca.mockRejectedValueOnce(new Error('delete failed')); // delete secret may fail
     mockExeca.mockRejectedValueOnce(new Error('secret creation failed')); // create secret fails
 
     const result = await createModel('test-model');
@@ -141,30 +131,4 @@ describe('createModel', () => {
     expect(mockOutput.error).toHaveBeenCalledWith('failed to create secret');
   });
 
-  it('cleans up secret if model creation fails', async () => {
-    mockExeca.mockRejectedValueOnce(new Error('not found')); // model doesn't exist
-
-    mockInquirer.prompt
-      .mockResolvedValueOnce({modelType: 'openai'})
-      .mockResolvedValueOnce({
-        modelVersion: 'gpt-4',
-        baseUrl: 'https://api.openai.com',
-      })
-      .mockResolvedValueOnce({apiKey: 'secret'});
-
-    mockExeca.mockResolvedValueOnce({}); // delete secret
-    mockExeca.mockResolvedValueOnce({}); // create secret
-    mockExeca.mockRejectedValueOnce(new Error('apply failed')); // apply model fails
-    mockExeca.mockResolvedValueOnce({}); // cleanup secret
-
-    const result = await createModel('test-model');
-
-    expect(result).toBe(false);
-    expect(mockOutput.error).toHaveBeenCalledWith('failed to create model');
-    expect(mockExeca).toHaveBeenCalledWith(
-      'kubectl',
-      ['delete', 'secret', 'test-model-model-api-key'],
-      {stdio: 'pipe'}
-    );
-  });
 });

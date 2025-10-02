@@ -155,17 +155,8 @@ export async function createModel(
 
   // Step 6: Create the Kubernetes secret
   const secretName = `${modelName}-model-api-key`;
-  output.info(`creating secret ${secretName}...`);
 
   try {
-    // Delete existing secret if it exists (update scenario)
-    await execa('kubectl', ['delete', 'secret', secretName], {
-      stdio: 'pipe',
-    }).catch(() => {
-      // Ignore error if secret doesn't exist
-    });
-
-    // Create the secret
     await execa(
       'kubectl',
       [
@@ -178,7 +169,7 @@ export async function createModel(
       {stdio: 'pipe'}
     );
 
-    output.success(`secret ${secretName} created`);
+    output.success(`created secret ${secretName}`);
   } catch (error) {
     output.error('failed to create secret');
     console.error(error);
@@ -245,21 +236,11 @@ export async function createModel(
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    output.success(`model ${modelName} created successfully`);
-    console.log();
-    output.info('you can now use this model with ARK agents and queries');
+    output.success(`model ${modelName} created`);
     return true;
   } catch (error) {
     output.error('failed to create model');
     console.error(error);
-
-    // Try to clean up the secret if model creation failed
-    try {
-      await execa('kubectl', ['delete', 'secret', secretName], {stdio: 'pipe'});
-      output.info(`cleaned up secret ${secretName}`);
-    } catch {
-      // Ignore cleanup errors
-    }
     return false;
   }
 }
