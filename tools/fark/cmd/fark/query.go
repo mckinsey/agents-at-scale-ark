@@ -14,11 +14,11 @@ import (
 	"mckinsey.com/ark/internal/annotations"
 )
 
-func createQuery(input runtime.RawExtension, targets []arkv1alpha1.QueryTarget, namespace string, params []arkv1alpha1.Parameter, sessionId string) (*arkv1alpha1.Query, error) {
+func createQuery(input string, targets []arkv1alpha1.QueryTarget, namespace string, params []arkv1alpha1.Parameter, sessionId string) (*arkv1alpha1.Query, error) {
 	queryName := fmt.Sprintf("query-%d", time.Now().Unix())
 
 	spec := &arkv1alpha1.QuerySpec{
-		Input:      input,
+		Input:      runtime.RawExtension{Raw: []byte(input)},
 		Targets:    targets,
 		Parameters: params,
 		SessionId:  sessionId,
@@ -54,9 +54,24 @@ func submitQuery(config *Config, query *arkv1alpha1.Query) error {
 }
 
 func convertToUnstructured(query *arkv1alpha1.Query) (*unstructured.Unstructured, error) {
-	unstructuredQuery, err := runtime.DefaultUnstructuredConverter.ToUnstructured(query)
+	// Create a copy of the query without the RawExtension field to avoid conversion issues
+	queryCopy := query.DeepCopy()
+	originalInput := queryCopy.Spec.Input
+	queryCopy.Spec.Input = runtime.RawExtension{} // Clear the RawExtension field temporarily
+
+	// Convert the query without RawExtension. DefaultUnstructuredConverter cannot handle RawExtension
+	unstructuredQuery, err := runtime.DefaultUnstructuredConverter.ToUnstructured(queryCopy)
 	if err != nil {
 		return nil, err
+	}
+
+	// Manually set the Input field as raw JSON in the unstructured map
+	if originalInput.Raw != nil {
+		var inputValue interface{}
+		if err := json.Unmarshal(originalInput.Raw, &inputValue); err != nil {
+			inputValue = string(originalInput.Raw)
+		}
+		unstructured.SetNestedField(unstructuredQuery, inputValue, "spec", "input")
 	}
 
 	unstructuredObj := &unstructured.Unstructured{}

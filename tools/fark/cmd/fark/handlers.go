@@ -170,7 +170,7 @@ func handleQueryResourceWithName(config *Config, resourceType ResourceType, w ht
 
 	// Create query targets
 	targets := []arkv1alpha1.QueryTarget{{Type: string(resourceType)[:len(resourceType)-1], Name: req.Name}}
-	query, err := createQuery(runtime.RawExtension{Raw: []byte(req.Input)}, targets, config.Namespace, req.Parameters, req.SessionId)
+	query, err := createQuery(req.Input, targets, config.Namespace, req.Parameters, req.SessionId)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to create query: %v", err), http.StatusInternalServerError)
 		return

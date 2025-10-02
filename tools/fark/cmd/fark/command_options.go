@@ -50,7 +50,7 @@ func (c *TargetCommand) Run() error {
 	}
 
 	targets := []arkv1alpha1.QueryTarget{{Type: c.TargetType, Name: c.TargetName}}
-	query, err := createQuery(runtime.RawExtension{Raw: []byte(c.Input)}, targets, c.Namespace, params, c.SessionId)
+	query, err := createQuery(c.Input, targets, c.Namespace, params, c.SessionId)
 	if err != nil {
 		return fmt.Errorf("failed to create query: %v", err)
 	}
