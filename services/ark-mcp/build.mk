@@ -52,8 +52,10 @@ $(ARK_MCP_SERVICE_NAME)-build: $(ARK_MCP_STAMP_BUILD) # HELP: Build ark-mcp Dock
 $(ARK_MCP_STAMP_BUILD): $(ARK_MCP_STAMP_DEPS) $(ARK_SDK_WHL)
 	@mkdir -p $(ARK_MCP_SERVICE_DIR)/ark-mcp/out
 	cp $(ARK_SDK_WHL) $(ARK_MCP_SERVICE_DIR)/ark-mcp/out/
+	cp $(BUILD_ROOT)/uv.lock $(ARK_MCP_SERVICE_DIR)/ark-mcp/
 	cd $(ARK_MCP_SERVICE_DIR) && docker build -t $(ARK_MCP_IMAGE):$(ARK_MCP_TAG) .
 	@rm -rf $(ARK_MCP_SERVICE_DIR)/ark-mcp/out
+	@rm -f $(ARK_MCP_SERVICE_DIR)/ark-mcp/uv.lock
 	@touch $@
 
 # Install target
