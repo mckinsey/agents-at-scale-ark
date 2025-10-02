@@ -371,7 +371,7 @@ jobs:
           fark agent sample-agent "confirm you have read this message"
 
   e2e-ark-cli:
-    needs: [setup-container-cache-registry, build-containers]
+    needs: [build-ark-cli]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
