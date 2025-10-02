@@ -59,12 +59,11 @@ profiles:
             kubectl:
               manifests:
                 - "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml"
+
 pipelines:
   deploy: |-
+    create_deployments --all
     run_dependency_pipelines --all --pipeline=deploy
-    create_deployments --all
   dev: |-
-    run_dependency_pipelines --all --pipeline=dev
     create_deployments --all
-
-
+    run_dependency_pipelines --all --pipeline=dev
