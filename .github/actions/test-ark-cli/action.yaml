@@ -8,6 +8,15 @@ inputs:
   azure-openai-base-url:
     description: Azure OpenAI base URL
     required: true
+  model-type:
+    description: Model provider type
+    required: true
+  model-name:
+    description: Model name/version
+    required: true
+  model-api-version:
+    description: Model API version (Azure only)
+    required: true
   ci-cache-registry-username:
     description: Username for CI cache registry
     required: true
@@ -74,14 +83,14 @@ runs:
 
     - name: Create default model
       shell: bash
-      env:
-        ARK_MODEL_TYPE: azure
-        ARK_MODEL_BASE_URL: ${{ inputs.azure-openai-base-url }}
-        ARK_MODEL_API_KEY: ${{ inputs.azure-openai-key }}
-        ARK_MODEL_API_VERSION: 2024-12-01-preview
-        ARK_MODEL_VERSION: gpt-4.1-mini
       run: |
-        ark models create default --yes
+        ark models create default \
+          --type "${{ inputs.model-type }}" \
+          --model "${{ inputs.model-name }}" \
+          --base-url "${{ inputs.azure-openai-base-url }}" \
+          --api-key "${{ inputs.azure-openai-key }}" \
+          --api-version "${{ inputs.model-api-version }}" \
+          --yes
         ark models list
 
         echo "Waiting for model to be available..."
