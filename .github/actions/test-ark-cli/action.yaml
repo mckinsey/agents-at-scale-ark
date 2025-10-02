@@ -1,4 +1,4 @@
-name: Test ARK CLI
+name: e2e-ark-cli
 description: End-to-end test for the ARK CLI
 
 inputs:
@@ -32,22 +32,6 @@ runs:
       uses: actions/setup-node@v4
       with:
         node-version: '24.x'
-
-    - name: Configure K3s registry authentication
-      shell: bash
-      run: |
-        sudo mkdir -p /etc/rancher/k3s
-        cat <<EOF | sudo tee /etc/rancher/k3s/registries.yaml
-        mirrors:
-          ghcr.io:
-            endpoint:
-              - "https://ghcr.io"
-        configs:
-          ghcr.io:
-            auth:
-              username: ${{ inputs.ci-cache-registry-username }}
-              password: ${{ inputs.ci-cache-registry-password }}
-        EOF
 
     - name: Setup K3s cluster
       uses: ./.github/actions/setup-k3s
