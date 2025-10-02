@@ -329,7 +329,7 @@ export async function installArk(
       );
 
       if (result) {
-        spinner.succeed('Ark is ready!');
+        spinner.succeed('Ark is ready');
       } else {
         spinner.fail(`Ark did not become ready within ${timeoutSeconds} seconds`);
         process.exit(1);

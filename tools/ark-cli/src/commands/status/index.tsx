@@ -354,7 +354,7 @@ export async function checkStatus(
       );
 
       if (result) {
-        waitSpinner.succeed('All services are ready!');
+        waitSpinner.succeed('All services are ready');
         process.exit(0);
       } else {
         waitSpinner.fail(`Services did not become ready within ${timeoutSeconds} seconds`);
