@@ -150,7 +150,8 @@ spec:
                                       queryParameterRef:
                                         properties:
                                           name:
-                                            description: Name of the parameter from the Query resource
+                                            description: Name of the parameter from
+                                              the Query resource
                                             minLength: 1
                                             type: string
                                         required:
@@ -378,7 +379,8 @@ spec:
                                     queryParameterRef:
                                       properties:
                                         name:
-                                          description: Name of the parameter from the Query resource
+                                          description: Name of the parameter from
+                                            the Query resource
                                           minLength: 1
                                           type: string
                                       required:
@@ -486,7 +488,8 @@ spec:
                                 queryParameterRef:
                                   properties:
                                     name:
-                                      description: Name of the parameter from the Query resource
+                                      description: Name of the parameter from the
+                                        Query resource
                                       minLength: 1
                                       type: string
                                   required:
@@ -606,7 +609,8 @@ spec:
                             queryParameterRef:
                               properties:
                                 name:
-                                  description: Name of the parameter from the Query resource
+                                  description: Name of the parameter from the Query
+                                    resource
                                   minLength: 1
                                   type: string
                               required:
