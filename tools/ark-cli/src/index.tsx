@@ -1,4 +1,4 @@
-#!/usr/bin/env NODE_NO_WARNINGS=1 node
+#!/usr/bin/env node
 
 import {Command} from 'commander';
 import {render} from 'ink';

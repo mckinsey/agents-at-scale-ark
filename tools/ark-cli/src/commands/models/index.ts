@@ -65,8 +65,14 @@ export function createModelsCommand(_: ArkConfig): Command {
   createCommand
     .description('Create a new model')
     .argument('[name]', 'Model name (optional)')
-    .action(async (name) => {
-      await createModel(name);
+    .option('--type <type>', 'Model provider type (azure, openai, bedrock)')
+    .option('--model <model>', 'Model name (e.g., gpt-4o-mini)')
+    .option('--base-url <url>', 'Base URL for the model API')
+    .option('--api-key <key>', 'API key for authentication')
+    .option('--api-version <version>', 'API version (Azure only)')
+    .option('--yes', 'Skip confirmation prompts')
+    .action(async (name, options) => {
+      await createModel(name, options);
     });
 
   modelsCommand.addCommand(createCommand);

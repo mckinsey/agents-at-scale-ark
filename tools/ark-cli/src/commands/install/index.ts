@@ -8,11 +8,13 @@ import output from '../../lib/output.js';
 import {
   getInstallableServices,
   arkDependencies,
+  arkServices,
   type ArkService,
 } from '../../arkServices.js';
-import {isArkReady} from '../../lib/arkStatus.js';
 import {printNextSteps} from '../../lib/nextSteps.js';
 import ora from 'ora';
+import {waitForServicesReady, type WaitProgress} from '../../lib/waitForReady.js';
+import {parseTimeoutToSeconds} from '../../lib/timeout.js';
 
 async function installService(service: ArkService, verbose: boolean = false) {
   const helmArgs = [
@@ -92,6 +94,14 @@ export async function installArk(
     );
 
     // Build choices for the checkbox prompt
+    const coreServices = Object.values(arkServices)
+      .filter(s => s.category === 'core')
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const otherServices = Object.values(arkServices)
+      .filter(s => s.category === 'service')
+      .sort((a, b) => a.name.localeCompare(b.name));
+
     const allChoices = [
       new inquirer.Separator(chalk.bold('──── Dependencies ────')),
       {
@@ -105,32 +115,17 @@ export async function installArk(
         checked: true,
       },
       new inquirer.Separator(chalk.bold('──── Ark Core ────')),
-      {
-        name: `ark-controller ${chalk.gray('- Core Ark controller')}`,
-        value: 'ark-controller',
-        checked: true,
-      },
+      ...coreServices.map((service) => ({
+        name: `${service.name} ${chalk.gray(`- ${service.description}`)}`,
+        value: service.helmReleaseName,
+        checked: Boolean(service.enabled),
+      })),
       new inquirer.Separator(chalk.bold('──── Ark Services ────')),
-      {
-        name: `ark-api ${chalk.gray('- API service')}`,
-        value: 'ark-api',
-        checked: true,
-      },
-      {
-        name: `ark-dashboard ${chalk.gray('- Web dashboard')}`,
-        value: 'ark-dashboard',
-        checked: true,
-      },
-      {
-        name: `ark-mcp ${chalk.gray('- MCP services')}`,
-        value: 'ark-mcp',
-        checked: true,
-      },
-      {
-        name: `localhost-gateway ${chalk.gray('- Gateway for local access')}`,
-        value: 'localhost-gateway',
-        checked: true,
-      },
+      ...otherServices.map((service) => ({
+        name: `${service.name} ${chalk.gray(`- ${service.description}`)}`,
+        value: service.helmReleaseName,
+        checked: Boolean(service.enabled),
+      })),
     ];
 
     let selectedComponents: string[] = [];
@@ -236,11 +231,11 @@ export async function installArk(
     }
 
     // Install selected services
-    const services = getInstallableServices();
-    for (const service of Object.values(services)) {
-      // Check if this service was selected
-      const serviceKey = service.helmReleaseName;
-      if (!selectedComponents.includes(serviceKey)) {
+    for (const serviceName of selectedComponents) {
+      const service = Object.values(arkServices).find(
+        (s) => s.helmReleaseName === serviceName
+      );
+      if (!service || !service.chartPath) {
         continue;
       }
 
@@ -250,8 +245,8 @@ export async function installArk(
 
         console.log(); // Add blank line after command output
       } catch {
-        // Continue with remaining services on error
         console.log(); // Add blank line after error output
+        process.exit(1);
       }
     }
   } else {
@@ -286,8 +281,8 @@ export async function installArk(
         await installService(service, options.verbose);
         console.log(); // Add blank line after command output
       } catch {
-        // Continue with remaining services on error
         console.log(); // Add blank line after error output
+        process.exit(1);
       }
     }
   }
@@ -299,42 +294,46 @@ export async function installArk(
 
   // Wait for Ark to be ready if requested
   if (options.waitForReady) {
-    // Parse timeout value (e.g., '30s', '2m', '60')
-    const parseTimeout = (value: string): number => {
-      const match = value.match(/^(\d+)([sm])?$/);
-      if (!match) {
-        throw new Error('Invalid timeout format. Use format like 30s or 2m');
-      }
-      const num = parseInt(match[1], 10);
-      const unit = match[2] || 's';
-      return unit === 'm' ? num * 60 : num;
-    };
-
     try {
-      const timeoutSeconds = parseTimeout(options.waitForReady);
-      const startTime = Date.now();
-      const endTime = startTime + timeoutSeconds * 1000;
+      const timeoutSeconds = parseTimeoutToSeconds(options.waitForReady);
+
+      const servicesToWait = Object.values(arkServices).filter(
+        (s) => s.enabled && s.category === 'core' && s.k8sDeploymentName && s.namespace
+      );
 
       const spinner = ora(
         `Waiting for Ark to be ready (timeout: ${timeoutSeconds}s)...`
       ).start();
 
-      while (Date.now() < endTime) {
-        if (await isArkReady()) {
-          spinner.succeed('Ark is ready!');
-          return;
+      const statusMap = new Map<string, boolean>();
+      servicesToWait.forEach((s) => statusMap.set(s.name, false));
+
+      const startTime = Date.now();
+      const result = await waitForServicesReady(
+        servicesToWait,
+        timeoutSeconds,
+        (progress: WaitProgress) => {
+          statusMap.set(progress.serviceName, progress.ready);
+
+          const elapsed = Math.floor((Date.now() - startTime) / 1000);
+          const lines = servicesToWait.map((s) => {
+            const ready = statusMap.get(s.name);
+            const icon = ready ? '✓' : '⋯';
+            const status = ready ? 'ready' : 'waiting...';
+            const color = ready ? chalk.green : chalk.yellow;
+            return `  ${color(icon)} ${chalk.bold(s.name)} ${chalk.blue(`(${s.namespace})`)} - ${status}`;
+          });
+
+          spinner.text = `Waiting for Ark to be ready (${elapsed}/${timeoutSeconds}s)...\n${lines.join('\n')}`;
         }
+      );
 
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        spinner.text = `Waiting for Ark to be ready (${elapsed}/${timeoutSeconds}s)...`;
-
-        // Wait 2 seconds before checking again
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+      if (result) {
+        spinner.succeed('Ark is ready');
+      } else {
+        spinner.fail(`Ark did not become ready within ${timeoutSeconds} seconds`);
+        process.exit(1);
       }
-
-      // Timeout reached
-      spinner.fail(`Ark did not become ready within ${timeoutSeconds} seconds`);
-      process.exit(1);
     } catch (error) {
       output.error(
         `Failed to wait for ready: ${error instanceof Error ? error.message : 'Unknown error'}`
