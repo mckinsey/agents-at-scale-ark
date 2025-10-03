@@ -286,6 +286,16 @@
       "contributions": [
         "doc"
       ]
+    },
+    {
+      "login": "simoneb",
+      "name": "Simone Busoli",
+      "avatar_url": "https://avatars.githubusercontent.com/u/20181?v=4",
+      "profile": "https://github.com/simoneb",
+      "contributions": [
+        "doc",
+        "bug"
+      ]
     }
   ],
   "contributorsPerLine": 7,
