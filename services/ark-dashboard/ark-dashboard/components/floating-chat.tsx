@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { 
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/tooltip"
 import { chatService } from "@/lib/services"
 import { ChatMessage } from "@/components/chat/chat-message"
-import type { ChatMessageData } from "@/lib/types/chat"
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions"
 
 type ChatType = "model" | "team" | "agent"
@@ -29,7 +28,7 @@ interface FloatingChatProps {
 
 
 export default function FloatingChat({ name, type, position, onClose }: FloatingChatProps) {
-  const [chatMessages, setChatMessages] = useState<ChatMessageData[]>([])
+  const [chatMessages, setChatMessages] = useState<ChatCompletionMessageParam[]>([])
   const [currentMessage, setCurrentMessage] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -73,61 +72,45 @@ export default function FloatingChat({ name, type, position, onClose }: Floating
   const pollQueryStatus = async (queryName: string) => {
     let pollingStopped = false
     stopPollingRef.current = () => { pollingStopped = true }
-    
+
     while (!pollingStopped) {
       try {
         const result = await chatService.getQueryResult(queryName)
 
         // Check if terminal state with response
         if (result.terminal) {
-          // Add assistant message with the result
-          const assistantMessage: ChatMessageData = {
-            role: "assistant",
-            content: "",
-            queryName: queryName,
-            status: "completed"
-          }
-          
+          let content = ""
+
           if (result.status === 'done' && result.response) {
-            assistantMessage.content = result.response
-            assistantMessage.status = "completed"
+            content = result.response
           } else if (result.status === 'error') {
-            assistantMessage.content = result.response || 'Query failed'
-            assistantMessage.status = "failed"
+            content = result.response || 'Query failed'
           } else if (result.status === 'unknown') {
-            assistantMessage.content = 'Query status unknown'
-            assistantMessage.status = "failed"
+            content = 'Query status unknown'
           }
-          
-          setChatMessages((prev) => [...prev, assistantMessage])
-          
+
+          setChatMessages((prev) => [...prev, { role: "assistant", content }])
+
           pollingStopped = true
           break
         }
       } catch (error) {
         console.error('Error polling query status:', error)
-        
-        // Add error message
-        const errorMessage: ChatMessageData = {
-          role: "assistant",
-          content: "Error while processing query",
-          queryName: queryName,
-          status: "failed"
-        }
-        setChatMessages((prev) => [...prev, errorMessage])
-        
+
+        setChatMessages((prev) => [...prev, { role: "assistant", content: "Error while processing query" }])
+
         pollingStopped = true
       }
-      
+
       if (!pollingStopped) {
         await new Promise(resolve => setTimeout(resolve, 1000))
       }
     }
   }
 
-  const buildChatMessages = (messages: ChatMessageData[], currentMsg: string): ChatCompletionMessageParam[] => {
+  const buildChatMessages = (messages: ChatCompletionMessageParam[], currentMsg: string): ChatCompletionMessageParam[] => {
     return [
-      ...messages.map(msg => ({ role: msg.role, content: msg.content })),
+      ...messages,
       { role: "user", content: currentMsg }
     ]
   }
@@ -282,18 +265,28 @@ export default function FloatingChat({ name, type, position, onClose }: Floating
               </div>
             )}
 
-            {chatMessages.map((message, index) => (
-              message.content ? (
+            {chatMessages.map((message, index) => {
+              // Extract string content from message
+              let content = ""
+              if (typeof message.content === "string") {
+                content = message.content
+              } else if (Array.isArray(message.content)) {
+                // For multimodal content, extract text parts
+                content = message.content
+                  .filter((part) => typeof part === "object" && part !== null && "type" in part && part.type === "text")
+                  .map((part) => typeof part === "object" && part !== null && "text" in part ? part.text : "")
+                  .join("\n")
+              }
+
+              return content ? (
                 <ChatMessage
                   key={index}
-                  role={message.role}
-                  content={message.content}
-                  status={message.status}
+                  role={message.role as "user" | "assistant" | "system"}
+                  content={content}
                   viewMode={viewMode}
-                  queryName={message.queryName}
                 />
               ) : null
-            ))}
+            })}
             
             {/* Show typing indicator when processing */}
             {isProcessing && (
