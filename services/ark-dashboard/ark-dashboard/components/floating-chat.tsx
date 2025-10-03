@@ -13,9 +13,9 @@ import {
   TooltipTrigger
 } from "@/components/ui/tooltip"
 import { chatService } from "@/lib/services"
-import type { Message } from "@/lib/services/chat"
 import { ChatMessage } from "@/components/chat/chat-message"
 import type { ChatMessageData } from "@/lib/types/chat"
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions"
 
 type ChatType = "model" | "team" | "agent"
 
@@ -125,21 +125,11 @@ export default function FloatingChat({ name, type, position, onClose }: Floating
     }
   }
 
-  const buildChatMessages = (messages: ChatMessageData[], currentMsg: string): Message[] => {
-    const messageArray: Message[] = messages
-      .filter(msg => msg.content) // Only include messages with content
-      .map(msg => ({
-        role: msg.role,
-        content: msg.content
-      }))
-    
-    // Add the current message
-    messageArray.push({
-      role: "user",
-      content: currentMsg
-    })
-    
-    return messageArray
+  const buildChatMessages = (messages: ChatMessageData[], currentMsg: string): ChatCompletionMessageParam[] => {
+    return [
+      ...messages.map(msg => ({ role: msg.role, content: msg.content })),
+      { role: "user", content: currentMsg }
+    ]
   }
 
   const handleSendMessage = async () => {

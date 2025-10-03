@@ -2,8 +2,6 @@ import { apiClient } from "@/lib/api/client";
 import type { components } from "@/lib/api/generated/types";
 import { generateUUID } from "@/lib/utils/uuid";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-
-export type Message = ChatCompletionMessageParam;
 export type InputType = components["schemas"]["InputType"];
 
 interface AxiosError extends Error {
@@ -155,7 +153,7 @@ export const chatService = {
   },
 
   async submitChatQuery(
-    messages: Message[],
+    messages: ChatCompletionMessageParam[],
     targetType: string,
     targetName: string,
     sessionId?: string
