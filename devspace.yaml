@@ -3,6 +3,8 @@ version: v2beta1
 
 # Dependencies - include other DevSpace configurations
 dependencies:
+  localhost-gateway:
+    path: ./services/localhost-gateway
   ark-cluster-memory:
     path: ./services/ark-cluster-memory
   ark-api:
@@ -11,9 +13,8 @@ dependencies:
     path: ./services/ark-dashboard
   ark:
     path: ./ark
-#   ark-mcp:
-#     path: ./services/ark-mcp
-#     pipeline: dev
+#  ark-mcp:
+#    path: ./services/ark-mcp
 #   postgres-memory:
 #     path: ./services/postgres-memory
 
@@ -26,6 +27,10 @@ vars:
   ENABLE_GATEWAY_API_CRDS:
     source: env
     default: true
+
+commands:
+  routes:
+    ./services/localhost-gateway/scripts/show-routes.sh
 
 profiles:
   - name: enable-cert-manager
