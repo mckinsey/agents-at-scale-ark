@@ -8,10 +8,12 @@
     "ark": "dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "templates"
   ],
   "scripts": {
-    "build": "tsc && chmod +x dist/index.js",
+    "build": "npm run copy-templates && tsc && chmod +x dist/index.js",
+    "copy-templates": "rm -rf templates && cp -r ../../templates .",
     "dev": "tsc --watch",
     "start": "NODE_NO_WARNINGS=1 node dist/index.js",
     "clean": "rm -rf dist",

@@ -41,3 +41,19 @@ https://mckinsey.github.io/agents-at-scale-ark/
 The [Quickstart](https://mckinsey.github.io/agents-at-scale-ark/quickstart/) guide will walk you through the process of configuring a model, creating an agent and running basic queries.
 
 To troubleshoot an installation, run `ark status`.
+
+## Development
+
+### Building from Source
+
+The ARK CLI uses templates from the parent repository. When building, templates are automatically copied from `../../templates` into the CLI package:
+
+```bash
+# Build (copies templates and compiles TypeScript)
+npm run build
+
+# Install globally for testing
+npm install -g .
+```
+
+**Note**: The `templates/` directory in the CLI package is git-ignored and generated during build. The source of truth for templates is in the main repo at `../../templates`.
