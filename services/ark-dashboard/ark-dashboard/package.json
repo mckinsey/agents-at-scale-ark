@@ -37,6 +37,7 @@
     "mermaid": "^11.9.0",
     "next": "^15.3.4",
     "next-auth": "^5.0.0-beta.29",
+    "openai": "^6.1.0",
     "react": "^19.0.0",
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
