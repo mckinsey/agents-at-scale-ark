@@ -277,6 +277,15 @@
         "doc",
         "bug"
       ]
+    },
+    {
+      "login": "skazinka",
+      "name": "Lily Kazinka",
+      "avatar_url": "https://avatars.githubusercontent.com/u/4908684?v=4",
+      "profile": "https://github.com/skazinka",
+      "contributions": [
+        "doc"
+      ]
     }
   ],
   "contributorsPerLine": 7,
