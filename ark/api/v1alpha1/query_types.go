@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/openai/openai-go"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -13,19 +14,9 @@ import (
 const (
 	// QueryTypeUser represents a query with string input that gets converted to a single message with role="user"
 	QueryTypeUser = "user"
-	// QueryTypeMessages represents a query with an array of Message objects, each with explicit role and content
+	// QueryTypeMessages represents a query with an array of OpenAI ChatCompletionMessageParamUnion objects
 	QueryTypeMessages = "messages"
 )
-
-// Message represents a single message in a conversation
-type Message struct {
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Role string `json:"role"`
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Content string `json:"content"`
-}
 
 type QueryTarget struct {
 	// +kubebuilder:validation:Required
@@ -52,7 +43,7 @@ type QuerySpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:pruning:PreserveUnknownFields
 	// +kubebuilder:validation:Schemaless
-	// Input can be a string (type=user) or []Message (type=messages)
+	// Input can be a string (type=user) or []openai.ChatCompletionMessageParamUnion (type=messages)
 	Input runtime.RawExtension `json:"input"`
 	// +kubebuilder:validation:Optional
 	// Parameters for template processing in the input field
@@ -139,13 +130,13 @@ func (q *QuerySpec) GetInputString() (string, error) {
 	return inputString, nil
 }
 
-// GetInputMessages returns the input as []Message when type="messages"
-func (q *QuerySpec) GetInputMessages() ([]Message, error) {
+// GetInputMessages returns the input as []openai.ChatCompletionMessageParamUnion when type="messages"
+func (q *QuerySpec) GetInputMessages() ([]openai.ChatCompletionMessageParamUnion, error) {
 	if q.Type != QueryTypeMessages {
 		return nil, fmt.Errorf("cannot get message input for type=%s, expected type=%s", q.Type, QueryTypeMessages)
 	}
 
-	var messages []Message
+	var messages []openai.ChatCompletionMessageParamUnion
 	if err := json.Unmarshal(q.Input.Raw, &messages); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal input as messages: %w", err)
 	}
@@ -168,8 +159,8 @@ func (q *QuerySpec) SetInputString(input string) error {
 	return nil
 }
 
-// SetInputMessages sets the input as []Message and updates type to "messages"
-func (q *QuerySpec) SetInputMessages(messages []Message) error {
+// SetInputMessages sets the input as []openai.ChatCompletionMessageParamUnion and updates type to "messages"
+func (q *QuerySpec) SetInputMessages(messages []openai.ChatCompletionMessageParamUnion) error {
 	inputBytes, err := json.Marshal(messages)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message input: %w", err)
@@ -180,7 +171,7 @@ func (q *QuerySpec) SetInputMessages(messages []Message) error {
 	return nil
 }
 
-// GetInputAsGeneric returns the input as either string or []Message based on type
+// GetInputAsGeneric returns the input as either string or []openai.ChatCompletionMessageParamUnion based on type
 func (q *QuerySpec) GetInputAsGeneric() (interface{}, error) {
 	switch q.Type {
 	case QueryTypeUser, "": // Empty type defaults to user/string input

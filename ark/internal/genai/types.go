@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/packages/param"
 )
 
 type (
@@ -25,6 +26,14 @@ func NewUserMessage(content string) Message {
 
 func NewAssistantMessage(content string) Message {
 	return Message(openai.AssistantMessage(content))
+}
+
+func NewAssistantMessageWithName(content, name string) Message {
+	msg := openai.AssistantMessage(content)
+	if m := msg.OfAssistant; m != nil {
+		m.Name = param.Opt[string]{Value: name}
+	}
+	return Message(msg)
 }
 
 func ToolMessage[T string | []openai.ChatCompletionContentPartTextParam](content T, toolCallID string) Message {

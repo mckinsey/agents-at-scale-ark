@@ -54,7 +54,8 @@ spec:
                 description: When true, indicates intent to cancel the query
                 type: boolean
               input:
-                description: Input can be a string (type=user) or []Message (type=messages)
+                description: Input can be a string (type=user) or []openai.ChatCompletionMessageParamUnion
+                  (type=messages)
                 x-kubernetes-preserve-unknown-fields: true
               memory:
                 properties:
