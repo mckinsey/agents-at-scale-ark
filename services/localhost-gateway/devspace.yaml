@@ -1,4 +1,4 @@
-# DevSpace configuration for ark-mcp service
+# DevSpace configuration for localhost-gateway
 version: v2beta1
 
 pipelines:
