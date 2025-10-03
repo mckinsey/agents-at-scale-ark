@@ -4,18 +4,13 @@ from typing import List, Dict, Optional, Any, Union
 from datetime import datetime
 from pydantic import BaseModel
 from enum import Enum
+from openai.types.chat import ChatCompletionMessageParam
 
 
 class InputType(str, Enum):
     """Input type enumeration."""
     USER = "user"
     MESSAGES = "messages"
-
-
-class Message(BaseModel):
-    """A message in a conversation."""
-    role: str  # "user", "assistant", "system"
-    content: str
 
 
 class Memory(BaseModel):
@@ -81,7 +76,7 @@ class QueryResponse(BaseModel):
     name: str
     namespace: str
     type: Optional[InputType] = InputType.USER
-    input: Union[str, List[Message]]
+    input: Union[str, List[ChatCompletionMessageParam]]
     memory: Optional[Memory] = None
     sessionId: Optional[str] = None
     status: Optional[Dict[str, Any]] = None
@@ -98,7 +93,7 @@ class QueryCreateRequest(BaseModel):
     """Request body for creating a query."""
     name: str
     type: Optional[InputType] = InputType.USER
-    input: Union[str, List[Message]]
+    input: Union[str, List[ChatCompletionMessageParam]]
     memory: Optional[Memory] = None
     parameters: Optional[List[Parameter]] = None
     selector: Optional[LabelSelector] = None
@@ -116,7 +111,7 @@ class QueryCreateRequest(BaseModel):
 class QueryUpdateRequest(BaseModel):
     """Request body for updating a query."""
     type: Optional[InputType] = None
-    input: Optional[Union[str, List[Message]]] = None
+    input: Optional[Union[str, List[ChatCompletionMessageParam]]] = None
     memory: Optional[Memory] = None
     parameters: Optional[List[Parameter]] = None
     selector: Optional[LabelSelector] = None
@@ -133,7 +128,7 @@ class QueryDetailResponse(BaseModel):
     name: str
     namespace: str
     type: Optional[InputType] = InputType.USER
-    input: Union[str, List[Message]]
+    input: Union[str, List[ChatCompletionMessageParam]]
     memory: Optional[Memory] = None
     parameters: Optional[List[Parameter]] = None
     selector: Optional[LabelSelector] = None

@@ -113,11 +113,8 @@ async def create_query(
             # For string input, pass as string
             spec["input"] = query.input if isinstance(query.input, str) else str(query.input)
         else:
-            # Convert Message objects to dict array for RawExtension input field
-            spec["input"] = [
-                {"role": msg.role, "content": msg.content} 
-                for msg in query.input
-            ]
+            # Messages are already dicts (ChatCompletionMessageParam), pass through as-is
+            spec["input"] = query.input
         
         if query.memory:
             spec["memory"] = query.memory.model_dump()

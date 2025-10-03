@@ -83,12 +83,13 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function
   };
 
   // Helper function to convert input to displayable string
-  const getInputDisplayText = (input: string | { role: string; content: string; }[] | undefined): string => {
+  const getInputDisplayText = (input: string | { role: string; content: any; }[] | undefined): string => {
     if (!input) return "-";
     if (typeof input === "string") return input;
     if (Array.isArray(input)) {
-      // Convert message array to readable format
-      return input.map(msg => `${msg.role}: ${msg.content}`).join("\n");
+      // Show just the content from the last message
+      const lastMsg = input[input.length - 1];
+      return typeof lastMsg.content === 'string' ? lastMsg.content : JSON.stringify(lastMsg.content);
     }
     return "-";
   };
