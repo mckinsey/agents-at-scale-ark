@@ -10,7 +10,10 @@ import {
 import {StatusData, ServiceStatus} from '../../lib/types.js';
 import {fetchVersionInfo} from '../../lib/versions.js';
 import type {ArkVersionInfo} from '../../lib/versions.js';
-import {waitForServicesReady, type WaitProgress} from '../../lib/waitForReady.js';
+import {
+  waitForServicesReady,
+  type WaitProgress,
+} from '../../lib/waitForReady.js';
 import {arkServices} from '../../arkServices.js';
 import type {ArkService} from '../../types/arkService.js';
 import output from '../../lib/output.js';
@@ -308,20 +311,29 @@ export async function checkStatus(
       let servicesToWait: ArkService[] = [];
       if (serviceNames && serviceNames.length > 0) {
         servicesToWait = serviceNames
-          .map((name) => Object.values(arkServices).find((s) => s.name === name))
-          .filter((s): s is ArkService =>
-            s !== undefined &&
-            s.k8sDeploymentName !== undefined &&
-            s.namespace !== undefined
+          .map((name) =>
+            Object.values(arkServices).find((s) => s.name === name)
+          )
+          .filter(
+            (s): s is ArkService =>
+              s !== undefined &&
+              s.k8sDeploymentName !== undefined &&
+              s.namespace !== undefined
           );
 
         if (servicesToWait.length === 0) {
-          output.error(`No valid services found matching: ${serviceNames.join(', ')}`);
+          output.error(
+            `No valid services found matching: ${serviceNames.join(', ')}`
+          );
           process.exit(1);
         }
       } else {
         servicesToWait = Object.values(arkServices).filter(
-          (s) => s.enabled && s.category === 'core' && s.k8sDeploymentName && s.namespace
+          (s) =>
+            s.enabled &&
+            s.category === 'core' &&
+            s.k8sDeploymentName &&
+            s.namespace
         );
       }
 
@@ -357,7 +369,9 @@ export async function checkStatus(
         waitSpinner.succeed('All services are ready');
         process.exit(0);
       } else {
-        waitSpinner.fail(`Services did not become ready within ${timeoutSeconds} seconds`);
+        waitSpinner.fail(
+          `Services did not become ready within ${timeoutSeconds} seconds`
+        );
         process.exit(1);
       }
     }

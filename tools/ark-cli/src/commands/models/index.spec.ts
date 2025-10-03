@@ -114,7 +114,10 @@ describe('models command', () => {
     const command = createModelsCommand({});
     await command.parseAsync(['node', 'test', 'create', 'my-model']);
 
-    expect(mockCreateModel).toHaveBeenCalledWith('my-model', expect.objectContaining({}));
+    expect(mockCreateModel).toHaveBeenCalledWith(
+      'my-model',
+      expect.objectContaining({})
+    );
   });
 
   it('query subcommand works', async () => {

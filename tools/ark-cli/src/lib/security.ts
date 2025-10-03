@@ -7,7 +7,6 @@ import fs from 'fs';
 import {ValidationError} from './errors.js';
 
 export class SecurityUtils {
-
   /**
    * Validate that a path is safe and doesn't contain directory traversal attempts
    */

@@ -1,6 +1,5 @@
 """API routes for Query resources."""
 
-import json
 from datetime import datetime
 from fastapi import APIRouter, Query
 from typing import Optional

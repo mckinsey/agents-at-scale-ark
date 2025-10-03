@@ -58,12 +58,20 @@ describe('targets command', () => {
     const command = createTargetsCommand({});
     await command.parseAsync(['node', 'test']);
 
-    expect(mockExeca).toHaveBeenCalledWith('kubectl', ['get', 'models', '-o', 'json'], {
-      stdio: 'pipe',
-    });
-    expect(mockExeca).toHaveBeenCalledWith('kubectl', ['get', 'agents', '-o', 'json'], {
-      stdio: 'pipe',
-    });
+    expect(mockExeca).toHaveBeenCalledWith(
+      'kubectl',
+      ['get', 'models', '-o', 'json'],
+      {
+        stdio: 'pipe',
+      }
+    );
+    expect(mockExeca).toHaveBeenCalledWith(
+      'kubectl',
+      ['get', 'agents', '-o', 'json'],
+      {
+        stdio: 'pipe',
+      }
+    );
     expect(mockConsoleLog).toHaveBeenCalledWith('agent/gpt-assistant');
     expect(mockConsoleLog).toHaveBeenCalledWith('model/gpt-4');
   });
@@ -104,9 +112,13 @@ describe('targets command', () => {
     const command = createTargetsCommand({});
     await command.parseAsync(['node', 'test', '-t', 'agent']);
 
-    expect(mockExeca).toHaveBeenCalledWith('kubectl', ['get', 'agents', '-o', 'json'], {
-      stdio: 'pipe',
-    });
+    expect(mockExeca).toHaveBeenCalledWith(
+      'kubectl',
+      ['get', 'agents', '-o', 'json'],
+      {
+        stdio: 'pipe',
+      }
+    );
     expect(mockExeca).toHaveBeenCalledTimes(1); // Only agents, not other types
     expect(mockConsoleLog).toHaveBeenCalledWith('agent/gpt');
     expect(mockConsoleLog).toHaveBeenCalledWith('agent/helper');
@@ -184,8 +196,12 @@ describe('targets command', () => {
     const command = createTargetsCommand({});
     await command.parseAsync(['node', 'test', 'list']);
 
-    expect(mockExeca).toHaveBeenCalledWith('kubectl', ['get', 'models', '-o', 'json'], {
-      stdio: 'pipe',
-    });
+    expect(mockExeca).toHaveBeenCalledWith(
+      'kubectl',
+      ['get', 'models', '-o', 'json'],
+      {
+        stdio: 'pipe',
+      }
+    );
   });
 });

@@ -83,7 +83,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function
   };
 
   // Helper function to convert input to displayable string
-  const getInputDisplayText = (input: string | { role: string; content: any; }[] | undefined): string => {
+  const getInputDisplayText = (input: string | { role: string; content: string | unknown; }[] | undefined): string => {
     if (!input) return "-";
     if (typeof input === "string") return input;
     if (Array.isArray(input)) {

@@ -6,7 +6,9 @@ jest.unstable_mockModule('execa', () => ({
 }));
 
 const {execa} = await import('execa');
-const {waitForDeploymentReady, waitForServicesReady} = await import('./waitForReady.js');
+const {waitForDeploymentReady, waitForServicesReady} = await import(
+  './waitForReady.js'
+);
 const mockedExeca = execa as jest.MockedFunction<typeof execa>;
 
 describe('waitForDeploymentReady', () => {
@@ -21,7 +23,11 @@ describe('waitForDeploymentReady', () => {
       exitCode: 0,
     } as any);
 
-    const result = await waitForDeploymentReady('ark-controller', 'ark-system', 30);
+    const result = await waitForDeploymentReady(
+      'ark-controller',
+      'ark-system',
+      30
+    );
 
     expect(result).toBe(true);
     expect(mockedExeca).toHaveBeenCalledWith(
@@ -96,7 +102,11 @@ describe('waitForServicesReady', () => {
   });
 
   it('calls progress callback', async () => {
-    mockedExeca.mockResolvedValue({stdout: 'ok', stderr: '', exitCode: 0} as any);
+    mockedExeca.mockResolvedValue({
+      stdout: 'ok',
+      stderr: '',
+      exitCode: 0,
+    } as any);
 
     const onProgress = jest.fn();
     await waitForServicesReady([service1], 30, onProgress);
@@ -116,9 +126,16 @@ describe('waitForServicesReady', () => {
       category: 'service',
     };
 
-    mockedExeca.mockResolvedValue({stdout: 'ok', stderr: '', exitCode: 0} as any);
+    mockedExeca.mockResolvedValue({
+      stdout: 'ok',
+      stderr: '',
+      exitCode: 0,
+    } as any);
 
-    const result = await waitForServicesReady([service1, incompleteService], 30);
+    const result = await waitForServicesReady(
+      [service1, incompleteService],
+      30
+    );
 
     expect(result).toBe(true);
     expect(mockedExeca).toHaveBeenCalledTimes(1);

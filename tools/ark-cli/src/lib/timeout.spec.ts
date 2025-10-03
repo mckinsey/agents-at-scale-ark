@@ -10,7 +10,11 @@ describe('parseTimeoutToSeconds', () => {
   });
 
   it('should throw error for invalid formats', () => {
-    expect(() => parseTimeoutToSeconds('abc')).toThrow('Invalid timeout format');
-    expect(() => parseTimeoutToSeconds('-5s')).toThrow('Invalid timeout format');
+    expect(() => parseTimeoutToSeconds('abc')).toThrow(
+      'Invalid timeout format'
+    );
+    expect(() => parseTimeoutToSeconds('-5s')).toThrow(
+      'Invalid timeout format'
+    );
   });
 });
