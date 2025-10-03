@@ -159,7 +159,7 @@ export default function FloatingChat({ name, type, position, onClose }: Floating
 
     try {
       const messageArray = buildChatMessages(chatMessages, userMessage)
-      const query = await chatService.submitFlexibleChatQuery(
+      const query = await chatService.submitChatQuery(
         messageArray,
         type,
         name,
