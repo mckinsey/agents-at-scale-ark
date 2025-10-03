@@ -119,6 +119,15 @@ spec:
 - `assistant` - Agent/assistant responses
 - `system` - System instructions (provider-specific)
 
+#### Multimodal Messages
+
+The `messages` type uses the standard OpenAI message structure, supporting multimodal content including `image_url` for vision capabilities:
+
+```bash
+kubectl apply -f samples/queries/query-messages-image-url.yaml
+# Example output: "The image shows a black hexagonal shape with a small break in the bottom right corner, resembling the QuantumBlack logo"
+```
+
 ## Targets
 
 Targets specify which resources should process the query. Supported types: `agent`, `team`, `model`, `tool`.
