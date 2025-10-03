@@ -35,7 +35,6 @@ export default function FloatingChat({ name, type, position, onClose }: Floating
   const [error, setError] = useState<string | null>(null)
   const [isMaximized, setIsMaximized] = useState(false)
   const [viewMode, setViewMode] = useState<'text' | 'markdown'>('markdown')
-  const [inputMode, setInputMode] = useState<'string' | 'messages'>('string') 
   const [sessionId] = useState(() => `session-${Date.now()}`)
   const inputRef = useRef<HTMLInputElement>(null)
   const stopPollingRef = useRef<(() => void) | null>(null)
@@ -126,21 +125,6 @@ export default function FloatingChat({ name, type, position, onClose }: Floating
     }
   }
 
-  const buildChatHistory = (messages: ChatMessageData[], currentMsg: string): string => {
-    const history = messages
-      .filter(msg => msg.content) // Only include messages with content
-      .map(msg => {
-        const prefix = msg.role === "user" ? "User" : "Agent"
-        return `${prefix}: ${msg.content}`
-      })
-      .join("\n\n")
-    
-    // Add the current message
-    const fullQuery = history ? `${history}\n\nUser: ${currentMsg}` : `User: ${currentMsg}`
-    return fullQuery
-  }
-
-  // New function to build message array instead of concatenated string
   const buildChatMessages = (messages: ChatMessageData[], currentMsg: string): Message[] => {
     const messageArray: Message[] = messages
       .filter(msg => msg.content) // Only include messages with content
@@ -174,29 +158,14 @@ export default function FloatingChat({ name, type, position, onClose }: Floating
     setIsProcessing(true)
 
     try {
-      // Choose input method based on inputMode
-      if (inputMode === 'messages') {
-        // Use message array approach with the new flexible method
-        const messageArray = buildChatMessages(chatMessages, userMessage)
-        const query = await chatService.submitFlexibleChatQuery(
-          messageArray,
-          type,
-          name,
-          sessionId
-        )
-        await pollQueryStatus(query.name)
-      } else {
-        // Use traditional string concatenation approach
-        const fullQuery = buildChatHistory(chatMessages, userMessage)
-        const query = await chatService.submitChatQuery(
-          fullQuery,
-          type,
-          name,
-          sessionId
-        )
-        await pollQueryStatus(query.name)
-      }
-      
+      const messageArray = buildChatMessages(chatMessages, userMessage)
+      const query = await chatService.submitFlexibleChatQuery(
+        messageArray,
+        type,
+        name,
+        sessionId
+      )
+      await pollQueryStatus(query.name)
     } catch (err) {
       console.error('Error sending message:', err)
       let errorMessage = 'Failed to send message'
@@ -256,17 +225,8 @@ export default function FloatingChat({ name, type, position, onClose }: Floating
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            
+
             <div className="flex items-center gap-1 ml-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setInputMode(inputMode === 'string' ? 'messages' : 'string')}
-                className="h-6 w-6 p-0 text-xs"
-                title={`Current input mode: ${inputMode}. Click to switch to ${inputMode === 'string' ? 'messages' : 'string'} mode`}
-              >
-                {inputMode === 'string' ? 'S' : 'M'}
-              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -371,7 +331,7 @@ export default function FloatingChat({ name, type, position, onClose }: Floating
           <div className="flex-1 relative">
             <Input
               ref={inputRef}
-              placeholder={isProcessing ? "Processing..." : `Type your message... (${inputMode} mode)`}
+              placeholder={isProcessing ? "Processing..." : "Type your message..."}
               value={currentMessage}
               onChange={(e) => setCurrentMessage(e.target.value)}
               onKeyPress={handleKeyPress}
