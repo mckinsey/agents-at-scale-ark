@@ -9,6 +9,8 @@ ARK includes an integrated Agent-to-Agent Gateway (A2AGW) that implements the [A
 
 ARK also supports **Agent Hosting**, which allows users to host their existing LangChain, CrewAI, AutoGen, or other agent code and expose agents to the ARK cluster using the A2A protocol.
 
+**Agent Discovery Endpoints**: ARK supports both legacy (`/.well-known/agent.json`) and new (`/agent-card.json`) discovery endpoints for backwards compatibility.
+
 Note: At present, ARK only supports text-based responses from the A2A server. Other response formats (e.g., images, audio, structured JSON) are not yet supported.
 
 ## Overview

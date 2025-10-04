@@ -22,28 +22,61 @@ import (
 )
 
 // DiscoverA2AAgents discovers agents from an A2A server using simplified HTTP approach
-// Note: The A2A library doesn't provide a direct agent discovery API yet, so we use HTTP
+// Tries both new (agent-card.json) and legacy (/.well-known/agent.json) endpoints
 func DiscoverA2AAgents(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace string) (*A2AAgentCard, error) {
 	return DiscoverA2AAgentsWithRecorder(ctx, k8sClient, address, headers, namespace, nil, nil)
 }
 
 // DiscoverA2AAgentsWithRecorder discovers agents with optional K8s event recording
 func DiscoverA2AAgentsWithRecorder(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace string, recorder record.EventRecorder, obj client.Object) (*A2AAgentCard, error) {
-	agentCardURL := strings.TrimSuffix(address, "/") + protocol.AgentCardPath
+	baseURL := strings.TrimSuffix(address, "/")
+
+	// Try new agent-card.json endpoint first
+	agentCardURL := baseURL + "/agent-card.json"
 
 	// Create A2A client for consistent configuration
 	if err := validateA2AClient(address, headers, ctx, k8sClient, namespace, recorder, obj); err != nil {
 		return nil, err
 	}
 
-	// Create and configure HTTP request
+	// Try new endpoint first
 	req, err := createA2ARequest(ctx, agentCardURL, headers, k8sClient, namespace, recorder, obj)
 	if err != nil {
 		return nil, err
 	}
 
-	// Execute request and parse response
-	return executeA2ARequest(ctx, req, address, recorder, obj)
+	agentCard, err := executeA2ARequest(ctx, req, address, recorder, obj)
+	if err == nil {
+		if recorder != nil && obj != nil {
+			recorder.Event(obj, corev1.EventTypeNormal, "A2ANewEndpoint", "Successfully used new /agent-card.json endpoint")
+		}
+		return agentCard, nil
+	}
+
+	// Log the attempt and try fallback
+	logf.FromContext(ctx).Info("Failed to discover agent using new endpoint, trying legacy endpoint", "new_url", agentCardURL, "error", err)
+
+	return tryLegacyA2AEndpoint(ctx, k8sClient, baseURL, headers, namespace, recorder, obj, address)
+}
+
+// tryLegacyA2AEndpoint attempts to discover agent using legacy endpoint
+func tryLegacyA2AEndpoint(ctx context.Context, k8sClient client.Client, baseURL string, headers []arkv1prealpha1.Header, namespace string, recorder record.EventRecorder, obj client.Object, address string) (*A2AAgentCard, error) {
+	legacyURL := baseURL + protocol.AgentCardPath
+	req, err := createA2ARequest(ctx, legacyURL, headers, k8sClient, namespace, recorder, obj)
+	if err != nil {
+		return nil, err
+	}
+
+	agentCard, err := executeA2ARequest(ctx, req, address, recorder, obj)
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover agent from both new (/agent-card.json) and legacy (%s) endpoints: %w", protocol.AgentCardPath, err)
+	}
+
+	if recorder != nil && obj != nil {
+		recorder.Event(obj, corev1.EventTypeWarning, "A2AEndpointFallback", fmt.Sprintf("Used legacy endpoint %s after new endpoint failed", protocol.AgentCardPath))
+	}
+
+	return agentCard, nil
 }
 
 // ExecuteA2AAgent executes a task on an A2A agent using the official library client
