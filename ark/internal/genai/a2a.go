@@ -21,6 +21,11 @@ import (
 	"mckinsey.com/ark/internal/telemetry"
 )
 
+const (
+	// NewAgentCardPath is the path for the new agent metadata JSON endpoint
+	NewAgentCardPath = "/agent-card.json"
+)
+
 // DiscoverA2AAgents discovers agents from an A2A server using simplified HTTP approach
 // Tries both new (agent-card.json) and legacy (/.well-known/agent.json) endpoints
 func DiscoverA2AAgents(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace string) (*A2AAgentCard, error) {
@@ -32,7 +37,7 @@ func DiscoverA2AAgentsWithRecorder(ctx context.Context, k8sClient client.Client,
 	baseURL := strings.TrimSuffix(address, "/")
 
 	// Try new agent-card.json endpoint first
-	agentCardURL := baseURL + "/agent-card.json"
+	agentCardURL := baseURL + NewAgentCardPath
 
 	// Create A2A client for consistent configuration
 	if err := validateA2AClient(address, headers, ctx, k8sClient, namespace, recorder, obj); err != nil {
@@ -48,7 +53,7 @@ func DiscoverA2AAgentsWithRecorder(ctx context.Context, k8sClient client.Client,
 	agentCard, err := executeA2ARequest(ctx, req, address, recorder, obj)
 	if err == nil {
 		if recorder != nil && obj != nil {
-			recorder.Event(obj, corev1.EventTypeNormal, "A2ANewEndpoint", "Successfully used new /agent-card.json endpoint")
+			recorder.Event(obj, corev1.EventTypeNormal, "A2ANewEndpoint", fmt.Sprintf("Successfully used new %s endpoint", NewAgentCardPath))
 		}
 		return agentCard, nil
 	}
@@ -69,7 +74,7 @@ func tryLegacyA2AEndpoint(ctx context.Context, k8sClient client.Client, baseURL 
 
 	agentCard, err := executeA2ARequest(ctx, req, address, recorder, obj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to discover agent from both new (/agent-card.json) and legacy (%s) endpoints: %w", protocol.AgentCardPath, err)
+		return nil, fmt.Errorf("failed to discover agent from both new (%s) and legacy (%s) endpoints: %w", NewAgentCardPath, protocol.AgentCardPath, err)
 	}
 
 	if recorder != nil && obj != nil {
