@@ -25,7 +25,7 @@ devspace dev
 ```
 
 
-If you wish to start individual services, you must first start the localhost-gateway
+If you wish to start individual services and wish to use localhost gateway routes, you must first start it
 
 ```bash
 devspace dev --dependency localhost-gateway
@@ -55,12 +55,14 @@ devspace list deployments --namespace ark-system
 ```
 
 ## Open the dashboard
-- Via routes:
+
+You can find a link to the dashboard by getting the current available endpoints
+
 ```bash
 devspace run routes
 ```
 
-- Or via port-forward:
+- Or you can port-forward the dashboard yourself:
 ```bash
 kubectl port-forward -n default svc/ark-dashboard 3000:3000
 # Then open http://localhost:3000
