@@ -13,8 +13,10 @@ dependencies:
     path: ./services/ark-dashboard
   ark:
     path: ./ark
-#  ark-mcp:
-#    path: ./services/ark-mcp
+  ark-mcp:
+    path: ./services/ark-mcp
+  ark-evaluator:
+    path: ./services/ark-evaluator
 #   postgres-memory:
 #     path: ./services/postgres-memory
 
