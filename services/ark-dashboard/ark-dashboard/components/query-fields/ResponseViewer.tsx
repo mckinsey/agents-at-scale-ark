@@ -22,13 +22,6 @@ function ViewToggle({
 }
 
 export default function ResponseViewer({ response, initialMode, userInput }: Props) {
-  // Helper function to clean user input
-  const cleanUserInput = (input: string): string => {
-    if (input.toLowerCase().startsWith('user:')) {
-      return input.substring(5).trim()
-    }
-    return input
-  }
   const showJson = responseIsJson(response);
   const [mode, setMode] = useState<ViewMode>(initialMode ?? pickDefaultView(response, "text"));
 
@@ -54,7 +47,7 @@ export default function ResponseViewer({ response, initialMode, userInput }: Pro
           {/* User message bubble */}
           <div className="flex justify-end">
             <div className="bg-blue-500 text-white rounded-2xl rounded-br-md px-4 py-2 max-w-[70%] shadow-sm">
-              <div className="text-sm whitespace-pre-wrap break-words">{cleanUserInput(userInput || "")}</div>
+              <div className="text-sm whitespace-pre-wrap break-words">{userInput || ""}</div>
             </div>
           </div>
           

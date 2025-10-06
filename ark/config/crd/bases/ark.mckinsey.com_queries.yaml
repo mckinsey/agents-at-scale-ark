@@ -15,6 +15,9 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
@@ -51,8 +54,9 @@ spec:
                 description: When true, indicates intent to cancel the query
                 type: boolean
               input:
-                minLength: 1
-                type: string
+                description: Input can be a string (type=user) or []openai.ChatCompletionMessageParamUnion
+                  (type=messages)
+                x-kubernetes-preserve-unknown-fields: true
               memory:
                 properties:
                   name:
@@ -239,6 +243,12 @@ spec:
                 type: string
               ttl:
                 default: 720h
+                type: string
+              type:
+                default: user
+                enum:
+                - user
+                - messages
                 type: string
             required:
             - input

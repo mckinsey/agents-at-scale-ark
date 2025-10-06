@@ -20,7 +20,7 @@ import (
 
 type EvaluationRequest struct {
 	QueryID   string                 `json:"queryId"`
-	Input     string                 `json:"input"`
+	Input     []Message              `json:"input"`
 	Responses []arkv1alpha1.Response `json:"responses"`
 	Query     arkv1alpha1.Query      `json:"query"`
 }

@@ -19,7 +19,7 @@ describe('printNextSteps', () => {
   it('prints successful installation message', () => {
     printNextSteps();
     const fullOutput = output.join('\n');
-    expect(fullOutput).toContain('ARK installed successfully!');
+    expect(fullOutput).toContain('✓ Installation complete');
   });
 
   it('includes all required commands', () => {

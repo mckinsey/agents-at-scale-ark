@@ -1,7 +1,7 @@
 {
   "name": "@agents-at-scale/ark",
   "version": "0.1.36",
-  "description": "ARK CLI - Interactive terminal interface for ARK agents",
+  "description": "Ark CLI - Interactive terminal interface for ARK agents",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
@@ -18,7 +18,7 @@
     "lint": "eslint src/ --fix && prettier --write src/",
     "lint:check": "eslint src/ && prettier --check src/",
     "test": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --coverage --coverageDirectory=./artifacts/coverage --coverageReporters=text --coverageReporters=lcov --coverageReporters=text-summary",
-    "postinstall": "echo \"ARK CLI installed! Run 'ark' to try it out.\""
+    "postinstall": "echo \"Ark CLI installed. Run 'ark' to try it out.\""
   },
   "keywords": [
     "ark",

@@ -41,3 +41,38 @@ https://mckinsey.github.io/agents-at-scale-ark/
 The [Quickstart](https://mckinsey.github.io/agents-at-scale-ark/quickstart/) guide will walk you through the process of configuring a model, creating an agent and running basic queries.
 
 To troubleshoot an installation, run `ark status`.
+
+## Configuration
+
+You can customize Ark service installations using a `.arkrc.yaml` file in your home directory (`~/.arkrc.yaml`) or project directory. This allows you to override service properties like enabled status, namespace, or chart location.
+
+Example `.arkrc.yaml`:
+
+```yaml
+services:
+  localhost-gateway:
+    enabled: true
+  ark-controller:
+    namespace: custom-namespace
+```
+
+This example enables the `localhost-gateway` service (disabled by default) and changes the namespace for `ark-controller`.
+
+### Installing Agents @ Scale
+
+To install the Agents @ Scale platform with JFrog container registry credentials:
+
+```yaml
+services:
+  agents-at-scale:
+    enabled: true
+    installArgs:
+      - --set
+      - containerRegistry.enabled=true
+      - --set
+      - containerRegistry.username=YOUR_USERNAME
+      - --set
+      - containerRegistry.password=YOUR_PASSWORD
+```
+
+Replace `YOUR_USERNAME` and `YOUR_PASSWORD` with your JFrog credentials.

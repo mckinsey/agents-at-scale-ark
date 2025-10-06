@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import yaml from 'yaml';
 import type {ClusterInfo} from './cluster.js';
+import type {ArkService} from '../types/arkService.js';
 
 export interface ChatConfig {
   streaming?: boolean;
@@ -11,6 +12,7 @@ export interface ChatConfig {
 
 export interface ArkConfig {
   chat?: ChatConfig;
+  services?: {[serviceName: string]: Partial<ArkService>};
   // Cluster info - populated during startup if context exists
   clusterInfo?: ClusterInfo;
 }
@@ -87,6 +89,16 @@ function mergeConfig(target: ArkConfig, source: ArkConfig): void {
     }
     if (source.chat.outputFormat !== undefined) {
       target.chat.outputFormat = source.chat.outputFormat;
+    }
+  }
+
+  if (source.services) {
+    target.services = target.services || {};
+    for (const [serviceName, overrides] of Object.entries(source.services)) {
+      target.services[serviceName] = {
+        ...target.services[serviceName],
+        ...overrides,
+      };
     }
   }
 }

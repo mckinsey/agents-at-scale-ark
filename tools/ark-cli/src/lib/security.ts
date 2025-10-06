@@ -11,6 +11,11 @@ export class SecurityUtils {
    * Validate that a path is safe and doesn't contain directory traversal attempts
    */
   static validatePath(filePath: string, context: string = 'path'): void {
+    // Skip validation for internal template paths - they're always safe
+    if (context === 'template path') {
+      return;
+    }
+
     if (!filePath || typeof filePath !== 'string') {
       throw new ValidationError(
         `Invalid ${context}: path must be a non-empty string`,

@@ -120,7 +120,7 @@ complete -F _ark_completion ark
     .description('Generate zsh completion script')
     .action(() => {
       // Shell script requires escaped $ characters
-      /* eslint-disable no-useless-escape */
+
       console.log(
         `
 #compdef ark
@@ -232,7 +232,6 @@ _ark() {
 _ark
       `.trim()
       );
-      /* eslint-enable no-useless-escape */
     });
 
   return completion;

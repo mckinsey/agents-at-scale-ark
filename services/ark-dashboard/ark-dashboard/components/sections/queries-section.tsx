@@ -82,6 +82,19 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function
       : text;
   };
 
+  // Helper function to convert input to displayable string
+  const getInputDisplayText = (input: string | { role: string; content?: string | unknown; }[] | undefined): string => {
+    if (!input) return "-";
+    if (typeof input === "string") return input;
+    if (Array.isArray(input)) {
+      // Show just the content from the last message
+      const lastMsg = input[input.length - 1];
+      if (!lastMsg.content) return "-";
+      return typeof lastMsg.content === 'string' ? lastMsg.content : JSON.stringify(lastMsg.content);
+    }
+    return "-";
+  };
+
   const formatTokenUsage = (query: QueryResponse) => {
     if (!query.status?.tokenUsage) return "-";
     const usage = query.status.tokenUsage as {
@@ -373,6 +386,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function
                       sortedQueries.map((query) => {
                         const target = getTargetDisplay(query);
                         const output = getOutput(query);
+                        const inputDisplayText = getInputDisplayText(query.input);
                         return (
                           <tr
                             key={query.name}
@@ -396,12 +410,12 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger className="text-left">
-                                    {truncateText(query.input)}
+                                    {truncateText(inputDisplayText)}
                                   </TooltipTrigger>
-                                  {query.input && query.input.length > 50 && (
+                                  {inputDisplayText && inputDisplayText.length > 50 && (
                                     <TooltipContent className="max-w-md">
                                       <p className="whitespace-pre-wrap">
-                                        {query.input}
+                                        {inputDisplayText}
                                       </p>
                                     </TooltipContent>
                                   )}
