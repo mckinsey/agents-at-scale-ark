@@ -103,7 +103,6 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             spec=QueryV1alpha1Spec(type="messages", input=json.dumps(messages), targets=[target]),
         )
 
-        logger.info(f"Creating query for {target.type}/{target.name}")
         async with with_ark_client(namespace, "v1alpha1") as ark_client:
             # Create the query using QueryV1alpha1 object like queries API
             await ark_client.queries.a_create(query_resource)
@@ -157,7 +156,6 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             )
 
     except ValidationError as e:
-        logger.error(f"Validation error: {str(e)}")
         # Return OpenAI-formatted error to adhere to OpenAI completions spec
         return JSONResponse(
             status_code=400,
@@ -169,8 +167,6 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
                 }
             }
         )
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
         # Return OpenAI-formatted error to adhere to OpenAI completions spec
