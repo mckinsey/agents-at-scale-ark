@@ -18,7 +18,7 @@ import { type APIKeyCreateResponse } from "@/lib/services"
 interface APIKeyCreatedDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  apiKey: APIKeyCreateResponse | null
+  apiKey: APIKeyCreateResponse
 }
 
 export function APIKeyCreatedDialog({ open, onOpenChange, apiKey }: APIKeyCreatedDialogProps) {
@@ -51,8 +51,6 @@ export function APIKeyCreatedDialog({ open, onOpenChange, apiKey }: APIKeyCreate
     setCopiedBoth(false)
     onOpenChange(false)
   }
-
-  if (!apiKey) return null
 
   const bothCredentials = `Public Key: ${apiKey.public_key}\nSecret Key: ${apiKey.secret_key}`
 

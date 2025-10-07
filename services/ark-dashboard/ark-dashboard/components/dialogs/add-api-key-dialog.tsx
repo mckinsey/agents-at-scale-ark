@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -19,7 +18,7 @@ import {
   FormField,
   FormItem,
   FormLabel,
-  FormMessage,
+  FormMessage
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { type APIKeyCreateRequest, type APIKeyCreateResponse } from "@/lib/services"
@@ -27,7 +26,7 @@ import { useCreateAPIKey } from "@/lib/services/api-keys-hooks"
 
 const formSchema = z.object({
   name: z.string().min(1, "Name is required").max(100, "Name must be less than 100 characters"),
-  expires_at: z.string().optional(),
+  expires_at: z.string().optional()
 })
 
 interface AddAPIKeyDialogProps {
@@ -37,45 +36,35 @@ interface AddAPIKeyDialogProps {
 }
 
 export function AddAPIKeyDialog({ open, onOpenChange, onSuccess }: AddAPIKeyDialogProps) {
-  const [error, setError] = useState<string | null>(null)
-  
   const createAPIKeyMutation = useCreateAPIKey()
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
-      expires_at: "",
-    },
+      expires_at: ""
+    }
   })
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    try {
-      setError(null)
-      
-      const request: APIKeyCreateRequest = {
-        name: values.name.trim(),
-        expires_at: values.expires_at ? new Date(values.expires_at).toISOString() : null
-      }
-      
-      const response = await createAPIKeyMutation.mutateAsync(request)
-      
-      // Reset form
-      form.reset()
-      
-      // Close dialog and show success
-      onOpenChange(false)
-      onSuccess(response)
-      
-    } catch (err) {
-      console.error("Failed to create API key:", err)
-      setError(err instanceof Error ? err.message : "Failed to create API key")
+    const request: APIKeyCreateRequest = {
+      name: values.name.trim(),
+      expires_at: values.expires_at ? new Date(values.expires_at).toISOString() : null
     }
+    
+    const response = await createAPIKeyMutation.mutateAsync(request)
+    
+    // Reset form
+    form.reset()
+    
+    // Close dialog and show success
+    onOpenChange(false)
+    onSuccess(response)
   }
 
   const handleCancel = () => {
     form.reset()
-    setError(null)
+    createAPIKeyMutation.reset()
     onOpenChange(false)
   }
 
@@ -130,9 +119,13 @@ export function AddAPIKeyDialog({ open, onOpenChange, onSuccess }: AddAPIKeyDial
               )}
             />
             
-            {error && (
+            {createAPIKeyMutation.error && (
               <div className="text-red-600 bg-red-50 border border-red-200 rounded-md p-3">
-                <p className="text-sm">{error}</p>
+                <p className="text-sm">
+                  {createAPIKeyMutation.error instanceof Error 
+                    ? createAPIKeyMutation.error.message 
+                    : "Failed to create API key"}
+                </p>
               </div>
             )}
             

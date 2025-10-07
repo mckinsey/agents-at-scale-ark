@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Plus, Copy, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/common/page-header"
@@ -138,7 +138,7 @@ function APIKeysContent() {
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false)
   const [apiKeyToRevoke, setApiKeyToRevoke] = useState<APIKey | null>(null)
 
-  const { data: apiKeysData, isLoading: loading, error } = useListAPIKeys()
+  const { data: apiKeysData, isPending: loading, error } = useListAPIKeys()
   const deleteAPIKeyMutation = useDeleteAPIKey()
 
   const apiKeys = apiKeysData?.items || []
@@ -156,15 +156,9 @@ function APIKeysContent() {
   const confirmRevoke = async () => {
     if (!apiKeyToRevoke) return
 
-    try {
-      await deleteAPIKeyMutation.mutateAsync(apiKeyToRevoke.public_key)
-      // Close dialog
-      setRevokeDialogOpen(false)
-      setApiKeyToRevoke(null)
-    } catch (err) {
-      console.error("Failed to revoke API key:", err)
-      // TODO: Show error message to user
-    }
+    await deleteAPIKeyMutation.mutateAsync(apiKeyToRevoke.public_key)
+    setRevokeDialogOpen(false)
+    setApiKeyToRevoke(null)
   }
 
   if (loading) {
@@ -228,11 +222,13 @@ function APIKeysContent() {
         onSuccess={handleApiKeyCreated}
       />
       
-      <APIKeyCreatedDialog
-        open={successDialogOpen}
-        onOpenChange={setSuccessDialogOpen}
-        apiKey={createdApiKey}
-      />
+      {createdApiKey && (
+        <APIKeyCreatedDialog
+          open={successDialogOpen}
+          onOpenChange={setSuccessDialogOpen}
+          apiKey={createdApiKey}
+        />
+      )}
       
       <ConfirmationDialog
         open={revokeDialogOpen}

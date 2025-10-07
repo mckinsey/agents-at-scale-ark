@@ -14,8 +14,10 @@ export const useCreateAPIKey = () => {
   return useMutation({
     mutationFn: (request: APIKeyCreateRequest) => apiKeysService.create(request),
     onSuccess: () => {
-      // Invalidate and refetch API keys list
       queryClient.invalidateQueries({ queryKey: ['api-keys'] })
+    },
+    onError: (error) => {
+      console.error('Failed to create API key:', error)
     }
   })
 }
@@ -26,8 +28,10 @@ export const useDeleteAPIKey = () => {
   return useMutation({
     mutationFn: (publicKey: string) => apiKeysService.delete(publicKey),
     onSuccess: () => {
-      // Invalidate and refetch API keys list
       queryClient.invalidateQueries({ queryKey: ['api-keys'] })
+    },
+    onError: (error) => {
+      console.error('Failed to delete API key:', error)
     }
   })
 }

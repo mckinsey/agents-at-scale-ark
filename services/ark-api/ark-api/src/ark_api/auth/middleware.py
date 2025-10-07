@@ -49,30 +49,56 @@ class AuthMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, api_key_namespace: str = "ark-system"):
         super().__init__(app)
         self.api_key_service = APIKeyService(namespace=api_key_namespace)
+        
+        # Validate configuration at startup
+        self._validate_auth_config()
+    
+    def _validate_auth_config(self):
+        """
+        Validate authentication configuration at startup.
+        Fail fast with clear error messages if configuration is invalid.
+        """
+        auth_mode = os.getenv("AUTH_MODE", "").lower()
+        oidc_issuer = os.getenv("OIDC_ISSUER_URL", "")
+        oidc_app_id = os.getenv("OIDC_APPLICATION_ID", "")
+        
+        # Validate auth mode
+        valid_auth_modes = [AuthMode.SSO, AuthMode.BASIC, AuthMode.HYBRID, AuthMode.OPEN]
+        if auth_mode and auth_mode not in valid_auth_modes:
+            raise ValueError(
+                f"Invalid AUTH_MODE '{auth_mode}'. "
+                f"Valid values are: {', '.join(valid_auth_modes)}"
+            )
+        
+        # If SSO or HYBRID mode, require OIDC configuration
+        if auth_mode in [AuthMode.SSO, AuthMode.HYBRID]:
+            missing_params = []
+            if not oidc_issuer:
+                missing_params.append("OIDC_ISSUER_URL")
+            if not oidc_app_id:
+                missing_params.append("OIDC_APPLICATION_ID")
+            
+            if missing_params:
+                raise ValueError(
+                    f"AUTH_MODE is set to '{auth_mode}' but the following required "
+                    f"environment variables are missing: {', '.join(missing_params)}. "
+                    f"Please set these variables or change AUTH_MODE."
+                )
+        
+        logger.info(f"Authentication middleware initialized with mode: {auth_mode or 'open (default)'}")
     
     async def dispatch(self, request: Request, call_next):
         # Get the path from the request
         path = request.url.path
         
-        # Get authentication mode and OIDC configuration
-        auth_mode_raw = os.getenv("AUTH_MODE", "").lower()
-        oidc_issuer = os.getenv("OIDC_ISSUER_URL", "")
-        oidc_app_id = os.getenv("OIDC_APPLICATION_ID", "")
-        
-        # Validate auth mode - default to "open" for invalid values
-        valid_auth_modes = [AuthMode.SSO, AuthMode.BASIC, AuthMode.HYBRID, AuthMode.OPEN]
-        if auth_mode_raw in valid_auth_modes:
-            auth_mode = auth_mode_raw
-        else:
-            auth_mode = AuthMode.OPEN
-            if auth_mode_raw:  # Only log if a value was actually set
-                logger.warning(f"Invalid AUTH_MODE '{auth_mode_raw}', defaulting to 'open'. Valid values: {valid_auth_modes}")
+        # Get authentication mode (validated at startup)
+        auth_mode = os.getenv("AUTH_MODE", "").lower() or AuthMode.OPEN
         
         # Log authentication configuration
-        logger.debug(f"Auth mode: {auth_mode} (raw: {auth_mode_raw}), Path: {path}")
+        logger.debug(f"Auth mode: {auth_mode}, Path: {path}")
         
         # Determine which auth methods are enabled
-        jwt_enabled = auth_mode in [AuthMode.SSO, AuthMode.HYBRID] and oidc_issuer and oidc_app_id
+        jwt_enabled = auth_mode in [AuthMode.SSO, AuthMode.HYBRID]
         basic_enabled = auth_mode in [AuthMode.BASIC, AuthMode.HYBRID]
         auth_disabled = auth_mode == AuthMode.OPEN
         
