@@ -79,8 +79,10 @@ func (v *ToolCustomValidator) validateTool(_ context.Context, tool *arkv1alpha1.
 		return v.validateMCPTool(tool.Spec.MCP)
 	case genai.ToolTypeAgent:
 		return v.validateAgentTool(tool.Spec.Agent.Name)
+	case genai.ToolTypeBuiltin:
+		return v.validateBuiltinTool(tool.Name)
 	default:
-		return warnings, fmt.Errorf("unsupported tool type '%s': supported types are: http, mcp", tool.Spec.Type)
+		return warnings, fmt.Errorf("unsupported tool type '%s': supported types are: http, mcp, agent, builtin", tool.Spec.Type)
 	}
 }
 
@@ -140,6 +142,20 @@ func (v *ToolCustomValidator) validateAgentTool(agent string) (admission.Warning
 	}
 
 	return warnings, nil
+}
+
+// validateBuiltinTool validates Builtin-specific configuration
+func (v *ToolCustomValidator) validateBuiltinTool(toolName string) (admission.Warnings, error) {
+	var warnings admission.Warnings
+
+	supportedBuiltinTools := []string{genai.BuiltinToolNoop, genai.BuiltinToolTerminate}
+	for _, supportedTool := range supportedBuiltinTools {
+		if toolName == supportedTool {
+			return warnings, nil
+		}
+	}
+
+	return warnings, fmt.Errorf("unsupported builtin tool '%s': supported builtin tools are: %v", toolName, supportedBuiltinTools)
 }
 
 // validateInputSchema validates the tool's inputSchema using jsonschema
