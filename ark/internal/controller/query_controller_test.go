@@ -38,7 +38,6 @@ var _ = Describe("Query Controller", func() {
 						Namespace: "default",
 					},
 					Spec: arkv1alpha1.QuerySpec{
-						Input: "test input question",
 						Targets: []arkv1alpha1.QueryTarget{
 							{
 								Type: "agent",
@@ -47,6 +46,11 @@ var _ = Describe("Query Controller", func() {
 						},
 					},
 				}
+
+				// Set input using RawExtension helper
+				err := resource.Spec.SetInputString("test input question")
+				Expect(err).ShouldNot(HaveOccurred())
+
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})

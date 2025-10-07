@@ -109,14 +109,12 @@ func (cf *CommandFactory) createTargetCommand(targetType ResourceType, targetNam
 	singularType := string(targetType)[:len(targetType)-1] // Remove 's' from end
 
 	return &TargetCommand{
-		TargetType:        singularType,
-		TargetName:        targetName,
-		Input:             inputOverride,
-		Timeout:           f.timeout,
-		Parameters:        f.parameters,
-		SessionId:         f.sessionId,
-		Evaluators:        f.evaluators,
-		EvaluatorSelector: f.evaluatorSelector,
+		TargetType: singularType,
+		TargetName: targetName,
+		Input:      inputOverride,
+		Timeout:    f.timeout,
+		Parameters: f.parameters,
+		SessionId:  f.sessionId,
 		ExecutionContext: ExecutionContext{
 			Config:     cf.config,
 			Namespace:  ns,
@@ -179,8 +177,7 @@ func (cf *CommandFactory) buildExamples(targetType ResourceType) string {
 	return `  fark ` + singular + `
   fark ` + singular + ` my-` + singular + ` "What is the weather?"
   fark ` + singular + ` my-` + singular + ` -f input.txt -n my-namespace
-  fark ` + singular + ` my-` + singular + ` "Hello {{.name}}" -p name=John
-  fark ` + singular + ` my-` + singular + ` "What is the weather?" --evaluator evaluator-llm`
+  fark ` + singular + ` my-` + singular + ` "Hello {{.name}}" -p name=John`
 }
 
 // isInputRequiredForTool checks if a tool requires input parameters

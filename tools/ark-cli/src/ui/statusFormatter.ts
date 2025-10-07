@@ -1,58 +1,82 @@
 import chalk from 'chalk';
 
-import { StatusData, ServiceStatus, DependencyStatus } from '../lib/types.js';
+export type StatusColor =
+  | 'green'
+  | 'red'
+  | 'yellow'
+  | 'gray'
+  | 'white'
+  | 'cyan'
+  | 'bold';
 
+export interface StatusLine {
+  icon: string;
+  iconColor?: StatusColor;
+  status: string;
+  statusColor?: StatusColor;
+  name: string;
+  nameColor?: StatusColor;
+  details?: string;
+  subtext?: string;
+}
+
+export interface StatusSection {
+  title: string;
+  lines: StatusLine[];
+}
+
+/**
+ * Simple status formatter that just formats sections and lines
+ * The caller is responsible for deciding what to show
+ */
 export class StatusFormatter {
-  /**
-   * Print status check results to console
-   */
-  public static printStatus(statusData: StatusData): void {
-    console.log(chalk.cyan.bold('\n🔍 ARK System Status Check'));
-    console.log(chalk.gray('Checking ARK services and dependencies...\n'));
+  public static printSections(sections: StatusSection[]): void {
+    console.log();
 
-    // Print services status
-    console.log(chalk.cyan.bold('📡 ARK Services:'));
-    for (const service of statusData.services) {
-      StatusFormatter.printService(service);
-    }
+    sections.forEach((section, index) => {
+      console.log(chalk.cyan.bold(section.title));
+      section.lines.forEach((line) => this.printLine(line));
 
-    // Print dependencies status
-    console.log(chalk.cyan.bold('\n🛠️  System Dependencies:'));
-    for (const dep of statusData.dependencies) {
-      StatusFormatter.printDependency(dep);
-    }
+      if (index < sections.length - 1) {
+        console.log();
+      }
+    });
 
     console.log();
   }
 
-  private static printService(service: ServiceStatus): void {
-    const statusColor =
-      service.status === 'healthy'
-        ? chalk.green('✓ healthy')
-        : service.status === 'unhealthy'
-          ? chalk.red('✗ unhealthy')
-          : chalk.yellow('? not installed');
+  private static applyColor(text: string, color?: StatusColor): string {
+    if (!color) return text;
 
-    console.log(`  • ${chalk.bold(service.name)}: ${statusColor}`);
-    if (service.url) {
-      console.log(`    ${chalk.gray(`URL: ${service.url}`)}`);
-    }
-    if (service.details) {
-      console.log(`    ${chalk.gray(service.details)}`);
-    }
+    const colorMap = {
+      green: chalk.green,
+      red: chalk.red,
+      yellow: chalk.yellow,
+      gray: chalk.gray,
+      white: chalk.white,
+      cyan: chalk.cyan,
+      bold: chalk.bold,
+    };
+
+    return colorMap[color](text);
   }
 
-  private static printDependency(dep: DependencyStatus): void {
-    const statusColor = dep.installed
-      ? chalk.green('✓ installed')
-      : chalk.red('✗ missing');
+  private static printLine(line: StatusLine): void {
+    const icon = this.applyColor(line.icon, line.iconColor);
+    const status = this.applyColor(line.status, line.statusColor);
+    // Name formatting is now handled where the name is assembled
+    const name = this.applyColor(line.name, line.nameColor || 'white');
 
-    console.log(`  • ${chalk.bold(dep.name)}: ${statusColor}`);
-    if (dep.version) {
-      console.log(`    ${chalk.gray(`Version: ${dep.version}`)}`);
-    }
-    if (dep.details) {
-      console.log(`    ${chalk.gray(dep.details)}`);
+    const parts = [
+      `  ${icon} ${status}`,
+      name,
+      line.details ? chalk.gray(line.details) : '',
+    ].filter(Boolean);
+
+    console.log(parts.join(' '));
+
+    if (line.subtext) {
+      console.log(`    ${chalk.gray(line.subtext)}`);
     }
   }
 }

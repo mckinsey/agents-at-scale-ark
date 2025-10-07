@@ -33,6 +33,7 @@ import type { components } from "@/lib/api/generated/types";
 import { useMarkdownProcessor } from "@/lib/hooks/use-markdown-processor";
 import {
   agentsService,
+  evaluationsService,
   memoriesService,
   modelsService,
   teamsService,
@@ -81,11 +82,11 @@ function ResponseContent({ content, viewMode, rawJson }: { content: string, view
   }
   
 
-  if (viewMode === "markdown") {
+  if (viewMode === "content") {
     return <div className="text-sm">{markdownContent}</div>;
   }
 
-  if (viewMode === 'content') {
+  if (viewMode === 'text') {
     return (
       <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900/50 p-3">
         {content || "No content"}
@@ -296,13 +297,13 @@ function QueryDetailContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const queryId = params.id as string
-  const namespace = searchParams.get("namespace") || "default"
   const targetTool = searchParams.get("target_tool")
   const isNew = queryId === 'new'
   const mode = isNew ? 'new' : 'view'
 
   const [query, setQuery] = useState<TypedQueryDetailResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  const [evaluationCount, setEvaluationCount] = useState(0)
   const [availableTargets, setAvailableTargets] = useState<Array<{name: string, type: 'agent' | 'model' | 'team' | 'tool'}>>([])
   const [targetsLoading, setTargetsLoading] = useState(false)
   const [availableMemories, setAvailableMemories] = useState<Array<{name: string}>>([])
@@ -409,6 +410,7 @@ function QueryDetailContent() {
       // Prepare the query data for the API
       const queryData = {
         name: queryName,
+        type: Array.isArray(query.input) ? "messages" as const : "user" as const,
         input: query.input || '',
         targets: query.targets || [],
         timeout: query.timeout,
@@ -422,7 +424,7 @@ function QueryDetailContent() {
         })
       }
 
-      const savedQuery = await queriesService.create(namespace, queryData)
+      const savedQuery = await queriesService.create(queryData)
       
       toast({
         title: "Query Executed",
@@ -430,7 +432,7 @@ function QueryDetailContent() {
       })
       
       // Navigate to the created query
-      router.push(`/query/${savedQuery.name}?namespace=${namespace}`)
+      router.push(`/query/${savedQuery.name}`)
     } catch (error) {
       console.error('Failed to save query:', error)
       toast({
@@ -455,7 +457,8 @@ function QueryDetailContent() {
       // For new queries, initialize with empty object
       setQuery({
         name: '',
-        namespace: namespace,
+        namespace: '',
+        type: 'user',
         input: '',
         targets: [],
         status: null
@@ -468,11 +471,11 @@ function QueryDetailContent() {
         setMemoriesLoading(true)
         try {
           const [agents, models, teams, tools, memories] = await Promise.all([
-            agentsService.getAll(namespace),
-            modelsService.getAll(namespace),
-            teamsService.getAll(namespace),
-            toolsService.getAll(namespace),
-            memoriesService.getAll(namespace)
+            agentsService.getAll(),
+            modelsService.getAll(),
+            teamsService.getAll(),
+            toolsService.getAll(),
+            memoriesService.getAll()
           ])
 
           const targets = [
@@ -511,12 +514,21 @@ function QueryDetailContent() {
 
     const loadQuery = async () => {
       try {
-        const queryData = await queriesService.get(namespace, queryId)
+        const queryData = await queriesService.get(queryId)
         setQuery(queryData as TypedQueryDetailResponse)
-        
+
         // Set streaming state based on annotation
         const isStreamingEnabled = (queryData as TypedQueryDetailResponse).metadata?.[ARK_ANNOTATIONS.STREAMING_ENABLED] === "true"
         setStreaming(isStreamingEnabled)
+
+        // Load evaluation count
+        try {
+          const evaluationSummary = await evaluationsService.getEvaluationSummary(queryId)
+          setEvaluationCount(evaluationSummary.total || 0)
+        } catch (error) {
+          console.error('Failed to load evaluation count:', error)
+          setEvaluationCount(0)
+        }
       } catch (error) {
         toast({
           variant: "destructive",
@@ -529,7 +541,7 @@ function QueryDetailContent() {
     }
 
     loadQuery()
-  }, [namespace, queryId, isNew, targetTool])
+  }, [queryId, isNew, targetTool])
 
   // Fetch tool schema when exactly one tool is selected
   useEffect(() => {
@@ -537,13 +549,13 @@ function QueryDetailContent() {
     
     if (selectedTools.length === 1) {
       const toolName = selectedTools[0].name
-      toolsService.getDetail(namespace, toolName)
+      toolsService.getDetail(toolName)
         .then(setToolSchema)
         .catch(() => setToolSchema(null)) // Silent failure
     } else {
       setToolSchema(null)
     }
-  }, [query?.targets, namespace])
+  }, [query?.targets])
 
   if (loading) {
     return (
@@ -574,7 +586,7 @@ function QueryDetailContent() {
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink href={`/queries?namespace=${namespace}`}>
+              <BreadcrumbLink href={`/queries`}>
                 Queries
               </BreadcrumbLink>
             </BreadcrumbItem>
@@ -586,9 +598,8 @@ function QueryDetailContent() {
         </Breadcrumb>
         <div className="ml-auto flex gap-2">
           {!isNew && (
-            <QueryEvaluationActions 
-              queryName={queryId} 
-              namespace={namespace} 
+            <QueryEvaluationActions
+              queryName={queryId}
             />
           )}
           {isNew && (
@@ -596,7 +607,7 @@ function QueryDetailContent() {
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => router.push(`/query/new?namespace=${namespace}`)}
+                onClick={() => router.push(`/query/new`)}
               >
                 New Query
               </Button>
@@ -614,7 +625,7 @@ function QueryDetailContent() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => router.push(`/query/new?namespace=${namespace}`)}
+              onClick={() => router.push(`/query/new`)}
             >
               New Query
             </Button>
@@ -632,7 +643,7 @@ function QueryDetailContent() {
             <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Query</h3>
-                <a href={`/events?namespace=${namespace}&kind=Query&name=${query.name}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+                <a href={`/events?kind=Query&name=${query.name}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
                   View Events
                 </a>
               </div>
@@ -749,22 +760,6 @@ function QueryDetailContent() {
                     {query.selector ? "Configured" : "—"}
                   </td>
                 </tr>
-                <tr className="border-b border-gray-100 dark:border-gray-800">
-                  <td className={FIELD_HEADING_STYLES}>
-                    Evaluators
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                    {query.evaluators?.length ? `${query.evaluators.length} evaluator(s)` : "—"}
-                  </td>
-                </tr>
-                <tr>
-                  <td className={FIELD_HEADING_STYLES}>
-                    Eval. Selector
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                    {query.evaluatorSelector ? "Configured" : "—"}
-                  </td>
-                </tr>
               </tbody>
             </table>
           </div>
@@ -813,7 +808,7 @@ function QueryDetailContent() {
                     Evaluations
                   </td>
                   <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                    {query.status?.evaluations?.length || 0}
+                    {evaluationCount}
                   </td>
                 </tr>
               </tbody>
@@ -860,7 +855,7 @@ function QueryDetailContent() {
                   {/* Input Section */}
                   <div className={toolSchema && query.targets?.filter(t => t.type === 'tool').length === 1 ? 'p-3 border-r border-gray-200 dark:border-gray-700' : ''}>
                     <Textarea
-                      value={query.input || ''}
+                      value={typeof query.input === 'string' ? query.input || '' : ''}
                       onChange={(e) => setQuery(prev => prev ? { ...prev, input: e.target.value } : null)}
                       placeholder="Enter your query input..."
                       className="min-h-[200px] text-sm font-mono resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -880,7 +875,7 @@ function QueryDetailContent() {
                 </div>
               ) : (
                 <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900/50 p-3">
-                  {query.input}
+                  {typeof query.input === 'string' ? query.input : Array.isArray(query.input) ? JSON.stringify(query.input, null, 2) : ''}
                 </pre>
               )}
             </div>
@@ -954,10 +949,9 @@ function QueryDetailContent() {
                   </div>
                 </div>
                 <div className="p-3">
-                  <ErrorResponseContent 
+                  <ErrorResponseContent
                     query={query}
                     viewMode={errorViewMode}
-                    namespace={namespace}
                   />
                 </div>
               </div>

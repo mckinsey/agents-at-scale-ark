@@ -36,7 +36,6 @@ type EvaluationUpdateRequest = components["schemas"]["EvaluationUpdateRequest"]
 
 interface QueryEvaluationActionsProps {
   queryName: string
-  namespace: string
 }
 
 const getStatusConfig = (status: QueryEvaluationSummary['status']) => {
@@ -54,7 +53,7 @@ const getStatusConfig = (status: QueryEvaluationSummary['status']) => {
   }
 }
 
-export function QueryEvaluationActions({ queryName, namespace }: QueryEvaluationActionsProps) {
+export function QueryEvaluationActions({ queryName }: QueryEvaluationActionsProps) {
   const [summary, setSummary] = useState<QueryEvaluationSummary | null>(null)
   const [evaluators, setEvaluators] = useState<Evaluator[]>([])
   const [loading, setLoading] = useState(true)
@@ -67,8 +66,8 @@ export function QueryEvaluationActions({ queryName, namespace }: QueryEvaluation
       setLoading(true)
       try {
         const [summaryData, evaluatorsData] = await Promise.all([
-          evaluationsService.getEvaluationSummary(namespace, queryName),
-          evaluatorsService.getAll(namespace)
+          evaluationsService.getEvaluationSummary(queryName),
+          evaluatorsService.getAll()
         ])
         setSummary(summaryData)
         setEvaluators(evaluatorsData)
@@ -80,10 +79,10 @@ export function QueryEvaluationActions({ queryName, namespace }: QueryEvaluation
     }
 
     loadData()
-  }, [queryName, namespace])
+  }, [queryName])
 
   const handleViewEvaluations = () => {
-    router.push(`/evaluations?namespace=${namespace}&query=${encodeURIComponent(queryName)}`)
+    router.push(`/evaluations&query=${encodeURIComponent(queryName)}`)
   }
 
   const handleCreateEvaluation = (evaluatorName?: string) => {
@@ -97,10 +96,10 @@ export function QueryEvaluationActions({ queryName, namespace }: QueryEvaluation
     try {
       // Create the evaluation
       const createRequest = evaluationData as EvaluationCreateRequest
-      await evaluationsService.create(namespace, createRequest)
+      await evaluationsService.create(createRequest)
       
       // Refresh the summary after save
-      const newSummary = await evaluationsService.getEvaluationSummary(namespace, queryName)
+      const newSummary = await evaluationsService.getEvaluationSummary(queryName)
       setSummary(newSummary)
     } catch (error) {
       throw error // Re-throw so EvaluationEditor can handle the error display
@@ -216,7 +215,6 @@ export function QueryEvaluationActions({ queryName, namespace }: QueryEvaluation
         onOpenChange={setEditorOpen}
         evaluation={null}
         onSave={handleSaveEvaluation}
-        namespace={namespace}
         initialEvaluator={selectedEvaluator}
         initialQueryRef={queryName}
       />

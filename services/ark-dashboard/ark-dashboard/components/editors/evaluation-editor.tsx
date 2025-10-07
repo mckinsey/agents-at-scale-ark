@@ -48,7 +48,6 @@ interface EvaluationEditorProps {
   onSave: (
     evaluation: (EvaluationCreateRequest | EvaluationUpdateRequest) & { id?: string }
   ) => void
-  namespace: string
   initialEvaluator?: string
   initialQueryRef?: string
 }
@@ -58,7 +57,6 @@ export function EvaluationEditor({
   onOpenChange,
   evaluation,
   onSave,
-  namespace,
   initialEvaluator,
   initialQueryRef
 }: EvaluationEditorProps) {
@@ -98,11 +96,11 @@ export function EvaluationEditor({
         
         try {
           const [evaluatorsData, queriesData, agentsData, teamsData, modelsData] = await Promise.all([
-            safe("evaluatorsGetAll", evaluatorsService.getAll(namespace), []),
-            safe("queriesGetAll", queriesService.list(namespace), { items: [], count: 0 }),
-            safe("agentsGetAll", agentsService.getAll(namespace), []),
-            safe("teamsGetAll", teamsService.getAll(namespace), []),
-            safe("modelsGetAll", modelsService.getAll(namespace), [])
+            safe("evaluatorsGetAll", evaluatorsService.getAll(), []),
+            safe("queriesGetAll", queriesService.list(), { items: [], count: 0 }),
+            safe("agentsGetAll", agentsService.getAll(), []),
+            safe("teamsGetAll", teamsService.getAll(), []),
+            safe("modelsGetAll", modelsService.getAll(), [])
           ])
           setEvaluators(evaluatorsData)
           setQueries(queriesData.items)
@@ -123,14 +121,14 @@ export function EvaluationEditor({
       }
       loadData()
     }
-  }, [open, namespace])
+  }, [open])
 
   useEffect(() => {
     const loadEvaluationDetails = async () => {
       if (evaluation && isEditing) {
         try {
           // Fetch detailed evaluation data with spec
-          const detailedEvaluation = await evaluationsService.getDetailsByName(namespace, evaluation.name)
+          const detailedEvaluation = await evaluationsService.getDetailsByName(evaluation.name)
           if (detailedEvaluation) {
             setName(detailedEvaluation.name)
             setMode((detailedEvaluation.spec?.mode as EvaluationType) || "direct")
@@ -177,7 +175,7 @@ export function EvaluationEditor({
     if (open) {
       loadEvaluationDetails()
     }
-  }, [evaluation, isEditing, namespace, open, initialEvaluator, initialQueryRef])
+  }, [evaluation, isEditing, open, initialEvaluator, initialQueryRef])
 
   const handleSubmit = async () => {
     if (!evaluatorRef) {
@@ -242,14 +240,12 @@ export function EvaluationEditor({
           ...(queryRef && {
             queryRef: {
               name: queryRef,
-              namespace,
               ...(targetRef && { responseTarget: `${targetType}:${targetRef}` })
             }
           })
         },
         evaluator: {
-          name: evaluatorRef,
-          namespace
+          name: evaluatorRef
         },
         ...(isEditing && { id: evaluation.name })
       }

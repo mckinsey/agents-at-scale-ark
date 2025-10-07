@@ -141,7 +141,90 @@ Both Google Gemini and Anthropic provide OpenAI-compatible endpoints, allowing y
 
 Most other providers also support OpenAI compatible base URLs - check their docs for details.
 
-### Agent Model Configuration
+## Model Properties
+
+All model providers support a flexible properties system that allows you to customize model behavior by setting parameters like temperature, max tokens, and other OpenAI ChatCompletion parameters.
+
+### Basic Properties Example
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: gpt-4-custom
+spec:
+  type: openai
+  model:
+    value: gpt-4o
+  config:
+    openai:
+      properties:
+        temperature:
+          value: "0.1"
+        max_tokens:
+          value: "1000"
+      baseUrl:
+        value: "https://api.openai.com/v1"
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: openai-secret
+            key: token
+```
+
+Any OpenAI ChatCompletion parameters can be provided through the properties system, including `temperature`, `max_tokens`, `top_p`, `frequency_penalty`, `presence_penalty`, `stop`, `seed`, and more.
+
+## Status and Health Checking
+
+ARK continuously monitors model availability through periodic health checks. The model controller probes each model at regular intervals to ensure it remains accessible and functional.
+
+### Health Check Configuration
+
+The `pollInterval` field controls how often the model is probed:
+
+```yaml
+spec:
+  pollInterval: 1m  # Default: 1 minute
+```
+
+### Status Conditions
+
+Model status is tracked using Kubernetes conditions pattern. The primary condition is `ModelAvailable`:
+
+```yaml
+status:
+  conditions:
+  - type: ModelAvailable
+    status: "True"        # True/False/Unknown
+    reason: "Available"   # Short reason for the condition
+    message: "Model is available and probed successfully"
+    lastTransitionTime: "2024-01-15T10:30:00Z"
+```
+
+**Condition States:**
+- **ModelAvailable: True** - Model successfully responds to test prompts
+- **ModelAvailable: False** - Model probe failed (network error, authentication issue, etc.)
+- **ModelAvailable: Unknown** - Initial state before first probe completes
+
+### Viewing Model Status
+
+Check model availability using kubectl:
+
+```bash
+# List models with availability status
+kubectl get models
+
+NAME                TYPE      MODEL                    AVAILABLE   AGE
+gpt-4-model         azure     gpt-4.1-mini             True        5m
+claude-model        bedrock   claude-3-sonnet-v1       False       3m
+
+# Get detailed status
+kubectl describe model gpt-4-model
+```
+
+The `AVAILABLE` column shows the current state of the `ModelAvailable` condition, making it easy to identify models that may have connectivity or configuration issues.
+
+## Agent Model Configuration
 
 Agents can specify which model to use. If no model is specified, the `default` model is used. If an agent references a model that doesn't exist, the agent will remain in `pending` state. The `modelRef` parameter is used to specify the model name:
 

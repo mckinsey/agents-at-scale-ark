@@ -27,12 +27,10 @@ import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { Database, MessageSquare, ChevronDown } from "lucide-react";
 
 interface MemorySectionProps {
-  readonly namespace: string;
   readonly initialFilters?: Partial<MemoryFilters>;
 }
 
 export function MemorySection({
-  namespace,
   initialFilters
 }: MemorySectionProps) {
   const router = useRouter();
@@ -106,9 +104,9 @@ export function MemorySection({
 
       try {
         const [memoriesData, sessionsData, messagesData] = await Promise.all([
-          memoryService.getMemoryResources(namespace),
-          memoryService.getSessions(namespace),
-          memoryService.getAllMemoryMessages(namespace, {
+          memoryService.getMemoryResources(),
+          memoryService.getSessions(),
+          memoryService.getAllMemoryMessages({
             memory: filters.memoryName && filters.memoryName !== "all" ? filters.memoryName : undefined,
             session: filters.sessionId && filters.sessionId !== "all" ? filters.sessionId : undefined,
             query: filters.queryId && filters.queryId !== "all" ? filters.queryId : undefined
@@ -146,7 +144,7 @@ export function MemorySection({
         setLoading(false);
       }
     },
-    [namespace, filters]
+    [filters]
   );
 
   useEffect(() => {

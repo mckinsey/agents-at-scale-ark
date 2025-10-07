@@ -69,13 +69,6 @@ const StatusBadge = ({ status, onCancel }: StatusBadgeProps) => {
           icon: Play,
           label: "Running"
         };
-      case "evaluating":
-        return {
-          color:
-            "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-          icon: BarChart3,
-          label: "Evaluating"
-        };
       case "canceled":
         return {
           color:
@@ -94,7 +87,7 @@ const StatusBadge = ({ status, onCancel }: StatusBadgeProps) => {
   };
 
   const { color, icon: Icon, label } = getStatusInfo();
-  const canCancel = status === "running" || status === "evaluating";
+  const canCancel = status === "running";
 
   return (
     <div className="flex items-center gap-2">
@@ -129,7 +122,6 @@ export function EvaluationDetailView({
   const loadEvaluation = useCallback(async () => {
     try {
       const data = await evaluationsService.getDetailsByName(
-        namespace,
         evaluationId
       );
       setEvaluation(data);
@@ -137,7 +129,6 @@ export function EvaluationDetailView({
       // Check if enhanced data is available by trying to fetch it
       try {
         const enhancedData = await evaluationsService.getEnhancedDetailsByName(
-          namespace,
           evaluationId
         );
         if (enhancedData?.enhanced_metadata) {
@@ -157,7 +148,7 @@ export function EvaluationDetailView({
             : "An unexpected error occurred"
       });
     }
-  }, [namespace, evaluationId]);
+  }, [evaluationId]);
 
   useEffect(() => {
     const initialLoad = async () => {
@@ -175,7 +166,7 @@ export function EvaluationDetailView({
 
     const status = (evaluation.status as Record<string, unknown>)
       ?.phase as string;
-    const isRunning = status === "running" || status === "evaluating";
+    const isRunning = status === "running";
 
     if (!isRunning) return;
 
@@ -191,7 +182,7 @@ export function EvaluationDetailView({
 
     setCanceling(true);
     try {
-      await evaluationsService.cancel(namespace, evaluation.name);
+      await evaluationsService.cancel(evaluation.name);
       toast({
         variant: "success",
         title: "Evaluation Canceled",

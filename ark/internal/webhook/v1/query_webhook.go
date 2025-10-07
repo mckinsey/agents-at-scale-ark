@@ -84,10 +84,6 @@ func (v *QueryCustomValidator) validateQuery(ctx context.Context, query *arkv1al
 		return warnings, err
 	}
 
-	if err := v.validateEvaluators(ctx, query); err != nil {
-		return warnings, err
-	}
-
 	return warnings, nil
 }
 
@@ -116,28 +112,6 @@ func (v *QueryCustomValidator) validateQueryTargets(ctx context.Context, query *
 			}
 		default:
 			return fmt.Errorf("target[%d]: unsupported type '%s': supported types are: %s, %s, %s, %s", i, target.Type, TargetTypeAgent, TargetTypeTeam, TargetTypeModel, TargetTypeTool)
-		}
-	}
-
-	return nil
-}
-
-func (v *QueryCustomValidator) validateEvaluators(ctx context.Context, query *arkv1alpha1.Query) error {
-	hasEvaluators := len(query.Spec.Evaluators) > 0
-	hasEvaluatorSelector := query.Spec.EvaluatorSelector != nil
-
-	if hasEvaluators && hasEvaluatorSelector {
-		return fmt.Errorf("cannot specify both evaluators and evaluatorSelector")
-	}
-
-	for _, evaluatorRef := range query.Spec.Evaluators {
-		evaluatorNamespace := evaluatorRef.Namespace
-		if evaluatorNamespace == "" {
-			evaluatorNamespace = query.Namespace
-		}
-
-		if err := v.ValidateLoadEvaluator(ctx, evaluatorRef.Name, evaluatorNamespace); err != nil {
-			return fmt.Errorf("evaluator reference %s: %v", evaluatorRef.Name, err)
 		}
 	}
 

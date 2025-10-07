@@ -9,7 +9,7 @@ description: Required secrets and environment variables for ARK CI/CD pipelines
 
 ### CI/CD
 
-The CI/CD pipeline builds and tests all ARK components, services, and documentation on every push. It includes library builds, single-platform container builds (AMD64) for testing, E2E testing, and release preparation.
+The CI/CD pipeline builds and tests all ARK components, services, and documentation on every push. It includes library builds, single-platform container builds (AMD64) for testing, E2E testing, SonarQube code quality scanning, and release preparation.
 
 The pipeline begins with a `setup-container-cache-registry` job that determines the container registry used to cache images across CI/CD pipeline stages - fork PRs use their own GitHub Container Registry namespace (e.g., `ghcr.io/username/agents-at-scale-ark`) while internal PRs use the organization's registry.
 
@@ -84,7 +84,7 @@ Ensures pull request titles follow conventional commit format described in the r
 
 ### SonarQube Code Analysis (SCAS)
 
-Automated code quality and security analysis. Expected to fail in open source repositories as it requires McKinsey-specific infrastructure.
+Automated code quality and security analysis. The SonarQube scan job uses a self-hosted runner as it needs access to the internal SonarQube environment. If you fork this repository, you will need to adapt this to your own SonarQube configuration. Expected to fail in open source repositories as it requires McKinsey-specific infrastructure.
 
 ## Recommended GitHub Configuration
 
@@ -121,10 +121,12 @@ GitHub variables and secrets for ARK build and deployment workflows. All configu
 | `TEST_PYPI_API_TOKEN` | Secret (Required for PyPI deployment) | TestPyPI authentication token for testing Python package deployment | |
 | `PYPI_API_TOKEN` | Secret (Required for PyPI deployment) | PyPI authentication token with publish permissions for Python SDK deployment | |
 | **Code Quality and Analysis** | | |
-| `SONAR_TOKEN` | Secret | SonarQube authentication token |
-| `SONAR_HOST_URL` | Secret | SonarQube server URL |
+| `SONARQUBE_TOKEN` | Secret | SonarQube authentication token |
+| `SONARQUBE_PROJECT_KEY` | Secret | SonarQube project identifier |
+| `SONARQUBE_HOST_URL` | Variable | SonarQube server URL | `https://sonarqube-dev.mckinsey.com/` |
 | `ARTIFACTORY_USER` | Secret | Artifactory username for dependency resolution |
 | `ARTIFACTORY_PASS` | Secret | Artifactory password for dependency resolution |
+| `CODECOV_TOKEN` | Secret (Required for CI) | Codecov authentication token for test coverage reporting. CI builds will fail if not set. |
 
 ## Troubleshooting
 

@@ -49,8 +49,7 @@ When triggering a query:
   fark query my-query
   fark query my-query "New input text"
   fark query my-query -f input.txt -n my-namespace
-  fark query my-query -p name=John -p condition=sunny
-  fark query my-query --evaluator evaluator-llm`,
+  fark query my-query -p name=John -p condition=sunny`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := f.validate(); err != nil {
 				return err
@@ -75,14 +74,12 @@ When triggering a query:
 			}
 
 			opts := TriggerCommand{
-				QueryName:         queryName,
-				InputOverride:     inputOverride,
-				InputFile:         "",
-				Timeout:           f.timeout,
-				Parameters:        f.parameters,
-				SessionId:         f.sessionId,
-				Evaluators:        f.evaluators,
-				EvaluatorSelector: f.evaluatorSelector,
+				QueryName:     queryName,
+				InputOverride: inputOverride,
+				InputFile:     "",
+				Timeout:       f.timeout,
+				Parameters:    f.parameters,
+				SessionId:     f.sessionId,
 				ExecutionContext: ExecutionContext{
 					Config:     config,
 					Namespace:  ns,

@@ -19,9 +19,6 @@ import { useListQueries } from "@/lib/services/queries-hooks";
 import { Button } from "../ui/button";
 
 type QueryResponse = components["schemas"]["QueryResponse"];
-interface QueriesSectionProps {
-  namespace: string;
-}
 
 type SortField = "createdAt" | "none";
 type SortDirection = "asc" | "desc";
@@ -29,7 +26,7 @@ type SortDirection = "asc" | "desc";
 // NEW: view mode for the Output column
 type OutputViewMode = 'content' | 'raw';
 
-export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesSectionProps>(function QueriesSection({ namespace }, ref) {
+export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function QueriesSection(_, ref) {
   const [queries, setQueries] = useState<QueryResponse[]>([]);
   const [sortField, setSortField] = useState<SortField>('createdAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -38,7 +35,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
 
   useImperativeHandle(ref, () => ({
     openAddEditor: () => {
-      router.push(`/query/new?namespace=${namespace}`);
+      router.push(`/query/new`);
     }
   }));
 
@@ -53,7 +50,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
     isError: listQueriesError,
     error: listQueriesErrorObject,
     refetch: loadQueries
-  } = useListQueries(namespace);
+  } = useListQueries();
 
   useEffect(() => {
     if (listQueriesData && !listQueriesError) {
@@ -83,6 +80,19 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
     return text.length > cutoffIndex
       ? text.substring(0, cutoffIndex) + "..."
       : text;
+  };
+
+  // Helper function to convert input to displayable string
+  const getInputDisplayText = (input: string | { role: string; content?: string | unknown; }[] | undefined): string => {
+    if (!input) return "-";
+    if (typeof input === "string") return input;
+    if (Array.isArray(input)) {
+      // Show just the content from the last message
+      const lastMsg = input[input.length - 1];
+      if (!lastMsg.content) return "-";
+      return typeof lastMsg.content === 'string' ? lastMsg.content : JSON.stringify(lastMsg.content);
+    }
+    return "-";
   };
 
   const formatTokenUsage = (query: QueryResponse) => {
@@ -198,14 +208,12 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
       | "done"
       | "error"
       | "running"
-      | "evaluating"
       | "canceled"
       | "default";
     const variant = [
       "done",
       "error",
       "running",
-      "evaluating",
       "canceled"
     ].includes(status || "")
       ? normalizedStatus
@@ -223,13 +231,13 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
 
   const handleDelete = async (queryName: string) => {
     try {
-      await queriesService.delete(namespace, queryName);
+      await queriesService.delete(queryName);
       toast({
         variant: "success",
         title: "Query Deleted",
         description: "Successfully deleted query"
       });
-      const data = await queriesService.list(namespace);
+      const data = await queriesService.list();
       setQueries(data.items);
     } catch (error) {
       console.error("Failed to delete query:", error);
@@ -246,13 +254,13 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
 
   const handleCancel = async (queryName: string) => {
     try {
-      await queriesService.cancel(namespace, queryName);
+      await queriesService.cancel(queryName);
       toast({
         variant: "success",
         title: "Query Canceled",
         description: "Successfully canceled query"
       });
-      const data = await queriesService.list(namespace);
+      const data = await queriesService.list();
       setQueries(data.items);
     } catch (error) {
       console.error("Failed to cancel query:", error);
@@ -378,13 +386,14 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
                       sortedQueries.map((query) => {
                         const target = getTargetDisplay(query);
                         const output = getOutput(query);
+                        const inputDisplayText = getInputDisplayText(query.input);
                         return (
                           <tr
                             key={query.name}
                             className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/30 cursor-pointer"
                             onClick={() =>
                               router.push(
-                                `/query/${query.name}?namespace=${namespace}`
+                                `/query/${query.name}`
                               )
                             }
                           >
@@ -401,12 +410,12 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger className="text-left">
-                                    {truncateText(query.input)}
+                                    {truncateText(inputDisplayText)}
                                   </TooltipTrigger>
-                                  {query.input && query.input.length > 50 && (
+                                  {inputDisplayText && inputDisplayText.length > 50 && (
                                     <TooltipContent className="max-w-md">
                                       <p className="whitespace-pre-wrap">
-                                        {query.input}
+                                        {inputDisplayText}
                                       </p>
                                     </TooltipContent>
                                   )}
@@ -439,7 +448,6 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
                               <div className="flex items-center justify-center">
                                 <EvaluationStatusIndicator
                                   queryName={query.name}
-                                  namespace={namespace}
                                   compact={true}
                                 />
                               </div>
@@ -453,7 +461,6 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const eventsUrl = getResourceEventsUrl(
-                                      namespace,
                                       "Query",
                                       query.name
                                     );
@@ -492,7 +499,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }, QueriesS
 });
 
 interface StatusDotProps {
-  variant: "done" | "error" | "running" | "evaluating" | "canceled" | "default";
+  variant: "done" | "error" | "running" | "canceled" | "default";
   onCancel?: () => void;
 }
 
@@ -505,8 +512,6 @@ function StatusDot({ variant, onCancel }: StatusDotProps) {
         return "bg-red-300";
       case "running":
         return "bg-blue-300";
-      case "evaluating":
-        return "bg-yellow-300";
       case "canceled":
         return "bg-gray-300";
       default:
@@ -522,8 +527,6 @@ function StatusDot({ variant, onCancel }: StatusDotProps) {
         return "Error";
       case "running":
         return "Running";
-      case "evaluating":
-        return "Evaluating";
       case "canceled":
         return "Canceled";
       default:

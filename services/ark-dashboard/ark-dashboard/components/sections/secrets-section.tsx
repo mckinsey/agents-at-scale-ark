@@ -40,8 +40,8 @@ export const SecretsSection = forwardRef<
       setLoading(true);
       try {
         const [secretsData, modelsData] = await Promise.all([
-          secretsService.getAll(namespace),
-          modelsService.getAll(namespace)
+          secretsService.getAll(),
+          modelsService.getAll()
         ]);
         setSecrets(secretsData);
         setModels(modelsData);
@@ -69,14 +69,14 @@ export const SecretsSection = forwardRef<
       const existingSecret = secrets.find((s) => s.name === name);
 
       if (existingSecret) {
-        await secretsService.update(namespace, name, password);
+        await secretsService.update(name, password);
         toast({
           variant: "success",
           title: "Secret Updated",
           description: `Successfully updated ${name}`
         });
       } else {
-        await secretsService.create(namespace, name, password);
+        await secretsService.create(name, password);
         toast({
           variant: "success",
           title: "Secret Created",
@@ -84,7 +84,7 @@ export const SecretsSection = forwardRef<
         });
       }
       // Reload data
-      const updatedSecrets = await secretsService.getAll(namespace);
+      const updatedSecrets = await secretsService.getAll();
       setSecrets(updatedSecrets);
     } catch (error) {
       const isUpdate = secrets.some((s) => s.name === name);
@@ -105,14 +105,14 @@ export const SecretsSection = forwardRef<
       if (!secret) {
         throw new Error("Secret not found");
       }
-      await secretsService.delete(namespace, secret.name);
+      await secretsService.delete(secret.name);
       toast({
         variant: "success",
         title: "Secret Deleted",
         description: "Successfully deleted the secret"
       });
       // Reload data
-      const updatedSecrets = await secretsService.getAll(namespace);
+      const updatedSecrets = await secretsService.getAll();
       setSecrets(updatedSecrets);
     } catch (error) {
       toast({

@@ -28,9 +28,24 @@ make localhost-gateway-install
 ```
 
 ## Start the dev environment
+
+Each service contains their own devspace config. You can either start the entire project by doing
 ```bash
 devspace dev
 ```
+
+or start individual services
+
+```bash
+devspace dev --dependency ark-api
+```
+
+cert-manager or gateway-api are installed by default to disable them use env vars `ENABLE_CERT_MANAGER` and `ENABLE_GATEWAY_API_CRDS`
+
+```bash
+ENABLE_CERT_MANAGER=false devspace dev
+```
+
 - ark-api and ark-dashboard deploy to namespace: default
 - ark-controller deploys to namespace: ark-system
 

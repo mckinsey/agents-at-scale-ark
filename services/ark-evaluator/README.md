@@ -80,8 +80,9 @@ ARK Evaluator consolidates evaluation capabilities from multiple sources:
 
 - **ARK Native**: Default LLM-as-a-Judge with configurable providers
 - **Metrics Engine**: Deterministic evaluation from integrated evaluator-metric service
-- **Langfuse + RAGAS**: Advanced evaluation with Azure OpenAI and tracing
-- **OSS Integrations**: Extensible framework for evaluation platforms
+- **RAGAS Provider**: Standalone RAGAS evaluation with Azure OpenAI/OpenAI support
+- **Langfuse Provider**: Hybrid RAGAS evaluation with Langfuse tracing and observability
+- **OSS Integrations**: Extensible framework for additional evaluation platforms
 
 ## Documentation
 
@@ -89,8 +90,9 @@ ARK Evaluator consolidates evaluation capabilities from multiple sources:
 - **[Deterministic Evaluation](docs/deterministic-evaluation.md)** - Metrics-based assessment with objective scoring
 - **[LLM-as-a-Judge](docs/llm-as-judge.md)** - Model-based subjective evaluation across multiple providers
 
-### 🔧 **Advanced Integrations**  
-- **[Langfuse Integration](docs/langfuse-integration.md)** - RAGAS evaluation with Azure OpenAI and comprehensive tracing
+### 🔧 **OSS Evaluation Providers**
+- **[RAGAS Provider](docs/ragas-provider.md)** - Standalone RAGAS evaluation without dependencies
+- **[Langfuse Integration](docs/langfuse-integration.md)** - Hybrid RAGAS evaluation with Langfuse tracing
 
 ### 📖 **Reference Documentation**
 - **[API Reference](docs/api-reference.md)** - Complete endpoint documentation with examples
@@ -137,13 +139,40 @@ Intelligent quality assessment using advanced language models:
 - **Google Gemini**: Gemini Pro, Gemini Flash  
 - **Ollama**: Local model deployment
 
+### Provider Metric Discovery APIs
+
+ARK Evaluator includes APIs to dynamically discover supported metrics and their requirements:
+
+#### **GET /providers/{provider}/metrics**
+List all supported metrics for a provider with descriptions:
+```bash
+curl http://ark-evaluator:8000/providers/ragas/metrics
+```
+
+#### **GET /providers/{provider}/metrics/{metric}**
+Get detailed field requirements for specific metrics:
+```bash
+curl http://ark-evaluator:8000/providers/ragas/metrics/relevance
+```
+
+**Supported Providers:**
+- `ragas` - RAGAS evaluation metrics (relevance, context_precision, etc.)
+- `langfuse` - Langfuse integration capabilities
+
 ### Advanced Evaluation Frameworks
 
-#### ✅ **Langfuse + RAGAS Integration**
+#### ✅ **Standalone RAGAS Provider**
+Direct RAGAS evaluation without external dependencies:
+- **Pure RAGAS**: Relevancy, correctness, faithfulness, similarity metrics
+- **Dual Provider Support**: Azure OpenAI and OpenAI configurations
+- **High Performance**: Optimized evaluation without tracing overhead
+- **Simple Configuration**: Minimal parameters for quick setup
+
+#### ✅ **Langfuse + RAGAS Hybrid**
 Comprehensive evaluation with tracing and advanced metrics:
-- **RAGAS Metrics**: Answer relevancy, correctness, faithfulness, similarity
+- **RAGAS Evaluation**: All RAGAS metrics with full evaluation capabilities
+- **Langfuse Tracing**: Complete evaluation lineage and observability
 - **Azure OpenAI**: Full integration with embeddings and LLM evaluation
-- **Automatic Tracing**: Complete evaluation lineage in Langfuse
 - **UV Loop Compatibility**: Thread-safe execution for complex environments
 
 #### 🔄 **Planned Integrations** ([Roadmap](docs/roadmap.md))
@@ -183,12 +212,36 @@ parameters:
   temperature: "0.1"
 ```
 
-**Langfuse + Azure OpenAI:**
+**Standalone RAGAS (Azure OpenAI):**
+```yaml
+parameters:
+  provider: "ragas"
+  azure.api_key: "${AZURE_OPENAI_API_KEY}"
+  azure.endpoint: "${AZURE_OPENAI_ENDPOINT}"
+  azure.api_version: "2024-02-01"
+  azure.deployment_name: "gpt-4"
+  metrics: "relevance,correctness,faithfulness"
+  threshold: "0.8"
+```
+
+**Standalone RAGAS (OpenAI):**
+```yaml
+parameters:
+  provider: "ragas"
+  openai.api_key: "${OPENAI_API_KEY}"
+  openai.base_url: "https://api.openai.com/v1"
+  openai.model: "gpt-4"
+  metrics: "relevance,correctness"
+  threshold: "0.7"
+```
+
+**Langfuse + RAGAS Hybrid:**
 ```yaml
 parameters:
   provider: "langfuse"
   langfuse.host: "https://cloud.langfuse.com"
-  langfuse.azure_deployment: "gpt-4o"
+  langfuse.public_key: "${LANGFUSE_PUBLIC_KEY}"
+  langfuse.secret_key: "${LANGFUSE_SECRET_KEY}"
   metrics: "relevance,correctness,faithfulness"
 ```
 
@@ -241,14 +294,35 @@ POST /evaluate-metrics
 }
 ```
 
-### Advanced Langfuse Integration
+### Standalone RAGAS Evaluation
 ```bash
-# RAGAS evaluation with tracing
-POST /evaluate  
+# Pure RAGAS evaluation (high performance)
+POST /evaluate
+{
+  "type": "direct",
+  "config": {
+    "input": "What is renewable energy?",
+    "output": "Renewable energy comes from natural sources..."
+  },
+  "parameters": {
+    "provider": "ragas",
+    "azure.api_key": "your-key",
+    "azure.endpoint": "your-endpoint",
+    "metrics": "relevance,correctness,faithfulness",
+    "threshold": "0.8"
+  }
+}
+```
+
+### Langfuse + RAGAS Hybrid
+```bash
+# RAGAS evaluation with Langfuse tracing
+POST /evaluate
 {
   "parameters": {
     "provider": "langfuse",
-    "langfuse.azure_deployment": "gpt-4o",
+    "langfuse.host": "https://cloud.langfuse.com",
+    "langfuse.public_key": "your-public-key",
     "metrics": "faithfulness,relevance"
   }
 }

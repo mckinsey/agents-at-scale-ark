@@ -69,7 +69,7 @@ export function ModelRow({
         <div className="flex-shrink-0 mr-4">
           <AvailabilityStatusBadge
             status={model.available}
-            eventsLink={`/events?namespace=${namespace}&kind=Model&name=${model.name}&page=1`}
+            eventsLink={`/events?kind=Model&name=${model.name}&page=1`}
           />
         </div>
 

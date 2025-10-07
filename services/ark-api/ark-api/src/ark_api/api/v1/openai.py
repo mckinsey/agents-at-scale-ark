@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 import uuid
@@ -8,10 +9,10 @@ from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
 from ark_sdk.streaming_config import get_streaming_config, get_streaming_base_url
 from ark_sdk.k8s import get_namespace
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
-from openai.types.chat import ChatCompletion
+from fastapi.responses import StreamingResponse, JSONResponse
+from openai.types.chat import ChatCompletion, ChatCompletionMessageParam
 from openai.types import Model
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 import httpx
 from kubernetes_asyncio import client as k8s_client
 
@@ -48,14 +49,9 @@ def _create_model_entry(resource_id: str, metadata: dict) -> Model:
     )
 
 
-class ChatMessage(BaseModel):
-    role: str
-    content: str
-
-
 class ChatCompletionRequest(BaseModel):
     model: str
-    messages: List[ChatMessage]
+    messages: List[ChatCompletionMessageParam]
     temperature: float = 1.0
     max_tokens: Optional[int] = None
     stream: bool = False
@@ -86,7 +82,6 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
     logger.info(f"Received chat completion request for model: {model}")
 
     target = parse_model_to_query_target(model)
-    input_text = "\n".join([f"{msg.role}: {msg.content}" for msg in messages])
     query_name = f"openai-query-{uuid.uuid4().hex[:8]}"
 
     # Get the current namespace
@@ -100,25 +95,24 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             STREAMING_ENABLED_ANNOTATION: "true"
         }
 
-    # Create the QueryV1alpha1 object like the queries API does
-    query_resource = QueryV1alpha1(
-        metadata=metadata,
-        spec=QueryV1alpha1Spec(input=input_text, targets=[target]),
-    )
-
-    logger.info(f"Creating query for {target.type}/{target.name}")
-
     try:
+        # Create the QueryV1alpha1 object with type="messages"
+        # Serialize messages array to JSON string as required by QueryV1alpha1Spec
+        query_resource = QueryV1alpha1(
+            metadata=metadata,
+            spec=QueryV1alpha1Spec(type="messages", input=json.dumps(messages), targets=[target]),
+        )
+
         async with with_ark_client(namespace, "v1alpha1") as ark_client:
             # Create the query using QueryV1alpha1 object like queries API
             await ark_client.queries.a_create(query_resource)
             logger.info(f"Created query: {query_name}")
 
-            # If the caller didn't reuquest streaming, we can simply poll for
+            # If the caller didn't request streaming, we can simply poll for
             # the response.
             if not request.stream:
                 return await poll_query_completion(
-                    ark_client, query_name, model, input_text
+                    ark_client, query_name, model, messages
                 )
 
             # Streaming was requested - check if streaming backend is available
@@ -137,7 +131,7 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             if not streaming_config or not streaming_config.enabled:
                 logger.info("No streaming backend configured, falling back to polling")
                 completion = await poll_query_completion(
-                    ark_client, query_name, model, input_text
+                    ark_client, query_name, model, messages
                 )
                 sse_lines = create_single_chunk_sse_response(completion)
                 return StreamingResponse(
@@ -161,11 +155,31 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
                 headers=sse_headers
             )
 
+    except ValidationError as e:
+        # Return OpenAI-formatted error to adhere to OpenAI completions spec
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "message": str(e),
+                    "type": "invalid_request_error",
+                    "code": "invalid_value"
+                }
+            }
+        )
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
-        if isinstance(e, HTTPException):
-            raise
-        raise HTTPException(status_code=500, detail=str(e))
+        # Return OpenAI-formatted error to adhere to OpenAI completions spec
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "message": str(e),
+                    "type": "server_error",
+                    "code": "internal_error"
+                }
+            }
+        )
 
 
 @router.get("/models")

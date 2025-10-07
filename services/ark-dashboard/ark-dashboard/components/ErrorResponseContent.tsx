@@ -6,10 +6,9 @@ interface ErrorResponseContentProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any;
   viewMode: 'events' | 'details';
-  namespace: string;
 }
 
-export function ErrorResponseContent({ query, viewMode, namespace }: ErrorResponseContentProps) {
+export function ErrorResponseContent({ query, viewMode }: ErrorResponseContentProps) {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -17,7 +16,7 @@ export function ErrorResponseContent({ query, viewMode, namespace }: ErrorRespon
     const loadEvents = async () => {
       try {
         // Try to get events for this specific query
-        const eventData = await eventsService.getAll(namespace, {
+        const eventData = await eventsService.getAll({
           name: query.name
         });
         setEvents(eventData.items);
@@ -25,7 +24,7 @@ export function ErrorResponseContent({ query, viewMode, namespace }: ErrorRespon
         // If no events found for this query, try to get recent error events
         if (eventData.items.length === 0) {
           console.log('No events found for query, trying to get recent error events');
-          const recentEvents = await eventsService.getAll(namespace, {
+          const recentEvents = await eventsService.getAll({
             type: 'Warning'
           });
           setEvents(recentEvents.items);
@@ -42,7 +41,7 @@ export function ErrorResponseContent({ query, viewMode, namespace }: ErrorRespon
     if (query.name) {
       loadEvents();
     }
-  }, [query.name, namespace]);
+  }, [query.name]);
 
   const getErrorDetails = () => {
     // Find error events - look for ToolCallError, QueryResolveError, etc.

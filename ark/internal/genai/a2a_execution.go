@@ -5,7 +5,9 @@ package genai
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/openai/openai-go"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -28,7 +30,7 @@ func NewA2AExecutionEngine(k8sClient client.Client, recorder EventEmitter) *A2AE
 }
 
 // Execute executes a query against an A2A agent
-func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace string, annotations map[string]string, userInput Message) ([]Message, error) {
+func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace string, annotations map[string]string, userInput Message, eventStream EventStreamInterface) ([]Message, error) {
 	log := logf.FromContext(ctx)
 	log.Info("executing A2A agent", "agent", agentName)
 
@@ -105,5 +107,37 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 
 	// Convert response to genai.Message format
 	responseMessage := NewAssistantMessage(response)
+
+	// The A2A execution engine does not yet support streaming responses - if streaming
+	// was requested then the final response must be sent as a single chunk, as per the spec.
+	if eventStream != nil {
+		// Use query ID as completion ID (all chunks for a query share the same ID)
+		completionID := getQueryID(ctx)
+		// Use "agent/name" format as per OpenAI-compatible endpoints
+		modelID := fmt.Sprintf("agent/%s", agentName)
+
+		chunk := &openai.ChatCompletionChunk{
+			ID:      completionID,
+			Object:  "chat.completion.chunk",
+			Created: time.Now().Unix(),
+			Model:   modelID,
+			Choices: []openai.ChatCompletionChunkChoice{
+				{
+					Index: 0,
+					Delta: openai.ChatCompletionChunkChoiceDelta{
+						Content: response,
+						Role:    "assistant",
+					},
+					FinishReason: "stop",
+				},
+			},
+		}
+
+		chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, modelID)
+		if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
+			log.Error(err, "failed to send A2A response chunk to event stream")
+		}
+	}
+
 	return []Message{responseMessage}, nil
 }

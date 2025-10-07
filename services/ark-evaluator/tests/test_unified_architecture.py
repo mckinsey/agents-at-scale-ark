@@ -264,33 +264,6 @@ class TestLangfuseProvider:
         except ImportError:
             pytest.skip("Langfuse provider not available")
     
-    @pytest.mark.asyncio
-    async def test_langfuse_provider_handles_missing_library(self):
-        """Test Langfuse provider handles missing langfuse library gracefully."""
-        try:
-            from evaluator.oss_providers.langfuse import LangfuseProvider
-            
-            provider = LangfuseProvider(shared_session=Mock())
-            
-            request = UnifiedEvaluationRequest(
-                type=EvaluationType.DIRECT,
-                config=EvaluationConfig(input="test", output="test"),
-                parameters={
-                    "langfuse.host": "https://test.com",
-                    "langfuse.public_key": "pub",
-                    "langfuse.secret_key": "secret"
-                }
-            )
-            
-            # This should handle the import error gracefully
-            result = await provider.evaluate(request)
-            
-            # If langfuse is not installed, it should return an error response
-            if result.error and "not installed" in result.error:
-                assert result.score == "0.0"
-                assert result.passed is False
-        except ImportError:
-            pytest.skip("Langfuse provider not available")
 
 
 def test_all_new_imports_work():

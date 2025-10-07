@@ -15,13 +15,11 @@ import type { Evaluator } from "@/lib/services"
 interface EvaluatorRowProps {
   evaluator: Evaluator
   onDelete?: (id: string) => void
-  namespace: string
 }
 
 export function EvaluatorRow({
   evaluator,
-  onDelete,
-  namespace
+  onDelete
 }: EvaluatorRowProps) {
   const router = useRouter()
 
@@ -84,7 +82,7 @@ export function EvaluatorRow({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => router.push(`/evaluators/${evaluator.name}/edit?namespace=${namespace}`)}
+                  onClick={() => router.push(`/evaluators/${evaluator.name}/edit`)}
                   className="h-8 w-8 p-0"
                 >
                   <Pencil className="h-3 w-3" />

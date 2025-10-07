@@ -63,7 +63,6 @@ const STATUS_OPTIONS = [
   { value: "done", label: "Done", icon: CheckCircle, color: "text-green-600" },
   { value: "running", label: "Running", icon: Play, color: "text-blue-600" },
   { value: "error", label: "Error", icon: AlertCircle, color: "text-red-600" },
-  { value: "evaluating", label: "Evaluating", icon: Clock, color: "text-yellow-600" },
   { value: "canceled", label: "Canceled", icon: Square, color: "text-gray-600" }
 ]
 

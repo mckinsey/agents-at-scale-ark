@@ -1,7 +1,8 @@
 """Kubernetes teams API endpoints."""
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from typing import Optional
 from ark_sdk.models.team_v1alpha1 import TeamV1alpha1
 
 from ark_sdk.client import with_ark_client
@@ -17,7 +18,8 @@ from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/namespaces/{namespace}/teams", tags=["teams"])
+router = APIRouter(
+    prefix="/teams", tags=["teams"])
 
 # CRD configuration
 VERSION = "v1alpha1"
@@ -65,7 +67,7 @@ def team_to_detail_response(team: dict) -> TeamDetailResponse:
 
 @router.get("", response_model=TeamListResponse)
 @handle_k8s_errors(operation="list", resource_type="team")
-async def list_teams(namespace: str) -> TeamListResponse:
+async def list_teams(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> TeamListResponse:
     """
     List all Team CRs in a namespace.
     
@@ -90,7 +92,7 @@ async def list_teams(namespace: str) -> TeamListResponse:
 
 @router.post("", response_model=TeamDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="team")
-async def create_team(namespace: str, body: TeamCreateRequest) -> TeamDetailResponse:
+async def create_team(body: TeamCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> TeamDetailResponse:
     """
     Create a new Team CR.
     
@@ -136,7 +138,7 @@ async def create_team(namespace: str, body: TeamCreateRequest) -> TeamDetailResp
 
 @router.get("/{team_name}", response_model=TeamDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="team")
-async def get_team(namespace: str, team_name: str) -> TeamDetailResponse:
+async def get_team(team_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> TeamDetailResponse:
     """
     Get a specific Team CR by name.
     
@@ -155,7 +157,7 @@ async def get_team(namespace: str, team_name: str) -> TeamDetailResponse:
 
 @router.put("/{team_name}", response_model=TeamDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="team")
-async def update_team(namespace: str, team_name: str, body: TeamUpdateRequest) -> TeamDetailResponse:
+async def update_team(team_name: str, body: TeamUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> TeamDetailResponse:
     """
     Update a Team CR by name.
     
@@ -208,7 +210,7 @@ async def update_team(namespace: str, team_name: str, body: TeamUpdateRequest) -
 
 @router.delete("/{team_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="team")
-async def delete_team(namespace: str, team_name: str) -> None:
+async def delete_team(team_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> None:
     """
     Delete a Team CR by name.
     

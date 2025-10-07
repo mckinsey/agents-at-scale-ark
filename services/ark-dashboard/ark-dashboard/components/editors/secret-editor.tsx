@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { Secret } from "@/lib/services/secrets"
+import { kubernetesNameSchema } from "@/lib/utils/kubernetes-validation"
 
 interface SecretEditorProps {
   open: boolean
@@ -18,14 +19,6 @@ interface SecretEditorProps {
   secret: Secret | null
   onSave: (name: string, password: string) => void
   existingSecrets?: Secret[]
-}
-
-// Kubernetes secret name validation
-// Must consist of lower case alphanumeric characters, '-' or '.', 
-// and must start and end with an alphanumeric character
-const isValidK8sSecretName = (name: string): boolean => {
-  const k8sNameRegex = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/
-  return k8sNameRegex.test(name) && name.length <= 253
 }
 
 export function SecretEditor({ open, onOpenChange, secret, onSave, existingSecrets = [] }: SecretEditorProps) {
@@ -49,7 +42,7 @@ export function SecretEditor({ open, onOpenChange, secret, onSave, existingSecre
     }
 
     // Check Kubernetes naming rules
-    if (!isValidK8sSecretName(value)) {
+    if (!kubernetesNameSchema.safeParse(value).success) {
       setNameError("Name must consist of lowercase alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character (max 253 chars)")
       return false
     }
@@ -76,7 +69,7 @@ export function SecretEditor({ open, onOpenChange, secret, onSave, existingSecre
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     // Validate name before submitting
     if (!secret && !validateName(name)) {
       return
@@ -85,7 +78,7 @@ export function SecretEditor({ open, onOpenChange, secret, onSave, existingSecre
     if (!password.trim()) {
       return
     }
-    
+
     onSave(name, password)
     onOpenChange(false)
     setName("")

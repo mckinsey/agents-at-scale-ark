@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import {TemplateEngine} from '../templateEngine.js';
 import {TemplateDiscovery} from '../templateDiscovery.js';
+import type {GeneratorOptions} from '../index.js';
 
 export interface McpServerConfig {
   mcpServerName: string;
@@ -28,7 +29,11 @@ export function createMcpServerGenerator() {
     description:
       'Generate a new MCP server with Kubernetes deployment from template',
     templatePath: 'templates/mcp-server',
-    generate: async (name: string, destination: string, options: any) => {
+    generate: async (
+      name: string,
+      destination: string,
+      options: GeneratorOptions
+    ) => {
       const generator = new McpServerGenerator();
       await generator.generate(name, destination, options);
     },
@@ -47,7 +52,7 @@ class McpServerGenerator {
   async generate(
     name: string,
     destination: string,
-    _options: any
+    _options: GeneratorOptions
   ): Promise<void> {
     console.log(chalk.blue('🚀 ARK MCP Server Generator\n'));
 
@@ -199,8 +204,8 @@ class McpServerGenerator {
     const tools = await this.getToolDefinitions();
 
     // Check if destination exists
-    if (fs.existsSync(answers.destination)) {
-      const overwrite = await (inquirer as any).prompt([
+    if (answers.destination && fs.existsSync(answers.destination)) {
+      const overwrite = await inquirer.prompt<{overwrite: boolean}>([
         {
           type: 'confirm',
           name: 'overwrite',
@@ -216,9 +221,18 @@ class McpServerGenerator {
     }
 
     return {
-      ...answers,
+      mcpServerName: answers.mcpServerName || name,
+      description: answers.description || '',
+      technology: answers.technology || 'node',
+      packageSource: answers.packageSource || 'local',
+      packageName: answers.packageName,
+      destination: answers.destination || defaultDestination,
+      requiresAuth: answers.requiresAuth || false,
+      hasCustomConfig: answers.hasCustomConfig || false,
+      maintainerName: answers.maintainerName || '',
+      homeUrl: answers.homeUrl,
       tools,
-      packageManager: this.getPackageManager(answers.technology),
+      packageManager: this.getPackageManager(answers.technology || 'node'),
       sourceUrls: answers.homeUrl ? [answers.homeUrl] : [],
       sampleQuery: this.generateSampleQuery(tools),
     };
@@ -232,7 +246,7 @@ class McpServerGenerator {
 
     const tools: Array<{name: string; description: string}> = [];
 
-    const addMore = await (inquirer as any).prompt([
+    const addMore = await inquirer.prompt<{addTools: boolean}>([
       {
         type: 'confirm',
         name: 'addTools',
@@ -245,7 +259,10 @@ class McpServerGenerator {
       let addingTools = true;
 
       while (addingTools) {
-        const toolInfo = await (inquirer as any).prompt([
+        const toolInfo = await inquirer.prompt<{
+          name: string;
+          description: string;
+        }>([
           {
             type: 'input',
             name: 'name',
@@ -272,7 +289,7 @@ class McpServerGenerator {
 
         tools.push(toolInfo);
 
-        const continueAdding = await (inquirer as any).prompt([
+        const continueAdding = await inquirer.prompt<{continue: boolean}>([
           {
             type: 'confirm',
             name: 'continue',
@@ -352,7 +369,7 @@ class McpServerGenerator {
     );
     console.log(`Tools: ${config.tools.map((t) => t.name).join(', ')}`);
 
-    const confirm = await (inquirer as any).prompt([
+    const confirm = await inquirer.prompt<{proceed: boolean}>([
       {
         type: 'confirm',
         name: 'proceed',
@@ -378,7 +395,20 @@ class McpServerGenerator {
 
       // Generate from template
       // Set template variables using the same structure expected by templates
-      this.templateEngine.setVariables(config as any);
+      // Convert config to template variables format
+      const templateVars: Record<string, string | number | boolean> = {};
+      Object.entries(config).forEach(([key, value]) => {
+        if (
+          typeof value === 'string' ||
+          typeof value === 'number' ||
+          typeof value === 'boolean'
+        ) {
+          templateVars[key] = value;
+        } else {
+          templateVars[key] = JSON.stringify(value);
+        }
+      });
+      this.templateEngine.setVariables(templateVars);
       await this.templateEngine.processTemplate(
         templatePath,
         config.destination
@@ -395,8 +425,11 @@ class McpServerGenerator {
           `✅ MCP server generated successfully at ${config.destination}`
         )
       );
-    } catch (error: any) {
-      console.error(chalk.red('Failed to generate MCP server:'), error.message);
+    } catch (error) {
+      console.error(
+        chalk.red('Failed to generate MCP server:'),
+        error instanceof Error ? error.message : 'Unknown error'
+      );
       process.exit(1);
     }
   }

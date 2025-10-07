@@ -5,7 +5,7 @@ description: Learn how to create and execute queries against agents and teams
 
 # Creating Queries
 
-Queries are how you interact with models, toosl, agents and teams in ARK. A query sends input to any target, or set of targets, and receives a response. You can create queries using `kubectl`, the `fark` CLI, the ARK APIs or our OpenAI-compatible endpoints.
+Queries are how you interact with models, tools, agents and teams in ARK. A query sends input to any target, or set of targets, and receives a response. You can create queries using `kubectl`, the `fark` CLI, the ARK APIs or our OpenAI-compatible endpoints.
 
 ## What is a Query?
 
@@ -15,33 +15,85 @@ A query is a request to execute a task using an agent or team. It contains:
 - **Target**: Which agent or team should process the request
 - **Output**: The response from the agent or team
 
-## Using kubectl
+### User Messages
 
-Create a query using a YAML file:
+If a `type` is not specified, then the input of a query is a single user message:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: my-query
+  name: query-simple
 spec:
-  input: "What's the weather like in New York?"
+  input: "What is the capital of France"
   targets:
-  - type: agent
-    name: weather-agent
+    - type: agent
+      name: sample-agent
 ```
 
-Apply the query:
+Apply this sample query with:
 
 ```bash
-kubectl apply -f my-query.yaml
+# Create the 'sample agent' if you haven't already, then run the query.
+kubectl apply -f samples/agents/sample-agent.yaml
+kubectl apply -f samples/queries/query-simple.yaml
 ```
 
 Check the result:
 
 ```bash
-kubectl get query my-query -o yaml
+kubectl get query query-simple -o yaml
 ```
+
+### Structured Conversations
+
+The `messages` query type can be used to input a structured conversation (messages array):
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: conversation-messages
+  namespace: default
+spec:
+  type: messages
+  input:
+    - role: user
+      content: "Calculate 1+1."
+    - role: assistant
+      content: "2"
+    - role: user
+      content: "Calculate 2+2."
+    - role: assistant
+      content: "4"
+    - role: user
+      content: "What is the sum of all previous sums?"
+  targets:
+    - type: agent
+      name: sample-agent
+```
+
+Apply this query using kubectl:
+
+```bash
+# Create the 'sample agent' if you haven't already, then run the query.
+kubectl apply -f samples/agents/sample-agent.yaml
+kubectl apply -f samples/queries/query-conversation-messages.yaml
+```
+
+Check the result:
+
+```bash
+kubectl get query conversation-messages -o yaml
+```
+
+The `messages` input type allows you to build up conversation context, by adding the response of each query into an OpenAI message object array.
+
+Notes:
+
+- `type` is optional; if omitted, it defaults to `user` (string input).
+- For `type: messages`, `input` must be an array of objects with `role` and `content` fields.
+- Supported roles: `user`, `assistant`, `system`, and provider-specific roles.
 
 ## Using fark CLI
 
@@ -95,6 +147,7 @@ curl -X POST http://localhost:8000/openai/v1/chat/completions \
 ```
 
 Response:
+
 ```json
 {
   "id": "query-abc123",

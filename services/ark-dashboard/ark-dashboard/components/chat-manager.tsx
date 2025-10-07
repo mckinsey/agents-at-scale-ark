@@ -8,7 +8,6 @@ interface ChatWindow {
   id: string
   name: string
   type: ChatType
-  namespace: string
   position: number
 }
 
@@ -34,7 +33,7 @@ export default function ChatManager() {
 
   useEffect(() => {
     const handleOpenChat = (event: CustomEvent) => {
-      const { name, type, namespace } = event.detail
+      const { name, type } = event.detail
       const id = `${name}-${Date.now()}`
       
       setChatWindows(prev => {
@@ -50,14 +49,13 @@ export default function ChatManager() {
           id,
           name,
           type,
-          namespace,
           position: prev.length
         }]
       })
     }
 
     const handleToggleChat = (event: CustomEvent) => {
-      const { name, type, namespace } = event.detail
+      const { name, type } = event.detail
       
       setChatWindows(prev => {
         const existingChat = prev.find(chat => chat.name === name)
@@ -82,7 +80,6 @@ export default function ChatManager() {
             id,
             name,
             type,
-            namespace,
             position: prev.length
           }]
         }
@@ -121,7 +118,6 @@ export default function ChatManager() {
           id={chat.id}
           name={chat.name}
           type={chat.type}
-          namespace={chat.namespace}
           position={chat.position}
           onClose={() => handleCloseChat(chat.id)}
         />

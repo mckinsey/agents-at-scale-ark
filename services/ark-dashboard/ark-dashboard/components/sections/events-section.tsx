@@ -26,7 +26,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle, RefreshCw } from "lucide-react";
 
 interface EventsSectionProps {
-  readonly namespace: string;
   readonly page: number
   readonly limit: number
   readonly type?: string
@@ -34,7 +33,7 @@ interface EventsSectionProps {
   readonly name?: string
 }
 
-export function EventsSection({ namespace, page, limit, type, kind, name }: EventsSectionProps) {
+export function EventsSection({ page, limit, type, kind, name }: EventsSectionProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -67,10 +66,10 @@ export function EventsSection({ namespace, page, limit, type, kind, name }: Even
         };
 
         // Always load filter options from ALL events to get complete lists
-        const filterOptions = await eventsService.getAllFilterOptions(namespace);
+        const filterOptions = await eventsService.getAllFilterOptions();
 
         // Then load filtered events based on current filters
-        const eventsData = await eventsService.getAll(namespace, filters);
+        const eventsData = await eventsService.getAll(filters);
 
         setEvents(eventsData.items);
         setTotalEvents(eventsData.total);
@@ -82,7 +81,7 @@ export function EventsSection({ namespace, page, limit, type, kind, name }: Even
         // If a kind is selected, filter names to only show names from that kind
         if (kind) {
           // Need to get all events to properly filter names by kind
-          const allEventsData = await eventsService.getAll(namespace, {
+          const allEventsData = await eventsService.getAll({
             kind: kind,
             limit: 1000 // Get more events to find all names for this kind
           });
@@ -112,20 +111,20 @@ export function EventsSection({ namespace, page, limit, type, kind, name }: Even
       }
     },
     // Depend on individual URL params, not objects
-    [namespace, page, limit, type, kind, name]
+    [page, limit, type, kind, name]
   );
 
   // Load events when URL params change
   useEffect(() => {
     // Create a filter string to compare
-    const filterString = JSON.stringify({ namespace, page, limit, type, kind, name });
+    const filterString = JSON.stringify({ page, limit, type, kind, name });
 
     // Only load if filters have actually changed
     if (lastLoadedFilters.current !== filterString) {
       lastLoadedFilters.current = filterString;
       loadEvents();
     }
-  }, [loadEvents, namespace, page, limit, type, kind, name]);
+  }, [loadEvents, page, limit, type, kind, name]);
 
   // Create query string helper
   const createQueryString = useCallback(
@@ -191,7 +190,7 @@ export function EventsSection({ namespace, page, limit, type, kind, name }: Even
   };
 
   const handleEventClick = (event: Event) => {
-    router.push(`/event/${event.name}?namespace=${namespace}`);
+    router.push(`/event/${event.name}`);
   };
 
   // Helper functions
