@@ -3,14 +3,14 @@ version: v2beta1
 
 # Dependencies - include other DevSpace configurations
 dependencies:
+  ark:
+    path: ./ark
   ark-cluster-memory:
     path: ./services/ark-cluster-memory
   ark-api:
     path: ./services/ark-api
   ark-dashboard:
     path: ./services/ark-dashboard
-  ark:
-    path: ./ark
 #   ark-mcp:
 #     path: ./services/ark-mcp
 #     pipeline: dev
@@ -63,7 +63,9 @@ profiles:
 pipelines:
   deploy: |-
     create_deployments --all
+    run_dependency_pipelines ark --pipeline=deploy
     run_dependency_pipelines --all --pipeline=deploy
   dev: |-
     create_deployments --all
+    run_dependency_pipelines ark --pipeline=dev
     run_dependency_pipelines --all --pipeline=dev
