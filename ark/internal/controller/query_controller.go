@@ -388,8 +388,7 @@ func (r *QueryReconciler) reconcileQueue(ctx context.Context, query arkv1alpha1.
 		if result.messages != nil {
 			rawJSON, err := serializeMessages(result.messages)
 			if err != nil {
-				logf.Log.Error(err, "Failed to serialize messages", "target", result.target)
-				rawJSON = "[]" // fallback to empty array
+				return nil, eventStream, fmt.Errorf("failed to serialize messages for target %v: %w", result.target, err)
 			}
 			allResponses = append(allResponses, arkv1alpha1.Response{
 				Target:  result.target,
