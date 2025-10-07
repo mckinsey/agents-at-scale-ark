@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/runtime"
+
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
 )
@@ -13,7 +15,7 @@ import (
 type Query struct {
 	Name        string
 	Namespace   string
-	Input       string
+	Input       runtime.RawExtension
 	Parameters  []arkv1alpha1.Parameter
 	McpSettings map[string]MCPSettings
 }

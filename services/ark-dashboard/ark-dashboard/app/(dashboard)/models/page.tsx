@@ -2,7 +2,7 @@
 
 import { ModelsSection } from "@/components/sections/models-section"
 import { useSearchParams } from "next/navigation"
-import { Suspense, useRef } from "react"
+import { Suspense } from "react"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -13,11 +13,11 @@ import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
+import Link from "next/link"
 
 function ModelsContent() {
   const searchParams = useSearchParams()
   const namespace = searchParams.get("namespace") || "default"
-  const modelsSectionRef = useRef<{ openAddEditor: () => void }>(null)
 
   return (
     <>
@@ -32,14 +32,16 @@ function ModelsContent() {
           </BreadcrumbList>
         </Breadcrumb>
         <div className="ml-auto">
-          <Button onClick={() => modelsSectionRef.current?.openAddEditor()}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Model
-          </Button>
+          <Link href="/models/new">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Model
+            </Button>
+          </Link>
         </div>
       </header>
       <div className="flex flex-1 flex-col">
-        <ModelsSection ref={modelsSectionRef} namespace={namespace} />
+        <ModelsSection namespace={namespace} />
       </div>
     </>
   )

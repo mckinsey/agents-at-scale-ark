@@ -1,6 +1,6 @@
 """ARK services API endpoints."""
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from dataclasses import dataclass
 
 from fastapi import APIRouter, Query, HTTPException

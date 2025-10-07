@@ -5,7 +5,7 @@ import chalk from 'chalk';
  */
 export function printNextSteps(): void {
   console.log();
-  console.log(chalk.green.bold('✓ ARK installed successfully!'));
+  console.log(chalk.green.bold('✓ Installation complete'));
   console.log();
   console.log(chalk.gray('Next steps:'));
   console.log();

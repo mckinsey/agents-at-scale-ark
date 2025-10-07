@@ -410,6 +410,7 @@ function QueryDetailContent() {
       // Prepare the query data for the API
       const queryData = {
         name: queryName,
+        type: Array.isArray(query.input) ? "messages" as const : "user" as const,
         input: query.input || '',
         targets: query.targets || [],
         timeout: query.timeout,
@@ -457,6 +458,7 @@ function QueryDetailContent() {
       setQuery({
         name: '',
         namespace: '',
+        type: 'user',
         input: '',
         targets: [],
         status: null
@@ -853,7 +855,7 @@ function QueryDetailContent() {
                   {/* Input Section */}
                   <div className={toolSchema && query.targets?.filter(t => t.type === 'tool').length === 1 ? 'p-3 border-r border-gray-200 dark:border-gray-700' : ''}>
                     <Textarea
-                      value={query.input || ''}
+                      value={typeof query.input === 'string' ? query.input || '' : ''}
                       onChange={(e) => setQuery(prev => prev ? { ...prev, input: e.target.value } : null)}
                       placeholder="Enter your query input..."
                       className="min-h-[200px] text-sm font-mono resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -873,7 +875,7 @@ function QueryDetailContent() {
                 </div>
               ) : (
                 <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900/50 p-3">
-                  {query.input}
+                  {typeof query.input === 'string' ? query.input : Array.isArray(query.input) ? JSON.stringify(query.input, null, 2) : ''}
                 </pre>
               )}
             </div>

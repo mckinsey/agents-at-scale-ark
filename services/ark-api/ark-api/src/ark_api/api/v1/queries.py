@@ -34,12 +34,18 @@ def query_to_response(query: dict) -> QueryResponse:
             query["metadata"]["creationTimestamp"].replace("Z", "+00:00")
         )
     
+    # Get query type and determine input field
+    spec = query["spec"]
+    query_type = spec.get('type', 'user')
+    input_value = spec.get("input", "" if query_type == 'user' else [])
+    
     return QueryResponse(
         name=query["metadata"]["name"],
         namespace=query["metadata"]["namespace"],
-        input=query["spec"]["input"],
-        memory=query["spec"].get("memory"),
-        sessionId=query["spec"].get("sessionId"),
+        type=query_type,
+        input=input_value,
+        memory=spec.get("memory"),
+        sessionId=spec.get("sessionId"),
         status=query.get("status"),
         creationTimestamp=creation_timestamp
     )
@@ -50,10 +56,15 @@ def query_to_detail_response(query: dict) -> QueryDetailResponse:
     spec = query["spec"]
     metadata = query["metadata"]
     
+    # Get query type and determine input field
+    query_type = spec.get('type', 'user')
+    input_value = spec.get("input", "" if query_type == 'user' else [])
+    
     return QueryDetailResponse(
         name=metadata["name"],
         namespace=metadata["namespace"],
-        input=spec["input"],
+        type=query_type,
+        input=input_value,
         memory=spec.get("memory"),
         parameters=spec.get("parameters"),
         selector=spec.get("selector"),
@@ -91,9 +102,18 @@ async def create_query(
 ) -> QueryDetailResponse:
     """Create a new query."""
     async with with_ark_client(namespace, VERSION) as ark_client:
+        # Determine input type and build spec accordingly
         spec = {
-            "input": query.input
+            "type": getattr(query, 'type', 'user')
         }
+        
+        # Handle input based on type - pass raw data for RawExtension
+        if spec["type"] == "user":
+            # For string input, pass as string
+            spec["input"] = query.input if isinstance(query.input, str) else str(query.input)
+        else:
+            # Messages are already dicts (ChatCompletionMessageParam), pass through as-is
+            spec["input"] = query.input
         
         if query.memory:
             spec["memory"] = query.memory.model_dump()

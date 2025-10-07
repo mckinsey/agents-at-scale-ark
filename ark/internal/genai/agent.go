@@ -59,7 +59,7 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	if a.ExecutionEngine != nil {
 		// Check if this is the reserved 'a2a' execution engine
 		if a.ExecutionEngine.Name == "a2a" {
-			return a.executeWithA2AExecutionEngine(ctx, userInput)
+			return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
 		}
 		return a.executeWithExecutionEngine(ctx, userInput, history)
 	}
@@ -86,9 +86,9 @@ func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Messag
 	return engineClient.Execute(ctx, a.ExecutionEngine, agentConfig, userInput, history, toolDefinitions, a.Recorder)
 }
 
-func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message) ([]Message, error) {
+func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, eventStream EventStreamInterface) ([]Message, error) {
 	a2aEngine := NewA2AExecutionEngine(a.client, a.Recorder)
-	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, userInput)
+	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, userInput, eventStream)
 }
 
 func (a *Agent) prepareMessages(ctx context.Context, userInput Message, history []Message) ([]Message, error) {

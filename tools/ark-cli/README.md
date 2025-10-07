@@ -42,18 +42,37 @@ The [Quickstart](https://mckinsey.github.io/agents-at-scale-ark/quickstart/) gui
 
 To troubleshoot an installation, run `ark status`.
 
-## Development
+## Configuration
 
-### Building from Source
+You can customize Ark service installations using a `.arkrc.yaml` file in your home directory (`~/.arkrc.yaml`) or project directory. This allows you to override service properties like enabled status, namespace, or chart location.
 
-The ARK CLI uses templates from the parent repository. When building, templates are automatically copied from `../../templates` into the CLI package:
+Example `.arkrc.yaml`:
 
-```bash
-# Build (copies templates and compiles TypeScript)
-npm run build
-
-# Install globally for testing
-npm install -g .
+```yaml
+services:
+  localhost-gateway:
+    enabled: true
+  ark-controller:
+    namespace: custom-namespace
 ```
 
-**Note**: The `templates/` directory in the CLI package is git-ignored and generated during build. The source of truth for templates is in the main repo at `../../templates`.
+This example enables the `localhost-gateway` service (disabled by default) and changes the namespace for `ark-controller`.
+
+### Installing Agents @ Scale
+
+To install the Agents @ Scale platform with JFrog container registry credentials:
+
+```yaml
+services:
+  agents-at-scale:
+    enabled: true
+    installArgs:
+      - --set
+      - containerRegistry.enabled=true
+      - --set
+      - containerRegistry.username=YOUR_USERNAME
+      - --set
+      - containerRegistry.password=YOUR_PASSWORD
+```
+
+Replace `YOUR_USERNAME` and `YOUR_PASSWORD` with your JFrog credentials.

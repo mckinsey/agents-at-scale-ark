@@ -17,10 +17,53 @@ dependencies:
 #   postgres-memory:
 #     path: ./services/postgres-memory
 
+# Vars - To disable, set environment variables before the devspace commands
+#        For example: ENABLE_CERT_MANAGER=false devspace dev
+vars:
+  ENABLE_CERT_MANAGER:
+    source: env
+    default: true
+  ENABLE_GATEWAY_API_CRDS:
+    source: env
+    default: true
+
+profiles:
+  - name: enable-cert-manager
+    activation:
+    - vars:
+        ENABLE_CERT_MANAGER: true
+    patches:
+    - op: add
+      path: deployments
+      value:
+        cert-manager:
+          namespace: cert-manager
+          helm:
+            chart:
+              name: cert-manager
+              repo: https://charts.jetstack.io
+            releaseName: cert-manager
+            upgradeArgs: [ "--install" ]
+            values:
+              installCRDs: true
+  - name: enable-gateway-api
+    activation:
+      - vars:
+          ENABLE_GATEWAY_API_CRDS: true
+    patches:
+      - op: add
+        path: deployments
+        value:
+          gateway-api:
+            namespace: default
+            kubectl:
+              manifests:
+                - "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml"
+
 pipelines:
   deploy: |-
+    create_deployments --all
     run_dependency_pipelines --all --pipeline=deploy
   dev: |-
+    create_deployments --all
     run_dependency_pipelines --all --pipeline=dev
-
-

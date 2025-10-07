@@ -1,0 +1,353 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-input-types
+spec:
+  description: Test query with multiple inputs types (user and messages)
+  steps:
+  - name: test-query-converstation-input-default
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          set -u
+          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+        outputs:
+        - name: azure
+          value: (json_parse($stdout))
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a01-secret.yaml
+    - apply:
+        file: manifests/a02-model.yaml
+    - apply:
+        file: manifests/a03-agent.yaml
+    - apply:
+        file: manifests/query-input-type-default.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-model
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: test-agent
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-input-default
+          status:
+            phase: done
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-input-default
+          status:
+            (length(responses)): 1
+            (contains(responses[*].target.name, 'test-agent')): true
+            (length(join('', responses[*].content)) > `10`): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-input-default
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-input-types
+spec:
+  description: Test query with multiple inputs types (user and messages)
+  steps:
+  - name: test-query-converstation-input-type-user
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          set -u
+          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+        outputs:
+        - name: azure
+          value: (json_parse($stdout))
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a01-secret.yaml
+    - apply:
+        file: manifests/a02-model.yaml
+    - apply:
+        file: manifests/a03-agent.yaml
+    - apply:
+        file: manifests/query-input-type-user.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-model
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: test-agent
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-input-type-user
+          status:
+            phase: done
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-input-type-user
+          status:
+            (length(responses)): 1
+            (contains(responses[*].target.name, 'test-agent')): true
+            (length(join('', responses[*].content)) > `10`): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-input-type-user
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-input-types
+spec:
+  description: Test query with multiple inputs types (user and messages)
+  steps:
+  - name: test-query-converstation-input-type-messages
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          set -u
+          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+        outputs:
+        - name: azure
+          value: (json_parse($stdout))
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a01-secret.yaml
+    - apply:
+        file: manifests/a02-model.yaml
+    - apply:
+        file: manifests/a03-agent.yaml
+    - apply:
+        file: manifests/query-input-type-messages.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-model
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: test-agent
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-input-type-messages
+          status:
+            phase: done
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-input-type-messages
+          status:
+            (length(responses)): 1
+            (contains(responses[*].target.name, 'test-agent')): true
+            (length(join('', responses[*].content)) > `10`): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-input-type-messages
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-input-types
+spec:
+  description: Test query with multiple inputs types (user and messages)
+  steps:
+  - name: test-query-input-type-default-invalid-input
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          set -u
+          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+        outputs:
+        - name: azure
+          value: (json_parse($stdout))
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a01-secret.yaml
+    - apply:
+        file: manifests/a02-model.yaml
+    - apply:
+        file: manifests/a03-agent.yaml
+    - apply:
+        file: manifests/query-input-type-default-invalid-input.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-model
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: test-agent
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-default-invalid-input
+          status:
+            phase: error
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-default-invalid-input
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-input-types
+spec:
+  description: Test query with multiple inputs types (user and messages)
+  steps:
+  - name: test-query-input-type-user-invalid-input
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          set -u
+          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+        outputs:
+        - name: azure
+          value: (json_parse($stdout))
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a01-secret.yaml
+    - apply:
+        file: manifests/a02-model.yaml
+    - apply:
+        file: manifests/a03-agent.yaml
+    - apply:
+        file: manifests/query-input-type-user-invalid-input.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-model
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: test-agent
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-input-type-user-invalid-input
+          status:
+            phase: error
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-input-type-user-invalid-input
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-input-types
+spec:
+  description: Test query with multiple inputs types (user and messages)
+  steps:
+  - name: test-query-input-type-messages-invalid-input
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          set -u
+          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+        outputs:
+        - name: azure
+          value: (json_parse($stdout))
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a01-secret.yaml
+    - apply:
+        file: manifests/a02-model.yaml
+    - apply:
+        file: manifests/a03-agent.yaml
+    - apply:
+        file: manifests/query-input-type-messages-invalid-input.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-model
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: test-agent
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-input-type-messages-invalid-input
+          status:
+            phase: error
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-input-type-messages-invalid-input

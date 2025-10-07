@@ -1,0 +1,375 @@
+---
+title: Query
+description: Execution requests to agents or teams with input types and parameter expansion
+---
+
+# Query
+
+Queries represent execution requests sent to agents or teams. They support both simple string inputs and structured conversation messages with template parameter expansion.
+
+## Specification
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: example-query
+spec:
+  # Input type: "user" (default) or "messages"
+  type: user
+
+  # For type: user - simple string input
+  input: "What is the weather in {{.location}}?"
+
+  # OR for type: messages - structured conversation array
+  # input:
+  #   - role: user
+  #     content: "Calculate 1+1"
+  #   - role: assistant
+  #     content: "2"
+  #   - role: user
+  #     content: "Calculate 2+2"
+
+  # Template parameters for input expansion
+  parameters:
+    - name: location
+      value: "New York"
+    - name: api_key
+      valueFrom:
+        secretKeyRef:
+          name: weather-api
+          key: token
+
+  # Execution targets
+  targets:
+    - type: agent
+      name: weather-agent
+    - type: team
+      name: forecast-team
+
+  # Optional: session identifier for conversation continuity
+  sessionId: user-session-123
+
+  # Optional: memory storage for conversation history
+  memory:
+    name: cluster-memory
+
+  # Optional: timeout for query execution
+  timeout: 5m
+
+status:
+  # Execution state: pending, running, done, error
+  phase: done
+
+  # Responses from each target
+  responses:
+    - target:
+        type: agent
+        name: weather-agent
+      content: "It's 72°F and sunny in New York"
+```
+
+## Input Types
+
+### User Input (Default)
+
+Simple string input, treated as a single user message. Supports template parameter expansion.
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: simple-query
+spec:
+  # Type is optional - defaults to "user"
+  input: "What is the capital of {{.country}}?"
+  parameters:
+    - name: country
+      value: "France"
+  targets:
+    - type: agent
+      name: geography-agent
+```
+
+### Messages Input
+
+Structured conversation array for multi-turn conversations with role attribution.
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: conversation-query
+spec:
+  type: messages
+  input:
+    - role: user
+      content: "Calculate 1+1"
+    - role: assistant
+      content: "2"
+    - role: user
+      content: "Now calculate 2+2"
+  targets:
+    - type: agent
+      name: math-agent
+```
+
+**Supported roles:**
+- `user` - User messages
+- `assistant` - Agent/assistant responses
+- `system` - System instructions (provider-specific)
+
+#### Multimodal Messages
+
+The `messages` type uses the standard OpenAI message structure, supporting multimodal content including `image_url` for vision capabilities:
+
+```bash
+kubectl apply -f samples/queries/query-messages-image-url.yaml
+# Example output: "The image shows a black hexagonal shape with a small break in the bottom right corner, resembling the QuantumBlack logo"
+```
+
+## Targets
+
+Targets specify which resources should process the query. Supported types: `agent`, `team`, `model`, `tool`.
+
+```yaml
+spec:
+  input: "What's your recommendation?"
+  targets:
+    - type: agent
+      name: data-analyst
+    - type: team
+      name: review-team
+    - type: model
+      name: gpt-4
+```
+
+Each target receives the same input and produces an independent response in `status.responses[]`.
+
+## Query Parameter Expansion
+
+### Overview
+
+Query parameters enable dynamic input through Go template syntax. Parameters are resolved from values, ConfigMaps, or Secrets.
+
+**Important:** Parameter expansion only applies to `type: user` queries. For `type: messages` queries, message content is used as-is without template processing.
+
+### Parameter Sources
+
+```yaml
+spec:
+  input: "API: {{.endpoint}}, Key: {{.key}}, Mode: {{.mode}}"
+  parameters:
+    # Direct value
+    - name: mode
+      value: "production"
+
+    # From ConfigMap
+    - name: endpoint
+      valueFrom:
+        configMapKeyRef:
+          name: api-config
+          key: url
+
+    # From Secret
+    - name: key
+      valueFrom:
+        secretKeyRef:
+          name: api-credentials
+          key: api-key
+```
+
+### Template Syntax
+
+Use `{{.parameter_name}}` in the input string to reference parameters:
+
+```yaml
+input: |
+  Environment: {{.environment}}
+  Database: {{.db_host}}:{{.db_port}}
+  User: {{.db_user}}
+```
+
+Parameters are resolved before the query is sent to the target agent or team.
+
+### Agent Parameters
+
+Agent prompts can reference query parameters using `queryParameterRef`, allowing agents to access values from the query at runtime:
+
+```yaml
+# Agent with query parameter reference
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: dynamic-agent
+spec:
+  prompt: |
+    You are operating in {{.mode}} mode.
+    Target environment: {{.environment}}
+  parameters:
+    - name: mode
+      valueFrom:
+        queryParameterRef:
+          name: operation_mode
+    - name: environment
+      valueFrom:
+        queryParameterRef:
+          name: target_env
+---
+# Query providing parameters for the agent
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: parameterized-query
+spec:
+  input: "Process this request"
+  parameters:
+    - name: operation_mode
+      value: "production"
+    - name: target_env
+      value: "us-west-2"
+  targets:
+    - type: agent
+      name: dynamic-agent
+```
+
+## Session Management
+
+Group related queries using `sessionId` to maintain conversation context:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: query-1
+spec:
+  sessionId: user-session-123
+  memory:
+    name: cluster-memory
+  input: "Hello, my name is Alice"
+  targets:
+    - type: agent
+      name: assistant
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: query-2
+spec:
+  sessionId: user-session-123  # Same session
+  memory:
+    name: cluster-memory
+  input: "What's my name?"
+  targets:
+    - type: agent
+      name: assistant
+```
+
+The agent will remember "Alice" from the first query when processing the second.
+
+## Examples
+
+### Simple Query
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: hello-query
+spec:
+  input: "Hello, how are you?"
+  targets:
+    - type: agent
+      name: assistant
+```
+
+### Query with Parameters
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: weather-query
+spec:
+  input: "What's the weather in {{.city}} on {{.date}}?"
+  parameters:
+    - name: city
+      value: "Boston"
+    - name: date
+      valueFrom:
+        configMapKeyRef:
+          name: query-config
+          key: target-date
+  targets:
+    - type: agent
+      name: weather-agent
+```
+
+### Conversation with Messages
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: math-conversation
+spec:
+  type: messages
+  input:
+    - role: user
+      content: "Calculate the sum of 15 and 27"
+    - role: assistant
+      content: "15 + 27 = 42"
+    - role: user
+      content: "Now multiply that result by 3"
+  targets:
+    - type: agent
+      name: calculator
+```
+
+### Multi-Target Query
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: opinion-poll
+spec:
+  input: "Should we deploy this feature?"
+  targets:
+    - type: agent
+      name: product-manager
+    - type: agent
+      name: tech-lead
+    - type: team
+      name: qa-team
+```
+
+## Status and Phases
+
+### Phases
+
+| Phase | Description |
+|-------|-------------|
+| **pending** | Query created, waiting to execute |
+| **running** | Query executing on targets |
+| **done** | All targets completed successfully |
+| **error** | Query execution failed |
+
+### Status Fields
+
+```yaml
+status:
+  phase: done
+
+  # Response from each target
+  responses:
+    - target:
+        type: agent
+        name: weather-agent
+        namespace: default
+      content: "Current temperature is 72°F"
+
+  # Execution timing
+  startTime: "2025-10-02T10:00:00Z"
+  completionTime: "2025-10-02T10:00:05Z"
+```

@@ -372,6 +372,22 @@ jobs:
           # Test fark.
           fark agent sample-agent "confirm you have read this message"
 
+  e2e-ark-cli:
+    needs: [build-ark-cli]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/test-ark-cli
+        with:
+          azure-openai-key: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
+          azure-openai-base-url: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
+          model-type: azure
+          model-name: gpt-4.1-mini
+          model-api-version: 2024-12-01-preview
+          ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
+          ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
   e2e-smoke-test:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04

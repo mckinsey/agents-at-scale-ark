@@ -1,6 +1,7 @@
 import { apiClient } from "@/lib/api/client";
 import type { components } from "@/lib/api/generated/types";
 import { generateUUID } from "@/lib/utils/uuid";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 
 interface AxiosError extends Error {
   response?: {
@@ -151,14 +152,16 @@ export const chatService = {
   },
 
   async submitChatQuery(
-    input: string,
+    messages: ChatCompletionMessageParam[],
     targetType: string,
     targetName: string,
     sessionId?: string
   ): Promise<QueryDetailResponse> {
-    const queryRequest: QueryCreateRequest = {
+    const queryRequest = {
       name: `chat-query-${generateUUID()}`,
-      input,
+      type: "messages",
+      // Use OpenAI ChatCompletionMessageParam which supports multimodal content
+      input: messages,
       targets: [
         {
           type: targetType.toLowerCase(),
@@ -166,7 +169,7 @@ export const chatService = {
         }
       ],
       sessionId
-    };
+    } as unknown as QueryCreateRequest;
 
     return await this.createQuery(queryRequest);
   },

@@ -1,0 +1,23 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: image-vision-query
+spec:
+  # We will send raw OpenAI messages, rather than a single 'user' message.
+  type: messages
+  input:
+    # Send a single user message with a request to analyse the included image.
+    - role: user
+      content:
+        - type: text
+          text: "Please describe what you see in this image"
+        - type: image_url
+          # This is the ARK icon (QuantumBlack hexagon logo) converted to PNG.
+          image_url:
+            url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAA4CAYAAABNGP5yAAAABmJLR0QA/wD/AP+gvaeTAAAC/UlEQVRogeWbO2hUQRSGvzUag4hoJCoEFMVCiYWoEAsLg4/CpExSRsukNZaxTFpTJqkktkmrhYVbiChYKCgIrgYFQRTxTXxt1uIS2Dl39nHvzLl3svvBFLt77zn/mb07jz8TcOM8UAIqObUScM6xhtT0AJ8bCMyifQX2KddqZT6FWK02p1xrjOPAPw/CfbUycDJNIYU0NwH3gLNVr98A/cCflPGS0gk8Ag5UvVcEBrJIPkL8GxjJIrFg1KJjWDtpF7Aikt4n/ZPkSlFoeQts00x4HU+/PU/YxqIprWS9wA+RbF4rWQIWMDX9BPZrJLolEuU2/wr2EF+PLPpOchpYE0mu+k7iwCSmtjXgjK/gBaIppzrBS2CrrwQe2AK8wNT4GNjkI/hlEbgCDPoI7Jkh4jrHXINuB96JoHddgypyG1Pre2CHS8AZEfAv0OemUZUjRKvRas3TaYMdBFZFsBvuGtWZxdT8GzicJtCyCPQJ2O1Hoyq7gI+Y2peSBhkgPqCM+9OozgRx/ReavbkDeCpufgZs9i5TD6canHovIFI9xV5+PwGReByTI+gvUo6ggZBoJjuKxzk0IGxrmWO2C++IC51XUYHQ1GpWZR0dEHX3M50o7qQCoQA8pMaO9pr4wOteOiBsnsYkwCvxpnc3JSCkq7Vie8zzcnizQNZWBmU7KSBq2nqqdlIgNLT1BsWHFaKpo1W4Qry+S/Ii73ZSIDRt69nspJlsNKqSyNaTm6FV4JC+RlWKmDXN1rt4J/BB3LCsq0+dE0TT3fp2uLvRDePEB4yLigKz4CYJbL0O4AlmBzxnY1likr3AAxLUYLOTJlSkZUficwNLJLSTWg2bnVR3BG1FpmnSTmpVNtofR1UYIz4gDuWqKGNsdlKJsA5IqFPTTmonFjE74BthHJLKjF7gO2YnLOSqKAemMDugDJzKVVHGdAGvMTshz6OyuTBMfFoczVWRA1kdl68AX1LmCpI+omWxfBJqtZYqfp052rwDuom2yG3bAdD8v80F2wH/AWbDHs8ZOEndAAAAAElFTkSuQmCC"
+  # Target the default model and the sample agent.
+  targets:
+    - type: model
+      name: default
+    - type: agent
+      name: sample-agent

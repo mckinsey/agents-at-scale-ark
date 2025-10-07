@@ -11,9 +11,14 @@ from openai.types.completion_usage import CompletionUsage
 logger = logging.getLogger(__name__)
 
 
-def _create_chat_completion_response(query_name: str, model: str, content: str, input_text: str) -> ChatCompletion:
+def _create_chat_completion_response(query_name: str, model: str, content: str, messages: list) -> ChatCompletion:
     """Create OpenAI-compatible chat completion response."""
-    prompt_tokens = len(input_text.split())
+    # Count tokens from messages array
+    prompt_text = " ".join([
+        str(msg.get('content', '')) if isinstance(msg, dict) else str(msg)
+        for msg in messages
+    ])
+    prompt_tokens = len(prompt_text.split())
     completion_tokens = len(content.split())
     
     return ChatCompletion(
@@ -49,27 +54,27 @@ def _get_error_message(status: dict) -> str:
         return "Query execution failed: No error details available"
 
 
-async def poll_query_completion(ark_client, query_name: str, model: str, input_text: str) -> ChatCompletion:
+async def poll_query_completion(ark_client, query_name: str, model: str, messages: list) -> ChatCompletion:
     """Poll for query completion and return chat completion response."""
     max_attempts = 60  # 5 minutes with 5 second intervals
-    
+
     for _ in range(max_attempts):
         await asyncio.sleep(5)
-        
+
         query = await ark_client.queries.a_get(query_name)
         query_dict = query.to_dict()
         status = query_dict.get("status", {})
         phase = status.get("phase", "pending")
-        
+
         logger.info(f"Query {query_name} status: {phase}")
-        
+
         if phase == "done":
             responses = status.get("responses", [])
             if not responses:
                 raise HTTPException(status_code=500, detail="No response received")
-                
+
             content = responses[0].get("content", "")
-            return _create_chat_completion_response(query_name, model, content, input_text)
+            return _create_chat_completion_response(query_name, model, content, messages)
                     
         elif phase == "error":
             detail_message = _get_error_message(status)

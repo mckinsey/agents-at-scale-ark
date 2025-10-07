@@ -1,0 +1,21 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: conversation-messages
+  namespace: default
+spec:
+  type: messages
+  input:
+    - role: user
+      content: "Calculate 1+1."
+    - role: assistant
+      content: "2"
+    - role: user
+      content: "Calculate 2+2."
+    - role: assistant
+      content: "4"
+    - role: user
+      content: "What is the sum of all previous sums?"
+  targets:
+    - type: agent
+      name: sample-agent

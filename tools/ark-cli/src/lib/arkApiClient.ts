@@ -46,11 +46,9 @@ export interface Team {
 export class ArkApiClient {
   private openai: OpenAI;
   private baseUrl: string;
-  private namespace: string;
 
-  constructor(arkApiUrl: string, namespace: string = 'default') {
+  constructor(arkApiUrl: string) {
     this.baseUrl = arkApiUrl;
-    this.namespace = namespace;
     this.openai = new OpenAI({
       baseURL: `${arkApiUrl}/openai/v1`,
       apiKey: 'dummy', // ark-api doesn't require an API key
@@ -89,9 +87,7 @@ export class ArkApiClient {
 
   async getAgents(): Promise<Agent[]> {
     try {
-      const response = await fetch(
-        `${this.baseUrl}/v1/namespaces/${this.namespace}/agents`
-      );
+      const response = await fetch(`${this.baseUrl}/v1/agents`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -106,9 +102,7 @@ export class ArkApiClient {
 
   async getModels(): Promise<Model[]> {
     try {
-      const response = await fetch(
-        `${this.baseUrl}/v1/namespaces/${this.namespace}/models`
-      );
+      const response = await fetch(`${this.baseUrl}/v1/models`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -123,9 +117,7 @@ export class ArkApiClient {
 
   async getTools(): Promise<Tool[]> {
     try {
-      const response = await fetch(
-        `${this.baseUrl}/v1/namespaces/${this.namespace}/tools`
-      );
+      const response = await fetch(`${this.baseUrl}/v1/tools`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -140,9 +132,7 @@ export class ArkApiClient {
 
   async getTeams(): Promise<Team[]> {
     try {
-      const response = await fetch(
-        `${this.baseUrl}/v1/namespaces/${this.namespace}/teams`
-      );
+      const response = await fetch(`${this.baseUrl}/v1/teams`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }

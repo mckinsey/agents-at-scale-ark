@@ -25,7 +25,7 @@ spec:
       value: "text-embedding-ada-002"   # the model name
     # Azure-specific required parameters
     - name: azure.endpoint
-      value: "https://lxo.openai.azure.com/"
+      value: ($azure.url)
     - name: azure.deployment_name
       value: "gpt-4.1-mini"
     - name: azure.api_version

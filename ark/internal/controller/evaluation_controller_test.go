@@ -671,9 +671,7 @@ var _ = Describe("Evaluation Controller", func() {
 					Name:      "test-query",
 					Namespace: "default",
 				},
-				Spec: arkv1alpha1.QuerySpec{
-					Input: "What is 2+2?",
-				},
+				Spec: arkv1alpha1.QuerySpec{},
 				Status: arkv1alpha1.QueryStatus{
 					Phase: "done",
 					Responses: []arkv1alpha1.Response{
@@ -683,6 +681,11 @@ var _ = Describe("Evaluation Controller", func() {
 					},
 				},
 			}
+
+			// Set input using RawExtension helper
+			err := query.Spec.SetInputString("What is 2+2?")
+			Expect(err).ShouldNot(HaveOccurred())
+
 			Expect(k8sClient.Create(ctx, query)).Should(Succeed())
 
 			query.Status.Phase = statusDone
@@ -727,7 +730,7 @@ var _ = Describe("Evaluation Controller", func() {
 				Scheme: k8sClient.Scheme(),
 			}
 
-			_, err := controllerReconciler.Reconcile(ctx, ctrl.Request{
+			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
 				NamespacedName: evaluationLookupKey,
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -771,9 +774,7 @@ var _ = Describe("Evaluation Controller", func() {
 					Name:      "test-query-not-done",
 					Namespace: "default",
 				},
-				Spec: arkv1alpha1.QuerySpec{
-					Input: "What is 2+2?",
-				},
+				Spec: arkv1alpha1.QuerySpec{},
 				Status: arkv1alpha1.QueryStatus{
 					Phase: "running",
 					Responses: []arkv1alpha1.Response{
@@ -783,6 +784,11 @@ var _ = Describe("Evaluation Controller", func() {
 					},
 				},
 			}
+
+			// Set input using RawExtension helper
+			err := query.Spec.SetInputString("What is 2+2?")
+			Expect(err).ShouldNot(HaveOccurred())
+
 			Expect(k8sClient.Create(ctx, query)).Should(Succeed())
 
 			evaluation := &arkv1alpha1.Evaluation{
@@ -814,7 +820,7 @@ var _ = Describe("Evaluation Controller", func() {
 				Scheme: k8sClient.Scheme(),
 			}
 
-			_, err := controllerReconciler.Reconcile(ctx, ctrl.Request{
+			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
 				NamespacedName: evaluationLookupKey,
 			})
 			Expect(err).NotTo(HaveOccurred())

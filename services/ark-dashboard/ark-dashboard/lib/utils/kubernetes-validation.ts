@@ -1,24 +1,34 @@
-export function isValidKubernetesName(name: string): boolean {
-  if (!name || name.length === 0 || name.length > 253) {
-    return false;
-  }
+import { z } from 'zod'
 
-  // Safe regex pattern avoiding nested quantifiers that could cause ReDoS
-  // Check start/end characters separately to avoid backtracking
-  if (!/^[a-z0-9]/.test(name)) {
-    return false;
-  }
-  if (!/[a-z0-9]$/.test(name)) {
-    return false;
-  }
-  // Check that all characters are valid
-  if (!/^[a-z0-9-]+$/.test(name)) {
-    return false;
-  }
+export const kubernetesNameSchema = z.string("Name is required")
+  .min(1, {
+    message: "Name is required"
+  })
+  .max(253, {
+    message: "Name must be 253 characters or less"
+  })
+  .regex(/^[a-z0-9]/, {
+    message: "Name must start with a lowercase letter or number"
+  })
+  .regex(/[a-z0-9]$/, {
+    message: "Name must end with a lowercase letter or number"
+  })
+  .regex(/^[a-z0-9.-]+$/, {
+    message: "Name can only contain lowercase letters, numbers, hyphens, and dots"
+  });
 
-  return true;
-}
-
+/**
+ * @deprecated Use kubernetesNameSchema.safeParse() instead for validation.
+ * This function will be removed in a future version.
+ * 
+ * Example usage:
+ * ```typescript
+ * const result = kubernetesNameSchema.safeParse(name);
+ * if (!result.success) {
+ *   const errorMessage = result.error.errors[0]?.message;
+ * }
+ * ```
+ */
 export function getKubernetesNameError(name: string): string | null {
   if (!name || name.length === 0) {
     return "Name is required";
@@ -39,8 +49,8 @@ export function getKubernetesNameError(name: string): string | null {
   }
 
   // Check if name contains only valid characters
-  if (!/^[a-z0-9-]+$/.test(name)) {
-    return "Name can only contain lowercase letters, numbers, and hyphens";
+  if (!/^[a-z0-9.-]+$/.test(name)) {
+    return "Name can only contain lowercase letters, numbers, hyphens, and dots";
   }
 
   return null;

@@ -110,7 +110,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/secrets": {
+    "/v1/namespaces/{namespace}/secrets": {
         parameters: {
             query?: never;
             header?: never;
@@ -121,20 +121,20 @@ export interface paths {
          * List Secrets
          * @description List all secrets in namespace using ark-sdk.
          */
-        get: operations["list_secrets_v1_secrets_get"];
+        get: operations["list_secrets_v1_namespaces__namespace__secrets_get"];
         put?: never;
         /**
          * Create Secret
          * @description Create a new secret using ark-sdk.
          */
-        post: operations["create_secret_v1_secrets_post"];
+        post: operations["create_secret_v1_namespaces__namespace__secrets_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/secrets/{secret_name}": {
+    "/v1/namespaces/{namespace}/secrets/{secret_name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -145,24 +145,24 @@ export interface paths {
          * Get Secret
          * @description Get a specific secret using ark-sdk.
          */
-        get: operations["get_secret_v1_secrets__secret_name__get"];
+        get: operations["get_secret_v1_namespaces__namespace__secrets__secret_name__get"];
         /**
          * Update Secret
          * @description Update a secret using ark-sdk.
          */
-        put: operations["update_secret_v1_secrets__secret_name__put"];
+        put: operations["update_secret_v1_namespaces__namespace__secrets__secret_name__put"];
         post?: never;
         /**
          * Delete Secret
          * @description Delete a secret using ark-sdk.
          */
-        delete: operations["delete_secret_v1_secrets__secret_name__delete"];
+        delete: operations["delete_secret_v1_namespaces__namespace__secrets__secret_name__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/agents": {
+    "/v1/namespaces/{namespace}/agents": {
         parameters: {
             query?: never;
             header?: never;
@@ -174,12 +174,12 @@ export interface paths {
          * @description List all Agent CRs in a namespace.
          *
          *     Args:
-         *         namespace: The namespace to list agents from (defaults to current context)
+         *         namespace: The namespace to list agents from
          *
          *     Returns:
          *         AgentListResponse: List of all agents in the namespace
          */
-        get: operations["list_agents_v1_agents_get"];
+        get: operations["list_agents_v1_namespaces__namespace__agents_get"];
         put?: never;
         /**
          * Create Agent
@@ -192,14 +192,14 @@ export interface paths {
          *     Returns:
          *         AgentDetailResponse: The created agent details
          */
-        post: operations["create_agent_v1_agents_post"];
+        post: operations["create_agent_v1_namespaces__namespace__agents_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/agents/{agent_name}": {
+    "/v1/namespaces/{namespace}/agents/{agent_name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -217,7 +217,7 @@ export interface paths {
          *     Returns:
          *         AgentDetailResponse: The agent details
          */
-        get: operations["get_agent_v1_agents__agent_name__get"];
+        get: operations["get_agent_v1_namespaces__namespace__agents__agent_name__get"];
         /**
          * Update Agent
          * @description Update an Agent CR by name.
@@ -230,7 +230,7 @@ export interface paths {
          *     Returns:
          *         AgentDetailResponse: The updated agent details
          */
-        put: operations["update_agent_v1_agents__agent_name__put"];
+        put: operations["update_agent_v1_namespaces__namespace__agents__agent_name__put"];
         post?: never;
         /**
          * Delete Agent
@@ -240,13 +240,13 @@ export interface paths {
          *         namespace: The namespace containing the agent
          *         agent_name: The name of the agent
          */
-        delete: operations["delete_agent_v1_agents__agent_name__delete"];
+        delete: operations["delete_agent_v1_namespaces__namespace__agents__agent_name__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/models": {
+    "/v1/namespaces/{namespace}/models": {
         parameters: {
             query?: never;
             header?: never;
@@ -263,7 +263,7 @@ export interface paths {
          *     Returns:
          *         ModelListResponse: List of all models in the namespace
          */
-        get: operations["list_models_v1_models_get"];
+        get: operations["list_models_v1_namespaces__namespace__models_get"];
         put?: never;
         /**
          * Create Model
@@ -276,14 +276,14 @@ export interface paths {
          *     Returns:
          *         ModelDetailResponse: The created model details
          */
-        post: operations["create_model_v1_models_post"];
+        post: operations["create_model_v1_namespaces__namespace__models_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/models/{model_name}": {
+    "/v1/namespaces/{namespace}/models/{model_name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -301,7 +301,7 @@ export interface paths {
          *     Returns:
          *         ModelDetailResponse: The model details
          */
-        get: operations["get_model_v1_models__model_name__get"];
+        get: operations["get_model_v1_namespaces__namespace__models__model_name__get"];
         /**
          * Update Model
          * @description Update a Model CR by name.
@@ -314,7 +314,7 @@ export interface paths {
          *     Returns:
          *         ModelDetailResponse: The updated model details
          */
-        put: operations["update_model_v1_models__model_name__put"];
+        put: operations["update_model_v1_namespaces__namespace__models__model_name__put"];
         post?: never;
         /**
          * Delete Model
@@ -324,13 +324,13 @@ export interface paths {
          *         namespace: The namespace containing the model
          *         model_name: The name of the model
          */
-        delete: operations["delete_model_v1_models__model_name__delete"];
+        delete: operations["delete_model_v1_namespaces__namespace__models__model_name__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/teams": {
+    "/v1/namespaces/{namespace}/teams": {
         parameters: {
             query?: never;
             header?: never;
@@ -347,7 +347,7 @@ export interface paths {
          *     Returns:
          *         TeamListResponse: List of all teams in the namespace
          */
-        get: operations["list_teams_v1_teams_get"];
+        get: operations["list_teams_v1_namespaces__namespace__teams_get"];
         put?: never;
         /**
          * Create Team
@@ -360,14 +360,14 @@ export interface paths {
          *     Returns:
          *         TeamDetailResponse: The created team details
          */
-        post: operations["create_team_v1_teams_post"];
+        post: operations["create_team_v1_namespaces__namespace__teams_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/teams/{team_name}": {
+    "/v1/namespaces/{namespace}/teams/{team_name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -385,7 +385,7 @@ export interface paths {
          *     Returns:
          *         TeamDetailResponse: The team details
          */
-        get: operations["get_team_v1_teams__team_name__get"];
+        get: operations["get_team_v1_namespaces__namespace__teams__team_name__get"];
         /**
          * Update Team
          * @description Update a Team CR by name.
@@ -398,7 +398,7 @@ export interface paths {
          *     Returns:
          *         TeamDetailResponse: The updated team details
          */
-        put: operations["update_team_v1_teams__team_name__put"];
+        put: operations["update_team_v1_namespaces__namespace__teams__team_name__put"];
         post?: never;
         /**
          * Delete Team
@@ -408,13 +408,13 @@ export interface paths {
          *         namespace: The namespace containing the team
          *         team_name: The name of the team
          */
-        delete: operations["delete_team_v1_teams__team_name__delete"];
+        delete: operations["delete_team_v1_namespaces__namespace__teams__team_name__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/queries": {
+    "/v1/namespaces/{namespace}/queries": {
         parameters: {
             query?: never;
             header?: never;
@@ -425,20 +425,20 @@ export interface paths {
          * List Queries
          * @description List all queries in a namespace.
          */
-        get: operations["list_queries_v1_queries_get"];
+        get: operations["list_queries_v1_namespaces__namespace__queries_get"];
         put?: never;
         /**
          * Create Query
          * @description Create a new query.
          */
-        post: operations["create_query_v1_queries_post"];
+        post: operations["create_query_v1_namespaces__namespace__queries_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/queries/{query_name}": {
+    "/v1/namespaces/{namespace}/queries/{query_name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -449,24 +449,24 @@ export interface paths {
          * Get Query
          * @description Get a specific query.
          */
-        get: operations["get_query_v1_queries__query_name__get"];
+        get: operations["get_query_v1_namespaces__namespace__queries__query_name__get"];
         /**
          * Update Query
          * @description Update a specific query.
          */
-        put: operations["update_query_v1_queries__query_name__put"];
+        put: operations["update_query_v1_namespaces__namespace__queries__query_name__put"];
         post?: never;
         /**
          * Delete Query
          * @description Delete a specific query.
          */
-        delete: operations["delete_query_v1_queries__query_name__delete"];
+        delete: operations["delete_query_v1_namespaces__namespace__queries__query_name__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/queries/{query_name}/cancel": {
+    "/v1/namespaces/{namespace}/queries/{query_name}/cancel": {
         parameters: {
             query?: never;
             header?: never;
@@ -483,10 +483,10 @@ export interface paths {
          * Cancel Query
          * @description Cancel a specific query by setting spec.cancel to true.
          */
-        patch: operations["cancel_query_v1_queries__query_name__cancel_patch"];
+        patch: operations["cancel_query_v1_namespaces__namespace__queries__query_name__cancel_patch"];
         trace?: never;
     };
-    "/v1/tools": {
+    "/v1/namespaces/{namespace}/tools": {
         parameters: {
             query?: never;
             header?: never;
@@ -503,7 +503,7 @@ export interface paths {
          *     Returns:
          *         ToolListResponse: List of all tools in the namespace
          */
-        get: operations["list_tools_v1_tools_get"];
+        get: operations["list_tools_v1_namespaces__namespace__tools_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -512,7 +512,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/tools/{tool_name}": {
+    "/v1/namespaces/{namespace}/tools/{tool_name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -530,7 +530,7 @@ export interface paths {
          *     Returns:
          *         ToolDetailResponse: The tool details
          */
-        get: operations["get_tool_v1_tools__tool_name__get"];
+        get: operations["get_tool_v1_namespaces__namespace__tools__tool_name__get"];
         put?: never;
         post?: never;
         /**
@@ -541,13 +541,13 @@ export interface paths {
          *         namespace: The namespace containing the tool
          *         tool_name: The name of the tool
          */
-        delete: operations["delete_tool_v1_tools__tool_name__delete"];
+        delete: operations["delete_tool_v1_namespaces__namespace__tools__tool_name__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/mcp-servers": {
+    "/v1/namespaces/{namespace}/mcp-servers": {
         parameters: {
             query?: never;
             header?: never;
@@ -564,7 +564,7 @@ export interface paths {
          *     Returns:
          *         MCPServerListResponse: List of all MCP servers in the namespace
          */
-        get: operations["list_mcp_servers_v1_mcp_servers_get"];
+        get: operations["list_mcp_servers_v1_namespaces__namespace__mcp_servers_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -573,7 +573,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/mcp-servers/{mcp_server_name}": {
+    "/v1/namespaces/{namespace}/mcp-servers/{mcp_server_name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -591,7 +591,7 @@ export interface paths {
          *     Returns:
          *         MCPServerDetailResponse: The MCP server details
          */
-        get: operations["get_mcp_server_v1_mcp_servers__mcp_server_name__get"];
+        get: operations["get_mcp_server_v1_namespaces__namespace__mcp_servers__mcp_server_name__get"];
         put?: never;
         post?: never;
         /**
@@ -602,13 +602,13 @@ export interface paths {
          *         namespace: The namespace containing the MCP server
          *         mcp_server_name: The name of the MCP server
          */
-        delete: operations["delete_mcp_server_v1_mcp_servers__mcp_server_name__delete"];
+        delete: operations["delete_mcp_server_v1_namespaces__namespace__mcp_servers__mcp_server_name__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/a2a-servers": {
+    "/v1/namespaces/{namespace}/a2a-servers": {
         parameters: {
             query?: never;
             header?: never;
@@ -625,7 +625,7 @@ export interface paths {
          *     Returns:
          *         A2AServerListResponse: List of all A2A servers in the namespace
          */
-        get: operations["list_a2a_servers_v1_a2a_servers_get"];
+        get: operations["list_a2a_servers_v1_namespaces__namespace__a2a_servers_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -634,7 +634,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/a2a-servers/{a2a_server_name}": {
+    "/v1/namespaces/{namespace}/a2a-servers/{a2a_server_name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -652,7 +652,7 @@ export interface paths {
          *     Returns:
          *         A2AServerDetailResponse: The A2A server details
          */
-        get: operations["get_a2a_server_v1_a2a_servers__a2a_server_name__get"];
+        get: operations["get_a2a_server_v1_namespaces__namespace__a2a_servers__a2a_server_name__get"];
         put?: never;
         post?: never;
         /**
@@ -663,13 +663,13 @@ export interface paths {
          *         namespace: The namespace containing the A2A server
          *         a2a_server_name: The name of the A2A server
          */
-        delete: operations["delete_a2a_server_v1_a2a_servers__a2a_server_name__delete"];
+        delete: operations["delete_a2a_server_v1_namespaces__namespace__a2a_servers__a2a_server_name__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/memories": {
+    "/v1/namespaces/{namespace}/memories": {
         parameters: {
             query?: never;
             header?: never;
@@ -680,20 +680,20 @@ export interface paths {
          * List Memories
          * @description List all memories in a namespace.
          */
-        get: operations["list_memories_v1_memories_get"];
+        get: operations["list_memories_v1_namespaces__namespace__memories_get"];
         put?: never;
         /**
          * Create Memory
          * @description Create a new memory.
          */
-        post: operations["create_memory_v1_memories_post"];
+        post: operations["create_memory_v1_namespaces__namespace__memories_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/memories/{name}": {
+    "/v1/namespaces/{namespace}/memories/{name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -704,24 +704,24 @@ export interface paths {
          * Get Memory
          * @description Get a specific memory by name.
          */
-        get: operations["get_memory_v1_memories__name__get"];
+        get: operations["get_memory_v1_namespaces__namespace__memories__name__get"];
         /**
          * Update Memory
          * @description Update an existing memory.
          */
-        put: operations["update_memory_v1_memories__name__put"];
+        put: operations["update_memory_v1_namespaces__namespace__memories__name__put"];
         post?: never;
         /**
          * Delete Memory
          * @description Delete a memory.
          */
-        delete: operations["delete_memory_v1_memories__name__delete"];
+        delete: operations["delete_memory_v1_namespaces__namespace__memories__name__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/memories/{name}/sessions/{session_id}/messages": {
+    "/v1/namespaces/{namespace}/memories/{name}/sessions/{session_id}/messages": {
         parameters: {
             query?: never;
             header?: never;
@@ -732,7 +732,7 @@ export interface paths {
          * Get Memory Messages
          * @description Get messages for a specific session from a memory resource.
          */
-        get: operations["get_memory_messages_v1_memories__name__sessions__session_id__messages_get"];
+        get: operations["get_memory_messages_v1_namespaces__namespace__memories__name__sessions__session_id__messages_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -741,7 +741,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/memory-messages": {
+    "/v1/namespaces/{namespace}/memory-messages": {
         parameters: {
             query?: never;
             header?: never;
@@ -752,7 +752,7 @@ export interface paths {
          * List Memory Messages
          * @description List all memory messages with context, optionally filtered.
          */
-        get: operations["list_memory_messages_v1_memory_messages_get"];
+        get: operations["list_memory_messages_v1_namespaces__namespace__memory_messages_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -761,7 +761,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/sessions": {
+    "/v1/namespaces/{namespace}/sessions": {
         parameters: {
             query?: never;
             header?: never;
@@ -772,7 +772,7 @@ export interface paths {
          * List Sessions
          * @description List all sessions in a namespace, optionally filtered by memory.
          */
-        get: operations["list_sessions_v1_sessions_get"];
+        get: operations["list_sessions_v1_namespaces__namespace__sessions_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -798,7 +798,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/ark-services": {
+    "/v1/namespaces/{namespace}/ark-services": {
         parameters: {
             query?: never;
             header?: never;
@@ -816,7 +816,7 @@ export interface paths {
          *     Returns:
          *         ArkServiceListResponse: List of ARK services in the namespace
          */
-        get: operations["list_ark_services_v1_ark_services_get"];
+        get: operations["list_ark_services_v1_namespaces__namespace__ark_services_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -825,7 +825,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/ark-services/{service_name}": {
+    "/v1/namespaces/{namespace}/ark-services/{service_name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -843,7 +843,7 @@ export interface paths {
          *     Returns:
          *         ArkService: The ARK service details
          */
-        get: operations["get_ark_service_v1_ark_services__service_name__get"];
+        get: operations["get_ark_service_v1_namespaces__namespace__ark_services__service_name__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -852,7 +852,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/events": {
+    "/v1/namespaces/{namespace}/events": {
         parameters: {
             query?: never;
             header?: never;
@@ -874,7 +874,7 @@ export interface paths {
          *     Returns:
          *         EventListResponse: List of events in the namespace
          */
-        get: operations["list_events_v1_events_get"];
+        get: operations["list_events_v1_namespaces__namespace__events_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -883,7 +883,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/events/{event_name}": {
+    "/v1/namespaces/{namespace}/events/{event_name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -901,7 +901,7 @@ export interface paths {
          *     Returns:
          *         EventResponse: The requested event details
          */
-        get: operations["get_event_v1_events__event_name__get"];
+        get: operations["get_event_v1_namespaces__namespace__events__event_name__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -910,7 +910,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/evaluations": {
+    "/v1/namespaces/{namespace}/evaluations": {
         parameters: {
             query?: never;
             header?: never;
@@ -921,20 +921,20 @@ export interface paths {
          * List Evaluations
          * @description List all evaluations in a namespace.
          */
-        get: operations["list_evaluations_v1_evaluations_get"];
+        get: operations["list_evaluations_v1_namespaces__namespace__evaluations_get"];
         put?: never;
         /**
          * Create Evaluation
          * @description Create a new evaluation.
          */
-        post: operations["create_evaluation_v1_evaluations_post"];
+        post: operations["create_evaluation_v1_namespaces__namespace__evaluations_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/evaluations/{name}": {
+    "/v1/namespaces/{namespace}/evaluations/{name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -945,24 +945,24 @@ export interface paths {
          * Get Evaluation
          * @description Get details of a specific evaluation.
          */
-        get: operations["get_evaluation_v1_evaluations__name__get"];
+        get: operations["get_evaluation_v1_namespaces__namespace__evaluations__name__get"];
         /**
          * Update Evaluation
          * @description Update an existing evaluation.
          */
-        put: operations["update_evaluation_v1_evaluations__name__put"];
+        put: operations["update_evaluation_v1_namespaces__namespace__evaluations__name__put"];
         post?: never;
         /**
          * Delete Evaluation
          * @description Delete an evaluation.
          */
-        delete: operations["delete_evaluation_v1_evaluations__name__delete"];
+        delete: operations["delete_evaluation_v1_namespaces__namespace__evaluations__name__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/evaluations/{name}/cancel": {
+    "/v1/namespaces/{namespace}/evaluations/{name}/cancel": {
         parameters: {
             query?: never;
             header?: never;
@@ -979,10 +979,10 @@ export interface paths {
          * Cancel Evaluation
          * @description Cancel a running evaluation.
          */
-        patch: operations["cancel_evaluation_v1_evaluations__name__cancel_patch"];
+        patch: operations["cancel_evaluation_v1_namespaces__namespace__evaluations__name__cancel_patch"];
         trace?: never;
     };
-    "/v1/evaluators": {
+    "/v1/namespaces/{namespace}/evaluators": {
         parameters: {
             query?: never;
             header?: never;
@@ -993,20 +993,20 @@ export interface paths {
          * List Evaluators
          * @description List all evaluators in a namespace.
          */
-        get: operations["list_evaluators_v1_evaluators_get"];
+        get: operations["list_evaluators_v1_namespaces__namespace__evaluators_get"];
         put?: never;
         /**
          * Create Evaluator
          * @description Create a new evaluator.
          */
-        post: operations["create_evaluator_v1_evaluators_post"];
+        post: operations["create_evaluator_v1_namespaces__namespace__evaluators_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/evaluators/{name}": {
+    "/v1/namespaces/{namespace}/evaluators/{name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1017,18 +1017,18 @@ export interface paths {
          * Get Evaluator
          * @description Get details of a specific evaluator.
          */
-        get: operations["get_evaluator_v1_evaluators__name__get"];
+        get: operations["get_evaluator_v1_namespaces__namespace__evaluators__name__get"];
         /**
          * Update Evaluator
          * @description Update an existing evaluator.
          */
-        put: operations["update_evaluator_v1_evaluators__name__put"];
+        put: operations["update_evaluator_v1_namespaces__namespace__evaluators__name__put"];
         post?: never;
         /**
          * Delete Evaluator
          * @description Delete an evaluator.
          */
-        delete: operations["delete_evaluator_v1_evaluators__name__delete"];
+        delete: operations["delete_evaluator_v1_namespaces__namespace__evaluators__name__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2466,6 +2466,9 @@ export interface components {
             ttl?: string | null;
             /** Cancel */
             cancel?: boolean | null;
+            /** Evaluators */
+            evaluators?: components["schemas"]["Memory"][] | null;
+            evaluatorSelector?: components["schemas"]["ark_api__models__queries__LabelSelector"] | null;
             /** Metadata */
             metadata?: {
                 [key: string]: unknown;
@@ -2561,6 +2564,9 @@ export interface components {
             ttl?: string | null;
             /** Cancel */
             cancel?: boolean | null;
+            /** Evaluators */
+            evaluators?: components["schemas"]["Memory"][] | null;
+            evaluatorSelector?: components["schemas"]["ark_api__models__queries__LabelSelector"] | null;
         };
         /**
          * ReadinessResponse
@@ -3331,14 +3337,13 @@ export interface operations {
             };
         };
     };
-    list_secrets_v1_secrets_get: {
+    list_secrets_v1_namespaces__namespace__secrets_get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -3363,14 +3368,13 @@ export interface operations {
             };
         };
     };
-    create_secret_v1_secrets_post: {
+    create_secret_v1_namespaces__namespace__secrets_post: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -3399,14 +3403,12 @@ export interface operations {
             };
         };
     };
-    get_secret_v1_secrets__secret_name__get: {
+    get_secret_v1_namespaces__namespace__secrets__secret_name__get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 secret_name: string;
             };
             cookie?: never;
@@ -3433,14 +3435,12 @@ export interface operations {
             };
         };
     };
-    update_secret_v1_secrets__secret_name__put: {
+    update_secret_v1_namespaces__namespace__secrets__secret_name__put: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 secret_name: string;
             };
             cookie?: never;
@@ -3471,14 +3471,12 @@ export interface operations {
             };
         };
     };
-    delete_secret_v1_secrets__secret_name__delete: {
+    delete_secret_v1_namespaces__namespace__secrets__secret_name__delete: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 secret_name: string;
             };
             cookie?: never;
@@ -3505,14 +3503,13 @@ export interface operations {
             };
         };
     };
-    list_agents_v1_agents_get: {
+    list_agents_v1_namespaces__namespace__agents_get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -3537,14 +3534,13 @@ export interface operations {
             };
         };
     };
-    create_agent_v1_agents_post: {
+    create_agent_v1_namespaces__namespace__agents_post: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -3573,14 +3569,12 @@ export interface operations {
             };
         };
     };
-    get_agent_v1_agents__agent_name__get: {
+    get_agent_v1_namespaces__namespace__agents__agent_name__get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 agent_name: string;
             };
             cookie?: never;
@@ -3607,14 +3601,12 @@ export interface operations {
             };
         };
     };
-    update_agent_v1_agents__agent_name__put: {
+    update_agent_v1_namespaces__namespace__agents__agent_name__put: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 agent_name: string;
             };
             cookie?: never;
@@ -3645,14 +3637,12 @@ export interface operations {
             };
         };
     };
-    delete_agent_v1_agents__agent_name__delete: {
+    delete_agent_v1_namespaces__namespace__agents__agent_name__delete: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 agent_name: string;
             };
             cookie?: never;
@@ -3677,14 +3667,13 @@ export interface operations {
             };
         };
     };
-    list_models_v1_models_get: {
+    list_models_v1_namespaces__namespace__models_get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -3709,14 +3698,13 @@ export interface operations {
             };
         };
     };
-    create_model_v1_models_post: {
+    create_model_v1_namespaces__namespace__models_post: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -3745,14 +3733,12 @@ export interface operations {
             };
         };
     };
-    get_model_v1_models__model_name__get: {
+    get_model_v1_namespaces__namespace__models__model_name__get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 model_name: string;
             };
             cookie?: never;
@@ -3779,14 +3765,12 @@ export interface operations {
             };
         };
     };
-    update_model_v1_models__model_name__put: {
+    update_model_v1_namespaces__namespace__models__model_name__put: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 model_name: string;
             };
             cookie?: never;
@@ -3817,14 +3801,12 @@ export interface operations {
             };
         };
     };
-    delete_model_v1_models__model_name__delete: {
+    delete_model_v1_namespaces__namespace__models__model_name__delete: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 model_name: string;
             };
             cookie?: never;
@@ -3849,14 +3831,13 @@ export interface operations {
             };
         };
     };
-    list_teams_v1_teams_get: {
+    list_teams_v1_namespaces__namespace__teams_get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -3881,14 +3862,13 @@ export interface operations {
             };
         };
     };
-    create_team_v1_teams_post: {
+    create_team_v1_namespaces__namespace__teams_post: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -3917,14 +3897,12 @@ export interface operations {
             };
         };
     };
-    get_team_v1_teams__team_name__get: {
+    get_team_v1_namespaces__namespace__teams__team_name__get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 team_name: string;
             };
             cookie?: never;
@@ -3951,14 +3929,12 @@ export interface operations {
             };
         };
     };
-    update_team_v1_teams__team_name__put: {
+    update_team_v1_namespaces__namespace__teams__team_name__put: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 team_name: string;
             };
             cookie?: never;
@@ -3989,14 +3965,12 @@ export interface operations {
             };
         };
     };
-    delete_team_v1_teams__team_name__delete: {
+    delete_team_v1_namespaces__namespace__teams__team_name__delete: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 team_name: string;
             };
             cookie?: never;
@@ -4021,14 +3995,13 @@ export interface operations {
             };
         };
     };
-    list_queries_v1_queries_get: {
+    list_queries_v1_namespaces__namespace__queries_get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -4053,14 +4026,13 @@ export interface operations {
             };
         };
     };
-    create_query_v1_queries_post: {
+    create_query_v1_namespaces__namespace__queries_post: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -4089,14 +4061,12 @@ export interface operations {
             };
         };
     };
-    get_query_v1_queries__query_name__get: {
+    get_query_v1_namespaces__namespace__queries__query_name__get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 query_name: string;
             };
             cookie?: never;
@@ -4123,14 +4093,12 @@ export interface operations {
             };
         };
     };
-    update_query_v1_queries__query_name__put: {
+    update_query_v1_namespaces__namespace__queries__query_name__put: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 query_name: string;
             };
             cookie?: never;
@@ -4161,14 +4129,12 @@ export interface operations {
             };
         };
     };
-    delete_query_v1_queries__query_name__delete: {
+    delete_query_v1_namespaces__namespace__queries__query_name__delete: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 query_name: string;
             };
             cookie?: never;
@@ -4193,14 +4159,12 @@ export interface operations {
             };
         };
     };
-    cancel_query_v1_queries__query_name__cancel_patch: {
+    cancel_query_v1_namespaces__namespace__queries__query_name__cancel_patch: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 query_name: string;
             };
             cookie?: never;
@@ -4227,14 +4191,13 @@ export interface operations {
             };
         };
     };
-    list_tools_v1_tools_get: {
+    list_tools_v1_namespaces__namespace__tools_get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -4259,14 +4222,12 @@ export interface operations {
             };
         };
     };
-    get_tool_v1_tools__tool_name__get: {
+    get_tool_v1_namespaces__namespace__tools__tool_name__get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 tool_name: string;
             };
             cookie?: never;
@@ -4293,14 +4254,12 @@ export interface operations {
             };
         };
     };
-    delete_tool_v1_tools__tool_name__delete: {
+    delete_tool_v1_namespaces__namespace__tools__tool_name__delete: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 tool_name: string;
             };
             cookie?: never;
@@ -4325,14 +4284,13 @@ export interface operations {
             };
         };
     };
-    list_mcp_servers_v1_mcp_servers_get: {
+    list_mcp_servers_v1_namespaces__namespace__mcp_servers_get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -4357,14 +4315,12 @@ export interface operations {
             };
         };
     };
-    get_mcp_server_v1_mcp_servers__mcp_server_name__get: {
+    get_mcp_server_v1_namespaces__namespace__mcp_servers__mcp_server_name__get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 mcp_server_name: string;
             };
             cookie?: never;
@@ -4391,14 +4347,12 @@ export interface operations {
             };
         };
     };
-    delete_mcp_server_v1_mcp_servers__mcp_server_name__delete: {
+    delete_mcp_server_v1_namespaces__namespace__mcp_servers__mcp_server_name__delete: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 mcp_server_name: string;
             };
             cookie?: never;
@@ -4423,14 +4377,13 @@ export interface operations {
             };
         };
     };
-    list_a2a_servers_v1_a2a_servers_get: {
+    list_a2a_servers_v1_namespaces__namespace__a2a_servers_get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -4455,14 +4408,12 @@ export interface operations {
             };
         };
     };
-    get_a2a_server_v1_a2a_servers__a2a_server_name__get: {
+    get_a2a_server_v1_namespaces__namespace__a2a_servers__a2a_server_name__get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 a2a_server_name: string;
             };
             cookie?: never;
@@ -4489,14 +4440,12 @@ export interface operations {
             };
         };
     };
-    delete_a2a_server_v1_a2a_servers__a2a_server_name__delete: {
+    delete_a2a_server_v1_namespaces__namespace__a2a_servers__a2a_server_name__delete: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 a2a_server_name: string;
             };
             cookie?: never;
@@ -4521,14 +4470,13 @@ export interface operations {
             };
         };
     };
-    list_memories_v1_memories_get: {
+    list_memories_v1_namespaces__namespace__memories_get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -4553,14 +4501,13 @@ export interface operations {
             };
         };
     };
-    create_memory_v1_memories_post: {
+    create_memory_v1_namespaces__namespace__memories_post: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -4589,14 +4536,12 @@ export interface operations {
             };
         };
     };
-    get_memory_v1_memories__name__get: {
+    get_memory_v1_namespaces__namespace__memories__name__get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 name: string;
             };
             cookie?: never;
@@ -4623,14 +4568,12 @@ export interface operations {
             };
         };
     };
-    update_memory_v1_memories__name__put: {
+    update_memory_v1_namespaces__namespace__memories__name__put: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 name: string;
             };
             cookie?: never;
@@ -4661,14 +4604,12 @@ export interface operations {
             };
         };
     };
-    delete_memory_v1_memories__name__delete: {
+    delete_memory_v1_namespaces__namespace__memories__name__delete: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 name: string;
             };
             cookie?: never;
@@ -4697,14 +4638,12 @@ export interface operations {
             };
         };
     };
-    get_memory_messages_v1_memories__name__sessions__session_id__messages_get: {
+    get_memory_messages_v1_namespaces__namespace__memories__name__sessions__session_id__messages_get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 name: string;
                 session_id: string;
             };
@@ -4734,11 +4673,9 @@ export interface operations {
             };
         };
     };
-    list_memory_messages_v1_memory_messages_get: {
+    list_memory_messages_v1_namespaces__namespace__memory_messages_get: {
         parameters: {
             query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
                 /** @description Filter by memory name */
                 memory?: string | null;
                 /** @description Filter by session ID */
@@ -4747,7 +4684,9 @@ export interface operations {
                 query?: string | null;
             };
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -4772,16 +4711,16 @@ export interface operations {
             };
         };
     };
-    list_sessions_v1_sessions_get: {
+    list_sessions_v1_namespaces__namespace__sessions_get: {
         parameters: {
             query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
                 /** @description Filter by memory name */
                 memory?: string | null;
             };
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -4826,16 +4765,16 @@ export interface operations {
             };
         };
     };
-    list_ark_services_v1_ark_services_get: {
+    list_ark_services_v1_namespaces__namespace__ark_services_get: {
         parameters: {
             query?: {
                 /** @description List all Helm releases, not just ARK services */
                 list_all_services?: boolean | null;
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
             };
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -4860,14 +4799,12 @@ export interface operations {
             };
         };
     };
-    get_ark_service_v1_ark_services__service_name__get: {
+    get_ark_service_v1_namespaces__namespace__ark_services__service_name__get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 service_name: string;
             };
             cookie?: never;
@@ -4894,11 +4831,9 @@ export interface operations {
             };
         };
     };
-    list_events_v1_events_get: {
+    list_events_v1_namespaces__namespace__events_get: {
         parameters: {
             query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
                 /** @description Filter by event type (Normal, Warning) */
                 type?: string | null;
                 /** @description Filter by involved object kind */
@@ -4911,7 +4846,9 @@ export interface operations {
                 page?: number | null;
             };
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -4936,14 +4873,12 @@ export interface operations {
             };
         };
     };
-    get_event_v1_events__event_name__get: {
+    get_event_v1_namespaces__namespace__events__event_name__get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 event_name: string;
             };
             cookie?: never;
@@ -4970,18 +4905,18 @@ export interface operations {
             };
         };
     };
-    list_evaluations_v1_evaluations_get: {
+    list_evaluations_v1_namespaces__namespace__evaluations_get: {
         parameters: {
             query?: {
                 /** @description Include enhanced metadata from annotations */
                 enhanced?: boolean;
                 /** @description Filter evaluations by query reference name */
                 query_ref?: string;
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
             };
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -5006,14 +4941,13 @@ export interface operations {
             };
         };
     };
-    create_evaluation_v1_evaluations_post: {
+    create_evaluation_v1_namespaces__namespace__evaluations_post: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -5042,16 +4976,15 @@ export interface operations {
             };
         };
     };
-    get_evaluation_v1_evaluations__name__get: {
+    get_evaluation_v1_namespaces__namespace__evaluations__name__get: {
         parameters: {
             query?: {
                 /** @description Include enhanced metadata from annotations */
                 enhanced?: boolean;
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
             };
             header?: never;
             path: {
+                namespace: string;
                 name: string;
             };
             cookie?: never;
@@ -5078,14 +5011,12 @@ export interface operations {
             };
         };
     };
-    update_evaluation_v1_evaluations__name__put: {
+    update_evaluation_v1_namespaces__namespace__evaluations__name__put: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 name: string;
             };
             cookie?: never;
@@ -5116,14 +5047,12 @@ export interface operations {
             };
         };
     };
-    delete_evaluation_v1_evaluations__name__delete: {
+    delete_evaluation_v1_namespaces__namespace__evaluations__name__delete: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 name: string;
             };
             cookie?: never;
@@ -5152,14 +5081,12 @@ export interface operations {
             };
         };
     };
-    cancel_evaluation_v1_evaluations__name__cancel_patch: {
+    cancel_evaluation_v1_namespaces__namespace__evaluations__name__cancel_patch: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 name: string;
             };
             cookie?: never;
@@ -5186,14 +5113,13 @@ export interface operations {
             };
         };
     };
-    list_evaluators_v1_evaluators_get: {
+    list_evaluators_v1_namespaces__namespace__evaluators_get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -5218,14 +5144,13 @@ export interface operations {
             };
         };
     };
-    create_evaluator_v1_evaluators_post: {
+    create_evaluator_v1_namespaces__namespace__evaluators_post: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                namespace: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -5254,14 +5179,12 @@ export interface operations {
             };
         };
     };
-    get_evaluator_v1_evaluators__name__get: {
+    get_evaluator_v1_namespaces__namespace__evaluators__name__get: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 name: string;
             };
             cookie?: never;
@@ -5288,14 +5211,12 @@ export interface operations {
             };
         };
     };
-    update_evaluator_v1_evaluators__name__put: {
+    update_evaluator_v1_namespaces__namespace__evaluators__name__put: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 name: string;
             };
             cookie?: never;
@@ -5326,14 +5247,12 @@ export interface operations {
             };
         };
     };
-    delete_evaluator_v1_evaluators__name__delete: {
+    delete_evaluator_v1_namespaces__namespace__evaluators__name__delete: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
+                namespace: string;
                 name: string;
             };
             cookie?: never;
