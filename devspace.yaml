@@ -64,8 +64,8 @@ pipelines:
   deploy: |-
     create_deployments --all
     run_dependency_pipelines ark --pipeline=deploy
-    run_dependency_pipelines --all --pipeline=deploy
+    run_dependency_pipelines --all --exclude ark --pipeline=deploy
   dev: |-
     create_deployments --all
     run_dependency_pipelines ark --pipeline=dev
-    run_dependency_pipelines --all --pipeline=dev
+    run_dependency_pipelines --all --exclude ark --pipeline=dev
