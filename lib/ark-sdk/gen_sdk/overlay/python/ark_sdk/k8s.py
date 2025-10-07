@@ -120,7 +120,7 @@ class SecretClient:
         self.namespace = namespace
     
     def validate_and_encode_token(self, string_data: dict) -> dict:
-        """Validate and ensure token is base64 encoded."""
+        """Validate token field. Kubernetes will handle base64 encoding via string_data."""
         if not string_data:
             raise ValueError("Secret data cannot be empty")
         
@@ -131,14 +131,7 @@ class SecretClient:
             invalid_fields = provided_fields - allowed_fields
             raise ValueError(f"Only 'token' field is allowed. Invalid fields: {', '.join(invalid_fields)}")
         
-        token_value = string_data["token"]
-        
-        try:
-            base64.b64decode(token_value, validate=True)
-            return string_data
-        except Exception:
-            encoded_token = base64.b64encode(token_value.encode()).decode()
-            return {"token": encoded_token}
+        return string_data
     
     def calculate_secret_length(self, secret_data: dict) -> int:
         """Calculate total length of secret data."""
