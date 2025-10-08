@@ -397,7 +397,7 @@ func (r *QueryReconciler) reconcileQueue(ctx context.Context, query arkv1alpha1.
 			})
 		}
 	}
-	
+
 	return allResponses, eventStream, nil
 }
 

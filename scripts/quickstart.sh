@@ -193,7 +193,7 @@ quickstart() {
             if [ -n "$api_key" ] && [ -n "$base_url" ]; then
                 # Use envsubst to apply the configuration
                 API_KEY="$api_key" BASE_URL="$base_url" MODEL_TYPE="$model_type" MODEL_VERSION="$model_version" API_VERSION="$API_VERSION" envsubst < samples/quickstart/default-model.yaml | kubectl apply -f -
-
+                
                 echo -e "${green}✔${nc} default model configured"
             else
                 echo -e "${yellow}warning${nc}: skipping default model setup"

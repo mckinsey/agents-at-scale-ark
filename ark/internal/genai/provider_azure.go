@@ -8,7 +8,6 @@ import (
 	"github.com/openai/openai-go/option"
 	"k8s.io/apimachinery/pkg/runtime"
 	"mckinsey.com/ark/internal/common"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type AzureProvider struct {
@@ -138,7 +137,6 @@ func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []Me
 }
 
 func (ap *AzureProvider) createClient(ctx context.Context) openai.Client {
-	log := logf.Log.WithName("azure-provider")
 	httpClient := common.NewHTTPClientWithLogging(ctx)
 
 	deploymentURL := fmt.Sprintf("%s/openai/deployments/%s", ap.BaseURL, ap.Model)
@@ -150,13 +148,7 @@ func (ap *AzureProvider) createClient(ctx context.Context) openai.Client {
 		option.WithQueryAdd("api-version", ap.APIVersion),
 	}
 
-	if len(ap.Headers) > 0 {
-		log.Info("applying custom headers to Azure client", "model", ap.Model, "header_count", len(ap.Headers))
-		for name, value := range ap.Headers {
-			log.V(1).Info("applying custom header", "model", ap.Model, "header_name", name, "header_value_length", len(value))
-			options = append(options, option.WithHeader(name, value))
-		}
-	}
+	options = applyHeadersToOptions(ap.Headers, options, ap.Model)
 
 	return openai.NewClient(options...)
 }

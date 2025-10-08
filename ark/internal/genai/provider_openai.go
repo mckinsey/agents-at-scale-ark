@@ -260,7 +260,6 @@ func (op *OpenAIProvider) ChatCompletionStream(ctx context.Context, messages []M
 }
 
 func (op *OpenAIProvider) createClient(ctx context.Context) openai.Client {
-	log := logf.Log.WithName("openai-provider")
 	httpClient := common.NewHTTPClientWithLogging(ctx)
 
 	options := []option.RequestOption{
@@ -269,13 +268,7 @@ func (op *OpenAIProvider) createClient(ctx context.Context) openai.Client {
 		option.WithHTTPClient(httpClient),
 	}
 
-	if len(op.Headers) > 0 {
-		log.Info("applying custom headers to OpenAI client", "model", op.Model, "header_count", len(op.Headers))
-		for name, value := range op.Headers {
-			log.V(1).Info("applying custom header", "model", op.Model, "header_name", name, "header_value_length", len(value))
-			options = append(options, option.WithHeader(name, value))
-		}
-	}
+	options = applyHeadersToOptions(op.Headers, options, op.Model)
 
 	return openai.NewClient(options...)
 }
