@@ -296,6 +296,17 @@
         "doc",
         "bug"
       ]
+    },
+    {
+      "login": "adriander",
+      "name": "Adrian de Rivero",
+      "avatar_url": "https://avatars.githubusercontent.com/u/28889728?v=4",
+      "profile": "https://github.com/adriander",
+      "contributions": [
+        "code",
+        "bug",
+        "doc"
+      ]
     }
   ],
   "contributorsPerLine": 7,
