@@ -25,17 +25,10 @@ export function createChatCommand(config: ArkConfig): Command {
         const arkApiClient = await proxy.start();
 
         // Check if any models are configured before starting ChatUI
-        try {
-          const models = await arkApiClient.getModels();
-          if (models.length === 0) {
-            output.error('No models configured. Please configure at least one model before using ark chat.');
-            output.info('Run "ark install" to set up a default model, or configure models manually.');
-            proxy.stop();
-            process.exit(1);
-          }
-        } catch (modelError) {
-          output.error('Failed to check model configuration. Please ensure ark-api is running and models are configured.');
-          output.info('Run "ark install" to set up a default model.');
+        const models = await arkApiClient.getModels();
+        if (models.length === 0) {
+          output.error('No models configured. Please configure at least one model before using ark chat.');
+          output.info('Run "ark install" to set up a default model, or configure models manually.');
           proxy.stop();
           process.exit(1);
         }
@@ -54,7 +47,7 @@ export function createChatCommand(config: ArkConfig): Command {
         if (error instanceof Error && error.message.includes('port forward failed')) {
           output.error('ARK API connection failed. Please ensure ark-api is running.');
           output.info('Run "ark status" to check the status of ARK services.');
-        } else if (error instanceof Error && error.message.includes('No models configured')) {
+        } else if (error instanceof Error && error.message.includes('Failed to get models')) {
           output.error('No models configured. Please configure at least one model before using ark chat.');
           output.info('Run "ark install" to set up a default model, or configure models manually.');
         } else {
