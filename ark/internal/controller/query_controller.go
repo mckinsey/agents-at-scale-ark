@@ -507,6 +507,7 @@ func (r *QueryReconciler) determineQueryStatus(responses []arkv1alpha1.Response)
 func (r *QueryReconciler) createErrorResponse(target arkv1alpha1.QueryTarget, err error) arkv1alpha1.Response {
 	// Create error structure for Raw field - similar to successful message format
 	errorMessage := map[string]interface{}{
+		"role":    "assistant",
 		"error": err.Error(),
 	}
 	errorRaw, _ := json.Marshal([]map[string]interface{}{errorMessage})
