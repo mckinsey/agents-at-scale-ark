@@ -87,11 +87,3 @@ httpRoute:
 serviceAccount:
   name: ark-api-sa
   create: true
-
-# Builtin tools configuration
-builtinTools:
-  create: true
-  terminate:
-    name: terminate
-  noop:
-    name: noop
