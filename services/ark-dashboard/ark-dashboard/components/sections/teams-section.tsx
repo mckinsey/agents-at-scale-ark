@@ -4,14 +4,13 @@ import type React from "react"
 import { useState, useEffect, forwardRef, useImperativeHandle } from "react"
 import { toast } from "@/components/ui/use-toast"
 import { TeamEditor } from "@/components/editors"
-import { teamsService, agentsService, modelsService, type Team, type TeamCreateRequest, type TeamUpdateRequest, type Agent, type Model } from "@/lib/services"
+import { teamsService, agentsService, type Team, type TeamCreateRequest, type TeamUpdateRequest, type Agent } from "@/lib/services"
 import { TeamCard } from "@/components/cards"
 import { useDelayedLoading } from "@/lib/hooks"
 
 export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function TeamsSection(_, ref) {
   const [teams, setTeams] = useState<Team[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
-  const [models, setModels] = useState<Model[]>([])
   const [teamEditorOpen, setTeamEditorOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const showLoading = useDelayedLoading(loading)
@@ -24,14 +23,12 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function T
     const loadData = async () => {
       setLoading(true)
       try {
-        const [teamsData, agentsData, modelsData] = await Promise.all([
+        const [teamsData, agentsData] = await Promise.all([
           teamsService.getAll(),
-          agentsService.getAll(),
-          modelsService.getAll()
+          agentsService.getAll()
         ])
         setTeams(teamsData)
         setAgents(agentsData)
-        setModels(modelsData)
       } catch (error) {
         console.error("Failed to load data:", error)
         toast({
@@ -118,11 +115,10 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function T
         <main className="flex-1 overflow-auto p-6">
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pb-6">
             {teams.map((team) => (
-              <TeamCard 
-                key={team.id} 
-                team={team} 
+              <TeamCard
+                key={team.id}
+                team={team}
                 agents={agents}
-                models={models} 
                 onUpdate={handleSaveTeam}
                 onDelete={handleDeleteTeam}
               />
@@ -136,7 +132,6 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function T
         onOpenChange={setTeamEditorOpen}
         team={null}
         agents={agents}
-        models={models}
         onSave={handleSaveTeam}
       />
     </>

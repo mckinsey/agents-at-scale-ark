@@ -13,7 +13,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	"mckinsey.com/ark/internal/genai"
 )
 
 const (
@@ -134,7 +133,7 @@ func (v *TeamCustomValidator) validateStrategy(ctx context.Context, team *arkv1a
 	case "sequential", "round-robin":
 		return nil
 	case "selector":
-		return v.validateSelectorModel(ctx, team)
+		return v.validateSelectorAgent(ctx, team)
 	case "graph":
 		return v.validateGraphStrategy(team)
 	default:
@@ -142,14 +141,15 @@ func (v *TeamCustomValidator) validateStrategy(ctx context.Context, team *arkv1a
 	}
 }
 
-func (v *TeamCustomValidator) validateSelectorModel(ctx context.Context, team *arkv1alpha1.Team) error {
-	// Resolve selector model name with default fallback
-	modelName, namespace := genai.ResolveModelSpec(team.Spec.Selector, team.Namespace)
+func (v *TeamCustomValidator) validateSelectorAgent(ctx context.Context, team *arkv1alpha1.Team) error {
+	agentName := "default"
+	if team.Spec.Selector != nil && team.Spec.Selector.Agent != "" {
+		agentName = team.Spec.Selector.Agent
+	}
 
-	// Validate that the model exists
-	err := v.ValidateLoadModel(ctx, modelName, namespace)
+	err := v.ValidateLoadAgent(ctx, agentName, team.Namespace)
 	if err != nil {
-		return fmt.Errorf("selector model %s not found in namespace %s: %v", modelName, namespace, err)
+		return fmt.Errorf("selector agent '%s' not found in namespace %s: %v", agentName, team.Namespace, err)
 	}
 
 	return nil

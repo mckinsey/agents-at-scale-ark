@@ -26,13 +26,6 @@ func ResolveModelSpec(modelSpec any, defaultNamespace string) (string, string) {
 		}
 		return modelName, namespace
 
-	case *arkv1alpha1.TeamSelectorSpec:
-		modelName := defaultModelName
-		if spec != nil && spec.Model != "" {
-			modelName = spec.Model
-		}
-		return modelName, defaultNamespace
-
 	case string:
 		modelName := spec
 		if modelName == "" {
