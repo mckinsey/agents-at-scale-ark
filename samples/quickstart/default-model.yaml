@@ -27,5 +27,21 @@ spec:
             # This secret is created by following the setup instructions in the README
             name: azure-openai-secret
             key: token
+      headers:
+        - name: Custom-Header-1
+          value:
+            value: "direct-header-value"
+        - name: Custom-Header-2
+          value:
+            valueFrom:
+              secretKeyRef:
+                name: http-headers
+                key: custom-header
+        - name: User-Agent
+          value:
+            valueFrom:
+              configMapKeyRef:
+                name: http-config
+                key: user-agent
       apiVersion:
         value: "${API_VERSION}" 

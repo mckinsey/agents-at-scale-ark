@@ -1,0 +1,15 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: http-headers
+type: Opaque
+stringData:
+  custom-header: "secret-value-from-k8s-secret"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: http-config
+data:
+  user-agent: "ArkCustomAgent/1.0"

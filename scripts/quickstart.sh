@@ -191,10 +191,13 @@ quickstart() {
             api_key=$(echo -n "$api_key" | base64 | tr -d '\n' | tr -d ' ')
             
             if [ -n "$api_key" ] && [ -n "$base_url" ]; then
+                # Apply HTTP test resources (Secret and ConfigMap for custom headers)
+                kubectl apply -f samples/quickstart/http-test-resources.yaml > /dev/null 2>&1
+
                 # Use envsubst to apply the configuration
                 API_KEY="$api_key" BASE_URL="$base_url" MODEL_TYPE="$model_type" MODEL_VERSION="$model_version" API_VERSION="$API_VERSION" envsubst < samples/quickstart/default-model.yaml | kubectl apply -f -
-                
-                echo -e "${green}✔${nc} default model configured"
+
+                echo -e "${green}✔${nc} default model configured with custom headers"
             else
                 echo -e "${yellow}warning${nc}: skipping default model setup"
             fi

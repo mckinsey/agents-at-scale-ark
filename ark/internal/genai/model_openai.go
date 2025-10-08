@@ -6,6 +6,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func loadOpenAIConfig(ctx context.Context, resolver *common.ValueSourceResolver, config *arkv1alpha1.OpenAIModelConfig, namespace string, model *Model) error {
@@ -21,6 +22,21 @@ func loadOpenAIConfig(ctx context.Context, resolver *common.ValueSourceResolver,
 	apiKey, err := resolver.ResolveValueSource(ctx, config.APIKey, namespace)
 	if err != nil {
 		return fmt.Errorf("failed to resolve OpenAI apiKey: %w", err)
+	}
+
+	var headers map[string]string
+	if len(config.Headers) > 0 {
+		log := logf.FromContext(ctx)
+		headers = make(map[string]string)
+		log.Info("resolving custom headers for OpenAI model", "model", model.Model, "namespace", namespace, "header_count", len(config.Headers))
+		for _, header := range config.Headers {
+			value, err := ResolveModelHeaderValue(ctx, resolver.Client, header, namespace)
+			if err != nil {
+				return fmt.Errorf("failed to resolve OpenAI header %s: %w", header.Name, err)
+			}
+			headers[header.Name] = value
+			log.Info("resolved custom header for OpenAI model", "model", model.Model, "header_name", header.Name)
+		}
 	}
 
 	var properties map[string]string
@@ -39,6 +55,7 @@ func loadOpenAIConfig(ctx context.Context, resolver *common.ValueSourceResolver,
 		Model:      model.Model,
 		BaseURL:    baseURL,
 		APIKey:     apiKey,
+		Headers:    headers,
 		Properties: properties,
 	}
 	model.Provider = openaiProvider

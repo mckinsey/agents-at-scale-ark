@@ -6,6 +6,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func loadAzureConfig(ctx context.Context, resolver *common.ValueSourceResolver, config *arkv1alpha1.AzureModelConfig, namespace string, model *Model) error {
@@ -31,6 +32,21 @@ func loadAzureConfig(ctx context.Context, resolver *common.ValueSourceResolver, 
 		}
 	}
 
+	var headers map[string]string
+	if len(config.Headers) > 0 {
+		log := logf.FromContext(ctx)
+		headers = make(map[string]string)
+		log.Info("resolving custom headers for Azure model", "model", model.Model, "namespace", namespace, "header_count", len(config.Headers))
+		for _, header := range config.Headers {
+			value, err := ResolveModelHeaderValue(ctx, resolver.Client, header, namespace)
+			if err != nil {
+				return fmt.Errorf("failed to resolve Azure header %s: %w", header.Name, err)
+			}
+			headers[header.Name] = value
+			log.Info("resolved custom header for Azure model", "model", model.Model, "header_name", header.Name)
+		}
+	}
+
 	var properties map[string]string
 	if config.Properties != nil {
 		properties = make(map[string]string)
@@ -48,6 +64,7 @@ func loadAzureConfig(ctx context.Context, resolver *common.ValueSourceResolver, 
 		BaseURL:    baseURL,
 		APIKey:     apiKey,
 		APIVersion: apiVersion,
+		Headers:    headers,
 		Properties: properties,
 	}
 	model.Provider = azureProvider
