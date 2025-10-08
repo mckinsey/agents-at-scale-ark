@@ -6,6 +6,7 @@ Provisions namespaces for Ark workloads with appropriate RBAC permissions and se
 
 - Creates a service account for query execution
 - Sets up RBAC permissions for Ark and Kubernetes resources within the namespace
+- Provisions builtin tools (terminate, noop) for agent workflows
 - Optionally configures resource quotas and network policies
 
 ## Installation
@@ -18,4 +19,4 @@ helm install ark-tenant oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-te
 
 ## Configuration
 
-See `values.yaml` for all configuration options including service accounts, resource quotas, and network policies.
+See `values.yaml` for all configuration options including service accounts, builtin tools (terminate, noop), resource quotas, and network policies.
