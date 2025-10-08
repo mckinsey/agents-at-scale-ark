@@ -389,15 +389,18 @@ func (r *QueryReconciler) reconcileQueue(ctx context.Context, query arkv1alpha1.
 			// Skip targets that were delegated to external execution engines (messages == nil)
 			if result.messages != nil {
 				rawJSON, err := serializeMessages(result.messages)
-			if err != nil {
-				return nil, eventStream, fmt.Errorf("failed to serialize messages for target %v: %w", result.target, err)
-			}
-				allResponses = append(allResponses, arkv1alpha1.Response{
-					Target:  result.target,
-					Content: messageToText(result.messages[len(result.messages)-1]), // Get last message explicitly
-					Raw:     rawJSON,
-					Phase:   statusDone,
-				})
+				if err != nil {
+					// Track serialization error as failed response instead of failing entire query
+					serializationErr := fmt.Errorf("failed to serialize messages for target %v: %w", result.target, err)
+					allResponses = append(allResponses, r.createErrorResponse(result.target, serializationErr))
+				} else {
+					allResponses = append(allResponses, arkv1alpha1.Response{
+						Target:  result.target,
+						Content: messageToText(result.messages[len(result.messages)-1]), // Get last message explicitly
+						Raw:     rawJSON,
+						Phase:   statusDone,
+					})
+				}
 			}
 		}
 	}
