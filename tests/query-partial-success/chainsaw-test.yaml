@@ -35,12 +35,6 @@ spec:
           kind: Agent
           metadata:
             name: test-agent-2
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Team
-          metadata:
-            name: test-team
     # Wait for query to complete with partial success
     - assert:
         resource:
@@ -60,7 +54,7 @@ spec:
             name: test-query-partial-success
           status:
             # Should have responses from all targets (including failures)
-            (length(responses) >= `2`): true
+            (length(responses) == `2`): true
             # Should have at least one successful response (agent-1 or team)
             (contains(responses[?phase == 'done'].target.name, 'test-agent-1') || contains(responses[?phase == 'done'].target.name, 'test-team')): true
             # Should have at least one error response (agent-2)

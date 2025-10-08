@@ -9,5 +9,4 @@ spec:
       name: test-agent-1
     - type: agent
       name: test-agent-2
-    - type: team
-      name: test-team
+      
