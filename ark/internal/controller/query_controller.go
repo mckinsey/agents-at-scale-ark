@@ -194,11 +194,13 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		TotalTokens:      tokenSummary.TotalTokens,
 	}
 
-	_ = r.updateStatus(opCtx, &obj, statusDone)
+	// Set overall query status based on whether any targets failed
+	queryStatus := r.determineQueryStatus(responses)
+	_ = r.updateStatus(opCtx, &obj, queryStatus)
 
 	duration := &metav1.Duration{Duration: time.Since(startTime)}
 	r.finalizeEventStream(opCtx, eventStream)
-	_ = r.updateStatusWithDuration(opCtx, &obj, statusDone, duration)
+	_ = r.updateStatusWithDuration(opCtx, &obj, queryStatus, duration)
 }
 
 // finalizeEventStream sends the completion message to the event stream and
@@ -382,16 +384,18 @@ func (r *QueryReconciler) reconcileQueue(ctx context.Context, query arkv1alpha1.
 
 	for result := range resultChan {
 		if result.err != nil {
-			return nil, eventStream, result.err
-		}
-		// Skip targets that were delegated to external execution engines (messages == nil)
-		if result.messages != nil {
-			rawBytes, _ := json.Marshal(result.messages) // full original message array
-			allResponses = append(allResponses, arkv1alpha1.Response{
-				Target:  result.target,
-				Content: messageToText(result.messages[len(result.messages)-1]), // Get last message explicitly
-				Raw:     string(rawBytes),
-			})
+			allResponses = append(allResponses, r.createErrorResponse(result.target, result.err))
+		} else {
+			// Skip targets that were delegated to external execution engines (messages == nil)
+			if result.messages != nil {
+				rawBytes, _ := json.Marshal(result.messages) // full original message array
+				allResponses = append(allResponses, arkv1alpha1.Response{
+					Target:  result.target,
+					Content: messageToText(result.messages[len(result.messages)-1]), // Get last message explicitly
+					Raw:     string(rawBytes),
+					Phase:   statusDone,
+				})
+			}
 		}
 	}
 
@@ -434,6 +438,34 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 		logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
 	}
 	return err
+}
+
+// determineQueryStatus checks if any responses have error phase and returns appropriate query status
+func (r *QueryReconciler) determineQueryStatus(responses []arkv1alpha1.Response) string {
+	for _, response := range responses {
+		if response.Phase == statusError {
+			return statusError
+		}
+	}
+	return statusDone
+}
+
+// createErrorResponse creates a standardized error response for a failed target
+func (r *QueryReconciler) createErrorResponse(target arkv1alpha1.QueryTarget, err error) arkv1alpha1.Response {
+	// Create error structure for Raw field - similar to successful message format
+	errorMessage := map[string]interface{}{
+		"role":    "assistant",
+		"content": err.Error(),
+		"error":   true,
+	}
+	errorRaw, _ := json.Marshal([]map[string]interface{}{errorMessage})
+
+	return arkv1alpha1.Response{
+		Target:  target,
+		Content: err.Error(),
+		Raw:     string(errorRaw),
+		Phase:   statusError,
+	}
 }
 
 func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query) {
