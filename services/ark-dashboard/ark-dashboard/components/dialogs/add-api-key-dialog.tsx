@@ -15,6 +15,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -111,9 +112,9 @@ export function AddAPIKeyDialog({ open, onOpenChange, onSuccess }: AddAPIKeyDial
                       {...field}
                     />
                   </FormControl>
-                  <p className="text-xs text-muted-foreground">
+                  <FormDescription>
                     Leave empty for no expiration
-                  </p>
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

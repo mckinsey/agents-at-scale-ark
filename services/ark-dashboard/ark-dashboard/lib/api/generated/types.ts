@@ -1043,16 +1043,18 @@ export interface paths {
         };
         /**
          * List Api Keys
-         * @description List all active API keys (without secret keys).
+         * @description List all active API keys in the current namespace (without secret keys).
+         *     API keys are namespace-scoped for tenant isolation.
          *
          *     Returns:
-         *         APIKeyListResponse: List of API keys
+         *         APIKeyListResponse: List of API keys in the current namespace
          */
         get: operations["list_api_keys_v1_api_keys_get"];
         put?: never;
         /**
          * Create Api Key
          * @description Create a new API key for service-to-service authentication.
+         *     API keys are namespace-scoped for tenant isolation and stored in the current namespace.
          *
          *     Args:
          *         body: API key creation request
@@ -1079,7 +1081,8 @@ export interface paths {
         post?: never;
         /**
          * Delete Api Key
-         * @description Soft delete an API key by marking it as inactive.
+         * @description Soft delete an API key in the current namespace by marking it as inactive.
+         *     API keys are namespace-scoped for tenant isolation.
          *
          *     Args:
          *         public_key: The public key of the API key to delete

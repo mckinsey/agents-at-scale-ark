@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { toast } from "@/components/ui/use-toast"
 import { apiKeysService, type APIKeyCreateRequest } from "./api-keys"
 
 export const useListAPIKeys = () => {
@@ -18,6 +19,11 @@ export const useCreateAPIKey = () => {
     },
     onError: (error) => {
       console.error('Failed to create API key:', error)
+      toast({
+        title: "Error",
+        description: "Failed to create API key. Please try again.",
+        variant: "destructive"
+      })
     }
   })
 }
@@ -32,6 +38,11 @@ export const useDeleteAPIKey = () => {
     },
     onError: (error) => {
       console.error('Failed to delete API key:', error)
+      toast({
+        title: "Error",
+        description: "Failed to delete API key. Please try again.",
+        variant: "destructive"
+      })
     }
   })
 }

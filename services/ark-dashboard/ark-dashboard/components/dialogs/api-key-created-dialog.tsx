@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Check, Copy } from "lucide-react"
+import copy from "copy-to-clipboard"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -26,23 +27,23 @@ export function APIKeyCreatedDialog({ open, onOpenChange, apiKey }: APIKeyCreate
   const [copiedSecret, setCopiedSecret] = useState(false)
   const [copiedBoth, setCopiedBoth] = useState(false)
 
-  const copyToClipboard = async (text: string, type: 'public' | 'secret' | 'both') => {
-    try {
-      await navigator.clipboard.writeText(text)
-      
-      if (type === 'public') {
-        setCopiedPublic(true)
-        setTimeout(() => setCopiedPublic(false), 2000)
-      } else if (type === 'secret') {
-        setCopiedSecret(true)
-        setTimeout(() => setCopiedSecret(false), 2000)
-      } else {
-        setCopiedBoth(true)
-        setTimeout(() => setCopiedBoth(false), 2000)
-      }
-    } catch (err) {
-      console.error('Failed to copy to clipboard:', err)
+  const copyToClipboard = (text: string, type: 'public' | 'secret' | 'both') => {
+    copy(text)
+    
+    if (type === 'public') {
+      setCopiedPublic(true)
+      setTimeout(() => setCopiedPublic(false), 2000)
+    } else if (type === 'secret') {
+      setCopiedSecret(true)
+      setTimeout(() => setCopiedSecret(false), 2000)
+    } else {
+      setCopiedBoth(true)
+      setTimeout(() => setCopiedBoth(false), 2000)
     }
+  }
+  
+  const selectAllText = (e: React.MouseEvent<HTMLInputElement>) => {
+    e.currentTarget.select()
   }
 
   const handleClose = () => {
@@ -78,7 +79,8 @@ export function APIKeyCreatedDialog({ open, onOpenChange, apiKey }: APIKeyCreate
                 id="public-key"
                 value={apiKey.public_key}
                 readOnly
-                className="font-mono text-sm"
+                onClick={selectAllText}
+                className="font-mono text-sm cursor-pointer"
               />
               <Button
                 size="sm"
@@ -97,7 +99,8 @@ export function APIKeyCreatedDialog({ open, onOpenChange, apiKey }: APIKeyCreate
                 id="secret-key"
                 value={apiKey.secret_key}
                 readOnly
-                className="font-mono text-sm"
+                onClick={selectAllText}
+                className="font-mono text-sm cursor-pointer"
               />
               <Button
                 size="sm"

@@ -52,7 +52,7 @@ export default function HomePage() {
         </section>
         {!models?.some(m => m.name === 'default') && <section>
           <Link href="/models/new?name=default">
-            <Alert variant='destructive' className="flex gap-2 flex-row flex-wrap">
+            <Alert variant='warning' className="flex gap-2 flex-row flex-wrap">
               <div className="flex items-center gap-1">
                 <AlertTriangleIcon className="w-4 h-4" />
                 <AlertTitle>You have no default Model configured.</AlertTitle>
