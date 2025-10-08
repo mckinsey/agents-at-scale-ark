@@ -49,6 +49,7 @@ type ExecutionEngineRef struct {
 type AgentSpec struct {
 	Prompt      string `json:"prompt,omitempty"`
 	Description string `json:"description,omitempty"`
+	// +kubebuilder:default={name:"default"}
 	// +kubebuilder:validation:Optional
 	ModelRef *AgentModelRef `json:"modelRef,omitempty"`
 	// +kubebuilder:validation:Optional

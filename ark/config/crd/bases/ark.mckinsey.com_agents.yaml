@@ -66,6 +66,8 @@ spec:
                 - name
                 type: object
               modelRef:
+                default:
+                  name: default
                 properties:
                   name:
                     minLength: 1

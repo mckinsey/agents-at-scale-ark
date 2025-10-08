@@ -22,7 +22,7 @@ spec:
   # Human-readable description
   description: General-purpose assistant agent
   
-  # Model reference (optional - uses 'default' if not specified)
+  # Model reference (optional - defaults to 'default' if not specified)
   modelRef:
     name: gpt-4-model
     namespace: default
@@ -61,27 +61,34 @@ spec:
         type: number
         
 status:
-  # Current phase: Pending, Ready, or Error
-  phase: Ready
+  # Status conditions indicate agent health and availability
+  conditions:
+  - type: Available
+    status: "True"
+    reason: AllDependenciesReady
+    message: Agent is ready for execution
 ```
 
-## Status and Phases
+## Status and Conditions
 
-Agents have a status phase that indicates their readiness state:
+Agents use status conditions to indicate their availability and health:
 
-### Phases
+### Conditions
 
-| Phase | Description | Next Action |
-|-------|-------------|-------------|
-| **Pending** | Agent created but dependencies not resolved | Controller reconciles dependencies |
-| **Ready** | All dependencies resolved, agent operational | Agent can process queries |
-| **Error** | Agent configuration error or dependency failure | Check events for details |
+| Condition Type | Status | Description |
+|----------------|--------|-------------|
+| **Available** | True | Agent is ready for execution with all dependencies resolved |
+| **Available** | False | Agent has unresolved dependencies or configuration issues |
 
 ### Status Fields
 
 ```yaml
 status:
-  phase: Ready  # Current phase: Pending, Ready, or Error
+  conditions:
+  - type: Available
+    status: "True"
+    reason: AllDependenciesReady
+    message: Agent is ready for execution
 ```
 
 ## Examples
@@ -191,15 +198,14 @@ The agent controller continuously reconciles agent resources to ensure dependenc
 
 ### Model Resolution
 
-1. **With modelRef**: Controller validates the specified model exists
-2. **Without modelRef**: Controller checks for model named "default" in agent's namespace
-3. **Model not found**: Agent enters "Pending" phase with warning event
+1. **Model Reference**: Controller validates the specified model exists in agent's namespace
+2. **Model not found**: Agent status condition "Available" is set to False with warning event
 
 ### Tool Resolution
 
 1. **Custom tools**: Controller validates each custom tool exists in agent's namespace
 2. **Built-in tools**: No validation needed (always available)
-3. **Tool not found**: Agent enters "Pending" phase with warning event
+3. **Tool not found**: Agent status condition "Available" is set to False with warning event
 
 ### Dependency Watching
 
@@ -207,4 +213,4 @@ The controller watches for changes to:
 - **Models**: When a model is created/updated, reconciles all dependent agents
 - **Tools**: When a tool is created/updated, reconciles all agents using that tool
 
-This ensures agents automatically become Ready when missing dependencies are resolved.
+This ensures agents automatically become Available when missing dependencies are resolved.

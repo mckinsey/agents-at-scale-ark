@@ -88,7 +88,7 @@ var _ = Describe("Agent Controller", func() {
 					Namespace: "default",
 				},
 				Spec: arkv1alpha1.AgentSpec{
-					ModelRef: nil, // No explicit model - should use default
+					ModelRef: &arkv1alpha1.AgentModelRef{Name: "default"}, // Webhook sets default model
 					Prompt:   "test prompt for default model",
 				},
 			}

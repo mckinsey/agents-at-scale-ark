@@ -33,6 +33,9 @@ spec:
           kind: Agent
           metadata:
             name: agent-no-model
+          spec:
+            modelRef:
+              name: default
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
