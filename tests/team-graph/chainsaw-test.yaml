@@ -4,6 +4,14 @@ metadata:
   name: team-graph
 spec:
   steps:
+  - name: deploy-ark-tenant
+    try:
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --wait --timeout=30s --namespace $NAMESPACE
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
   - name: setup-test-environment
     try:
     - script:

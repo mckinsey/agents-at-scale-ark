@@ -7,6 +7,14 @@ spec:
   # Selector strategy requires multiple AI model calls for participant selection
   # and can take longer than default timeouts, especially with maxTurns: 6
   steps:
+  - name: deploy-ark-tenant
+    try:
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --wait --timeout=30s --namespace $NAMESPACE
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
   - name: step-1
     try:
     - script:
