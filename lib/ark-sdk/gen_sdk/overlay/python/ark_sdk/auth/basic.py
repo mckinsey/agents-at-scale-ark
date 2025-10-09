@@ -39,7 +39,7 @@ class BasicAuthValidator:
             return username, password
             
         except Exception as e:
-            logger.warning(f"Error parsing basic auth header: {e}")
+            logger.error(f"Error parsing basic auth header: {e}")
             return None
     
     @staticmethod

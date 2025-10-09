@@ -144,12 +144,11 @@ class APIKeyService:
             return None
         return dt.isoformat()
     
-    async def create_api_key(self, request: APIKeyCreateRequest, user_id: Optional[str] = None) -> APIKeyCreateResponse:
+    async def create_api_key(self, request: APIKeyCreateRequest) -> APIKeyCreateResponse:
         """Create a new API key.
         
         Args:
             request: API key creation request
-            user_id: Optional user ID who created the key
             
         Returns:
             API key creation response with secret key
@@ -167,9 +166,6 @@ class APIKeyService:
         
         if request.expires_at:
             annotations[API_KEY_EXPIRES_AT_ANNOTATION] = self._format_datetime(request.expires_at)
-        
-        if user_id:
-            annotations["ark.mckinsey.com/created-by"] = user_id
         
         labels = {
             API_KEY_LABEL: "true",

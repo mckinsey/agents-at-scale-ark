@@ -31,11 +31,7 @@ async def create_api_key(
     """
     try:
         api_key_service = APIKeyService()
-        
-        # No user attribution in current global key model
-        user_id = None
-        
-        result = await api_key_service.create_api_key(body, user_id=user_id)
+        result = await api_key_service.create_api_key(body)
         
         logger.info(f"Created API key '{body.name}' with public key {result.public_key}")
         return result
