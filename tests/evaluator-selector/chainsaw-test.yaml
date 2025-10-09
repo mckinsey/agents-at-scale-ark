@@ -30,9 +30,6 @@ spec:
             file: manifests/a01-secret.yaml
         - apply:
             file: manifests/a02-model.yaml
-        - apply:
-            file: manifests/a03-evaluator-with-selector.yaml
-            timeout: 30s
         - assert:
             resource:
               apiVersion: ark.mckinsey.com/v1alpha1
@@ -43,6 +40,9 @@ spec:
                 conditions:
                 - type: ModelAvailable
                   status: "True"
+        - apply:
+            file: manifests/a03-evaluator-with-selector.yaml
+            timeout: 30s
         - assert:
             resource:
               apiVersion: ark.mckinsey.com/v1alpha1
