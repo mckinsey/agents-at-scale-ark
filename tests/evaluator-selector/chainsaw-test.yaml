@@ -17,9 +17,13 @@ spec:
               echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
             outputs:
             - name: azure
-              value: (json_parse($stdout))      
-        - apply:
-            file: manifests/a00-rbac.yaml
+              value: (json_parse($stdout))
+        - script:
+            content: |
+              helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+            env:
+            - name: NAMESPACE
+              value: ($namespace)
         - apply:
             file: manifests/a00-evaluator-llm-rbac.yaml
         - apply:
