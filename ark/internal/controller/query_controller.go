@@ -194,11 +194,13 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		TotalTokens:      tokenSummary.TotalTokens,
 	}
 
-	_ = r.updateStatus(opCtx, &obj, statusDone)
+	// Set overall query status based on whether any targets failed
+	queryStatus := r.determineQueryStatus(responses)
+	_ = r.updateStatus(opCtx, &obj, queryStatus)
 
 	duration := &metav1.Duration{Duration: time.Since(startTime)}
 	r.finalizeEventStream(opCtx, eventStream)
-	_ = r.updateStatusWithDuration(opCtx, &obj, statusDone, duration)
+	_ = r.updateStatusWithDuration(opCtx, &obj, queryStatus, duration)
 }
 
 // finalizeEventStream sends the completion message to the event stream and
@@ -337,34 +339,45 @@ func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.
 }
 
 func (r *QueryReconciler) reconcileQueue(ctx context.Context, query arkv1alpha1.Query, impersonatedClient client.Client, memory genai.MemoryInterface, tokenCollector *genai.TokenUsageCollector) ([]arkv1alpha1.Response, genai.EventStreamInterface, error) {
-	// Create event stream if streaming is requested
-	var eventStream genai.EventStreamInterface
-	if genai.IsStreamingEnabled(query) {
-		sessionId := query.Spec.SessionId
-		if sessionId == "" {
-			sessionId = string(query.UID)
-		}
-
-		var err error
-		eventStream, err = genai.NewEventStreamForQuery(ctx, r.Client, query.Namespace, sessionId, query.Name)
-		if err != nil {
-			// Configuration error - fail the query
-			return nil, nil, fmt.Errorf("streaming configuration error: %w", err)
-		}
-
-		if eventStream == nil {
-			// No streaming service configured - just warn
-			logf.FromContext(ctx).Info("Streaming requested but no streaming service configured",
-				"query", query.Name,
-				"namespace", query.Namespace)
-		}
+	eventStream, err := r.createEventStreamIfNeeded(ctx, query)
+	if err != nil {
+		return nil, nil, err
 	}
+
 	targets, err := r.resolveTargets(ctx, query, impersonatedClient)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to resolve targets: %w", err)
 	}
 
-	var allResponses []arkv1alpha1.Response
+	allResponses := r.executeTargetsInParallel(ctx, query, targets, impersonatedClient, memory, eventStream, tokenCollector)
+	return allResponses, eventStream, nil
+}
+
+func (r *QueryReconciler) createEventStreamIfNeeded(ctx context.Context, query arkv1alpha1.Query) (genai.EventStreamInterface, error) {
+	if !genai.IsStreamingEnabled(query) {
+		return nil, nil
+	}
+
+	sessionId := query.Spec.SessionId
+	if sessionId == "" {
+		sessionId = string(query.UID)
+	}
+
+	eventStream, err := genai.NewEventStreamForQuery(ctx, r.Client, query.Namespace, sessionId, query.Name)
+	if err != nil {
+		return nil, fmt.Errorf("streaming configuration error: %w", err)
+	}
+
+	if eventStream == nil {
+		logf.FromContext(ctx).Info("Streaming requested but no streaming service configured",
+			"query", query.Name,
+			"namespace", query.Namespace)
+	}
+
+	return eventStream, nil
+}
+
+func (r *QueryReconciler) executeTargetsInParallel(ctx context.Context, query arkv1alpha1.Query, targets []arkv1alpha1.QueryTarget, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, tokenCollector *genai.TokenUsageCollector) []arkv1alpha1.Response {
 	resultChan := make(chan targetResult, len(targets))
 	var wg sync.WaitGroup
 
@@ -380,25 +393,40 @@ func (r *QueryReconciler) reconcileQueue(ctx context.Context, query arkv1alpha1.
 	wg.Wait()
 	close(resultChan)
 
+	return r.processTargetResults(resultChan)
+}
+
+func (r *QueryReconciler) processTargetResults(resultChan chan targetResult) []arkv1alpha1.Response {
+	var allResponses []arkv1alpha1.Response
+
 	for result := range resultChan {
-		if result.err != nil {
-			return nil, eventStream, result.err
-		}
-		// Skip targets that were delegated to external execution engines (messages == nil)
-		if result.messages != nil {
-			rawJSON, err := serializeMessages(result.messages)
-			if err != nil {
-				return nil, eventStream, fmt.Errorf("failed to serialize messages for target %v: %w", result.target, err)
-			}
-			allResponses = append(allResponses, arkv1alpha1.Response{
-				Target:  result.target,
-				Content: messageToText(result.messages[len(result.messages)-1]), // Get last message explicitly
-				Raw:     rawJSON,
-			})
+		switch {
+		case result.err != nil:
+			allResponses = append(allResponses, r.createErrorResponse(result.target, result.err))
+		case result.messages == nil:
+			// Skip targets that were delegated to external execution engines (messages == nil)
+		default:
+			response := r.createSuccessResponse(result.target, result.messages)
+			allResponses = append(allResponses, response)
 		}
 	}
-	
-	return allResponses, eventStream, nil
+
+	return allResponses
+}
+
+func (r *QueryReconciler) createSuccessResponse(target arkv1alpha1.QueryTarget, messages []genai.Message) arkv1alpha1.Response {
+	rawJSON, err := serializeMessages(messages)
+	if err != nil {
+		serializationErr := fmt.Errorf("failed to serialize messages for target %v: %w", target, err)
+		return r.createErrorResponse(target, serializationErr)
+	}
+
+	return arkv1alpha1.Response{
+		Target:  target,
+		Content: messageToText(messages[len(messages)-1]),
+		Raw:     rawJSON,
+		Phase:   statusDone,
+	}
 }
 
 // messageToText extracts text content from a single OpenAI message format structure.
@@ -463,6 +491,33 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 		logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
 	}
 	return err
+}
+
+// determineQueryStatus checks if any responses have error phase and returns appropriate query status
+func (r *QueryReconciler) determineQueryStatus(responses []arkv1alpha1.Response) string {
+	for _, response := range responses {
+		if response.Phase == statusError {
+			return statusError
+		}
+	}
+	return statusDone
+}
+
+// createErrorResponse creates a standardized error response for a failed target
+func (r *QueryReconciler) createErrorResponse(target arkv1alpha1.QueryTarget, err error) arkv1alpha1.Response {
+	// Create error structure for Raw field - similar to successful message format
+	errorMessage := map[string]interface{}{
+		"error":   "target_execution_error",
+		"message": err.Error(),
+	}
+	errorRaw, _ := json.Marshal([]map[string]interface{}{errorMessage})
+
+	return arkv1alpha1.Response{
+		Target:  target,
+		Content: err.Error(),
+		Raw:     string(errorRaw),
+		Phase:   statusError,
+	}
 }
 
 func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query) {
