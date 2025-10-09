@@ -38,6 +38,8 @@ deployments:
           securityContext:
             runAsNonRoot: false
 
+        webhook:
+          enable: true
 
 dev:
   ark-controller:
