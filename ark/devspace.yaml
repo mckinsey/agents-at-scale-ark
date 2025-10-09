@@ -37,7 +37,6 @@ deployments:
           # Override security context for development
           securityContext:
             runAsNonRoot: false
-
         webhook:
           enable: true
 

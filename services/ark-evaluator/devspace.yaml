@@ -30,22 +30,19 @@ deployments:
       chart:
         path: ./chart
       values:
-        app:
-          image:
-            repository: ${runtime.images.ark-evaluator.image}
-            tag: ${runtime.images.ark-evaluator.tag}
-          # Override resources for local development
-          resources:
-            limits:
-              cpu: 1000m
-              memory: 1Gi
-              ephemeral-storage: 1Gi
-            requests:
-              cpu: 500m
-              memory: 512Mi
-              ephemeral-storage: 100Mi
-        httpRoute:
-          enabled: true
+        image:
+          repository: ${runtime.images.ark-evaluator.image}
+          tag: ${runtime.images.ark-evaluator.tag}
+        # Override resources for local development
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+            ephemeral-storage: 1Gi
+          requests:
+            cpu: 500m
+            memory: 512Mi
+            ephemeral-storage: 100Mi
 
 dev:
   ark-evaluator:
