@@ -277,6 +277,8 @@ spec:
                   properties:
                     content:
                       type: string
+                    phase:
+                      type: string
                     raw:
                       type: string
                     target:
