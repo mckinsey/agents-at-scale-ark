@@ -9,23 +9,13 @@ Develop and live-reload ARK services directly in your Kubernetes cluster using D
 
 ## Prerequisites
 - A running Kubernetes cluster (e.g., minikube)
-- kubectl and DevSpace installed
+- kubectl, uv and DevSpace installed
 - Docker running locally
 
 ## One-time setup
 ```bash
 # Install DevSpace
-brew install devspace
-
-# Install localhost gateway
-make localhost-gateway-install
-```
-**Note:** If you delete the deployment/pods of `localhost-gateway` and see `make: Nothing to be done for 'localhost-gateway-install'` while installing,
-then the stamp file from the previous needs to be deleted. Do a force reinstall with 
-```bash
-rm out/localhost-gateway/stamp-install
-make localhost-gateway-install
-```
+brew install devspace uv
 
 ## Start the dev environment
 
@@ -34,10 +24,19 @@ Each service contains their own devspace config. You can either start the entire
 devspace dev
 ```
 
-or start individual services
+
+If you wish to start individual services and wish to use localhost gateway routes, you must first start it
 
 ```bash
+devspace dev --dependency localhost-gateway
+```
+
+then start your desired service by running
+```bash
 devspace dev --dependency ark-api
+## or from the subdirectory itself
+cd services/ark-api
+devspace dev
 ```
 
 cert-manager or gateway-api are installed by default to disable them use env vars `ENABLE_CERT_MANAGER` and `ENABLE_GATEWAY_API_CRDS`
@@ -47,7 +46,7 @@ ENABLE_CERT_MANAGER=false devspace dev
 ```
 
 - ark-api and ark-dashboard deploy to namespace: default
-- ark-controller deploys to namespace: ark-system
+- ark-controller and localhost-gateway deploys to namespace: ark-system
 
 ## Check deployment status
 ```bash
@@ -56,12 +55,14 @@ devspace list deployments --namespace ark-system
 ```
 
 ## Open the dashboard
-- Via routes:
+
+You can find a link to the dashboard by getting the current available endpoints
+
 ```bash
-make routes
+devspace run routes
 ```
 
-- Or via port-forward:
+- Or you can port-forward the dashboard yourself:
 ```bash
 kubectl port-forward -n default svc/ark-dashboard 3000:3000
 # Then open http://localhost:3000

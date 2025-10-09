@@ -386,15 +386,18 @@ func (r *QueryReconciler) reconcileQueue(ctx context.Context, query arkv1alpha1.
 		}
 		// Skip targets that were delegated to external execution engines (messages == nil)
 		if result.messages != nil {
-			rawBytes, _ := json.Marshal(result.messages) // full original message array
+			rawJSON, err := serializeMessages(result.messages)
+			if err != nil {
+				return nil, eventStream, fmt.Errorf("failed to serialize messages for target %v: %w", result.target, err)
+			}
 			allResponses = append(allResponses, arkv1alpha1.Response{
 				Target:  result.target,
 				Content: messageToText(result.messages[len(result.messages)-1]), // Get last message explicitly
-				Raw:     string(rawBytes),
+				Raw:     rawJSON,
 			})
 		}
 	}
-
+	
 	return allResponses, eventStream, nil
 }
 
@@ -415,6 +418,32 @@ func messageToText(message genai.Message) string {
 			"message", message)
 		return ""
 	}
+}
+
+// serializeMessages converts OpenAI union message types to their actual content for JSON serialization
+func serializeMessages(messages []genai.Message) (string, error) {
+	var actualMessages []interface{}
+	for _, msg := range messages {
+		switch {
+		case msg.OfAssistant != nil:
+			actualMessages = append(actualMessages, msg.OfAssistant)
+		case msg.OfUser != nil:
+			actualMessages = append(actualMessages, msg.OfUser)
+		case msg.OfSystem != nil:
+			actualMessages = append(actualMessages, msg.OfSystem)
+		case msg.OfTool != nil:
+			actualMessages = append(actualMessages, msg.OfTool)
+		case msg.OfFunction != nil:
+			actualMessages = append(actualMessages, msg.OfFunction)
+		default:
+			return "", fmt.Errorf("unknown message type encountered during serialization")
+		}
+	}
+	rawBytes, err := json.Marshal(actualMessages)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal messages: %w", err)
+	}
+	return string(rawBytes), nil
 }
 
 func (r *QueryReconciler) updateStatus(ctx context.Context, query *arkv1alpha1.Query, status string) error {
