@@ -20,8 +20,20 @@ spec:
         outputs:
         - name: azure
           value: (json_parse($stdout))
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - apply:
-        file: manifests/*.yaml
+        file: manifests/a01-secret.yaml
+    - apply:
+        file: manifests/a02-model.yaml
+    - apply:
+        file: manifests/a03-agent.yaml
+    - apply:
+        file: manifests/a04-query.yaml
 
   - name: verify-model-ready
     try:
