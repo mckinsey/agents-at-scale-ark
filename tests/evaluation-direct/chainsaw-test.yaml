@@ -24,7 +24,13 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
     - apply:
-        file: manifests/*.yaml
+        file: manifests/a01-secret.yaml
+    - apply:
+        file: manifests/a02-model.yaml
+    - apply:
+        file: manifests/a03-evaluator.yaml
+    - apply:
+        file: manifests/a04-golden-examples-configmap.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -50,6 +56,8 @@ spec:
           kind: ConfigMap
           metadata:
             name: golden-examples
+    - apply:
+        file: manifests/a05-evaluation.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
