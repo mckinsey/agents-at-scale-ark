@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   tfe-plan:
-    runs-on: ${{ vars.GH_RUNNER_LABEL }}
+    runs-on: ${{vars.GH_RUNNER_LABEL || 'ubuntu-latest' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
