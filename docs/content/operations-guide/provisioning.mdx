@@ -1,6 +1,6 @@
 ## Sample cloud infrastructure setup and provisioning pipelines 
 
-/infrastructure folder contains Terraform modules and top-level configurations intended to provision necessary infrastructure on the two main cloud providers (AWS, GCP). 
+`/infrastructure` folder contains Terraform modules and top-level configurations intended to provision necessary infrastructure on the two main cloud providers (AWS, GCP). 
 It provisions a managed Kubernetes cluster up and running, so application teams can deploy and iterate. 
 
 **Security & compliance disclaimer** - 
@@ -20,18 +20,18 @@ For more details, please, refer to [Disclaimer](../../disclaimer.mdx).
 - Modules focus on fast bootstrap and essential resources (VPC/network, cluster, node pools, IAM/service accounts, and basic storage).
 - Users MUST extend and harden these modules to meet their organization’s security, compliance, and operational requirements.
 
-##Provisioning supports 2 approaches:
-- local - for ad-hoc PoC or short Demo
-- fork-based - for long-term use and custom development
+## Provisioning supports 2 approaches:
+- *local* - for ad-hoc PoC or short Demo
+- *fork-based* - for long-term use and custom development
 
-###Provision infrastructure locally:
-####AWS:
+### Provision infrastructure locally
+#### AWS:
     ```
     - AWS CLI installed and configured: https://docs.aws.amazon.com/cli/
     - Terraform (recommended >= 1.0)
     - AWS credentials with permissions to create VPC, EKS, EC2, IAM, ELB, S3 (or an appropriately-scoped IAM role) 
   ```
-####GCP:
+#### GCP:
     ```
     - Google Cloud SDK (gcloud) installed and authenticated: https://cloud.google.com/sdk
     - Terraform (recommended >= 1.0)
@@ -41,11 +41,11 @@ For more details, please, refer to [Disclaimer](../../disclaimer.mdx).
 
 Once prerequisites are in place, navigate to the respective folder:
 
-####AWS:
+#### AWS:
   ```
   cd /infrastructure/providers/aws
   ```
-####GCP:
+#### GCP:
   ```
     cd /infrastructure/providers/gcp
     ```
@@ -64,7 +64,7 @@ Overall provisioning can take up to 10 minutes.
 
 Configure GitHub OIDC for provisioning and deployment:
 
-####AWS:
+#### AWS:
   ```
 resource "aws_iam_role" "github_oidc_role" {
   name        = "github-oidc-role"
@@ -90,7 +90,7 @@ data "aws_iam_policy" "github_oidc_administrator_policy" {
 
 ``` 
 Example of the policy you can find in `infrastructure/samples/github_oidc_assume_role_policy.json` - Replace `ACCOUNT_ID`, `ORG`, `REPO`, `REF` with respective values, to further harden the policy, you can add filter for your github runners IPs or other organization-specific requirements.
-####GCP:
+#### GCP:
   ```
 resource "google_service_account" "github_oidc_sa" {
   project    = var.gcp_project_id
@@ -133,7 +133,7 @@ Create S3 or GCS bucket in the same region
 
 Populate the following secrets and variable in the GitHub repo:
 
-####AWS:
+#### AWS:
   Secrets:
   ```
     AWS_GH_OIDC_ROLE_ARN
@@ -144,7 +144,7 @@ Populate the following secrets and variable in the GitHub repo:
     ```
     AWS_REGION
     ```
-####GCP:
+#### GCP:
   Secrets:
   ```
 GCP_PROJECT_ID
