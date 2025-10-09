@@ -2,9 +2,9 @@
 
 # Application configuration
 app:
+  name: ark-api-a2a
   image:
     repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-api-a2a
-    tag: "{{ .Chart.AppVersion | default .Chart.Version }}"
     pullPolicy: IfNotPresent
 
 # Global annotations added to HTTPRoute resources
