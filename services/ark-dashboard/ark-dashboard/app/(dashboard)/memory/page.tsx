@@ -3,14 +3,11 @@
 import { MemorySection } from "@/components/sections/memory-section"
 import { useSearchParams } from "next/navigation"
 import { Suspense } from "react"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbList,
-  BreadcrumbPage
-} from "@/components/ui/breadcrumb"
-import { Separator } from "@/components/ui/separator"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { BreadcrumbElement, PageHeader } from "@/components/common/page-header"
+
+const breadcrumbs: BreadcrumbElement[] = [
+  { href: '/', label: "ARK Dashboard" }
+]
 
 function MemoryContent() {
   const searchParams = useSearchParams()
@@ -23,17 +20,7 @@ function MemoryContent() {
 
   return (
     <>
-      <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-        <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbPage>Memory</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-      </header>
+      <PageHeader breadcrumbs={breadcrumbs} currentPage="Memory" />
       <div className="flex flex-1 flex-col">
         <MemorySection initialFilters={initialFilters} />
       </div>
