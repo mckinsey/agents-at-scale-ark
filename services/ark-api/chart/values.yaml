@@ -39,9 +39,6 @@ app:
     # - "open": No authentication (development only)
     - name: AUTH_MODE
       value: "open"
-    # Optional: API key storage namespace (defaults to ark-system)
-    - name: API_KEY_NAMESPACE
-      value: "ark-system"
   # Optional: Import entire secrets/configmaps as env vars
   # envFrom:
   #   - secretRef:

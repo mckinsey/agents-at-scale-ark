@@ -107,10 +107,9 @@ AUTH_MODE=hybrid        # Recommended: support both JWT and API keys
 AUTH_MODE=sso           # JWT only
 AUTH_MODE=basic         # API keys only  
 AUTH_MODE=open          # No auth (development)
-
-# API Key Storage (optional)
-API_KEY_NAMESPACE=ark-system  # Default: ark-system
 ```
+
+**Note**: API keys are always stored in the `ark-system` namespace for centralized management and security. The RBAC configuration grants the service account permissions to access secrets in both the release namespace and `ark-system`.
 
 ### AUTH_MODE Behavior
 
@@ -161,72 +160,9 @@ AUTH_MODE=hybrid
 AUTH_MODE=open
 ```
 
-## Usage Examples
+## Usage
 
-### Python with API Keys
-```python
-import requests
-from requests.auth import HTTPBasicAuth
-
-# Using requests with basic auth
-response = requests.get(
-    "https://ark-api.example.com/v1/agents",
-    auth=HTTPBasicAuth("pk-ark-xxxxx", "sk-ark-xxxxx")
-)
-
-# Using requests with custom headers
-import base64
-credentials = base64.b64encode(b"pk-ark-xxxxx:sk-ark-xxxxx").decode()
-response = requests.get(
-    "https://ark-api.example.com/v1/agents",
-    headers={"Authorization": f"Basic {credentials}"}
-)
-```
-
-### JavaScript/Node.js with API Keys
-```javascript
-// Using fetch with basic auth
-const credentials = btoa("pk-ark-xxxxx:sk-ark-xxxxx");
-const response = await fetch("https://ark-api.example.com/v1/agents", {
-    headers: {
-        "Authorization": `Basic ${credentials}`
-    }
-});
-
-// Using axios
-const axios = require('axios');
-const response = await axios.get("https://ark-api.example.com/v1/agents", {
-    auth: {
-        username: "pk-ark-xxxxx",
-        password: "sk-ark-xxxxx"
-    }
-});
-```
-
-### Curl Examples
-```bash
-# List all agents using API key
-curl -u pk-ark-xxxxx:sk-ark-xxxxx \
-  https://ark-api.example.com/v1/agents
-
-# Create a new agent using API key
-curl -u pk-ark-xxxxx:sk-ark-xxxxx \
-  -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"name": "my-agent", "description": "Test agent"}' \
-  https://ark-api.example.com/v1/agents
-
-# Get API key info using JWT (dashboard user)
-curl -H "Authorization: Bearer <jwt-token>" \
-  https://ark-api.example.com/v1/api-keys
-
-# Create a new API key using JWT
-curl -H "Authorization: Bearer <jwt-token>" \
-  -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Production Service", "expires_at": "2025-12-31T23:59:59Z"}' \
-  https://ark-api.example.com/v1/api-keys
-```
+For detailed usage examples including API key authentication, JWT authentication, and code examples in multiple languages, see the [Authentication Guide](../../docs/content/developer-guide/authentication.mdx).
 
 ## Notes
 - Requires Python 3.11+ and uv package manager

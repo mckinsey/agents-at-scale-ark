@@ -395,7 +395,7 @@ DELETE /v1/api-keys/{public_key}
 - **Expiration**: API keys can have optional expiration dates for enhanced security
 - **Soft Delete**: Revoked API keys are marked inactive but retained for audit trails
 - **Global Access**: API keys provide access to all ARK APIs (no namespace restrictions currently)
-- **Kubernetes Storage**: API keys are stored as Kubernetes secrets in the configured namespace
+- **Centralized Storage**: API keys are stored as Kubernetes secrets in the `ark-system` namespace for centralized management
 
 ## Security Features
 
@@ -527,8 +527,6 @@ Monitor authentication flow in browser developer tools and server logs.
     OIDC_ISSUER_URL="https://your-oidc-provider.com"
     OIDC_CLIENT_ID="your-client-id"
     OIDC_CLIENT_SECRET="your-client-secret"
-    # API key configuration for services
-    API_KEY_NAMESPACE="ark-system"
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -576,7 +574,6 @@ Monitor authentication flow in browser developer tools and server logs.
     AUTH_URL="http://localhost:3000/api/auth"
     AUTH_MODE="basic"
     # OIDC variables not required in basic mode
-    API_KEY_NAMESPACE="ark-system"  # Optional: namespace for API key storage
     ```
   </Tabs.Tab>
   <Tabs.Tab>
