@@ -3,6 +3,7 @@
 import secrets
 import bcrypt
 import base64
+import json
 import logging
 import re
 from datetime import datetime, timezone
@@ -22,11 +23,7 @@ logger = logging.getLogger(__name__)
 
 # Constants for API key storage
 API_KEY_TYPE = ARK_PREFIX + "api-key"  # Used for both secret type and label key
-API_KEY_NAME_ANNOTATION = ARK_PREFIX + "api-key-name"
-API_KEY_CREATED_AT_ANNOTATION = ARK_PREFIX + "created-at"
-API_KEY_EXPIRES_AT_ANNOTATION = ARK_PREFIX + "expires-at"
-API_KEY_LAST_USED_ANNOTATION = ARK_PREFIX + "last-used-at"
-API_KEY_DELETED_AT_ANNOTATION = ARK_PREFIX + "deleted-at"
+API_KEY_ANNOTATION = ARK_PREFIX + "api-key-metadata"  # JSON annotation with all API key metadata
 
 # API Key generation constants
 # These values determine the length of the random token portion of API keys
@@ -144,6 +141,68 @@ class APIKeyService:
             return None
         return dt.isoformat()
     
+    def _create_api_key_annotation(
+        self,
+        name: str,
+        created_at: datetime,
+        expires_at: Optional[datetime] = None,
+        last_used_at: Optional[datetime] = None,
+        deleted_at: Optional[datetime] = None
+    ) -> str:
+        """Create JSON annotation for API key metadata.
+        
+        Args:
+            name: API key name
+            created_at: Creation timestamp
+            expires_at: Optional expiration timestamp
+            last_used_at: Optional last used timestamp
+            deleted_at: Optional deletion timestamp
+            
+        Returns:
+            JSON string with API key metadata
+        """
+        metadata = {
+            "name": name,
+            "createdAt": self._format_datetime(created_at)
+        }
+        
+        if expires_at:
+            metadata["expiresAt"] = self._format_datetime(expires_at)
+        if last_used_at:
+            metadata["lastUsedAt"] = self._format_datetime(last_used_at)
+        if deleted_at:
+            metadata["deletedAt"] = self._format_datetime(deleted_at)
+        
+        return json.dumps(metadata)
+    
+    def _parse_api_key_annotation(self, annotation_json: str) -> Dict[str, Any]:
+        """Parse JSON annotation to extract API key metadata.
+        
+        Args:
+            annotation_json: JSON string from annotation
+            
+        Returns:
+            Dictionary with parsed metadata
+        """
+        try:
+            metadata = json.loads(annotation_json)
+            return {
+                "name": metadata.get("name", "Unknown"),
+                "created_at": self._parse_datetime(metadata.get("createdAt")),
+                "expires_at": self._parse_datetime(metadata.get("expiresAt")),
+                "last_used_at": self._parse_datetime(metadata.get("lastUsedAt")),
+                "deleted_at": self._parse_datetime(metadata.get("deletedAt"))
+            }
+        except (json.JSONDecodeError, Exception) as e:
+            logger.error(f"Error parsing API key annotation: {e}")
+            return {
+                "name": "Unknown",
+                "created_at": None,
+                "expires_at": None,
+                "last_used_at": None,
+                "deleted_at": None
+            }
+    
     async def create_api_key(self, request: APIKeyCreateRequest) -> APIKeyCreateResponse:
         """Create a new API key.
         
@@ -159,13 +218,16 @@ class APIKeyService:
         
         # Prepare metadata
         now = datetime.now(timezone.utc)
-        annotations = {
-            API_KEY_NAME_ANNOTATION: request.name,
-            API_KEY_CREATED_AT_ANNOTATION: self._format_datetime(now),
-        }
         
-        if request.expires_at:
-            annotations[API_KEY_EXPIRES_AT_ANNOTATION] = self._format_datetime(request.expires_at)
+        api_key_json = self._create_api_key_annotation(
+            name=request.name,
+            created_at=now,
+            expires_at=request.expires_at
+        )
+        
+        annotations = {
+            API_KEY_ANNOTATION: api_key_json
+        }
         
         labels = {
             API_KEY_TYPE: "true",
@@ -226,14 +288,16 @@ class APIKeyService:
         api_keys = []
         for secret in secrets.items:
             try:
-                # Parse metadata
+                # Parse JSON annotation
                 annotations = secret.metadata.annotations or {}
+                api_key_json = annotations.get(API_KEY_ANNOTATION, "{}")
+                metadata = self._parse_api_key_annotation(api_key_json)
                 
-                name = annotations.get(API_KEY_NAME_ANNOTATION, "Unknown")
-                created_at = self._parse_datetime(annotations.get(API_KEY_CREATED_AT_ANNOTATION))
-                expires_at = self._parse_datetime(annotations.get(API_KEY_EXPIRES_AT_ANNOTATION))
-                last_used_at = self._parse_datetime(annotations.get(API_KEY_LAST_USED_ANNOTATION))
-                deleted_at = self._parse_datetime(annotations.get(API_KEY_DELETED_AT_ANNOTATION))
+                name = metadata["name"]
+                created_at = metadata["created_at"]
+                expires_at = metadata["expires_at"]
+                last_used_at = metadata["last_used_at"]
+                deleted_at = metadata["deleted_at"]
                 
                 # Get data from secret
                 data = secret.data or {}
@@ -293,23 +357,27 @@ class APIKeyService:
             secret_key_hash = base64.b64decode(data.get("secret_key_hash", "")).decode('utf-8') if data.get("secret_key_hash") else ""
             is_active = base64.b64decode(data.get("is_active", "")).decode('utf-8') == "true" if data.get("is_active") else True
             
+            # Parse JSON annotation
+            api_key_json = annotations.get(API_KEY_ANNOTATION, "{}")
+            metadata = self._parse_api_key_annotation(api_key_json)
+            
             # Verify public key matches
             if stored_public_key != public_key:
                 return None
             
             # Check if key is active (not soft-deleted)
-            deleted_at = self._parse_datetime(annotations.get(API_KEY_DELETED_AT_ANNOTATION))
+            deleted_at = metadata["deleted_at"]
             if not is_active or deleted_at is not None:
                 return None
             
             # Check expiration
-            expires_at = self._parse_datetime(annotations.get(API_KEY_EXPIRES_AT_ANNOTATION))
+            expires_at = metadata["expires_at"]
             if expires_at and expires_at < datetime.now(timezone.utc):
                 return None
             
             return {
                 "id": str(secret.metadata.uid),
-                "name": annotations.get(API_KEY_NAME_ANNOTATION, "Unknown"),
+                "name": metadata["name"],
                 "public_key": public_key,
                 "secret_key_hash": secret_key_hash,
                 "is_active": is_active,
@@ -367,11 +435,25 @@ class APIKeyService:
                     namespace=self.namespace
                 )
                 
+                # Parse existing JSON annotation
+                annotations = secret.metadata.annotations or {}
+                api_key_json = annotations.get(API_KEY_ANNOTATION, "{}")
+                metadata = self._parse_api_key_annotation(api_key_json)
+                
+                # Update last used timestamp
+                updated_json = self._create_api_key_annotation(
+                    name=metadata["name"],
+                    created_at=metadata["created_at"] or now,
+                    expires_at=metadata["expires_at"],
+                    last_used_at=now,
+                    deleted_at=metadata["deleted_at"]
+                )
+                
                 # Update annotations
                 if not secret.metadata.annotations:
                     secret.metadata.annotations = {}
                 
-                secret.metadata.annotations[API_KEY_LAST_USED_ANNOTATION] = self._format_datetime(now)
+                secret.metadata.annotations[API_KEY_ANNOTATION] = updated_json
                 
                 # Patch the secret
                 await v1.patch_namespaced_secret(
@@ -406,11 +488,25 @@ class APIKeyService:
                     namespace=self.namespace
                 )
                 
+                # Parse existing JSON annotation
+                annotations = secret.metadata.annotations or {}
+                api_key_json = annotations.get(API_KEY_ANNOTATION, "{}")
+                metadata = self._parse_api_key_annotation(api_key_json)
+                
+                # Update deleted timestamp
+                updated_json = self._create_api_key_annotation(
+                    name=metadata["name"],
+                    created_at=metadata["created_at"] or now,
+                    expires_at=metadata["expires_at"],
+                    last_used_at=metadata["last_used_at"],
+                    deleted_at=now
+                )
+                
                 # Update to mark as deleted (soft delete)
                 if not secret.metadata.annotations:
                     secret.metadata.annotations = {}
                 
-                secret.metadata.annotations[API_KEY_DELETED_AT_ANNOTATION] = self._format_datetime(now)
+                secret.metadata.annotations[API_KEY_ANNOTATION] = updated_json
                 
                 # Update secret data to mark as inactive
                 if not secret.string_data:

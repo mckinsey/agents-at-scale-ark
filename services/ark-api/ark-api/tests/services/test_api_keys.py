@@ -5,8 +5,9 @@ from unittest.mock import Mock, patch, AsyncMock
 from datetime import datetime, timezone, timedelta
 import base64
 import bcrypt
+import json
 
-from ark_api.services.api_keys import APIKeyService, API_KEY_TYPE
+from ark_api.services.api_keys import APIKeyService, API_KEY_TYPE, API_KEY_ANNOTATION
 from ark_api.models.auth import APIKeyCreateRequest
 
 
@@ -153,12 +154,14 @@ class TestAPIKeyServiceIntegration(unittest.TestCase):
         mock_api_client_instance = AsyncMock()
         mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
         
-        # Mock secret list response
+        # Mock secret list response with JSON annotation
         mock_secret = Mock()
         mock_secret.metadata.uid = "test-uid-123"
         mock_secret.metadata.annotations = {
-            "ark.mckinsey.com/api-key-name": "Test Key",
-            "ark.mckinsey.com/created-at": "2024-01-01T00:00:00+00:00"
+            API_KEY_ANNOTATION: json.dumps({
+                "name": "Test Key",
+                "createdAt": "2024-01-01T00:00:00+00:00"
+            })
         }
         mock_secret.data = {
             "public_key": base64.b64encode(b"pk-ark-test").decode(),
@@ -217,7 +220,9 @@ class TestAPIKeyServiceIntegration(unittest.TestCase):
         # Check that the secret was marked as deleted
         patch_call_args = mock_api_instance.patch_namespaced_secret.call_args
         patched_secret = patch_call_args[1]["body"]
-        self.assertIn("ark.mckinsey.com/deleted-at", patched_secret.metadata.annotations)
+        self.assertIn(API_KEY_ANNOTATION, patched_secret.metadata.annotations)
+        annotation_data = json.loads(patched_secret.metadata.annotations[API_KEY_ANNOTATION])
+        self.assertIn("deletedAt", annotation_data)
         self.assertEqual(patched_secret.string_data["is_active"], "false")
     
     @patch('ark_api.services.api_keys.ApiClient')
@@ -232,11 +237,15 @@ class TestAPIKeyServiceIntegration(unittest.TestCase):
         secret_key = "sk-ark-test-secret"
         hashed = self.service._hash_secret_key(secret_key)
         
-        # Mock secret response
+        # Mock secret response with JSON annotation
         mock_secret = Mock()
         mock_secret.type = "ark.mckinsey.com/api-key"
+        mock_secret.metadata.uid = "test-uid-123"
         mock_secret.metadata.annotations = {
-            "ark.mckinsey.com/api-key-name": "Test Key"
+            API_KEY_ANNOTATION: json.dumps({
+                "name": "Test Key",
+                "createdAt": "2024-01-01T00:00:00+00:00"
+            })
         }
         mock_secret.data = {
             "public_key": base64.b64encode(b"pk-ark-test").decode(),
