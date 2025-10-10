@@ -122,7 +122,9 @@ jobs:
         with:
           go-version: "1.24"
           cache: true
-          cache-dependency-path: ark/go.sum
+          cache-dependency-path: |
+            ark/go.sum
+            tools/fark/go.sum
 
       - name: Install gcov2lcov
         run: go install github.com/jandelgado/gcov2lcov@latest
@@ -156,7 +158,9 @@ jobs:
         with:
           go-version: "1.24"
           cache: true
-          cache-dependency-path: ark/go.sum
+          cache-dependency-path: |
+            ark/go.sum
+            tools/fark/go.sum
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
