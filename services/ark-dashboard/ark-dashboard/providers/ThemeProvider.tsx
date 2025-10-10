@@ -1,11 +1,24 @@
 "use client"
 
+import * as React from "react"
 import { ThemeProvider as NextThemesProvider } from "next-themes"
-import { ComponentProps } from "react"
+import { useAtomValue } from "jotai"
+import { isExperimentalDarkModeEnabledAtom } from "@/atoms/experimental-features"
 
 export function ThemeProvider({
-  children,
-  ...props
-}: ComponentProps<typeof NextThemesProvider>) {
-  return <NextThemesProvider {...props}>{children}</NextThemesProvider>
+  children
+}: React.ComponentProps<typeof NextThemesProvider>) {
+  const isExperimentalDarkModeEnabled = useAtomValue(isExperimentalDarkModeEnabledAtom)
+
+  return (
+    <NextThemesProvider
+      attribute="class"
+      defaultTheme="light"
+      forcedTheme={isExperimentalDarkModeEnabled ? "dark" : undefined}
+      enableSystem
+      disableTransitionOnChange
+    >
+      {children}
+    </NextThemesProvider>
+  )
 }

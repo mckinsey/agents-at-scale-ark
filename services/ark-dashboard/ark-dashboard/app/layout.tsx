@@ -2,10 +2,7 @@ import type { Metadata } from "next";
 
 import "./globals.css";
 import localFont from "next/font/local";
-import { Toaster } from "@/components/ui/sonner"
-import { SSOModeProvider, OpenModeProvider } from "@/providers/AuthProviders";
 import { GlobalProviders } from "@/providers/GlobalProviders";
-import { ThemeProvider } from "@/providers/ThemeProvider";
 
 const geistSans = localFont({
   src: [
@@ -53,25 +50,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const isSSOEnabled = process.env.AUTH_MODE === "sso";
-  const AuthProvider = isSSOEnabled ? SSOModeProvider : OpenModeProvider;
-
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="light"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <AuthProvider>
-            <GlobalProviders>{children}</GlobalProviders>
-          </AuthProvider>
-          <Toaster richColors closeButton visibleToasts={5} />
-        </ThemeProvider>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <GlobalProviders>{children}</GlobalProviders>
       </body>
     </html>
   );
