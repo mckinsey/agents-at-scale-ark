@@ -148,7 +148,7 @@ func (ap *AzureProvider) createClient(ctx context.Context) openai.Client {
 		option.WithQueryAdd("api-version", ap.APIVersion),
 	}
 
-	options = applyHeadersToOptions(ap.Headers, options, ap.Model)
+	options = applyHeadersToOptions(ctx, ap.Headers, options, ap.Model)
 
 	return openai.NewClient(options...)
 }

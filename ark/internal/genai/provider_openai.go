@@ -268,7 +268,7 @@ func (op *OpenAIProvider) createClient(ctx context.Context) openai.Client {
 		option.WithHTTPClient(httpClient),
 	}
 
-	options = applyHeadersToOptions(op.Headers, options, op.Model)
+	options = applyHeadersToOptions(ctx, op.Headers, options, op.Model)
 
 	return openai.NewClient(options...)
 }

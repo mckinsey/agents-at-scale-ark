@@ -3,31 +3,8 @@
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-type ModelHeaderValue struct {
-	// +kubebuilder:validation:Optional
-	Value string `json:"value,omitempty"`
-	// +kubebuilder:validation:Optional
-	ValueFrom *ModelHeaderValueSource `json:"valueFrom,omitempty"`
-}
-
-type ModelHeaderValueSource struct {
-	// +kubebuilder:validation:Optional
-	SecretKeyRef *corev1.SecretKeySelector `json:"secretKeyRef,omitempty"`
-	// +kubebuilder:validation:Optional
-	ConfigMapKeyRef *corev1.ConfigMapKeySelector `json:"configMapKeyRef,omitempty"`
-}
-
-type ModelHeader struct {
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
-	// +kubebuilder:validation:Required
-	Value ModelHeaderValue `json:"value"`
-}
 
 // ModelConfig holds type-specific configuration parameters
 type ModelConfig struct {
@@ -48,7 +25,7 @@ type AzureModelConfig struct {
 	// +kubebuilder:validation:Optional
 	APIVersion *ValueSource `json:"apiVersion,omitempty"`
 	// +kubebuilder:validation:Optional
-	Headers []ModelHeader `json:"headers,omitempty"`
+	Headers []Header `json:"headers,omitempty"`
 	// +kubebuilder:validation:Optional
 	Properties map[string]ValueSource `json:"properties,omitempty"`
 }
@@ -60,7 +37,7 @@ type OpenAIModelConfig struct {
 	// +kubebuilder:validation:Required
 	APIKey ValueSource `json:"apiKey"`
 	// +kubebuilder:validation:Optional
-	Headers []ModelHeader `json:"headers,omitempty"`
+	Headers []Header `json:"headers,omitempty"`
 	// +kubebuilder:validation:Optional
 	Properties map[string]ValueSource `json:"properties,omitempty"`
 }

@@ -293,38 +293,8 @@ func BuildMCPServerURL(ctx context.Context, k8sClient client.Client, mcpServerCR
 	return resolver.ResolveValueSource(ctx, address, mcpServerCRD.Namespace)
 }
 
-// ResolveHeaderValue resolves header values from secrets (v1alpha1)
+// ResolveHeaderValue resolves header values from secrets or configmaps (v1alpha1)
 func ResolveHeaderValue(ctx context.Context, k8sClient client.Client, header arkv1alpha1.Header, namespace string) (string, error) {
-	if header.Value.Value != "" {
-		return header.Value.Value, nil
-	}
-
-	if header.Value.ValueFrom != nil && header.Value.ValueFrom.SecretKeyRef != nil {
-		secretRef := header.Value.ValueFrom.SecretKeyRef
-		secret := &corev1.Secret{}
-
-		secretKey := types.NamespacedName{
-			Name:      secretRef.Name,
-			Namespace: namespace,
-		}
-
-		if err := k8sClient.Get(ctx, secretKey, secret); err != nil {
-			return "", fmt.Errorf("failed to get secret %s/%s: %w", namespace, secretRef.Name, err)
-		}
-
-		value, exists := secret.Data[secretRef.Key]
-		if !exists {
-			return "", fmt.Errorf("key %s not found in secret %s/%s", secretRef.Key, namespace, secretRef.Name)
-		}
-
-		return string(value), nil
-	}
-
-	return "", fmt.Errorf("header value must specify either value or valueFrom.secretKeyRef")
-}
-
-// ResolveModelHeaderValue resolves model header values from secrets or configmaps
-func ResolveModelHeaderValue(ctx context.Context, k8sClient client.Client, header arkv1alpha1.ModelHeader, namespace string) (string, error) {
 	if header.Value.Value != "" {
 		return header.Value.Value, nil
 	}

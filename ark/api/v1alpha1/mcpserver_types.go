@@ -3,29 +3,8 @@
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-type HeaderValue struct {
-	// +kubebuilder:validation:Optional
-	Value string `json:"value,omitempty"`
-	// +kubebuilder:validation:Optional
-	ValueFrom *HeaderValueSource `json:"valueFrom,omitempty"`
-}
-
-type HeaderValueSource struct {
-	// +kubebuilder:validation:Optional
-	SecretKeyRef *corev1.SecretKeySelector `json:"secretKeyRef,omitempty"`
-}
-
-type Header struct {
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
-	// +kubebuilder:validation:Required
-	Value HeaderValue `json:"value"`
-}
 
 type MCPServerSpec struct {
 	// +kubebuilder:validation:Required

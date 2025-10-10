@@ -98,7 +98,7 @@ func loadModelCRD(ctx context.Context, k8sClient client.Client, name, namespace 
 }
 
 // resolveModelHeaders resolves custom headers from Model configuration
-func resolveModelHeaders(ctx context.Context, k8sClient client.Client, headers []arkv1alpha1.ModelHeader, modelName, namespace, providerName string) (map[string]string, error) {
+func resolveModelHeaders(ctx context.Context, k8sClient client.Client, headers []arkv1alpha1.Header, modelName, namespace, providerName string) (map[string]string, error) {
 	if len(headers) == 0 {
 		return nil, nil
 	}
@@ -108,7 +108,7 @@ func resolveModelHeaders(ctx context.Context, k8sClient client.Client, headers [
 	log.Info("resolving custom headers for model", "provider", providerName, "model", modelName, "namespace", namespace, "header_count", len(headers))
 
 	for _, header := range headers {
-		value, err := ResolveModelHeaderValue(ctx, k8sClient, header, namespace)
+		value, err := ResolveHeaderValue(ctx, k8sClient, header, namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve %s header %s: %w", providerName, header.Name, err)
 		}
@@ -120,12 +120,12 @@ func resolveModelHeaders(ctx context.Context, k8sClient client.Client, headers [
 }
 
 // applyHeadersToOptions applies custom headers to OpenAI client options
-func applyHeadersToOptions(headers map[string]string, options []option.RequestOption, modelName string) []option.RequestOption {
+func applyHeadersToOptions(ctx context.Context, headers map[string]string, options []option.RequestOption, modelName string) []option.RequestOption {
 	if len(headers) == 0 {
 		return options
 	}
 
-	log := logf.Log
+	log := logf.FromContext(ctx)
 	log.Info("applying custom headers to client", "model", modelName, "header_count", len(headers))
 	for name, value := range headers {
 		log.V(1).Info("applying custom header", "model", modelName, "header_name", name, "header_value_length", len(value))
