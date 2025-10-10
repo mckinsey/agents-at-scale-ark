@@ -22,11 +22,9 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
     - apply:
-        file: manifests/a01-secret.yaml
-    - apply:
-        file: manifests/a02-model.yaml
+        file: manifests/*.yaml
 
-  - name: wait-for-model-ready
+  - name: wait-for-resources
     try:
     - assert:
         resource:
@@ -39,20 +37,12 @@ spec:
             - type: ModelAvailable
               status: "True"
         timeout: 30s
-
-  - name: apply-agent-and-query
-    try:
-    - apply:
-        file: manifests/a03-agent.yaml
-    - apply:
-        file: manifests/a04-query.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Agent
           metadata:
             name: token-test-agent
-        timeout: 10s
 
   - name: wait-for-query-completion
     try:

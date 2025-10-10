@@ -27,13 +27,7 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
     - apply:
-        file: manifests/a01-secret.yaml
-    - apply:
-        file: manifests/a02-model.yaml
-    - apply:
-        file: manifests/a03-agent.yaml
-    - apply:
-        file: manifests/a04-query.yaml
+        file: manifests/*.yaml
 
   - name: verify-model-ready
     try:

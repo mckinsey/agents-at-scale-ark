@@ -24,11 +24,7 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
     - apply:
-        file: manifests/a00-evaluator-llm-rbac.yaml
-    - apply:
-        file: manifests/a01-secret.yaml
-    - apply:
-        file: manifests/a02-model.yaml
+        file: manifests/*.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -39,14 +35,6 @@ spec:
             conditions:
             - type: ModelAvailable
               status: "True"
-    - apply:
-        file: manifests/a03-evaluator.yaml
-    - apply:
-        file: manifests/a04-golden-examples-configmap.yaml
-    - apply:
-        file: manifests/a05-agent.yaml
-    - apply:
-        file: manifests/a06-query.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

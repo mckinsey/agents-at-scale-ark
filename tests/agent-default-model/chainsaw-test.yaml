@@ -22,13 +22,7 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
     - apply:
-        file: manifests/a01-secret.yaml
-    - apply:
-        file: manifests/a02-default-model.yaml
-    - apply:
-        file: manifests/a03-agent-no-model.yaml
-    - apply:
-        file: manifests/a04-query.yaml
+        file: manifests/*.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
