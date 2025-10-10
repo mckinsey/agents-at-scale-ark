@@ -145,7 +145,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 logger.error(f"JWT authentication error: {e}")
                 auth_error = "JWT authentication failed"
         
-        # Try basic authentication if enabled and JWT didn't succeed
+        # Try basic authentication if enabled (JWT block not executed)
         elif basic_enabled and auth_header.startswith(AuthHeader.BASIC):
             try:
                 # Parse basic auth credentials

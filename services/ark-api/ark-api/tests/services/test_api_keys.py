@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 import base64
 import bcrypt
 
-from ark_api.services.api_keys import APIKeyService
+from ark_api.services.api_keys import APIKeyService, API_KEY_TYPE
 from ark_api.models.auth import APIKeyCreateRequest
 
 
@@ -184,7 +184,7 @@ class TestAPIKeyServiceIntegration(unittest.TestCase):
         # Verify Kubernetes API was called correctly
         mock_api_instance.list_namespaced_secret.assert_called_once_with(
             namespace="test-namespace",
-            label_selector="ark.mckinsey.com/api-key=true"
+            label_selector=f"{API_KEY_TYPE}=true"
         )
     
     @patch('ark_api.services.api_keys.ApiClient')

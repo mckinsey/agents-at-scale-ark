@@ -55,8 +55,6 @@ async def list_api_keys() -> APIKeyListResponse:
     try:
         api_key_service = APIKeyService()
         result = await api_key_service.list_api_keys()
-        
-        logger.debug(f"Listed {result.count} API keys")
         return result
         
     except Exception as e:

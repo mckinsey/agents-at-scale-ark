@@ -16,17 +16,17 @@ from ..models.auth import (
     APIKeyCreateResponse,
     APIKeyListResponse
 )
+from ..constants.annotations import ARK_PREFIX
 
 logger = logging.getLogger(__name__)
 
 # Constants for API key storage
-API_KEY_SECRET_TYPE = "ark.mckinsey.com/api-key"
-API_KEY_LABEL = "ark.mckinsey.com/api-key"
-API_KEY_NAME_ANNOTATION = "ark.mckinsey.com/api-key-name"
-API_KEY_CREATED_AT_ANNOTATION = "ark.mckinsey.com/created-at"
-API_KEY_EXPIRES_AT_ANNOTATION = "ark.mckinsey.com/expires-at"
-API_KEY_LAST_USED_ANNOTATION = "ark.mckinsey.com/last-used-at"
-API_KEY_DELETED_AT_ANNOTATION = "ark.mckinsey.com/deleted-at"
+API_KEY_TYPE = ARK_PREFIX + "api-key"  # Used for both secret type and label key
+API_KEY_NAME_ANNOTATION = ARK_PREFIX + "api-key-name"
+API_KEY_CREATED_AT_ANNOTATION = ARK_PREFIX + "created-at"
+API_KEY_EXPIRES_AT_ANNOTATION = ARK_PREFIX + "expires-at"
+API_KEY_LAST_USED_ANNOTATION = ARK_PREFIX + "last-used-at"
+API_KEY_DELETED_AT_ANNOTATION = ARK_PREFIX + "deleted-at"
 
 # API Key generation constants
 # These values determine the length of the random token portion of API keys
@@ -168,7 +168,7 @@ class APIKeyService:
             annotations[API_KEY_EXPIRES_AT_ANNOTATION] = self._format_datetime(request.expires_at)
         
         labels = {
-            API_KEY_LABEL: "true",
+            API_KEY_TYPE: "true",
         }
         
         # Create Kubernetes secret
@@ -182,7 +182,7 @@ class APIKeyService:
                 labels=labels,
                 annotations=annotations
             ),
-            type=API_KEY_SECRET_TYPE,
+            type=API_KEY_TYPE,
             string_data={
                 "public_key": public_key,
                 "secret_key_hash": secret_key_hash,
@@ -220,7 +220,7 @@ class APIKeyService:
             # List secrets with our API key label
             secrets = await v1.list_namespaced_secret(
                 namespace=self.namespace,
-                label_selector=f"{API_KEY_LABEL}=true"
+                label_selector=f"{API_KEY_TYPE}=true"
             )
         
         api_keys = []
@@ -282,7 +282,7 @@ class APIKeyService:
                 )
             
             # Check if it's an API key secret
-            if secret.type != API_KEY_SECRET_TYPE:
+            if secret.type != API_KEY_TYPE:
                 return None
             
             # Parse data
