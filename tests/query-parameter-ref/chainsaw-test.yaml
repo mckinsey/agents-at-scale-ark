@@ -28,16 +28,17 @@ spec:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Model
             metadata:
-              name: test-model
+              name: mock-gpt-4.1
               namespace: $NAMESPACE
             spec:
               type: openai
               model:
-                value: echo-model
+                value: gpt-4.1
+              pollInterval: 3s
               config:
                 openai:
                   baseUrl:
-                    value: http://mock-openai.$NAMESPACE.svc.cluster.local
+                    value: http://mock-openai.$NAMESPACE.svc.cluster.local/v1
                   apiKey:
                     value: mock-api-key
             EOF
@@ -61,7 +62,7 @@ spec:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Model
             metadata:
-              name: test-model
+              name: mock-gpt-4.1
             status:
               conditions:
               - type: ModelAvailable
@@ -73,6 +74,7 @@ spec:
             metadata:
               name: test-agent
       - assert:
+          timeout: 5s
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Query
@@ -80,7 +82,9 @@ spec:
               name: test-query-with-params
             status:
               phase: done
+      # Response is immutable after phase: done, no need to retry
       - assert:
+          timeout: 1s
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Query
@@ -89,7 +93,9 @@ spec:
             status:
               (length(responses)): 1
               (contains(responses[*].target.name, 'test-agent')): true
-              (length(join('', responses[*].content)) > `10`): true
+              # Verify system message echoed back with resolved parameter
+              (contains(responses[0].raw, '"role":"system"')): true
+              (contains(responses[0].content, 'QueryAgent123')): true
       # Test nested valueFrom resolution - Agent referencing Query params that use ConfigMap/Secret
       - assert:
           resource:
@@ -98,6 +104,7 @@ spec:
             metadata:
               name: test-agent-nested
       - assert:
+          timeout: 5s
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Query
@@ -105,7 +112,9 @@ spec:
               name: test-query-nested-params
             status:
               phase: done
+      # Response is immutable after phase: done, no need to retry
       - assert:
+          timeout: 1s
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Query
