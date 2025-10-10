@@ -24,7 +24,19 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
     - apply:
-        file: manifests/*.yaml
+        file: manifests/a00-evaluator-llm-rbac.yaml
+    - apply:
+        file: manifests/a01-secret.yaml
+    - apply:
+        file: manifests/a02-model.yaml
+    - apply:
+        file: manifests/a03-evaluator.yaml
+    - apply:
+        file: manifests/a04-agent.yaml
+    - apply:
+        file: manifests/a05-query.yaml
+    - apply:
+        file: manifests/a06-evaluation.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

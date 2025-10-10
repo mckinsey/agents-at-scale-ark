@@ -24,6 +24,8 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
     - apply:
+        file: manifests/a00-evaluator-llm-rbac.yaml
+    - apply:
         file: manifests/a01-secret.yaml
     - apply:
         file: manifests/a02-model.yaml
