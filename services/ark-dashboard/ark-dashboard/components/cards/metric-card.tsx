@@ -7,6 +7,16 @@ import { ComponentProps } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
+
+function LoadingState() {
+  return (
+    <div className="flex flex-col space-y-2 w-full">
+      <Skeleton className="h-8 w-1/3" />
+      <Skeleton className="h-4 w-2/3" />
+    </div>
+  )
+}
+
 export type Props = {
   title: string;
   value: number | string;
@@ -24,9 +34,6 @@ export function MetricCard({
   isLoading,
   hasError
 }: Props) {
-  if (isLoading) {
-    return <Skeleton className="min-h-[150px] rounded-xl" />;
-  }
 
   return (
     <Link href={href}>
@@ -59,13 +66,13 @@ export function MetricCard({
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between min-h-14">
             {hasError ? (
               <div className="flex flex-col space-y-2">
                 <div className="text-2xl font-bold text-destructive">!</div>
                 <p className="text-xs text-destructive">Failed to fetch data</p>
               </div>
-            ) : !value ? (
+            ) : isLoading ? (<LoadingState />) : !value ? (
               <div className="flex flex-col space-y-2">
                 <div className="text-2xl font-bold text-muted-foreground">
                   —
@@ -75,7 +82,7 @@ export function MetricCard({
                 </p>
               </div>
             ) : (
-              <div className="text-2xl font-bold">{value}</div>
+              <div className="self-start text-2xl font-bold">{value}</div>
             )}
             <ChevronRight
               className={cn(
