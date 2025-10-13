@@ -1,12 +1,15 @@
 # Agent Default Model Test
 
-Tests agent behavior with and without default model present.
+Tests agent behavior with and without default model present using mock-llm.
 
 ## What it tests
 
 ### Scenario 1: With default model
+- Mock OpenAI server deployed (mock-llm)
+- Default model created pointing to mock server
 - Agent creation without explicit modelRef
 - Webhook sets modelRef to "default"
+- Model shows as Available
 - Agent shows as Available when default model exists
 - Query execution using default model succeeds
 
