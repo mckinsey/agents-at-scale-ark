@@ -32,14 +32,14 @@ import {
   type Evaluator,
   type Agent,
   type Team,
-  type Model
+  type Model,
+  type QueryResponse
 } from "@/lib/services"
 import type { components } from "@/lib/api/generated/types"
 
 type EvaluationCreateRequest = components["schemas"]["EvaluationCreateRequest"]
 type EvaluationUpdateRequest = components["schemas"]["EvaluationUpdateRequest"]
 type EvaluationType = components["schemas"]["EvaluationType"]
-type QueryResponse = components["schemas"]["QueryResponse"]
 
 interface EvaluationEditorProps {
   open: boolean
