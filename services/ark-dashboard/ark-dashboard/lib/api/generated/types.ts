@@ -1436,7 +1436,7 @@ export interface components {
             /** Id */
             id: string;
             /** Choices */
-            choices: components["schemas"]["Choice"][];
+            choices: components["schemas"]["Choice-Output"][];
             /** Created */
             created: number;
             /** Model */
@@ -1464,13 +1464,13 @@ export interface components {
             audio?: components["schemas"]["Audio"] | null;
             /** Content */
             content?: string | (components["schemas"]["ChatCompletionContentPartTextParam"] | components["schemas"]["ChatCompletionContentPartRefusalParam"])[] | null;
-            function_call?: components["schemas"]["FunctionCall-Input"] | null;
+            function_call?: components["schemas"]["openai__types__chat__chat_completion_assistant_message_param__FunctionCall"] | null;
             /** Name */
             name?: string;
             /** Refusal */
             refusal?: string | null;
             /** Tool Calls */
-            tool_calls?: (components["schemas"]["ChatCompletionMessageFunctionToolCallParam-Input"] | components["schemas"]["ChatCompletionMessageCustomToolCallParam-Input"])[];
+            tool_calls?: (components["schemas"]["ChatCompletionMessageFunctionToolCallParam"] | components["schemas"]["ChatCompletionMessageCustomToolCallParam"])[];
         };
         /** ChatCompletionAssistantMessageParam */
         "ChatCompletionAssistantMessageParam-Output": {
@@ -1488,7 +1488,7 @@ export interface components {
             /** Refusal */
             refusal?: string | null;
             /** Tool Calls */
-            tool_calls?: (components["schemas"]["ChatCompletionMessageFunctionToolCallParam-Output"] | components["schemas"]["ChatCompletionMessageCustomToolCallParam-Output"])[];
+            tool_calls?: (components["schemas"]["ChatCompletionMessageFunctionToolCallParam"] | components["schemas"]["ChatCompletionMessageCustomToolCallParam"])[];
         };
         /** ChatCompletionAudio */
         ChatCompletionAudio: {
@@ -1566,7 +1566,7 @@ export interface components {
             role: "function";
         };
         /** ChatCompletionMessage */
-        ChatCompletionMessage: {
+        "ChatCompletionMessage-Input": {
             /** Content */
             content?: string | null;
             /** Refusal */
@@ -1579,7 +1579,27 @@ export interface components {
             /** Annotations */
             annotations?: components["schemas"]["Annotation"][] | null;
             audio?: components["schemas"]["ChatCompletionAudio"] | null;
-            function_call?: components["schemas"]["openai__types__chat__chat_completion_message__FunctionCall"] | null;
+            function_call?: components["schemas"]["FunctionCall"] | null;
+            /** Tool Calls */
+            tool_calls?: (components["schemas"]["ChatCompletionMessageFunctionToolCall"] | components["schemas"]["ChatCompletionMessageCustomToolCall"])[] | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ChatCompletionMessage */
+        "ChatCompletionMessage-Output": {
+            /** Content */
+            content?: string | null;
+            /** Refusal */
+            refusal?: string | null;
+            /**
+             * Role
+             * @constant
+             */
+            role: "assistant";
+            /** Annotations */
+            annotations?: components["schemas"]["Annotation"][] | null;
+            audio?: components["schemas"]["ChatCompletionAudio"] | null;
+            function_call?: components["schemas"]["FunctionCall"] | null;
             /** Tool Calls */
             tool_calls?: (components["schemas"]["ChatCompletionMessageFunctionToolCall"] | components["schemas"]["ChatCompletionMessageCustomToolCall"])[] | null;
         } & {
@@ -1589,7 +1609,7 @@ export interface components {
         ChatCompletionMessageCustomToolCall: {
             /** Id */
             id: string;
-            custom: components["schemas"]["openai__types__chat__chat_completion_message_custom_tool_call__Custom"];
+            custom: components["schemas"]["Custom"];
             /**
              * Type
              * @constant
@@ -1599,18 +1619,7 @@ export interface components {
             [key: string]: unknown;
         };
         /** ChatCompletionMessageCustomToolCallParam */
-        "ChatCompletionMessageCustomToolCallParam-Input": {
-            /** Id */
-            id: string;
-            custom: components["schemas"]["Custom-Input"];
-            /**
-             * Type
-             * @constant
-             */
-            type: "custom";
-        };
-        /** ChatCompletionMessageCustomToolCallParam */
-        "ChatCompletionMessageCustomToolCallParam-Output": {
+        ChatCompletionMessageCustomToolCallParam: {
             /** Id */
             id: string;
             custom: components["schemas"]["openai__types__chat__chat_completion_message_custom_tool_call_param__Custom"];
@@ -1624,7 +1633,7 @@ export interface components {
         ChatCompletionMessageFunctionToolCall: {
             /** Id */
             id: string;
-            function: components["schemas"]["openai__types__chat__chat_completion_message_function_tool_call__Function"];
+            function: components["schemas"]["Function"];
             /**
              * Type
              * @constant
@@ -1634,18 +1643,7 @@ export interface components {
             [key: string]: unknown;
         };
         /** ChatCompletionMessageFunctionToolCallParam */
-        "ChatCompletionMessageFunctionToolCallParam-Input": {
-            /** Id */
-            id: string;
-            function: components["schemas"]["Function-Input"];
-            /**
-             * Type
-             * @constant
-             */
-            type: "function";
-        };
-        /** ChatCompletionMessageFunctionToolCallParam */
-        "ChatCompletionMessageFunctionToolCallParam-Output": {
+        ChatCompletionMessageFunctionToolCallParam: {
             /** Id */
             id: string;
             function: components["schemas"]["openai__types__chat__chat_completion_message_function_tool_call_param__Function"];
@@ -1750,7 +1748,7 @@ export interface components {
             pending: number;
         };
         /** Choice */
-        Choice: {
+        "Choice-Input": {
             /**
              * Finish Reason
              * @enum {string}
@@ -1758,13 +1756,36 @@ export interface components {
             finish_reason: "stop" | "length" | "tool_calls" | "content_filter" | "function_call";
             /** Index */
             index: number;
-            logprobs?: components["schemas"]["ChoiceLogprobs"] | null;
-            message: components["schemas"]["ChatCompletionMessage"];
+            logprobs?: components["schemas"]["ChoiceLogprobs-Input"] | null;
+            message: components["schemas"]["ChatCompletionMessage-Input"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Choice */
+        "Choice-Output": {
+            /**
+             * Finish Reason
+             * @enum {string}
+             */
+            finish_reason: "stop" | "length" | "tool_calls" | "content_filter" | "function_call";
+            /** Index */
+            index: number;
+            logprobs?: components["schemas"]["ChoiceLogprobs-Output"] | null;
+            message: components["schemas"]["ChatCompletionMessage-Output"];
         } & {
             [key: string]: unknown;
         };
         /** ChoiceLogprobs */
-        ChoiceLogprobs: {
+        "ChoiceLogprobs-Input": {
+            /** Content */
+            content?: components["schemas"]["ChatCompletionTokenLogprob"][] | null;
+            /** Refusal */
+            refusal?: components["schemas"]["ChatCompletionTokenLogprob"][] | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ChoiceLogprobs */
+        "ChoiceLogprobs-Output": {
             /** Content */
             content?: components["schemas"]["ChatCompletionTokenLogprob"][] | null;
             /** Refusal */
@@ -1809,11 +1830,13 @@ export interface components {
             cluster: string | null;
         };
         /** Custom */
-        "Custom-Input": {
+        Custom: {
             /** Input */
             input: string;
             /** Name */
             name: string;
+        } & {
+            [key: string]: unknown;
         };
         /**
          * DirectEvaluationMetadata
@@ -1837,7 +1860,34 @@ export interface components {
          * EnhancedEvaluationDetailResponse
          * @description Enhanced detailed evaluation response with metadata.
          */
-        EnhancedEvaluationDetailResponse: {
+        "EnhancedEvaluationDetailResponse-Input": {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace: string;
+            /** Spec */
+            spec: {
+                [key: string]: unknown;
+            };
+            /** Status */
+            status?: {
+                [key: string]: unknown;
+            } | null;
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
+            tokenUsage?: components["schemas"]["TokenUsage"] | null;
+            /** Batchresults */
+            batchResults?: components["schemas"]["BatchResult"][] | null;
+            childEvaluationStatus?: components["schemas"]["ChildEvaluationStatus"] | null;
+            enhanced_metadata?: components["schemas"]["UnifiedEvaluationMetadata"] | null;
+        };
+        /**
+         * EnhancedEvaluationDetailResponse
+         * @description Enhanced detailed evaluation response with metadata.
+         */
+        "EnhancedEvaluationDetailResponse-Output": {
             /** Name */
             name: string;
             /** Namespace */
@@ -1864,9 +1914,19 @@ export interface components {
          * EnhancedEvaluationListResponse
          * @description Enhanced response for listing evaluations with metadata.
          */
-        EnhancedEvaluationListResponse: {
+        "EnhancedEvaluationListResponse-Input": {
             /** Items */
-            items: components["schemas"]["EnhancedEvaluationResponse"][];
+            items: components["schemas"]["EnhancedEvaluationResponse-Input"][];
+            /** Count */
+            count: number;
+        };
+        /**
+         * EnhancedEvaluationListResponse
+         * @description Enhanced response for listing evaluations with metadata.
+         */
+        "EnhancedEvaluationListResponse-Output": {
+            /** Items */
+            items: components["schemas"]["EnhancedEvaluationResponse-Output"][];
             /** Count */
             count: number;
         };
@@ -1874,7 +1934,28 @@ export interface components {
          * EnhancedEvaluationResponse
          * @description Enhanced evaluation response with metadata for list operations.
          */
-        EnhancedEvaluationResponse: {
+        "EnhancedEvaluationResponse-Input": {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace: string;
+            /** Type */
+            type: string;
+            /** Phase */
+            phase?: string | null;
+            /** Score */
+            score?: string | null;
+            /** Passed */
+            passed?: boolean | null;
+            /** Message */
+            message?: string | null;
+            enhanced_metadata?: components["schemas"]["UnifiedEvaluationMetadata"] | null;
+        };
+        /**
+         * EnhancedEvaluationResponse
+         * @description Enhanced evaluation response with metadata for list operations.
+         */
+        "EnhancedEvaluationResponse-Output": {
             /** Name */
             name: string;
             /** Namespace */
@@ -2216,18 +2297,22 @@ export interface components {
             filename?: string;
         };
         /** Function */
-        "Function-Input": {
+        Function: {
             /** Arguments */
             arguments: string;
             /** Name */
             name: string;
+        } & {
+            [key: string]: unknown;
         };
         /** FunctionCall */
-        "FunctionCall-Input": {
+        FunctionCall: {
             /** Arguments */
             arguments: string;
             /** Name */
             name: string;
+        } & {
+            [key: string]: unknown;
         };
         /**
          * Graph
@@ -2731,7 +2816,7 @@ export interface components {
          */
         QueryListResponse: {
             /** Items */
-            items: components["schemas"]["QueryResponse"][];
+            items: components["schemas"]["QueryResponse-Output"][];
             /** Count */
             count: number;
         };
@@ -2751,7 +2836,30 @@ export interface components {
          * QueryResponse
          * @description Basic query response for list operations.
          */
-        QueryResponse: {
+        "QueryResponse-Input": {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace: string;
+            /** @default user */
+            type: components["schemas"]["InputType"] | null;
+            /** Input */
+            input: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam-Input"] | components["schemas"]["ChatCompletionAssistantMessageParam-Input"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
+            memory?: components["schemas"]["Memory"] | null;
+            /** Sessionid */
+            sessionId?: string | null;
+            /** Status */
+            status?: {
+                [key: string]: unknown;
+            } | null;
+            /** Creationtimestamp */
+            creationTimestamp?: string | null;
+        };
+        /**
+         * QueryResponse
+         * @description Basic query response for list operations.
+         */
+        "QueryResponse-Output": {
             /** Name */
             name: string;
             /** Namespace */
@@ -3449,39 +3557,12 @@ export interface components {
             /** Name */
             name: string;
         };
-        /** FunctionCall */
-        openai__types__chat__chat_completion_message__FunctionCall: {
-            /** Arguments */
-            arguments: string;
-            /** Name */
-            name: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /** Custom */
-        openai__types__chat__chat_completion_message_custom_tool_call__Custom: {
-            /** Input */
-            input: string;
-            /** Name */
-            name: string;
-        } & {
-            [key: string]: unknown;
-        };
         /** Custom */
         openai__types__chat__chat_completion_message_custom_tool_call_param__Custom: {
             /** Input */
             input: string;
             /** Name */
             name: string;
-        };
-        /** Function */
-        openai__types__chat__chat_completion_message_function_tool_call__Function: {
-            /** Arguments */
-            arguments: string;
-            /** Name */
-            name: string;
-        } & {
-            [key: string]: unknown;
         };
         /** Function */
         openai__types__chat__chat_completion_message_function_tool_call_param__Function: {
@@ -5273,7 +5354,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EvaluationListResponse"] | components["schemas"]["EnhancedEvaluationListResponse"];
+                    "application/json": components["schemas"]["EvaluationListResponse"] | components["schemas"]["EnhancedEvaluationListResponse-Output"];
                 };
             };
             /** @description Validation Error */
@@ -5345,7 +5426,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EvaluationDetailResponse"] | components["schemas"]["EnhancedEvaluationDetailResponse"];
+                    "application/json": components["schemas"]["EvaluationDetailResponse"] | components["schemas"]["EnhancedEvaluationDetailResponse-Output"];
                 };
             };
             /** @description Validation Error */
