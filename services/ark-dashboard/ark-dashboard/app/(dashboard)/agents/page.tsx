@@ -17,8 +17,8 @@ export default function AgentsPage() {
     <>
       <PageHeader breadcrumbs={breadcrumbs} currentPage="Agents" actions={
         <Button onClick={() => agentsSectionRef.current?.openAddEditor()}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Agent
+          <Plus className="h-4 w-4" />
+          Create Agent
         </Button>
       } />
       <div className="flex flex-1 flex-col">

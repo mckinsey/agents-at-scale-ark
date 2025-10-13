@@ -154,8 +154,8 @@ export const AgentsSection = forwardRef<
           </EmptyHeader>
           <EmptyContent>
             <Button onClick={() => setAgentEditorOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Agent
+              <Plus className="h-4 w-4" />
+              Create Agent
             </Button>
           </EmptyContent>
           <Button
