@@ -9,7 +9,7 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import type { Event } from "@/lib/services/events";
 import { eventsService } from "@/lib/services/events";
 import { useParams, useRouter } from "next/navigation";
@@ -134,9 +134,7 @@ function EventDetailContent() {
         const eventData = await eventsService.get(eventId);
         setEvent(eventData);
       } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Event",
+        toast.error("Failed to Load Event", {
           description:
             error instanceof Error
               ? error.message

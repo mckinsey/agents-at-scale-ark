@@ -4,7 +4,7 @@ import { MetricCard } from "./metric-card";
 import { DASHBOARD_SECTIONS } from "@/lib/constants";
 import { useGetAllAgents } from "@/lib/services/agents-hooks";
 import { useEffect } from "react";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 
 export function HomepageAgentsCard() {
   const { data, isPending, error } = useGetAllAgents();
@@ -16,9 +16,7 @@ export function HomepageAgentsCard() {
 
   useEffect(() => {
     if (error) {
-      toast({
-        variant: "destructive",
-        title: `Failed to get Agents`,
+      toast.error("Failed to get Agents", {
         description:
           error instanceof Error
             ? error.message

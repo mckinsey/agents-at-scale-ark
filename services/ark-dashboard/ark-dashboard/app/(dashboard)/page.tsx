@@ -7,7 +7,7 @@ import {
   HomepageMcpServersCard,
   HomepageTeamsCard
 } from "@/components/cards";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner"
 import { useGetAllModels } from "@/lib/services/models-hooks";
 import { useEffect } from "react";
 import { Spinner } from "@/components/ui/spinner";
@@ -21,9 +21,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to get Models",
+      toast.error("Failed to get Models", {
         description:
           error instanceof Error
             ? error.message

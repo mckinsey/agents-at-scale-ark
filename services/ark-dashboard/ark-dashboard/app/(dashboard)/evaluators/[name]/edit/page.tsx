@@ -2,7 +2,7 @@
 
 import { BreadcrumbElement, PageHeader } from "@/components/common/page-header";
 import { EvaluatorEditForm } from "@/components/forms/evaluator-edit-form";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import {
   evaluatorsService,
   type EvaluatorDetailResponse
@@ -39,9 +39,7 @@ function EvaluatorEditContent({
         );
         setEvaluator(data);
       } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Evaluator",
+        toast.error("Failed to Load Evaluator", {
           description:
             error instanceof Error
               ? error.message
@@ -60,16 +58,12 @@ function EvaluatorEditContent({
     setSaving(true);
     try {
       await evaluatorsService.update(evaluatorName, data);
-      toast({
-        variant: "success",
-        title: "Evaluator Updated",
+      toast.success("Evaluator Updated", {
         description: "Successfully updated the evaluator"
       });
       router.push(`/evaluators`);
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Update Evaluator",
+      toast.error("Failed to Update Evaluator", {
         description:
           error instanceof Error
             ? error.message
