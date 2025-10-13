@@ -12,13 +12,11 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip";
-import { queriesService } from "@/lib/services/queries";
+import { queriesService, type QueryResponse } from "@/lib/services";
 import { getResourceEventsUrl } from "@/lib/utils/events";
 import { useRouter } from "next/navigation";
 import { useListQueries } from "@/lib/services/queries-hooks";
 import { Button } from "../ui/button";
-
-type QueryResponse = components["schemas"]["QueryResponse"];
 
 type SortField = "createdAt" | "none";
 type SortDirection = "asc" | "desc";
