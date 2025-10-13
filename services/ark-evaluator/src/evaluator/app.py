@@ -76,6 +76,46 @@ def create_app() -> FastAPI:
     async def ready():
         return {"status": "ready", "service": "ark-evaluator"}
 
+    @app.get("/providers/{provider}/metrics")
+    async def get_provider_metrics(provider: str):
+        """
+        Get supported metrics and their field requirements for a specific provider.
+        """
+        if provider.lower() == "ragas":
+            from .oss_providers.ragas.ragas_metrics import MetricRegistry
+            metrics = MetricRegistry.get_all_metrics()
+            return {
+                "provider": "ragas",
+                "metrics": [
+                    {
+                        "name": metric.get_display_name(),
+                        "description": metric.get_description(),
+                        "ragas_name": metric.get_name()
+                    }
+                    for metric in metrics.values()
+                ]
+            }
+        else:
+            raise HTTPException(status_code=404, detail=f"Provider {provider} not found or doesn't support metric queries")
+
+    @app.get("/providers/{provider}/metrics/{metric}")
+    async def get_metric_details(provider: str, metric: str):
+        """
+        Get detailed field requirements for a specific metric.
+        """
+        if provider.lower() == "ragas":
+            from .oss_providers.ragas.ragas_metrics import MetricRegistry
+            metric_info = MetricRegistry.get_metric_info(metric)
+            if metric_info:
+                return {
+                    "provider": "ragas",
+                    "metric": metric_info
+                }
+            else:
+                raise HTTPException(status_code=404, detail=f"Metric {metric} not found for provider {provider}")
+        else:
+            raise HTTPException(status_code=404, detail=f"Provider {provider} not found or doesn't support metric queries")
+
     @app.post("/evaluate", response_model=EvaluationResponse)
     async def evaluate(request: UnifiedEvaluationRequest) -> EvaluationResponse:
         """

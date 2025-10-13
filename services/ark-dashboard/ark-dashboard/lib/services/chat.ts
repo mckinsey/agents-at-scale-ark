@@ -1,6 +1,7 @@
 import { apiClient } from "@/lib/api/client";
 import type { components } from "@/lib/api/generated/types";
 import { generateUUID } from "@/lib/utils/uuid";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 
 interface AxiosError extends Error {
   response?: {
@@ -8,7 +9,7 @@ interface AxiosError extends Error {
   };
 }
 
-export type QueryResponse = components["schemas"]["QueryResponse"];
+export type QueryResponse = components["schemas"]["QueryResponse-Output"];
 export type QueryDetailResponse = components["schemas"]["QueryDetailResponse"];
 export type QueryListResponse = components["schemas"]["QueryListResponse"];
 export type QueryCreateRequest = components["schemas"]["QueryCreateRequest"];
@@ -18,7 +19,7 @@ export type QueryUpdateRequest = components["schemas"]["QueryUpdateRequest"];
 type TerminalQueryStatusPhase = "done" | "error" | "canceled" | "unknown";
 
 // Define non-terminal status phases
-type NonTerminalQueryStatusPhase = "pending" | "running" | "evaluating";
+type NonTerminalQueryStatusPhase = "pending" | "running";
 
 // Combined query status phase type
 type QueryStatusPhase = TerminalQueryStatusPhase | NonTerminalQueryStatusPhase;
@@ -31,7 +32,7 @@ const TERMINAL_QUERY_STATUS_PHASES: readonly TerminalQueryStatusPhase[] = [
   "unknown"
 ] as const;
 const NON_TERMINAL_QUERY_STATUS_PHASES: readonly NonTerminalQueryStatusPhase[] =
-  ["pending", "running", "evaluating"] as const;
+  ["pending", "running"] as const;
 const QUERY_STATUS_PHASES: readonly QueryStatusPhase[] = [
   ...TERMINAL_QUERY_STATUS_PHASES,
   ...NON_TERMINAL_QUERY_STATUS_PHASES
@@ -78,7 +79,6 @@ export type ChatSession = {
 
 export const chatService = {
   async createQuery(
-    namespace: string,
     query: QueryCreateRequest
   ): Promise<QueryDetailResponse> {
     // Normalize target types to lowercase
@@ -91,19 +91,18 @@ export const chatService = {
     };
 
     const response = await apiClient.post<QueryDetailResponse>(
-      `/api/v1/namespaces/${namespace}/queries/`,
+      `/api/v1/queries/`,
       normalizedQuery
     );
     return response;
   },
 
   async getQuery(
-    namespace: string,
     queryName: string
   ): Promise<QueryDetailResponse | null> {
     try {
       return await apiClient.get<QueryDetailResponse>(
-        `/api/v1/namespaces/${namespace}/queries/${queryName}`
+        `/api/v1/queries/${queryName}`
       );
     } catch (error) {
       if ((error as AxiosError).response?.status === 404) {
@@ -113,21 +112,20 @@ export const chatService = {
     }
   },
 
-  async listQueries(namespace: string): Promise<QueryListResponse> {
+  async listQueries(): Promise<QueryListResponse> {
     const response = await apiClient.get<QueryListResponse>(
-      `/api/v1/namespaces/${namespace}/queries/`
+      `/api/v1/queries/`
     );
     return response;
   },
 
   async updateQuery(
-    namespace: string,
     queryName: string,
     updates: QueryUpdateRequest
   ): Promise<QueryDetailResponse | null> {
     try {
       const response = await apiClient.put<QueryDetailResponse>(
-        `/api/v1/namespaces/${namespace}/queries/${queryName}`,
+        `/api/v1/queries/${queryName}`,
         updates
       );
       return response;
@@ -139,10 +137,10 @@ export const chatService = {
     }
   },
 
-  async deleteQuery(namespace: string, queryName: string): Promise<boolean> {
+  async deleteQuery(queryName: string): Promise<boolean> {
     try {
       await apiClient.delete(
-        `/api/v1/namespaces/${namespace}/queries/${queryName}`
+        `/api/v1/queries/${queryName}`
       );
       return true;
     } catch (error) {
@@ -154,15 +152,16 @@ export const chatService = {
   },
 
   async submitChatQuery(
-    namespace: string,
-    input: string,
+    messages: ChatCompletionMessageParam[],
     targetType: string,
     targetName: string,
     sessionId?: string
   ): Promise<QueryDetailResponse> {
-    const queryRequest: QueryCreateRequest = {
+    const queryRequest = {
       name: `chat-query-${generateUUID()}`,
-      input,
+      type: "messages",
+      // Use OpenAI ChatCompletionMessageParam which supports multimodal content
+      input: messages,
       targets: [
         {
           type: targetType.toLowerCase(),
@@ -170,32 +169,31 @@ export const chatService = {
         }
       ],
       sessionId
-    };
+    } as unknown as QueryCreateRequest;
 
-    return await this.createQuery(namespace, queryRequest);
+    return await this.createQuery(queryRequest);
   },
 
   async getChatHistory(
-    namespace: string,
     sessionId: string
   ): Promise<QueryDetailResponse[]> {
-    const response = await this.listQueries(namespace);
+    const response = await this.listQueries();
 
     return response.items
       .filter((item) => item.name.startsWith("chat-query-"))
       .map(
         (item) =>
-          ({
-            ...item,
-            input: item.input,
-            status: item.status,
-            memory: undefined,
-            parameters: undefined,
-            selector: undefined,
-            serviceAccount: undefined,
-            sessionId: sessionId,
-            targets: undefined
-          } as QueryDetailResponse)
+        ({
+          ...item,
+          input: item.input,
+          status: item.status,
+          memory: undefined,
+          parameters: undefined,
+          selector: undefined,
+          serviceAccount: undefined,
+          sessionId: sessionId,
+          targets: undefined
+        } as QueryDetailResponse)
       )
       .sort((a, b) => {
         const aTime = parseInt(a.name.split("-").pop() || "0");
@@ -205,11 +203,10 @@ export const chatService = {
   },
 
   async getQueryResult(
-    namespace: string,
     queryName: string
   ): Promise<ChatResponse> {
     try {
-      const query = await this.getQuery(namespace, queryName);
+      const query = await this.getQuery(queryName);
 
       if (!query || !query.status) {
         return { status: "unknown", terminal: true };
@@ -241,7 +238,6 @@ export const chatService = {
   },
 
   async streamQueryStatus(
-    namespace: string,
     queryName: string,
     onUpdate: (status: QueryDetailResponse["status"]) => void,
     pollInterval: number = 1000
@@ -251,7 +247,7 @@ export const chatService = {
     const poll = async () => {
       while (!stopped) {
         try {
-          const query = await this.getQuery(namespace, queryName);
+          const query = await this.getQuery(queryName);
           if (query && query.status) {
             onUpdate(query.status);
 

@@ -16,10 +16,10 @@ def simulate_current_code():
     
     # Simulate the params from the evaluator
     params = {
-        'langfuse.azure_endpoint': 'https://openai.azure.com/',
+        'langfuse.azure_endpoint': os.getenv('E2E_TEST_AZURE_OPENAI_BASE_URL', 'url'),
         'langfuse.azure_deployment': 'gpt-4.1-mini',
         'langfuse.model_version': '2024-04-01-preview',
-        'langfuse.azure_api_key': os.getenv('AZURE_OPENAI_API_KEY', 'key'),
+        'langfuse.azure_api_key': os.getenv('E2E_TEST_AZURE_OPENAI_KEY', 'key'),
         # Note: No embedding-specific params
     }
     

@@ -1,3 +1,5 @@
+"use client"
+
 import { useState } from "react";
 import { Server, Trash2, Info, Pencil } from "lucide-react";
 import { BaseCard, type BaseCardAction } from "./base-card";
@@ -99,7 +101,7 @@ export function McpServerCard({
         open={mcpEditorOpen}
         onOpenChange={setMcpEditorOpen}
         mcpServer={mcpServer}
-        onSave={onUpdate || (() => {})}
+        onSave={onUpdate || (() => { })}
         namespace={namespace}
       />
       {onDelete && (

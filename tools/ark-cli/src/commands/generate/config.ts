@@ -3,7 +3,6 @@
  */
 
 import path from 'path';
-import {ConfigManager} from '../../lib/config.js';
 
 export interface ProjectTypeChoice {
   value: 'empty' | 'with-samples';
@@ -102,34 +101,19 @@ export const GENERATOR_CHOICES: GeneratorChoice[] = [
  * Default configuration values with config manager integration
  */
 export const GENERATOR_DEFAULTS: GeneratorDefaults = {
-  get projectType() {
-    try {
-      const configManager = new ConfigManager();
-      return configManager.get('defaultProjectType');
-    } catch {
-      return 'with-samples';
-    }
+  get projectType(): ProjectTypeChoice['value'] {
+    return 'with-samples';
   },
   get skipModels() {
-    try {
-      const configManager = new ConfigManager();
-      return configManager.get('skipModelsbyDefault');
-    } catch {
-      return false;
-    }
+    return false;
   },
   get skipGit() {
-    try {
-      const configManager = new ConfigManager();
-      return configManager.get('skipGitByDefault');
-    } catch {
-      return false;
-    }
+    return false;
   },
   getDefaultDestination: () => {
     try {
-      const configManager = new ConfigManager();
-      const configured = configManager.get('defaultDestination');
+      // Return current working directory as default
+      const configured = null;
       if (configured && configured !== process.cwd()) {
         return configured;
       }

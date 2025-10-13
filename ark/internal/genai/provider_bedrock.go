@@ -232,7 +232,7 @@ func (bm *BedrockModel) convertMessages(messages []Message) ([]bedrockMessage, s
 		case RoleUser, RoleAssistant, RoleTool:
 			msgRole := role
 			if role == RoleTool {
-				msgRole = "user"
+				msgRole = RoleUser
 			}
 			bedrockMessages = append(bedrockMessages, bedrockMessage{
 				Role:    msgRole,
@@ -347,7 +347,7 @@ func extractMessageContent(msg Message) (string, string) {
 
 	if userMsg := openaiMsg.OfUser; userMsg != nil {
 		if content := userMsg.Content.OfString; content.Value != "" {
-			return content.Value, "user"
+			return content.Value, RoleUser
 		}
 	}
 

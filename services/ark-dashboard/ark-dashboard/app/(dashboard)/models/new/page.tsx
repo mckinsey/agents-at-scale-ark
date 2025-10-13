@@ -1,0 +1,28 @@
+import { BreadcrumbElement, PageHeader } from "@/components/common/page-header";
+import { ModelConfiguratorForm } from "@/components/forms/model-configuration-form";
+
+type SearchParams = {
+  name?: string
+}
+
+type Props = {
+  searchParams: Promise<SearchParams>
+}
+
+const breadcrumbs: BreadcrumbElement[] = [
+  { href: '/', label: "ARK Dashboard" },
+  { href: '/models', label: "Models" }
+]
+
+export default async function CreateModelPage({ searchParams }: Props) {
+  const params = (await searchParams)
+
+  return (
+    <div className="min-h-screen">
+      <PageHeader breadcrumbs={breadcrumbs} currentPage="Add New Model" />
+      <main className="container px-6 py-8">
+        <ModelConfiguratorForm defaultName={params.name} />
+      </main>
+    </div>
+  )
+}

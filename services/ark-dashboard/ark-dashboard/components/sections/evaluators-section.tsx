@@ -10,11 +10,7 @@ import { EvaluatorRow } from "@/components/rows/evaluator-row"
 import { useDelayedLoading } from "@/lib/hooks"
 import { ToggleSwitch, type ToggleOption } from "@/components/ui/toggle-switch"
 
-interface EvaluatorsSectionProps {
-  namespace: string
-}
-
-export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }, EvaluatorsSectionProps>(function EvaluatorsSection({ namespace }, ref) {
+export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(function EvaluatorsSection(_, ref) {
   const [evaluators, setEvaluators] = useState<Evaluator[]>([])
   const [evaluatorEditorOpen, setEvaluatorEditorOpen] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -34,7 +30,7 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }, Evalu
     const loadData = async () => {
       setLoading(true)
       try {
-        const evaluatorsData = await evaluatorsService.getAll(namespace)
+        const evaluatorsData = await evaluatorsService.getAll()
         setEvaluators(evaluatorsData)
       } catch (error) {
         toast({
@@ -48,18 +44,18 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }, Evalu
     }
 
     loadData()
-  }, [namespace])
+  }, [])
 
   const handleCreateEvaluator = async (evaluator: EvaluatorCreateRequest & { id?: string }) => {
     try {
       const { id: _, ...createData } = evaluator
-      await evaluatorsService.create(namespace, createData)
+      await evaluatorsService.create(createData)
       toast({
         variant: "success",
         title: "Evaluator Created",
         description: `Successfully created ${createData.name}`
       })
-      const updatedEvaluators = await evaluatorsService.getAll(namespace)
+      const updatedEvaluators = await evaluatorsService.getAll()
       setEvaluators(updatedEvaluators)
     } catch (error) {
       toast({
@@ -76,13 +72,13 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }, Evalu
       if (!evaluator) {
         throw new Error("Evaluator not found")
       }
-      await evaluatorsService.delete(namespace, name)
+      await evaluatorsService.delete(name)
       toast({
         variant: "success",
         title: "Evaluator Deleted",
         description: `Successfully deleted ${evaluator.name}`
       })
-      const updatedEvaluators = await evaluatorsService.getAll(namespace)
+      const updatedEvaluators = await evaluatorsService.getAll()
       setEvaluators(updatedEvaluators)
     } catch (error) {
       toast({
@@ -115,11 +111,10 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }, Evalu
           {showCompactView && (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pb-6">
               {evaluators.map((evaluator) => (
-                <EvaluatorCard 
-                  key={evaluator.name} 
-                  evaluator={evaluator} 
+                <EvaluatorCard
+                  key={evaluator.name}
+                  evaluator={evaluator}
                   onDelete={handleDeleteEvaluator}
-                  namespace={namespace}
                 />
               ))}
             </div>
@@ -132,7 +127,6 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }, Evalu
                   key={evaluator.name}
                   evaluator={evaluator}
                   onDelete={handleDeleteEvaluator}
-                  namespace={namespace}
                 />
               ))}
             </div>
@@ -145,7 +139,6 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }, Evalu
         onOpenChange={setEvaluatorEditorOpen}
         evaluator={null}
         onSave={handleCreateEvaluator as any} // eslint-disable-line @typescript-eslint/no-explicit-any
-        namespace={namespace}
       />
     </>
   )

@@ -25,7 +25,7 @@ function AgentFields({ selectedAgent, setSelectedAgent, namespace, open }: Agent
       if (open) {
         setLoadingAgents(true);
         try {
-          const agentList = await agentsService.getAll(namespace);
+          const agentList = await agentsService.getAll();
           setAgents(agentList);
         } catch (error) {
           console.error("Failed to load agents:", error);

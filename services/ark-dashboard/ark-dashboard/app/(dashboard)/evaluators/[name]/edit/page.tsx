@@ -1,15 +1,7 @@
 "use client";
 
+import { BreadcrumbElement, PageHeader } from "@/components/common/page-header";
 import { EvaluatorEditForm } from "@/components/forms/evaluator-edit-form";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator
-} from "@/components/ui/breadcrumb";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { toast } from "@/components/ui/use-toast";
 import {
   evaluatorsService,
@@ -17,6 +9,11 @@ import {
 } from "@/lib/services";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
+
+const breadcrumbs: BreadcrumbElement[] = [
+  { href: '/', label: "ARK Dashboard" },
+  { href: '/evaluators', label: "Evaluators" }
+]
 
 interface EvaluatorEditContentProps {
   namespace: string;
@@ -38,7 +35,6 @@ function EvaluatorEditContent({
     const loadEvaluator = async () => {
       try {
         const data = await evaluatorsService.getDetailsByName(
-          namespace,
           evaluatorName
         );
         setEvaluator(data);
@@ -51,7 +47,7 @@ function EvaluatorEditContent({
               ? error.message
               : "An unexpected error occurred"
         });
-        router.push(`/evaluators?namespace=${namespace}`);
+        router.push(`/evaluators`);
       } finally {
         setLoading(false);
       }
@@ -63,13 +59,13 @@ function EvaluatorEditContent({
   const handleSave = async (data: Record<string, unknown>) => {
     setSaving(true);
     try {
-      await evaluatorsService.update(namespace, evaluatorName, data);
+      await evaluatorsService.update(evaluatorName, data);
       toast({
         variant: "success",
         title: "Evaluator Updated",
         description: "Successfully updated the evaluator"
       });
-      router.push(`/evaluators?namespace=${namespace}`);
+      router.push(`/evaluators`);
     } catch (error) {
       toast({
         variant: "destructive",
@@ -85,7 +81,7 @@ function EvaluatorEditContent({
   };
 
   const handleCancel = () => {
-    router.push(`/evaluators?namespace=${namespace}`);
+    router.push(`/evaluators`);
   };
 
   if (loading) {
@@ -106,27 +102,7 @@ function EvaluatorEditContent({
 
   return (
     <>
-      <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-        <SidebarTrigger className="-ml-1" />
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem className="hidden md:block">
-              <BreadcrumbLink href="/">ARK Dashboard</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator className="hidden md:block" />
-            <BreadcrumbItem>
-              <BreadcrumbLink href={`/evaluators?namespace=${namespace}`}>
-                Evaluators
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>Edit {evaluator.name}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-      </header>
-
+      <PageHeader breadcrumbs={breadcrumbs} currentPage={`Edit ${evaluator.name}`} />
       <div className="flex-1 overflow-hidden">
         <EvaluatorEditForm
           evaluator={evaluator}

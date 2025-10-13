@@ -1,0 +1,66 @@
+# DevSpace configuration for ark-dashboard service
+version: v2beta1
+
+images:
+  ark-dashboard:
+    image: ark-dashboard
+    dockerfile: Dockerfile
+    context: .
+
+pipelines:
+  deploy: |-
+    build_images --all
+    create_deployments --all
+  dev: |-
+    create_deployments --all
+    start_dev --all
+
+deployments:
+  ark-dashboard:
+    namespace: default
+    helm:
+      chart:
+        path: ./chart
+      values:
+        app:
+          image:
+            repository: ${runtime.images.ark-dashboard.image}
+            tag: ${runtime.images.ark-dashboard.tag}
+          # Override resources for local development
+          resources:
+            limits:
+              memory: "3072Mi"
+              cpu: "2000m"
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+        httpRoute:
+          enabled: true
+
+dev:
+  ark-dashboard:
+    imageSelector: ark-dashboard
+    devImage: node:24-alpine
+    env:
+      - name: NODE_ENV
+        value: development
+    command:
+      [
+        "sh",
+        "-c",
+        "cd /app/ark-dashboard && npm install -g pnpm && pnpm install && pnpm run dev",
+      ]
+    namespace: default
+    # Stream logs instead of terminal
+    logs:
+      lastLines: 50
+    # File synchronization for hot reload
+    sync:
+      - path: .:/app
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+    # Enable SSH for IDE integration
+    ssh:
+      enabled: true
+

@@ -59,7 +59,7 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	if a.ExecutionEngine != nil {
 		// Check if this is the reserved 'a2a' execution engine
 		if a.ExecutionEngine.Name == "a2a" {
-			return a.executeWithA2AExecutionEngine(ctx, userInput)
+			return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
 		}
 		return a.executeWithExecutionEngine(ctx, userInput, history)
 	}
@@ -86,9 +86,9 @@ func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Messag
 	return engineClient.Execute(ctx, a.ExecutionEngine, agentConfig, userInput, history, toolDefinitions, a.Recorder)
 }
 
-func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message) ([]Message, error) {
+func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, eventStream EventStreamInterface) ([]Message, error) {
 	a2aEngine := NewA2AExecutionEngine(a.client, a.Recorder)
-	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, userInput)
+	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, userInput, eventStream)
 }
 
 func (a *Agent) prepareMessages(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
@@ -293,7 +293,15 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		}
 	}
 
-	tools := NewToolRegistry()
+	queryCrd, ok := ctx.Value(QueryContextKey).(*arkv1alpha1.Query)
+	if !ok {
+		return nil, fmt.Errorf("missing query context for agent %s/%s", crd.Namespace, crd.Name)
+	}
+	query, err := MakeQuery(queryCrd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make query from context for agent %s/%s: %w", crd.Namespace, crd.Name, err)
+	}
+	tools := NewToolRegistry(query.McpSettings)
 
 	if err := tools.registerTools(ctx, k8sClient, crd); err != nil {
 		return nil, err

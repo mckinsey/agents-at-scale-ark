@@ -136,11 +136,11 @@ export const evaluationsService = {
   /**
    * Get all evaluations in a namespace with optional filtering
    */
-  async getAll(namespace: string): Promise<Evaluation[]> {
+  async getAll(): Promise<Evaluation[]> {
     const response = await apiClient.get<EvaluationListResponse>(
-      `/api/v1/namespaces/${namespace}/evaluations`
+      `/api/v1/evaluations`
     )
-    
+
     // For now, just use the response items directly
     // TODO: Implement proper filtering once we have real spec data
     return response.items || []
@@ -149,21 +149,21 @@ export const evaluationsService = {
   /**
    * Get all evaluations with full details including spec
    */
-  async getAllWithDetails(namespace: string, enhanced: boolean = false): Promise<(Evaluation | EvaluationDetailResponse | EnhancedEvaluationResponse | EnhancedEvaluationDetailResponse)[]> {
-    const url = enhanced 
-      ? `/api/v1/namespaces/${namespace}/evaluations?enhanced=true`
-      : `/api/v1/namespaces/${namespace}/evaluations`
-    
-    const response = enhanced 
+  async getAllWithDetails(enhanced: boolean = false): Promise<(Evaluation | EvaluationDetailResponse | EnhancedEvaluationResponse | EnhancedEvaluationDetailResponse)[]> {
+    const url = enhanced
+      ? `/api/v1/evaluations?enhanced=true`
+      : `/api/v1/evaluations`
+
+    const response = enhanced
       ? await apiClient.get<EnhancedEvaluationListResponse>(url)
       : await apiClient.get<EvaluationListResponse>(url)
-    
+
     // Debug: log evaluation count for troubleshooting
     if (process.env.NODE_ENV === 'development') {
-      console.log(`Found ${response.items?.length || 0} evaluations in namespace ${namespace}:`, 
+      console.log(`Found ${response.items?.length || 0} evaluations:`,
         response.items?.map(e => `${e.name} (${e.type})`) || [])
     }
-    
+
     if (!response.items || response.items.length === 0) {
       return []
     }
@@ -171,9 +171,9 @@ export const evaluationsService = {
     // Fetch details for each evaluation in parallel
     const detailPromises = response.items.map(async (evaluation) => {
       try {
-        const detailed = enhanced 
-          ? await this.getEnhancedDetailsByName(namespace, evaluation.name)
-          : await this.getDetailsByName(namespace, evaluation.name)
+        const detailed = enhanced
+          ? await this.getEnhancedDetailsByName(evaluation.name)
+          : await this.getDetailsByName(evaluation.name)
         return { success: true, data: detailed, fallback: evaluation }
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
@@ -182,12 +182,12 @@ export const evaluationsService = {
         return { success: false, data: null, fallback: evaluation }
       }
     })
-    
+
     const results = await Promise.allSettled(detailPromises)
-    
+
     // Return detailed data where available, fallback to basic data otherwise
     return results
-      .filter((result): result is PromiseFulfilledResult<{success: boolean, data: EvaluationDetailResponse | null, fallback: Evaluation}> => 
+      .filter((result): result is PromiseFulfilledResult<{success: boolean, data: EvaluationDetailResponse | null, fallback: Evaluation}> =>
         result.status === 'fulfilled'
       )
       .map(result => {
@@ -199,10 +199,10 @@ export const evaluationsService = {
   /**
    * Get a single evaluation by name
    */
-  async getByName(namespace: string, name: string): Promise<Evaluation | null> {
+  async getByName(name: string): Promise<Evaluation | null> {
     try {
       const response = await apiClient.get<EvaluationResponse>(
-        `/api/v1/namespaces/${namespace}/evaluations/${name}`
+        `/api/v1/evaluations/${name}`
       )
       return response
     } catch (error) {
@@ -216,10 +216,10 @@ export const evaluationsService = {
   /**
    * Get detailed evaluation by name with full spec
    */
-  async getDetailsByName(namespace: string, name: string): Promise<EvaluationDetailResponse | null> {
+  async getDetailsByName(name: string): Promise<EvaluationDetailResponse | null> {
     try {
       const response = await apiClient.get<EvaluationDetailResponse>(
-        `/api/v1/namespaces/${namespace}/evaluations/${name}`
+        `/api/v1/evaluations/${name}`
       )
       return response
     } catch (error) {
@@ -233,10 +233,10 @@ export const evaluationsService = {
   /**
    * Get enhanced detailed evaluation by name with full spec and enhanced metadata
    */
-  async getEnhancedDetailsByName(namespace: string, name: string): Promise<EnhancedEvaluationDetailResponse | null> {
+  async getEnhancedDetailsByName(name: string): Promise<EnhancedEvaluationDetailResponse | null> {
     try {
       const response = await apiClient.get<EnhancedEvaluationDetailResponse>(
-        `/api/v1/namespaces/${namespace}/evaluations/${name}?enhanced=true`
+        `/api/v1/evaluations/${name}?enhanced=true`
       )
       return response
     } catch (error) {
@@ -250,22 +250,22 @@ export const evaluationsService = {
   /**
    * Create a new evaluation
    */
-  async create(namespace: string, evaluation: EvaluationCreateRequest): Promise<Evaluation> {
+  async create(evaluation: EvaluationCreateRequest): Promise<Evaluation> {
     const response = await apiClient.post<EvaluationResponse>(
-      `/api/v1/namespaces/${namespace}/evaluations`,
+      `/api/v1/evaluations`,
       evaluation
     )
-    
+
     return response
   },
 
   /**
    * Update an existing evaluation
    */
-  async update(namespace: string, name: string, updates: EvaluationUpdateRequest): Promise<Evaluation | null> {
+  async update(name: string, updates: EvaluationUpdateRequest): Promise<Evaluation | null> {
     try {
       const response = await apiClient.put<EvaluationResponse>(
-        `/api/v1/namespaces/${namespace}/evaluations/${name}`,
+        `/api/v1/evaluations/${name}`,
         updates
       )
       return response
@@ -280,10 +280,10 @@ export const evaluationsService = {
   /**
    * Delete an evaluation
    */
-  async delete(namespace: string, name: string): Promise<boolean> {
+  async delete(name: string): Promise<boolean> {
     try {
       await apiClient.delete(
-        `/api/v1/namespaces/${namespace}/evaluations/${name}`
+        `/api/v1/evaluations/${name}`
       )
       return true
     } catch (error) {
@@ -297,10 +297,10 @@ export const evaluationsService = {
   /**
    * Cancel a running evaluation
    */
-  async cancel(namespace: string, name: string): Promise<Evaluation | null> {
+  async cancel(name: string): Promise<Evaluation | null> {
     try {
       const response = await apiClient.patch<EvaluationResponse>(
-        `/api/v1/namespaces/${namespace}/evaluations/${name}/cancel`
+        `/api/v1/evaluations/${name}/cancel`
       )
       return response
     } catch (error) {
@@ -314,24 +314,24 @@ export const evaluationsService = {
   /**
    * Get evaluations by query reference
    */
-  async getByQueryRef(namespace: string, queryName: string, enhanced: boolean = false): Promise<Evaluation[] | EnhancedEvaluationResponse[]> {
+  async getByQueryRef(queryName: string, enhanced: boolean = false): Promise<Evaluation[] | EnhancedEvaluationResponse[]> {
     // Use the backend filter to efficiently get evaluations for a specific query
-    const url = enhanced 
-      ? `/api/v1/namespaces/${namespace}/evaluations?enhanced=true&query_ref=${encodeURIComponent(queryName)}`
-      : `/api/v1/namespaces/${namespace}/evaluations?query_ref=${encodeURIComponent(queryName)}`
-    
-    const response = enhanced 
+    const url = enhanced
+      ? `/api/v1/evaluations?enhanced=true&query_ref=${encodeURIComponent(queryName)}`
+      : `/api/v1/evaluations?query_ref=${encodeURIComponent(queryName)}`
+
+    const response = enhanced
       ? await apiClient.get<EnhancedEvaluationListResponse>(url)
       : await apiClient.get<EvaluationListResponse>(url)
-    
+
     return response.items || []
   },
 
   /**
    * Get evaluation summary for a query
    */
-  async getEvaluationSummary(namespace: string, queryName: string, enhanced: boolean = false): Promise<QueryEvaluationSummary> {
-    const evaluations = await this.getByQueryRef(namespace, queryName, enhanced)
+  async getEvaluationSummary(queryName: string, enhanced: boolean = false): Promise<QueryEvaluationSummary> {
+    const evaluations = await this.getByQueryRef(queryName, enhanced)
     
     if (evaluations.length === 0) {
       return {

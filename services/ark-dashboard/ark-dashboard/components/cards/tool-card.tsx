@@ -1,3 +1,5 @@
+"use client"
+
 import { useState } from "react"
 import { Wrench, Trash2, ChevronRight, MessageCircle } from "lucide-react"
 import { BaseCard, type BaseCardAction } from "./base-card"
@@ -13,14 +15,13 @@ interface ToolCardProps {
   onInfo?: (tool: Tool) => void
   deleteDisabled?: boolean
   deleteDisabledReason?: string
-  namespace?: string
 }
 
-export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisabledReason, namespace }: ToolCardProps) {
+export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisabledReason }: ToolCardProps) {
   const router = useRouter();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const actions: BaseCardAction[] = []
-  
+
   // Get custom icon or default Wrench icon
   const annotations = tool.annotations as Record<string, string> | undefined;
   const IconComponent = getCustomIcon(annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], Wrench)
@@ -45,7 +46,7 @@ export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisable
   actions.push({
     icon: MessageCircle,
     label: "Query tool",
-    onClick: () => router.push(`/query/new?namespace=${namespace || 'default'}&target_tool=${tool.name}`)
+    onClick: () => router.push(`/query/new?target_tool=${tool.name}`)
   });
 
   return (

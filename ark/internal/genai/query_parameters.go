@@ -126,3 +126,37 @@ func ResolveBodyTemplate(ctx context.Context, k8sClient client.Client, namespace
 
 	return buf.String(), nil
 }
+
+// GetQueryInputMessages returns a message array based on query type, handling both input and messages
+func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClient client.Client) ([]Message, error) {
+	queryType := query.Spec.Type
+	if queryType == "" {
+		queryType = RoleUser // default type
+	}
+
+	if queryType == RoleUser {
+		// For 'user' type (default), get input string using helper method
+		inputString, err := query.Spec.GetInputString()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get input string: %w", err)
+		}
+
+		// Resolve input with template parameters and create a single user message
+		resolvedInput, err := ResolveQueryInput(ctx, k8sClient, query.Namespace, inputString, query.Spec.Parameters)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve query input: %w", err)
+		}
+		return []Message{NewUserMessage(resolvedInput)}, nil
+	} else {
+		openaiMessages, err := query.Spec.GetInputMessages()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get input messages: %w", err)
+		}
+
+		messages := make([]Message, len(openaiMessages))
+		for i := range openaiMessages {
+			messages[i] = Message(openaiMessages[i])
+		}
+		return messages, nil
+	}
+}

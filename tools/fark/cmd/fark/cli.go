@@ -146,9 +146,6 @@ func printQueryResults(query *arkv1alpha1.Query, outputMode string) {
 		result := map[string]interface{}{
 			"responses": query.Status.Responses,
 		}
-		if len(query.Status.Evaluations) > 0 {
-			result["evaluations"] = query.Status.Evaluations
-		}
 		if jsonData, err := json.MarshalIndent(result, "", "  "); err == nil {
 			fmt.Println(string(jsonData))
 		}

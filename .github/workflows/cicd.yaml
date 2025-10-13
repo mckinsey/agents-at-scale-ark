@@ -46,6 +46,42 @@ jobs:
         with:
           docker-cicd-cache-registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY }}
 
+  # Code quality scan with SonarQube
+  # NOTE: This job is currently disabled - waiting for enterprise SonarQube configuration to be applied
+  sonar_scan:
+    if: false  # Disabled until enterprise configuration is ready
+    runs-on: [ self-hosted, Linux ]
+    env:
+      SONAR_TOKEN: ${{ secrets.SONARQUBE_TOKEN }}
+      SONAR_HOST_URL: ${{ vars.SONARQUBE_HOST_URL }}
+      PROJECT_KEY: ${{ secrets.SONARQUBE_PROJECT_KEY }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@master
+      - if: ${{ github.base_ref == null }}
+        name: Sonar Scan
+        run: |
+          docker run -i --user `id -u` --rm -e SONAR_TOKEN -e SONAR_HOST_URL \
+          -v `pwd`:/app -w /app sonarsource/sonar-scanner-cli:5.0.1 \
+            -Dsonar.projectKey=$PROJECT_KEY \
+            -Dsonar.sources=./ -Dsonar.branch.name=`echo "${{ github.ref }}" | cut -b 12-` \
+            -Dsonar.qualitygate.wait=false
+      - if: ${{ github.base_ref != null }}
+        name: Sonar Scan on PR
+        env:
+          pr_key: ${{ github.event.number }}
+          pr_branch: ${{ github.head_ref }}
+          pr_base: ${{ github.base_ref }}
+        run: |
+          docker run -i --user `id -u` --rm -e SONAR_TOKEN -e SONAR_HOST_URL \
+          -v `pwd`:/app -w /app sonarsource/sonar-scanner-cli:5.0.1 \
+            -Dsonar.projectKey=$PROJECT_KEY \
+            -Dsonar.sources=./ \
+            -Dsonar.pullrequest.key="$pr_key" \
+            -Dsonar.pullrequest.branch="$pr_branch" \
+            -Dsonar.pullrequest.base="$pr_base" \
+            -Dsonar.qualitygate.wait=false
+
   # Security scan with JFrog Xray
   jfrog-xray-scan:
     runs-on: ubuntu-24.04
@@ -86,7 +122,9 @@ jobs:
         with:
           go-version: "1.24"
           cache: true
-          cache-dependency-path: ark/go.sum
+          cache-dependency-path: |
+            ark/go.sum
+            tools/fark/go.sum
 
       - name: Install gcov2lcov
         run: go install github.com/jandelgado/gcov2lcov@latest
@@ -120,7 +158,9 @@ jobs:
         with:
           go-version: "1.24"
           cache: true
-          cache-dependency-path: ark/go.sum
+          cache-dependency-path: |
+            ark/go.sum
+            tools/fark/go.sum
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -132,6 +172,8 @@ jobs:
           args: "--version"
 
       - run: make -j24 build-all
+
+      - run: make -j24 services-test-all
       
       - uses: ./.github/actions/collect-coverage
         with:
@@ -326,13 +368,29 @@ jobs:
           echo "ARK_QUICKSTART_BASE_URL=$ARK_QUICKSTART_BASE_URL"
           echo "ARK_QUICKSTART_API_VERSION=$ARK_QUICKSTART_API_VERSION"
           echo "ARK_QUICKSTART_API_KEY=***"
-          make quickstart
+          make quickstart-force
       - name: Test end-to-end query
         run: |
           # Test the soon-to-be-deprecated query script (still used in quickstart).
           ./scripts/query.sh agent/sample-agent "confirm you have read this message"
           # Test fark.
           fark agent sample-agent "confirm you have read this message"
+
+  e2e-ark-cli:
+    needs: [build-ark-cli]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/test-ark-cli
+        with:
+          azure-openai-key: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
+          azure-openai-base-url: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
+          model-type: azure
+          model-name: gpt-4.1-mini
+          model-api-version: 2024-12-01-preview
+          ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
+          ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
   e2e-smoke-test:
     needs: [setup-container-cache-registry, build-containers]
@@ -624,6 +682,19 @@ jobs:
           cd tools/ark-cli
           npm ci
           npm run build
+
+      - name: Run tests and collect coverage
+        run: |
+          cd tools/ark-cli
+          npm test
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: ${{ github.repository }}
+          directory: tools/ark-cli/artifacts/coverage
+          name: ark-cli
 
       - name: Create NPM package tarball
         run: |

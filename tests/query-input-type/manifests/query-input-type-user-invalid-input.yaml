@@ -1,0 +1,21 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-query-input-type-user-invalid-input
+spec:
+  type: user
+  # This is an invalid user query. input must be a string not an array
+  input:
+    - role: user
+      content: "Calculate 1+1."
+    - role: assistant
+      content: "2"
+    - role: user
+      content: "Calculate 2+2."
+    - role: assistant
+      content: "4"
+    - role: user
+      content: "What is the sum of all previous sums?"
+  targets:
+    - type: agent
+      name: test-agent

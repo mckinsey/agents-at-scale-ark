@@ -1,12 +1,13 @@
 """ARK services API endpoints."""
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from dataclasses import dataclass
 
 from fastapi import APIRouter, Query, HTTPException
 from kubernetes_asyncio import client
 from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio.client.rest import ApiException
+from ark_sdk.k8s import get_context
 
 from ...models.ark_services import (
     ArkService,
@@ -26,7 +27,7 @@ from ...constants.annotations import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/namespaces/{namespace}/ark-services", tags=["ark-services"])
+router = APIRouter(prefix="/ark-services", tags=["ark-services"])
 
 
 @dataclass
@@ -61,32 +62,18 @@ async def get_gateway(custom_api: client.CustomObjectsApi, gateway_name: str, ga
     return Gateway(name=gateway_name, namespace=gateway_namespace, port=port)
 
 
-async def get_gateway_port_for_route(custom_api: client.CustomObjectsApi, route_spec: Dict[str, Any], gateways: Dict[str, Gateway]) -> Optional[int]:
-    """Get the port for a route from its parent gateway.
-    
-    Returns None if the gateway doesn't exist (route should be skipped).
-    Raises an error if the route configuration is invalid.
+async def get_port_for_gateway(gateway_name: str) -> int:
+    """Get the port for a gateway based on its name.
+
+    We use a hardcoded port for localhost-gateway because the ark-api
+    service account cannot read the localhost-gateway resource in ark-system namespace.
+
+    For localhost-gateway, use port 8080.
+    For other gateways, use default port 80.
     """
-    parent_refs = route_spec.get("parentRefs", [])
-    if not parent_refs:
-        raise ValueError("HTTPRoute missing required parentRefs")
-    
-    gateway_name = parent_refs[0].get("name")
-    gateway_namespace = parent_refs[0].get("namespace")
-    if not gateway_name or not gateway_namespace:
-        raise ValueError("HTTPRoute parentRef missing gateway name or namespace")
-    
-    cache_key = f"{gateway_namespace}/{gateway_name}"
-    if cache_key not in gateways:
-        try:
-            gateways[cache_key] = await get_gateway(custom_api, gateway_name, gateway_namespace)
-        except ApiException as e:
-            if e.status == 404:
-                # Gateway doesn't exist yet - this is valid if the user has installed services with routes but not installed a gateway
-                return None
-            raise  # Other errors should bubble up
-    
-    return gateways[cache_key].port
+    if gateway_name == "localhost-gateway":
+        return 8080
+    return 80
 
 
 async def get_httproutes_for_ark_service(namespace: str, release_name: str) -> List[HTTPRouteInfo]:
@@ -108,8 +95,6 @@ async def get_httproutes_for_ark_service(namespace: str, release_name: str) -> L
                 return []
             raise  # Unexpected error (permissions, connection, etc.)
         
-        # Cache gateways for this API call only
-        gateways: Dict[str, Gateway] = {}
         service_routes = []
         
         for route in routes.get("items", []):
@@ -122,14 +107,14 @@ async def get_httproutes_for_ark_service(namespace: str, release_name: str) -> L
             if helm_release_name == release_name:
                 rules = spec.get("rules", [])
                 hostnames = spec.get("hostnames", [])
-                
-                # Get port from referenced gateway
-                port = await get_gateway_port_for_route(custom_api, spec, gateways)
-                
-                # Skip route if gateway doesn't exist - this is valid if user installed services before gateway
-                if port is None:
-                    continue
-                
+
+                # Get gateway name from parent refs
+                parent_refs = spec.get("parentRefs", [])
+                gateway_name = parent_refs[0].get("name") if parent_refs else None
+
+                # Get port based on gateway name
+                port = await get_port_for_gateway(gateway_name) if gateway_name else 80
+
                 # Create one route entry per hostname
                 for hostname in hostnames:
                     url = f"http://{hostname}:{port}" if port != 80 else f"http://{hostname}"
@@ -147,19 +132,22 @@ async def get_httproutes_for_ark_service(namespace: str, release_name: str) -> L
 
 @router.get("", response_model=ArkServiceListResponse)
 async def list_ark_services(
-    namespace: str,
-    list_all_services: Optional[bool] = Query(False, description="List all Helm releases, not just ARK services")
+    list_all_services: Optional[bool] = Query(False, description="List all Helm releases, not just ARK services"),
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
 ) -> ArkServiceListResponse:
     """
     List ARK services (Helm releases) in a namespace.
-    
+
     Args:
         namespace: The namespace to list ARK services from
         list_all_services: List all Helm releases instead of just ARK services (default: False)
-        
+
     Returns:
         ArkServiceListResponse: List of ARK services in the namespace
     """
+    if namespace is None:
+        namespace = get_context()["namespace"]
+
     helm_releases = await get_helm_releases(namespace)
     ark_services = []
     
@@ -208,8 +196,8 @@ async def list_ark_services(
 
 @router.get("/{service_name}", response_model=ArkService)
 async def get_ark_service(
-    namespace: str,
-    service_name: str
+    service_name: str,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
 ) -> ArkService:
     """
     Get a specific ARK service (Helm release) by name.

@@ -1,0 +1,109 @@
+name: e2e-ark-cli
+description: End-to-end test for the ARK CLI
+
+inputs:
+  azure-openai-key:
+    description: Azure OpenAI API key for testing
+    required: true
+  azure-openai-base-url:
+    description: Azure OpenAI base URL
+    required: true
+  model-type:
+    description: Model provider type
+    required: true
+  model-name:
+    description: Model name/version
+    required: true
+  model-api-version:
+    description: Model API version (Azure only)
+    required: true
+  ci-cache-registry-username:
+    description: Username for CI cache registry
+    required: true
+  ci-cache-registry-password:
+    description: Password for CI cache registry
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install dependencies
+      shell: bash
+      run: |
+        sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+        sudo chmod +x /usr/local/bin/yq
+        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+        curl -sS https://webinstall.dev/k9s | bash
+        export PATH="$HOME/.local/bin:$PATH"
+        sudo apt-get update && sudo apt-get install -y gettext
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24.x'
+
+    - name: Setup K3s cluster
+      uses: ./.github/actions/setup-k3s
+      with:
+        metrics-enabled: false
+        traefik-enabled: false
+        k3s-channel: latest
+
+    - name: Install Ark CLI
+      shell: bash
+      run: |
+        set -x
+        cd tools/ark-cli
+        npm install
+        npm run build
+        npm install -g .
+        which ark
+        ls -la $(which ark)
+
+    - name: Check Status
+      shell: bash
+      run: ark status
+
+    - name: Install Ark using CLI
+      shell: bash
+      run: |
+        ark install --yes
+        ark --version
+
+    - name: Wait for Ark components to be ready
+      shell: bash
+      run: |
+        ark status \
+          ark-controller \
+          ark-api \
+          ark-dashboard \
+          --wait-for-ready=15m
+
+        ark status
+
+    - name: Create default model
+      shell: bash
+      run: |
+        ark models create default \
+          --type "${{ inputs.model-type }}" \
+          --model "${{ inputs.model-name }}" \
+          --base-url "${{ inputs.azure-openai-base-url }}" \
+          --api-key "${{ inputs.azure-openai-key }}" \
+          --api-version "${{ inputs.model-api-version }}" \
+          --yes
+
+        kubectl wait --for=jsonpath='{.status.conditions[?(@.type=="ModelAvailable")].status}'=True \
+          model/default \
+          --timeout=5m
+
+    - name: Run Query
+      shell: bash
+      run: |
+        ark query model/default "Hello, please confirm you received this test message"
+
+    - name: Uninstall Ark
+      shell: bash
+      run: |
+        ark uninstall --yes
+        ark status
+        sleep 30 && ark status

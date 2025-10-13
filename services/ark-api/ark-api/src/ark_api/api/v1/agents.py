@@ -3,7 +3,8 @@ import logging
 import json
 import re
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from typing import Optional
 from ark_sdk.models.agent_v1alpha1 import AgentV1alpha1
 
 from ark_sdk.client import with_ark_client
@@ -22,7 +23,7 @@ from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/namespaces/{namespace}/agents", tags=["agents"])
+router = APIRouter(prefix="/agents", tags=["agents"])
 
 # CRD configuration
 VERSION = "v1alpha1"
@@ -101,12 +102,12 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
 
 @router.get("", response_model=AgentListResponse)
 @handle_k8s_errors(operation="list", resource_type="agent")
-async def list_agents(namespace: str) -> AgentListResponse:
+async def list_agents(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> AgentListResponse:
     """
     List all Agent CRs in a namespace.
-    
+
     Args:
-        namespace: The namespace to list agents from
+        namespace: The namespace to list agents from (defaults to current context)
         
     Returns:
         AgentListResponse: List of all agents in the namespace
@@ -126,7 +127,7 @@ async def list_agents(namespace: str) -> AgentListResponse:
 
 @router.post("", response_model=AgentDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="agent")
-async def create_agent(namespace: str, body: AgentCreateRequest) -> AgentDetailResponse:
+async def create_agent(body: AgentCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> AgentDetailResponse:
     """
     Create a new Agent CR.
     
@@ -173,7 +174,7 @@ async def create_agent(namespace: str, body: AgentCreateRequest) -> AgentDetailR
 
 @router.get("/{agent_name}", response_model=AgentDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="agent")
-async def get_agent(namespace: str, agent_name: str) -> AgentDetailResponse:
+async def get_agent(agent_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> AgentDetailResponse:
     """
     Get a specific Agent CR by name.
     
@@ -192,7 +193,7 @@ async def get_agent(namespace: str, agent_name: str) -> AgentDetailResponse:
 
 @router.put("/{agent_name}", response_model=AgentDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="agent")
-async def update_agent(namespace: str, agent_name: str, body: AgentUpdateRequest) -> AgentDetailResponse:
+async def update_agent(agent_name: str, body: AgentUpdateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> AgentDetailResponse:
     """
     Update an Agent CR by name.
     
@@ -243,7 +244,7 @@ async def update_agent(namespace: str, agent_name: str, body: AgentUpdateRequest
 
 @router.delete("/{agent_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="agent")
-async def delete_agent(namespace: str, agent_name: str) -> None:
+async def delete_agent(agent_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> None:
     """
     Delete an Agent CR by name.
     

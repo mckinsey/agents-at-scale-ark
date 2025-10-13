@@ -1,9 +1,8 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, forwardRef, useImperativeHandle } from "react"
+import { useState, useEffect } from "react"
 import { toast } from "@/components/ui/use-toast"
-import { ModelEditor } from "@/components/editors"
 import { modelsService, type Model, type ModelCreateRequest, type ModelUpdateRequest } from "@/lib/services"
 import { ModelCard } from "@/components/cards"
 import { useDelayedLoading } from "@/lib/hooks"
@@ -14,27 +13,22 @@ interface ModelsSectionProps {
   namespace: string
 }
 
-export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSectionProps>(function ModelsSection({ namespace }, ref) {
+export const ModelsSection = function ModelsSection({ namespace }: ModelsSectionProps) {
   const [models, setModels] = useState<Model[]>([])
-  const [modelEditorOpen, setModelEditorOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const showLoading = useDelayedLoading(loading)
   const [showCompactView, setShowCompactView] = useState(false)
-  
+
   const viewOptions: ToggleOption[] = [
     { id: "compact", label: "compact view", active: !showCompactView },
     { id: "card", label: "card view", active: showCompactView }
   ]
 
-  useImperativeHandle(ref, () => ({
-    openAddEditor: () => setModelEditorOpen(true)
-  }));
-
   useEffect(() => {
     const loadData = async () => {
       setLoading(true)
       try {
-        const modelsData = await modelsService.getAll(namespace)
+        const modelsData = await modelsService.getAll()
         setModels(modelsData)
       } catch (error) {
         console.error("Failed to load data:", error)
@@ -56,7 +50,7 @@ export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSec
       if ('id' in model) {
         // Update existing model
         const { id, ...updateData } = model
-        await modelsService.updateById(namespace, id, updateData)
+        await modelsService.updateById(id, updateData)
         toast({
           variant: "success",
           title: "Model Updated",
@@ -64,7 +58,7 @@ export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSec
         })
       } else {
         // Create new model
-        await modelsService.create(namespace, model)
+        await modelsService.create(model)
         toast({
           variant: "success",
           title: "Model Created",
@@ -72,7 +66,7 @@ export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSec
         })
       }
       // Reload data
-      const updatedModels = await modelsService.getAll(namespace)
+      const updatedModels = await modelsService.getAll()
       setModels(updatedModels)
     } catch (error) {
       toast({
@@ -89,14 +83,14 @@ export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSec
       if (!model) {
         throw new Error("Model not found")
       }
-      await modelsService.deleteById(namespace, id)
+      await modelsService.deleteById(id)
       toast({
         variant: "success",
         title: "Model Deleted",
         description: `Successfully deleted ${model.name}`
       })
       // Reload data
-      const updatedModels = await modelsService.getAll(namespace)
+      const updatedModels = await modelsService.getAll()
       setModels(updatedModels)
     } catch (error) {
       toast({
@@ -124,7 +118,7 @@ export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSec
             onChange={(id) => setShowCompactView(id === "card")}
           />
         </div>
-        
+
         <main className="flex-1 overflow-auto px-6 py-0">
           {showCompactView && (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pb-6">
@@ -139,7 +133,7 @@ export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSec
               ))}
             </div>
           )}
-          
+
           {!showCompactView && (
             <div className="flex flex-col gap-3">
               {models.map((model) => (
@@ -155,14 +149,6 @@ export const ModelsSection = forwardRef<{ openAddEditor: () => void }, ModelsSec
           )}
         </main>
       </div>
-      
-      <ModelEditor
-        open={modelEditorOpen}
-        onOpenChange={setModelEditorOpen}
-        model={null}
-        onSave={handleSaveModel}
-        namespace={namespace}
-      />
     </>
   )
-});
+}

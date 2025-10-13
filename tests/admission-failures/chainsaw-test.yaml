@@ -62,10 +62,6 @@ spec:
     try:
     - error:
         file: manifests/invalid-query-invalid-target-type.yaml
-  - name: test-query-both-evaluators-and-selector
-    try:
-    - error:
-        file: manifests/invalid-query-both-evaluators-and-selector.yaml
   - name: test-query-no-targets-or-selector
     try:
     - error:

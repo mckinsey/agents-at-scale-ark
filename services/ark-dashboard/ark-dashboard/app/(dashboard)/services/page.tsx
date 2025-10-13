@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
 import {
   ColumnDef,
   flexRender,
@@ -23,16 +22,14 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbList,
-  BreadcrumbPage
-} from "@/components/ui/breadcrumb"
-import { Separator } from "@/components/ui/separator"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+
 import { ExternalLink } from "lucide-react"
 import { arkServicesService, type ArkService } from "@/lib/services"
+import { BreadcrumbElement, PageHeader } from "@/components/common/page-header"
+
+const breadcrumbs: BreadcrumbElement[] = [
+  { href: '/', label: "ARK Dashboard" }
+]
 
 // Column definitions
 const columns: ColumnDef<ArkService>[] = [
@@ -85,7 +82,7 @@ const columns: ColumnDef<ArkService>[] = [
       const service = row.original
       const chartVersion = service.chart_version
       const appVersion = service.app_version
-      
+
       return (
         <div className="text-sm">
           {appVersion && (
@@ -114,7 +111,7 @@ const columns: ColumnDef<ArkService>[] = [
     cell: ({ row }) => {
       const updated = row.original.updated
       if (!updated) return <div className="text-muted-foreground text-sm">-</div>
-      
+
       try {
         const date = new Date(updated)
         const now = new Date()
@@ -122,7 +119,7 @@ const columns: ColumnDef<ArkService>[] = [
         const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
         const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
         const diffMinutes = Math.floor(diffMs / (1000 * 60))
-        
+
         let timeAgo
         if (diffDays > 0) {
           timeAgo = `${diffDays}d ago`
@@ -133,7 +130,7 @@ const columns: ColumnDef<ArkService>[] = [
         } else {
           timeAgo = "Just now"
         }
-        
+
         return (
           <div className="text-sm">
             <div>{timeAgo}</div>
@@ -155,7 +152,7 @@ const columns: ColumnDef<ArkService>[] = [
       if (!routes || routes.length === 0) {
         return <div className="text-muted-foreground text-sm">No routes</div>
       }
-      
+
       return (
         <div className="space-y-1">
           {routes.map((route, index) => (
@@ -203,9 +200,9 @@ function DataTable<TData, TValue>({
                     {header.isPlaceholder
                       ? null
                       : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
+                        header.column.columnDef.header,
+                        header.getContext()
+                      )}
                   </TableHead>
                 )
               })}
@@ -240,9 +237,6 @@ function DataTable<TData, TValue>({
 }
 
 function ServicesContent() {
-  const searchParams = useSearchParams()
-  const namespace = searchParams.get("namespace") || "default"
-  
   const [services, setServices] = useState<ArkService[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -252,7 +246,7 @@ function ServicesContent() {
       setLoading(true)
       setError(null)
       try {
-        const data = await arkServicesService.getAll(namespace)
+        const data = await arkServicesService.getAll()
         setServices(data.items)
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load ARK services")
@@ -262,22 +256,12 @@ function ServicesContent() {
     }
 
     fetchServices()
-  }, [namespace])
+  }, [])
 
   if (loading) {
     return (
       <>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbPage>ARK Services</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </header>
+        <PageHeader breadcrumbs={breadcrumbs} currentPage="ARK Services" />
         <div className="flex flex-1 flex-col">
           <main className="flex-1 overflow-auto p-4">
             <div className="flex items-center justify-center h-32">
@@ -292,17 +276,7 @@ function ServicesContent() {
   if (error) {
     return (
       <>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbPage>ARK Services</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </header>
+        <PageHeader breadcrumbs={breadcrumbs} currentPage="ARK Services" />
         <div className="flex flex-1 flex-col">
           <main className="flex-1 overflow-auto p-4">
             <div className="text-red-600 bg-red-50 border border-red-200 rounded-md p-4">
@@ -317,17 +291,7 @@ function ServicesContent() {
 
   return (
     <>
-      <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-        <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbPage>ARK Services</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-      </header>
+      <PageHeader breadcrumbs={breadcrumbs} currentPage="ARK Services" />
       <div className="flex flex-1 flex-col">
         <main className="flex-1 overflow-auto p-4">
           <DataTable columns={columns} data={services} />

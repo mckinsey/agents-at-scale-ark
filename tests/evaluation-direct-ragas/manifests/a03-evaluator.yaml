@@ -1,0 +1,40 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: test-evaluator-llm
+  labels:
+    ark.mckinsey.com/provider: ragas
+    ark.mckinsey.com/service: evaluation
+spec:
+  description: "ragas-based evaluation"
+  address:
+    valueFrom:
+      serviceRef:
+        name: ark-evaluator
+        namespace: default
+        port: "http"
+        path: "/evaluate"
+  parameters:
+    # Provider selection
+    - name: provider
+      value: ragas
+    - name: azure.embedding_deployment
+      value: "text-embedding-ada-002"  # or whatever your embedding deployment is named
+    - name: azure.embedding_model
+      value: "text-embedding-ada-002"   # the model name
+    # Azure-specific required parameters
+    - name: azure.endpoint
+      value: ($azure.url)
+    - name: azure.deployment_name
+      value: "gpt-4.1-mini"
+    - name: azure.api_version
+      value: "2024-12-01-preview"
+    - name: azure.api_key
+      valueFrom:
+        secretKeyRef:
+          name: direct-evaluation-model-token
+          key: token
+    - name: min-score
+      value: "0.7"
+    - name: model.name
+      value: direct-evaluation-model

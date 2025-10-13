@@ -1,18 +1,32 @@
 # Deploying Ark
 
-Deploy Ark locally using quickstart or to remote clusters with registry-based deployment.
+Deploy Ark locally using the CLI, Helm, or to remote clusters with registry-based deployment.
 
-## Local Deployment
+## CLI Deployment
 
-For local development against local clusters (minikube, kind, k3s, Docker Desktop Kubernetes), the `make quickstart` command can be used from the repository:
+Ensure you have [Node.js](https://nodejs.org/en/download) and [Helm](https://helm.sh/docs/intro/install/) installed. Then run the following commands to install Ark:
 
-```bash
-git clone https://github.com/mckinsey/agents-at-scale-ark.git
-cd agents-at-scale-ark
-make quickstart
+```
+npm install -g @agents-at-scale/ark
+ark install
 ```
 
-This builds the containers locally and deploys them to a local cluster. More details are in the [Getting Started](../../quickstart) guide. 
+This will run an interactive install of the core Ark controller, dependencies, and optional additional services.
+
+## Local Development
+
+To run in local development mode with live-reload, install [Devspace](https://devspace.sh), clone and run:
+
+```bash
+# Clone the repo, move to the project.
+git clone https://github.com/mckinsey/agents-at-scale-ark.git
+cd agents-at-scale-ark
+
+# Run with live-reload for local development.
+devspace dev
+```
+
+More details are in the [Local Development](../../developer-guide/local-development) developer guide. 
 
 ## Deploying via Helm
 

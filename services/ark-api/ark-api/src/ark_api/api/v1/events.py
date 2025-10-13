@@ -6,13 +6,14 @@ from fastapi import APIRouter, Query
 from kubernetes_asyncio import client
 from kubernetes_asyncio.client.api_client import ApiClient
 from kubernetes_asyncio.client.rest import ApiException
+from ark_sdk.k8s import get_context
 
 from ...models.events import EventListResponse, EventResponse, event_to_response
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/namespaces/{namespace}/events", tags=["events"])
+router = APIRouter(prefix="/events", tags=["events"])
 
 
 def _matches_type_filter(event_dict: dict, type_filter: Optional[str]) -> bool:
@@ -57,7 +58,7 @@ def _paginate_events(events: list, page_num: int, limit_num: int) -> tuple[list,
 @router.get("", response_model=EventListResponse)
 @handle_k8s_errors(operation="list", resource_type="event")
 async def list_events(
-    namespace: str,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
     type_filter: Optional[str] = Query(None, alias="type", description="Filter by event type (Normal, Warning)"),
     kind_filter: Optional[str] = Query(None, alias="kind", description="Filter by involved object kind"),
     name_filter: Optional[str] = Query(None, alias="name", description="Filter by involved object name"),
@@ -66,7 +67,7 @@ async def list_events(
 ) -> EventListResponse:
     """
     List all Kubernetes events in a namespace with optional filtering.
-    
+
     Args:
         namespace: The namespace to list events from
         type_filter: Filter by event type (Normal, Warning)
@@ -74,10 +75,13 @@ async def list_events(
         name_filter: Filter by involved object name
         limit: Maximum number of events to return (default: 500)
         page: Page number for pagination (1-based, default: 1)
-        
+
     Returns:
         EventListResponse: List of events in the namespace
     """
+    if namespace is None:
+        namespace = get_context()["namespace"]
+
     async with ApiClient() as api_client:
         v1 = client.CoreV1Api(api_client)
         
@@ -111,19 +115,22 @@ async def list_events(
 @router.get("/{event_name}", response_model=EventResponse)
 @handle_k8s_errors(operation="get", resource_type="event")
 async def get_event(
-    namespace: str,
-    event_name: str
+    event_name: str,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
 ) -> EventResponse:
     """
     Get a specific Kubernetes event by name.
-    
+
     Args:
         namespace: The namespace containing the event
         event_name: The name of the event to retrieve
-        
+
     Returns:
         EventResponse: The requested event details
     """
+    if namespace is None:
+        namespace = get_context()["namespace"]
+
     async with ApiClient() as api_client:
         v1 = client.CoreV1Api(api_client)
         
