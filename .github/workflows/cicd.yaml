@@ -173,6 +173,10 @@ jobs:
 
       - run: make -j24 build-all
 
+      - run: rm -Rf out/ark-dashboard/
+
+      - run: make ark-dashboard-deps
+
       - name: Check generated types are unchanged
         run: |
           if ! git diff --exit-code services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts; then
