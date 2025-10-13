@@ -14,7 +14,6 @@ This page provides detailed specifications for each ARK custom resource.
 | [Team](#teams) | `ark.mckinsey.com/v1alpha1` | Teams of agents with execution strategies |
 | [Evaluator](#evaluators) | `ark.mckinsey.com/v1alpha1` | AI-powered query assessment services |
 | [Evaluation](#evaluations) | `ark.mckinsey.com/v1alpha1` | Multi-type AI output assessments |
-| [A2AServer](#a2a-servers) | `ark.mckinsey.com/v1prealpha1` | Agent-to-Agent protocol servers |
 | [ExecutionEngine](#execution-engines) | `ark.mckinsey.com/v1prealpha1` | External execution engines |
 
 ## Teams
@@ -339,24 +338,6 @@ spec:
         weight: 1
 ```
 
-
-## A2A Servers
-
-A2A (Agent-to-Agent) Servers enable hosting external agent frameworks within ARK.
-
-### Specification
-```yaml
-apiVersion: ark.mckinsey.com/v1prealpha1
-kind: A2AServer
-metadata:
-  name: langchain-agents
-spec:
-  address:
-    valueFrom:
-      serviceRef:
-        name: langchain-service
-        port: "8080"
-```
 
 ## Execution Engines
 

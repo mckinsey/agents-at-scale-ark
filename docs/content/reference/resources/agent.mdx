@@ -192,6 +192,33 @@ spec:
       value: "expert"  # Static value
 ```
 
+### A2A Agent (Created by A2AServer)
+
+Agents created by [A2AServer](/reference/resources/a2aserver) resources use the A2A execution engine:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: aws-operator-agent
+  annotations:
+    # A2A server that created this agent
+    ark.mckinsey.com/a2a-server-name: aws-operator-agent
+    # Resolved address of the A2A server
+    ark.mckinsey.com/a2a-server-address: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent-jg0yD9Hv2n
+    # Skills discovered from the A2A server
+    ark.mckinsey.com/a2a-server-skills: '[{"name":"describe_ec2_instances","description":"List and describe EC2 instances"}]'
+spec:
+  description: AWS operations agent with read-only access to AWS services
+  prompt: You are aws_operator_agent. AWS operations agent with read-only access to AWS services
+  executionEngine:
+    name: a2a
+  # modelRef omitted - A2A agents don't require models by default
+  # If the underlying A2A server uses an ARK model, the agent can optionally link to it via modelRef.
+  # When modelRef is set, the agent will only show as Available if both the model and A2A server are available.
+  # Otherwise, only the A2A server availability is checked.
+```
+
 ## Reconciliation Behavior
 
 The agent controller continuously reconciles agent resources to ensure dependencies are met:
