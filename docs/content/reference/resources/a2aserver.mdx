@@ -69,7 +69,7 @@ spec:
 
 When an A2AServer is created:
 
-1. **Discovery**: Controller connects to the server and discovers available agents
+1. **Discovery**: Controller connects to the server and discovers available agents. Tries `/.well-known/agent-card.json` (A2A ≥0.3), then `/.well-known/agent.json` (A2A <0.3).
 2. **Agent Creation**: For each discovered agent, an Agent resource is created with:
    - Owner reference to the A2AServer
    - `executionEngine.name: a2a`
