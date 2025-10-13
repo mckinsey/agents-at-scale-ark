@@ -104,7 +104,7 @@ def main(host: str, port: int) -> None:
     # Extract the specific routes we need
     jsonrpc_route = None
     agent_json_route = None
-    
+
     for route in built_a2a_app.routes:
         if hasattr(route, 'path'):
             if route.path == "/":
@@ -114,18 +114,21 @@ def main(host: str, port: int) -> None:
 
     # Create main application with health check and specific A2A routes
     routes = [Route("/health", health, methods=["GET"])]
-    
+
     if jsonrpc_route:
         routes.append(Route("/", jsonrpc_route.endpoint, methods=jsonrpc_route.methods))
-    
+
+    # Add both legacy and new agent discovery endpoints
     if agent_json_route:
-        routes.append(agent_json_route)
-    
+        routes.append(agent_json_route)  # Legacy: /.well-known/agent.json
+        routes.append(Route("/agent-card.json", agent_json_route.endpoint, methods=agent_json_route.methods))  # New endpoint
+
     app = Starlette(routes=routes)
 
     logger.info(f"Starting LangChain A2A server on {host}:{port}")
     logger.info("Available endpoints:")
-    logger.info("  - /.well-known/agent.json (agent discovery)")
+    logger.info("  - /.well-known/agent.json (legacy agent discovery)")
+    logger.info("  - /agent-card.json (new agent discovery)")
     logger.info("  - / (main endpoint)")
     logger.info("  - /health (health check)")
 

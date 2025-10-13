@@ -21,29 +21,58 @@ import (
 	"mckinsey.com/ark/internal/telemetry"
 )
 
+const (
+	// AgentCardPathVersion2 is the A2A protocol 0.2.x agent card path
+	AgentCardPathVersion2 = "/.well-known/agent.json"
+	// AgentCardPathVersion3 is the A2A protocol 0.3.x agent card path
+	AgentCardPathVersion3 = "/.well-known/agent-card.json"
+)
+
 // DiscoverA2AAgents discovers agents from an A2A server using simplified HTTP approach
-// Note: The A2A library doesn't provide a direct agent discovery API yet, so we use HTTP
 func DiscoverA2AAgents(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace string) (*A2AAgentCard, error) {
 	return DiscoverA2AAgentsWithRecorder(ctx, k8sClient, address, headers, namespace, nil, nil)
 }
 
 // DiscoverA2AAgentsWithRecorder discovers agents with optional K8s event recording
+// Tries both A2A protocol versions: 0.3.x (agent-card.json) and 0.2.x (agent.json)
+// Note: protocol.AgentCardPath is version 0.2.x (agent.json) at time of writing
 func DiscoverA2AAgentsWithRecorder(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace string, recorder record.EventRecorder, obj client.Object) (*A2AAgentCard, error) {
-	agentCardURL := strings.TrimSuffix(address, "/") + protocol.AgentCardPath
+	baseURL := strings.TrimSuffix(address, "/")
 
-	// Create A2A client for consistent configuration
 	if err := validateA2AClient(address, headers, ctx, k8sClient, namespace, recorder, obj); err != nil {
 		return nil, err
 	}
 
-	// Create and configure HTTP request
-	req, err := createA2ARequest(ctx, agentCardURL, headers, k8sClient, namespace, recorder, obj)
-	if err != nil {
-		return nil, err
+	endpoints := []struct {
+		url     string
+		version string
+	}{
+		{baseURL + AgentCardPathVersion3, "protocol version 0.3.x"},
+		{baseURL + AgentCardPathVersion2, "protocol version 0.2.x"},
 	}
 
-	// Execute request and parse response
-	return executeA2ARequest(ctx, req, address, recorder, obj)
+	var lastErr error
+	for _, endpoint := range endpoints {
+		req, err := createA2ARequest(ctx, endpoint.url, headers, k8sClient, namespace, recorder, obj)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		agentCard, err := executeA2ARequest(ctx, req, address, recorder, obj)
+		if err == nil {
+			if recorder != nil && obj != nil {
+				recorder.Event(obj, corev1.EventTypeNormal, "A2ADiscoverySuccess", fmt.Sprintf("Successfully discovered agent using %s at %s", endpoint.version, endpoint.url))
+			}
+			return agentCard, nil
+		}
+
+		lastErr = err
+		logf.FromContext(ctx).Info("Failed to discover agent using endpoint, trying next", "url", endpoint.url, "version", endpoint.version, "error", err)
+	}
+
+	return nil, fmt.Errorf("failed to discover agent from all endpoints (%s, %s): %w",
+		AgentCardPathVersion3, AgentCardPathVersion2, lastErr)
 }
 
 // ExecuteA2AAgent executes a task on an A2A agent using the official library client
