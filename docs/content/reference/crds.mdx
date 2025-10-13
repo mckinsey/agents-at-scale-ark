@@ -11,48 +11,10 @@ This page provides detailed specifications for each ARK custom resource.
 
 | Resource | API Version | Description |
 |----------|-------------|-------------|
-| [Team](#teams) | `ark.mckinsey.com/v1alpha1` | Teams of agents with execution strategies |
 | [Evaluator](#evaluators) | `ark.mckinsey.com/v1alpha1` | AI-powered query assessment services |
 | [Evaluation](#evaluations) | `ark.mckinsey.com/v1alpha1` | Multi-type AI output assessments |
 | [A2AServer](#a2a-servers) | `ark.mckinsey.com/v1prealpha1` | Agent-to-Agent protocol servers |
 | [ExecutionEngine](#execution-engines) | `ark.mckinsey.com/v1prealpha1` | External execution engines |
-
-## Teams
-
-Teams coordinate multiple agents working together using different execution strategies.
-
-### Specification
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Team
-metadata:
-  name: team-seq
-spec:
-  members:
-    - name: agent-seq
-      type: agent
-    - name: agent-seq
-      type: agent
-    - name: agent-seq
-      type: agent
-  strategy: "sequential"
-```
-
-### Execution Strategies
-- **sequential**: Agents process input one after another
-- **parallel**: Agents process input simultaneously
-- **round-robin**: Agents take turns processing inputs
-- **selector**: Dynamic agent selection based on criteria
-
-### Member Types
-- **agent**: Reference to an Agent resource
-- **team**: Reference to another Team resource (nested teams)
-
-### Advanced Features
-Teams support complex workflows including:
-- **Graph-based strategies**: Custom execution flows
-- **Conditional routing**: Dynamic member selection
-- **Termination conditions**: Early completion criteria
 
 ## Evaluators
 

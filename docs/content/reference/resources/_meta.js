@@ -4,5 +4,6 @@ export default {
   memory: 'Memories',
   models: 'Models',
   query: 'Queries',
+  team: 'Teams',
   tools: 'Tools'
 }
