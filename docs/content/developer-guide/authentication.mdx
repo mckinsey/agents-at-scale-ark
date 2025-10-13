@@ -303,6 +303,17 @@ The authentication flow varies based on the `AUTH_MODE` setting:
 
 ARK supports HTTP Basic Authentication using API keys for service-to-service communication. This authentication method is ideal for programmatic access, CI/CD systems, and headless services.
 
+### API Key Namespace Scoping
+
+API keys in ARK are **namespace-scoped** for multi-tenant security:
+
+- Each namespace maintains its own set of API keys
+- API keys are stored as Kubernetes secrets with type `ark.mckinsey.com/api-key`
+- Service accounts only have permissions within their deployment namespace
+- True tenant isolation: Tenant A cannot access Tenant B's API keys
+
+This design ensures that in multi-tenant deployments, each tenant's API keys remain private and isolated from other tenants. When you create an API key, it is stored in the current namespace context (or the namespace you specify explicitly).
+
 ### Creating API Keys
 
 API keys can be created through the ARK Dashboard (when `AUTH_MODE=hybrid` or `AUTH_MODE=sso`) or directly via API endpoints.
@@ -315,6 +326,7 @@ API keys can be created through the ARK Dashboard (when `AUTH_MODE=hybrid` or `A
 
 #### Via API Endpoint
 ```bash
+# Create in current namespace
 curl -X POST http://localhost:8000/v1/api-keys \
   -H "Content-Type: application/json" \
   -d '{
@@ -322,6 +334,8 @@ curl -X POST http://localhost:8000/v1/api-keys \
     "expires_at": "2024-12-31T23:59:59Z"
   }'
 ```
+
+**Note:** The API key will be stored in the current namespace only. You must authenticate against the ARK API instance in the same namespace where the API key was created.
 
 ### Using API Keys
 
@@ -369,11 +383,13 @@ API keys use HTTP Basic Authentication where:
 
 #### List API Keys
 ```bash
+# List in current namespace
 GET /v1/api-keys
 ```
 
 #### Create API Key
 ```bash
+# Create in current namespace
 POST /v1/api-keys
 Content-Type: application/json
 
@@ -385,6 +401,7 @@ Content-Type: application/json
 
 #### Revoke API Key
 ```bash
+# Revoke in current namespace
 DELETE /v1/api-keys/{public_key}
 ```
 
@@ -392,10 +409,12 @@ DELETE /v1/api-keys/{public_key}
 
 - **Secret Key Storage**: Secret keys are hashed using bcrypt before storage in Kubernetes secrets
 - **Single Display**: Secret keys are shown only once during creation - store them securely
+- **Namespace Isolation**: API keys are namespace-scoped for multi-tenant security
+- **Tenant Isolation**: Each tenant's API keys are isolated (cannot access other tenants' keys)
+- **Kubernetes RBAC**: Service accounts only have permissions within their deployment namespace
 - **Expiration**: API keys can have optional expiration dates for enhanced security
 - **Soft Delete**: Revoked API keys are marked inactive but retained for audit trails
-- **Global Access**: API keys provide access to all ARK APIs (no namespace restrictions currently)
-- **Centralized Storage**: API keys are stored as Kubernetes secrets in the `ark-system` namespace for centralized management
+- **Per-Namespace Storage**: API keys are stored as Kubernetes secrets in their respective namespaces for true tenant isolation
 
 ## Security Features
 

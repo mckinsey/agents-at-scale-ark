@@ -11,6 +11,8 @@ from typing import Optional, List, Tuple, Dict, Any
 from kubernetes_asyncio import client
 from kubernetes_asyncio.client.api_client import ApiClient
 
+from ark_sdk.k8s import get_context
+
 from ..models.auth import (
     APIKeyCreateRequest,
     APIKeyResponse,
@@ -37,13 +39,12 @@ SECRET_KEY_TOKEN_LENGTH = 48  # bytes for secret key token generation
 class APIKeyService:
     """Service for managing API keys stored as Kubernetes secrets."""
     
-    def __init__(self, namespace: str = "ark-system"):
+    def __init__(self):
         """Initialize API key service.
         
-        Args:
-            namespace: Kubernetes namespace to store API keys in
+        API keys are always stored in the current context namespace for security.
         """
-        self.namespace = namespace
+        self.namespace = get_context()["namespace"]
     
     def _generate_key_pair(self) -> Tuple[str, str]:
         """Generate a public/secret key pair.

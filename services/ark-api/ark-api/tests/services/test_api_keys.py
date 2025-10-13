@@ -1,7 +1,7 @@
 """Test cases for API key service."""
 
 import unittest
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch, AsyncMock, MagicMock
 from datetime import datetime, timezone, timedelta
 import base64
 import bcrypt
@@ -14,9 +14,11 @@ from ark_api.models.auth import APIKeyCreateRequest
 class TestAPIKeyService(unittest.TestCase):
     """Test API key service functionality."""
     
-    def setUp(self):
+    @patch('ark_api.services.api_keys.get_context')
+    def setUp(self, mock_get_context):
         """Set up test fixtures."""
-        self.service = APIKeyService(namespace="test-namespace")
+        mock_get_context.return_value = {"namespace": "test-namespace", "cluster": "test"}
+        self.service = APIKeyService()
     
     def test_generate_key_pair(self):
         """Test API key pair generation."""
@@ -102,9 +104,11 @@ class TestAPIKeyService(unittest.TestCase):
 class TestAPIKeyServiceIntegration(unittest.TestCase):
     """Integration tests for API key service with mocked Kubernetes client."""
     
-    def setUp(self):
+    @patch('ark_api.services.api_keys.get_context')
+    def setUp(self, mock_get_context):
         """Set up test fixtures."""
-        self.service = APIKeyService(namespace="test-namespace")
+        mock_get_context.return_value = {"namespace": "test-namespace", "cluster": "test"}
+        self.service = APIKeyService()
     
     @patch('ark_api.services.api_keys.ApiClient')
     @patch('ark_api.services.api_keys.client.CoreV1Api')
@@ -299,6 +303,153 @@ class TestAPIKeyServiceIntegration(unittest.TestCase):
         
         # Verify result
         self.assertIsNone(result)
+
+
+class TestAPIKeyNamespaceScoping(unittest.TestCase):
+    """Test namespace scoping for API keys (multi-tenant isolation)."""
+    
+    @patch('ark_api.services.api_keys.get_context')
+    def test_default_namespace_from_context(self, mock_get_context):
+        """Test that APIKeyService uses current context namespace by default."""
+        mock_get_context.return_value = {"namespace": "team-a", "cluster": "test-cluster"}
+        
+        # Create service without specifying namespace
+        service = APIKeyService()
+        
+        # Verify it uses the context namespace
+        self.assertEqual(service.namespace, "team-a")
+        mock_get_context.assert_called_once()
+    
+    @patch('ark_api.services.api_keys.get_context')
+    def test_namespace_always_from_context(self, mock_get_context):
+        """Test that namespace always comes from context (no override possible)."""
+        mock_get_context.return_value = {"namespace": "team-a", "cluster": "test-cluster"}
+        
+        # Create service - it must use context namespace
+        service = APIKeyService()
+        
+        # Verify it uses the context namespace
+        self.assertEqual(service.namespace, "team-a")
+        mock_get_context.assert_called_once()
+    
+    @patch('ark_api.services.api_keys.get_context')
+    @patch('ark_api.services.api_keys.ApiClient')
+    @patch('ark_api.services.api_keys.client.CoreV1Api')
+    async def test_api_keys_isolated_by_namespace(self, mock_v1_api, mock_api_client, mock_get_context):
+        """Test that API keys in different namespaces are isolated."""
+        # Setup async context manager mock
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+        
+        # Create services for two different namespaces by mocking context
+        mock_get_context.return_value = {"namespace": "team-a", "cluster": "test"}
+        service_team_a = APIKeyService()
+        
+        mock_get_context.return_value = {"namespace": "team-b", "cluster": "test"}
+        service_team_b = APIKeyService()
+        
+        # Mock secret creation response
+        mock_secret = Mock()
+        mock_secret.metadata.uid = "test-uid"
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.create_namespaced_secret = AsyncMock(return_value=mock_secret)
+        
+        # Create API keys in both namespaces
+        request = APIKeyCreateRequest(name="Test Key")
+        
+        await service_team_a.create_api_key(request)
+        await service_team_b.create_api_key(request)
+        
+        # Verify keys were created in correct namespaces
+        calls = mock_api_instance.create_namespaced_secret.call_args_list
+        self.assertEqual(len(calls), 2)
+        
+        # First call should be to team-a
+        self.assertEqual(calls[0][1]["namespace"], "team-a")
+        
+        # Second call should be to team-b
+        self.assertEqual(calls[1][1]["namespace"], "team-b")
+    
+    @patch('ark_api.services.api_keys.get_context')
+    @patch('ark_api.services.api_keys.ApiClient')
+    @patch('ark_api.services.api_keys.client.CoreV1Api')
+    async def test_list_api_keys_namespace_scoped(self, mock_v1_api, mock_api_client, mock_get_context):
+        """Test that listing API keys only returns keys from the service's namespace."""
+        # Setup async context manager mock
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+        
+        # Create service for team-a
+        mock_get_context.return_value = {"namespace": "team-a", "cluster": "test"}
+        service = APIKeyService()
+        
+        # Mock secret list response
+        mock_response = Mock()
+        mock_response.items = []
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.list_namespaced_secret = AsyncMock(return_value=mock_response)
+        
+        # List API keys
+        await service.list_api_keys()
+        
+        # Verify list was called with correct namespace
+        mock_api_instance.list_namespaced_secret.assert_called_once_with(
+            namespace="team-a",
+            label_selector=f"{API_KEY_TYPE}=true"
+        )
+    
+    @patch('ark_api.services.api_keys.get_context')
+    @patch('ark_api.services.api_keys.ApiClient')
+    @patch('ark_api.services.api_keys.client.CoreV1Api')
+    async def test_verify_api_key_namespace_scoped(self, mock_v1_api, mock_api_client, mock_get_context):
+        """Test that API key verification is namespace-scoped."""
+        # Setup async context manager mock
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+        
+        # Create services for two namespaces by mocking context
+        mock_get_context.return_value = {"namespace": "team-a", "cluster": "test"}
+        service_team_a = APIKeyService()
+        
+        mock_get_context.return_value = {"namespace": "team-b", "cluster": "test"}
+        service_team_b = APIKeyService()
+        
+        # Mock API response - key exists in team-a but not in team-b
+        mock_secret = Mock()
+        mock_secret.type = "ark.mckinsey.com/api-key"
+        mock_secret.metadata.uid = "test-uid"
+        mock_secret.metadata.annotations = {
+            API_KEY_ANNOTATION: json.dumps({"name": "Test Key", "createdAt": "2024-01-01T00:00:00+00:00"})
+        }
+        mock_secret.data = {
+            "public_key": base64.b64encode(b"pk-ark-test").decode(),
+            "secret_key_hash": base64.b64encode(b"hash").decode(),
+            "is_active": base64.b64encode(b"true").decode()
+        }
+        
+        mock_api_instance = mock_v1_api.return_value
+        
+        # For team-a: return the secret
+        # For team-b: raise 404 (not found)
+        def read_namespaced_secret_side_effect(*args, **kwargs):
+            namespace = kwargs.get("namespace")
+            if namespace == "team-a":
+                return mock_secret
+            else:
+                from kubernetes_asyncio.client.rest import ApiException
+                raise ApiException(status=404)
+        
+        mock_api_instance.read_namespaced_secret = AsyncMock(side_effect=read_namespaced_secret_side_effect)
+        mock_api_instance.patch_namespaced_secret = AsyncMock(return_value=mock_secret)
+        
+        # Verify in team-a should find the key
+        result_a = await service_team_a.get_api_key_by_public_key("pk-ark-test")
+        self.assertIsNotNone(result_a)
+        self.assertEqual(result_a["public_key"], "pk-ark-test")
+        
+        # Verify in team-b should NOT find the key (namespace isolation)
+        result_b = await service_team_b.get_api_key_by_public_key("pk-ark-test")
+        self.assertIsNone(result_b)
 
 
 if __name__ == '__main__':

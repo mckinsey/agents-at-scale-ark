@@ -44,11 +44,11 @@ curl -H "Authorization: Bearer <jwt-token>" https://ark-api.example.com/v1/agent
 
 ### API Key Authentication (Service-to-Service)
 
-For programmatic access and service-to-service communication:
+For programmatic access and service-to-service communication. **API keys are stored per-namespace for tenant isolation.**
 
 **Creating API Keys:**
 ```bash
-# Create an API key via the dashboard or API
+# Create an API key in the current namespace
 curl -X POST https://ark-api.example.com/v1/api-keys \
   -H "Authorization: Bearer <jwt-token>" \
   -H "Content-Type: application/json" \
@@ -78,20 +78,22 @@ curl -H "Authorization: Basic <base64(public_key:secret_key)>" \
   https://ark-api.example.com/v1/agents
 ```
 
+**Note:** API keys are namespace-scoped and stored in the current namespace only. You must authenticate against the ARK API instance in the same namespace where the API key was created.
+
 ### API Key Management
 
 ```bash
-# List API keys (secrets not shown)
+# List API keys in current namespace (secrets not shown)
 GET /v1/api-keys
 
-# Create API key
+# Create API key in current namespace
 POST /v1/api-keys
 {
   "name": "Service Key",
   "expires_at": "2024-12-31T23:59:59Z"  // Optional
 }
 
-# Delete API key (soft delete)
+# Delete API key (soft delete) from current namespace
 DELETE /v1/api-keys/{public_key}
 ```
 
@@ -109,7 +111,7 @@ AUTH_MODE=basic         # API keys only
 AUTH_MODE=open          # No auth (development)
 ```
 
-**Note**: API keys are always stored in the `ark-system` namespace for centralized management and security. The RBAC configuration grants the service account permissions to access secrets in both the release namespace and `ark-system`.
+**Note**: API keys are stored per-namespace for tenant isolation. Each namespace has its own set of API keys stored as Kubernetes secrets. The RBAC configuration grants the service account permissions to access secrets only in its deployment namespace, ensuring true multi-tenant isolation.
 
 ### AUTH_MODE Behavior
 
@@ -137,10 +139,12 @@ AUTH_MODE=open          # No auth (development)
 ### Security Considerations
 
 - **API Key Storage**: API keys are stored as Kubernetes secrets with bcrypt-hashed secret keys
+- **Namespace Isolation**: API keys are namespace-scoped for multi-tenant security
+- **Tenant Isolation**: Each tenant's API keys are isolated (cannot access other tenants' keys)
+- **Kubernetes RBAC**: Service accounts only have permissions within their deployment namespace
 - **Expiration**: API keys can have optional expiration dates
 - **Last Used Tracking**: API key usage is tracked with last-used timestamps
 - **Soft Delete**: API keys are soft-deleted (marked inactive) for audit trails
-- **Global Access**: API keys provide global access to ARK APIs (no namespace restrictions)
 
 ### Public Routes
 

@@ -46,9 +46,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
     - open: No authentication (development)
     """
     
-    def __init__(self, app, api_key_namespace: str = "ark-system"):
+    def __init__(self, app):
         super().__init__(app)
-        self.api_key_service = APIKeyService(namespace=api_key_namespace)
+        # API keys are always stored in current context namespace for security
+        self.api_key_service = APIKeyService()
         
         # Validate configuration at startup
         self._validate_auth_config()
@@ -155,16 +156,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 else:
                     public_key, secret_key = credentials
                     
-                    # Verify API key
+                    # Verify API key (uses namespace configured at middleware initialization)
+                    # API keys are namespace-scoped for tenant isolation
                     api_key_data = await self.api_key_service.verify_api_key(public_key, secret_key)
                     if api_key_data:
                         auth_success = True
-                        logger.debug(f"Basic auth successful for key: {public_key}")
+                        logger.debug(f"Basic auth successful for key: {public_key} in namespace {self.api_key_service.namespace}")
                         
                         # Add API key context to request (optional)
                         request.state.api_key = api_key_data
                     else:
-                        auth_error = "Invalid API key credentials"
+                        auth_error = f"Invalid API key credentials or key not found in namespace {self.api_key_service.namespace}"
                         
             except Exception as e:
                 logger.error(f"Basic auth error: {e}")
