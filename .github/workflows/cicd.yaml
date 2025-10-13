@@ -173,6 +173,13 @@ jobs:
 
       - run: make -j24 build-all
 
+      - name: Check generated types are unchanged
+        run: |
+          if ! git diff --exit-code services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts; then
+            echo "Error: Generated types.ts file has changed. Please regenerate and commit the changes."
+            exit 1
+          fi
+
       - run: make -j24 services-test-all
       
       - uses: ./.github/actions/collect-coverage
