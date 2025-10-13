@@ -3,7 +3,6 @@
 import { EvaluationStatusIndicator } from "@/components/evaluation";
 import { useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import { toast } from "@/components/ui/use-toast";
-import type { components } from "@/lib/api/generated/types";
 import { Trash2, ChevronUp, ChevronDown, RefreshCw, FileText } from "lucide-react";
 import { formatAge } from "@/lib/utils/time";
 import {
