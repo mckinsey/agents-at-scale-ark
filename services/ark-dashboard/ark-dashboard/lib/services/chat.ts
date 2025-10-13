@@ -9,7 +9,7 @@ interface AxiosError extends Error {
   };
 }
 
-export type QueryResponse = components["schemas"]["QueryResponse"];
+export type QueryResponse = components["schemas"]["QueryResponse-Output"];
 export type QueryDetailResponse = components["schemas"]["QueryDetailResponse"];
 export type QueryListResponse = components["schemas"]["QueryListResponse"];
 export type QueryCreateRequest = components["schemas"]["QueryCreateRequest"];
@@ -183,17 +183,17 @@ export const chatService = {
       .filter((item) => item.name.startsWith("chat-query-"))
       .map(
         (item) =>
-          ({
-            ...item,
-            input: item.input,
-            status: item.status,
-            memory: undefined,
-            parameters: undefined,
-            selector: undefined,
-            serviceAccount: undefined,
-            sessionId: sessionId,
-            targets: undefined
-          } as QueryDetailResponse)
+        ({
+          ...item,
+          input: item.input,
+          status: item.status,
+          memory: undefined,
+          parameters: undefined,
+          selector: undefined,
+          serviceAccount: undefined,
+          sessionId: sessionId,
+          targets: undefined
+        } as QueryDetailResponse)
       )
       .sort((a, b) => {
         const aTime = parseInt(a.name.split("-").pop() || "0");

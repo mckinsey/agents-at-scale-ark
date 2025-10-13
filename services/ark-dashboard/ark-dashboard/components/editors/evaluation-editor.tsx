@@ -39,7 +39,7 @@ import type { components } from "@/lib/api/generated/types"
 type EvaluationCreateRequest = components["schemas"]["EvaluationCreateRequest"]
 type EvaluationUpdateRequest = components["schemas"]["EvaluationUpdateRequest"]
 type EvaluationType = components["schemas"]["EvaluationType"]
-type QueryResponse = components["schemas"]["QueryResponse"]
+type QueryResponse = components["schemas"]["QueryResponse-Output"]
 
 interface EvaluationEditorProps {
   open: boolean
@@ -85,7 +85,7 @@ export function EvaluationEditor({
       console.error(`${requestName} failed:`, err);
       return fallback;
     });
-  } 
+  }
 
   useEffect(() => {
     if (open) {
@@ -93,7 +93,7 @@ export function EvaluationEditor({
         setEvaluatorsLoading(true)
         setQueriesLoading(true)
         setTargetsLoading(true)
-        
+
         try {
           const [evaluatorsData, queriesData, agentsData, teamsData, modelsData] = await Promise.all([
             safe("evaluatorsGetAll", evaluatorsService.getAll(), []),
@@ -132,15 +132,15 @@ export function EvaluationEditor({
           if (detailedEvaluation) {
             setName(detailedEvaluation.name)
             setMode((detailedEvaluation.spec?.mode as EvaluationType) || "direct")
-            
+
             // Extract evaluator reference
             const evaluatorSpec = detailedEvaluation.spec?.evaluator as { name?: string }
             setEvaluatorRef(evaluatorSpec?.name || "")
-            
+
             // Extract query reference
             const queryRefSpec = detailedEvaluation.spec?.queryRef as { name?: string }
             setQueryRef(queryRefSpec?.name || "")
-            
+
             // Extract input and output
             setInput((detailedEvaluation.spec?.input as string) || "")
             setOutput((detailedEvaluation.spec?.output as string) || "")
@@ -450,16 +450,16 @@ export function EvaluationEditor({
           >
             Cancel
           </Button>
-          <Button 
-            onClick={handleSubmit} 
-            disabled={isSubmitting || !name || !evaluatorRef || 
+          <Button
+            onClick={handleSubmit}
+            disabled={isSubmitting || !name || !evaluatorRef ||
               ((mode === "query" || mode === "batch") && (!queryRef || !targetRef))}
           >
             {isSubmitting
               ? "Saving..."
               : isEditing
-              ? "Update Evaluation"
-              : "Create Evaluation"}
+                ? "Update Evaluation"
+                : "Create Evaluation"}
           </Button>
         </DialogFooter>
       </DialogContent>
