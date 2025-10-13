@@ -200,6 +200,7 @@ The agent controller continuously reconciles agent resources to ensure dependenc
 
 1. **Model Reference**: Controller validates the specified model exists in agent's namespace
 2. **Model not found**: Agent status condition "Available" is set to False with warning event
+3. **A2A Agents**: Agents owned by A2AServer resources do not require a model reference
 
 ### Tool Resolution
 
