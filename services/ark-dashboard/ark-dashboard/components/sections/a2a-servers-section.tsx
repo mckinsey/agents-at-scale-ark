@@ -9,6 +9,10 @@ import { useDelayedLoading } from "@/lib/hooks";
 import { InfoDialog } from "@/components/dialogs/info-dialog";
 import { A2AEditor } from "@/components/editors/a2a-editor";
 import type { A2AServerConfiguration } from "@/lib/services/a2a-servers";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { DASHBOARD_SECTIONS } from "@/lib/constants";
+import { ArrowUpRightIcon, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface A2AServersSectionProps {
   namespace: string;
@@ -84,6 +88,47 @@ export const A2AServersSection = forwardRef<
         <div className="text-center py-8">Loading...</div>
       </div>
     );
+  }
+
+  if (a2aServers.length === 0 && !loading) {
+    return (
+      <>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.a2a.icon />
+            </EmptyMedia>
+            <EmptyTitle>No A2A Servers Yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t added any A2A Servers yet. Get started by adding
+              your first A2A Server.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={() => setA2aEditorOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add A2A Server
+            </Button>
+          </EmptyContent>
+          <Button
+            variant="link"
+            asChild
+            className="text-muted-foreground"
+            size="sm"
+          >
+            <a href="https://mckinsey.github.io/agents-at-scale-ark/" target="_blank">
+              Learn More <ArrowUpRightIcon />
+            </a>
+          </Button>
+        </Empty>
+        <A2AEditor
+          open={a2aEditorOpen}
+          onOpenChange={setA2aEditorOpen}
+          namespace={namespace}
+          onSave={handleSave}
+        />
+      </>
+    )
   }
 
   return (
