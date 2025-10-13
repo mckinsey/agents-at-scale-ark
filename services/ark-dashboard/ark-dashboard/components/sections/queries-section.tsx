@@ -4,7 +4,7 @@ import { EvaluationStatusIndicator } from "@/components/evaluation";
 import { useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import { toast } from "sonner";
 import type { components } from "@/lib/api/generated/types";
-import { Trash2, ChevronUp, ChevronDown, RefreshCw, FileText } from "lucide-react";
+import { Trash2, ChevronUp, ChevronDown, RefreshCw, FileText, ArrowUpRightIcon, Plus } from "lucide-react";
 import { formatAge } from "@/lib/utils/time";
 import {
   Tooltip,
@@ -16,7 +16,10 @@ import { queriesService } from "@/lib/services/queries";
 import { getResourceEventsUrl } from "@/lib/utils/events";
 import { useRouter } from "next/navigation";
 import { useListQueries } from "@/lib/services/queries-hooks";
-import { Button } from "../ui/button";
+import { Button } from "@/components/ui/button";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { DASHBOARD_SECTIONS } from "@/lib/constants";
+import Link from "next/link";
 
 type QueryResponse = components["schemas"]["QueryResponse-Output"];
 
@@ -273,6 +276,8 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function
     );
   }
 
+
+
   return (
     <div className="flex h-full flex-col">
       {listQueriesFetching ? (
@@ -363,16 +368,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedQueries.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={8}
-                          className="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
-                        >
-                          No queries found
-                        </td>
-                      </tr>
-                    ) : (
+                    {
                       sortedQueries.map((query) => {
                         const target = getTargetDisplay(query);
                         const output = getOutput(query);
@@ -476,11 +472,45 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function
                           </tr>
                         );
                       })
-                    )}
+                    }
                   </tbody>
                 </table>
               </div>
             </div>
+            {sortedQueries.length === 0 && (
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <DASHBOARD_SECTIONS.queries.icon />
+                  </EmptyMedia>
+                  <EmptyTitle>No Queries Yet</EmptyTitle>
+                  <EmptyDescription>
+                    You haven&apos;t added any queries yet. Get started by adding
+                    your first query.
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <Link href="/query/new">
+                    <Button asChild>
+                      <div>
+                        <Plus className="h-4 w-4" />
+                        Add Query
+                      </div>
+                    </Button>
+                  </Link>
+                </EmptyContent>
+                <Button
+                  variant="link"
+                  asChild
+                  className="text-muted-foreground"
+                  size="sm"
+                >
+                  <a href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/queries/" target="_blank">
+                    Learn More <ArrowUpRightIcon />
+                  </a>
+                </Button>
+              </Empty>
+            )}
           </main>
         </div>
       )}
