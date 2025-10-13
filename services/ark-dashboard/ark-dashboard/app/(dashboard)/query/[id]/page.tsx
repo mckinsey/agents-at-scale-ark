@@ -7,20 +7,10 @@ import { Copy } from "lucide-react"
 import { QueryTargetsField } from "@/components/query-fields/query-targets-field"
 import { QueryMemoryField } from "@/components/query-fields/query-memory-field"
 import { QueryEvaluationActions } from "@/components/query-actions"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator
-} from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -45,13 +35,18 @@ import { simplifyDuration } from "@/lib/utils/time";
 import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import JsonDisplay from "@/components/JsonDisplay"
 import { ErrorResponseContent } from '@/components/ErrorResponseContent';
+import { BreadcrumbElement, PageHeader } from "@/components/common/page-header";
 
+const breadcrumbs: BreadcrumbElement[] = [
+  { href: '/', label: "ARK Dashboard" },
+  { href: '/queries', label: "Queries" }
+]
 
 // Component for rendering response content
-function ResponseContent({ content, viewMode, rawJson }: { content: string, viewMode: 'content'| 'text' | 'markdown' | 'raw', rawJson?: unknown }) {
-  
+function ResponseContent({ content, viewMode, rawJson }: { content: string, viewMode: 'content' | 'text' | 'markdown' | 'raw', rawJson?: unknown }) {
+
   const markdownContent = useMarkdownProcessor(content);
-  
+
   if (viewMode === 'raw') {
     const getJsonDisplay = () => {
       if (rawJson && typeof rawJson === 'object' && (rawJson as { raw?: string }).raw) {
@@ -60,7 +55,7 @@ function ResponseContent({ content, viewMode, rawJson }: { content: string, view
           // Create a more readable structure
           const readableJson = {
             content: (rawJson as { content?: string }).content || "No content",
-            target: (rawJson as { target?: { name?: string; type?: string } }).target || "No target", 
+            target: (rawJson as { target?: { name?: string; type?: string } }).target || "No target",
             raw: parsed
           };
           return readableJson;
@@ -73,14 +68,14 @@ function ResponseContent({ content, viewMode, rawJson }: { content: string, view
 
     return (
       <div className="text-sm">
-        <JsonDisplay 
-          value={getJsonDisplay()} 
+        <JsonDisplay
+          value={getJsonDisplay()}
           className="bg-black text-white p-4 rounded text-sm font-mono whitespace-pre-wrap break-words"
         />
       </div>
     )
   }
-  
+
 
   if (viewMode === "content") {
     return <div className="text-sm">{markdownContent}</div>;
@@ -93,7 +88,7 @@ function ResponseContent({ content, viewMode, rawJson }: { content: string, view
       </pre>
     )
   }
-  
+
   return (
     <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900/50 p-3">
       {content || "No content"}
@@ -161,9 +156,9 @@ function QueryDurationField({ mode, value, onChange, label, placeholder, inputRe
           </TooltipProvider>
         </td>
         <td className="px-3 py-2">
-          <Input 
+          <Input
             ref={inputRef}
-            value={value || ''} 
+            value={value || ''}
             onChange={(e) => onChange?.(e.target.value)}
             placeholder={placeholder}
             className="text-xs"
@@ -212,9 +207,9 @@ function QueryNameField({ mode, value, onChange, label, placeholder, inputRef, t
           </TooltipProvider>
         </td>
         <td className="px-3 py-2">
-          <Input 
+          <Input
             ref={inputRef}
-            value={value || ''} 
+            value={value || ''}
             onChange={(e) => onChange?.(e.target.value)}
             placeholder={placeholder || "Enter query name"}
             className="text-xs"
@@ -257,7 +252,7 @@ interface QueryStreamingFieldProps {
 
 function QueryStreamingField({ mode, value, onChange, label, tooltip, metadata }: QueryStreamingFieldProps) {
   // For view mode, check if streaming annotation exists
-  const isStreamingEnabled = mode === 'view' 
+  const isStreamingEnabled = mode === 'view'
     ? metadata?.annotations?.[ARK_ANNOTATIONS.STREAMING_ENABLED] === "true"
     : value
 
@@ -304,9 +299,9 @@ function QueryDetailContent() {
   const [query, setQuery] = useState<TypedQueryDetailResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [evaluationCount, setEvaluationCount] = useState(0)
-  const [availableTargets, setAvailableTargets] = useState<Array<{name: string, type: 'agent' | 'model' | 'team' | 'tool'}>>([])
+  const [availableTargets, setAvailableTargets] = useState<Array<{ name: string, type: 'agent' | 'model' | 'team' | 'tool' }>>([])
   const [targetsLoading, setTargetsLoading] = useState(false)
-  const [availableMemories, setAvailableMemories] = useState<Array<{name: string}>>([])
+  const [availableMemories, setAvailableMemories] = useState<Array<{ name: string }>>([])
   const [memoriesLoading, setMemoriesLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [responseViewMode, setResponseViewMode] = useState<'content' | 'raw'>('content')
@@ -318,7 +313,7 @@ function QueryDetailContent() {
   // Copy schema to clipboard
   const copySchemaToClipboard = async () => {
     if (!toolSchema?.spec?.inputSchema) return
-    
+
     const schemaText = getSchemaExample(toolSchema.spec.inputSchema) || '{}'
     try {
       await navigator.clipboard.writeText(schemaText)
@@ -328,7 +323,7 @@ function QueryDetailContent() {
       })
     } catch {
       toast({
-        variant: "destructive", 
+        variant: "destructive",
         title: "Copy failed",
         description: "Could not copy to clipboard"
       })
@@ -339,8 +334,8 @@ function QueryDetailContent() {
   const getSchemaExample = (schema: Record<string, unknown>): string | null => {
     // Look for explicit examples
     if (schema.example) {
-      return typeof schema.example === 'string' 
-        ? schema.example 
+      return typeof schema.example === 'string'
+        ? schema.example
         : JSON.stringify(schema.example, null, 2)
     }
 
@@ -383,7 +378,7 @@ function QueryDetailContent() {
 
   const handleSaveQuery = async () => {
     if (!query) return
-    
+
     // Validate required fields
     if (!query.targets || query.targets.length === 0) {
       toast({
@@ -394,7 +389,7 @@ function QueryDetailContent() {
       // TODO: Focus targets field
       return
     }
-    
+
     setSaving(true)
     try {
       // Auto-generate name if empty
@@ -406,7 +401,7 @@ function QueryDetailContent() {
         const randomSuffix = (randomValue % 900000) + 100000;
         queryName = `ark-${dateStr}-${randomSuffix}`
       }
-      
+
       // Prepare the query data for the API
       const queryData = {
         name: queryName,
@@ -425,12 +420,12 @@ function QueryDetailContent() {
       }
 
       const savedQuery = await queriesService.create(queryData)
-      
+
       toast({
         title: "Query Executed",
         description: `Query "${savedQuery.name}" has been created and is now executing.`
       })
-      
+
       // Navigate to the created query
       router.push(`/query/${savedQuery.name}`)
     } catch (error) {
@@ -546,7 +541,7 @@ function QueryDetailContent() {
   // Fetch tool schema when exactly one tool is selected
   useEffect(() => {
     const selectedTools = query?.targets?.filter(t => t.type === 'tool') || []
-    
+
     if (selectedTools.length === 1) {
       const toolName = selectedTools[0].name
       toolsService.getDetail(toolName)
@@ -580,23 +575,8 @@ function QueryDetailContent() {
 
   return (
     <>
-      <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-        <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink href={`/queries`}>
-                Queries
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>{isNew ? 'New Query' : query.name}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-        <div className="ml-auto flex gap-2">
+      <PageHeader breadcrumbs={breadcrumbs} currentPage={isNew ? 'New Query' : query.name} actions={
+        <>
           {!isNew && (
             <QueryEvaluationActions
               queryName={queryId}
@@ -604,15 +584,15 @@ function QueryDetailContent() {
           )}
           {isNew && (
             <>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 onClick={() => router.push(`/query/new`)}
               >
                 New Query
               </Button>
-              <Button 
-                variant="default" 
+              <Button
+                variant="default"
                 size="sm"
                 onClick={handleSaveQuery}
                 disabled={saving}
@@ -622,349 +602,345 @@ function QueryDetailContent() {
             </>
           )}
           {!isNew && (
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => router.push(`/query/new`)}
             >
               New Query
             </Button>
           )}
-        </div>
-      </header>
+        </>
+      } />
       <div className="flex h-full flex-col">
 
-      {/* Query Details - Three Column Layout */}
-      <div className="px-4 py-3 border-b bg-gray-50/30 dark:bg-gray-900/10">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-          
-          {/* Query Column */}
-          <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-            <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Query</h3>
-                <a href={`/events?kind=Query&name=${query.name}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
-                  View Events
-                </a>
-              </div>
-            </div>
-            <table className="w-full table-fixed">
-              <tbody>
-                <QueryNameField 
-                  mode={mode}
-                  value={query.name}
-                  onChange={(name) => setQuery(prev => prev ? { ...prev, name } : null)}
-                  label="Name"
-                  placeholder="Default: Auto-generated"
-                  inputRef={nameFieldRef}
-                />
-                <tr className="border-b border-gray-100 dark:border-gray-800">
-                  <td className="px-3 py-2 text-xs font-medium text-gray-400 dark:text-gray-600 bg-gray-50 dark:bg-gray-900/50 w-1/3 text-left">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger className="cursor-help text-left" tabIndex={-1}>
-                          Svc. Account
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Kubernetes ServiceAccount used for RBAC permissions during query execution</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-400 dark:text-gray-600">
-                    {query.serviceAccount || "—"}
-                  </td>
-                </tr>
-                <QueryTargetsField 
-                  mode={mode}
-                  value={query.targets || []}
-                  onChange={(targets) => setQuery(prev => prev ? { ...prev, targets } : null)}
-                  label="Targets"
-                  availableTargets={availableTargets}
-                  loading={targetsLoading}
-                />
-                <QueryNameField 
-                  mode={mode}
-                  value={query.sessionId}
-                  onChange={(sessionId) => setQuery(prev => prev ? { ...prev, sessionId } : null)}
-                  label="Session ID"
-                  placeholder="Default: Auto-generated"
-                  tooltip="Identifier for grouping related queries, used for conversation memory"
-                />
-              </tbody>
-            </table>
-          </div>
+        {/* Query Details - Three Column Layout */}
+        <div className="px-4 py-3 border-b bg-gray-50/30 dark:bg-gray-900/10">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
 
-          {/* Configuration Column */}
-          <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-            <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b">
-              <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Configuration</h3>
-            </div>
-            <table className="w-full">
-              <tbody>
-                <QueryDurationField 
-                  mode={mode}
-                  value={query.timeout}
-                  onChange={(timeout) => setQuery(prev => prev ? { ...prev, timeout } : null)}
-                  label="Timeout"
-                  placeholder="Default: 5m"
-                  tooltip="How long the query can execute for before it is stopped"
-                />
-                <QueryDurationField 
-                  mode={mode}
-                  value={query.ttl}
-                  onChange={(ttl) => setQuery(prev => prev ? { ...prev, ttl } : null)}
-                  label="TTL"
-                  placeholder="Default: 720h"
-                  tooltip="How long the query will remain in the system before it is deleted"
-                />
-                <QueryMemoryField 
-                  mode={mode}
-                  value={query.memory}
-                  onChange={(memory) => setQuery(prev => prev ? { ...prev, memory } : null)}
-                  label="Memory"
-                  availableMemories={availableMemories}
-                  loading={memoriesLoading}
-                />
-                <QueryStreamingField 
-                  mode={mode}
-                  value={streaming}
-                  onChange={setStreaming}
-                  label="Streaming"
-                  metadata={query.metadata}
-                />
-                <tr>
-                  <td className={FIELD_HEADING_STYLES}>
-                    Parameters
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                    {query.parameters?.length ? `${query.parameters.length} param(s)` : "—"}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* Advanced Settings Column */}
-          <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-            <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b">
-              <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Advanced Settings</h3>
-            </div>
-            <table className="w-full">
-              <tbody>
-                <tr className="border-b border-gray-100 dark:border-gray-800">
-                  <td className={FIELD_HEADING_STYLES}>
-                    Selector
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                    {query.selector ? "Configured" : "—"}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* Status & Results Column */}
-          <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-            <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b">
-              <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Status & Results</h3>
-            </div>
-            <table className="w-full">
-              <tbody>
-                <tr className="border-b border-gray-100 dark:border-gray-800">
-                  <td className={FIELD_HEADING_STYLES}>
-                    Phase
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                    {isNew ? "—" : query.status?.phase}
-                  </td>
-                </tr>
-                <tr className="border-b border-gray-100 dark:border-gray-800">
-                  <td className={FIELD_HEADING_STYLES}>
-                    Cancel
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                    {query.cancel ? "Requested" : "No"}
-                  </td>
-                </tr>
-                <tr className="border-b border-gray-100 dark:border-gray-800">
-                  <td className={FIELD_HEADING_STYLES}>
-                    Responses
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                    {query.status?.responses?.length || 0}
-                  </td>
-                </tr>
-                <tr className="border-b border-gray-100 dark:border-gray-800">
-                  <td className={FIELD_HEADING_STYLES}>
-                    Token Usage
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                    {query.status?.tokenUsage ? `${query.status.tokenUsage.promptTokens || 0} / ${query.status.tokenUsage.completionTokens || 0}` : "—"}
-                  </td>
-                </tr>
-                <tr>
-                  <td className={FIELD_HEADING_STYLES}>
-                    Evaluations
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                    {evaluationCount}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-        </div>
-      </div>
-
-      {/* Input and Responses Section */}
-      <div className="flex-1 flex flex-col min-h-0">
-        <ScrollArea className="flex-1 p-3">
-          <div className="space-y-3">
-            
-            {/* Input Table */}
+            {/* Query Column */}
             <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-              {/* Header */}
-              {mode === 'new' && toolSchema && query.targets?.filter(t => t.type === 'tool').length === 1 ? (
-                <div className="grid grid-cols-2 gap-0 bg-gray-100 dark:bg-gray-800 border-b">
-                  <div className="px-3 py-2 border-r border-gray-200 dark:border-gray-700">
+              <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Query</h3>
+                  <a href={`/events?kind=Query&name=${query.name}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+                    View Events
+                  </a>
+                </div>
+              </div>
+              <table className="w-full table-fixed">
+                <tbody>
+                  <QueryNameField
+                    mode={mode}
+                    value={query.name}
+                    onChange={(name) => setQuery(prev => prev ? { ...prev, name } : null)}
+                    label="Name"
+                    placeholder="Default: Auto-generated"
+                    inputRef={nameFieldRef}
+                  />
+                  <tr className="border-b border-gray-100 dark:border-gray-800">
+                    <td className="px-3 py-2 text-xs font-medium text-gray-400 dark:text-gray-600 bg-gray-50 dark:bg-gray-900/50 w-1/3 text-left">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger className="cursor-help text-left" tabIndex={-1}>
+                            Svc. Account
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Kubernetes ServiceAccount used for RBAC permissions during query execution</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-400 dark:text-gray-600">
+                      {query.serviceAccount || "—"}
+                    </td>
+                  </tr>
+                  <QueryTargetsField
+                    mode={mode}
+                    value={query.targets || []}
+                    onChange={(targets) => setQuery(prev => prev ? { ...prev, targets } : null)}
+                    label="Targets"
+                    availableTargets={availableTargets}
+                    loading={targetsLoading}
+                  />
+                  <QueryNameField
+                    mode={mode}
+                    value={query.sessionId}
+                    onChange={(sessionId) => setQuery(prev => prev ? { ...prev, sessionId } : null)}
+                    label="Session ID"
+                    placeholder="Default: Auto-generated"
+                    tooltip="Identifier for grouping related queries, used for conversation memory"
+                  />
+                </tbody>
+              </table>
+            </div>
+
+            {/* Configuration Column */}
+            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+              <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b">
+                <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Configuration</h3>
+              </div>
+              <table className="w-full">
+                <tbody>
+                  <QueryDurationField
+                    mode={mode}
+                    value={query.timeout}
+                    onChange={(timeout) => setQuery(prev => prev ? { ...prev, timeout } : null)}
+                    label="Timeout"
+                    placeholder="Default: 5m"
+                    tooltip="How long the query can execute for before it is stopped"
+                  />
+                  <QueryDurationField
+                    mode={mode}
+                    value={query.ttl}
+                    onChange={(ttl) => setQuery(prev => prev ? { ...prev, ttl } : null)}
+                    label="TTL"
+                    placeholder="Default: 720h"
+                    tooltip="How long the query will remain in the system before it is deleted"
+                  />
+                  <QueryMemoryField
+                    mode={mode}
+                    value={query.memory}
+                    onChange={(memory) => setQuery(prev => prev ? { ...prev, memory } : null)}
+                    label="Memory"
+                    availableMemories={availableMemories}
+                    loading={memoriesLoading}
+                  />
+                  <QueryStreamingField
+                    mode={mode}
+                    value={streaming}
+                    onChange={setStreaming}
+                    label="Streaming"
+                    metadata={query.metadata}
+                  />
+                  <tr>
+                    <td className={FIELD_HEADING_STYLES}>
+                      Parameters
+                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
+                      {query.parameters?.length ? `${query.parameters.length} param(s)` : "—"}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Advanced Settings Column */}
+            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+              <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b">
+                <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Advanced Settings</h3>
+              </div>
+              <table className="w-full">
+                <tbody>
+                  <tr className="border-b border-gray-100 dark:border-gray-800">
+                    <td className={FIELD_HEADING_STYLES}>
+                      Selector
+                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
+                      {query.selector ? "Configured" : "—"}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Status & Results Column */}
+            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+              <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b">
+                <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Status & Results</h3>
+              </div>
+              <table className="w-full">
+                <tbody>
+                  <tr className="border-b border-gray-100 dark:border-gray-800">
+                    <td className={FIELD_HEADING_STYLES}>
+                      Phase
+                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
+                      {isNew ? "—" : query.status?.phase}
+                    </td>
+                  </tr>
+                  <tr className="border-b border-gray-100 dark:border-gray-800">
+                    <td className={FIELD_HEADING_STYLES}>
+                      Cancel
+                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
+                      {query.cancel ? "Requested" : "No"}
+                    </td>
+                  </tr>
+                  <tr className="border-b border-gray-100 dark:border-gray-800">
+                    <td className={FIELD_HEADING_STYLES}>
+                      Responses
+                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
+                      {query.status?.responses?.length || 0}
+                    </td>
+                  </tr>
+                  <tr className="border-b border-gray-100 dark:border-gray-800">
+                    <td className={FIELD_HEADING_STYLES}>
+                      Token Usage
+                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
+                      {query.status?.tokenUsage ? `${query.status.tokenUsage.promptTokens || 0} / ${query.status.tokenUsage.completionTokens || 0}` : "—"}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className={FIELD_HEADING_STYLES}>
+                      Evaluations
+                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
+                      {evaluationCount}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        </div>
+
+        {/* Input and Responses Section */}
+        <div className="flex-1 flex flex-col min-h-0">
+          <ScrollArea className="flex-1 p-3">
+            <div className="space-y-3">
+
+              {/* Input Table */}
+              <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                {/* Header */}
+                {mode === 'new' && toolSchema && query.targets?.filter(t => t.type === 'tool').length === 1 ? (
+                  <div className="grid grid-cols-2 gap-0 bg-gray-100 dark:bg-gray-800 border-b">
+                    <div className="px-3 py-2 border-r border-gray-200 dark:border-gray-700">
+                      <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Input</h3>
+                    </div>
+                    <div className="px-3 py-2 flex items-center gap-2">
+                      <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Input Schema</h3>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={copySchemaToClipboard}
+                        className="h-auto p-0 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                      >
+                        <Copy className="h-2 w-2" />
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
                     <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Input</h3>
                   </div>
-                  <div className="px-3 py-2 flex items-center gap-2">
-                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Input Schema</h3>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={copySchemaToClipboard}
-                      className="h-auto p-0 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
-                    >
-                      <Copy className="h-2 w-2" />
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
-                  <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Input</h3>
-                </div>
-              )}
+                )}
 
-              {/* Content */}
-              {mode === 'new' ? (
-                <div className={toolSchema && query.targets?.filter(t => t.type === 'tool').length === 1 ? 'grid grid-cols-2 gap-0' : 'p-3'}>
-                  {/* Input Section */}
-                  <div className={toolSchema && query.targets?.filter(t => t.type === 'tool').length === 1 ? 'p-3 border-r border-gray-200 dark:border-gray-700' : ''}>
-                    <Textarea
-                      value={typeof query.input === 'string' ? query.input || '' : ''}
-                      onChange={(e) => setQuery(prev => prev ? { ...prev, input: e.target.value } : null)}
-                      placeholder="Enter your query input..."
-                      className="min-h-[200px] text-sm font-mono resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-                    />
-                  </div>
-                  
-                  {/* Tool Schema Example - only show for single tool selection */}
-                  {toolSchema && query.targets?.filter(t => t.type === 'tool').length === 1 && (
-                    <div className="p-3">
+                {/* Content */}
+                {mode === 'new' ? (
+                  <div className={toolSchema && query.targets?.filter(t => t.type === 'tool').length === 1 ? 'grid grid-cols-2 gap-0' : 'p-3'}>
+                    {/* Input Section */}
+                    <div className={toolSchema && query.targets?.filter(t => t.type === 'tool').length === 1 ? 'p-3 border-r border-gray-200 dark:border-gray-700' : ''}>
                       <Textarea
-                        value={toolSchema.spec?.inputSchema ? getSchemaExample(toolSchema.spec.inputSchema) || '{}' : '{}'}
-                        readOnly
+                        value={typeof query.input === 'string' ? query.input || '' : ''}
+                        onChange={(e) => setQuery(prev => prev ? { ...prev, input: e.target.value } : null)}
+                        placeholder="Enter your query input..."
                         className="min-h-[200px] text-sm font-mono resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
                       />
                     </div>
-                  )}
+
+                    {/* Tool Schema Example - only show for single tool selection */}
+                    {toolSchema && query.targets?.filter(t => t.type === 'tool').length === 1 && (
+                      <div className="p-3">
+                        <Textarea
+                          value={toolSchema.spec?.inputSchema ? getSchemaExample(toolSchema.spec.inputSchema) || '{}' : '{}'}
+                          readOnly
+                          className="min-h-[200px] text-sm font-mono resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900/50 p-3">
+                    {typeof query.input === 'string' ? query.input : Array.isArray(query.input) ? JSON.stringify(query.input, null, 2) : ''}
+                  </pre>
+                )}
+              </div>
+
+              {/* Conditional Response or Error Section */}
+              {query.status?.responses && query.status.responses.length > 0 ? (
+                /* Response Section - show when there are responses */
+                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
+                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Response</h3>
+                    <div className="flex items-center gap-1 text-xs overflow-x-auto whitespace-nowrap flex-shrink-0">
+                      <button
+                        className={`px-2 py-1 rounded ${responseViewMode === 'content'
+                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                          : 'text-gray-500 dark:text-gray-400'
+                          }`}
+                        onClick={() => setResponseViewMode('content')}
+                      >
+                        Content
+                      </button>
+                      <button
+                        className={`px-2 py-1 rounded ${responseViewMode === 'raw'
+                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                          : 'text-gray-500 dark:text-gray-400'
+                          }`}
+                        onClick={() => setResponseViewMode('raw')}
+                      >
+                        Raw
+                      </button>
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    {query.status?.responses?.map((response, index) => (
+                      <div key={index} className="mb-4 last:mb-0">
+                        <ResponseContent
+                          content={response.content || "No content"}
+                          viewMode={responseViewMode}
+                          rawJson={response}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ) : (
-                <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900/50 p-3">
-                  {typeof query.input === 'string' ? query.input : Array.isArray(query.input) ? JSON.stringify(query.input, null, 2) : ''}
-                </pre>
+              ) : !isNew && (query.status?.phase === 'failed' || query.status?.phase === 'error') ? (
+                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
+                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Error</h3>
+                    <div className="flex items-center gap-1 text-xs overflow-x-auto whitespace-nowrap flex-shrink-0">
+                      <button
+                        className={`px-2 py-1 rounded ${errorViewMode === 'events'
+                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                          : 'text-gray-500 dark:text-gray-400'
+                          }`}
+                        onClick={() => setErrorViewMode('events')}
+                      >
+                        Events
+                      </button>
+                      <button
+                        className={`px-2 py-1 rounded ${errorViewMode === 'details'
+                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                          : 'text-gray-500 dark:text-gray-400'
+                          }`}
+                        onClick={() => setErrorViewMode('details')}
+                      >
+                        Details
+                      </button>
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    <ErrorResponseContent
+                      query={query}
+                      viewMode={errorViewMode}
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              {!isNew && (
+                <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                  Note: Events expire after a certain amount of time and may no longer be available for viewing.
+                </div>
               )}
             </div>
-
-                        {/* Conditional Response or Error Section */}
-            {query.status?.responses && query.status.responses.length > 0 ? (
-              /* Response Section - show when there are responses */
-              <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
-                  <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Response</h3>
-                  <div className="flex items-center gap-1 text-xs overflow-x-auto whitespace-nowrap flex-shrink-0">
-                    <button 
-                      className={`px-2 py-1 rounded ${
-                        responseViewMode === 'content' 
-                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                          : 'text-gray-500 dark:text-gray-400'
-                      }`}
-                      onClick={() => setResponseViewMode('content')}
-                    >
-                      Content
-                    </button>
-                    <button 
-                      className={`px-2 py-1 rounded ${
-                        responseViewMode === 'raw' 
-                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                          : 'text-gray-500 dark:text-gray-400'
-                      }`}
-                      onClick={() => setResponseViewMode('raw')}
-                    >
-                      Raw
-                    </button>
-                  </div>
-                </div>
-                <div className="p-3">
-                  {query.status?.responses?.map((response, index) => (
-                    <div key={index} className="mb-4 last:mb-0">
-                      <ResponseContent 
-                        content={response.content || "No content"} 
-                        viewMode={responseViewMode} 
-                        rawJson={response} 
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : !isNew && (query.status?.phase === 'failed' || query.status?.phase === 'error') ? (
-              <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
-                  <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">Error</h3>
-                  <div className="flex items-center gap-1 text-xs overflow-x-auto whitespace-nowrap flex-shrink-0">
-                    <button 
-                      className={`px-2 py-1 rounded ${
-                        errorViewMode === 'events' 
-                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                          : 'text-gray-500 dark:text-gray-400'
-                      }`}
-                      onClick={() => setErrorViewMode('events')}
-                    >
-                      Events
-                    </button>
-                    <button 
-                      className={`px-2 py-1 rounded ${
-                        errorViewMode === 'details' 
-                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' 
-                          : 'text-gray-500 dark:text-gray-400'
-                      }`}
-                      onClick={() => setErrorViewMode('details')}
-                    >
-                      Details
-                    </button>
-                  </div>
-                </div>
-                <div className="p-3">
-                  <ErrorResponseContent
-                    query={query}
-                    viewMode={errorViewMode}
-                  />
-                </div>
-              </div>
-            ) : null}
-            
-            {!isNew && (
-            <div className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
-              Note: Events expire after a certain amount of time and may no longer be available for viewing.
-            </div>
-            )}
-          </div>
-        </ScrollArea>
-      </div>
+          </ScrollArea>
+        </div>
       </div>
     </>
   )
