@@ -3,9 +3,9 @@ kind: Test
 metadata:
   name: agent-default-model
 spec:
-  description: Test that agents use model named 'default' when no modelRef is specified
+  description: Test agent behavior with and without default model
   steps:
-  - name: step-1
+  - name: test-with-default-model
     try:
     - script:
         skipLogOutput: true
@@ -60,3 +60,42 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: default-model-query
+
+  - name: test-without-default-model
+    try:
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: agent-no-default-model
+          spec:
+            prompt: |
+              You are a test agent created without a default model.
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: agent-no-default-model
+          spec:
+            modelRef:
+              name: default
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: agent-no-default-model
+          status:
+            conditions:
+            - type: Available
+              status: "False"
+              reason: ModelNotFound
+              message: (contains(@, 'default'))
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+        name: agent-no-default-model
