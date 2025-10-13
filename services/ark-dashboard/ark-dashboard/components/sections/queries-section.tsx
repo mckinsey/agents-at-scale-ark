@@ -2,7 +2,7 @@
 
 import { EvaluationStatusIndicator } from "@/components/evaluation";
 import { useEffect, useState, forwardRef, useImperativeHandle } from "react";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import type { components } from "@/lib/api/generated/types";
 import { Trash2, ChevronUp, ChevronDown, RefreshCw, FileText } from "lucide-react";
 import { formatAge } from "@/lib/utils/time";
@@ -58,9 +58,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function
     }
 
     if (listQueriesError) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Load Queries",
+      toast.error("Failed to Load Queries", {
         description:
           listQueriesErrorObject instanceof Error
             ? listQueriesErrorObject.message
@@ -232,18 +230,14 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function
   const handleDelete = async (queryName: string) => {
     try {
       await queriesService.delete(queryName);
-      toast({
-        variant: "success",
-        title: "Query Deleted",
+      toast.success("Query Deleted", {
         description: "Successfully deleted query"
       });
       const data = await queriesService.list();
       setQueries(data.items);
     } catch (error) {
       console.error("Failed to delete query:", error);
-      toast({
-        variant: "destructive",
-        title: "Failed to Delete Query",
+      toast.error("Failed to Delete Query", {
         description:
           error instanceof Error
             ? error.message
@@ -255,18 +249,14 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function
   const handleCancel = async (queryName: string) => {
     try {
       await queriesService.cancel(queryName);
-      toast({
-        variant: "success",
-        title: "Query Canceled",
+      toast.success("Query Canceled", {
         description: "Successfully canceled query"
       });
       const data = await queriesService.list();
       setQueries(data.items);
     } catch (error) {
       console.error("Failed to cancel query:", error);
-      toast({
-        variant: "destructive",
-        title: "Failed to Cancel Query",
+      toast.error("Failed to Cancel Query", {
         description:
           error instanceof Error
             ? error.message

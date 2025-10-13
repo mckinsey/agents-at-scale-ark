@@ -21,7 +21,7 @@ import {
   SelectValue
 } from "@/components/ui/select"
 import { X, Plus } from "lucide-react"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import {
   modelsService,
   evaluatorsService,
@@ -85,9 +85,7 @@ export function EvaluatorEditor({
           const modelsData = await modelsService.getAll()
           setModels(modelsData)
         } catch (error) {
-          toast({
-            variant: "destructive",
-            title: "Failed to Load Models",
+          toast.error("Failed to Load Models", {
             description: error instanceof Error ? error.message : "An unexpected error occurred"
           })
         } finally {
@@ -108,19 +106,19 @@ export function EvaluatorEditor({
           if (detailedEvaluator) {
             setName(detailedEvaluator.name)
             setDescription(detailedEvaluator.spec?.description as string || "")
-            
+
             // Extract address from spec
             const addressSpec = detailedEvaluator.spec?.address as { value?: string }
             setAddress(addressSpec?.value || "")
-            
+
             // Extract model reference
             const modelRefSpec = detailedEvaluator.spec?.modelRef as { name?: string }
             setModelRef(modelRefSpec?.name || "")
-            
+
             // Extract parameters
             const parametersSpec = detailedEvaluator.spec?.parameters as Parameter[]
             setParameters(parametersSpec || [])
-            
+
             // Extract selector - handle both flat and nested structures
             const selectorSpec = detailedEvaluator.spec?.selector as Record<string, unknown>
             if (selectorSpec) {
@@ -144,9 +142,7 @@ export function EvaluatorEditor({
             }
           }
         } catch (error) {
-          toast({
-            variant: "destructive",
-            title: "Failed to Load Evaluator Details",
+          toast.error("Failed to Load Evaluator Details", {
             description: error instanceof Error ? error.message : "An unexpected error occurred"
           })
           // Fallback to basic data
@@ -212,8 +208,8 @@ export function EvaluatorEditor({
   const removeMatchLabel = (key: string) => {
     if (selector?.labelSelector?.matchLabels) {
       const { [key]: _removed, ...rest } = selector.labelSelector.matchLabels
-      setSelector({ 
-        ...selector, 
+      setSelector({
+        ...selector,
         labelSelector: {
           ...selector.labelSelector,
           matchLabels: rest
@@ -238,9 +234,7 @@ export function EvaluatorEditor({
   const handleSubmit = async () => {
     // Validation
     if (!name || !address) {
-      toast({
-        variant: "destructive",
-        title: "Validation Error",
+      toast.error("Validation Error", {
         description: "Name and address are required fields"
       })
       return
@@ -248,9 +242,7 @@ export function EvaluatorEditor({
 
     // Validate Kubernetes name format
     if (!name.match(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/)) {
-      toast({
-        variant: "destructive",
-        title: "Validation Error",
+      toast.error("Validation Error", {
         description: "Name must be a valid Kubernetes name (lowercase letters, numbers, and hyphens only)"
       })
       return
@@ -260,9 +252,7 @@ export function EvaluatorEditor({
     try {
       new URL(address)
     } catch {
-      toast({
-        variant: "destructive",
-        title: "Validation Error",
+      toast.error("Validation Error", {
         description: "Address must be a valid URL"
       })
       return
@@ -272,17 +262,13 @@ export function EvaluatorEditor({
     const paramNames = new Set()
     for (const param of parameters) {
       if (!param.name || !param.name.trim()) {
-        toast({
-          variant: "destructive",
-          title: "Validation Error",
+        toast.error("Validation Error", {
           description: "All parameters must have names"
         })
         return
       }
       if (paramNames.has(param.name)) {
-        toast({
-          variant: "destructive",
-          title: "Validation Error",
+        toast.error("Validation Error", {
           description: `Duplicate parameter name: ${param.name}`
         })
         return
@@ -294,9 +280,7 @@ export function EvaluatorEditor({
     if (selector?.labelSelector?.matchLabels) {
       for (const [key] of Object.entries(selector.labelSelector.matchLabels)) {
         if (!key.trim()) {
-          toast({
-            variant: "destructive",
-            title: "Validation Error",
+          toast.error("Validation Error", {
             description: "Selector labels cannot have empty keys"
           })
           return
@@ -358,199 +342,199 @@ export function EvaluatorEditor({
         ) : (
           <div className="space-y-4 max-h-[60vh] overflow-y-auto">
             <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
-            <Input
-              id="name"
-              placeholder="evaluator-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={isEditing}
-            />
-          </div>
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                placeholder="evaluator-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={isEditing}
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              placeholder="Describe what this evaluator does..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                placeholder="Describe what this evaluator does..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="address">Address</Label>
-            <Input
-              id="address"
-              placeholder="http://evaluator-service:8080"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-            />
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="address">Address</Label>
+              <Input
+                id="address"
+                placeholder="http://evaluator-service:8080"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="model">Model Reference (Optional)</Label>
-            <Select value={modelRef || "__none__"} onValueChange={(value) => setModelRef(value === "__none__" ? "" : value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a model (optional)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">
-                  <span className="text-muted-foreground">None</span>
-                </SelectItem>
-                {modelsLoading ? (
-                  <SelectItem value="__loading__" disabled>
-                    Loading models...
+            <div className="space-y-2">
+              <Label htmlFor="model">Model Reference (Optional)</Label>
+              <Select value={modelRef || "__none__"} onValueChange={(value) => setModelRef(value === "__none__" ? "" : value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a model (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">
+                    <span className="text-muted-foreground">None</span>
                   </SelectItem>
-                ) : (
-                  models.map((model) => (
-                    <SelectItem key={model.name} value={model.name}>
-                      {model.name}
+                  {modelsLoading ? (
+                    <SelectItem value="__loading__" disabled>
+                      Loading models...
                     </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Parameters (Optional)</Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addParameter}
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Add Parameter
-              </Button>
+                  ) : (
+                    models.map((model) => (
+                      <SelectItem key={model.name} value={model.name}>
+                        {model.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
-            {parameters.length > 0 && (
-              <div className="space-y-2 border rounded-md p-3">
-                {parameters.map((param, index) => (
-                  <div key={index} className="flex gap-2 items-center">
-                    <Input
-                      placeholder="Parameter name"
-                      value={param.name}
-                      onChange={(e) => updateParameter(index, "name", e.target.value)}
-                      className="flex-1"
-                    />
-                    <Input
-                      placeholder="Parameter value"
-                      value={param.value}
-                      onChange={(e) => updateParameter(index, "value", e.target.value)}
-                      className="flex-1"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeParameter(index)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Resource Selector (Optional)</Label>
-              <div className="flex gap-2">
-                {!selector && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSelector({
-                      resource: "Query",
-                      labelSelector: {
-                        matchLabels: {},
-                        matchExpressions: []
-                      }
-                    })}
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Selector
-                  </Button>
-                )}
-                {selector && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelector(null)}
-                  >
-                    <X className="h-4 w-4 mr-1" />
-                    Remove Selector
-                  </Button>
-                )}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Parameters (Optional)</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addParameter}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Parameter
+                </Button>
               </div>
-            </div>
-            {selector && (
-              <div className="border rounded-md p-3 space-y-3">
-                <div className="space-y-1">
-                  <Label className="text-sm">Resource Type</Label>
-                  <Select
-                    value={selector.resource}
-                    onValueChange={(value) => setSelector({ ...selector, resource: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Query">Query</SelectItem>
-                      <SelectItem value="Agent">Agent</SelectItem>
-                      <SelectItem value="Model">Model</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm">Match Labels</Label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={addMatchLabel}
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add Label
-                    </Button>
-                  </div>
-                  {Object.entries(selector.labelSelector?.matchLabels || {}).map(([key, value], index) => (
-                    <div key={`label-${index}`} className="flex gap-2 items-center">
+              {parameters.length > 0 && (
+                <div className="space-y-2 border rounded-md p-3">
+                  {parameters.map((param, index) => (
+                    <div key={index} className="flex gap-2 items-center">
                       <Input
-                        placeholder="Label key"
-                        value={key}
-                        onChange={(e) => updateMatchLabel(key, e.target.value, value)}
+                        placeholder="Parameter name"
+                        value={param.name}
+                        onChange={(e) => updateParameter(index, "name", e.target.value)}
                         className="flex-1"
                       />
                       <Input
-                        placeholder="Label value"
-                        value={value}
-                        onChange={(e) => updateMatchLabel(key, key, e.target.value)}
+                        placeholder="Parameter value"
+                        value={param.value}
+                        onChange={(e) => updateParameter(index, "value", e.target.value)}
                         className="flex-1"
                       />
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={() => removeMatchLabel(key)}
+                        onClick={() => removeParameter(index)}
                       >
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
                   ))}
                 </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Resource Selector (Optional)</Label>
+                <div className="flex gap-2">
+                  {!selector && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelector({
+                        resource: "Query",
+                        labelSelector: {
+                          matchLabels: {},
+                          matchExpressions: []
+                        }
+                      })}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Selector
+                    </Button>
+                  )}
+                  {selector && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelector(null)}
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      Remove Selector
+                    </Button>
+                  )}
+                </div>
               </div>
-            )}
+              {selector && (
+                <div className="border rounded-md p-3 space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-sm">Resource Type</Label>
+                    <Select
+                      value={selector.resource}
+                      onValueChange={(value) => setSelector({ ...selector, resource: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Query">Query</SelectItem>
+                        <SelectItem value="Agent">Agent</SelectItem>
+                        <SelectItem value="Model">Model</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm">Match Labels</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addMatchLabel}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Label
+                      </Button>
+                    </div>
+                    {Object.entries(selector.labelSelector?.matchLabels || {}).map(([key, value], index) => (
+                      <div key={`label-${index}`} className="flex gap-2 items-center">
+                        <Input
+                          placeholder="Label key"
+                          value={key}
+                          onChange={(e) => updateMatchLabel(key, e.target.value, value)}
+                          className="flex-1"
+                        />
+                        <Input
+                          placeholder="Label value"
+                          value={value}
+                          onChange={(e) => updateMatchLabel(key, key, e.target.value)}
+                          className="flex-1"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeMatchLabel(key)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
         )}
 
         <DialogFooter>
@@ -561,15 +545,15 @@ export function EvaluatorEditor({
           >
             Cancel
           </Button>
-          <Button 
-            onClick={handleSubmit} 
+          <Button
+            onClick={handleSubmit}
             disabled={isSubmitting || evaluatorLoading || !name || !address}
           >
             {isSubmitting
               ? "Saving..."
               : isEditing
-              ? "Update Evaluator"
-              : "Create Evaluator"}
+                ? "Update Evaluator"
+                : "Create Evaluator"}
           </Button>
         </DialogFooter>
       </DialogContent>
