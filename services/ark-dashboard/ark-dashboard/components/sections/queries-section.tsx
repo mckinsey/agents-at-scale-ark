@@ -18,7 +18,7 @@ import { useRouter } from "next/navigation";
 import { useListQueries } from "@/lib/services/queries-hooks";
 import { Button } from "../ui/button";
 
-type QueryResponse = components["schemas"]["QueryResponse"];
+type QueryResponse = components["schemas"]["QueryResponse-Output"];
 
 type SortField = "createdAt" | "none";
 type SortDirection = "asc" | "desc";
@@ -345,7 +345,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function
                             >
                               Content
                             </button>
-      
+
                             <button
                               className={`px-2 py-1 rounded ${outputViewMode === 'raw' ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}
                               onClick={() => setOutputViewMode('raw')}
