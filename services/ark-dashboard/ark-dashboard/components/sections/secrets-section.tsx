@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
+import { useState, useEffect, forwardRef, useImperativeHandle, useCallback } from "react";
 import { toast } from "sonner";
 import { SecretEditor } from "@/components/editors";
 import {
@@ -12,6 +12,10 @@ import {
 } from "@/lib/services";
 import { SecretRow } from "@/components/rows/secret-row";
 import { useDelayedLoading } from "@/lib/hooks";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { DASHBOARD_SECTIONS } from "@/lib/constants";
+import { Button } from "@/components/ui/button";
+import { ArrowUpRightIcon, Plus } from "lucide-react";
 
 interface SecretsSectionProps {
   namespace: string;
@@ -28,11 +32,13 @@ export const SecretsSection = forwardRef<
   const [loading, setLoading] = useState(true);
   const showLoading = useDelayedLoading(loading);
 
+  const handleOpenAddEditor = useCallback(() => {
+    setEditingSecret(null);
+    setSecretEditorOpen(true);
+  }, [])
+
   useImperativeHandle(ref, () => ({
-    openAddEditor: () => {
-      setEditingSecret(null);
-      setSecretEditorOpen(true);
-    }
+    openAddEditor: handleOpenAddEditor
   }));
 
   useEffect(() => {
@@ -120,6 +126,53 @@ export const SecretsSection = forwardRef<
         <div className="text-center py-8">Loading...</div>
       </div>
     );
+  }
+
+  if (secrets.length === 0 && !loading) {
+    return (
+      <>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.secrets.icon />
+            </EmptyMedia>
+            <EmptyTitle>No Secrets Yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t added any secrets yet. Get started by adding
+              your first secret.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={handleOpenAddEditor}>
+              <Plus className="h-4 w-4" />
+              Add Secret
+            </Button>
+          </EmptyContent>
+          <Button
+            variant="link"
+            asChild
+            className="text-muted-foreground"
+            size="sm"
+          >
+            <a href="https://mckinsey.github.io/agents-at-scale-ark/" target="_blank">
+              Learn More <ArrowUpRightIcon />
+            </a>
+          </Button>
+        </Empty>
+        <SecretEditor
+          open={secretEditorOpen}
+          onOpenChange={(open) => {
+            setSecretEditorOpen(open);
+            if (!open) {
+              setEditingSecret(null);
+            }
+          }}
+          secret={editingSecret}
+          onSave={handleSaveSecret}
+          existingSecrets={secrets}
+        />
+      </>
+    )
   }
 
   return (
