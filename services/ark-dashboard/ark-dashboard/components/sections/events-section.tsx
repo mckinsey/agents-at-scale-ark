@@ -24,6 +24,8 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle, RefreshCw } from "lucide-react";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
+import { DASHBOARD_SECTIONS } from "@/lib/constants";
 
 interface EventsSectionProps {
   readonly page: number
@@ -419,9 +421,14 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
       </div>
 
       {events.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-gray-500">No events found</p>
-        </div>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.events.icon />
+            </EmptyMedia>
+            <EmptyTitle>No Events Yet</EmptyTitle>
+          </EmptyHeader>
+        </Empty>
       )}
 
       {/* Pagination */}

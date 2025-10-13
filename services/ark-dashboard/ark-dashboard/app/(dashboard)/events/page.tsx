@@ -16,11 +16,11 @@ type SearchParams = {
 const defaultPage = 1;
 const defaultLimit = 10;
 
-export default async function EventsPage({
-  searchParams
-}: {
+type PageProps = {
   searchParams: Promise<SearchParams>
-}) {
+}
+
+export default async function EventsPage({ searchParams }: PageProps) {
   const filters = (await searchParams)
 
   const parsedFilters = {
