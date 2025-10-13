@@ -55,9 +55,7 @@ describe('createModel', () => {
       ['get', 'model', 'test-model'],
       {stdio: 'pipe'}
     );
-    expect(mockOutput.success).toHaveBeenCalledWith(
-      'model test-model created'
-    );
+    expect(mockOutput.success).toHaveBeenCalledWith('model test-model created');
   });
 
   it('prompts for name when not provided', async () => {
@@ -130,5 +128,4 @@ describe('createModel', () => {
     expect(result).toBe(false);
     expect(mockOutput.error).toHaveBeenCalledWith('failed to create secret');
   });
-
 });

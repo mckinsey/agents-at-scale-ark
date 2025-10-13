@@ -1,10 +1,13 @@
-import type { ChatMessageData } from "@/lib/types/chat"
 import { useMarkdownProcessor } from "@/lib/hooks/use-markdown-processor"
 import { getResourceEventsUrl } from "@/lib/utils/events"
 import { AlertCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
 
-interface ChatMessageProps extends Pick<ChatMessageData, "role" | "content" | "status" | "queryName"> {
+interface ChatMessageProps {
+  role: "user" | "assistant" | "system"
+  content: string
+  status?: "pending" | "processing" | "completed" | "failed"
+  queryName?: string
   className?: string
   viewMode?: 'text' | 'markdown'
 }

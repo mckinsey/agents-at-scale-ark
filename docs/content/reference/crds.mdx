@@ -11,54 +11,11 @@ This page provides detailed specifications for each ARK custom resource.
 
 | Resource | API Version | Description |
 |----------|-------------|-------------|
-| [Agent](/reference/resources/agent) | `ark.mckinsey.com/v1alpha1` | AI agents with prompts and tools |
 | [Team](#teams) | `ark.mckinsey.com/v1alpha1` | Teams of agents with execution strategies |
-| [Query](#queries) | `ark.mckinsey.com/v1alpha1` | Queries to agents or teams |
-| [MCPServer](#mcp-servers) | `ark.mckinsey.com/v1alpha1` | Model Context Protocol servers |
 | [Evaluator](#evaluators) | `ark.mckinsey.com/v1alpha1` | AI-powered query assessment services |
 | [Evaluation](#evaluations) | `ark.mckinsey.com/v1alpha1` | Multi-type AI output assessments |
 | [A2AServer](#a2a-servers) | `ark.mckinsey.com/v1prealpha1` | Agent-to-Agent protocol servers |
 | [ExecutionEngine](#execution-engines) | `ark.mckinsey.com/v1prealpha1` | External execution engines |
-
-## Models
-
-Models define connections to AI model providers and handle authentication and configuration.
-
-### Specification
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Model
-metadata:
-  name: default  # Special name 'default' used when agents don't specify a model
-spec:
-  type: azure  # openai, azure, bedrock
-  model:
-    value: gpt-4.1-mini
-  config:
-    azure:
-      baseUrl:
-        value: "https://lxo.openai.azure.com"
-      apiKey:
-        valueFrom:
-          secretKeyRef:
-            name: default-model-token
-            key: token
-      apiVersion:
-        value: "2024-12-01-preview"
-```
-
-### Supported Providers
-- **Azure OpenAI**: Enterprise-grade OpenAI models
-- **OpenAI**: Direct OpenAI API access
-- **AWS Bedrock**: Amazon's managed AI service
-- **Gemini**: Google's AI models
-
-### Configuration Options
-- **API Keys**: Stored securely in Kubernetes secrets
-- **Base URLs**: Custom endpoints for different providers
-- **API Versions**: Provider-specific API versions
-- **Model Parameters**: Temperature, max tokens, etc.
-
 
 ## Teams
 
@@ -96,38 +53,6 @@ Teams support complex workflows including:
 - **Graph-based strategies**: Custom execution flows
 - **Conditional routing**: Dynamic member selection
 - **Termination conditions**: Early completion criteria
-
-## Queries
-
-Queries represent requests sent to agents or teams and track their execution and results.
-
-### Specification
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: weather-query
-spec:
-  input: 'What is the weather today in New York?'
-  targets:
-    - type: agent
-      name: weather
-```
-
-### Target Types
-- **agent**: Send query to a specific agent
-- **team**: Send query to a team of agents
-- **selector**: Use label selectors to choose targets dynamically
-
-### Advanced Features
-- **Session Management**: Group related queries with sessionId
-- **Template Parameters**: Use variables in query input
-- **Timeout Control**: Set maximum execution time
-- **Multiple Targets**: Send same query to multiple agents/teams
-- **Evaluation Integration**: Use with dedicated Evaluation CRDs for post-hoc assessment
-
-
-
 
 ## Evaluators
 

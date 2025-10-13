@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/runtime"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
@@ -215,7 +216,7 @@ func handleTriggerQueryWithName(config *Config, w http.ResponseWriter, r *http.R
 	// Use existing input unless overridden
 	input := existingQuery.Spec.Input
 	if req.InputOverride != "" {
-		input = req.InputOverride
+		input = runtime.RawExtension{Raw: []byte(req.InputOverride)}
 	}
 
 	// Use existing parameters unless overridden

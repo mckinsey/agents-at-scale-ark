@@ -1,3 +1,5 @@
+"use client"
+
 import { useState } from "react"
 import { Wrench, Trash2, ChevronRight, MessageCircle } from "lucide-react"
 import { BaseCard, type BaseCardAction } from "./base-card"
@@ -19,7 +21,7 @@ export function ToolCard({ tool, onDelete, onInfo, deleteDisabled, deleteDisable
   const router = useRouter();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const actions: BaseCardAction[] = []
-  
+
   // Get custom icon or default Wrench icon
   const annotations = tool.annotations as Record<string, string> | undefined;
   const IconComponent = getCustomIcon(annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], Wrench)

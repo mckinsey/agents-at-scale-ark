@@ -13,7 +13,10 @@ import {
 } from '../../arkServices.js';
 import {printNextSteps} from '../../lib/nextSteps.js';
 import ora from 'ora';
-import {waitForServicesReady, type WaitProgress} from '../../lib/waitForReady.js';
+import {
+  waitForServicesReady,
+  type WaitProgress,
+} from '../../lib/waitForReady.js';
 import {parseTimeoutToSeconds} from '../../lib/timeout.js';
 
 async function installService(service: ArkService, verbose: boolean = false) {
@@ -95,11 +98,11 @@ export async function installArk(
 
     // Build choices for the checkbox prompt
     const coreServices = Object.values(arkServices)
-      .filter(s => s.category === 'core')
+      .filter((s) => s.category === 'core')
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const otherServices = Object.values(arkServices)
-      .filter(s => s.category === 'service')
+      .filter((s) => s.category === 'service')
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const allChoices = [
@@ -298,7 +301,11 @@ export async function installArk(
       const timeoutSeconds = parseTimeoutToSeconds(options.waitForReady);
 
       const servicesToWait = Object.values(arkServices).filter(
-        (s) => s.enabled && s.category === 'core' && s.k8sDeploymentName && s.namespace
+        (s) =>
+          s.enabled &&
+          s.category === 'core' &&
+          s.k8sDeploymentName &&
+          s.namespace
       );
 
       const spinner = ora(
@@ -331,7 +338,9 @@ export async function installArk(
       if (result) {
         spinner.succeed('Ark is ready');
       } else {
-        spinner.fail(`Ark did not become ready within ${timeoutSeconds} seconds`);
+        spinner.fail(
+          `Ark did not become ready within ${timeoutSeconds} seconds`
+        );
         process.exit(1);
       }
     } catch (error) {

@@ -177,7 +177,11 @@ describe('startup', () => {
       type: 'unknown',
       context: 'minikube',
     });
-    expect(mockExeca).toHaveBeenCalledWith('kubectl', ['config', 'current-context'], {timeout: 5000});
+    expect(mockExeca).toHaveBeenCalledWith(
+      'kubectl',
+      ['config', 'current-context'],
+      {timeout: 5000}
+    );
   });
 
   it('handles missing kubectl context gracefully', async () => {
@@ -191,5 +195,4 @@ describe('startup', () => {
     expect(config).toEqual(expectedConfig);
     expect(config.clusterInfo).toBeUndefined();
   });
-
 });

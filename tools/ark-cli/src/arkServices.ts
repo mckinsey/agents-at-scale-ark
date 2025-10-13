@@ -166,9 +166,7 @@ const defaultArkServices: ServiceCollection = {
   },
 };
 
-function applyConfigOverrides(
-  defaults: ServiceCollection
-): ServiceCollection {
+function applyConfigOverrides(defaults: ServiceCollection): ServiceCollection {
   const config = loadConfig();
   const overrides = config?.services || {};
   const result: ServiceCollection = {};
@@ -183,7 +181,8 @@ function applyConfigOverrides(
 /**
  * Core ARK services - initialized with defaults and config overrides applied
  */
-export const arkServices: ServiceCollection = applyConfigOverrides(defaultArkServices);
+export const arkServices: ServiceCollection =
+  applyConfigOverrides(defaultArkServices);
 
 /**
  * Get services that can be installed via Helm charts (only enabled services)

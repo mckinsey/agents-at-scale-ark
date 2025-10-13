@@ -26,7 +26,7 @@ export async function waitForDeploymentReady(
       {timeout: timeoutSeconds * 1000}
     );
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 }

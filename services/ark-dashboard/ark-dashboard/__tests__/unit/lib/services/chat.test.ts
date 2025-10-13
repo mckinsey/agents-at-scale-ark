@@ -91,9 +91,10 @@ describe('chatService', () => {
 
   describe('submitChatQuery', () => {
     it('should create chat query with generated name', async () => {
+      const messages = [{ role: 'user' as const, content: 'Hello' }]
       const mockResponse: QueryDetailResponse = {
         name: 'chat-query-mock-uuid',
-        input: 'Hello',
+        input: messages,
         targets: [{ type: 'agent', name: 'test-agent' }],
         status: { phase: 'pending' },
       }
@@ -101,7 +102,7 @@ describe('chatService', () => {
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse)
 
       const result = await chatService.submitChatQuery(
-        'Hello',
+        messages,
         'agent',
         'test-agent',
         'session-123'
@@ -111,7 +112,8 @@ describe('chatService', () => {
         `/api/v1/queries/`,
         {
           name: 'chat-query-mock-uuid',
-          input: 'Hello',
+          type: 'messages',
+          input: messages,
           targets: [{ type: 'agent', name: 'test-agent' }],
           sessionId: 'session-123',
         }

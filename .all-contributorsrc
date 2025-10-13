@@ -277,6 +277,47 @@
         "doc",
         "bug"
       ]
+    },
+    {
+      "login": "skazinka",
+      "name": "Lily Kazinka",
+      "avatar_url": "https://avatars.githubusercontent.com/u/4908684?v=4",
+      "profile": "https://github.com/skazinka",
+      "contributions": [
+        "doc"
+      ]
+    },
+    {
+      "login": "simoneb",
+      "name": "Simone Busoli",
+      "avatar_url": "https://avatars.githubusercontent.com/u/20181?v=4",
+      "profile": "https://github.com/simoneb",
+      "contributions": [
+        "doc",
+        "bug"
+      ]
+    },
+    {
+      "login": "adriander",
+      "name": "Adrian de Rivero",
+      "avatar_url": "https://avatars.githubusercontent.com/u/28889728?v=4",
+      "profile": "https://github.com/adriander",
+      "contributions": [
+        "code",
+        "bug",
+        "doc"
+      ]
+    },
+    {
+      "login": "JoshKneale",
+      "name": "Josh Kneale",
+      "avatar_url": "https://avatars.githubusercontent.com/u/25364897?v=4",
+      "profile": "https://github.com/JoshKneale",
+      "contributions": [
+        "doc",
+        "bug",
+        "code"
+      ]
     }
   ],
   "contributorsPerLine": 7,
