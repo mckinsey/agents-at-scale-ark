@@ -99,9 +99,11 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 		return false, "A2AServerNotReady", msg
 	}
 
-	// Check model dependency
-	if ok, msg := r.checkModelDependency(ctx, agent); !ok {
-		return false, "ModelNotFound", msg
+	// Check the status of the agent's model. Some agents (such as A2A agents) have a 'nil' model, and their status is not associated with model availability.
+	if agent.Spec.ModelRef != nil {
+		if ok, msg := r.checkModelDependency(ctx, agent); !ok {
+			return false, "ModelNotFound", msg
+		}
 	}
 
 	// Check tool dependencies
@@ -331,7 +333,7 @@ func (r *AgentReconciler) agentDependsOnTool(agent *arkv1alpha1.Agent, toolName 
 
 // agentDependsOnModel checks if an agent depends on a specific model
 func (r *AgentReconciler) agentDependsOnModel(agent *arkv1alpha1.Agent, modelName string) bool {
-	return agent.Spec.ModelRef.Name == modelName
+	return agent.Spec.ModelRef != nil && agent.Spec.ModelRef.Name == modelName
 }
 
 // findAgentsForA2AServer finds agents owned by the given A2AServer
