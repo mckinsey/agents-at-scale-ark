@@ -8,15 +8,12 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
 )
-
-var agentDefaulterLog = logf.Log.WithName("agent-defaulter")
 
 // SetupAgentWebhookWithManager registers the webhook for Agent in the manager.
 func SetupAgentWebhookWithManager(mgr ctrl.Manager) error {
@@ -38,15 +35,8 @@ func (d *AgentCustomDefaulter) Default(ctx context.Context, obj runtime.Object) 
 		return fmt.Errorf("expected an Agent object but got %T", obj)
 	}
 
-	log := agentDefaulterLog.WithValues("agent", agent.Name, "namespace", agent.Namespace)
-
 	_, isA2A := agent.Annotations[annotations.A2AServerName]
 	hasModel := agent.Spec.ModelRef != nil
-
-	log.Info("AGENT_DEFAULTER_WEBHOOK",
-		"isA2A", isA2A,
-		"hasModelRef", hasModel,
-	)
 
 	// Set default model for non-A2A agents
 	// A2A agents are identified by the presence of the a2a-server-name annotation
@@ -55,7 +45,6 @@ func (d *AgentCustomDefaulter) Default(ctx context.Context, obj runtime.Object) 
 		agent.Spec.ModelRef = &arkv1alpha1.AgentModelRef{
 			Name: "default",
 		}
-		log.Info("AGENT_DEFAULTER_WEBHOOK: Set modelRef to 'default'")
 	}
 
 	return nil
