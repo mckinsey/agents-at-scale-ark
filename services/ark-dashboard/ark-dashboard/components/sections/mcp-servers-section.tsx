@@ -7,8 +7,12 @@ import { mcpServersService, type MCPServer } from '@/lib/services';
 import { McpServerCard } from '@/components/cards';
 import { useDelayedLoading } from '@/lib/hooks';
 import { InfoDialog } from '@/components/dialogs/info-dialog';
-import { McpEditor } from '../editors/mcp-editor';
+import { McpEditor } from '@/components/editors/mcp-editor';
 import { MCPServerConfiguration } from '@/lib/services/mcp-servers';
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import { Button } from '@/components/ui/button';
+import { ArrowUpRightIcon, Plus } from 'lucide-react';
 
 interface McpServersSectionProps {
   namespace: string;
@@ -108,6 +112,48 @@ export const McpServersSection = forwardRef<{ openAddEditor: () => void }, McpSe
         <div className='text-center py-8'>Loading...</div>
       </div>
     );
+  }
+
+  if (mcpServers.length === 0 && !loading) {
+    return (
+      <>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.mcp.icon />
+            </EmptyMedia>
+            <EmptyTitle>No MCP Servers Yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t added any MCP Servers yet. Get started by adding
+              your first MCP Server.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={() => setMcpEditorOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add MCP Server
+            </Button>
+          </EmptyContent>
+          <Button
+            variant="link"
+            asChild
+            className="text-muted-foreground"
+            size="sm"
+          >
+            <a href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/tools/" target="_blank">
+              Learn More <ArrowUpRightIcon />
+            </a>
+          </Button>
+        </Empty>
+        <McpEditor
+          open={mcpEditorOpen}
+          onOpenChange={setMcpEditorOpen}
+          mcpServer={null}
+          onSave={handleSave}
+          namespace={namespace}
+        />
+      </>
+    )
   }
 
   return (
