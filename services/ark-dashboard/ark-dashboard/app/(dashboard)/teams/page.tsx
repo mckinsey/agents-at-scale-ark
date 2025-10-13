@@ -17,8 +17,8 @@ export default function TeamsPage() {
     <>
       <PageHeader breadcrumbs={breadcrumbs} currentPage="Teams" actions={
         <Button onClick={() => teamsSectionRef.current?.openAddEditor()}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Team
+          <Plus className="h-4 w-4" />
+          Create Team
         </Button>
       } />
       <div className="flex flex-1 flex-col">

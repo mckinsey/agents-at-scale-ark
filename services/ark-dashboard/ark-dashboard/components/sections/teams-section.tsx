@@ -121,8 +121,8 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function T
           </EmptyHeader>
           <EmptyContent>
             <Button onClick={() => setTeamEditorOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Team
+              <Plus className="h-4 w-4" />
+              Create Team
             </Button>
           </EmptyContent>
           <Button
