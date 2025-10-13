@@ -104,7 +104,6 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function T
     )
   }
 
-
   if (teams.length === 0 && !loading) {
     return (
       <>
