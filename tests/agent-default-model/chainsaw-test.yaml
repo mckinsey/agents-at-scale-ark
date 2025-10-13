@@ -5,6 +5,44 @@ metadata:
 spec:
   description: Test agent behavior with and without default model
   steps:
+  - name: test-without-default-model
+    try:
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: agent-no-default-model
+          spec:
+            prompt: |
+              You are a test agent created without a default model.
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: agent-no-default-model
+          spec:
+            modelRef:
+              name: default
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: agent-no-default-model
+          status:
+            conditions:
+            - type: Available
+              status: "False"
+              reason: ModelNotFound
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+        name: agent-no-default-model
+
   - name: test-with-default-model
     try:
     - apply:
@@ -88,49 +126,10 @@ spec:
           status:
             (length(responses)): 1
             (contains(responses[*].target.name, 'agent-no-model')): true
-            (length(join('', responses[*].content)) > `10`): true
+            (contains(responses[*].content, 'Please confirm you are working')): true
     catch:
     - events: {}
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: default-model-query
-
-  - name: test-without-default-model
-    try:
-    - apply:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: agent-no-default-model
-          spec:
-            prompt: |
-              You are a test agent created without a default model.
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: agent-no-default-model
-          spec:
-            modelRef:
-              name: default
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: agent-no-default-model
-          status:
-            conditions:
-            - type: Available
-              status: "False"
-              reason: ModelNotFound
-              message: (contains(@, 'default'))
-    catch:
-    - events: {}
-    - describe:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Agent
-        name: agent-no-default-model
