@@ -39,7 +39,7 @@ $(eval $(call CLEAN_STAMPS_TEMPLATE,$(ARK_DASHBOARD_SERVICE_NAME)))
 $(DASHBOARD_OPENAPI): $(OUT)/ark-api/stamp-test | $(OUT)
 	@mkdir -p $(ARK_DASHBOARD_SERVICE_DIR)/out
 	@mkdir -p $(dir $@)
-	cp services/ark-api/openapi.json $(ARK_DASHBOARD_SERVICE_DIR)/out/openapi.json
+# 	cp services/ark-api/openapi.json $(ARK_DASHBOARD_SERVICE_DIR)/out/openapi.json
 	cp services/ark-api/openapi.json $@
 
 # Dependencies
