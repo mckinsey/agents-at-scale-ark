@@ -7,9 +7,9 @@ import { TeamEditor } from "@/components/editors"
 import { teamsService, agentsService, modelsService, type Team, type TeamCreateRequest, type TeamUpdateRequest, type Agent, type Model } from "@/lib/services"
 import { TeamCard } from "@/components/cards"
 import { useDelayedLoading } from "@/lib/hooks"
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { DASHBOARD_SECTIONS } from "@/lib/constants"
-import { Button } from "../ui/button"
+import { Button } from "@/components/ui/button"
 import { ArrowUpRightIcon, Plus } from "lucide-react"
 
 export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function TeamsSection(_, ref) {
