@@ -49,6 +49,8 @@ jobs:
           echo "=== Git state ==="
           git rev-parse HEAD
           git status --porcelain
+          git rev-parse --abbrev-ref HEAD
+
           
           echo "=== Committed vs working directory ==="
           echo "Committed types.ts (QueryResponse lines):"
@@ -62,7 +64,7 @@ jobs:
           else
             echo "types.ts does not exist in working directory"
           fi
-          
+
       - id: setup-registry
         uses: ./.github/actions/setup-container-cache-registry
         with:
