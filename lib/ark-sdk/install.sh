@@ -62,5 +62,8 @@ uv run python generate_ark_clients.py -t "$OPENAPI_FILE" \
 uv sync
 
 pushd "$PY_SDK_DIR" >/dev/null
+
+rm -f setup.py setup.cfg
+
 uv run python -m build .
 popd >/dev/null

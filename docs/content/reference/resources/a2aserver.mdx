@@ -1,0 +1,77 @@
+---
+title: A2AServer
+description: Agent-to-Agent protocol servers for hosting external agent frameworks
+---
+
+# A2AServer
+
+A2AServer enables hosting external agent frameworks within ARK using the Agent-to-Agent (A2A) protocol.
+
+## Specification
+
+```yaml
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: A2AServer
+metadata:
+  name: aws-operator-agent
+spec:
+  # Service address for the A2A server.
+  # Supports value, valueFrom.serviceRef, valueFrom.configMapKeyRef, valueFrom.secretKeyRef
+  address:
+    value: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent-jg0yD9Hv2n
+  # Human-readable description of the A2A server
+  description: AWS operations agent with read-only access to AWS services
+  # How often to poll the server for updates (default: 1m)
+  pollInterval: 1m
+status:
+  conditions:
+    # Ready: A2AServer is reachable and operational
+    - type: Ready
+      status: "True"
+      reason: AgentDiscovered
+      message: Successfully discovered agent
+    # Discovering: Agent discovery is in progress
+    - type: Discovering
+      status: "False"
+      reason: DiscoveryComplete
+      message: Agent discovery completed
+  # Last successfully resolved server address
+  lastResolvedAddress: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent-jg0yD9Hv2n
+```
+
+## Examples
+
+### Created Agent Example
+
+When the A2AServer above is created, the controller automatically creates an Agent:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: aws-operator-agent
+  annotations:
+    # A2A server that created this agent
+    ark.mckinsey.com/a2a-server-name: aws-operator-agent
+    # Resolved address of the A2A server
+    ark.mckinsey.com/a2a-server-address: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent-jg0yD9Hv2n
+    # Skills discovered from the A2A server
+    ark.mckinsey.com/a2a-server-skills: '[{"name":"describe_ec2_instances","description":"List and describe EC2 instances in the account"}]'
+spec:
+  description: AWS operations agent with read-only access to AWS services
+  prompt: You are aws_operator_agent. AWS operations agent with read-only access to AWS services
+  executionEngine:
+    name: a2a
+  # No modelRef - A2A agents don't require models
+```
+
+## Behavior
+
+When an A2AServer is created:
+
+1. **Discovery**: Controller connects to the server and discovers available agents. Tries `/.well-known/agent-card.json` (A2A v0.3+), then `/.well-known/agent.json` (A2A v0.2.x).
+2. **Agent Creation**: For each discovered agent, an Agent resource is created with:
+   - Owner reference to the A2AServer
+   - `executionEngine.name: a2a`
+   - Annotations identifying the A2AServer
+3. **Status Updates**: Controller continuously monitors server health

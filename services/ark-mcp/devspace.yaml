@@ -1,12 +1,19 @@
 # DevSpace configuration for ark-mcp service
 version: v2beta1
 
+dependencies:
+  ark-sdk:
+    path: ../../lib/ark-sdk
+
 pipelines:
   deploy: |-
+    run_dependency_pipelines --all --pipeline=deploy
+    ./sync-ark-sdk.sh
     build_images --all
     create_deployments --all
-  
   dev: |-
+    run_dependency_pipelines --all --pipeline=dev
+    ./sync-ark-sdk.sh
     create_deployments --all
     start_dev --all
 
@@ -34,17 +41,19 @@ deployments:
             requests:
               memory: "128Mi"
               cpu: "100m"
+        httpRoute:
+          enabled: true
 
 dev:
   ark-mcp:
     imageSelector: ark-mcp
-    devImage: ghcr.io/astral-sh/uv:python3.12-slim
-    command: ["sh", "-c", "cd /app && uv sync && uv run python -m ark_mcp"]
+    devImage: python:3.12-slim
+    command: ["sh", "-c", "cd /app/ark-mcp && pip install uv && uv sync && uv run python -m ark_mcp"]
     namespace: default
     logs:
       lastLines: 50
     sync:
-      - path: ./ark-mcp:/app
+      - path: .:/app
         startContainer: true
         disableDownload: true
         uploadExcludeFile: .dockerignore

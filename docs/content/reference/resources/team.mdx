@@ -1,0 +1,79 @@
+---
+title: Team
+description: Teams of agents with execution strategies
+---
+
+# Team
+
+Teams coordinate multiple agents working together using different execution strategies.
+
+## Specification
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: example-team
+spec:
+  # Team members - agents or nested teams
+  members:
+    - name: researcher
+      type: agent
+    - name: analyst
+      type: agent
+    - name: writer
+      type: agent
+
+  # Turn limit (optional) - prevents infinite loops
+  maxTurns: 10
+
+  # Execution strategy - how members collaborate
+  strategy: selector  # Options: sequential, round-robin, selector, graph
+
+  # Selector configuration - for strategy: selector
+  selector:
+    model: gpt-4  # Model to use for selection (optional)
+    selectorPrompt: "Choose the best agent for: {{.Input}}"
+
+  # # Round-robin configuration - for strategy: round-robin
+  # strategy: round-robin
+  # # No additional configuration needed
+
+  # # Sequential configuration - for strategy: sequential
+  # strategy: sequential
+  # # No additional configuration needed
+
+  # # Graph configuration - for strategy: graph
+  # strategy: graph
+  # graph:
+  #   edges:
+  #     - from: researcher
+  #       to: analyst
+  #     - from: analyst
+  #       to: writer
+```
+
+## Execution Strategies
+
+Execution strategies define how team members are chosen during query execution.
+
+- **sequential** - Agents process input one after another
+- **round-robin** - Agents take turns processing inputs
+- **selector** Dynamic agent selection based on criteria, LLM choses the next agent for the job
+- **graph** Custom execution flows with edges, supports more complex workflows
+
+## Turn Limiting
+
+The optional `maxTurns` field prevents infinite loops by limiting execution turns. When reached, the team completes successfully with all accumulated responses.
+
+- **round-robin** - Limits total agent messages (e.g., 3 agents, `maxTurns: 5` = 5 messages total)
+- **selector** - Limits selection rounds (each round = one agent selection and execution)
+- **graph** - Limits edge traversals through the execution graph
+- **sequential** - Not applicable (naturally terminates after all agents complete)
+
+When `maxTurns` is reached:
+
+1. Team execution stops gracefully
+2. All responses generated up to the limit are returned
+3. Warning event emitted: `TeamMaxTurnsReached`
+4. Query completes successfully (not an error)

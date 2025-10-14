@@ -1,0 +1,43 @@
+# DevSpace configuration for localhost-gateway
+version: v2beta1
+
+pipelines:
+  dev: |-
+    create_deployments --all
+    
+    echo "Waiting for gateway to be ready to port-forward..."
+    until kubectl port-forward -n ark-system service/localhost-gateway-nginx 8080:80; do 
+      echo "Port-forwarding failed - gateway not ready yet. Retrying in 10s..."
+      sleep 10
+    done
+
+deployments:
+  nginx-gateway-fabric:
+    namespace: default
+    kubectl:
+      manifests:
+        - "https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v2.0.2/deploy/crds.yaml"
+  localhost-gateway:
+    namespace: ark-system
+    helm:
+      chart:
+        path: ./chart
+      values:
+        nginxGateway:
+          install: true
+          namespace: ark-system
+          image:
+            repository: ghcr.io/nginx/nginx-gateway-fabric
+            tag: "1.6.2"
+        gateway:
+          name: localhost-gateway
+          namespace: ark-system
+        localhost:
+          port: 8080
+
+dev:
+  localhost-gateway:
+    namespace: ark-system
+    imageSelector: ghcr.io/nginx/nginx-gateway-fabric/nginx
+    ports:
+    - port: 8080:80

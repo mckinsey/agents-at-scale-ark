@@ -3,20 +3,83 @@ kind: Test
 metadata:
   name: agent-default-model
 spec:
-  description: Test that agents use model named 'default' when no modelRef is specified
+  description: Test agent behavior with and without default model
   steps:
-  - name: step-1
+  - name: test-without-default-model
     try:
-    - script:
-        skipLogOutput: true
-        content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
     - apply:
-        file: manifests/*.yaml
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: agent-no-default-model
+          spec:
+            prompt: |
+              You are a test agent created without a default model.
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: agent-no-default-model
+          spec:
+            modelRef:
+              name: default
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: agent-no-default-model
+          status:
+            conditions:
+            - type: Available
+              status: "False"
+              reason: ModelNotFound
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+        name: agent-no-default-model
+
+  - name: test-with-default-model
+    try:
+    - apply:
+        file: manifests/a00-mock-openai.yaml
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: mock-openai
+          status:
+            phase: Running
+            (contains(conditions[?type == 'Ready'].status, 'True')): true
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - script:
+        content: |
+          kubectl apply -f - <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: default
+            namespace: $NAMESPACE
+          spec:
+            type: openai
+            model:
+              value: gpt-4.1
+            pollInterval: 3s
+            config:
+              openai:
+                baseUrl:
+                  value: http://mock-openai.$NAMESPACE.svc.cluster.local/v1
+                apiKey:
+                  value: mock-api-key
+          EOF
+    - apply:
+        file: manifests/a0[3-4]-*.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -33,6 +96,19 @@ spec:
           kind: Agent
           metadata:
             name: agent-no-model
+          spec:
+            modelRef:
+              name: default
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: agent-no-model
+          status:
+            conditions:
+            - type: Available
+              status: "True"
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -50,7 +126,7 @@ spec:
           status:
             (length(responses)): 1
             (contains(responses[*].target.name, 'agent-no-model')): true
-            (length(join('', responses[*].content)) > `10`): true
+            (contains(responses[*].content, 'Please confirm you are working')): true
     catch:
     - events: {}
     - describe:

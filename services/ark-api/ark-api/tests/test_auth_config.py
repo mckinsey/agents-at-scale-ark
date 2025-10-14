@@ -8,6 +8,9 @@ import unittest
 import os
 from unittest.mock import patch
 
+from ark_sdk.auth.validator import TokenValidator
+from ark_sdk.auth.config import AuthConfig
+from ark_api.auth.constants import AuthMode
 
 
 class TestAuthConfig(unittest.TestCase):
@@ -45,18 +48,64 @@ class TestAuthConfig(unittest.TestCase):
     def test_auth_mode_parsing(self):
         """Test AUTH_MODE environment variable parsing."""
         # Test SSO mode (authentication required)
-        for value in ['sso', 'SSO', 'Sso']:
+        for value in [AuthMode.SSO, 'SSO', 'Sso']:
             with patch.dict(os.environ, {'AUTH_MODE': value}):
                 auth_mode = os.getenv("AUTH_MODE", "").lower()
-                skip_auth = auth_mode != "sso"
+                skip_auth = auth_mode != AuthMode.SSO
                 self.assertFalse(skip_auth, f"Failed for value: {value}")
 
         # Test non-SSO modes (authentication skipped)
-        for value in ['open', 'Open', 'OPEN', 'false', 'true', 'off', 'on', '', None]:
+        for value in [AuthMode.OPEN, 'Open', 'OPEN', 'false', 'true', 'off', 'on', '', None]:
             with patch.dict(os.environ, {'AUTH_MODE': value} if value is not None else {}):
                 auth_mode = os.getenv("AUTH_MODE", "").lower()
-                skip_auth = auth_mode != "sso"
+                skip_auth = auth_mode != AuthMode.SSO
                 self.assertTrue(skip_auth, f"Failed for value: {value}")
+
+    def test_auth_mode_validation_with_invalid_values(self):
+        """Test AUTH_MODE validation logic that defaults invalid values to 'open'."""
+        from ark_api.auth.constants import AuthMode
+        
+        # Test valid auth modes
+        valid_auth_modes = [AuthMode.SSO, AuthMode.BASIC, AuthMode.HYBRID, AuthMode.OPEN]
+        
+        for valid_mode in valid_auth_modes:
+            with self.subTest(mode=valid_mode):
+                auth_mode_raw = valid_mode.lower()
+                # Simulate the validation logic from middleware
+                if auth_mode_raw in valid_auth_modes:
+                    auth_mode = auth_mode_raw
+                else:
+                    auth_mode = AuthMode.OPEN
+                
+                self.assertEqual(auth_mode, valid_mode)
+        
+        # Test invalid auth modes - should default to 'open'
+        invalid_modes = ['invalid', 'wrong', 'bad', 'unknown', 'jwt', 'oauth', 'none', '123']
+        
+        for invalid_mode in invalid_modes:
+            with self.subTest(mode=invalid_mode):
+                auth_mode_raw = invalid_mode.lower()
+                # Simulate the validation logic from middleware
+                if auth_mode_raw in valid_auth_modes:
+                    auth_mode = auth_mode_raw
+                else:
+                    auth_mode = AuthMode.OPEN
+                
+                self.assertEqual(auth_mode, AuthMode.OPEN, 
+                               f"Invalid mode '{invalid_mode}' should default to 'open'")
+        
+        # Test empty/None values - should default to 'open'
+        for empty_value in ['', None]:
+            with self.subTest(mode=empty_value):
+                auth_mode_raw = (empty_value or "").lower()
+                # Simulate the validation logic from middleware
+                if auth_mode_raw in valid_auth_modes:
+                    auth_mode = auth_mode_raw
+                else:
+                    auth_mode = AuthMode.OPEN
+                
+                self.assertEqual(auth_mode, AuthMode.OPEN, 
+                               f"Empty/None mode '{empty_value}' should default to 'open'")
 
 
 

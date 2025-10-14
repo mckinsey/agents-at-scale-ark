@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import type { A2AServerConfiguration } from "@/lib/services/a2a-servers";
 
 type Props = {
@@ -34,10 +34,7 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
 
   const handleSave = () => {
     if (!isValid) {
-      toast({
-        variant: "destructive",
-        title: "Please fill in required fields correctly"
-      });
+      toast.error("Please fill in required fields correctly");
       return;
     }
 

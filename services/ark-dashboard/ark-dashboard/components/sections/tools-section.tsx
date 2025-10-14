@@ -4,7 +4,7 @@ import { ToolCard } from "@/components/cards";
 import { InfoDialog } from "@/components/dialogs/info-dialog";
 import { ToolRow } from "@/components/rows/tool-row";
 import { ToggleSwitch, type ToggleOption } from "@/components/ui/toggle-switch";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { useDelayedLoading } from "@/lib/hooks";
 import {
   agentsService,
@@ -69,9 +69,7 @@ export const ToolsSection = forwardRef<
         setAgents(agentsData);
       } catch (error) {
         console.error("Failed to load data:", error);
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Data",
+        toast.error("Failed to Load Data", {
           description:
             error instanceof Error
               ? error.message
@@ -107,16 +105,12 @@ export const ToolsSection = forwardRef<
     try {
       await toolsService.delete(identifier);
       setTools(tools.filter((tool) => (tool.name || tool.type) !== identifier));
-      toast({
-        variant: "success",
-        title: "Tool Deleted",
+      toast.success("Tool Deleted", {
         description: "Successfully deleted tool"
       });
     } catch (error) {
       console.error("Failed to delete tool:", error);
-      toast({
-        variant: "destructive",
-        title: "Failed to Delete Tool",
+      toast.error("Failed to Delete Tool", {
         description:
           error instanceof Error
             ? error.message
@@ -140,18 +134,14 @@ export const ToolsSection = forwardRef<
   }) => {
     try {
       await toolsService.create(toolSpec);
-      toast({
-        variant: "success",
-        title: "Tool Created",
+      toast.success("Tool Created", {
         description: `Successfully created ${toolSpec.name}`
       });
 
       const updatedTools = await toolsService.getAll();
       setTools(updatedTools);
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Create Tool",
+      toast.error("Failed to Create Tool", {
         description:
           error instanceof Error
             ? error.message
@@ -310,9 +300,8 @@ export const ToolsSection = forwardRef<
           <InfoDialog
             open={infoDialogOpen}
             onOpenChange={setInfoDialogOpen}
-            title={`Tool: ${
-              selectedTool.name || selectedTool.type || "Unnamed"
-            }`}
+            title={`Tool: ${selectedTool.name || selectedTool.type || "Unnamed"
+              }`}
             data={selectedTool}
             additionalFields={getAdditionalFields(selectedTool)}
           />

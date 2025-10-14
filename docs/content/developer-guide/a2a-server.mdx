@@ -9,6 +9,12 @@ ARK includes an integrated Agent-to-Agent Gateway (A2AGW) that implements the [A
 
 ARK also supports **Agent Hosting**, which allows users to host their existing LangChain, CrewAI, AutoGen, or other agent code and expose agents to the ARK cluster using the A2A protocol.
 
+**Agent Discovery Endpoints**: ARK automatically tries multiple A2A protocol endpoints for agent discovery:
+1. First tries `/.well-known/agent-card.json` - the current protocol standard as of [A2A v0.3.0](https://github.com/a2aproject/A2A/releases/tag/v0.3.0)
+2. Falls back to `/.well-known/agent.json` - used in A2A v0.2.x and earlier
+
+Both endpoints are checked for backwards compatibility, as many A2A libraries have not yet adopted the new protocol standard.
+
 Note: At present, ARK only supports text-based responses from the A2A server. Other response formats (e.g., images, audio, structured JSON) are not yet supported.
 
 ## Overview
@@ -107,6 +113,13 @@ fark agent langchain-agents-weather-reporter "What's the weather like today?"
 kubectl get agents
 ```
 
+## Creating a sample agent
+
+You must have a default model *before* using this sample agent
+
+See the [samples/agent-hosting](https://github.com/mckinsey/agents-at-scale-ark/tree/main/samples/agent-hosting) directory for complete examples:
+- **LangChain Weather Agent**: Weather forecasting with NWS API tools
+
 ## Agent Hosting with A2A Servers
 
 Agent hosting allows you to integrate existing agent frameworks with ARK using the A2A protocol.
@@ -164,10 +177,6 @@ Agent hosting works with any framework that can implement the A2A protocol:
 - **AutoGen** - Conversational AI agents
 - **Custom implementations** - Any HTTP service implementing A2A protocol
 
-## Samples
-
-See the [samples/agent-hosting](https://github.com/mckinsey/agents-at-scale-ark/tree/main/samples/agent-hosting) directory for complete examples:
-- **LangChain Weather Agent**: Weather forecasting with NWS API tools
 
 ## A2A Annotations
 
