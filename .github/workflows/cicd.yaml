@@ -176,6 +176,7 @@ jobs:
           echo "Hash of committed file (if present):"
           if [ -f services/ark-api/openapi.json ]; then sha256sum services/ark-api/openapi.json || true; else echo "openapi.json missing"; fi
           if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true; else echo "types.ts missing"; fi
+          grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
 
       - run: make -j24 build-all
 
@@ -184,6 +185,7 @@ jobs:
           echo "Hash of committed/generated file (if present):"
           if [ -f services/ark-api/openapi.json ]; then sha256sum services/ark-api/openapi.json || true; else echo "openapi.json missing"; fi
           if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true; else echo "types.ts missing"; fi
+          grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
 
       # - run: rm -Rf out/ark-dashboard/
 
@@ -209,6 +211,7 @@ jobs:
           echo
           echo "Hash after regeneration (if present):"
           if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true; else echo "types.ts still missing"; fi
+          grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
 
           echo
           echo "Git status / diff (names only):"
@@ -220,11 +223,6 @@ jobs:
             echo "Error: Generated types.ts file has changed. Please regenerate and commit the changes."
             exit 1
           fi
-
-      - name: test QueryResponse in types.ts
-        run: |
-          grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
-
 
       - run: make -j24 services-test-all
       
