@@ -292,6 +292,13 @@ jobs:
           username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
+      - name: Print file hash (pre-build)
+        run: |
+          echo "Hash of types.ts:"
+          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true; else echo "types.ts missing"; fi
+          echo "QueryResponse within types.ts:"
+          grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
+
       - uses: ./.github/actions/build-image
         with:
           path: ${{ matrix.path }}
@@ -302,6 +309,13 @@ jobs:
           push: true
           prebuild: ${{ matrix.prebuild }}
 
+      - name: Print file hash (post-build)
+        run: |
+          echo "Hash of types.ts:"
+          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true; else echo "types.ts missing"; fi
+          echo "QueryResponse within types.ts:"
+          grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
+
 
   build-libs:
     runs-on: ubuntu-24.04
@@ -310,6 +324,13 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+
+      - name: Print file hash
+        run: |
+          echo "Hash of types.ts:"
+          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true; else echo "types.ts missing"; fi
+          echo "QueryResponse within types.ts:"
+          grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
 
       - name: Build libraries
         run: make libs-build-all
