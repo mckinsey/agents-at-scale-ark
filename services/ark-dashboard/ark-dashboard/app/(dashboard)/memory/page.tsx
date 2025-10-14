@@ -2,14 +2,13 @@
 
 import { MemorySection } from "@/components/sections/memory-section"
 import { useSearchParams } from "next/navigation"
-import { Suspense } from "react"
 import { BreadcrumbElement, PageHeader } from "@/components/common/page-header"
 
 const breadcrumbs: BreadcrumbElement[] = [
   { href: '/', label: "ARK Dashboard" }
 ]
 
-function MemoryContent() {
+export default function MemoryPage() {
   const searchParams = useSearchParams()
 
   // Extract filter parameters from URL
@@ -25,13 +24,5 @@ function MemoryContent() {
         <MemorySection initialFilters={initialFilters} />
       </div>
     </>
-  )
-}
-
-export default function MemoryPage() {
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <MemoryContent />
-    </Suspense>
   )
 }
