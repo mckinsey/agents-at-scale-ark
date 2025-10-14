@@ -342,6 +342,17 @@ jobs:
           path: out/
           retention-days: 30
 
+      # Add this to build-libs job after "Build libraries"
+      - name: Debug what's being uploaded
+        run: |
+          echo "Contents of out/ being uploaded:"
+          find out/ -name "*.ts" -o -name "*.json" | head -20
+          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then
+            echo "types.ts hash in build-libs:"
+            sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
+            grep -c QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true
+          fi
+
   e2e-quickstart:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
