@@ -204,7 +204,7 @@ jobs:
           echo "Forcing regeneration to prove generator behavior..."
           rm -f out/ark-dashboard/stamp-deps || true
           # Run the generator explicitly to ensure it executes in this job
-          cd services/ark-dashboard/ark-dashboard && npm ci --no-audit --no-fund && npm run generate:api || true
+          ( cd services/ark-dashboard/ark-dashboard && npm ci --no-audit --no-fund && npm run generate:api ) || true
 
           echo
           echo "Hash after regeneration (if present):"
