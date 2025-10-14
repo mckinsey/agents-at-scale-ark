@@ -44,6 +44,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: tmp. switch branch manually (only one test)
+        run: git switch -c fix/check-generated-types-are-unchanged
+
       - name: Debug pre-setup state
         run: |
           echo "=== Git state ==="
