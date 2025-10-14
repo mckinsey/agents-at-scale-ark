@@ -342,8 +342,14 @@ export function TeamEditor({
   const isGraphValid =
     strategy !== "graph" ||
     (graphEdges.length > 0 && graphEdges.every((edge) => edge.to));
+  const isSelectorValid =
+    strategy !== "selector" || (selectorAgent && selectorAgent !== "__none__");
   const isValid =
-    name.trim() && selectedMembers.length > 0 && isGraphValid && !nameError;
+    name.trim() &&
+    selectedMembers.length > 0 &&
+    isGraphValid &&
+    isSelectorValid &&
+    !nameError;
 
   const moveCard = (dragIndex: number, hoverIndex: number) => {
     const updated = [...orderedAgents];
