@@ -122,6 +122,11 @@ kubectl get deployment ark-controller -n ark-system \
 
 The Ark CLI can be used to show the status of all running Ark services and their versions, with the `ark status` command.
 
+```bash
+# Check overall system status
+ark status
+```
+
 ## Cluster Preparation for CI/CD Deployments
 
 Before using GitHub Actions to deploy Ark to a cluster, platform administrators need to set up the required RBAC permissions.
