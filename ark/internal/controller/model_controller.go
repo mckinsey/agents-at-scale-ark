@@ -50,11 +50,6 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// Initialize conditions if empty
 	if len(model.Status.Conditions) == 0 {
 		r.setCondition(&model, ModelAvailable, metav1.ConditionUnknown, "Initializing", "Model availability is being determined")
-		if err := r.updateStatus(ctx, &model); err != nil {
-			return ctrl.Result{}, err
-		}
-		// Return early to avoid double reconciliation, let the status update trigger next reconcile
-		return ctrl.Result{}, nil
 	}
 
 	// Probe the model to test whether it is available.

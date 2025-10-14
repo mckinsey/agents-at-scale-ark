@@ -2,7 +2,7 @@
 
 import type React from "react";
 import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { AgentEditor } from "@/components/editors";
 import {
   agentsService,
@@ -22,7 +22,7 @@ import { ToggleSwitch, type ToggleOption } from "@/components/ui/toggle-switch";
 export const AgentsSection = forwardRef<
   { openAddEditor: () => void },
   object
->(function AgentsSection({}, ref) {
+>(function AgentsSection({ }, ref) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [models, setModels] = useState<Model[]>([]);
@@ -54,9 +54,7 @@ export const AgentsSection = forwardRef<
         setModels(modelsData);
       } catch (error) {
         console.error("Failed to load data:", error);
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Data",
+        toast.error("Failed to Load Data", {
           description:
             error instanceof Error
               ? error.message
@@ -81,18 +79,14 @@ export const AgentsSection = forwardRef<
           updateRequest.id,
           updateRequest
         );
-        toast({
-          variant: "success",
-          title: "Agent Updated",
+        toast.success("Agent Updated", {
           description: "Successfully updated the agent"
         });
       } else {
         // This is a create
         const createRequest = agent as AgentCreateRequest;
         await agentsService.create(createRequest);
-        toast({
-          variant: "success",
-          title: "Agent Created",
+        toast.success("Agent Created", {
           description: `Successfully created ${createRequest.name}`
         });
       }
@@ -100,9 +94,7 @@ export const AgentsSection = forwardRef<
       const updatedAgents = await agentsService.getAll();
       setAgents(updatedAgents);
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: agent.id ? "Failed to Update Agent" : "Failed to Create Agent",
+      toast.error(agent.id ? "Failed to Update Agent" : "Failed to Create Agent", {
         description:
           error instanceof Error
             ? error.message
@@ -118,18 +110,14 @@ export const AgentsSection = forwardRef<
         throw new Error("Agent not found");
       }
       await agentsService.deleteById(id);
-      toast({
-        variant: "success",
-        title: "Agent Deleted",
+      toast.success("Agent Deleted", {
         description: `Successfully deleted ${agent.name}`
       });
       // Reload data
       const updatedAgents = await agentsService.getAll();
       setAgents(updatedAgents);
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Delete Agent",
+      toast.error("Failed to Delete Agent", {
         description:
           error instanceof Error
             ? error.message

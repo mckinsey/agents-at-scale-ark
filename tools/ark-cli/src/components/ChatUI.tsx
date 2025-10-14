@@ -6,6 +6,7 @@ import * as React from 'react';
 import {marked} from 'marked';
 // @ts-ignore - no types available
 import TerminalRenderer from 'marked-terminal';
+import {APIError} from 'openai';
 import {
   ChatClient,
   QueryTarget,
@@ -703,8 +704,25 @@ const ChatUI: React.FC<ChatUIProps> = ({
         return;
       }
 
-      const errorMessage =
-        err instanceof Error ? err.message : 'Failed to send message';
+      let errorMessage = 'Failed to send message';
+
+      // OpenAI SDK errors include response body in .error property
+      if (err instanceof APIError) {
+        if (err.error && typeof err.error === 'object') {
+          errorMessage = JSON.stringify(err.error, null, 2);
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      // Standard JavaScript errors
+      else if (err instanceof Error) {
+        errorMessage = err.message;
+      }
+      // String errors from throw statements
+      else if (typeof err === 'string') {
+        errorMessage = err;
+      }
+
       setError(errorMessage);
       setIsTyping(false);
       setAbortController(null);

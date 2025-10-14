@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle
 } from "@/components/ui/card";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { EnhancedEvaluationMetadata } from "@/lib/services/evaluations";
 import { Code, Copy } from "lucide-react";
 
@@ -36,15 +36,11 @@ export function RawMetadataComponent({
       await navigator.clipboard.writeText(
         JSON.stringify(combinedMetadata, null, 2)
       );
-      toast({
-        variant: "default",
-        title: "Copied to Clipboard",
+      toast("Copied to Clipboard", {
         description: "Metadata has been copied to your clipboard"
       });
     } catch {
-      toast({
-        variant: "destructive",
-        title: "Copy Failed",
+      toast.error("Copy Failed", {
         description: "Failed to copy metadata to clipboard"
       });
     }

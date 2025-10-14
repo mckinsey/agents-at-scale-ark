@@ -13,41 +13,44 @@ import (
 
 const defaultModelName = "default"
 
-func ResolveModelSpec(modelSpec any, defaultNamespace string) (string, string) {
+func ResolveModelSpec(modelSpec any, defaultNamespace string) (string, string, error) {
+	if modelSpec == nil {
+		return "", "", fmt.Errorf("model spec is nil")
+	}
 	switch spec := modelSpec.(type) {
 	case *arkv1alpha1.AgentModelRef:
-		if spec == nil {
-			return defaultModelName, defaultNamespace
-		}
 		modelName := spec.Name
 		namespace := spec.Namespace
 		if namespace == "" {
 			namespace = defaultNamespace
 		}
-		return modelName, namespace
+		return modelName, namespace, nil
 
 	case *arkv1alpha1.TeamSelectorSpec:
 		modelName := defaultModelName
-		if spec != nil && spec.Model != "" {
+		if spec.Model != "" {
 			modelName = spec.Model
 		}
-		return modelName, defaultNamespace
+		return modelName, defaultNamespace, nil
 
 	case string:
 		modelName := spec
 		if modelName == "" {
 			modelName = defaultModelName
 		}
-		return modelName, defaultNamespace
+		return modelName, defaultNamespace, nil
 
 	default:
-		return defaultModelName, defaultNamespace
+		return "", "", fmt.Errorf("unsupported model spec type: %T", modelSpec)
 	}
 }
 
 // LoadModel loads a model by resolving modelSpec and defaultNamespace
 func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface{}, defaultNamespace string) (*Model, error) {
-	modelName, namespace := ResolveModelSpec(modelSpec, defaultNamespace)
+	modelName, namespace, err := ResolveModelSpec(modelSpec, defaultNamespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve model spec: %w", err)
+	}
 	modelCRD, err := loadModelCRD(ctx, k8sClient, modelName, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load model CRD %s in namespace %s: %w", modelName, namespace, err)

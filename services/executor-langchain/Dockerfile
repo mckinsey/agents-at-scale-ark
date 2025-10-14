@@ -21,7 +21,8 @@ COPY build-context/*.whl /tmp/
 RUN uv add /tmp/ark_sdk-*.whl && \
     HOME=/home/executor uv sync --no-dev && \
     HOME=/home/executor uv pip install -e . && \
-    chown -R executor:executor /home/executor
+    chown -R executor:executor /home/executor && \
+    chown -R executor:executor /app
 
 USER executor
 

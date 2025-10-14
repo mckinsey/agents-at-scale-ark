@@ -1,6 +1,6 @@
 "use client";
 
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { createContext, Dispatch, PropsWithChildren, SetStateAction, useCallback, useContext, useEffect, useState } from "react";
 import { Control, useForm, UseFormReturn, UseFormSetValue } from "react-hook-form";
 import { z } from 'zod'
@@ -133,9 +133,7 @@ export function ModelConfiguratorForm({ defaultName }: ModelConfiguratorFormProp
 
   useEffect(() => {
     if (secretsError) {
-      toast({
-        variant: "destructive",
-        title: "Failed to get secrets",
+      toast.error("Failed to get secrets", {
         description:
           secretsError instanceof Error
             ? secretsError.message

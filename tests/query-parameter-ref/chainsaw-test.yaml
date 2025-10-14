@@ -18,9 +18,16 @@ spec:
             status:
               phase: Running
               (contains(conditions[?type == 'Ready'].status, 'True')): true
-      # Now apply RBAC, ConfigMap, Secret
+      # Install ark-tenant for RBAC
+      - script:
+          content: |
+            helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+      # Now apply ConfigMap, Secret
       - apply:
-          file: manifests/a0[1-3]-*.yaml
+          file: manifests/a0[2-3]-*.yaml
       # Now create the Model after mock server is ready
       - script:
           content: |
@@ -28,16 +35,17 @@ spec:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Model
             metadata:
-              name: test-model
+              name: mock-gpt-4.1
               namespace: $NAMESPACE
             spec:
               type: openai
               model:
-                value: echo-model
+                value: gpt-4.1
+              pollInterval: 3s
               config:
                 openai:
                   baseUrl:
-                    value: http://mock-openai.$NAMESPACE.svc.cluster.local
+                    value: http://mock-openai.$NAMESPACE.svc.cluster.local/v1
                   apiKey:
                     value: mock-api-key
             EOF
@@ -61,7 +69,7 @@ spec:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Model
             metadata:
-              name: test-model
+              name: mock-gpt-4.1
             status:
               conditions:
               - type: ModelAvailable
@@ -73,6 +81,7 @@ spec:
             metadata:
               name: test-agent
       - assert:
+          timeout: 5s
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Query
@@ -80,7 +89,9 @@ spec:
               name: test-query-with-params
             status:
               phase: done
+      # Response is immutable after phase: done, no need to retry
       - assert:
+          timeout: 1s
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Query
@@ -89,7 +100,9 @@ spec:
             status:
               (length(responses)): 1
               (contains(responses[*].target.name, 'test-agent')): true
-              (length(join('', responses[*].content)) > `10`): true
+              # Verify system message echoed back with resolved parameter
+              (contains(responses[0].raw, '"role":"system"')): true
+              (contains(responses[0].content, 'QueryAgent123')): true
       # Test nested valueFrom resolution - Agent referencing Query params that use ConfigMap/Secret
       - assert:
           resource:
@@ -98,6 +111,7 @@ spec:
             metadata:
               name: test-agent-nested
       - assert:
+          timeout: 5s
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Query
@@ -105,7 +119,9 @@ spec:
               name: test-query-nested-params
             status:
               phase: done
+      # Response is immutable after phase: done, no need to retry
       - assert:
+          timeout: 1s
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Query

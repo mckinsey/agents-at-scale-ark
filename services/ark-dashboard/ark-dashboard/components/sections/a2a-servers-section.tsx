@@ -2,7 +2,7 @@
 
 import type React from "react";
 import { useState, useEffect, forwardRef, useImperativeHandle, useCallback } from "react";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { A2AServersService, type A2AServer } from "@/lib/services";
 import { A2AServerCard } from "@/components/cards";
 import { useDelayedLoading } from "@/lib/hooks";
@@ -44,9 +44,7 @@ export const A2AServersSection = forwardRef<
       setA2AServers(data);
     } catch (error) {
       console.error("Failed to load A2A servers:", error);
-      toast({
-        variant: "destructive",
-        title: "Failed to Load A2A Servers",
+      toast.error("Failed to Load A2A Servers", {
         description:
           error instanceof Error ? error.message : "An unexpected error occurred"
       });
@@ -67,17 +65,13 @@ export const A2AServersSection = forwardRef<
   const handleSave = async (config: A2AServerConfiguration) => {
     try {
       await A2AServersService.create(config);
-      toast({
-        variant: "success",
-        title: "A2A Server Created",
+      toast.success("A2A Server Created", {
         description: `Successfully created ${config.name}`
       });
       await loadData();
       setA2aEditorOpen(false);
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Create A2A Server",
+      toast.error("Failed to Create A2A Server", {
         description:
           error instanceof Error ? error.message : "An unexpected error occurred"
       });

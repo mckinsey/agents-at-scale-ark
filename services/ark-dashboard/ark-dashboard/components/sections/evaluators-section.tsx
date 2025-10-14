@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, forwardRef, useImperativeHandle } from "react"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { EvaluatorEditor } from "@/components/editors"
 import { evaluatorsService, type Evaluator, type EvaluatorCreateRequest } from "@/lib/services"
 import { EvaluatorCard } from "@/components/cards"
@@ -33,9 +33,7 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(funct
         const evaluatorsData = await evaluatorsService.getAll()
         setEvaluators(evaluatorsData)
       } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Evaluators",
+        toast.error("Failed to Load Evaluators", {
           description: error instanceof Error ? error.message : "An unexpected error occurred"
         })
       } finally {
@@ -50,17 +48,13 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(funct
     try {
       const { id: _, ...createData } = evaluator
       await evaluatorsService.create(createData)
-      toast({
-        variant: "success",
-        title: "Evaluator Created",
+      toast.success("Evaluator Created", {
         description: `Successfully created ${createData.name}`
       })
       const updatedEvaluators = await evaluatorsService.getAll()
       setEvaluators(updatedEvaluators)
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Create Evaluator",
+      toast.error("Failed to Create Evaluator", {
         description: error instanceof Error ? error.message : "An unexpected error occurred"
       })
     }
@@ -73,17 +67,13 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(funct
         throw new Error("Evaluator not found")
       }
       await evaluatorsService.delete(name)
-      toast({
-        variant: "success",
-        title: "Evaluator Deleted",
+      toast.success("Evaluator Deleted", {
         description: `Successfully deleted ${evaluator.name}`
       })
       const updatedEvaluators = await evaluatorsService.getAll()
       setEvaluators(updatedEvaluators)
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Delete Evaluator",
+      toast.error("Failed to Delete Evaluator", {
         description: error instanceof Error ? error.message : "An unexpected error occurred"
       })
     }
@@ -133,7 +123,7 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(funct
           )}
         </main>
       </div>
-      
+
       <EvaluatorEditor
         open={evaluatorEditorOpen}
         onOpenChange={setEvaluatorEditorOpen}
