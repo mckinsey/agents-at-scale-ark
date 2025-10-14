@@ -41,6 +41,8 @@ jobs:
       is-fork-pr: ${{ steps.setup-registry.outputs.is-fork-pr }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Debug pre-setup state
         run: |
@@ -56,7 +58,7 @@ jobs:
           if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then
             grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || echo "No QueryResponse in working"
             echo "git log for types.ts:"
-            git --no-pager log -n 5 --pretty=format:"%h %ad %an %s" --date=iso -- services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
+            git --no-pager log --pretty=format:"%h %ad %an %s" --date=iso -- services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
           else
             echo "types.ts does not exist in working directory"
           fi
