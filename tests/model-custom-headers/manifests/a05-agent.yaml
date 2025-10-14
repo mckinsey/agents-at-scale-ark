@@ -1,0 +1,8 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: headers-test-agent
+spec:
+  prompt: You are a helpful assistant testing custom HTTP headers. Respond concisely.
+  modelRef:
+    name: test-model-custom-headers

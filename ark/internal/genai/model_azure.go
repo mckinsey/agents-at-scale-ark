@@ -31,6 +31,11 @@ func loadAzureConfig(ctx context.Context, resolver *common.ValueSourceResolver, 
 		}
 	}
 
+	headers, err := resolveModelHeaders(ctx, resolver.Client, config.Headers, model.Model, namespace, "Azure")
+	if err != nil {
+		return err
+	}
+
 	var properties map[string]string
 	if config.Properties != nil {
 		properties = make(map[string]string)
@@ -48,6 +53,7 @@ func loadAzureConfig(ctx context.Context, resolver *common.ValueSourceResolver, 
 		BaseURL:    baseURL,
 		APIKey:     apiKey,
 		APIVersion: apiVersion,
+		Headers:    headers,
 		Properties: properties,
 	}
 	model.Provider = azureProvider

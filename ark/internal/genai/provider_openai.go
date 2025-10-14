@@ -16,6 +16,7 @@ type OpenAIProvider struct {
 	Model        string
 	BaseURL      string
 	APIKey       string
+	Headers      map[string]string
 	Properties   map[string]string
 	outputSchema *runtime.RawExtension
 	schemaName   string
@@ -261,11 +262,15 @@ func (op *OpenAIProvider) ChatCompletionStream(ctx context.Context, messages []M
 func (op *OpenAIProvider) createClient(ctx context.Context) openai.Client {
 	httpClient := common.NewHTTPClientWithLogging(ctx)
 
-	return openai.NewClient(
+	options := []option.RequestOption{
 		option.WithBaseURL(op.BaseURL),
 		option.WithAPIKey(op.APIKey),
 		option.WithHTTPClient(httpClient),
-	)
+	}
+
+	options = applyHeadersToOptions(ctx, op.Headers, options, op.Model)
+
+	return openai.NewClient(options...)
 }
 
 func (op *OpenAIProvider) BuildConfig() map[string]any {
