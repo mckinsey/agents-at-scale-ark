@@ -76,6 +76,7 @@ type Response struct {
 	Target  QueryTarget `json:"target,omitempty"`
 	Content string      `json:"content,omitempty"`
 	Raw     string      `json:"raw,omitempty"`
+	Phase   string      `json:"phase,omitempty"`
 }
 
 // +kubebuilder:object:root=true

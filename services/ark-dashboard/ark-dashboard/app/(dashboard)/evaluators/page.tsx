@@ -2,45 +2,25 @@
 
 import { Suspense, useRef } from "react"
 import { Plus } from "lucide-react"
-import { SidebarTrigger } from "@/components/ui/sidebar"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator
-} from "@/components/ui/breadcrumb"
 import { Button } from "@/components/ui/button"
 import { EvaluatorsSection } from "@/components/sections"
+import { BreadcrumbElement, PageHeader } from "@/components/common/page-header"
+
+const breadcrumbs: BreadcrumbElement[] = [
+  { href: '/', label: "ARK Dashboard" }
+]
 
 function EvaluatorsContent() {
   const evaluatorsSectionRef = useRef<{ openAddEditor: () => void }>(null)
 
   return (
     <>
-      <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-        <SidebarTrigger className="-ml-1" />
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem className="hidden md:block">
-              <BreadcrumbLink href="/">
-                ARK Dashboard
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator className="hidden md:block" />
-            <BreadcrumbItem>
-              <BreadcrumbPage>Evaluators</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-        <div className="ml-auto">
-          <Button onClick={() => evaluatorsSectionRef.current?.openAddEditor()}>
-            <Plus className="h-4 w-4" />
-            Add Evaluator
-          </Button>
-        </div>
-      </header>
+      <PageHeader breadcrumbs={breadcrumbs} currentPage="Evaluators" actions={
+        <Button onClick={() => evaluatorsSectionRef.current?.openAddEditor()}>
+          <Plus className="h-4 w-4" />
+          Add Evaluator
+        </Button>
+      } />
       <div className="flex flex-1 flex-col gap-4 p-4">
         <EvaluatorsSection ref={evaluatorsSectionRef} />
       </div>

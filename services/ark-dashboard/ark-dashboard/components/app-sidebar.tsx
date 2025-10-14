@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import Image from "next/image"
 import { AlertCircle, Plus, ChevronRight, ChevronsUpDown, Check, ChevronsUpDownIcon, LogOut, Home } from "lucide-react"
 import { useRouter, usePathname } from "next/navigation"
-import { CONFIGURATION_SECTIONS, OPERATION_SECTIONS, RUNTIME_SECTIONS } from "@/lib/constants/dashboard-icons"
+import { CONFIGURATION_SECTIONS, OPERATION_SECTIONS, RUNTIME_SECTIONS, SERVICE_SECTIONS } from "@/lib/constants/dashboard-icons"
 import {
   Sidebar,
   SidebarContent,
@@ -251,6 +251,43 @@ export function AppSidebar() {
                 <SidebarGroupContent>
                   <SidebarMenu>
                     {OPERATION_SECTIONS.map((item) => {
+                      const isPlaceholder = isPlaceholderSection(item.key)
+                      const isDisabled = !isNamespaceResolved || loading || isPlaceholder
+                      const isActive = getCurrentSection() === item.key
+                      return (
+                        <SidebarMenuItem key={item.key}>
+                          <SidebarMenuButton
+                            onClick={() => !isPlaceholder && isNamespaceResolved && navigateToSection(item.key)}
+                            isActive={isActive}
+                            disabled={isDisabled}
+                          >
+                            <item.icon />
+                            <span>{item.title}</span>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      )
+                    })}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </Collapsible>
+          </SidebarGroup>
+          
+          <SidebarGroup>
+            <Collapsible defaultOpen className="group/collapsible">
+              <SidebarGroupLabel
+                asChild
+                className="group/label text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-sm"
+              >
+                <CollapsibleTrigger className="flex w-full items-center">
+                  Service
+                  <ChevronRight className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                </CollapsibleTrigger>
+              </SidebarGroupLabel>
+              <CollapsibleContent>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {SERVICE_SECTIONS.map((item) => {
                       const isPlaceholder = isPlaceholderSection(item.key)
                       const isDisabled = !isNamespaceResolved || loading || isPlaceholder
                       const isActive = getCurrentSection() === item.key

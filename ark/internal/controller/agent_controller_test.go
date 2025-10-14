@@ -88,7 +88,7 @@ var _ = Describe("Agent Controller", func() {
 					Namespace: "default",
 				},
 				Spec: arkv1alpha1.AgentSpec{
-					ModelRef: nil, // No explicit model - should use default
+					ModelRef: &arkv1alpha1.AgentModelRef{Name: "default"}, // Webhook sets default model
 					Prompt:   "test prompt for default model",
 				},
 			}
@@ -108,6 +108,45 @@ var _ = Describe("Agent Controller", func() {
 
 			By("Cleanup the default model test resource")
 			Expect(k8sClient.Delete(ctx, defaultModelAgent)).To(Succeed())
+		})
+
+		It("should handle A2A agents without model reference", func() {
+			const a2aAgentResourceName = "test-a2a-agent-resource"
+			a2aAgentTypeNamespacedName := types.NamespacedName{
+				Name:      a2aAgentResourceName,
+				Namespace: "default",
+			}
+
+			By("creating an A2A agent without model reference")
+			a2aAgent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      a2aAgentResourceName,
+					Namespace: "default",
+					Annotations: map[string]string{
+						"ark.mckinsey.com/a2a-server-name": "test-a2a-server",
+					},
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					ModelRef: nil,
+					Prompt:   "test prompt for A2A agent",
+				},
+			}
+			Expect(k8sClient.Create(ctx, a2aAgent)).To(Succeed())
+
+			By("Reconciling the A2A agent without model")
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: record.NewFakeRecorder(10),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: a2aAgentTypeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Cleanup the A2A agent test resource")
+			Expect(k8sClient.Delete(ctx, a2aAgent)).To(Succeed())
 		})
 	})
 })

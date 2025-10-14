@@ -15,7 +15,7 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import {
   memoryService,
   type MemoryResource,
@@ -49,14 +49,14 @@ export function MemorySection({
   const [availableMemories, setAvailableMemories] = useState<MemoryResource[]>([]);
   const [availableSessions, setAvailableSessions] = useState<string[]>([]);
   const [availableQueries, setAvailableQueries] = useState<string[]>([]);
-  
+
   const [memoryFilter, setMemoryFilter] = useState("");
   const [sessionFilter, setSessionFilter] = useState("");
   const [queryFilter, setQueryFilter] = useState("");
   const [memoryDropdownOpen, setMemoryDropdownOpen] = useState(false);
   const [sessionDropdownOpen, setSessionDropdownOpen] = useState(false);
   const [queryDropdownOpen, setQueryDropdownOpen] = useState(false);
-  
+
   const memoryFilterRef = useRef<HTMLInputElement>(null);
   const sessionFilterRef = useRef<HTMLInputElement>(null);
   const queryFilterRef = useRef<HTMLInputElement>(null);
@@ -112,13 +112,13 @@ export function MemorySection({
             query: filters.queryId && filters.queryId !== "all" ? filters.queryId : undefined
           })
         ]);
-        
+
         // Sort by sequence number descending (newest first) to maintain proper chronological order
         // This ensures messages appear in the correct order regardless of timestamp precision
-        const sortedMessages = messagesData.sort((a, b) => 
+        const sortedMessages = messagesData.sort((a, b) =>
           (b.sequence || 0) - (a.sequence || 0)
         );
-        
+
         setTotalMessages(sortedMessages.length);
         setAvailableMemories(memoriesData);
         setMemoryMessages(sortedMessages);
@@ -126,15 +126,13 @@ export function MemorySection({
         // Extract unique session IDs and query IDs for filtering
         const sessionIds = new Set(sessionsData.map(s => s.sessionId));
         setAvailableSessions(Array.from(sessionIds).sort());
-        
+
         const queryIds = new Set(sortedMessages.map(m => m.queryId));
         setAvailableQueries(Array.from(queryIds).sort());
 
       } catch (error) {
         console.error("Failed to load memory messages:", error);
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Memory Messages",
+        toast.error("Failed to Load Memory Messages", {
           description:
             error instanceof Error
               ? error.message
@@ -184,13 +182,13 @@ export function MemorySection({
       memoryFilterRef.current.focus();
     }
   }, [memoryDropdownOpen]);
-  
+
   useEffect(() => {
     if (sessionDropdownOpen && sessionFilterRef.current) {
       sessionFilterRef.current.focus();
     }
   }, [sessionDropdownOpen]);
-  
+
   useEffect(() => {
     if (queryDropdownOpen && queryFilterRef.current) {
       queryFilterRef.current.focus();
@@ -203,13 +201,13 @@ export function MemorySection({
       memory.name.toLowerCase().includes(memoryFilter.toLowerCase())
     );
   }, [availableMemories, memoryFilter]);
-  
+
   const filteredSessions = useMemo(() => {
     return availableSessions.filter(session =>
       session.toLowerCase().includes(sessionFilter.toLowerCase())
     );
   }, [availableSessions, sessionFilter]);
-  
+
   const filteredQueries = useMemo(() => {
     return availableQueries.filter(query =>
       query.toLowerCase().includes(queryFilter.toLowerCase())
@@ -246,18 +244,18 @@ export function MemorySection({
   };
 
   const totalPages = Math.max(1, Math.ceil(totalMessages / itemsPerPage));
-  
+
   // Apply client-side pagination to the sorted messages
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedMessages = memoryMessages.slice(startIndex, startIndex + itemsPerPage);
-  
+
   // Format timestamp for display
   const formatTimestamp = (timestamp: string) => {
     try {
       const date = new Date(timestamp);
       return date.toLocaleString('en-US', {
         month: 'short',
-        day: '2-digit', 
+        day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
@@ -267,7 +265,7 @@ export function MemorySection({
       return timestamp;
     }
   };
-  
+
 
 
   const handleItemsPerPageChange = (newLimit: number) => {
@@ -298,8 +296,8 @@ export function MemorySection({
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="w-48 justify-between text-sm h-9 font-normal min-w-0">
               <span className={`truncate min-w-0 ${!searchParams.get("memory") || searchParams.get("memory") === "all" ? 'text-muted-foreground' : ''}`}>
-                {!searchParams.get("memory") || searchParams.get("memory") === "all" 
-                  ? "All Memories" 
+                {!searchParams.get("memory") || searchParams.get("memory") === "all"
+                  ? "All Memories"
                   : searchParams.get("memory")
                 }
               </span>
@@ -318,7 +316,7 @@ export function MemorySection({
             </div>
             <DropdownMenuSeparator />
             <div className="max-h-64 overflow-auto">
-              <div 
+              <div
                 className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
                 onClick={() => {
                   updateUrlParams({ memory: undefined, page: 1 });
@@ -328,7 +326,7 @@ export function MemorySection({
                 All Memories
               </div>
               {filteredMemories.map((memory) => (
-                <div 
+                <div
                   key={memory.name}
                   className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
                   onClick={() => {
@@ -352,8 +350,8 @@ export function MemorySection({
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="w-64 justify-between text-sm h-9 font-normal min-w-0">
               <span className={`truncate min-w-0 ${!searchParams.get("sessionId") || searchParams.get("sessionId") === "all" ? 'text-muted-foreground' : ''}`}>
-                {!searchParams.get("sessionId") || searchParams.get("sessionId") === "all" 
-                  ? "All Sessions" 
+                {!searchParams.get("sessionId") || searchParams.get("sessionId") === "all"
+                  ? "All Sessions"
                   : (searchParams.get("sessionId")!.length > 30 ? `${searchParams.get("sessionId")!.substring(0, 30)}...` : searchParams.get("sessionId"))
                 }
               </span>
@@ -372,7 +370,7 @@ export function MemorySection({
             </div>
             <DropdownMenuSeparator />
             <div className="max-h-64 overflow-auto">
-              <div 
+              <div
                 className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
                 onClick={() => {
                   handleFilterChange("sessionId", "all");
@@ -382,7 +380,7 @@ export function MemorySection({
                 All Sessions
               </div>
               {filteredSessions.map((sessionId) => (
-                <div 
+                <div
                   key={sessionId}
                   className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
                   onClick={() => {
@@ -406,8 +404,8 @@ export function MemorySection({
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="w-64 justify-between text-sm h-9 font-normal min-w-0">
               <span className={`truncate min-w-0 ${!searchParams.get("queryId") || searchParams.get("queryId") === "all" ? 'text-muted-foreground' : ''}`}>
-                {!searchParams.get("queryId") || searchParams.get("queryId") === "all" 
-                  ? "All Queries" 
+                {!searchParams.get("queryId") || searchParams.get("queryId") === "all"
+                  ? "All Queries"
                   : (searchParams.get("queryId")!.length > 30 ? `${searchParams.get("queryId")!.substring(0, 30)}...` : searchParams.get("queryId"))
                 }
               </span>
@@ -426,7 +424,7 @@ export function MemorySection({
             </div>
             <DropdownMenuSeparator />
             <div className="max-h-64 overflow-auto">
-              <div 
+              <div
                 className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
                 onClick={() => {
                   handleFilterChange("queryId", "all");
@@ -436,7 +434,7 @@ export function MemorySection({
                 All Queries
               </div>
               {filteredQueries.map((queryId) => (
-                <div 
+                <div
                   key={queryId}
                   className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
                   onClick={() => {

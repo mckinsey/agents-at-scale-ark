@@ -1,0 +1,35 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: test-model-custom-headers
+spec:
+  type: azure
+  model:
+    value: gpt-4.1-mini
+  config:
+    azure:
+      baseUrl:
+        value: ($azure.url)
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: test-model-token
+            key: token
+      apiVersion:
+        value: "2024-12-01-preview"
+      headers:
+      - name: X-Consumer-Application
+        value:
+          value: ark-chainsaw-test-value
+      - name: X-Authorization-Session
+        value:
+          valueFrom:
+            secretKeyRef:
+              name: test-custom-headers
+              key: auth-token
+      - name: X-Consumer-Group
+        value:
+          valueFrom:
+            configMapKeyRef:
+              name: test-custom-headers
+              key: consumer-group

@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/annotations"
 )
 
 var _ = Describe("Agent Webhook", func() {
@@ -92,6 +93,39 @@ var _ = Describe("Agent Webhook", func() {
 			warnings, err := validator.ValidateCreate(ctx, agent)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(warnings).To(BeEmpty())
+		})
+	})
+
+	Context("When defaulting agent model", func() {
+		var defaulter *AgentCustomDefaulter
+
+		BeforeEach(func() {
+			defaulter = &AgentCustomDefaulter{}
+		})
+
+		It("Should set default model for regular agents without modelRef", func() {
+			agent.Spec.ModelRef = nil
+			err := defaulter.Default(ctx, agent)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(agent.Spec.ModelRef).NotTo(BeNil())
+			Expect(agent.Spec.ModelRef.Name).To(Equal("default"))
+		})
+
+		It("Should not override existing modelRef", func() {
+			agent.Spec.ModelRef = &arkv1alpha1.AgentModelRef{Name: "custom-model"}
+			err := defaulter.Default(ctx, agent)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(agent.Spec.ModelRef.Name).To(Equal("custom-model"))
+		})
+
+		It("Should not set default model for A2A agents", func() {
+			agent.Spec.ModelRef = nil
+			agent.Annotations = map[string]string{
+				annotations.A2AServerName: "test-a2a-server",
+			}
+			err := defaulter.Default(ctx, agent)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(agent.Spec.ModelRef).To(BeNil())
 		})
 	})
 })

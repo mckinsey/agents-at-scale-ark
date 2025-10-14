@@ -25,6 +25,8 @@ type AzureModelConfig struct {
 	// +kubebuilder:validation:Optional
 	APIVersion *ValueSource `json:"apiVersion,omitempty"`
 	// +kubebuilder:validation:Optional
+	Headers []Header `json:"headers,omitempty"`
+	// +kubebuilder:validation:Optional
 	Properties map[string]ValueSource `json:"properties,omitempty"`
 }
 
@@ -34,6 +36,8 @@ type OpenAIModelConfig struct {
 	BaseURL ValueSource `json:"baseUrl"`
 	// +kubebuilder:validation:Required
 	APIKey ValueSource `json:"apiKey"`
+	// +kubebuilder:validation:Optional
+	Headers []Header `json:"headers,omitempty"`
 	// +kubebuilder:validation:Optional
 	Properties map[string]ValueSource `json:"properties,omitempty"`
 }

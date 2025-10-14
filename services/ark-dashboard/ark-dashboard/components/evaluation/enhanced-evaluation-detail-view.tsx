@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { useDelayedLoading } from "@/lib/hooks/use-delayed-loading";
 import {
   EnhancedEvaluationDetailResponse,
@@ -123,9 +123,7 @@ export function EnhancedEvaluationDetailView({
       );
       setEvaluation(data);
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Load Evaluation",
+      toast.error("Failed to Load Evaluation", {
         description:
           error instanceof Error
             ? error.message
@@ -150,18 +148,14 @@ export function EnhancedEvaluationDetailView({
     setCanceling(true);
     try {
       await evaluationsService.cancel(evaluation.name);
-      toast({
-        variant: "default",
-        title: "Evaluation Canceled",
+      toast("Evaluation Canceled", {
         description: "Successfully canceled the evaluation"
       });
 
       // Reload evaluation data
       await loadEvaluation();
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Cancel Evaluation",
+      toast.error("Failed to Cancel Evaluation", {
         description:
           error instanceof Error
             ? error.message
@@ -305,19 +299,18 @@ export function EnhancedEvaluationDetailView({
                     <AlertCircle className="h-4 w-4 text-red-600" />
                   ) : null}
                   <span
-                    className={`font-medium ${
-                      status?.passed === true
+                    className={`font-medium ${status?.passed === true
                         ? "text-green-600"
                         : status?.passed === false
-                        ? "text-red-600"
-                        : "text-muted-foreground"
-                    }`}
+                          ? "text-red-600"
+                          : "text-muted-foreground"
+                      }`}
                   >
                     {status?.passed === true
                       ? "Yes"
                       : status?.passed === false
-                      ? "No"
-                      : "Unknown"}
+                        ? "No"
+                        : "Unknown"}
                   </span>
                 </div>
               </div>
@@ -553,8 +546,8 @@ export function EnhancedEvaluationDetailView({
                   status: result.passed
                     ? ("completed" as const)
                     : result.failed
-                    ? ("failed" as const)
-                    : ("pending" as const),
+                      ? ("failed" as const)
+                      : ("pending" as const),
                   metadata: {
                     score: result.score,
                     duration: result.duration

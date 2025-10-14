@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, forwardRef, useImperativeHandle } from "react"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { TeamEditor } from "@/components/editors"
 import { teamsService, agentsService, type Team, type TeamCreateRequest, type TeamUpdateRequest, type Agent } from "@/lib/services"
 import { TeamCard } from "@/components/cards"
@@ -31,9 +31,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function T
         setAgents(agentsData)
       } catch (error) {
         console.error("Failed to load data:", error)
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Data",
+        toast.error("Failed to Load Data", {
           description: error instanceof Error ? error.message : "An unexpected error occurred"
         })
       } finally {
@@ -50,18 +48,14 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function T
         // This is an update
         const updateRequest = team as TeamUpdateRequest & { id: string }
         await teamsService.updateById(updateRequest.id, updateRequest)
-        toast({
-          variant: "success",
-          title: "Team Updated",
+        toast.success("Team Updated", {
           description: "Successfully updated the team"
         })
       } else {
         // This is a create
         const createRequest = team as TeamCreateRequest
         await teamsService.create(createRequest)
-        toast({
-          variant: "success",
-          title: "Team Created",
+        toast.success("Team Created", {
           description: `Successfully created ${createRequest.name}`
         })
       }
@@ -69,9 +63,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function T
       const updatedTeams = await teamsService.getAll()
       setTeams(updatedTeams)
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: team.id ? "Failed to Update Team" : "Failed to Create Team",
+      toast.error(team.id ? "Failed to Update Team" : "Failed to Create Team", {
         description: error instanceof Error ? error.message : "An unexpected error occurred"
       })
     }
@@ -84,18 +76,14 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function T
         throw new Error("Team not found")
       }
       await teamsService.deleteById(id)
-      toast({
-        variant: "success",
-        title: "Team Deleted",
+      toast.success("Team Deleted", {
         description: `Successfully deleted ${team.name}`
       })
       // Reload data
       const updatedTeams = await teamsService.getAll()
       setTeams(updatedTeams)
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Delete Team",
+      toast.error("Failed to Delete Team", {
         description: error instanceof Error ? error.message : "An unexpected error occurred"
       })
     }
@@ -126,7 +114,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function T
           </div>
         </main>
       </div>
-      
+
       <TeamEditor
         open={teamEditorOpen}
         onOpenChange={setTeamEditorOpen}
