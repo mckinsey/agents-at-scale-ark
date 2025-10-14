@@ -44,47 +44,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Debug pre-setup state
-        run: |
-          echo "=== Git state ==="
-          git rev-parse HEAD
-          git status --porcelain
-          
-          echo "=== Committed vs working directory ==="
-          echo "Committed types.ts (QueryResponse lines):"
-          git show HEAD:services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts | grep QueryResponse || echo "No QueryResponse in committed"
-          
-          echo "Working directory types.ts (if exists):"
-          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then
-            grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || echo "No QueryResponse in working"
-            echo "git log for types.ts:"
-            git --no-pager log --pretty=format:"%h %ad %an %s" --date=iso -- services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
-          else
-            echo "types.ts does not exist in working directory"
-          fi
-
-      - name: Print file hash (pre-build)
-        run: |
-          echo "Hash of types.ts:"
-          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true; else echo "types.ts missing"; fi
-          echo "QueryResponse within types.ts:"
-          grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true
-
       - id: setup-registry
         uses: ./.github/actions/setup-container-cache-registry
         with:
           docker-cicd-cache-registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY }}
-
-      - name: Debug post-setup state  
-        run: |
-          echo "=== After setup action ==="
-          echo "Working directory types.ts:"
-          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then
-            sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
-            grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
-          else
-            echo "types.ts still does not exist"
-          fi
 
   # Code quality scan with SonarQube
   # NOTE: This job is currently disabled - waiting for enterprise SonarQube configuration to be applied
@@ -211,62 +174,7 @@ jobs:
           version: "0.12.2"
           args: "--version"
 
-      - name: Pre build diagnostic
-        run: |
-          echo "Hash of committed file (if present):"
-          if [ -f services/ark-api/openapi.json ]; then sha256sum services/ark-api/openapi.json || true; else echo "openapi.json missing"; fi
-          echo "Hash of types.ts:"
-          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true; else echo "types.ts missing"; fi
-          echo "QueryResponse within types.ts:"
-          grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
-          echo "QueryResponse within types.ts in git:"
-          git show HEAD:services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts | grep QueryResponse || echo "No QueryResponse in committed version"
-
       - run: make -j24 build-all
-
-      - name: Post build diagnostic
-        run: |
-          echo "Hash of committed/generated file (if present):"
-          if [ -f services/ark-api/openapi.json ]; then sha256sum services/ark-api/openapi.json || true; else echo "openapi.json missing"; fi
-          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true; else echo "types.ts missing"; fi
-          grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
-
-      # - run: rm -Rf out/ark-dashboard/
-
-      # - run: make ark-dashboard-deps
-
-      - name: Check generated types are unchanged
-        run: |
-          echo "=== Diagnostic: repository and file state ==="
-          echo "Git HEAD: $(git rev-parse HEAD)"
-          echo "Listing relevant files and mtimes:" 
-          stat -c '%y %n' out/ark-dashboard/stamp-deps || echo "no out/ark-dashboard/stamp-deps"
-          stat -c '%y %n' services/ark-dashboard/out/openapi.json || echo "no services/ark-dashboard/out/openapi.json"
-          echo
-          echo "Hash of committed/generated file (if present):"
-          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true; else echo "types.ts missing"; fi
-
-          echo
-          echo "Forcing regeneration to prove generator behavior..."
-          rm -f out/ark-dashboard/stamp-deps || true
-          # Run the generator explicitly to ensure it executes in this job
-          ( cd services/ark-dashboard/ark-dashboard && npm ci --no-audit --no-fund && npm run generate:api ) || true
-
-          echo
-          echo "Hash after regeneration (if present):"
-          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true; else echo "types.ts still missing"; fi
-          grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
-
-          echo
-          echo "Git status / diff (names only):"
-          git --no-pager status --porcelain || true
-          git --no-pager diff --name-only || true
-
-          # Now fail the CI if the generated file differs from committed
-          if ! git diff --exit-code services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts; then
-            echo "Error: Generated types.ts file has changed. Please regenerate and commit the changes."
-            exit 1
-          fi
 
       - run: make -j24 services-test-all
       
@@ -283,7 +191,6 @@ jobs:
           artifact-suffix: ark-api-a2a-unit
 
   build-containers:
-    if: false  # Temporarily disabled to investigate CI issues
     needs: [setup-container-cache-registry, build-libs]
     runs-on: ubuntu-24.04
     strategy:
@@ -333,13 +240,6 @@ jobs:
           username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
-      - name: Print file hash (pre-build)
-        run: |
-          echo "Hash of types.ts:"
-          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true; else echo "types.ts missing"; fi
-          echo "QueryResponse within types.ts:"
-          grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
-
       - uses: ./.github/actions/build-image
         with:
           path: ${{ matrix.path }}
@@ -350,29 +250,13 @@ jobs:
           push: true
           prebuild: ${{ matrix.prebuild }}
 
-      - name: Print file hash (post-build)
-        run: |
-          echo "Hash of types.ts:"
-          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true; else echo "types.ts missing"; fi
-          echo "QueryResponse within types.ts:"
-          grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
-
-
   build-libs:
-    if: false  # Temporarily disabled to investigate CI issues
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
-
-      - name: Print file hash
-        run: |
-          echo "Hash of types.ts:"
-          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true; else echo "types.ts missing"; fi
-          echo "QueryResponse within types.ts:"
-          grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
 
       - name: Build libraries
         run: make libs-build-all
@@ -383,17 +267,6 @@ jobs:
           name: out-libs-${{ github.sha }}
           path: out/
           retention-days: 30
-
-      # Add this to build-libs job after "Build libraries"
-      - name: Debug what's being uploaded
-        run: |
-          echo "Contents of out/ being uploaded:"
-          find out/ -name "*.ts" -o -name "*.json" | head -20
-          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then
-            echo "types.ts hash in build-libs:"
-            sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
-            grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
-          fi
 
   e2e-quickstart:
     needs: [setup-container-cache-registry, build-containers]
