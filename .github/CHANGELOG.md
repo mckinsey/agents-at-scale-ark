@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.1.37](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.36...v0.1.37) (2025-10-09)
+
+
+### Features
+
+* aas-install and arkrc.yaml overrides ([#221](https://github.com/mckinsey/agents-at-scale-ark/issues/221)) ([9a7dc9a](https://github.com/mckinsey/agents-at-scale-ark/commit/9a7dc9ae147160932364f2668da68e96fb14a2cd))
+* Add files for devspace files for localhost gateway and mcp ([#243](https://github.com/mckinsey/agents-at-scale-ark/issues/243)) ([b446168](https://github.com/mckinsey/agents-at-scale-ark/commit/b4461687587ca583d77adf22efd47746babfc309))
+* add partial success handling for queries ([#264](https://github.com/mckinsey/agents-at-scale-ark/issues/264)) ([f38be82](https://github.com/mckinsey/agents-at-scale-ark/commit/f38be8244abeb4eac6387aa134fa2273dfea267a))
+* add support for MCP server sessions and settings ([#165](https://github.com/mckinsey/agents-at-scale-ark/issues/165)) ([72484bb](https://github.com/mckinsey/agents-at-scale-ark/commit/72484bb55f37bb662b86398eebdddd87e35bb8d9))
+* **ark-dashboard:** Add icons for more AI providers ([#228](https://github.com/mckinsey/agents-at-scale-ark/issues/228)) ([4c39d3e](https://github.com/mckinsey/agents-at-scale-ark/commit/4c39d3ecd06f4481e83746526948c4a20bdda2f0))
+* devspace improvements ([d026933](https://github.com/mckinsey/agents-at-scale-ark/commit/d0269332ae1685041a1c31d09fe53113ef8dab58))
+* homepage create model ([#204](https://github.com/mckinsey/agents-at-scale-ark/issues/204)) ([f824443](https://github.com/mckinsey/agents-at-scale-ark/commit/f824443cdf6383ee1539a69c0a3dad233335f3f9))
+* Install cert manager and gateway CRD's ([#226](https://github.com/mckinsey/agents-at-scale-ark/issues/226)) ([d8cc864](https://github.com/mckinsey/agents-at-scale-ark/commit/d8cc86466f9d232d48e60b34841db6f132442b14))
+* **queries:** 'messages' query type for structured conversations and multi-model input ([#181](https://github.com/mckinsey/agents-at-scale-ark/issues/181)) ([df0603e](https://github.com/mckinsey/agents-at-scale-ark/commit/df0603e104b100e66bcef1b4e203cc54cc6cf8c2))
+* setup simple uv workspace ([#223](https://github.com/mckinsey/agents-at-scale-ark/issues/223)) ([2789c39](https://github.com/mckinsey/agents-at-scale-ark/commit/2789c39bcf31f8c8fb9fff301a6513c308ca18a1))
+
+
+### Bug Fixes
+
+* add unit test to ci/cd and fix failing tests ([#213](https://github.com/mckinsey/agents-at-scale-ark/issues/213)) ([802a107](https://github.com/mckinsey/agents-at-scale-ark/commit/802a107f9ff77a7f83c12d3eb9e8f81c650ea6af))
+* **ark-cli:** fix npmjs readme ([#205](https://github.com/mckinsey/agents-at-scale-ark/issues/205)) ([0b7ff22](https://github.com/mckinsey/agents-at-scale-ark/commit/0b7ff222dcf0b69ee3b96b0fe2ef8ba4941982d5))
+* ark-sdk secrets encoding ([#251](https://github.com/mckinsey/agents-at-scale-ark/issues/251)) ([341421b](https://github.com/mckinsey/agents-at-scale-ark/commit/341421b46bd4dd5c5f2c69ed6a2ad0cb9afe11c6))
+* Create CRD's first ([#234](https://github.com/mckinsey/agents-at-scale-ark/issues/234)) ([a98e182](https://github.com/mckinsey/agents-at-scale-ark/commit/a98e18287891cfa794d4fdfb5f98896776464236))
+* ensures agent editor resets on dialog open state changes ([#265](https://github.com/mckinsey/agents-at-scale-ark/issues/265)) ([0199b8f](https://github.com/mckinsey/agents-at-scale-ark/commit/0199b8f48e5fd5162a03644e34c3a548631c04c4))
+* improve error handling in OpenAI chat completions ([#258](https://github.com/mckinsey/agents-at-scale-ark/issues/258)) ([d0eba99](https://github.com/mckinsey/agents-at-scale-ark/commit/d0eba99837fbb2fe89114a50d1d8d9bb9336fca0))
+* Improved content view format ([#210](https://github.com/mckinsey/agents-at-scale-ark/issues/210)) ([8efe25a](https://github.com/mckinsey/agents-at-scale-ark/commit/8efe25a986faecd1d6b80af7e5982ecaef5c4715))
+* Install ark controller first ([#254](https://github.com/mckinsey/agents-at-scale-ark/issues/254)) ([4f596d0](https://github.com/mckinsey/agents-at-scale-ark/commit/4f596d029bf6a4694bc62b884b5a997c9f7b82de))
+* raw message serialization golang structs ([#259](https://github.com/mckinsey/agents-at-scale-ark/issues/259)) ([fb6c6a5](https://github.com/mckinsey/agents-at-scale-ark/commit/fb6c6a5e734feb925fd7c8cbd0de201dedc73c65))
+* Revert "feat: Move devspace config into their service directories" ([#208](https://github.com/mckinsey/agents-at-scale-ark/issues/208)) ([dd59279](https://github.com/mckinsey/agents-at-scale-ark/commit/dd59279e4de66ec2efbdaf58658b84dfb91d8108))
+* sample a2a agent tags mismatch fix ([#215](https://github.com/mckinsey/agents-at-scale-ark/issues/215)) ([cf17889](https://github.com/mckinsey/agents-at-scale-ark/commit/cf1788916b67260b728a0728c170985f17a8fb53))
+* SDK build for ark-api ([#203](https://github.com/mckinsey/agents-at-scale-ark/issues/203)) ([65d7008](https://github.com/mckinsey/agents-at-scale-ark/commit/65d70088b10933285ff02cae2d4ce9b36148af7a))
+* skip failing evaluator tests requiring ark-evaluator service ([#230](https://github.com/mckinsey/agents-at-scale-ark/issues/230)) ([739a854](https://github.com/mckinsey/agents-at-scale-ark/commit/739a85468eb9fab3e35e5d9a0d6bfac7e573582e))
+* update Azure endpoint configuration to use environment variables ([#233](https://github.com/mckinsey/agents-at-scale-ark/issues/233)) ([fcc42bb](https://github.com/mckinsey/agents-at-scale-ark/commit/fcc42bb2272bde78ff0e44e31a1d79121358e330))
+
 ## [0.1.36](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.35...v0.1.36) (2025-09-26)
 
 

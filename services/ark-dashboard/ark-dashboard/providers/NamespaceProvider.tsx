@@ -1,6 +1,6 @@
 "use client";
 
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { Namespace } from "@/lib/services";
 import {
   useCreateNamespace,
@@ -72,9 +72,7 @@ function NamespaceProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (error) {
-      toast({
-        variant: "destructive",
-        title: `Failed to get namespace`,
+      toast.error("Failed to get namespace", {
         description:
           error instanceof Error
             ? error.message
@@ -85,9 +83,7 @@ function NamespaceProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!data && !isPending) {
-      toast({
-        variant: "destructive",
-        title: `Failed to get namespace`,
+      toast.error("Failed to get namespace", {
         description: "An unexpected error occurred"
       });
     }

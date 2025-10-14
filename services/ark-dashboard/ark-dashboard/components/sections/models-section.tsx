@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { modelsService, type Model, type ModelCreateRequest, type ModelUpdateRequest } from "@/lib/services"
 import { ModelCard } from "@/components/cards"
 import { useDelayedLoading } from "@/lib/hooks"
@@ -32,9 +32,7 @@ export const ModelsSection = function ModelsSection({ namespace }: ModelsSection
         setModels(modelsData)
       } catch (error) {
         console.error("Failed to load data:", error)
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Data",
+        toast.error("Failed to Load Data", {
           description: error instanceof Error ? error.message : "An unexpected error occurred"
         })
       } finally {
@@ -51,17 +49,13 @@ export const ModelsSection = function ModelsSection({ namespace }: ModelsSection
         // Update existing model
         const { id, ...updateData } = model
         await modelsService.updateById(id, updateData)
-        toast({
-          variant: "success",
-          title: "Model Updated",
+        toast.success("Model Updated", {
           description: `Successfully updated model`
         })
       } else {
         // Create new model
         await modelsService.create(model)
-        toast({
-          variant: "success",
-          title: "Model Created",
+        toast.success("Model Created", {
           description: `Successfully created ${model.name}`
         })
       }
@@ -69,9 +63,7 @@ export const ModelsSection = function ModelsSection({ namespace }: ModelsSection
       const updatedModels = await modelsService.getAll()
       setModels(updatedModels)
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: 'id' in model ? "Failed to Update Model" : "Failed to Create Model",
+      toast.error('id' in model ? "Failed to Update Model" : "Failed to Create Model", {
         description: error instanceof Error ? error.message : "An unexpected error occurred"
       })
     }
@@ -84,18 +76,14 @@ export const ModelsSection = function ModelsSection({ namespace }: ModelsSection
         throw new Error("Model not found")
       }
       await modelsService.deleteById(id)
-      toast({
-        variant: "success",
-        title: "Model Deleted",
+      toast.success("Model Deleted", {
         description: `Successfully deleted ${model.name}`
       })
       // Reload data
       const updatedModels = await modelsService.getAll()
       setModels(updatedModels)
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Delete Model",
+      toast.error("Failed to Delete Model", {
         description: error instanceof Error ? error.message : "An unexpected error occurred"
       })
     }

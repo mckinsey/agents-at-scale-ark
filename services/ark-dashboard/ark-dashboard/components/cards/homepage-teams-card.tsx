@@ -4,7 +4,7 @@ import { MetricCard } from "./metric-card";
 import { DASHBOARD_SECTIONS } from "@/lib/constants";
 import { useGetAllTeams } from "@/lib/services/teams-hooks";
 import { useEffect } from "react";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 
 export function HomepageTeamsCard() {
   const { data, isPending, error } = useGetAllTeams();
@@ -16,9 +16,7 @@ export function HomepageTeamsCard() {
 
   useEffect(() => {
     if (error) {
-      toast({
-        variant: "destructive",
-        title: `Failed to get Teams`,
+      toast.error("Failed to get Teams", {
         description:
           error instanceof Error
             ? error.message
