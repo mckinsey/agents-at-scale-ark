@@ -91,9 +91,10 @@ profiles:
 
 pipelines:
   deploy: |-
+    run_dependency_pipelines ark --pipeline=deploy
     create_deployments --all
     run_dependency_pipelines --all --exclude ark --pipeline=deploy
   dev: |-
-    create_deployments --all
     run_dependency_pipelines ark --pipeline=dev
+    create_deployments --all
     run_dependency_pipelines --all --exclude ark --pipeline=dev
