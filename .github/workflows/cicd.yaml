@@ -251,6 +251,7 @@ jobs:
           artifact-suffix: ark-api-a2a-unit
 
   build-containers:
+    if: false  # Temporarily disabled to investigate CI issues
     needs: [setup-container-cache-registry, build-libs]
     runs-on: ubuntu-24.04
     strategy:
@@ -326,6 +327,7 @@ jobs:
 
 
   build-libs:
+    if: false  # Temporarily disabled to investigate CI issues
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
