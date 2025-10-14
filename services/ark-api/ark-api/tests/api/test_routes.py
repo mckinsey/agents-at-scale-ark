@@ -1317,15 +1317,15 @@ class TestTeamsEndpoint(unittest.TestCase):
                 "strategy": "selector",
                 "maxTurns": 10,
                 "selector": {
-                    "model": "gpt-4",
+                    "agent": "selector-agent",
                     "selectorPrompt": "Choose the best agent for the task"
                 }
             },
             "status": {"phase": "pending"}
         }
-        
+
         mock_client.teams.a_create = AsyncMock(return_value=mock_team)
-        
+
         # Make the request
         request_data = {
             "name": "full-team",
@@ -1334,18 +1334,18 @@ class TestTeamsEndpoint(unittest.TestCase):
             "strategy": "selector",
             "maxTurns": 10,
             "selector": {
-                "model": "gpt-4",
+                "agent": "selector-agent",
                 "selectorPrompt": "Choose the best agent for the task"
             }
         }
         response = self.client.post("/v1/teams?namespace=default", json=request_data)
-        
+
         # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["name"], "full-team")
         self.assertEqual(data["maxTurns"], 10)
-        self.assertEqual(data["selector"]["model"], "gpt-4")
+        self.assertEqual(data["selector"]["agent"], "selector-agent")
         self.assertEqual(data["selector"]["selectorPrompt"], "Choose the best agent for the task")
     
     @patch('ark_api.api.v1.teams.with_ark_client')
