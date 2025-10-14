@@ -133,7 +133,7 @@ export const ToolsSection = forwardRef<
     url?: string;
   }) => {
     try {
-      await toolsService.create(toolSpec);
+      await toolsService.create({ ...toolSpec, namespace });
       toast.success("Tool Created", {
         description: `Successfully created ${toolSpec.name}`
       });
