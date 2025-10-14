@@ -40,23 +40,6 @@ jobs:
       ci-cache-registry-hostname: ${{ steps.setup-registry.outputs.ci-cache-registry-hostname }}
       is-fork-pr: ${{ steps.setup-registry.outputs.is-fork-pr }}
     steps:
-      - name: Debug pre-setup state
-        run: |
-          echo "=== Git state ==="
-          git rev-parse HEAD
-          git status --porcelain
-          
-          echo "=== Committed vs working directory ==="
-          echo "Committed types.ts (QueryResponse lines):"
-          git show HEAD:services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts | grep -A3 -B3 QueryResponse || echo "No QueryResponse in committed"
-          
-          echo "Working directory types.ts (if exists):"
-          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then
-            grep -A3 -B3 QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || echo "No QueryResponse in working"
-          else
-            echo "types.ts does not exist in working directory"
-          fi
-
       - uses: actions/checkout@v4
 
       - name: Debug pre-setup state
@@ -87,7 +70,7 @@ jobs:
         uses: ./.github/actions/setup-container-cache-registry
         with:
           docker-cicd-cache-registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY }}
-          
+
       - name: Debug post-setup state  
         run: |
           echo "=== After setup action ==="
