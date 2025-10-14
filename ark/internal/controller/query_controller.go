@@ -411,7 +411,7 @@ func (r *QueryReconciler) processTargetResults(resultChan chan targetResult) []a
 		}
 	}
 
-	return allResponses, eventStream, nil
+	return allResponses
 }
 
 func (r *QueryReconciler) createSuccessResponse(target arkv1alpha1.QueryTarget, messages []genai.Message) arkv1alpha1.Response {
