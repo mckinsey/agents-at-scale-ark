@@ -11,10 +11,8 @@ spec:
       type: agent
     - name: analyst
       type: agent
-    - name: coordinator
-      type: agent
   selector:
-    model: test-model
+    agent: coordinator
     selectorPrompt: |
       You are coordinating a team for testing selector functionality. Select the most appropriate team member
       to respond next based on the conversation flow and expertise needed.
