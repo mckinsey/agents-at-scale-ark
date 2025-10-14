@@ -382,7 +382,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function
                                 </EmptyMedia>
                                 <EmptyTitle>No Queries Yet</EmptyTitle>
                                 <EmptyDescription>
-                                  You haven&apos;t added any queries yet. Get started by adding
+                                  You haven&apos;t created any queries yet. Get started by creating
                                   your first query.
                                 </EmptyDescription>
                               </EmptyHeader>
@@ -391,7 +391,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function
                                   <Button asChild>
                                     <div>
                                       <Plus className="h-4 w-4" />
-                                      Add Query
+                                      Create Query
                                     </div>
                                   </Button>
                                 </Link>

@@ -17,7 +17,7 @@ export default function QueriesPage() {
       <PageHeader breadcrumbs={breadcrumbs} currentPage="Queries" actions={
         <Button onClick={() => queriesSectionRef.current?.openAddEditor()}>
           <Plus className="h-4 w-4" />
-          Add Query
+          Create Query
         </Button>
       } />
       <div className="flex flex-1 flex-col">
