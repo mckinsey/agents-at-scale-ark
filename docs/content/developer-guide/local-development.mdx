@@ -16,16 +16,14 @@ Develop and live-reload ARK services directly in your Kubernetes cluster using D
 ```bash
 # Install DevSpace
 brew install devspace uv
+```
 
-## Start the dev environment
-
-Each service contains their own devspace config. You can either start the entire project by doing
+You can either start the entire project by doing
 ```bash
 devspace dev
 ```
 
-
-If you wish to start individual services and wish to use localhost gateway routes, you must first start it
+Each service contains their own devspace config. If you wish to start individual services and wish to use localhost gateway routes, you must first start it
 
 ```bash
 devspace dev --dependency localhost-gateway

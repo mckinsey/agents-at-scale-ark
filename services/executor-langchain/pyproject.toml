@@ -83,7 +83,3 @@ pythonpath = [
 testpaths = [
     "tests"
 ]
-
-[tool.uv.sources]
-ark-sdk = { path = "../../out/ark-sdk/dist/ark_sdk-0.1.33-py3-none-any.whl" }
-
