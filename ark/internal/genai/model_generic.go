@@ -2,6 +2,7 @@ package genai
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -69,6 +70,13 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStr
 	}
 
 	if err != nil {
+		telemetry.RecordError(span, err)
+		return nil, err
+	}
+
+	// Check for nil response
+	if response == nil {
+		err := fmt.Errorf("model provider returned nil response without error")
 		telemetry.RecordError(span, err)
 		return nil, err
 	}

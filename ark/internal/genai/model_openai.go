@@ -23,6 +23,11 @@ func loadOpenAIConfig(ctx context.Context, resolver *common.ValueSourceResolver,
 		return fmt.Errorf("failed to resolve OpenAI apiKey: %w", err)
 	}
 
+	headers, err := resolveModelHeaders(ctx, resolver.Client, config.Headers, model.Model, namespace, "OpenAI")
+	if err != nil {
+		return err
+	}
+
 	var properties map[string]string
 	if config.Properties != nil {
 		properties = make(map[string]string)
@@ -39,6 +44,7 @@ func loadOpenAIConfig(ctx context.Context, resolver *common.ValueSourceResolver,
 		Model:      model.Model,
 		BaseURL:    baseURL,
 		APIKey:     apiKey,
+		Headers:    headers,
 		Properties: properties,
 	}
 	model.Provider = openaiProvider
