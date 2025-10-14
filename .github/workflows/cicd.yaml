@@ -179,6 +179,31 @@ jobs:
 
       - name: Check generated types are unchanged
         run: |
+          echo "=== Diagnostic: repository and file state ==="
+          echo "Git HEAD: $(git rev-parse HEAD)"
+          echo "Listing relevant files and mtimes:" 
+          stat -c '%y %n' out/ark-dashboard/stamp-deps || echo "no out/ark-dashboard/stamp-deps"
+          stat -c '%y %n' services/ark-dashboard/out/openapi.json || echo "no services/ark-dashboard/out/openapi.json"
+          echo
+          echo "Hash of committed/generated file (if present):"
+          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true; else echo "types.ts missing"; fi
+
+          echo
+          echo "Forcing regeneration to prove generator behavior..."
+          rm -f out/ark-dashboard/stamp-deps || true
+          # Run the generator explicitly to ensure it executes in this job
+          cd services/ark-dashboard/ark-dashboard && npm ci --no-audit --no-fund && npm run generate:api || true
+
+          echo
+          echo "Hash after regeneration (if present):"
+          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true; else echo "types.ts still missing"; fi
+
+          echo
+          echo "Git status / diff (names only):"
+          git --no-pager status --porcelain || true
+          git --no-pager diff --name-only || true
+
+          # Now fail the CI if the generated file differs from committed
           if ! git diff --exit-code services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts; then
             echo "Error: Generated types.ts file has changed. Please regenerate and commit the changes."
             exit 1
