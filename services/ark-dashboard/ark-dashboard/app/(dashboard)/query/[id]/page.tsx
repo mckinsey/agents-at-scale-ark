@@ -18,7 +18,7 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import type { components } from "@/lib/api/generated/types";
 import { useMarkdownProcessor } from "@/lib/hooks/use-markdown-processor";
 import {
@@ -317,14 +317,11 @@ function QueryDetailContent() {
     const schemaText = getSchemaExample(toolSchema.spec.inputSchema) || '{}'
     try {
       await navigator.clipboard.writeText(schemaText)
-      toast({
-        title: "Copied to clipboard",
+      toast("Copied to clipboard", {
         description: "Input schema template has been copied"
       })
     } catch {
-      toast({
-        variant: "destructive",
-        title: "Copy failed",
+      toast.error("Copy failed", {
         description: "Could not copy to clipboard"
       })
     }
@@ -381,9 +378,7 @@ function QueryDetailContent() {
 
     // Validate required fields
     if (!query.targets || query.targets.length === 0) {
-      toast({
-        variant: "destructive",
-        title: "Missing Targets",
+      toast.error("Missing Targets", {
         description: "Please select at least one target (agent, model, team, or tool) to execute the query."
       })
       // TODO: Focus targets field
@@ -421,8 +416,7 @@ function QueryDetailContent() {
 
       const savedQuery = await queriesService.create(queryData)
 
-      toast({
-        title: "Query Executed",
+      toast("Query Executed", {
         description: `Query "${savedQuery.name}" has been created and is now executing.`
       })
 
@@ -430,9 +424,7 @@ function QueryDetailContent() {
       router.push(`/query/${savedQuery.name}`)
     } catch (error) {
       console.error('Failed to save query:', error)
-      toast({
-        variant: "destructive",
-        title: "Failed to Execute Query",
+      toast.error("Failed to Execute Query", {
         description: error instanceof Error ? error.message : "An unexpected error occurred"
       })
     } finally {
@@ -492,9 +484,7 @@ function QueryDetailContent() {
           }
         } catch (error) {
           console.error('Failed to load resources:', error)
-          toast({
-            variant: "destructive",
-            title: "Failed to Load Resources",
+          toast.error("Failed to Load Resources", {
             description: "Could not load available agents, models, teams, tools, and memories"
           })
         } finally {
@@ -525,9 +515,7 @@ function QueryDetailContent() {
           setEvaluationCount(0)
         }
       } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Query",
+        toast.error("Failed to Load Query", {
           description: error instanceof Error ? error.message : "An unexpected error occurred"
         })
       } finally {

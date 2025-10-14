@@ -4,5 +4,3 @@ metadata:
   name: invalid-agent-empty-prompt
 spec:
   prompt: ""  # Empty prompt - should fail admission
-  modelRef:
-    name: default

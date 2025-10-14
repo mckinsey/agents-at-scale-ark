@@ -144,11 +144,13 @@ func (v *TeamCustomValidator) validateStrategy(ctx context.Context, team *arkv1a
 
 func (v *TeamCustomValidator) validateSelectorModel(ctx context.Context, team *arkv1alpha1.Team) error {
 	// Resolve selector model name with default fallback
-	modelName, namespace := genai.ResolveModelSpec(team.Spec.Selector, team.Namespace)
+	modelName, namespace, err := genai.ResolveModelSpec(team.Spec.Selector, team.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to resolve selector model: %w", err)
+	}
 
 	// Validate that the model exists
-	err := v.ValidateLoadModel(ctx, modelName, namespace)
-	if err != nil {
+	if err := v.ValidateLoadModel(ctx, modelName, namespace); err != nil {
 		return fmt.Errorf("selector model %s not found in namespace %s: %v", modelName, namespace, err)
 	}
 

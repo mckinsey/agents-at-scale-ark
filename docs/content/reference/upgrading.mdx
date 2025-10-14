@@ -1,0 +1,57 @@
+# Upgrading
+
+Ark uses [Semantic Versioning](https://semver.org/). The technical details are in the [semantic versioning specification](https://semver.org/). Briefly, they are:
+
+1. The `v0.1.x` version line is the initial API unstable development phase of a project, breaking changes can occur on new releases.
+2. From `v0.2.x` onwards, breaking changes are fully documenting in this guide, without migration instructions.
+3. Patch releases (e.g. `v0.2.1` to `v0.2.2` or `v0.2.x`) do not introduce breaking changes, and should have no special instructions to follow.
+4. Minor releases (e.g. `v0.2.2` to `v0.3.0`) introduce small changes. Minor workaround might be needed, and the [changelog](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/CHANGELOG.md) should be checked.
+5. Minor releases prior to `v0.1.0` (e.g. `v0.3.0` to `v0.4.0`) may introduce backwards incompatible behavior changes, which are documented in this guide with migration instructions.
+
+A detailed record of every change is documented in [`CHANGELOG.md`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/CHANGELOG.md).
+
+## v0.1.34
+
+### Agent Model References
+
+Prior to `v0.1.34` if an `Agent` had no `modelRef` specified, then the model named `default` was assumed.
+
+This led to some challenges:
+
+- When viewing agent details (e.g. with `kubectl get agents`), the agent model was not shown, which could make it unclear that the model was in-fact implied to be `default`
+- It was impossible to differentiate between an agent that was using the `default` model, and an agent that has no model set (for example, A2A agents have no model)
+- A bug was present that meant that A2A agents would show as `Available=False` if there was no `default` model or if the `default` model was not healthy
+
+From version `v0.1.34`, if an `Agent` has no `modelRef` specified:
+
+- On admission or update, if the agent is not an A2A agent (i.e. it does not have the `ark.mckinsey.com/a2a-server-name` annotation set) and if no `modelRef` is specified, then `modelRef` is set to `default`
+- A2A agents' availability is no longer incorrectly associated with the `default` model
+
+This is a **non-breaking** change when you create or update your resources (applying agents via `yaml` or APIs and so on). It is a **breaking** change for _existing_ agents that have no `modelRef` that are running in your cluster. Until the agent is reconciled, it will not have its model set to `default`.
+
+To migrate existing agents, simply update them. The controller will reconcile the agent and set the correct model. You can annotate agents to trigger an update:
+
+```bash
+# Show agents. We have one with a model, one without, and one a2a agent.
+kubectl get agents
+
+# e.g:
+# NAME              MODEL              AVAILABLE   AGE
+# code-reviewer     claude-4-opus      True        2d16h
+# team-leader                          True        2d16h
+# a2a-agent                            True        2d16h
+
+# Update each agent by adding an annotation. Agents without a model will have it
+# set to 'default'. Use '--all-namespaces' if you want to update the entire
+# cluster.
+kubectl annotate agents --all 'ark.mckinsey.com/migrate-0.1.34=done' --overwrite
+
+# Show agents - the default model is now set for non-a2a agents.
+kubectl get agents
+
+# e.g:
+# NAME              MODEL              AVAILABLE   AGE
+# code-reviewer     claude-4-opus      True        2d16h
+# team-leader       default            True        2d16h
+# a2a-agent                            True        2d16h
+```

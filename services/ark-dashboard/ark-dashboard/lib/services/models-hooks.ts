@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { modelsService } from "./models";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 
 export const GET_ALL_MODELS_QUERY_KEY = "get-all-models";
 
@@ -21,9 +21,7 @@ export const useCreateModel = (props?: useCreateModelProps) => {
   return useMutation({
     mutationFn: modelsService.create,
     onSuccess: (model) => {
-      toast({
-        variant: "success",
-        title: "Model Created",
+      toast.success("Model Created", {
         description: `Successfully created ${model.name}`
       })
 
@@ -41,9 +39,7 @@ export const useCreateModel = (props?: useCreateModelProps) => {
         return "An unexpected error occurred"
       }
 
-      toast({
-        variant: "destructive",
-        title: `Failed to create Model: ${data.name}`,
+      toast.error(`Failed to create Model: ${data.name}`, {
         description: getMessage()
       })
     }

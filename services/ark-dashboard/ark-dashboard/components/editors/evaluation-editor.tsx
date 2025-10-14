@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import {
   evaluatorsService,
   evaluationsService,
@@ -108,9 +108,7 @@ export function EvaluationEditor({
           setTeams(teamsData)
           setModels(modelsData)
         } catch (error) {
-          toast({
-            variant: "destructive",
-            title: "Failed to Load Data",
+          toast.error("Failed to Load Data", {
             description: error instanceof Error ? error.message : "An unexpected error occurred"
           })
         } finally {
@@ -146,9 +144,7 @@ export function EvaluationEditor({
             setOutput((detailedEvaluation.spec?.output as string) || "")
           }
         } catch (error) {
-          toast({
-            variant: "destructive",
-            title: "Failed to Load Evaluation Details",
+          toast.error("Failed to Load Evaluation Details", {
             description: error instanceof Error ? error.message : "An unexpected error occurred"
           })
           // Fallback to basic data
@@ -179,9 +175,7 @@ export function EvaluationEditor({
 
   const handleSubmit = async () => {
     if (!evaluatorRef) {
-      toast({
-        variant: "destructive",
-        title: "Validation Error",
+      toast.error("Validation Error", {
         description: "Please select an evaluator"
       })
       return
@@ -190,9 +184,7 @@ export function EvaluationEditor({
     // Validate name format for new evaluations
     if (!isEditing && name) {
       if (!name.match(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/)) {
-        toast({
-          variant: "destructive",
-          title: "Validation Error",
+        toast.error("Validation Error", {
           description: "Name must be a valid Kubernetes name (lowercase letters, numbers, and hyphens only)"
         })
         return
@@ -201,9 +193,7 @@ export function EvaluationEditor({
 
     // Validate query mode requirements
     if ((mode === "query" || mode === "batch") && !queryRef) {
-      toast({
-        variant: "destructive",
-        title: "Validation Error",
+      toast.error("Validation Error", {
         description: "Query reference is required for query and batch modes"
       })
       return
@@ -211,9 +201,7 @@ export function EvaluationEditor({
 
     // Validate target selection for query mode
     if ((mode === "query" || mode === "batch") && !targetRef) {
-      toast({
-        variant: "destructive",
-        title: "Validation Error",
+      toast.error("Validation Error", {
         description: "Target selection is required for query and batch modes"
       })
       return
@@ -221,9 +209,7 @@ export function EvaluationEditor({
 
     // Validate direct mode requirements
     if (mode === "direct" && (!input || !output)) {
-      toast({
-        variant: "destructive",
-        title: "Validation Error",
+      toast.error("Validation Error", {
         description: "Input and output are required for direct mode"
       })
       return
