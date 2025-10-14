@@ -24,7 +24,6 @@ import (
 )
 
 const (
-	defaultModelName = "default"
 	// Condition types
 	AgentAvailable = "Available"
 )
@@ -100,9 +99,11 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 		return false, "A2AServerNotReady", msg
 	}
 
-	// Check model dependency
-	if ok, msg := r.checkModelDependency(ctx, agent); !ok {
-		return false, "ModelNotFound", msg
+	// Check the status of the agent's model. Some agents (such as A2A agents) have a 'nil' model, and their status is not associated with model availability.
+	if agent.Spec.ModelRef != nil {
+		if ok, msg := r.checkModelDependency(ctx, agent); !ok {
+			return false, "ModelNotFound", msg
+		}
 	}
 
 	// Check tool dependencies
@@ -116,14 +117,11 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 
 // checkModelDependency validates model dependency
 func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string) {
-	modelName := defaultModelName
+	modelName := agent.Spec.ModelRef.Name
 	modelNamespace := agent.Namespace
 
-	if agent.Spec.ModelRef != nil {
-		modelName = agent.Spec.ModelRef.Name
-		if agent.Spec.ModelRef.Namespace != "" {
-			modelNamespace = agent.Spec.ModelRef.Namespace
-		}
+	if agent.Spec.ModelRef.Namespace != "" {
+		modelNamespace = agent.Spec.ModelRef.Namespace
 	}
 
 	var model arkv1alpha1.Model
@@ -335,15 +333,7 @@ func (r *AgentReconciler) agentDependsOnTool(agent *arkv1alpha1.Agent, toolName 
 
 // agentDependsOnModel checks if an agent depends on a specific model
 func (r *AgentReconciler) agentDependsOnModel(agent *arkv1alpha1.Agent, modelName string) bool {
-	// Check if agent explicitly references this model
-	if agent.Spec.ModelRef != nil && agent.Spec.ModelRef.Name == modelName {
-		return true
-	}
-	// Check if agent uses default model (no modelRef) and this is the default model
-	if agent.Spec.ModelRef == nil && modelName == defaultModelName {
-		return true
-	}
-	return false
+	return agent.Spec.ModelRef != nil && agent.Spec.ModelRef.Name == modelName
 }
 
 // findAgentsForA2AServer finds agents owned by the given A2AServer

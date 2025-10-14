@@ -123,7 +123,7 @@ export function AgentEditor({
       setSelectedTools([]);
       setIsPromptExpanded(false);
     }
-  }, [agent, agent?.tools]);
+  }, [open, agent, agent?.tools]);
 
   const handleSave = () => {
     if (agent) {
@@ -133,19 +133,19 @@ export function AgentEditor({
         // Only include model, execution engine, prompt, and tools for non-A2A agents
         modelRef:
           !agent.isA2A &&
-          selectedModelName &&
-          selectedModelName !== "" &&
-          selectedModelName !== "__none__"
+            selectedModelName &&
+            selectedModelName !== "" &&
+            selectedModelName !== "__none__"
             ? {
-                name: selectedModelName,
-                namespace: selectedModelNamespace || undefined
-              }
+              name: selectedModelName,
+              namespace: selectedModelNamespace || undefined
+            }
             : undefined,
         executionEngine:
           !agent.isA2A && executionEngineName
             ? {
-                name: executionEngineName
-              }
+              name: executionEngineName
+            }
             : undefined,
         prompt: !agent.isA2A ? prompt || undefined : undefined,
         tools: agent.isA2A ? undefined : selectedTools,
@@ -159,17 +159,17 @@ export function AgentEditor({
         description: description || undefined,
         modelRef:
           selectedModelName &&
-          selectedModelName !== "" &&
-          selectedModelName !== "__none__"
+            selectedModelName !== "" &&
+            selectedModelName !== "__none__"
             ? {
-                name: selectedModelName,
-                namespace: selectedModelNamespace || undefined
-              }
+              name: selectedModelName,
+              namespace: selectedModelNamespace || undefined
+            }
             : undefined,
         executionEngine: executionEngineName
           ? {
-              name: executionEngineName
-            }
+            name: executionEngineName
+          }
           : undefined,
         prompt: prompt || undefined,
         tools: selectedTools
@@ -317,14 +317,13 @@ export function AgentEditor({
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Enter the agent's prompt or instructions..."
-                  className={`transition-all duration-200 resize-none ${
-                    isPromptExpanded 
-                      ? "min-h-[400px] max-h-[500px] overflow-y-auto" 
+                  className={`transition-all duration-200 resize-none ${isPromptExpanded
+                      ? "min-h-[400px] max-h-[500px] overflow-y-auto"
                       : "min-h-[100px] max-h-[150px]"
-                  }`}
-                  style={{ 
-                    whiteSpace: 'pre-wrap', 
-                    wordWrap: 'break-word' 
+                    }`}
+                  style={{
+                    whiteSpace: 'pre-wrap',
+                    wordWrap: 'break-word'
                   }}
                 />
                 {isPromptExpanded && prompt.length > 0 && (

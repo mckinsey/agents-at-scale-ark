@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Secret, SecretDetailResponse, secretsService } from "./secrets";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { APIError } from "@/lib/api/client";
 
 export const GET_ALL_SECRETS_QUERY_KEY = "get-all-secrets";
@@ -42,9 +42,7 @@ export const useCreateSecret = (props: useCreateSecretProps) => {
       return { previousTodos }
     },
     onSuccess: (data) => {
-      toast({
-        variant: "success",
-        title: "Secret Created",
+      toast.success("Secret Created", {
         description: `Successfully created secret ${data.name}`
       })
 
@@ -67,9 +65,7 @@ export const useCreateSecret = (props: useCreateSecretProps) => {
         return "An unexpected error occurred"
       }
 
-      toast({
-        variant: "destructive",
-        title: `Failed to create Secret: ${data.name}`,
+      toast.error(`Failed to create Secret: ${data.name}`, {
         description: getMessage()
       })
     },

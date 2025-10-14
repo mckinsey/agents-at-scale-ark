@@ -16,7 +16,7 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import {
   eventsService,
   type Event
@@ -97,9 +97,7 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
         }
       } catch (error) {
         console.error("Failed to load events:", error);
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Events",
+        toast.error("Failed to Load Events", {
           description:
             error instanceof Error
               ? error.message

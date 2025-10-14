@@ -23,6 +23,31 @@ You can open the API docs directly and interact with them through the path: http
 
 ![Ark APIs](/ark-apis.png)
 
+## Authentication
+
+ARK APIs support multiple authentication methods depending on the `AUTH_MODE` configuration:
+
+- **OIDC/JWT**: For dashboard users (when `AUTH_MODE=sso` or `AUTH_MODE=hybrid`)
+- **API Keys**: For service-to-service communication (when `AUTH_MODE=basic` or `AUTH_MODE=hybrid`)
+- **No Authentication**: For development environments (when `AUTH_MODE=open`)
+
+### Using API Keys
+
+For programmatic access, create API keys and use HTTP Basic Authentication:
+
+```bash
+# Create an API key (requires authentication)
+curl -X POST http://localhost:8000/v1/api-keys \
+  -H "Content-Type: application/json" \
+  -d '{"name": "My Service Key"}'
+
+# Use the API key for subsequent requests
+curl -u "pk-ark-xxxxx:sk-ark-xxxxx" \
+  http://localhost:8000/v1/namespaces/default/agents
+```
+
+See the [Authentication Guide](/developer-guide/authentication) for complete configuration details.
+
 ## Starting the APIs
 
 ```bash
@@ -41,14 +66,15 @@ Browse the complete API documentation at `http://localhost:8000/docs` when the s
 
 Standard REST APIs for managing ARK resources, for example:
 
-- Agents: `/v1/namespaces/{namespace}/agents`
-- Teams: `/v1/namespaces/{namespace}/teams` 
-- Queries: `/v1/namespaces/{namespace}/queries`
-- Models: `/v1/namespaces/{namespace}/models`
-- Evaluators: `/v1/namespaces/{namespace}/evaluators`
-- Evaluations: `/v1/namespaces/{namespace}/evaluations`
-- Secrets: `/v1/namespaces/{namespace}/secrets`
-- Namespaces: `/v1/namespaces`
+- **Agents**: `/v1/namespaces/{namespace}/agents`
+- **Teams**: `/v1/namespaces/{namespace}/teams` 
+- **Queries**: `/v1/namespaces/{namespace}/queries`
+- **Models**: `/v1/namespaces/{namespace}/models`
+- **Evaluators**: `/v1/namespaces/{namespace}/evaluators`
+- **Evaluations**: `/v1/namespaces/{namespace}/evaluations`
+- **Secrets**: `/v1/namespaces/{namespace}/secrets`
+- **API Keys**: `/v1/api-keys` (for service authentication)
+- **Namespaces**: `/v1/namespaces`
 
 Standard Kubernetes REST patterns are followed, such as `POST` to create, `DELETE` to delete.
 

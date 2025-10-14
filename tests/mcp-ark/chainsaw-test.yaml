@@ -8,8 +8,12 @@ spec:
   steps:
   - name: setup-rbac
     try:
-    - apply:
-        file: manifests/a00-rbac.yaml
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
 
   - name: deploy-ark-mcp-server
     try:
@@ -74,5 +78,3 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-    - delete:
-        file: manifests/a00-rbac.yaml

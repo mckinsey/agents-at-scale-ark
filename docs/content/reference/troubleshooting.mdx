@@ -113,3 +113,11 @@ Failed downloads, network errors, disconnects and so on for packages or installa
 **Avoiding Kubernetes on Windows**
 
 If Kubernetes or Docker cannot be run in your environment, the best solution would be to run a remote Kubernetes cluster, on AWS/GCP or similar. Check the [Operations Guide](../../operations-guide/deploying-ark) on how to do this.
+
+## Agents
+
+**Agents without a model show as 'Unavailable'**
+
+Agents created prior to version `v0.1.34` that do not have a model set may show as "Unavailable" or have events such as `ModelNotFound`.
+
+To resolve, set the agent `modelRef` to `default`. See [v0.1.34 Upgrade Guide](/reference/upgrading#v0134) for more details.

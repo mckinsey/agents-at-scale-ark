@@ -4,7 +4,7 @@ metadata:
   name: evaluator-llm-test-access-($namespace)
 rules:
 - apiGroups: ["ark.mckinsey.com"]
-  resources: ["models", "queries", "evaluations"]
+  resources: ["models", "queries", "evaluations", "agents"]
   verbs: ["get", "list", "watch"]
 - apiGroups: [""]
   resources: ["secrets", "configmaps"]

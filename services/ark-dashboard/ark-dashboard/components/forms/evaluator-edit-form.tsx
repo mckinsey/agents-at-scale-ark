@@ -13,7 +13,7 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import {
   modelsService,
   type EvaluatorDetailResponse,
@@ -75,9 +75,7 @@ export function EvaluatorEditForm({
         const modelsData = await modelsService.getAll();
         setModels(modelsData);
       } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Models",
+        toast.error("Failed to Load Models", {
           description:
             error instanceof Error
               ? error.message

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -58,7 +58,7 @@ export function ToolEditor({
   const [httpUrl, setHttpUrl] = useState("");
   const [selectedAgent, setSelectedAgent] = useState("");
 
-  const isValid = 
+  const isValid =
     name.trim() &&
     type.trim() &&
     description.trim().length > 0 &&
@@ -72,9 +72,7 @@ export function ToolEditor({
     try {
       if (inputSchema.trim()) parsedInputSchema = JSON.parse(inputSchema);
     } catch {
-      toast({
-        variant: "destructive", 
-        title: "Invalid Input Schema",
+      toast.error("Invalid Input Schema", {
         description: "Input Schema must be valid JSON."
       })
       return;
@@ -83,9 +81,7 @@ export function ToolEditor({
     try {
       if (annotations.trim()) parsedAnnotations = JSON.parse(annotations);
     } catch {
-      toast({
-        variant: "destructive", 
-        title: "Invalid Annotations",
+      toast.error("Invalid Annotations", {
         description: "Annotations must be valid JSON."
       })
       return;
@@ -154,57 +150,56 @@ export function ToolEditor({
               placeholder="Tool description"
             />
           </div>
-            <div className="grid gap-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="inputSchema">Input Schema (JSON)</Label>
-                <div className="flex items-center gap-2">
-                  {inputSchema.length > 0 && (
-                    <span className="text-xs text-muted-foreground">
-                      {inputSchema.length} characters
-                    </span>
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="inputSchema">Input Schema (JSON)</Label>
+              <div className="flex items-center gap-2">
+                {inputSchema.length > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {inputSchema.length} characters
+                  </span>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsInputSchemaExpanded(!isInputSchemaExpanded)}
+                  className="h-8 px-2"
+                >
+                  {isInputSchemaExpanded ? (
+                    <>
+                      <Minimize2 className="h-4 w-4 mr-1" />
+                      Collapse
+                    </>
+                  ) : (
+                    <>
+                      <Maximize2 className="h-4 w-4 mr-1" />
+                      Expand
+                    </>
                   )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsInputSchemaExpanded(!isInputSchemaExpanded)}
-                    className="h-8 px-2"
-                  >
-                    {isInputSchemaExpanded ? (
-                      <>
-                        <Minimize2 className="h-4 w-4 mr-1" />
-                        Collapse
-                      </>
-                    ) : (
-                      <>
-                        <Maximize2 className="h-4 w-4 mr-1" />
-                        Expand
-                      </>
-                    )}
-                  </Button>
-                </div>
+                </Button>
               </div>
-              <Textarea
-                id="inputSchema"
-                value={inputSchema}
-                onChange={(e) => setInputSchema(e.target.value)}
-                placeholder='e.g., {"param": "value"}'
-                className={`transition-all duration-200 resize-none ${
-                  isInputSchemaExpanded 
-                    ? "min-h-[400px] max-h-[500px] overflow-y-auto" 
-                    : "min-h-[100px] max-h-[150px]"
-                }`}
-                style={{ 
-                  whiteSpace: 'pre-wrap', 
-                  wordWrap: 'break-word' 
-                }}
-              />
-              {isInputSchemaExpanded && inputSchema.length > 0 && (
-                <div className="text-xs text-muted-foreground">
-                  {inputSchema.split('\n').length} lines
-                </div>
-              )}
             </div>
+            <Textarea
+              id="inputSchema"
+              value={inputSchema}
+              onChange={(e) => setInputSchema(e.target.value)}
+              placeholder='e.g., {"param": "value"}'
+              className={`transition-all duration-200 resize-none ${isInputSchemaExpanded
+                  ? "min-h-[400px] max-h-[500px] overflow-y-auto"
+                  : "min-h-[100px] max-h-[150px]"
+                }`}
+              style={{
+                whiteSpace: 'pre-wrap',
+                wordWrap: 'break-word'
+              }}
+            />
+            {isInputSchemaExpanded && inputSchema.length > 0 && (
+              <div className="text-xs text-muted-foreground">
+                {inputSchema.split('\n').length} lines
+              </div>
+            )}
+          </div>
           <div className="grid gap-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="annotations">Annotations (JSON)</Label>
@@ -240,14 +235,13 @@ export function ToolEditor({
               value={annotations}
               onChange={(e) => setAnnotations(e.target.value)}
               placeholder='e.g., {"note": "important"}'
-              className={`transition-all duration-200 resize-none ${
-                isAnnotationsExpanded 
-                  ? "min-h-[400px] max-h-[500px] overflow-y-auto" 
+              className={`transition-all duration-200 resize-none ${isAnnotationsExpanded
+                  ? "min-h-[400px] max-h-[500px] overflow-y-auto"
                   : "min-h-[100px] max-h-[150px]"
-              }`}
-              style={{ 
-                whiteSpace: 'pre-wrap', 
-                wordWrap: 'break-word' 
+                }`}
+              style={{
+                whiteSpace: 'pre-wrap',
+                wordWrap: 'break-word'
               }}
             />
             {isAnnotationsExpanded && annotations.length > 0 && (
@@ -260,8 +254,8 @@ export function ToolEditor({
             <HttpFields url={httpUrl} setUrl={setHttpUrl} />
           )}
           {type === "agent" && (
-            <AgentFields 
-              selectedAgent={selectedAgent} 
+            <AgentFields
+              selectedAgent={selectedAgent}
               setSelectedAgent={setSelectedAgent}
               namespace={namespace}
               open={open}
