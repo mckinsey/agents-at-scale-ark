@@ -50,11 +50,11 @@ jobs:
           
           echo "=== Committed vs working directory ==="
           echo "Committed types.ts (QueryResponse lines):"
-          git show HEAD:services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts | grep -A3 -B3 QueryResponse || echo "No QueryResponse in committed"
+          git show HEAD:services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts | grep QueryResponse || echo "No QueryResponse in committed"
           
           echo "Working directory types.ts (if exists):"
           if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then
-            grep -A3 -B3 QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || echo "No QueryResponse in working"
+            grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || echo "No QueryResponse in working"
           else
             echo "types.ts does not exist in working directory"
           fi
@@ -77,7 +77,7 @@ jobs:
           echo "Working directory types.ts:"
           if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then
             sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
-            grep -A3 -B3 QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
+            grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
           else
             echo "types.ts still does not exist"
           fi
