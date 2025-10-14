@@ -41,6 +41,14 @@ jobs:
       is-fork-pr: ${{ steps.setup-registry.outputs.is-fork-pr }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Print file hash (pre-build)
+        run: |
+          echo "Hash of types.ts:"
+          if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true; else echo "types.ts missing"; fi
+          echo "QueryResponse within types.ts:"
+          grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true
+
       - id: setup-registry
         uses: ./.github/actions/setup-container-cache-registry
         with:
@@ -350,7 +358,7 @@ jobs:
           if [ -f services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts ]; then
             echo "types.ts hash in build-libs:"
             sha256sum services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
-            grep -c QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts || true
+            grep QueryResponse services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
           fi
 
   e2e-quickstart:
