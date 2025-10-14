@@ -3,6 +3,7 @@ export default {
   'local-development': 'Local Development',
   'logging-and-events': 'Logging and Events',
   'ark-sdk': 'ARK SDK',
+  'ark-cli': 'Ark CLI Developer Guide',
   'design-principles': 'Design Principles',
   'crd-design-guide': 'CRD Design Guidelines',
   'cli-tools': 'CLI Tools',
