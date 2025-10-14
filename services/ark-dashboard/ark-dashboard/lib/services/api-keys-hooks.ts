@@ -1,6 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { apiKeysService, type APIKeyCreateRequest } from "./api-keys"
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  return "An unexpected error occurred"
+}
 
 export const useListAPIKeys = () => {
   return useQuery({
@@ -19,10 +24,8 @@ export const useCreateAPIKey = () => {
     },
     onError: (error) => {
       console.error('Failed to create API key:', error)
-      toast({
-        title: "Error",
-        description: "Failed to create API key. Please try again.",
-        variant: "destructive"
+      toast.error("Failed to create API key", {
+        description: getErrorMessage(error)
       })
     }
   })
@@ -38,10 +41,8 @@ export const useDeleteAPIKey = () => {
     },
     onError: (error) => {
       console.error('Failed to delete API key:', error)
-      toast({
-        title: "Error",
-        description: "Failed to delete API key. Please try again.",
-        variant: "destructive"
+      toast.error("Failed to delete API key", {
+        description: getErrorMessage(error)
       })
     }
   })

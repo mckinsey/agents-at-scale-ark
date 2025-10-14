@@ -165,7 +165,7 @@ function APIKeysContent() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Service API Keys" }]}
+          currentPage="Service API Keys"
         />
         <div className="flex flex-1 flex-col">
           <main className="flex-1 overflow-auto p-4">
@@ -182,7 +182,7 @@ function APIKeysContent() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Service API Keys" }]}
+          currentPage="Service API Keys"
         />
         <div className="flex flex-1 flex-col">
           <main className="flex-1 overflow-auto p-4">
@@ -199,7 +199,7 @@ function APIKeysContent() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Service API Keys" }]}
+        currentPage="Service API Keys"
         actions={
           <Button 
             size="sm"
