@@ -4,7 +4,7 @@ metadata:
   name: test-agent
 spec:
   modelRef:
-    name: test-model
+    name: mock-gpt-4.1
   prompt: |
     Your name is {{.agent_name}}.
   parameters:

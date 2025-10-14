@@ -4,7 +4,7 @@ metadata:
   name: test-agent-nested
 spec:
   modelRef:
-    name: test-model
+    name: mock-gpt-4.1
   prompt: |
     You are {{.agent_name}} with role {{.agent_role}}.
   parameters:
