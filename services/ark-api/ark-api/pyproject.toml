@@ -5,6 +5,7 @@ description = ""
 requires-python = ">=3.11"
 dependencies = [
     "aiofiles>=24.1.0",
+    "bcrypt>=4.0.0",
     "dpath>=2.2.0",
     "fastapi>=0.115.8",
     "kubernetes-asyncio>=33.3.0",
