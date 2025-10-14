@@ -185,5 +185,9 @@ func (v *TeamCustomValidator) validateGraphStrategy(team *arkv1alpha1.Team) erro
 		transitionMap[edge.From] = true
 	}
 
+	if team.Spec.MaxTurns == nil {
+		return fmt.Errorf("graph strategy requires maxTurns to prevent infinite execution")
+	}
+
 	return nil
 }

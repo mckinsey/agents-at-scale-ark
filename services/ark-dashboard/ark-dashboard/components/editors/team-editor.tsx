@@ -31,9 +31,11 @@ import type {
 import type { components } from "@/lib/api/generated/types";
 import { getKubernetesNameError } from "@/lib/utils/kubernetes-validation";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { cn } from "@/lib/utils";
+import { AlertCircle } from "lucide-react";
 
 type GraphEdge = components["schemas"]["GraphEdge"];
 
@@ -275,7 +277,7 @@ export function TeamEditor({
 
   const isGraphValid =
     strategy !== "graph" ||
-    (graphEdges.length > 0 && graphEdges.every((edge) => edge.to));
+    (graphEdges.length > 0 && graphEdges.every((edge) => edge.to) && maxTurns.trim() !== "");
   const isValid =
     name.trim() && selectedMembers.length > 0 && isGraphValid && !nameError;
 
@@ -354,6 +356,14 @@ export function TeamEditor({
               onChange={(e) => setMaxTurns(e.target.value)}
               placeholder="e.g., 10"
             />
+            {strategy === "graph" && !maxTurns && (
+              <Alert variant="destructive" className="py-2">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-sm">
+                  Graph strategy requires Max Turns to be set
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
           <div className="grid gap-2">
             <Label>Members</Label>

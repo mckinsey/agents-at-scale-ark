@@ -1,4 +1,5 @@
 """Common exception handlers for Kubernetes API operations."""
+import json
 import logging
 from functools import wraps
 from typing import Callable, Any
@@ -72,10 +73,18 @@ def handle_k8s_errors(
                         detail += f" in namespace {namespace}"
                     raise HTTPException(status_code=409, detail=detail)
                 
-                # Generic Kubernetes API error
+                error_detail = e.reason
+                if e.body:
+                    try:
+                        body_json = json.loads(e.body)
+                        if body_json.get("message"):
+                            error_detail = body_json["message"]
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
+                
                 raise HTTPException(
                     status_code=e.status,
-                    detail=f"Kubernetes API error: {e.reason}"
+                    detail=error_detail
                 )
                 
             except HTTPException:
@@ -83,9 +92,17 @@ def handle_k8s_errors(
                 raise
                 
             except Exception as e:
-                # Log unexpected errors with full details
                 logger.error(f"Unexpected error during {operation} {resource_type}: {e}")
                 logger.exception("Full traceback:")
+                
+                error_message = str(e)
+                
+                if "denied the request" in error_message.lower():
+                    raise HTTPException(
+                        status_code=422,
+                        detail=error_message
+                    )
+                
                 raise HTTPException(
                     status_code=500,
                     detail="Internal server error"
