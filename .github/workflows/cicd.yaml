@@ -41,11 +41,15 @@ jobs:
       is-fork-pr: ${{ steps.setup-registry.outputs.is-fork-pr }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        # with:
+        #   fetch-depth: 0
 
-      - name: tmp. switch branch manually (only one test)
-        run: git switch -c fix/check-generated-types-are-unchanged
+      # - name: tmp. switch branch manually (only one test)
+      #   run: git switch -c fix/check-generated-types-are-unchanged
+      #  with:
+      #     # For pull requests, checkout the actual branch instead of the merge commit
+      #     ref: ${{ github.head_ref || github.ref }}
+      #     fetch-depth: 0
 
       - name: Debug pre-setup state
         run: |
@@ -67,6 +71,8 @@ jobs:
           else
             echo "types.ts does not exist in working directory"
           fi
+          echo "last 20 commits"
+          git --no-pager log -n 20 --pretty=format:"%h %ad %an %s" --date=iso
 
       - id: setup-registry
         uses: ./.github/actions/setup-container-cache-registry
