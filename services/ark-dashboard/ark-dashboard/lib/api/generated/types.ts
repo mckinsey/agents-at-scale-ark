@@ -1034,6 +1034,65 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/api-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Api Keys
+         * @description List all active API keys in the current namespace (without secret keys).
+         *     API keys are namespace-scoped for tenant isolation.
+         *
+         *     Returns:
+         *         APIKeyListResponse: List of API keys in the current namespace
+         */
+        get: operations["list_api_keys_v1_api_keys_get"];
+        put?: never;
+        /**
+         * Create Api Key
+         * @description Create a new API key for service-to-service authentication.
+         *     API keys are namespace-scoped for tenant isolation and stored in the current namespace.
+         *
+         *     Args:
+         *         body: API key creation request
+         *
+         *     Returns:
+         *         APIKeyCreateResponse: The created API key with secret (only shown once)
+         */
+        post: operations["create_api_key_v1_api_keys_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/api-keys/{public_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Api Key
+         * @description Soft delete an API key in the current namespace by marking it as inactive.
+         *     API keys are namespace-scoped for tenant isolation.
+         *
+         *     Args:
+         *         public_key: The public key of the API key to delete
+         */
+        delete: operations["delete_api_key_v1_api_keys__public_key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openai/v1/chat/completions": {
         parameters: {
             query?: never;
@@ -1131,6 +1190,133 @@ export interface components {
             discovering?: boolean | null;
             /** Status Message */
             status_message?: string | null;
+        };
+        /**
+         * APIKeyCreateRequest
+         * @description Request model for creating an API key.
+         */
+        APIKeyCreateRequest: {
+            /**
+             * Name
+             * @description Human-readable name for the API key
+             * @example Production Service Key
+             */
+            name: string;
+            /**
+             * Expires At
+             * @description Optional expiration date for the API key
+             * @example 2024-12-31T23:59:59Z
+             */
+            expires_at?: string | null;
+        };
+        /**
+         * APIKeyCreateResponse
+         * @description Response model for API key creation (includes secret key).
+         */
+        APIKeyCreateResponse: {
+            /**
+             * Id
+             * @description Unique identifier for the API key
+             * @example abc123-def456
+             */
+            id: string;
+            /**
+             * Name
+             * @description Human-readable name for the API key
+             * @example Production Service Key
+             */
+            name: string;
+            /**
+             * Public Key
+             * @description Public key for authentication
+             * @example pk-ark-abcd1234...
+             */
+            public_key: string;
+            /**
+             * Secret Key
+             * @description Secret key for authentication (only returned on creation)
+             * @example sk-ark-efgh5678...
+             */
+            secret_key: string;
+            /**
+             * Created At
+             * Format: date-time
+             * @description When the API key was created
+             * @example 2024-01-01T00:00:00Z
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * @description When the API key expires
+             * @example 2024-12-31T23:59:59Z
+             */
+            expires_at?: string | null;
+        };
+        /**
+         * APIKeyListResponse
+         * @description List of API keys response model.
+         */
+        APIKeyListResponse: {
+            /**
+             * Items
+             * @description List of API keys
+             */
+            items: components["schemas"]["APIKeyResponse"][];
+            /**
+             * Count
+             * @description Total number of API keys
+             * @example 5
+             */
+            count: number;
+        };
+        /**
+         * APIKeyResponse
+         * @description API key response model (without secret key).
+         */
+        APIKeyResponse: {
+            /**
+             * Id
+             * @description Unique identifier for the API key
+             * @example abc123-def456
+             */
+            id: string;
+            /**
+             * Name
+             * @description Human-readable name for the API key
+             * @example Production Service Key
+             */
+            name: string;
+            /**
+             * Public Key
+             * @description Public key for authentication
+             * @example pk-ark-abcd1234...
+             */
+            public_key: string;
+            /**
+             * Created At
+             * Format: date-time
+             * @description When the API key was created
+             * @example 2024-01-01T00:00:00Z
+             */
+            created_at: string;
+            /**
+             * Last Used At
+             * @description When the API key was last used
+             * @example 2024-06-01T12:00:00Z
+             */
+            last_used_at?: string | null;
+            /**
+             * Expires At
+             * @description When the API key expires
+             * @example 2024-12-31T23:59:59Z
+             */
+            expires_at?: string | null;
+            /**
+             * Is Active
+             * @description Whether the API key is active (not soft-deleted)
+             * @example true
+             */
+            is_active: boolean;
         };
         /**
          * AgentCreateRequest
@@ -5712,6 +5898,88 @@ export interface operations {
                         [key: string]: unknown;
                     };
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_api_keys_v1_api_keys_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIKeyListResponse"];
+                };
+            };
+        };
+    };
+    create_api_key_v1_api_keys_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["APIKeyCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIKeyCreateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_api_key_v1_api_keys__public_key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
