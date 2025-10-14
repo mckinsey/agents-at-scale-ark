@@ -41,8 +41,8 @@ jobs:
       is-fork-pr: ${{ steps.setup-registry.outputs.is-fork-pr }}
     steps:
       - uses: actions/checkout@v4
-        # with:
-        #   fetch-depth: 0
+        with:
+          fetch-depth: 0
 
       # - name: tmp. switch branch manually (only one test)
       #   run: git switch -c fix/check-generated-types-are-unchanged
