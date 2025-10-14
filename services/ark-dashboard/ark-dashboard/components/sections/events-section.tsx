@@ -357,79 +357,88 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
-              {events.map((event) => (
-                <tr
-                  key={event.name}
-                  onClick={() => handleEventClick(event)}
-                  className="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors"
-                >
-                  <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    {formatAge(event.lastTimestamp)}
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-sm">
-                    <div className="flex items-center gap-2">
-                      {getEventTypeIcon(event.type)}
-                      {getEventTypeBadge(event.type)}
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    {event.reason}
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="cursor-help">
-                            {event.involvedObjectKind}/
-                            {event.involvedObjectName}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <div className="text-xs">
-                            <div>Kind: {event.involvedObjectKind}</div>
-                            <div>Name: {event.involvedObjectName}</div>
-                            {event.involvedObjectNamespace && (
-                              <div>
-                                Namespace: {event.involvedObjectNamespace}
-                              </div>
-                            )}
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    -
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    {event.sourceComponent}
-                    {event.sourceHost && ` (${event.sourceHost})`}
-                  </td>
-                  <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                    <div className="max-w-md truncate" title={event.message}>
-                      {event.message}
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-center">
-                    {event.count}
+              {events.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="px-3 py-8 text-center text-xs text-gray-500 dark:text-gray-400"
+                  >
+                    <Empty>
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <DASHBOARD_SECTIONS.events.icon />
+                        </EmptyMedia>
+                        <EmptyTitle>No Events Yet</EmptyTitle>
+                      </EmptyHeader>
+                    </Empty>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                events.map((event) => (
+                  <tr
+                    key={event.name}
+                    onClick={() => handleEventClick(event)}
+                    className="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors"
+                  >
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      {formatAge(event.lastTimestamp)}
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm">
+                      <div className="flex items-center gap-2">
+                        {getEventTypeIcon(event.type)}
+                        {getEventTypeBadge(event.type)}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                      {event.reason}
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help">
+                              {event.involvedObjectKind}/
+                              {event.involvedObjectName}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <div className="text-xs">
+                              <div>Kind: {event.involvedObjectKind}</div>
+                              <div>Name: {event.involvedObjectName}</div>
+                              {event.involvedObjectNamespace && (
+                                <div>
+                                  Namespace: {event.involvedObjectNamespace}
+                                </div>
+                              )}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      -
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      {event.sourceComponent}
+                      {event.sourceHost && ` (${event.sourceHost})`}
+                    </td>
+                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                      <div className="max-w-md truncate" title={event.message}>
+                        {event.message}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-center">
+                      {event.count}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {events.length === 0 && (
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <DASHBOARD_SECTIONS.events.icon />
-            </EmptyMedia>
-            <EmptyTitle>No Events Yet</EmptyTitle>
-          </EmptyHeader>
-        </Empty>
-      )}
+
 
       {/* Pagination */}
       <Pagination
