@@ -18,9 +18,16 @@ spec:
             status:
               phase: Running
               (contains(conditions[?type == 'Ready'].status, 'True')): true
-      # Now apply RBAC, ConfigMap, Secret
+      # Install ark-tenant for RBAC
+      - script:
+          content: |
+            helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+      # Now apply ConfigMap, Secret
       - apply:
-          file: manifests/a0[1-3]-*.yaml
+          file: manifests/a0[2-3]-*.yaml
       # Now create the Model after mock server is ready
       - script:
           content: |
