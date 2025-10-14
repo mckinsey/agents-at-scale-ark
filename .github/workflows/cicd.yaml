@@ -41,16 +41,6 @@ jobs:
       is-fork-pr: ${{ steps.setup-registry.outputs.is-fork-pr }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref }}
-          fetch-depth: 0
-
-      # - name: tmp. switch branch manually (only one test)
-      #   run: git switch -c fix/check-generated-types-are-unchanged
-      #  with:
-      #     # For pull requests, checkout the actual branch instead of the merge commit
-      #     ref: ${{ github.head_ref || github.ref }}
-      #     fetch-depth: 0
 
       - name: Debug pre-setup state
         run: |
@@ -188,6 +178,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Checkout the actual branch instead of the merge commit
+          ref: ${{ github.head_ref || github.ref }}
+          fetch-depth: 0
+
       - uses: actions/setup-go@v5
         with:
           go-version: "1.24"
