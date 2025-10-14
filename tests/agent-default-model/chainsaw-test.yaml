@@ -45,6 +45,12 @@ spec:
 
   - name: test-with-default-model
     try:
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - apply:
         file: manifests/a00-mock-openai.yaml
     - assert:
@@ -56,8 +62,6 @@ spec:
           status:
             phase: Running
             (contains(conditions[?type == 'Ready'].status, 'True')): true
-    - apply:
-        file: manifests/a00-rbac.yaml
     - script:
         content: |
           kubectl apply -f - <<EOF
