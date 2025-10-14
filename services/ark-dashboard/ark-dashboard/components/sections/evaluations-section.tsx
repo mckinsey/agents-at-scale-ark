@@ -18,17 +18,21 @@ import type { components } from "@/lib/api/generated/types";
 import type { Evaluation, EvaluationDetailResponse } from "@/lib/services";
 import { evaluationsService } from "@/lib/services/evaluations";
 import {
+  ArrowUpRightIcon,
   ChevronDown,
   ChevronUp,
   Edit,
+  Plus,
   RefreshCw,
   StopCircle,
   Trash2
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
-import { useGetAllEvaluationsWithDetails } from "../../lib/services/evaluations-hooks";
-import { formatAge } from "../../lib/utils/time";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from "react";
+import { useGetAllEvaluationsWithDetails } from "@/lib/services/evaluations-hooks";
+import { formatAge } from "@/lib/utils/time";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { DASHBOARD_SECTIONS } from "@/lib/constants";
 
 type EvaluationCreateRequest = components["schemas"]["EvaluationCreateRequest"];
 type EvaluationUpdateRequest = components["schemas"]["EvaluationUpdateRequest"];
@@ -109,11 +113,13 @@ export const EvaluationsSection = forwardRef<
   });
   const router = useRouter();
 
+  const handleOpenAddEditor = useCallback(() => {
+    setEditingEvaluation(null);
+    setEditorOpen(true);
+  }, [])
+
   useImperativeHandle(ref, () => ({
-    openAddEditor: () => {
-      setEditingEvaluation(null);
-      setEditorOpen(true);
-    }
+    openAddEditor: handleOpenAddEditor
   }));
 
   const {
@@ -708,11 +714,37 @@ export const EvaluationsSection = forwardRef<
             {sortedEvaluations.length === 0 ? (
               <tr>
                 <td
-                  colSpan={activeTab === "dataset" ? 7 : 8}
+                  colSpan={activeTab === "dataset" ? 8 : 9}
                   className="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
                 >
-                  No {activeTab === "dataset" ? "dataset" : "standard"}{" "}
-                  evaluations found
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <DASHBOARD_SECTIONS.evaluations.icon />
+                      </EmptyMedia>
+                      <EmptyTitle>No Evaluations Yet</EmptyTitle>
+                      <EmptyDescription>
+                        You haven&apos;t created any evaluations yet. Get started by creating
+                        your first evaluation.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                    <EmptyContent>
+                      <Button onClick={handleOpenAddEditor}>
+                        <Plus className="h-4 w-4" />
+                        Create Evaluation
+                      </Button>
+                    </EmptyContent>
+                    <Button
+                      variant="link"
+                      asChild
+                      className="text-muted-foreground"
+                      size="sm"
+                    >
+                      <a href="https://mckinsey.github.io/agents-at-scale-ark/reference/evaluations/evaluations/" target="_blank">
+                        Learn More <ArrowUpRightIcon />
+                      </a>
+                    </Button>
+                  </Empty>
                 </td>
               </tr>
             ) : (
@@ -743,8 +775,8 @@ export const EvaluationsSection = forwardRef<
                     <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                       <span
                         className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${activeTab === "dataset"
-                            ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
-                            : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                          ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+                          : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
                           }`}
                       >
                         {getTypeDisplay(evaluation)}
