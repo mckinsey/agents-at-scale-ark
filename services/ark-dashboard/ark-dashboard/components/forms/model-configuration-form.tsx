@@ -6,7 +6,7 @@ import { Control, useForm, UseFormReturn, UseFormSetValue } from "react-hook-for
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod';
 import { kubernetesNameSchema } from "@/lib/utils/kubernetes-validation";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCreateSecret, useGetAllSecrets } from "@/lib/services/secrets-hooks";
@@ -32,23 +32,23 @@ const openaiSchema = z.object({
   name: kubernetesNameSchema,
   type: z.literal("openai"),
   model: z.string().min(1, { message: "Model is required" }),
-  secret: z.string().min(1, { message: "Secret is required" }),
+  secret: z.string().min(1, { message: "API Key is required" }),
   baseUrl: z.string().min(1, { message: "Base URL is required" })
 })
 
 const azureSchema = z.object({
   name: kubernetesNameSchema,
   type: z.literal("azure"),
-  model: z.string().min(1, { message: "Name is required" }),
-  secret: z.string().min(1, { message: "Name is required" }),
-  baseUrl: z.string().min(1, { message: "Name is required" }),
+  model: z.string().min(1, { message: "Model is required" }),
+  secret: z.string().min(1, { message: "API Key is required" }),
+  baseUrl: z.string().min(1, { message: "Base URL is required" }),
   azureApiVersion: z.string().nullish()
 })
 
 const bedrockSchema = z.object({
   name: kubernetesNameSchema,
   type: z.literal("bedrock"),
-  model: z.string().min(1, { message: "Name is required" }),
+  model: z.string().min(1, { message: "Model is required" }),
   bedrockAccessKeyIdSecretName: z.string().min(1, { message: "Access Key ID Secret is required" }),
   bedrockSecretAccessKeySecretName: z.string().min(1, { message: "Secret Access Key Secret is required" }),
   region: z.string().nullish(),
@@ -396,6 +396,11 @@ function AzureSpecificFields({ control, isSecretsPending, secrets }: AzureSpecif
             <FormControl>
               <Input {...field} value={field.value ?? ""} placeholder="2023-05-15" />
             </FormControl>
+            <FormDescription>
+              If your instance is opted in to the <a rel="noreferrer" className="text-primary underline-offset-4 hover:underline" href="https://learn.microsoft.com/en-us/azure/ai-foundry/openai/api-version-lifecycle?tabs=python" target="_blank">
+                next-generation v1 Azure OpenAI APIs
+              </a>, this field is optional. Otherwise, you must provide an API version.
+            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
