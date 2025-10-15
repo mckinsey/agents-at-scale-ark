@@ -1,0 +1,46 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simple-agent
+  labels:
+    app: simple-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: simple-agent
+  template:
+    metadata:
+      labels:
+        app: simple-agent
+    spec:
+      containers:
+      - name: simple-agent
+        image: simple-agent:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: simple-agent
+  labels:
+    app: simple-agent
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: simple-agent
