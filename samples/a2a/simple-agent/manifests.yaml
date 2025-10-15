@@ -1,3 +1,4 @@
+# Deployment runs the simple-agent container with the A2A server
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -28,6 +29,7 @@ spec:
           requests:
             memory: "128Mi"
             cpu: "100m"
+# Service exposes the simple-agent A2A server on port 80
 ---
 apiVersion: v1
 kind: Service
@@ -44,3 +46,16 @@ spec:
     name: http
   selector:
     app: simple-agent
+# A2AServer registers the simple-agent with Ark for agent discovery
+---
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: A2AServer
+metadata:
+  name: simple-agent
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: simple-agent
+        port: http
+  description: "Simple agent with conversation, math, and echo capabilities"

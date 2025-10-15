@@ -245,6 +245,10 @@ def create_app() -> Starlette:
     return Starlette(routes=routes)
 
 
+# Create app instance for uvicorn hot reload
+app = create_app()
+
+
 def main():
     """Main entry point for the A2A server."""
     app = create_app()

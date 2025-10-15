@@ -7,7 +7,7 @@ name = "simple-a2a-server"
 version = "1.0.0"
 description = "A simple A2A server demonstrating basic functionality"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.12"
 dependencies = [
     "a2a-sdk[http-server]>=0.2.6",
     "starlette>=0.27.0",
@@ -25,14 +25,14 @@ dev = [
 
 [tool.black]
 line-length = 88
-target-version = ['py38']
+target-version = ['py312']
 
 [tool.isort]
 profile = "black"
 line_length = 88
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

@@ -11,8 +11,6 @@ export default {
   services: 'Services',
   'ark-dashboard': 'ARK Dashboard',
   'ark-gateway': 'ARK Gateway',
-  'a2a-server': 'A2A Servers',
-  'a2a-gateway': 'A2A Gateway',
   'building-a2a-servers': 'Building A2A Servers',
   'ark-evaluator': 'Evaluation Engine Service',
   testing: 'End-to-End Testing',
