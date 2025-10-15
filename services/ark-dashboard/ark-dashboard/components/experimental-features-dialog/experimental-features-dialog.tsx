@@ -7,33 +7,16 @@ import {
   DialogTitle
 } from "@/components/ui/dialog"
 import { useAtom } from 'jotai';
-import { storedIsExperimentalDarkModeEnabledAtom, isExperimentalFeaturesEnabledAtom } from '@/atoms/experimental-features';
 import { Switch } from '@/components/ui/switch';
-import { atomWithStorage, RESET } from 'jotai/utils'
+import { RESET } from 'jotai/utils'
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-
-type ExperimentalFeature = {
-  feature: string;
-  description?: string;
-  atom: ReturnType<typeof atomWithStorage<boolean>>
-}
+import { ExperimentalFeature } from './types';
+import { experimentalFeatureGroups } from './experimental-features';
 
 const EXPERIMENTAL_MODAL_KEYBOARD_SHORTCUT = 'e'
 
-const experimentalFeatures: ExperimentalFeature[] = [
-  {
-    feature: 'Experimental Features',
-    description: 'Turning this off will disable experimental features',
-    atom: isExperimentalFeaturesEnabledAtom
-  },
-  {
-    feature: 'Experimental Dark Mode',
-    atom: storedIsExperimentalDarkModeEnabledAtom
-  }
-]
-
-type ExperimentalFeatureToggleProps<> = {
+type ExperimentalFeatureToggleProps = {
   feature: ExperimentalFeature
 }
 
@@ -48,7 +31,7 @@ function ExperimentalFeatureToggle({ feature }: ExperimentalFeatureToggleProps) 
     <div className="flex flex-row items-center justify-between">
       <div className="space-y-0.5">
         <Label>{feature.feature}</Label>
-        {feature.description && <p className="text-muted-foreground text-sm">{feature.description}</p>}
+        {feature.description && <div className="text-muted-foreground text-sm">{feature.description}</div>}
       </div>
       <Switch
         checked={atomValue}
@@ -90,13 +73,22 @@ export function ExperimentalFeaturesDialog() {
           <DialogTitle>Experimental features</DialogTitle>
           <DialogDescription>Enable experimental features</DialogDescription>
         </DialogHeader>
-        <div className='py-4 px-2 space-y-2'>
-          {experimentalFeatures.map((feature, index) => (
-            <Fragment key={feature.feature}>
-              {index !== 0 && <Separator />}
-              <ExperimentalFeatureToggle feature={feature} />
-            </Fragment>
-          ))}
+        <div className='py-4 px-2 space-y-6'>
+          {
+            experimentalFeatureGroups.map(({ groupKey, groupLabel, features }) => (
+              <section key={groupKey} className='space-y-2'>
+                {groupLabel && <Label className='text-base font-bold'>{groupLabel}</Label>}
+                <div>
+                  {features.map((feature, index) => (
+                    <Fragment key={feature.feature}>
+                      {index !== 0 && <Separator />}
+                      <ExperimentalFeatureToggle feature={feature} />
+                    </Fragment>
+                  ))}
+                </div>
+              </section>
+            ))
+          }
         </div>
       </DialogContent>
     </Dialog>
