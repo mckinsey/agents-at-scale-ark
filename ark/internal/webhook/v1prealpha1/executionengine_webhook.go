@@ -15,6 +15,7 @@ import (
 
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/common"
+	"mckinsey.com/ark/internal/genai"
 )
 
 var executionengineLog = logf.Log.WithName("executionengine-resource")
@@ -48,8 +49,8 @@ func (v *ExecutionEngineValidator) ValidateCreate(ctx context.Context, obj runti
 	executionengineLog.Info("Validating ExecutionEngine", "name", executionEngine.GetName(), "namespace", executionEngine.GetNamespace())
 
 	// Validate that the execution engine name is not reserved
-	if executionEngine.GetName() == "a2a" {
-		return nil, fmt.Errorf("execution engine name 'a2a' is reserved for A2A servers")
+	if executionEngine.GetName() == genai.ExecutionEngineA2A {
+		return nil, fmt.Errorf("execution engine name '%s' is reserved for A2A servers", genai.ExecutionEngineA2A)
 	}
 
 	// Validate that the address can be resolved
