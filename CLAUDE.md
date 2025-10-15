@@ -12,7 +12,6 @@
   - Webhooks for validation and admission control
 
 - **`services/`** - Supporting services for ARK (Go, Python, TypeScript)
-  - `fark/` - CLI tool and API service (Go)
   - `postgres-memory/` - Memory persistence service (Go)
   - **Execution Engines (Python):**
     - `executor-langchain/` - LangChain agent execution and tool integration engine
@@ -40,6 +39,9 @@
 
 ## Supporting Folders
 
+- **`tools/`** - CLI tools
+  - `ark-cli/` - Ark CLI (Node.js) - General-purpose, interactive
+  - `fark/` - Fark CLI (Go) - Optimized for resource management and low latency
 - **`bundles/`** - LegacyX and vNext component bundles and manifests
 - **`scripts/`** - Build and deployment scripts (Bash)
 - **`templates/`** - Project templates for new services
@@ -95,6 +97,19 @@ npm build          # Build site
 
 cd services/vnext-ui/    # UI service
 make build         # Build Docker image
+```
+
+## CLI Tools
+```bash
+cd tools/ark-cli/  # Ark CLI (Node.js)
+npm install        # Install dependencies
+npm run build      # Build TypeScript
+npm test           # Run tests
+
+cd tools/fark/     # Fark CLI (Go)
+make build-binary  # Build binary
+make test          # Run tests
+make install       # Install to ~/.local/bin
 ```
 
 # Writing Style

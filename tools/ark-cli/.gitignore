@@ -31,3 +31,6 @@ Thumbs.db
 # Cache
 .eslintcache
 .cache
+
+# Templates (copied from parent repo during build)
+templates/
