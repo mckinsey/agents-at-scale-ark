@@ -11,14 +11,8 @@ dependencies:
     path: ./services/ark-cluster-memory
   ark-api:
     path: ./services/ark-api
-  ark-api-a2a:
-    path: ./services/ark-api-a2a
   ark-dashboard:
     path: ./services/ark-dashboard
-  ark:
-    path: ./ark
-  simple-agent:
-    path: ./samples/a2a/simple-agent
 #  ark-api-a2a:
 #    path: ./services/ark-api-a2a
 #  ark-mcp:
