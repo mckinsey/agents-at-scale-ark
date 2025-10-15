@@ -1,0 +1,20 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: get-document-stats
+  namespace: default
+spec:
+  type: http
+  description: "Get statistics about the documents in the vector database"
+  http:
+    url: "http://rag-retrieval-http.default.svc.cluster.local:8000/get_document_stats"
+    method: POST
+    headers:
+      - name: Content-Type
+        value:
+          value: "application/json"
+    body: "{}"
+  inputSchema:
+    type: object
+    properties: {}
+
