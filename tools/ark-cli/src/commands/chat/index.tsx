@@ -20,20 +20,9 @@ export function createChatCommand(config: ArkConfig): Command {
       // Config is passed from main
 
       try {
-        // Initialize proxy first
         const proxy = new ArkApiProxy();
         const arkApiClient = await proxy.start();
 
-        // Check if any models are configured before starting ChatUI
-        const models = await arkApiClient.getModels();
-        if (models.length === 0) {
-          output.error('No models configured. Please configure at least one model before using ark chat.');
-          output.info('Run "ark install" to set up a default model, or configure models manually.');
-          proxy.stop();
-          process.exit(1);
-        }
-
-        // Only render ChatUI if models are available
         render(
           <ChatUI
             initialTargetId={initialTargetId}

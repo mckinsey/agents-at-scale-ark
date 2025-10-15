@@ -1,7 +1,6 @@
 import {Box, Text, useInput, useApp} from 'ink';
 import TextInput from 'ink-text-input';
 import Spinner from 'ink-spinner';
-import chalk from 'chalk';
 import * as React from 'react';
 import {marked} from 'marked';
 // @ts-ignore - no types available
@@ -20,6 +19,8 @@ import {AgentSelector} from '../ui/AgentSelector.js';
 import {ModelSelector} from '../ui/ModelSelector.js';
 import {TeamSelector} from '../ui/TeamSelector.js';
 import {ToolSelector} from '../ui/ToolSelector.js';
+import {useAsyncOperation, AsyncOperationStatus} from './AsyncOperation.js';
+import {createConnectingToArkOperation} from '../ui/asyncOperations/connectingToArk.js';
 
 type SlashCommand =
   | '/output'
@@ -109,6 +110,7 @@ const ChatUI: React.FC<ChatUIProps> = ({
   config,
 }) => {
   const {exit} = useApp();
+  const asyncOp = useAsyncOperation();
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [input, setInput] = React.useState('');
   const [isTyping, setIsTyping] = React.useState(false);
@@ -117,7 +119,6 @@ const ChatUI: React.FC<ChatUIProps> = ({
     []
   );
   const [error, setError] = React.useState<string | null>(null);
-  const [isLoading, setIsLoading] = React.useState(true);
   const [targetIndex, setTargetIndex] = React.useState(0);
   const [abortController, setAbortController] =
     React.useState<AbortController | null>(null);
@@ -155,86 +156,28 @@ const ChatUI: React.FC<ChatUIProps> = ({
 
   // Initialize chat client and fetch targets on mount
   React.useEffect(() => {
-    const initializeChat = async () => {
-      try {
-        // Use the provided ArkApiClient to create ChatClient
-        const client = new ChatClient(arkApiClient);
-        chatClientRef.current = client;
-
-        const targets = await client.getQueryTargets();
-        setAvailableTargets(targets);
-
-        if (initialTargetId) {
-          // If initialTargetId is provided, find and set the target
-          const matchedTarget = targets.find((t) => t.id === initialTargetId);
-          const matchedIndex = targets.findIndex(
-            (t) => t.id === initialTargetId
-          );
-          if (matchedTarget) {
-            setTarget(matchedTarget);
-            setTargetIndex(matchedIndex >= 0 ? matchedIndex : 0);
-            setChatConfig((prev) => ({...prev, currentTarget: matchedTarget}));
-            setMessages([]);
-          } else {
-            // If target not found, show error and exit
-            console.error(
-              chalk.red('Error:'),
-              `Target "${initialTargetId}" not found`
-            );
-            console.error(
-              chalk.gray('Use "ark targets list" to see available targets')
-            );
-            if (arkApiProxy) {
-              arkApiProxy.stop();
-            }
-            exit();
-          }
-        } else if (targets.length > 0) {
-          // No initial target specified - auto-select first available
-          // Priority: agents > models > tools
-          const agents = targets.filter((t) => t.type === 'agent');
-          const models = targets.filter((t) => t.type === 'model');
-          const tools = targets.filter((t) => t.type === 'tool');
-
-          let selectedTarget: QueryTarget | null = null;
-          let selectedIndex = 0;
-
-          if (agents.length > 0) {
-            selectedTarget = agents[0];
-            selectedIndex = targets.findIndex((t) => t.id === agents[0].id);
-          } else if (models.length > 0) {
-            selectedTarget = models[0];
-            selectedIndex = targets.findIndex((t) => t.id === models[0].id);
-          } else if (tools.length > 0) {
-            selectedTarget = tools[0];
-            selectedIndex = targets.findIndex((t) => t.id === tools[0].id);
-          }
-
+    asyncOp.run(
+      createConnectingToArkOperation({
+        arkApiClient,
+        initialTargetId,
+        onSuccess: ({client, targets, selectedTarget, selectedIndex}) => {
+          chatClientRef.current = client;
+          setAvailableTargets(targets);
           if (selectedTarget) {
             setTarget(selectedTarget);
             setTargetIndex(selectedIndex);
             setChatConfig((prev) => ({...prev, currentTarget: selectedTarget}));
             setMessages([]);
-          } else {
-            setError('No targets available');
           }
-        } else {
-          setError('No agents, models, or tools available');
-        }
-
-        setIsLoading(false);
-      } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : 'Failed to initialize chat';
-        console.error(chalk.red('Error:'), errorMessage);
-        if (arkApiProxy) {
-          arkApiProxy.stop();
-        }
-        exit();
-      }
-    };
-
-    initializeChat();
+        },
+        onQuit: () => {
+          if (arkApiProxy) {
+            arkApiProxy.stop();
+          }
+          exit();
+        },
+      })
+    );
 
     // Cleanup function to close port forward when component unmounts
     return () => {
@@ -709,7 +652,8 @@ const ChatUI: React.FC<ChatUIProps> = ({
       // OpenAI SDK errors include response body in .error property
       if (err instanceof APIError) {
         if (err.error && typeof err.error === 'object') {
-          errorMessage = JSON.stringify(err.error, null, 2);
+          const errorObj = err.error as any;
+          errorMessage = errorObj.message || JSON.stringify(err.error, null, 2);
         } else {
           errorMessage = err.message;
         }
@@ -982,15 +926,9 @@ const ChatUI: React.FC<ChatUIProps> = ({
     );
   };
 
-  // Show loading state
-  if (isLoading) {
-    return (
-      <Box flexDirection="column">
-        <Text color="yellow">
-          <Spinner type="dots" /> Loading available targets...
-        </Text>
-      </Box>
-    );
+  // Show async operation status (connection, etc.)
+  if (asyncOp.state.status === 'loading' || asyncOp.state.status === 'error') {
+    return <AsyncOperationStatus operation={asyncOp} />;
   }
 
   // Show error if no targets available
