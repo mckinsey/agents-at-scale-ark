@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -56,6 +57,14 @@ func (r *EvaluationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		log.Error(err, "unable to fetch Evaluation")
 		return ctrl.Result{}, err
+	}
+
+	// Initialize default conditions if not present
+	if len(evaluation.Status.Conditions) == 0 {
+		r.setCondition(&evaluation, arkv1alpha1.EvaluationCompleted, metav1.ConditionFalse, "EvaluationNotStarted", "The evaluation has not been started yet")
+		r.Status().Update(ctx, &evaluation)
+		log.Info("Initialized default conditions", "evaluation", evaluation.Name)
+		return ctrl.Result{}, nil
 	}
 
 	// Simple state machine - if already done or error, do nothing
@@ -662,6 +671,17 @@ func (r *EvaluationReconciler) processQueryEvaluation(ctx context.Context, evalu
 	return ctrl.Result{}, nil
 }
 
+func (r *EvaluationReconciler) setCondition(evaluation *arkv1alpha1.Evaluation, conditionType arkv1alpha1.EvaluationConditionType, status metav1.ConditionStatus, reason, message string) {
+	meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
+		Type:               string(conditionType),
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		LastTransitionTime: metav1.Now(),
+		ObservedGeneration: evaluation.Generation,
+	})
+}
+
 func (r *EvaluationReconciler) updateStatus(ctx context.Context, evaluation arkv1alpha1.Evaluation, phase, message string) error {
 	log := logf.FromContext(ctx)
 
@@ -682,6 +702,17 @@ func (r *EvaluationReconciler) updateStatus(ctx context.Context, evaluation arkv
 		// Update status fields atomically
 		latest.Status.Phase = phase
 		latest.Status.Message = message
+
+		switch phase {
+		case statusRunning:
+			r.setCondition(latest, arkv1alpha1.EvaluationCompleted, metav1.ConditionFalse, "EvaluationRunning", message)
+		case statusDone:
+			r.setCondition(latest, arkv1alpha1.EvaluationCompleted, metav1.ConditionTrue, "EvaluationSucceeded", message)
+		case statusError:
+			r.setCondition(latest, arkv1alpha1.EvaluationCompleted, metav1.ConditionTrue, "EvaluationErrored", message)
+		case statusCanceled:
+			r.setCondition(latest, arkv1alpha1.EvaluationCompleted, metav1.ConditionTrue, "EvaluationCanceled", message)
+		}
 
 		// Update status subresource
 		if err := r.Status().Update(ctx, latest); err != nil {
@@ -740,6 +771,8 @@ func (r *EvaluationReconciler) updateEvaluationComplete(ctx context.Context, eva
 		latest.Status.TokenUsage = response.TokenUsage
 		latest.Status.Phase = statusDone
 		latest.Status.Message = message
+
+		r.setCondition(latest, arkv1alpha1.EvaluationCompleted, metav1.ConditionTrue, "EvaluationCompleted", message)
 
 		// Update status subresource
 		if err := r.Status().Update(ctx, latest); err != nil {
@@ -901,8 +934,7 @@ func (r *EvaluationReconciler) aggregateChildResults(ctx context.Context, parent
 	// Calculate average score
 	averageScore := "0.000"
 	if validScores > 0 {
-		avgScore := totalScore / float64(validScores)
-		averageScore = fmt.Sprintf("%.3f", avgScore)
+		averageScore = fmt.Sprintf("%.3f", totalScore/float64(validScores))
 	}
 
 	// Determine parent pass/fail status
@@ -910,12 +942,16 @@ func (r *EvaluationReconciler) aggregateChildResults(ctx context.Context, parent
 	parentPassed := passedTests == totalTests
 
 	// Update parent evaluation status
+	message := fmt.Sprintf("Batch evaluation completed: %d/%d children passed",
+		passedTests, totalTests)
+
 	parentEvaluation.Status.Score = averageScore
 	parentEvaluation.Status.Passed = parentPassed
 	parentEvaluation.Status.Phase = statusDone
-	parentEvaluation.Status.Message = fmt.Sprintf("Batch evaluation completed: %d/%d children passed",
-		passedTests, totalTests)
+	parentEvaluation.Status.Message = message
 	parentEvaluation.Status.TokenUsage = &aggregatedTokenUsage
+
+	r.setCondition(&parentEvaluation, arkv1alpha1.EvaluationCompleted, metav1.ConditionTrue, "EvaluationCompleted", message)
 
 	if err := r.Status().Update(ctx, &parentEvaluation); err != nil {
 		log.Error(err, "Failed to update parent evaluation with batch results", "evaluation", parentEvaluation.Name)
