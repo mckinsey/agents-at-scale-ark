@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: custom-headers-query
+spec:
+  input: What is 2 plus 2?
+  targets:
+  - type: agent
+    name: headers-test-agent

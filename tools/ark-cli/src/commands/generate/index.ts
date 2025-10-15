@@ -285,11 +285,10 @@ ${chalk.cyan('Use Cases:')}
           : undefined
       )
       .option(
-        '-i, --interactive',
+        '--no-interactive',
         type === 'marketplace'
           ? 'Not supported for marketplace'
-          : 'Force additional configuration prompts (generators prompt by default when info is missing)',
-        false
+          : 'Skip interactive prompts and use defaults (prompts by default)'
       );
 
     if (helpText?.examples) {

@@ -25,7 +25,7 @@ Interactive dashboard and system status monitoring tool.
 ```bash
 # Download latest release for your platform
 # Linux/macOS
-curl -L https://github.com/mckinsey/agents-at-scale-ark/releases/latest/download/fark_$(uname)_$(uname -m | sed 's/x86_64/x86_64/;s/aarch64/arm64/').tar.gz | tar xz
+curl -L "https://github.com/mckinsey/agents-at-scale-ark/releases/latest/download/fark_$(uname)_$(uname -m | sed 's/aarch64/arm64/').tar.gz" | tar xz
 sudo mv fark /usr/local/bin/
 
 # Windows: Download fark_Windows_x86_64.zip from releases page
@@ -193,6 +193,15 @@ Launch the interactive menu interface:
 ark
 ```
 
+### System Status
+
+Check the status of ARK services and components:
+
+```bash
+# Check overall system status
+ark status
+```
+
 ## Common Use Cases
 
 ### Development Workflow
@@ -212,7 +221,7 @@ fark delete agent test-math
 ### Production Monitoring
 ```bash
 # Check system health
-ark check status
+ark status
 
 # Monitor specific resources
 fark get agent

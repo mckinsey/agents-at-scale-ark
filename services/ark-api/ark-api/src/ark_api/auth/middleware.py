@@ -7,7 +7,7 @@ except those explicitly marked as public.
 Environment Variables:
     OIDC_ISSUER_URL: OIDC issuer URL (e.g., https://your-oidc-provider.com/realms/your-realm)
     OIDC_APPLICATION_ID: OIDC application ID (used as app_id for JWT validation)
-    AUTH_MODE: Set to "sso" to enable authentication, any other value to skip authentication
+    AUTH_MODE: Authentication mode (sso, basic, hybrid, open)
     
 Note: JWKS URL is automatically derived from the issuer URL
 """
@@ -19,10 +19,16 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from .config import is_route_authenticated
+from .constants import AuthMode, AuthHeader
 
 # Import from ark_sdk
 from ark_sdk.auth.exceptions import TokenValidationError
 from ark_sdk.auth.validator import TokenValidator
+from ark_sdk.auth.config import AuthConfig
+from ark_sdk.auth.basic import BasicAuthValidator
+
+# Import API key service
+from ..services.api_keys import APIKeyService
 
 # Re-export for convenience
 __all__ = ['AuthMiddleware', 'TokenValidationError']
@@ -33,79 +39,159 @@ logger = logging.getLogger(__name__)
 class AuthMiddleware(BaseHTTPMiddleware):
     """
     Middleware that automatically protects all routes except those in PUBLIC_ROUTES.
-    This approach is more reliable than trying to modify route dependencies.
+    Supports multiple authentication modes:
+    - sso: OIDC/JWT only
+    - basic: API key basic auth only  
+    - hybrid: Both OIDC/JWT and basic auth
+    - open: No authentication (development)
     """
+    
+    def __init__(self, app):
+        super().__init__(app)
+        # API keys are always stored in current context namespace for security
+        self.api_key_service = APIKeyService()
+        
+        # Validate configuration at startup
+        self._validate_auth_config()
+    
+    def _validate_auth_config(self):
+        """
+        Validate authentication configuration at startup.
+        Fail fast with clear error messages if configuration is invalid.
+        """
+        auth_mode = os.getenv("AUTH_MODE", "").lower()
+        oidc_issuer = os.getenv("OIDC_ISSUER_URL", "")
+        oidc_app_id = os.getenv("OIDC_APPLICATION_ID", "")
+        
+        # Validate auth mode
+        valid_auth_modes = [AuthMode.SSO, AuthMode.BASIC, AuthMode.HYBRID, AuthMode.OPEN]
+        if auth_mode and auth_mode not in valid_auth_modes:
+            raise ValueError(
+                f"Invalid AUTH_MODE '{auth_mode}'. "
+                f"Valid values are: {', '.join(valid_auth_modes)}"
+            )
+        
+        # If SSO or HYBRID mode, require OIDC configuration
+        if auth_mode in [AuthMode.SSO, AuthMode.HYBRID]:
+            missing_params = []
+            if not oidc_issuer:
+                missing_params.append("OIDC_ISSUER_URL")
+            if not oidc_app_id:
+                missing_params.append("OIDC_APPLICATION_ID")
+            
+            if missing_params:
+                raise ValueError(
+                    f"AUTH_MODE is set to '{auth_mode}' but the following required "
+                    f"environment variables are missing: {', '.join(missing_params)}. "
+                    f"Please set these variables or change AUTH_MODE."
+                )
+        
+        logger.info(f"Authentication middleware initialized with mode: {auth_mode or 'open (default)'}")
     
     async def dispatch(self, request: Request, call_next):
         # Get the path from the request
         path = request.url.path
         
-        # Only apply authentication if AUTH_MODE is set to "sso" (case insensitive)
-        # and OIDC configuration is available
-        auth_mode = os.getenv("AUTH_MODE", "").lower()
-        oidc_issuer = os.getenv("OIDC_ISSUER_URL", "")
-        oidc_app_id = os.getenv("OIDC_APPLICATION_ID", "")
+        # Get authentication mode (validated at startup)
+        auth_mode = os.getenv("AUTH_MODE", "").lower() or AuthMode.OPEN
         
-        # Check OIDC configuration and log appropriate messages
-        if auth_mode == "sso":
-            if not oidc_issuer:
-                logger.warning("AUTH_MODE=sso but  is not configured. Authentication disabled.")
-            elif not oidc_app_id:
-                logger.warning("AUTH_MODE=sso but OIDC_APPLICATION_ID is not configured. Authentication disabled.")
-            else:
-                logger.debug("Authentication enabled: AUTH_MODE=sso with valid OIDC configuration")
-        else:
-            logger.debug(f"Authentication disabled: AUTH_MODE={auth_mode or 'not set'}")
+        # Log authentication configuration
+        logger.debug(f"Auth mode: {auth_mode}, Path: {path}")
         
-        # Skip authentication if AUTH_MODE is not "sso" or OIDC config is missing
-        skip_auth = (auth_mode != "sso") or (not oidc_issuer) or (not oidc_app_id)
-
-        if skip_auth:
+        # Determine which auth methods are enabled
+        jwt_enabled = auth_mode in [AuthMode.SSO, AuthMode.HYBRID]
+        basic_enabled = auth_mode in [AuthMode.BASIC, AuthMode.HYBRID]
+        auth_disabled = auth_mode == AuthMode.OPEN
+        
+        if auth_disabled:
+            logger.debug("Authentication disabled")
             response = await call_next(request)
             return response
         
         # Check if this route should be authenticated
-        if is_route_authenticated(path):
-            try:
-                # Extract the Authorization header
-                auth_header = request.headers.get("Authorization")
-                if not auth_header or not auth_header.startswith("Bearer "):
-                    return JSONResponse(
-                        status_code=401,
-                        content={"detail": "Missing or invalid authorization header"}
-                    )
-                
-                # Extract the token
-                token = auth_header[7:]  # Remove "Bearer " prefix
-                if not token:
-                    return JSONResponse(
-                        status_code=401,
-                        content={"detail": "Missing token"}
-                    )
-                
-                
-                # Validate the token using ark_sdk validator
-                
-                # Create TokenValidator instance (will read config from environment)
-                validator = TokenValidator()
-                await validator.validate_token(token)
-                
-            except TokenValidationError as e:
-                logger.error(f"Token validation error: {e}")
-                return JSONResponse(
-                    status_code=401,
-                    content={"detail": str(e)}
-                )
-            except Exception as e:
-                logger.error(f"Authentication error: {e}")
-                return JSONResponse(
-                    status_code=401,
-                    content={"detail": "Authentication failed"}
-                )
-        else:
-            pass  # Route is public, skip authentication
+        if not is_route_authenticated(path):
+            logger.debug(f"Route {path} is public, skipping authentication")
+            response = await call_next(request)
+            return response
         
-        # Continue to the next middleware/route handler
+        # Route requires authentication
+        auth_header = request.headers.get("Authorization")
+        if not auth_header:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Missing authorization header"}
+            )
+        
+        # Try different authentication methods based on auth mode
+        auth_success = False
+        auth_error = "Authentication failed"
+        
+        # Try JWT authentication if enabled
+        if jwt_enabled and auth_header.startswith(AuthHeader.BEARER):
+            try:
+                token = auth_header[len(AuthHeader.BEARER):]  # Remove "Bearer " prefix
+                if not token:
+                    auth_error = "Missing token"
+                else:
+                    # Validate JWT token using ark_sdk validator
+                    validator = TokenValidator()
+                    await validator.validate_token(token)
+                    auth_success = True
+                    logger.debug("JWT authentication successful")
+                    
+            except TokenValidationError as e:
+                logger.debug(f"JWT validation failed: {e}")
+                auth_error = str(e)
+            except Exception as e:
+                logger.error(f"JWT authentication error: {e}")
+                auth_error = "JWT authentication failed"
+        
+        # Try basic authentication if enabled (JWT block not executed)
+        elif basic_enabled and auth_header.startswith(AuthHeader.BASIC):
+            try:
+                # Parse basic auth credentials
+                credentials = BasicAuthValidator.parse_basic_auth_header(auth_header)
+                if not credentials:
+                    auth_error = "Invalid basic auth format"
+                else:
+                    public_key, secret_key = credentials
+                    
+                    # Verify API key (uses namespace configured at middleware initialization)
+                    # API keys are namespace-scoped for tenant isolation
+                    api_key_data = await self.api_key_service.verify_api_key(public_key, secret_key)
+                    if api_key_data:
+                        auth_success = True
+                        logger.debug(f"Basic auth successful for key: {public_key} in namespace {self.api_key_service.namespace}")
+                        
+                        # Add API key context to request (optional)
+                        request.state.api_key = api_key_data
+                    else:
+                        auth_error = f"Invalid API key credentials or key not found in namespace {self.api_key_service.namespace}"
+                        
+            except Exception as e:
+                logger.error(f"Basic auth error: {e}")
+                auth_error = "Basic authentication failed"
+        
+        else:
+            # Unsupported auth type or no auth methods enabled
+            if jwt_enabled and basic_enabled:
+                auth_error = f"Invalid authorization header. Use '{AuthHeader.BEARER}<token>' or '{AuthHeader.BASIC}<credentials>'"
+            elif jwt_enabled:
+                auth_error = f"Invalid authorization header. Use '{AuthHeader.BEARER}<token>'"
+            elif basic_enabled:
+                auth_error = f"Invalid authorization header. Use '{AuthHeader.BASIC}<credentials>'"
+            else:
+                auth_error = "No authentication methods configured"
+        
+        # Check authentication result
+        if not auth_success:
+            logger.warning(f"Authentication failed for {request.method} {path}: {auth_error}")
+            return JSONResponse(
+                status_code=401,
+                content={"detail": auth_error}
+            )
+        
+        # Authentication successful, continue to the next middleware/route handler
         response = await call_next(request)
         return response
 

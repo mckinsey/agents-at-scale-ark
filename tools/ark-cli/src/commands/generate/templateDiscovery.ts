@@ -13,11 +13,24 @@ export class TemplateDiscovery {
   private templatesPath: string;
 
   constructor() {
-    // Get the path to the templates directory relative to the ark CLI
-    // Navigate from tools/ark-cli/src/commands/generate/templateDiscovery.js to agents-at-scale/templates
+    // Get the path to the templates directory
+    // This handles both development and production scenarios
     const currentFile = fileURLToPath(import.meta.url);
-    const arkRoot = path.resolve(path.dirname(currentFile), '../../../../../');
-    this.templatesPath = path.join(arkRoot, 'templates');
+
+    // Try production path first (templates included in npm package)
+    const packageRoot = path.resolve(path.dirname(currentFile), '../../../');
+    const productionTemplatesPath = path.join(packageRoot, 'templates');
+
+    if (fs.existsSync(productionTemplatesPath)) {
+      this.templatesPath = productionTemplatesPath;
+    } else {
+      // Fall back to development path (relative to ARK project root)
+      const arkRoot = path.resolve(
+        path.dirname(currentFile),
+        '../../../../../'
+      );
+      this.templatesPath = path.join(arkRoot, 'templates');
+    }
   }
 
   /**

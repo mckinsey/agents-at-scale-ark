@@ -13,9 +13,14 @@ dependencies:
     path: ./services/ark-api
   ark-dashboard:
     path: ./services/ark-dashboard
-
+#  ark-api-a2a:
+#    path: ./services/ark-api-a2a
 #  ark-mcp:
 #    path: ./services/ark-mcp
+#  ark-evaluator:
+#    path: ./services/ark-evaluator
+#  executor-langchain:
+#    path: ./services/executor-langchain
 #   postgres-memory:
 #     path: ./services/postgres-memory
 
@@ -69,7 +74,6 @@ profiles:
 pipelines:
   deploy: |-
     create_deployments --all
-    run_dependency_pipelines ark --pipeline=deploy
     run_dependency_pipelines --all --exclude ark --pipeline=deploy
   dev: |-
     create_deployments --all

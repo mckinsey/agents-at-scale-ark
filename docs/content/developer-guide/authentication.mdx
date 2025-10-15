@@ -1,16 +1,25 @@
-# ARK Dashboard Authentication
+import { Tabs } from 'nextra/components'
 
-The ARK Dashboard implements a robust OpenID Connect (OIDC) authentication system built on NextAuth.js v5. This system provides secure access control for the dashboard interface and automatic token propagation to backend API services.
+# ARK Authentication System
+
+ARK implements a comprehensive authentication system supporting both user authentication and service-to-service authentication. The system includes OpenID Connect (OIDC) for user access to the dashboard and HTTP Basic Authentication with API keys for programmatic service access.
 
 ## Overview
 
 The authentication system consists of several key components:
 
+## **User Authentication (Dashboard)**
 - **OIDC Provider Integration**: Connects to any OIDC-compliant identity provider
 - **Session Management**: Handles user sessions with automatic token refresh
 - **Middleware Authentication**: Protects routes and proxies API calls with authentication
 - **Frontend Integration**: Provides user authentication state across React components
 - **Token Management**: Automatic access token refresh and propagation to backend services
+
+## **Service Authentication (APIs)**
+- **API Key Management**: Create, manage, and revoke API keys for service-to-service communication
+- **HTTP Basic Authentication**: Secure authentication using API key credentials
+- **Flexible Authentication Modes**: Support for OIDC-only, API key-only, or hybrid authentication
+- **Kubernetes Secret Storage**: API keys stored securely as Kubernetes secrets with bcrypt hashing
 
 ## Architecture
 
@@ -63,17 +72,21 @@ OIDC_CLIENT_SECRET="your-client-secret"              # Optional: OIDC client sec
 OIDC_PROVIDER_NAME="Your Provider"                   # Optional: Display name for the OIDC provider in UI
 
 # Authentication Mode
-AUTH_MODE="sso"                                       # Required: "sso" for authentication required, "open" for no authentication
+AUTH_MODE="hybrid"                                    # Required: see Authentication Modes section below
 ```
 
 ### Authentication Modes
 
 The `AUTH_MODE` environment variable controls the authentication behavior:
 
-- **`sso`**: Full authentication required. Users must authenticate with the OIDC provider to access the dashboard.
-- **`open`** (default): No authentication required. The application allows unrestricted access without signing in.
+- **`sso`**: OIDC/JWT authentication only. Users must authenticate with the OIDC provider. Service-to-service access requires JWT tokens.
+- **`basic`**: API key authentication only. All access requires HTTP Basic Authentication with API keys. Dashboard authentication is disabled.
+- **`hybrid`** (recommended): Both OIDC and API key authentication. Users can access the dashboard via OIDC, services can use API keys.
+- **`open`**: No authentication required. The application allows unrestricted access without signing in.
 
-> ⚠️ **Security Warning**: Only use `AUTH_MODE=open` in development or trusted environments. Production deployments should always use `AUTH_MODE=sso`.
+> ⚠️ **Security Warning**: Only use `AUTH_MODE=open` in development or trusted environments. Production deployments should use `hybrid` or `sso`.
+
+> ⚠️ **Invalid Values**: If `AUTH_MODE` is set to an invalid value (not `sso`, `basic`, `hybrid`, or `open`), it will automatically default to `open` for development safety. A warning will be logged when this occurs.
 
 ### OIDC Provider Setup
 
@@ -268,12 +281,140 @@ The authentication flow varies based on the `AUTH_MODE` setting:
 6. **Session Storage**: Session stored securely with HTTP-only cookies
 7. **API Token Injection**: Middleware adds Bearer token to backend API calls
 
+#### Basic Mode (`AUTH_MODE=basic`)
+1. **API Key Required**: All requests must include HTTP Basic Authentication headers
+2. **No Dashboard Authentication**: OIDC authentication is disabled
+3. **Service-to-Service Only**: Designed for headless/API-only deployments
+
+#### Hybrid Mode (`AUTH_MODE=hybrid`)
+1. **Dashboard Users**: Authenticate via OIDC/JWT (same as SSO mode)
+2. **Service Access**: Use HTTP Basic Authentication with API keys
+3. **Flexible Access**: Both authentication methods work on all API endpoints
+4. **Recommended**: Best for production with both human and service users
+
 #### Open Mode (`AUTH_MODE=open`)
 1. **Initial Access**: User accesses any route
 2. **No Authentication**: Middleware allows all requests to pass through
 3. **Direct API Access**: API calls are proxied directly without authentication headers
 
 > **Note**: In open mode, no authentication tokens are added to backend API calls. The backend must be configured to handle unauthenticated requests appropriately.
+
+## API Key Authentication
+
+ARK supports HTTP Basic Authentication using API keys for service-to-service communication. This authentication method is ideal for programmatic access, CI/CD systems, and headless services.
+
+### API Key Namespace Scoping
+
+API keys in ARK are **namespace-scoped** for multi-tenant security:
+
+- Each namespace maintains its own set of API keys
+- API keys are stored as Kubernetes secrets with type `ark.mckinsey.com/api-key`
+- Service accounts only have permissions within their deployment namespace
+- True tenant isolation: Tenant A cannot access Tenant B's API keys
+
+This design ensures that in multi-tenant deployments, each tenant's API keys remain private and isolated from other tenants. When you create an API key, it is stored in the current namespace context (or the namespace you specify explicitly).
+
+### Creating API Keys
+
+API keys can be created through the ARK Dashboard (when `AUTH_MODE=hybrid` or `AUTH_MODE=sso`) or directly via API endpoints.
+
+#### Via Dashboard
+1. Navigate to **Service API Keys** in the dashboard sidebar
+2. Click **Add API Key**
+3. Provide a descriptive name and optional expiration date
+4. Copy the generated public and secret keys immediately (secret is shown only once)
+
+#### Via API Endpoint
+```bash
+# Create in current namespace
+curl -X POST http://localhost:8000/v1/api-keys \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My Service Key",
+    "expires_at": "2024-12-31T23:59:59Z"
+  }'
+```
+
+**Note:** The API key will be stored in the current namespace only. You must authenticate against the ARK API instance in the same namespace where the API key was created.
+
+### Using API Keys
+
+API keys use HTTP Basic Authentication where:
+- **Username**: Public key (starts with `pk-ark-`)
+- **Password**: Secret key (starts with `sk-ark-`)
+
+<Tabs items={['Python', 'curl', 'JavaScript']}>
+  <Tabs.Tab>
+    ```python
+    import requests
+    from requests.auth import HTTPBasicAuth
+
+    # API credentials
+    public_key = "pk-ark-abcd1234efgh5678"
+    secret_key = "sk-ark-wxyz9876uvst5432"
+
+    # Make authenticated request
+    response = requests.get(
+        "http://localhost:8000/v1/namespaces/default/agents",
+        auth=HTTPBasicAuth(public_key, secret_key)
+    )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    curl -u "pk-ark-abcd1234efgh5678:sk-ark-wxyz9876uvst5432" \
+      http://localhost:8000/v1/namespaces/default/agents
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```javascript
+    const credentials = Buffer.from(`${publicKey}:${secretKey}`).toString('base64');
+
+    const response = await fetch('http://localhost:8000/v1/namespaces/default/agents', {
+      headers: {
+        'Authorization': `Basic ${credentials}`
+      }
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### API Key Management
+
+#### List API Keys
+```bash
+# List in current namespace
+GET /v1/api-keys
+```
+
+#### Create API Key
+```bash
+# Create in current namespace
+POST /v1/api-keys
+Content-Type: application/json
+
+{
+  "name": "Service Key Name",
+  "expires_at": "2024-12-31T23:59:59Z"  // Optional
+}
+```
+
+#### Revoke API Key
+```bash
+# Revoke in current namespace
+DELETE /v1/api-keys/{public_key}
+```
+
+### Security Considerations
+
+- **Secret Key Storage**: Secret keys are hashed using bcrypt before storage in Kubernetes secrets
+- **Single Display**: Secret keys are shown only once during creation - store them securely
+- **Namespace Isolation**: API keys are namespace-scoped for multi-tenant security
+- **Tenant Isolation**: Each tenant's API keys are isolated (cannot access other tenants' keys)
+- **Kubernetes RBAC**: Service accounts only have permissions within their deployment namespace
+- **Expiration**: API keys can have optional expiration dates for enhanced security
+- **Soft Delete**: Revoked API keys are marked inactive but retained for audit trails
+- **Per-Namespace Storage**: API keys are stored as Kubernetes secrets in their respective namespaces for true tenant isolation
 
 ## Security Features
 
@@ -392,49 +533,74 @@ Monitor authentication flow in browser developer tools and server logs.
 
 ## Example Configurations
 
-### Azure AD / Entra ID
-```bash
-BASE_URL="https://your-domain.com"
-AUTH_URL="https://your-domain.com/api/auth"
-AUTH_SECRET="your-generated-secret-key"
-AUTH_MODE="sso"
-OIDC_PROVIDER_ID="azure"
-OIDC_PROVIDER_NAME="Microsoft Azure AD"
-OIDC_ISSUER_URL="https://login.microsoftonline.com/your-tenant-id/v2.0"
-OIDC_CLIENT_ID="your-application-id"
-OIDC_CLIENT_SECRET="your-client-secret"
-```
-
-### Keycloak
-```bash
-BASE_URL="https://your-domain.com"
-AUTH_URL="https://your-domain.com/api/auth"
-AUTH_SECRET="your-generated-secret-key"
-AUTH_MODE="sso"
-OIDC_PROVIDER_ID="keycloak"
-OIDC_PROVIDER_NAME="Keycloak"
-OIDC_ISSUER_URL="https://your-keycloak.com/realms/your-realm"
-OIDC_CLIENT_ID="ark-dashboard"
-OIDC_CLIENT_SECRET="your-client-secret"
-```
-
-### Auth0
-```bash
-BASE_URL="https://your-domain.com"
-AUTH_URL="https://your-domain.com/api/auth"
-AUTH_SECRET="your-generated-secret-key"
-AUTH_MODE="sso"
-OIDC_PROVIDER_ID="auth0"
-OIDC_PROVIDER_NAME="Auth0"
-OIDC_ISSUER_URL="https://your-domain.auth0.com"
-OIDC_CLIENT_ID="your-client-id"
-OIDC_CLIENT_SECRET="your-client-secret"
-```
-
-### No Authentication (Local Development)
-```bash
-BASE_URL="http://localhost:3000"
-AUTH_URL="http://localhost:3000/api/auth"
-AUTH_MODE="open"
-# OIDC variables not required in open mode
-```
+<Tabs items={['Hybrid (Production)', 'Azure AD', 'Keycloak', 'Auth0', 'API Key Only', 'Open (Dev)']}>
+  <Tabs.Tab>
+    ```bash
+    BASE_URL="https://your-domain.com"
+    AUTH_URL="https://your-domain.com/api/auth"
+    AUTH_SECRET="your-generated-secret-key"
+    AUTH_MODE="hybrid"
+    # OIDC configuration for dashboard users
+    OIDC_PROVIDER_ID="your-provider"
+    OIDC_PROVIDER_NAME="Your Provider"
+    OIDC_ISSUER_URL="https://your-oidc-provider.com"
+    OIDC_CLIENT_ID="your-client-id"
+    OIDC_CLIENT_SECRET="your-client-secret"
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    BASE_URL="https://your-domain.com"
+    AUTH_URL="https://your-domain.com/api/auth"
+    AUTH_SECRET="your-generated-secret-key"
+    AUTH_MODE="hybrid"
+    OIDC_PROVIDER_ID="azure"
+    OIDC_PROVIDER_NAME="Microsoft Azure AD"
+    OIDC_ISSUER_URL="https://login.microsoftonline.com/your-tenant-id/v2.0"
+    OIDC_CLIENT_ID="your-application-id"
+    OIDC_CLIENT_SECRET="your-client-secret"
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    BASE_URL="https://your-domain.com"
+    AUTH_URL="https://your-domain.com/api/auth"
+    AUTH_SECRET="your-generated-secret-key"
+    AUTH_MODE="hybrid"
+    OIDC_PROVIDER_ID="keycloak"
+    OIDC_PROVIDER_NAME="Keycloak"
+    OIDC_ISSUER_URL="https://your-keycloak.com/realms/your-realm"
+    OIDC_CLIENT_ID="ark-dashboard"
+    OIDC_CLIENT_SECRET="your-client-secret"
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    BASE_URL="https://your-domain.com"
+    AUTH_URL="https://your-domain.com/api/auth"
+    AUTH_SECRET="your-generated-secret-key"
+    AUTH_MODE="hybrid"
+    OIDC_PROVIDER_ID="auth0"
+    OIDC_PROVIDER_NAME="Auth0"
+    OIDC_ISSUER_URL="https://your-domain.auth0.com"
+    OIDC_CLIENT_ID="your-client-id"
+    OIDC_CLIENT_SECRET="your-client-secret"
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    BASE_URL="http://localhost:3000"
+    AUTH_URL="http://localhost:3000/api/auth"
+    AUTH_MODE="basic"
+    # OIDC variables not required in basic mode
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    BASE_URL="http://localhost:3000"
+    AUTH_URL="http://localhost:3000/api/auth"
+    AUTH_MODE="open"
+    # OIDC variables not required in open mode
+    ```
+  </Tabs.Tab>
+</Tabs>

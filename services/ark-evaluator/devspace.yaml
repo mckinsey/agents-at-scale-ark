@@ -1,0 +1,67 @@
+# DevSpace configuration for ark-evaluator service
+version: v2beta1
+
+images:
+  ark-evaluator:
+    image: ark-evaluator
+    dockerfile: Dockerfile
+    context: .
+
+dependencies:
+  ark-sdk:
+    path: ../../lib/ark-sdk
+
+pipelines:
+  deploy: |-
+    run_dependency_pipelines --all --pipeline=deploy
+    ./sync-ark-sdk.sh
+    build_images --all
+    create_deployments --all
+  dev: |-
+    run_dependency_pipelines --all --pipeline=dev
+    ./sync-ark-sdk.sh
+    create_deployments --all
+    start_dev --all
+
+deployments:
+  ark-evaluator:
+    namespace: default
+    helm:
+      chart:
+        path: ./chart
+      values:
+        image:
+          repository: ${runtime.images.ark-evaluator.image}
+          tag: ${runtime.images.ark-evaluator.tag}
+        # Override resources for local development
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+            ephemeral-storage: 1Gi
+          requests:
+            cpu: 500m
+            memory: 512Mi
+            ephemeral-storage: 100Mi
+
+dev:
+  ark-evaluator:
+    imageSelector: ark-evaluator
+    devImage: python:3.12-slim
+    command:
+      [
+        "sh",
+        "-c",
+        "cd /app && pip install uv && uv run python -m evaluator",
+      ]
+    namespace: default
+    logs:
+      lastLines: 50
+    sync:
+      - path: .:/app
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+    ssh:
+      enabled: true
+

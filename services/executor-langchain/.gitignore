@@ -166,3 +166,4 @@ uv.lock
 # Local ark-sdk-python directory (should use the one in services/ark-sdk-python)
 ark-sdk-python/
 .wheels/
+build-context/

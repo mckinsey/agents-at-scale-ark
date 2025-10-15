@@ -174,6 +174,134 @@ spec:
 
 Any OpenAI ChatCompletion parameters can be provided through the properties system, including `temperature`, `max_tokens`, `top_p`, `frequency_penalty`, `presence_penalty`, `stop`, `seed`, and more.
 
+## Custom HTTP Headers
+
+OpenAI and Azure models support custom HTTP headers for advanced authentication and routing scenarios. Headers can be specified with direct values or loaded from Kubernetes Secrets and ConfigMaps.
+
+**Supported Providers:**
+- OpenAI
+- Azure OpenAI
+
+### Basic Headers Example
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: default
+spec:
+  type: azure
+  model:
+    value: gpt-4o
+  config:
+    azure:
+      baseUrl:
+        value: "https://your-resource.openai.azure.com"
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: azure-openai-key
+            key: token
+      apiVersion:
+        value: "2024-12-01-preview"
+      # Custom HTTP headers sent with every request
+      headers:
+        - name: X-Custom-Header
+          value:
+            value: "direct-header-value"
+        - name: X-Request-ID
+          value:
+            value: "my-app-v1"
+```
+
+### Headers from Secrets and ConfigMaps
+
+Load sensitive header values from Kubernetes Secrets or configuration from ConfigMaps:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gateway-credentials
+type: Opaque
+stringData:
+  api-key: "your-gateway-api-key"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  user-agent: "MyApp/1.0"
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: default
+spec:
+  type: azure
+  model:
+    value: gpt-4o
+  config:
+    azure:
+      baseUrl:
+        value: "https://your-resource.openai.azure.com"
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: azure-openai-key
+            key: token
+      apiVersion:
+        value: "2024-12-01-preview"
+      headers:
+        # Load from Secret
+        - name: X-API-Gateway-Key
+          value:
+            valueFrom:
+              secretKeyRef:
+                name: gateway-credentials
+                key: api-key
+        # Load from ConfigMap
+        - name: User-Agent
+          value:
+            valueFrom:
+              configMapKeyRef:
+                name: app-config
+                key: user-agent
+        # Direct value
+        - name: X-Client-ID
+          value:
+            value: "production-client"
+```
+
+### OpenAI Provider Headers
+
+Headers work the same way with OpenAI provider:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: openai-with-headers
+spec:
+  type: openai
+  model:
+    value: gpt-4o
+  config:
+    openai:
+      baseUrl:
+        value: "https://api.openai.com/v1"
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: openai-secret
+            key: token
+      headers:
+        - name: X-Custom-Header
+          value:
+            value: "my-value"
+```
+
 ## Status and Health Checking
 
 ARK continuously monitors model availability through periodic health checks. The model controller probes each model at regular intervals to ensure it remains accessible and functional.

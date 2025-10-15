@@ -59,8 +59,9 @@ export const toolsService = {
     annotations?: Record<string, string>;
     url?: string;
     agent?: string;
+    namespace?: string;
   }): Promise<void> {
-    const { name, type, description, inputSchema, annotations, url, agent } = tool;
+    const { name, type, description, inputSchema, annotations, url, agent, namespace } = tool;
     let parsedInputSchema: Record<string, unknown> | undefined = undefined;
     if (typeof inputSchema === "string" && inputSchema.trim()) {
       try {
@@ -80,6 +81,7 @@ export const toolsService = {
     };
     const payload = {
       name,
+      namespace: namespace || "default",
       annotations,
       spec
     };

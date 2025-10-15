@@ -12,13 +12,42 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/annotations"
 )
 
 // SetupAgentWebhookWithManager registers the webhook for Agent in the manager.
 func SetupAgentWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).For(&arkv1alpha1.Agent{}).
+		WithDefaulter(&AgentCustomDefaulter{}).
 		WithValidator(&AgentCustomValidator{ResourceValidator: &ResourceValidator{Client: mgr.GetClient()}}).
 		Complete()
+}
+
+// +kubebuilder:webhook:path=/mutate-ark-mckinsey-com-v1alpha1-agent,mutating=true,failurePolicy=fail,sideEffects=None,groups=ark.mckinsey.com,resources=agents,verbs=create;update,versions=v1alpha1,name=magent-v1.kb.io,admissionReviewVersions=v1
+
+type AgentCustomDefaulter struct{}
+
+var _ webhook.CustomDefaulter = &AgentCustomDefaulter{}
+
+func (d *AgentCustomDefaulter) Default(ctx context.Context, obj runtime.Object) error {
+	agent, ok := obj.(*arkv1alpha1.Agent)
+	if !ok {
+		return fmt.Errorf("expected an Agent object but got %T", obj)
+	}
+
+	_, isA2A := agent.Annotations[annotations.A2AServerName]
+	hasModel := agent.Spec.ModelRef != nil
+
+	// Set default model for non-A2A agents
+	// A2A agents are identified by the presence of the a2a-server-name annotation
+	// For upgrade details, see docs/content/reference/upgrading.mdx
+	if !hasModel && !isA2A {
+		agent.Spec.ModelRef = &arkv1alpha1.AgentModelRef{
+			Name: "default",
+		}
+	}
+
+	return nil
 }
 
 // +kubebuilder:webhook:path=/validate-ark-mckinsey-com-v1alpha1-agent,mutating=false,failurePolicy=fail,sideEffects=None,groups=ark.mckinsey.com,resources=agents,verbs=create;update,versions=v1alpha1,name=vagent-v1.kb.io,admissionReviewVersions=v1

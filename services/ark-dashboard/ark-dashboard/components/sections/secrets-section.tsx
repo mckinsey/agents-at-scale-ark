@@ -2,7 +2,7 @@
 
 import type React from "react";
 import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { SecretEditor } from "@/components/editors";
 import {
   secretsService,
@@ -47,9 +47,7 @@ export const SecretsSection = forwardRef<
         setModels(modelsData);
       } catch (error) {
         console.error("Failed to load data:", error);
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Data",
+        toast.error("Failed to Load Data", {
           description:
             error instanceof Error
               ? error.message
@@ -70,16 +68,12 @@ export const SecretsSection = forwardRef<
 
       if (existingSecret) {
         await secretsService.update(name, password);
-        toast({
-          variant: "success",
-          title: "Secret Updated",
+        toast.success("Secret Updated", {
           description: `Successfully updated ${name}`
         });
       } else {
         await secretsService.create(name, password);
-        toast({
-          variant: "success",
-          title: "Secret Created",
+        toast.success("Secret Created", {
           description: `Successfully created ${name}`
         });
       }
@@ -88,9 +82,7 @@ export const SecretsSection = forwardRef<
       setSecrets(updatedSecrets);
     } catch (error) {
       const isUpdate = secrets.some((s) => s.name === name);
-      toast({
-        variant: "destructive",
-        title: isUpdate ? "Failed to Update Secret" : "Failed to Create Secret",
+      toast.error(isUpdate ? "Failed to Update Secret" : "Failed to Create Secret", {
         description:
           error instanceof Error
             ? error.message
@@ -106,18 +98,14 @@ export const SecretsSection = forwardRef<
         throw new Error("Secret not found");
       }
       await secretsService.delete(secret.name);
-      toast({
-        variant: "success",
-        title: "Secret Deleted",
+      toast.success("Secret Deleted", {
         description: "Successfully deleted the secret"
       });
       // Reload data
       const updatedSecrets = await secretsService.getAll();
       setSecrets(updatedSecrets);
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Delete Secret",
+      toast.error("Failed to Delete Secret", {
         description:
           error instanceof Error
             ? error.message
