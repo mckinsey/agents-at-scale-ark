@@ -5,6 +5,7 @@ import { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardDescription,
   CardHeader,
   CardTitle
@@ -22,12 +23,12 @@ export interface BaseCardAction {
   label: string;
   onClick: () => void;
   variant?:
-    | "default"
-    | "destructive"
-    | "outline"
-    | "secondary"
-    | "ghost"
-    | "link";
+  | "default"
+  | "destructive"
+  | "outline"
+  | "secondary"
+  | "ghost"
+  | "link";
   className?: string;
   disabled?: boolean;
 }
@@ -73,39 +74,39 @@ export function BaseCard({
   }, [title]);
 
   const titleElement = (
-    <span ref={titleRef} className="truncate block max-w-[220px] overflow-hidden">
+    <span ref={titleRef} className="truncate block">
       {title}
     </span>
   );
 
   return (
     <Card className={cn("relative", cardClassName)}>
-      <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2 pr-24">
+      <CardHeader className="flex flex-row pr-3.5">
+        <CardTitle className="overflow-hidden max-w-full flex items-center text-lg gap-2">
           {Icon && (
             React.isValidElement(Icon) ? (
-              Icon
+              <div className="h-5 w-5 flex-shrink-0">
+                {Icon}
+              </div>
             ) : typeof Icon === 'function' ? (
               <Icon className={cn("h-5 w-5 flex-shrink-0", iconClassName)} />
             ) : null
           )}
-          <div className="truncate block max-w-[220px]">
-            {isTruncated ? (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>{titleElement}</TooltipTrigger>
-                  <TooltipContent>
-                    <p>{title}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            ) : (
-              titleElement
-            )}
-          </div>
+          {isTruncated ? (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>{titleElement}</TooltipTrigger>
+                <TooltipContent>
+                  <p>{title}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            titleElement
+          )}
         </CardTitle>
         {actions.length > 0 && (
-          <div className="absolute right-2 top-2 flex gap-1">
+          <CardAction className="flex ml-auto">
             {actions.map((action, index) => {
               const IconComponent = action.icon;
               return (
@@ -122,7 +123,7 @@ export function BaseCard({
                 </Button>
               );
             })}
-          </div>
+          </CardAction>
         )}
       </CardHeader>
       <div
