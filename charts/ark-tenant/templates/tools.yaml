@@ -1,0 +1,42 @@
+{{- if .Values.builtinTools.create -}}
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: {{ .Values.builtinTools.terminate.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    ark.mckinsey.com/skip-webhook-validation: "true"
+spec:
+  builtin:
+    name: terminate
+  description: Terminates the conversation
+  inputSchema:
+    properties:
+      response:
+        description: The response to send before terminating the conversation
+        type: string
+    required:
+    - response
+    type: object
+  type: builtin
+
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: {{ .Values.builtinTools.noop.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    ark.mckinsey.com/skip-webhook-validation: "true"
+spec:
+  builtin:
+    name: noop
+  description: A no-operation tool that does nothing and returns success
+  inputSchema:
+    type: object
+    properties:
+      message:
+        type: string
+        description: Optional message to include in the response
+  type: builtin
+{{- end }}

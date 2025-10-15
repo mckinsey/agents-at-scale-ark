@@ -110,6 +110,55 @@ bodyParameters:
         key: auth-token
 ```
 
+### Builtin Tools
+
+System-provided tools with predefined functionality.
+
+#### Noop Tool Example
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: noop
+spec:
+  type: builtin
+  description: "A no-operation tool that does nothing and returns success"
+  inputSchema:
+    type: object
+    properties:
+      message:
+        type: string
+        description: Optional message to include in the response
+  builtin:
+    name: noop
+```
+
+#### Terminate Tool Example
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: terminate
+spec:
+  type: builtin
+  description: "Terminates the conversation"
+  inputSchema:
+    type: object
+    properties:
+      response:
+        type: string
+        description: The response to send before terminating the conversation
+    required: ["response"]
+  builtin:
+    name: terminate
+```
+
+Available builtin tools:
+- **noop** - No-operation tool for testing and debugging
+- **terminate** - Ends conversation with final response
+
 ### MCP Tools
 
 Tools provided by Model Context Protocol servers.
@@ -160,36 +209,32 @@ spec:
 
 ## Agent Tool Reference Types
 
+Agents reference tools using the `tools` field in their spec. Tools can be referenced by name and type.
+
 ### Custom Tools
 
-Reference Tool resources by name:
+Reference custom Tool resources (HTTP, MCP, Agent, or Builtin tools) by name:
 
 ```yaml
 tools:
   - type: custom
-    name: get-coordinates
+    name: get-coordinates        # HTTP tool
   - type: custom
-    name: mcp-filesys-read-file
+    name: mcp-filesys-read-file  # MCP tool
+  - type: custom
+    name: call-research-agent    # Agent tool
 ```
 
 ### Built-in Tools
 
-System-provided tools:
+Reference system-provided builtin tools by name:
 
 ```yaml
 tools:
   - type: built-in
-    name: terminate # End conversation with final response
+    name: terminate  # End conversation with final response
   - type: built-in
-    name: noop # No-operation (testing/debugging)
+    name: noop       # No-operation (testing/debugging)
 ```
 
-### Agent as Tools
-
-Agent used as tools:
-
-```yaml
-tools:
-  - type: custom
-    name: call-research-agent
-```
+Note: Built-in tools must be defined as Tool resources with `type: builtin` before they can be referenced by agents.

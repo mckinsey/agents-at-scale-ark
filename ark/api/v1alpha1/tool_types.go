@@ -65,7 +65,7 @@ type ToolAnnotations struct {
 
 type ToolSpec struct {
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=http;mcp;agent
+	// +kubebuilder:validation:Enum=http;mcp;agent;builtin
 	Type string `json:"type"`
 	// Tool description
 	Description string `json:"description,omitempty"`
@@ -104,9 +104,10 @@ type HTTPSpec struct {
 
 // Tool type constants
 const (
-	ToolTypeHTTP  = "http"
-	ToolTypeMCP   = "mcp"
-	ToolTypeAgent = "agent"
+	ToolTypeHTTP    = "http"
+	ToolTypeMCP     = "mcp"
+	ToolTypeAgent   = "agent"
+	ToolTypeBuiltin = "builtin"
 )
 
 // Tool state constants

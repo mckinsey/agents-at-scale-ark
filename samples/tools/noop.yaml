@@ -1,0 +1,15 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: noop
+spec:
+  type: builtin
+  description: "A no-operation tool that does nothing and returns success"
+  inputSchema:
+    type: object
+    properties:
+      message:
+        type: string
+        description: Optional message to include in the response
+  builtin:
+    name: noop

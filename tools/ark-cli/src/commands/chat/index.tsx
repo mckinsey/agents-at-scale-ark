@@ -19,12 +19,10 @@ export function createChatCommand(config: ArkConfig): Command {
 
       // Config is passed from main
 
-      // Initialize proxy first - no spinner, just let ChatUI handle loading state
       try {
         const proxy = new ArkApiProxy();
         const arkApiClient = await proxy.start();
 
-        // Pass the initialized client and config to ChatUI
         render(
           <ChatUI
             initialTargetId={initialTargetId}
@@ -34,6 +32,7 @@ export function createChatCommand(config: ArkConfig): Command {
           />
         );
       } catch (error) {
+        // Handle proxy startup failure or other errors
         output.error(
           error instanceof Error ? error.message : 'ARK API connection failed'
         );
