@@ -129,7 +129,7 @@ This guide focuses on **custom RAG implementation** for production use cases.
   - Vector databases and embeddings
   - Python development
 
-For a complete working example with step-by-step setup, see [`samples/rag-external-vectordb/`](../../samples/rag-external-vectordb/README.md).
+For a complete working example with step-by-step setup, see `samples/rag-external-vectordb/README.md`.
 
 ---
 
@@ -145,13 +145,13 @@ For a complete working example with step-by-step setup, see [`samples/rag-extern
 
 **Deployment Files**:
 
-A complete working deployment is available in the [samples directory](../../samples/rag-external-vectordb/pgvector/):
+A complete working deployment is available in `samples/rag-external-vectordb/pgvector/`:
 
-- [`secret.yaml`](../../samples/rag-external-vectordb/pgvector/secret.yaml) - Database credentials
-- [`pvc.yaml`](../../samples/rag-external-vectordb/pgvector/pvc.yaml) - Persistent storage (10Gi)
-- [`configmap.yaml`](../../samples/rag-external-vectordb/pgvector/configmap.yaml) - Init SQL (creates vector extension, documents table, IVFFlat index)
-- [`deployment.yaml`](../../samples/rag-external-vectordb/pgvector/deployment.yaml) - PostgreSQL 16 with pgvector
-- [`service.yaml`](../../samples/rag-external-vectordb/pgvector/service.yaml) - ClusterIP service
+- `secret.yaml` - Database credentials
+- `pvc.yaml` - Persistent storage (10Gi)
+- `configmap.yaml` - Init SQL (creates vector extension, documents table, IVFFlat index)
+- `deployment.yaml` - PostgreSQL 16 with pgvector
+- `service.yaml` - ClusterIP service
 
 **Key Configuration**:
 - Vector dimension: 1536 (for Azure OpenAI text-embedding-ada-002)
@@ -174,12 +174,12 @@ ARK HTTP Tools provide a simple way to expose retrieval functions as tools that 
 
 **Complete Implementation Available**:
 
-The full working retrieval service is in [`samples/rag-external-vectordb/retrieval-service/`](../../samples/rag-external-vectordb/retrieval-service/):
+The full working retrieval service is in `samples/rag-external-vectordb/retrieval-service/`:
 
-- [`src/rest_server.py`](../../samples/rag-external-vectordb/retrieval-service/src/rest_server.py) - Flask REST API with Azure OpenAI embeddings
-- [`Dockerfile`](../../samples/rag-external-vectordb/retrieval-service/Dockerfile) - Container image definition
-- [`pyproject.toml`](../../samples/rag-external-vectordb/retrieval-service/pyproject.toml) - Python dependencies
-- [`deployment/`](../../samples/rag-external-vectordb/retrieval-service/deployment/) - Kubernetes manifests
+- `src/rest_server.py` - Flask REST API with Azure OpenAI embeddings
+- `Dockerfile` - Container image definition
+- `pyproject.toml` - Python dependencies
+- `deployment/` - Kubernetes manifests
 
 **Key Components**:
 
@@ -195,15 +195,15 @@ The implementation provides three tools:
 - psycopg2 + pgvector for database queries
 - Kubernetes Secrets for credentials (database + Azure OpenAI)
 
-See the [complete source code](../../samples/rag-external-vectordb/retrieval-service/src/rest_server.py) for implementation details.
+See `samples/rag-external-vectordb/retrieval-service/src/rest_server.py` for the complete source code.
 
 **ARK Tool CRDs**:
 
-The three HTTP Tools are defined in [`samples/rag-external-vectordb/tools/`](../../samples/rag-external-vectordb/tools/):
+The three HTTP Tools are defined in `samples/rag-external-vectordb/tools/`:
 
-- [`retrieve-chunks.yaml`](../../samples/rag-external-vectordb/tools/retrieve-chunks.yaml) - Main RAG retrieval tool
-- [`search-by-metadata.yaml`](../../samples/rag-external-vectordb/tools/search-by-metadata.yaml) - Metadata filtering
-- [`get-document-stats.yaml`](../../samples/rag-external-vectordb/tools/get-document-stats.yaml) - Database statistics
+- `retrieve-chunks.yaml` - Main RAG retrieval tool
+- `search-by-metadata.yaml` - Metadata filtering
+- `get-document-stats.yaml` - Database statistics
 
 Each Tool CRD defines:
 - HTTP endpoint (via serviceRef)
@@ -218,7 +218,7 @@ Each Tool CRD defines:
 - Docker for building images
 - Azure OpenAI account with API key
 
-For complete deployment instructions, see the [Quick Start Guide](../../samples/rag-external-vectordb/README.md#quick-start).
+For complete deployment instructions, see `samples/rag-external-vectordb/README.md`.
 
 **Summary**:
 1. Deploy pgvector database
@@ -238,7 +238,7 @@ ARK **does not include** built-in data ingestion. You need to create a separate 
 
 ### Sample Ingestion Script
 
-A complete working ingestion script is available: [`samples/rag-external-vectordb/ingestion/ingest_sample_data.py`](../../samples/rag-external-vectordb/ingestion/ingest_sample_data.py)
+A complete working ingestion script is available: `samples/rag-external-vectordb/ingestion/ingest_sample_data.py`
 
 **Features**:
 - Loads 12 sample documents about ARK concepts
@@ -286,7 +286,7 @@ python ingest_sample_data.py
 
 ### Basic RAG Agent
 
-A complete RAG-enabled agent example is available: [`samples/rag-external-vectordb/agents/rag-agent.yaml`](../../samples/rag-external-vectordb/agents/rag-agent.yaml)
+A complete RAG-enabled agent example is available: `samples/rag-external-vectordb/agents/rag-agent.yaml`
 
 **Key Configuration**:
 - **Prompt**: Instructions on when/how to use the `retrieve-chunks` tool
@@ -335,7 +335,7 @@ for r in results:
 
 ### 3. End-to-End Agent Test
 
-Use the sample query: [`samples/rag-external-vectordb/queries/rag-query.yaml`](../../samples/rag-external-vectordb/queries/rag-query.yaml)
+Use the sample query: `samples/rag-external-vectordb/queries/rag-query.yaml`
 
 ```bash
 # Deploy query
@@ -554,7 +554,7 @@ This guide covered:
 ### Next Steps
 
 **For Immediate Implementation**:
-1. Follow the [Quick Start Guide](../../samples/rag-external-vectordb/README.md#quick-start) for complete deployment
+1. Follow the Quick Start Guide in `samples/rag-external-vectordb/README.md` for complete deployment
 2. Test with the included sample data and RAG agent
 3. Customize for your use case (see guide sections above)
 
@@ -568,8 +568,8 @@ This guide covered:
 
 ## Additional Resources
 
-- **[Working Example](../../samples/rag-external-vectordb)**: Production-ready implementation with Azure OpenAI
-- **[Sample README](../../samples/rag-external-vectordb/README.md)**: Quick start guide and deployment instructions
+- **Working Example**: Production-ready implementation in `samples/rag-external-vectordb/`
+- **Sample README**: Quick start guide in `samples/rag-external-vectordb/README.md`
 - **ARK Documentation**: Internal documentation on Agents, Tools, HTTP Tools
 - **pgvector**: https://github.com/pgvector/pgvector
 - **Azure OpenAI**: https://learn.microsoft.com/en-us/azure/ai-services/openai/
