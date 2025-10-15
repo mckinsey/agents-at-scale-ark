@@ -46,6 +46,8 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip";
+import { useAtomValue } from "jotai";
+import { isExperimentalExecutionEngineEnabledAtom } from "@/atoms/experimental-features";
 
 interface AgentEditorProps {
   open: boolean;
@@ -80,6 +82,8 @@ export function AgentEditor({
   const [selectedTools, setSelectedTools] = useState<AgentTool[]>([]);
   const [toolsLoading, setToolsLoading] = useState(false);
   const [unavailableTools, setUnavailableTools] = useState<Tool[]>([]);
+  const isExperimentalExecutionEngineEnabled = useAtomValue(isExperimentalExecutionEngineEnabledAtom)
+
 
   useEffect(() => {
     if (open) {
@@ -273,15 +277,19 @@ export function AgentEditor({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="execution-engine">Execution Engine</Label>
-                <Input
-                  id="execution-engine"
-                  value={executionEngineName}
-                  onChange={(e) => setExecutionEngineName(e.target.value)}
-                  placeholder="e.g., langchain-executor"
-                />
-              </div>
+              {
+                isExperimentalExecutionEngineEnabled && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="execution-engine">Execution Engine</Label>
+                    <Input
+                      id="execution-engine"
+                      value={executionEngineName}
+                      onChange={(e) => setExecutionEngineName(e.target.value)}
+                      placeholder="e.g., langchain-executor"
+                    />
+                  </div>
+                )
+              }
               <div className="grid gap-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="prompt">Prompt</Label>
@@ -318,8 +326,8 @@ export function AgentEditor({
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Enter the agent's prompt or instructions..."
                   className={`transition-all duration-200 resize-none ${isPromptExpanded
-                      ? "min-h-[400px] max-h-[500px] overflow-y-auto"
-                      : "min-h-[100px] max-h-[150px]"
+                    ? "min-h-[400px] max-h-[500px] overflow-y-auto"
+                    : "min-h-[100px] max-h-[150px]"
                     }`}
                   style={{
                     whiteSpace: 'pre-wrap',
