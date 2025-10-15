@@ -4,16 +4,6 @@ CLI tool and HTTP API for querying ARK agents, teams, and models.
 
 ## Installation
 
-### From GitHub Release (Recommended)
-```bash
-# Download latest release for your platform
-# Linux/macOS (replace Darwin with Linux for Linux systems)
-curl -L https://github.com/mckinsey/agents-at-scale-ark/releases/latest/download/fark_$(uname)_$(uname -m | sed 's/x86_64/x86_64/;s/aarch64/arm64/').tar.gz | tar xz
-sudo mv fark /usr/local/bin/
-
-# Windows: Download fark_Windows_x86_64.zip from releases page
-```
-
 ### From Source
 ```bash
 # Clone and build locally
