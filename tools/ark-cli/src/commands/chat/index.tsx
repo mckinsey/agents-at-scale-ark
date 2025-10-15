@@ -44,17 +44,9 @@ export function createChatCommand(config: ArkConfig): Command {
         );
       } catch (error) {
         // Handle proxy startup failure or other errors
-        if (error instanceof Error && error.message.includes('port forward failed')) {
-          output.error('ARK API connection failed. Please ensure ark-api is running.');
-          output.info('Run "ark status" to check the status of ARK services.');
-        } else if (error instanceof Error && error.message.includes('Failed to get models')) {
-          output.error('No models configured. Please configure at least one model before using ark chat.');
-          output.info('Run "ark install" to set up a default model, or configure models manually.');
-        } else {
-          output.error(
-            error instanceof Error ? error.message : 'ARK API connection failed'
-          );
-        }
+        output.error(
+          error instanceof Error ? error.message : 'ARK API connection failed'
+        );
         process.exit(1);
       }
     });
