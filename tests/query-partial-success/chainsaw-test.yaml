@@ -45,6 +45,15 @@ spec:
           status:
             # Overall status should be "error" because agent-2 will fail
             phase: error
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-partial-success
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     # Verify we have responses from both successful and failed targets
     - assert:
         resource:

@@ -62,6 +62,15 @@ spec:
           metadata:
             name: test-query-label-selector
           status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-label-selector
+          status:
             (length(responses)): 2
             (contains(responses[*].target.name, 'test-agent-math')): true
             (contains(responses[*].target.name, 'test-agent-weather')): true

@@ -75,6 +75,15 @@ spec:
               name: test-query-with-params
             status:
               phase: done
+      - assert:
+          resource:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            metadata:
+              name: test-query-with-params
+            status:
+              (conditions[?type == 'Completed']):
+              - status: 'True'
       # Response is immutable after phase: done, no need to retry
       - assert:
           timeout: 1s
@@ -99,6 +108,15 @@ spec:
               name: test-query-nested-params
             status:
               phase: done
+      - assert:
+          resource:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            metadata:
+              name: test-query-nested-params
+            status:
+              (conditions[?type == 'Completed']):
+              - status: 'True'
       # Response is immutable after phase: done, no need to retry
       - assert:
           timeout: 1s

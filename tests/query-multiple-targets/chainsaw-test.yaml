@@ -62,6 +62,15 @@ spec:
           metadata:
             name: test-query-multiple-targets
           status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-multiple-targets
+          status:
             (length(responses)): 3
             (contains(responses[*].target.name, 'test-agent-1')): true
             (contains(responses[*].target.name, 'test-agent-2')): true

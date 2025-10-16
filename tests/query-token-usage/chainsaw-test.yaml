@@ -54,7 +54,6 @@ spec:
             name: token-usage-query
           status:
             phase: done
-
   - name: validate-response
     try:
     - assert:
@@ -71,5 +70,7 @@ spec:
             (tokenUsage.promptTokens > `0`): true
             (tokenUsage.completionTokens > `0`): true
             (tokenUsage.promptTokens + tokenUsage.completionTokens == to_number(tokenUsage.totalTokens)): true
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     catch:
       - events: {}

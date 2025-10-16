@@ -36,6 +36,15 @@ spec:
           metadata:
             name: tool-target-query
           status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: tool-target-query
+          status:
             (length(responses)): 1
             (contains(responses[*].target.name, 'test-tool')): true
             (length(join('', responses[*].content)) > `10`): true
