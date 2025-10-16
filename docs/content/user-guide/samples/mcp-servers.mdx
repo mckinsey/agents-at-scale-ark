@@ -189,23 +189,22 @@ from mcp.server.fastmcp import FastMCP
 # Create an MCP server
 # Stateless server (no session persistence)
 mcp = FastMCP("MulDivMathServer", stateless_http=True, host="0.0.0.0")
- 
+
 # Add a multiply tool
 @mcp.tool()
 def multiply(a: int, b: int) -> int:
     """Multiply two numbers"""
     print(f"Received {a} * {b}")
     return a * b
- 
+
 # Add a divide tool
 @mcp.tool()
 def divide(a: float, b: float) -> float:
     """Divide two numbers"""
     print(f"Received {a} / {b}")
-    return a / b
- 
- 
- 
+    return a / b 
+
+
 if __name__ == "__main__":
     mcp.run(transport="streamable-http")
 ```
