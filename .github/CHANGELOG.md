@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.39](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.38...v0.1.39) (2025-10-16)
+
+
+### Features
+
+* add missing ark-tenant install to cli ([#321](https://github.com/mckinsey/agents-at-scale-ark/issues/321)) ([a75da2e](https://github.com/mckinsey/agents-at-scale-ark/commit/a75da2ee83c23994b91530a5c547eaa8e10c560e))
+
 ## [0.1.38](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.37...v0.1.38) (2025-10-16)
 
 
