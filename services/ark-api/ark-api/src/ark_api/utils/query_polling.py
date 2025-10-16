@@ -41,17 +41,47 @@ def _create_chat_completion_response(query_name: str, model: str, content: str, 
     )
 
 
-def _get_error_message(status: dict) -> str:
-    """Extract error message from query status."""
+def _get_error_detail(status: dict) -> dict:
+    """Extract error details from query status, including individual target errors.
+
+    Returns a structured error dict with:
+    - message: The primary error message
+    - errors: List of individual target errors (for multi-target queries)
+
+    Note: For multi-target queries, we currently use the first error as the main message.
+    In the future, we should enhance this to better aggregate or present all errors.
+    """
     error_message = status.get("message", "")
     error_responses = status.get("responses", [])
 
-    if error_message:
-        return f"Query execution failed: {error_message}"
-    elif error_responses and error_responses[0].get("error"):
-        return f"Query execution failed: {error_responses[0].get('error')}"
+    logger.info(f"_get_error_detail - error_message: {error_message}, responses count: {len(error_responses)}")
+
+    # Collect individual target errors from responses
+    target_errors = []
+    for idx, response in enumerate(error_responses):
+        # In error phase, the 'content' field contains the actual error message
+        content = response.get("content", "")
+        target = response.get("target", f"target-{idx}")
+        logger.info(f"_get_error_detail - response {idx}: content={content[:100] if content else 'EMPTY'}, target={target}")
+        if content:
+            target_errors.append({
+                "target": target,
+                "message": content
+            })
+
+    # Determine the main error message
+    if target_errors:
+        # Use the first target error as the main message
+        main_message = f"Query execution failed: {target_errors[0]['message']}"
+    elif error_message:
+        main_message = f"Query execution failed: {error_message}"
     else:
-        return "Query execution failed: No error details available"
+        main_message = "Query execution failed: No error details available"
+
+    return {
+        "message": main_message,
+        "errors": target_errors if len(target_errors) > 1 else []
+    }
 
 
 async def poll_query_completion(ark_client, query_name: str, model: str, messages: list) -> ChatCompletion:
@@ -77,8 +107,8 @@ async def poll_query_completion(ark_client, query_name: str, model: str, message
             return _create_chat_completion_response(query_name, model, content, messages)
                     
         elif phase == "error":
-            detail_message = _get_error_message(status)
-            raise HTTPException(status_code=500, detail=detail_message)
+            error_detail = _get_error_detail(status)
+            raise HTTPException(status_code=500, detail=error_detail)
                 
     # If we get here, we timed out waiting for completion
     raise HTTPException(status_code=504, detail=f"Query {query_name} timed out after 5 minutes")

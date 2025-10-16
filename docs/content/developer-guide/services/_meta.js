@@ -1,3 +1,4 @@
 export default {
-  'ark-cluster-memory': 'ARK Cluster Memory'
+  'ark-a2a-api': 'Ark A2A Gateway',
+  'ark-cluster-memory': 'Ark Cluster Memory'
 }

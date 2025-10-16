@@ -7,16 +7,27 @@ spec:
   steps:
   - name: step-1
     try:
+    # Install mock-llm with Ark Model and custom headers
     - script:
-        skipLogOutput: true
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.12 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    # Install ark-tenant for RBAC
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    # Apply Secret and ConfigMap for headers
     - apply:
-        file: manifests/*.yaml
+        file: manifests/a0[1-2]-*.yaml
+    # Wait for Model to be available
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -27,37 +38,10 @@ spec:
             conditions:
             - type: ModelAvailable
               status: "True"
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: test-model-custom-headers
-          spec:
-            config:
-              azure:
-                headers:
-                - name: X-Consumer-Application
-                  value:
-                    value: ark-chainsaw-test-value
-                - name: X-Authorization-Session
-                  value:
-                    valueFrom:
-                      secretKeyRef:
-                        name: test-custom-headers
-                        key: auth-token
-                - name: X-Consumer-Group
-                  value:
-                    valueFrom:
-                      configMapKeyRef:
-                        name: test-custom-headers
-                        key: consumer-group
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: headers-test-agent
+    # Apply Agent and Query
+    - apply:
+        file: manifests/a0[5-6]-*.yaml
+    # Wait for Query to complete
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -66,6 +50,8 @@ spec:
             name: custom-headers-query
           status:
             phase: done
+    # Verify headers were received correctly
+    # Mock-llm echoes back the headers object as JSON in the response content
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -75,55 +61,10 @@ spec:
           status:
             (length(responses)): 1
             (contains(responses[*].target.name, 'headers-test-agent')): true
-            (length(join('', responses[*].content)) > `5`): true
-    - script:
-        timeout: 30s
-        content: |
-          set -e
-
-          echo "Checking controller logs for custom header resolution..."
-
-          LOGS=$(kubectl logs -n ark-system -l app.kubernetes.io/name=ark-controller --tail=500 2>/dev/null || echo "")
-
-          if [ -z "$LOGS" ]; then
-            echo "Warning: Could not retrieve controller logs, skipping log validation"
-            echo "Headers functionality validated via successful Query completion"
-            exit 0
-          fi
-
-          STATIC_FOUND=false
-          SECRET_FOUND=false
-          CONFIGMAP_FOUND=false
-          APPLIED_FOUND=false
-
-          if echo "$LOGS" | grep -q "resolved custom header.*X-Consumer-Application"; then
-            echo "✓ Static header (X-Consumer-Application) resolved"
-            STATIC_FOUND=true
-          fi
-
-          if echo "$LOGS" | grep -q "resolved custom header.*X-Authorization-Session"; then
-            echo "✓ Secret header (X-Authorization-Session) resolved"
-            SECRET_FOUND=true
-          fi
-
-          if echo "$LOGS" | grep -q "resolved custom header.*X-Consumer-Group"; then
-            echo "✓ ConfigMap header (X-Consumer-Group) resolved"
-            CONFIGMAP_FOUND=true
-          fi
-
-          if echo "$LOGS" | grep -q "applying custom headers to client.*header_count.*3"; then
-            echo "✓ All 3 headers applied to client"
-            APPLIED_FOUND=true
-          fi
-
-          if [ "$STATIC_FOUND" = true ] && [ "$SECRET_FOUND" = true ] && [ "$CONFIGMAP_FOUND" = true ] && [ "$APPLIED_FOUND" = true ]; then
-            echo "✓ All custom headers validated successfully"
-            exit 0
-          else
-            echo "Warning: Some headers not found in logs, but Query succeeded"
-            echo "This may indicate timing issues with log retrieval"
-            exit 0
-          fi
+            # Headers are echoed back as JSON object (Express lowercases header names)
+            (contains(responses[0].content, '"x-consumer-application":"ark-chainsaw-test-value"')): true
+            (contains(responses[0].content, '"x-authorization-session":"test-secret-token-chainsaw-12345"')): true
+            (contains(responses[0].content, '"x-consumer-group":"chainsaw-test-consumer-group"')): true
     catch:
     - events: {}
     - describe:

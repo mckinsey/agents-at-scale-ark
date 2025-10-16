@@ -5,19 +5,16 @@ metadata:
 spec:
   steps:
     - try:
-      # First apply mock server
-      - apply:
-          file: manifests/a00-mock-server.yaml
-      # Wait for mock server pod to be ready
-      - assert:
-          resource:
-            apiVersion: v1
-            kind: Pod
-            metadata:
-              name: mock-openai
-            status:
-              phase: Running
-              (contains(conditions[?type == 'Ready'].status, 'True')): true
+      # Install mock-llm with Ark Model and custom config
+      - script:
+          content: |
+            helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+              --version 0.1.12 \
+              --namespace $NAMESPACE \
+              --values mock-llm-values.yaml
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
       # Install ark-tenant for RBAC
       - script:
           content: |
@@ -25,33 +22,9 @@ spec:
           env:
           - name: NAMESPACE
             value: ($namespace)
-      # Now apply ConfigMap, Secret
+      # Apply ConfigMap, Secret
       - apply:
           file: manifests/a0[2-3]-*.yaml
-      # Now create the Model after mock server is ready
-      - script:
-          content: |
-            kubectl apply -f - <<EOF
-            apiVersion: ark.mckinsey.com/v1alpha1
-            kind: Model
-            metadata:
-              name: mock-gpt-4.1
-              namespace: $NAMESPACE
-            spec:
-              type: openai
-              model:
-                value: gpt-4.1
-              pollInterval: 3s
-              config:
-                openai:
-                  baseUrl:
-                    value: http://mock-openai.$NAMESPACE.svc.cluster.local/v1
-                  apiKey:
-                    value: mock-api-key
-            EOF
-      # Finally apply agents and queries
-      - apply:
-          file: manifests/a0[4-7]-*.yaml
       - assert:
           resource:
             apiVersion: v1
@@ -64,6 +37,7 @@ spec:
             kind: Secret
             metadata:
               name: query-secrets
+      # Wait for Model to be available before creating agents/queries
       - assert:
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1
@@ -74,12 +48,24 @@ spec:
               conditions:
               - type: ModelAvailable
                 status: "True"
+      # Apply agents first
+      - apply:
+          file: manifests/a0[4,6]-*.yaml
       - assert:
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Agent
             metadata:
               name: test-agent
+      - assert:
+          resource:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Agent
+            metadata:
+              name: test-agent-nested
+      # Now apply queries after Model and Agents are ready
+      - apply:
+          file: manifests/a0[5,7]-*.yaml
       - assert:
           timeout: 5s
           resource:
@@ -104,12 +90,6 @@ spec:
               (contains(responses[0].raw, '"role":"system"')): true
               (contains(responses[0].content, 'QueryAgent123')): true
       # Test nested valueFrom resolution - Agent referencing Query params that use ConfigMap/Secret
-      - assert:
-          resource:
-            apiVersion: ark.mckinsey.com/v1alpha1
-            kind: Agent
-            metadata:
-              name: test-agent-nested
       - assert:
           timeout: 5s
           resource:

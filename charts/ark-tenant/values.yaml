@@ -45,3 +45,11 @@ networkPolicy:
   # Example:
   # - ark-system
   # - monitoring
+
+# Builtin tools configuration
+builtinTools:
+  create: true
+  terminate:
+    name: terminate
+  noop:
+    name: noop

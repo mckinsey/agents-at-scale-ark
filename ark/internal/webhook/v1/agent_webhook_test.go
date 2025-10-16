@@ -13,6 +13,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/genai"
 )
 
 var _ = Describe("Agent Webhook", func() {
@@ -61,7 +62,7 @@ var _ = Describe("Agent Webhook", func() {
 		It("Should allow A2A agents without model validation", func() {
 			// Set execution engine to A2A
 			agent.Spec.ExecutionEngine = &arkv1alpha1.ExecutionEngineRef{
-				Name: ExecutionEngineA2A,
+				Name: genai.ExecutionEngineA2A,
 			}
 
 			warnings, err := validator.ValidateCreate(ctx, agent)
@@ -72,7 +73,7 @@ var _ = Describe("Agent Webhook", func() {
 		It("Should allow A2A agents to be updated without model validation", func() {
 			// Set execution engine to A2A
 			agent.Spec.ExecutionEngine = &arkv1alpha1.ExecutionEngineRef{
-				Name: ExecutionEngineA2A,
+				Name: genai.ExecutionEngineA2A,
 			}
 
 			oldAgent := agent.DeepCopy()

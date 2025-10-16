@@ -106,10 +106,6 @@ func (v *AgentCustomValidator) validateAgent(ctx context.Context, agent *arkv1al
 	return warnings, nil
 }
 
-const (
-	ExecutionEngineA2A = "a2a"
-)
-
 func (v *AgentCustomValidator) validateAgentModel(ctx context.Context, agent *arkv1alpha1.Agent) error {
 	// Model validation is now handled at runtime via status conditions
 	// Agents without valid models will show as Available: False

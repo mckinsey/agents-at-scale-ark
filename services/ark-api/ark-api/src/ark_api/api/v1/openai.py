@@ -1,4 +1,3 @@
-import json
 import logging
 import time
 import uuid
@@ -8,7 +7,7 @@ from ark_sdk import QueryV1alpha1Spec
 from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
 from ark_sdk.streaming_config import get_streaming_config, get_streaming_base_url
 from ark_sdk.k8s import get_namespace
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse, JSONResponse
 from openai.types.chat import ChatCompletion, ChatCompletionMessageParam
 from openai.types import Model
@@ -97,10 +96,10 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
 
     try:
         # Create the QueryV1alpha1 object with type="messages"
-        # Serialize messages array to JSON string as required by QueryV1alpha1Spec
+        # Pass messages directly without json.dumps() - SDK handles serialization
         query_resource = QueryV1alpha1(
             metadata=metadata,
-            spec=QueryV1alpha1Spec(type="messages", input=json.dumps(messages), targets=[target]),
+            spec=QueryV1alpha1Spec(type="messages", input=messages, targets=[target]),
         )
 
         async with with_ark_client(namespace, "v1alpha1") as ark_client:

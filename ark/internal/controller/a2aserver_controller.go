@@ -237,7 +237,7 @@ func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2A
 			Description: agentCard.Description,
 			Prompt:      fmt.Sprintf("You are %s. %s", agentCard.Name, agentCard.Description),
 			ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{
-				Name: "a2a",
+				Name: genai.ExecutionEngineA2A,
 			},
 		},
 	}

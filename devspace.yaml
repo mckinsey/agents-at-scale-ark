@@ -33,6 +33,9 @@ vars:
   ENABLE_GATEWAY_API_CRDS:
     source: env
     default: true
+  ENABLE_ARK_TENANT:
+    source: env
+    default: true
 
 commands:
   routes:
@@ -70,12 +73,28 @@ profiles:
             kubectl:
               manifests:
                 - "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml"
+  - name: enable-ark-tenant
+    activation:
+      - vars:
+          ENABLE_ARK_TENANT: true
+    patches:
+      - op: add
+        path: deployments
+        value:
+          ark-tenant:
+            namespace: default
+            helm:
+              chart:
+                path: ./charts/ark-tenant
+              releaseName: ark-tenant
+              upgradeArgs: [ "--install" ]
 
 pipelines:
   deploy: |-
+    run_dependency_pipelines ark --pipeline=deploy
     create_deployments --all
     run_dependency_pipelines --all --exclude ark --pipeline=deploy
   dev: |-
-    create_deployments --all
     run_dependency_pipelines ark --pipeline=dev
+    create_deployments --all
     run_dependency_pipelines --all --exclude ark --pipeline=dev

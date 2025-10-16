@@ -188,7 +188,7 @@ from mcp.server.fastmcp import FastMCP
 
 # Create an MCP server
 # Stateless server (no session persistence)
-mcp = FastMCP("MulDivMathServer", stateless_http=True)
+mcp = FastMCP("MulDivMathServer", stateless_http=True, host="0.0.0.0")
 
 # Add a multiply tool
 @mcp.tool()
@@ -202,8 +202,7 @@ def multiply(a: int, b: int) -> int:
 def divide(a: float, b: float) -> float:
     """Divide two numbers"""
     print(f"Received {a} / {b}")
-    return a / b
-
+    return a / b 
 
 
 if __name__ == "__main__":
@@ -233,13 +232,13 @@ metadata:
   name: simple-calculator-remote-http
 spec:
   address:
-    value: "http://localhost:8000/mcp"  # replace with full K8s service URL for deployment - "http://calc-service.default.svc.cluster.local" or "http://host.docker.internal:8000"
+    value: "http://localhost:8000/mcp"  # replace with full K8s service URL for deployment - "http://calc-service.default.svc.cluster.local" or "http://host.docker.internal:8000" or "http://host.minikube.internal:8000/mcp" if you use minikube
   timeout: "60s"
   transport: http
   description: "Remote server for performing calculations such as mul and div."
 ```
 
-- Please apply the above yaml
+- Please apply the above yaml (update to address value to http://host.minikube.internal:8000/mcp if you use minikube)
 - Shell verification
 ```sh
 k get mcpserver
