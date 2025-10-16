@@ -146,6 +146,26 @@ You can uninstall / cleanup your deployment with:
 devspace purge
 ```
 
+## LangChain Integration Example
+
+For a more advanced example that integrates with LangChain, see the [LangChain Weather Agent sample](https://github.com/mckinsey/agents-at-scale-ark/tree/main/samples/a2a/langchain-weather-agent). This sample demonstrates:
+
+- ✅ Building agents with LangChain framework
+- ✅ Custom tool integration (weather APIs)
+- ✅ Azure OpenAI connectivity
+- ✅ Self-contained LLM configuration (no ARK Model resources required)
+
+The LangChain Weather Agent shows how to wrap existing LangChain agents with the A2A protocol, making them accessible to ARK while keeping your existing agent implementation intact.
+
+```bash
+# Deploy and test the LangChain weather agent
+cd samples/a2a/langchain-weather-agent
+devspace dev
+
+# Query the agent
+ark agent query langchain-weather-agent "What's the weather in Chicago?"
+```
+
 ## Further Reading
 
 - The [`A2AServer`](/reference/resources/a2aserver) specification has the full details of the `A2AServer` resource

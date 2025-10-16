@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "langchain-weather-agent"
+version = "1.0.0"
+description = "A LangChain-based weather agent with A2A protocol support"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "a2a-sdk[http-server]>=0.2.6",
+    "langchain>=0.1.0",
+    "langchain-openai>=0.1.0",
+    "starlette>=0.27.0",
+    "uvicorn>=0.23.0",
+    "python-dotenv>=1.0.0",
+    "httpx>=0.25.0",
+    "click>=8.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.optional-dependencies]
+dev = [
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+

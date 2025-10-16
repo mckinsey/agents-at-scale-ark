@@ -6,7 +6,6 @@ import httpx
 def get_weather(city: str) -> str:
     """Get current weather for a city."""
     try:
-        # Get coordinates
         geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1"
         
         with httpx.Client() as client:
@@ -19,7 +18,6 @@ def get_weather(city: str) -> str:
             result = geo_data["results"][0]
             lat, lon = result["latitude"], result["longitude"]
             
-            # Get current weather only
             weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
             weather_response = client.get(weather_url)
             weather_data = weather_response.json()
@@ -31,3 +29,4 @@ def get_weather(city: str) -> str:
             
     except Exception as e:
         return f"Weather error: {str(e)}"
+

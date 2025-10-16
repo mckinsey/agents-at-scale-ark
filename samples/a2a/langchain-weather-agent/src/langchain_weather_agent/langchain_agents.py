@@ -8,10 +8,9 @@ from langchain.tools import tool
 from langchain_openai import AzureChatOpenAI
 from pydantic import SecretStr
 
-from hosted_langchain_agents.weather_tools import get_weather
+from langchain_weather_agent.weather_tools import get_weather
 
 
-# Create LangChain tools from our weather functions
 @tool
 def get_weather_tool(city: str) -> str:
     """Get weather forecast for a city using OpenMeteo APIs."""
@@ -21,19 +20,19 @@ def get_weather_tool(city: str) -> str:
 def create_weather_agent() -> AgentExecutor:
     """Create a LangChain weather agent with forecasting tools."""
 
-    # Initialize Azure OpenAI
+    api_key = os.getenv("AZURE_OPENAI_API_KEY") or ""
+    
     llm = AzureChatOpenAI(
-        api_key=SecretStr(os.getenv("AZURE_OPENAI_API_KEY") or ""),
+        api_key=SecretStr(api_key),
         api_version=os.getenv("AZURE_API_VERSION", "2024-12-01-preview"),
         azure_endpoint=os.getenv("AZURE_API_BASE"),
-        model=os.getenv("LLM_MODEL_NAME", "gpt-4o"),
+        azure_deployment=os.getenv("LLM_MODEL_NAME", "gpt-4o"),
         temperature=0.1,
+        default_headers={"api-key": api_key},
     )
 
-    # Define the tools
     tools = [get_weather_tool]
 
-    # Create the prompt template
     prompt = ChatPromptTemplate.from_messages(
         [
             (
@@ -56,10 +55,8 @@ IMPORTANT: You should not ask any questions or make suggestions.
         ]
     )
 
-    # Create the agent
     agent = create_tool_calling_agent(llm, tools, prompt)
 
-    # Create the agent executor
     agent_executor = AgentExecutor(
         agent=agent,
         tools=tools,
@@ -83,10 +80,8 @@ def get_weather_forecast(query: str) -> str:
     """
     try:
         agent = create_weather_agent()
-        print(f"🔥 AGENT: Invoking LangChain agent with query: {query}")
         result = agent.invoke({"input": query})
-        print(f"🔥 AGENT: LangChain agent result: {result}")
         return str(result["output"])
     except Exception as e:
-        print(f"🔥 AGENT: Error in LangChain agent: {str(e)}")
         return f"Error getting weather forecast: {str(e)}"
+
