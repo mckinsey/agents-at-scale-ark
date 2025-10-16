@@ -5,7 +5,7 @@ metadata:
   name: simple-calculator-remote-http
 spec:
   address:
-    value: "http://localhost:8000/mcp"  # replace with full K8s service URL for deployment - "http://sse-calc-service.default.svc.cluster.local"
+    value: "http://localhost:8000/mcp"  # replace with full K8s service URL for deployment - "http://sse-calc-service.default.svc.cluster.local" or "http://host.minikube.internal:8000/mcp" if you are using minikube
   timeout: "60s"
   transport: http
   description: "Remote server for performing calculations such as mul and div."
@@ -16,7 +16,7 @@ metadata:
   name: simple-calculator-remote-sse
 spec:
   address:
-    value: "http://localhost:8001/sse" # replace with full K8s service URL for deployment - "http://sse-calc-service.default.svc.cluster.local"
+    value: "http://localhost:8001/sse" # replace with full K8s service URL for deployment - "http://sse-calc-service.default.svc.cluster.local" or "http://host.minikube.internal:8000/sse" if you are using minikube
   timeout: "60s"
   transport: sse
   description: "Remote server for performing calculations such as add and sub."
