@@ -212,7 +212,6 @@ var _ = Describe("Query Controller", func() {
 			Expect(k8sClient.Delete(ctx, createdQuery)).Should(Succeed())
 		})
 	})
-
 })
 
 var _ = Describe("Query Controller Message Serialization", func() {
