@@ -61,8 +61,11 @@ func (r *EvaluationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// Initialize default conditions if not present
 	if len(evaluation.Status.Conditions) == 0 {
-		r.setCondition(&evaluation, arkv1alpha1.EvaluationCompleted, metav1.ConditionFalse, "EvaluationNotStarted", "The evaluation has not been started yet")
-		r.Status().Update(ctx, &evaluation)
+		r.setConditionCompleted(&evaluation, metav1.ConditionFalse, "EvaluationNotStarted", "The evaluation has not been started yet")
+		if err := r.Status().Update(ctx, &evaluation); err != nil {
+			logf.FromContext(ctx).Error(err, "failed to update Evaluation status.conditions")
+			return ctrl.Result{}, err
+		}
 		log.Info("Initialized default conditions", "evaluation", evaluation.Name)
 		return ctrl.Result{}, nil
 	}
@@ -671,9 +674,9 @@ func (r *EvaluationReconciler) processQueryEvaluation(ctx context.Context, evalu
 	return ctrl.Result{}, nil
 }
 
-func (r *EvaluationReconciler) setCondition(evaluation *arkv1alpha1.Evaluation, conditionType arkv1alpha1.EvaluationConditionType, status metav1.ConditionStatus, reason, message string) {
+func (r *EvaluationReconciler) setConditionCompleted(evaluation *arkv1alpha1.Evaluation, status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&evaluation.Status.Conditions, metav1.Condition{
-		Type:               string(conditionType),
+		Type:               string(arkv1alpha1.EvaluationCompleted),
 		Status:             status,
 		Reason:             reason,
 		Message:            message,
@@ -705,13 +708,13 @@ func (r *EvaluationReconciler) updateStatus(ctx context.Context, evaluation arkv
 
 		switch phase {
 		case statusRunning:
-			r.setCondition(latest, arkv1alpha1.EvaluationCompleted, metav1.ConditionFalse, "EvaluationRunning", message)
+			r.setConditionCompleted(latest, metav1.ConditionFalse, "EvaluationRunning", message)
 		case statusDone:
-			r.setCondition(latest, arkv1alpha1.EvaluationCompleted, metav1.ConditionTrue, "EvaluationSucceeded", message)
+			r.setConditionCompleted(latest, metav1.ConditionTrue, "EvaluationSucceeded", message)
 		case statusError:
-			r.setCondition(latest, arkv1alpha1.EvaluationCompleted, metav1.ConditionTrue, "EvaluationErrored", message)
+			r.setConditionCompleted(latest, metav1.ConditionTrue, "EvaluationErrored", message)
 		case statusCanceled:
-			r.setCondition(latest, arkv1alpha1.EvaluationCompleted, metav1.ConditionTrue, "EvaluationCanceled", message)
+			r.setConditionCompleted(latest, metav1.ConditionTrue, "EvaluationCanceled", message)
 		}
 
 		// Update status subresource
@@ -772,7 +775,7 @@ func (r *EvaluationReconciler) updateEvaluationComplete(ctx context.Context, eva
 		latest.Status.Phase = statusDone
 		latest.Status.Message = message
 
-		r.setCondition(latest, arkv1alpha1.EvaluationCompleted, metav1.ConditionTrue, "EvaluationCompleted", message)
+		r.setConditionCompleted(latest, metav1.ConditionTrue, "EvaluationCompleted", message)
 
 		// Update status subresource
 		if err := r.Status().Update(ctx, latest); err != nil {
@@ -951,7 +954,7 @@ func (r *EvaluationReconciler) aggregateChildResults(ctx context.Context, parent
 	parentEvaluation.Status.Message = message
 	parentEvaluation.Status.TokenUsage = &aggregatedTokenUsage
 
-	r.setCondition(&parentEvaluation, arkv1alpha1.EvaluationCompleted, metav1.ConditionTrue, "EvaluationCompleted", message)
+	r.setConditionCompleted(&parentEvaluation, metav1.ConditionTrue, "EvaluationCompleted", message)
 
 	if err := r.Status().Update(ctx, &parentEvaluation); err != nil {
 		log.Error(err, "Failed to update parent evaluation with batch results", "evaluation", parentEvaluation.Name)

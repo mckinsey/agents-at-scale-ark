@@ -75,7 +75,7 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	if len(obj.Status.Conditions) == 0 {
-		r.setCondition(&obj, arkv1alpha1.QueryCompleted, metav1.ConditionFalse, "QueryNotStarted", "The query has not been started yet")
+		r.setConditionCompleted(&obj, metav1.ConditionFalse, "QueryNotStarted", "The query has not been started yet")
 		return ctrl.Result{}, r.Status().Update(ctx, &obj)
 	}
 
@@ -480,9 +480,9 @@ func serializeMessages(messages []genai.Message) (string, error) {
 	return string(rawBytes), nil
 }
 
-func (r *QueryReconciler) setCondition(query *arkv1alpha1.Query, conditionType arkv1alpha1.QueryConditionType, status metav1.ConditionStatus, reason, message string) {
+func (r *QueryReconciler) setConditionCompleted(query *arkv1alpha1.Query, status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&query.Status.Conditions, metav1.Condition{
-		Type:               string(conditionType),
+		Type:               string(arkv1alpha1.QueryCompleted),
 		Status:             status,
 		Reason:             reason,
 		Message:            message,
@@ -502,13 +502,13 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	query.Status.Phase = status
 	switch status {
 	case statusRunning:
-		r.setCondition(query, arkv1alpha1.QueryCompleted, metav1.ConditionFalse, "QueryRunning", "Query is running")
+		r.setConditionCompleted(query, metav1.ConditionFalse, "QueryRunning", "Query is running")
 	case statusDone:
-		r.setCondition(query, arkv1alpha1.QueryCompleted, metav1.ConditionTrue, "QuerySucceeded", "Query completed successfully")
+		r.setConditionCompleted(query, metav1.ConditionTrue, "QuerySucceeded", "Query completed successfully")
 	case statusError:
-		r.setCondition(query, arkv1alpha1.QueryCompleted, metav1.ConditionTrue, "QueryErrored", "Query completed with error")
+		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryErrored", "Query completed with error")
 	case statusCanceled:
-		r.setCondition(query, arkv1alpha1.QueryCompleted, metav1.ConditionTrue, "QueryCanceled", "Query canceled")
+		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryCanceled", "Query canceled")
 	}
 	if duration != nil {
 		query.Status.Duration = duration
