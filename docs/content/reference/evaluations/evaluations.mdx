@@ -50,8 +50,6 @@ Before using evaluations, ensure you have:
           name: ark-evaluator
           port: "http"
           path: "/evaluate"
-    modelRef:
-      name: default
    ```
 
 ## Evaluation Resource
@@ -68,7 +66,7 @@ kind: Evaluation
 metadata:
   name: direct-eval-example
 spec:
-  mode: direct
+  type: direct
   evaluator:
     name: evaluator-llm
     parameters:
@@ -76,8 +74,9 @@ spec:
         value: "accuracy,clarity"
       - name: min-score
         value: "0.7"
-  input: "What is the capital of France?"
-  output: "Paris"
+  config:
+    input: "What is the capital of France?"
+    output: "Paris"
 ```
 
 ### Query Evaluation
@@ -90,7 +89,7 @@ kind: Evaluation
 metadata:
   name: query-eval-example
 spec:
-  mode: query
+  type: query
   evaluator:
     name: evaluator-llm
     parameters:
@@ -98,9 +97,10 @@ spec:
         value: "relevance,accuracy"
       - name: min-score
         value: "0.75"
-  queryRef:
-    name: completed-research-query
-    responseIndex: 0  # Evaluate first response (optional)
+  config:
+    queryRef:
+      name: completed-research-query
+      responseIndex: 0  # Evaluate first response (optional)
 ```
 
 
@@ -190,7 +190,7 @@ kind: Evaluation
 metadata:
   name: manual-eval-with-overrides
 spec:
-  mode: query
+  type: query
   evaluator:
     name: evaluator-with-defaults
     parameters:
@@ -199,9 +199,10 @@ spec:
       - name: temperature
         value: "0.1"         # New parameter not in evaluator
       # duration: "2m" and scope: "accuracy,clarity" inherited from evaluator
-  queryRef:
-    name: completed-query
-    responseIndex: 0
+  config:
+    queryRef:
+      name: completed-query
+      responseIndex: 0
 ```
 
 **Result**: The evaluation uses:
@@ -466,7 +467,7 @@ kind: Evaluation
 metadata:
   name: advanced-eval
 spec:
-  mode: direct
+  type: direct
   evaluator:
     name: evaluator-llm
     parameters:
@@ -478,8 +479,9 @@ spec:
         value: "0.2"
       - name: max-tokens
         value: "1000"
-  input: "Explain quantum computing"
-  output: "Quantum computing uses quantum mechanical phenomena..."
+  config:
+    input: "Explain quantum computing"
+    output: "Quantum computing uses quantum mechanical phenomena..."
 ```
 
 ### Environment-Specific Evaluations
@@ -493,7 +495,7 @@ kind: Evaluation
 metadata:
   name: prod-evaluation
 spec:
-  mode: direct  # Direct evaluation in production
+  type: direct  # Direct evaluation in production
   evaluator:
     name: evaluator-llm-prod
     parameters:
@@ -501,8 +503,9 @@ spec:
         value: "all"
       - name: min-score
         value: "0.9"
-  input: "User query"
-  output: "Agent response"
+  config:
+    input: "User query"
+    output: "Agent response"
 
 ---
 # Development evaluator with relaxed criteria
@@ -511,7 +514,7 @@ kind: Evaluation
 metadata:
   name: dev-evaluation
 spec:
-  mode: direct  # Direct evaluation in development
+  type: direct  # Direct evaluation in development
   evaluator:
     name: evaluator-llm-dev
     parameters:
@@ -519,8 +522,9 @@ spec:
         value: "accuracy,clarity"
       - name: min-score
         value: "0.6"
-  input: "User query"
-  output: "Agent response"
+  config:
+    input: "User query"
+    output: "Agent response"
 ```
 
 ## Best Practices
