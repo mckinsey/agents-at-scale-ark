@@ -6,8 +6,26 @@ from typing import Callable, Any
 
 from fastapi import HTTPException
 from kubernetes_asyncio.client.rest import ApiException
+from kubernetes.client.exceptions import ApiException as SyncApiException
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_error_detail(exception: ApiException | SyncApiException) -> str:
+    """
+    Extract detailed error message from Kubernetes ApiException.
+    
+    Tries to parse the JSON body to get a detailed message, falls back to reason.
+    """
+    error_detail = exception.reason
+    if exception.body:
+        try:
+            body_json = json.loads(exception.body)
+            if body_json.get("message"):
+                error_detail = body_json["message"]
+        except (json.JSONDecodeError, AttributeError):
+            pass
+    return error_detail
 
 
 def handle_k8s_errors(
@@ -29,7 +47,7 @@ def handle_k8s_errors(
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
                 return await func(*args, **kwargs)
-            except ApiException as e:
+            except (ApiException, SyncApiException) as e:
                 # Build context for error messages
                 namespace = kwargs.get("namespace", "")
                 resource_name = kwargs.get(f"{resource_type}_name", "")
@@ -73,18 +91,15 @@ def handle_k8s_errors(
                         detail += f" in namespace {namespace}"
                     raise HTTPException(status_code=409, detail=detail)
                 
-                error_detail = e.reason
-                if e.body:
-                    try:
-                        body_json = json.loads(e.body)
-                        if body_json.get("message"):
-                            error_detail = body_json["message"]
-                    except (json.JSONDecodeError, AttributeError):
-                        pass
+                elif e.status == 422:
+                    raise HTTPException(status_code=422, detail=_extract_error_detail(e))
+                
+                elif e.status == 403:
+                    raise HTTPException(status_code=403, detail=_extract_error_detail(e))
                 
                 raise HTTPException(
                     status_code=e.status,
-                    detail=error_detail
+                    detail=_extract_error_detail(e)
                 )
                 
             except HTTPException:
@@ -97,11 +112,12 @@ def handle_k8s_errors(
                 
                 error_message = str(e)
                 
-                if "denied the request" in error_message.lower():
-                    raise HTTPException(
-                        status_code=422,
-                        detail=error_message
-                    )
+                original_exception = e.__cause__ or e.__context__
+                if isinstance(original_exception, (ApiException, SyncApiException)):
+                    if original_exception.status == 422:
+                        raise HTTPException(status_code=422, detail=_extract_error_detail(original_exception))
+                    elif original_exception.status == 403:
+                        raise HTTPException(status_code=403, detail=_extract_error_detail(original_exception))
                 
                 raise HTTPException(
                     status_code=500,
