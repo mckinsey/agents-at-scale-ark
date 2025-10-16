@@ -90,6 +90,8 @@ Three main status codes are used:
 
 This helps scripts distinguish between usage errors and operational failures. Error details are printed by the CLI.
 
+Query operations return exit code `2` when execution fails, making error handling in scripts straightforward. This behavior aligns with Argo Workflows' `--wait` flag pattern (see [argoproj/argo-workflows#1008](https://github.com/argoproj/argo-workflows/issues/1008)).
+
 Example handling exit codes:
 
 ```bash
