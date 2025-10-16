@@ -6,6 +6,7 @@ import {execa} from 'execa';
 import ora from 'ora';
 import output from './output.js';
 import type {Query, QueryTarget, K8sCondition} from './types.js';
+import {ExitCodes} from './errors.js';
 
 export interface QueryOptions {
   targetType: string; // 'model', 'agent', 'team'
@@ -92,7 +93,6 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
           queryComplete = true;
           spinner.fail('Query failed');
 
-          // Try to get error message from conditions or status
           const errorCondition = query.status?.conditions?.find(
             (c: K8sCondition) => {
               return c.type === 'Complete' && c.status === 'False';
@@ -105,14 +105,15 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
           } else {
             output.error('Query failed with unknown error');
           }
+          process.exit(ExitCodes.OperationError);
         } else if (phase === 'canceled') {
           queryComplete = true;
           spinner.warn('Query canceled');
 
-          // Try to get cancellation reason if available
           if (query.status?.message) {
             output.warning(query.status.message);
           }
+          process.exit(ExitCodes.OperationError);
         }
       } catch {
         // Query might not exist yet, continue waiting
@@ -127,11 +128,12 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
     if (!queryComplete) {
       spinner.fail('Query timed out');
       output.error('Query did not complete within 5 minutes');
+      process.exit(ExitCodes.OperationError);
     }
   } catch (error) {
     spinner.fail('Query failed');
     output.error(error instanceof Error ? error.message : 'Unknown error');
-    process.exit(1);
+    process.exit(ExitCodes.CliError);
   } finally {
     // Clean up the query resource
     try {
