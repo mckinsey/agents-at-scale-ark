@@ -128,7 +128,7 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
     if (!queryComplete) {
       spinner.fail('Query timed out');
       output.error('Query did not complete within 5 minutes');
-      process.exit(ExitCodes.OperationError);
+      process.exit(ExitCodes.Timeout);
     }
   } catch (error) {
     spinner.fail('Query failed');

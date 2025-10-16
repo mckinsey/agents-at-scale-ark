@@ -9,6 +9,7 @@ export const ExitCodes = {
   Success: 0,
   CliError: 1,
   OperationError: 2,
+  Timeout: 3,
 } as const;
 
 export enum ErrorCode {
