@@ -790,7 +790,20 @@ class TestQueriesEndpoint(unittest.TestCase):
             "spec": {
                 "input": "What is the weather today?"
             },
-            "status": {"phase": "done", "response": "It's sunny and 72°F"}
+            "status": {
+                "phase": "done", 
+                "response": "It's sunny and 72°F",
+                "conditions": [
+                    {
+                        "type": "Completed",
+                        "status": "True",
+                        "reason": "QuerySucceeded",
+                        "message": "Query completed successfully",
+                        "lastTransitionTime": "2025-01-15T10:30:00Z",
+                        "observedGeneration": 1
+                    }
+                ]
+            }
         }
         
         mock_query2 = Mock()
@@ -799,7 +812,19 @@ class TestQueriesEndpoint(unittest.TestCase):
             "spec": {
                 "input": "Tell me a joke"
             },
-            "status": {"phase": "running"}
+            "status": {
+                "phase": "running",
+                "conditions": [
+                    {
+                        "type": "Completed",
+                        "status": "False",
+                        "reason": "QueryRunning",
+                        "message": "Query is currently running",
+                        "lastTransitionTime": "2025-01-15T10:25:00Z",
+                        "observedGeneration": 1
+                    }
+                ]
+            }
         }
         
         # Mock the API response
@@ -818,11 +843,23 @@ class TestQueriesEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][0]["name"], "test-query")
         self.assertEqual(data["items"][0]["input"], "What is the weather today?")
         self.assertEqual(data["items"][0]["status"]["phase"], "done")
+        # Check conditions field
+        self.assertIn("conditions", data["items"][0]["status"])
+        self.assertEqual(len(data["items"][0]["status"]["conditions"]), 1)
+        self.assertEqual(data["items"][0]["status"]["conditions"][0]["type"], "Completed")
+        self.assertEqual(data["items"][0]["status"]["conditions"][0]["status"], "True")
+        self.assertEqual(data["items"][0]["status"]["conditions"][0]["reason"], "QuerySucceeded")
         
         # Check second query
         self.assertEqual(data["items"][1]["name"], "another-query")
         self.assertEqual(data["items"][1]["input"], "Tell me a joke")
         self.assertEqual(data["items"][1]["status"]["phase"], "running")
+        # Check conditions field
+        self.assertIn("conditions", data["items"][1]["status"])
+        self.assertEqual(len(data["items"][1]["status"]["conditions"]), 1)
+        self.assertEqual(data["items"][1]["status"]["conditions"][0]["type"], "Completed")
+        self.assertEqual(data["items"][1]["status"]["conditions"][0]["status"], "False")
+        self.assertEqual(data["items"][1]["status"]["conditions"][0]["reason"], "QueryRunning")
     
     @patch('ark_api.api.v1.queries.with_ark_client')
     def test_list_queries_empty(self, mock_ark_client):
@@ -982,7 +1019,17 @@ class TestQueriesEndpoint(unittest.TestCase):
             },
             "status": {
                 "phase": "done",
-                "response": "42"
+                "response": "42",
+                "conditions": [
+                    {
+                        "type": "Completed",
+                        "status": "True",
+                        "reason": "QuerySucceeded",
+                        "message": "Query completed successfully",
+                        "lastTransitionTime": "2025-01-15T10:30:00Z",
+                        "observedGeneration": 1
+                    }
+                ]
             }
         }
         
@@ -998,6 +1045,12 @@ class TestQueriesEndpoint(unittest.TestCase):
         self.assertEqual(data["input"], "What is the meaning of life?")
         self.assertEqual(data["status"]["phase"], "done")
         self.assertEqual(data["status"]["response"], "42")
+        # Check conditions field
+        self.assertIn("conditions", data["status"])
+        self.assertEqual(len(data["status"]["conditions"]), 1)
+        self.assertEqual(data["status"]["conditions"][0]["type"], "Completed")
+        self.assertEqual(data["status"]["conditions"][0]["status"], "True")
+        self.assertEqual(data["status"]["conditions"][0]["reason"], "QuerySucceeded")
     
     @patch('ark_api.api.v1.queries.with_ark_client')
     def test_update_query_success(self, mock_ark_client):
