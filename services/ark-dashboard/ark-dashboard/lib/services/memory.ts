@@ -51,6 +51,12 @@ interface MemoryListResponse {
   total?: number;
 }
 
+export type MemoryMessagesFilters = {
+  memory?: string;
+  session?: string;
+  query?: string;
+};
+
 export const memoryService = {
   // Get all memory resources in a namespace
   async getMemoryResources(): Promise<MemoryResource[]> {
@@ -108,11 +114,7 @@ export const memoryService = {
   },
 
   // Get all memory messages using the new consolidated endpoint
-  async getAllMemoryMessages(filters?: {
-    memory?: string;
-    session?: string;
-    query?: string;
-  }): Promise<
+  async getAllMemoryMessages(filters?: MemoryMessagesFilters): Promise<
     {
       timestamp: string;
       memoryName: string;
