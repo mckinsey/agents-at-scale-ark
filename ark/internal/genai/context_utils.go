@@ -2,6 +2,7 @@ package genai
 
 import (
 	"context"
+	"time"
 )
 
 type contextKey string
@@ -15,10 +16,12 @@ const (
 	// Execution metadata keys for streaming
 	// These values are sent back with streaming chunks in the 'ark' metadata field,
 	// allowing callers to differentiate the source of chunks (e.g., specific agents in a team query)
-	targetKey contextKey = "target" // Original query target (e.g., "team/my-team")
-	teamKey   contextKey = "team"   // Current team name
-	agentKey  contextKey = "agent"  // Current agent name
-	modelKey  contextKey = "model"  // Current model name
+	targetKey      contextKey = "target"      // Original query target (e.g., "team/my-team")
+	teamKey        contextKey = "team"        // Current team name
+	agentKey       contextKey = "agent"       // Current agent name
+	modelKey       contextKey = "model"       // Current model name
+	queryTimeoutKey contextKey = "queryTimeout" // Query timeout duration
+	a2aTimeoutKey   contextKey = "a2aTimeout"   // A2A specific timeout
 )
 
 func WithQueryContext(ctx context.Context, queryID, sessionID, queryName string) context.Context {
@@ -83,4 +86,34 @@ func GetExecutionMetadata(ctx context.Context) map[string]interface{} {
 	}
 
 	return metadata
+}
+
+// WithQueryTimeout adds Query timeout to context
+func WithQueryTimeout(ctx context.Context, timeout time.Duration) context.Context {
+	return context.WithValue(ctx, queryTimeoutKey, timeout)
+}
+
+// getQueryTimeout retrieves Query timeout from context
+func getQueryTimeout(ctx context.Context) time.Duration {
+	if val := ctx.Value(queryTimeoutKey); val != nil {
+		if timeout, ok := val.(time.Duration); ok {
+			return timeout
+		}
+	}
+	return 0
+}
+
+// withA2ATimeout adds A2A-specific timeout to context
+func withA2ATimeout(ctx context.Context, timeout time.Duration) context.Context {
+	return context.WithValue(ctx, a2aTimeoutKey, timeout)
+}
+
+// getA2ATimeout retrieves A2A timeout from context
+func getA2ATimeout(ctx context.Context) time.Duration {
+	if val := ctx.Value(a2aTimeoutKey); val != nil {
+		if timeout, ok := val.(time.Duration); ok {
+			return timeout
+		}
+	}
+	return 0
 }

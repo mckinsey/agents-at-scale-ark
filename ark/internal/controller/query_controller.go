@@ -651,6 +651,10 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 	if query.Spec.Timeout != nil {
 		timeout = query.Spec.Timeout.Duration
 	}
+	
+	// Add Query timeout to context so downstream components can access it
+	ctx = genai.WithQueryTimeout(ctx, timeout)
+	
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 

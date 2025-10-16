@@ -166,6 +166,60 @@ devspace dev
 ark agent query langchain-weather-agent "What's the weather in Chicago?"
 ```
 
+## Timeout Configuration
+
+ARK provides flexible timeout configuration for A2A agent execution through multiple layers:
+
+### Timeout Precedence
+
+Timeouts are resolved in the following order (highest to lowest priority):
+
+1. **Query.spec.timeout** - Per-query timeout specified when creating a Query resource
+2. **A2AServer.spec.timeout** - Default timeout for all agents served by this A2A server
+3. **A2A_DEFAULT_TIMEOUT** environment variable - Deployment-wide default (ark-api-a2a gateway)
+4. **Hardcoded default** - 5 minutes (300 seconds)
+
+### Configuring A2AServer Timeout
+
+Add a timeout field to your A2AServer resource:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: A2AServer
+metadata:
+  name: my-agent
+spec:
+  address:
+    value: "http://my-agent.default.svc.cluster.local:80"
+  description: "My A2A agent"
+  timeout: "10m"  # 10 minutes timeout
+```
+
+### Configuring Query Timeout
+
+Override the timeout for specific queries:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: long-running-query
+spec:
+  input:
+  - content: "Complex analysis task"
+    role: user
+  targets:
+  - type: agent
+    name: my-agent
+  timeout: "30m"  # 30 minutes for this specific query
+```
+
+### Best Practices
+
+- **Set reasonable defaults**: Configure A2AServer timeout based on typical agent response times
+- **Use Query timeout for exceptions**: Override timeout for queries you know will take longer
+- **Account for overhead**: Set A2AServer timeout slightly higher than expected agent processing time
+- **Monitor and adjust**: Use ARK telemetry to identify queries that timeout and adjust accordingly
 ## Further Reading
 
 - The [`A2AServer`](/reference/resources/a2aserver) specification has the full details of the `A2AServer` resource
