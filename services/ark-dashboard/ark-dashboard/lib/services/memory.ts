@@ -149,4 +149,24 @@ export const memoryService = {
       return [];
     }
   },
+
+  async deleteSession(sessionId: string) {
+    apiClient.delete(`/api/v1/sessions/${sessionId}`);
+  },
+
+  async deleteQuery({
+    sessionId,
+    queryId,
+  }: {
+    sessionId: string;
+    queryId: string;
+  }) {
+    apiClient.delete(
+      `/api/v1/sessions/${sessionId}/queries/${queryId}/messages`,
+    );
+  },
+
+  async resetMemory() {
+    apiClient.delete('/api/v1/sessions');
+  },
 };

@@ -34,6 +34,11 @@ interface MemorySectionProps {
   readonly initialFilters?: Partial<MemoryFilters>;
 }
 
+type AvailableQuery = {
+  queryId: string;
+  sessionId: string;
+};
+
 export function MemorySection({ initialFilters }: MemorySectionProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -54,7 +59,9 @@ export function MemorySection({ initialFilters }: MemorySectionProps) {
     [],
   );
   const [availableSessions, setAvailableSessions] = useState<string[]>([]);
-  const [availableQueries, setAvailableQueries] = useState<string[]>([]);
+  const [availableQueries, setAvailableQueries] = useState<AvailableQuery[]>(
+    [],
+  );
 
   const [memoryFilter, setMemoryFilter] = useState('');
   const [sessionFilter, setSessionFilter] = useState('');
@@ -137,12 +144,28 @@ export function MemorySection({ initialFilters }: MemorySectionProps) {
       setAvailableMemories(memoriesData);
       setMemoryMessages(sortedMessages);
 
-      // Extract unique session IDs and query IDs for filtering
+      // Extract unique session IDs for filtering
       const sessionIds = new Set(sessionsData.map(s => s.sessionId));
       setAvailableSessions(Array.from(sessionIds).sort());
 
-      const queryIds = new Set(sortedMessages.map(m => m.queryId));
-      setAvailableQueries(Array.from(queryIds).sort());
+      // Extract unique queryID - sessionID pairs
+      const uniqueQueryIdSessionIdPairs = Array.from(
+        new Map(
+          sortedMessages.map(m => [
+            `${m.sessionId}-${m.queryId}`,
+            {
+              queryId: m.queryId,
+              sessionId: m.sessionId,
+            },
+          ]),
+        ).values(),
+      );
+
+      setAvailableQueries(
+        uniqueQueryIdSessionIdPairs.sort((a, b) =>
+          a.queryId.localeCompare(b.queryId),
+        ),
+      );
     } catch (error) {
       console.error('Failed to load memory messages:', error);
       toast.error('Failed to Load Memory Messages', {
@@ -228,7 +251,7 @@ export function MemorySection({ initialFilters }: MemorySectionProps) {
 
   const filteredQueries = useMemo(() => {
     return availableQueries.filter(query =>
-      query.toLowerCase().includes(queryFilter.toLowerCase()),
+      query.queryId.toLowerCase().includes(queryFilter.toLowerCase()),
     );
   }, [availableQueries, queryFilter]);
 
@@ -466,7 +489,7 @@ export function MemorySection({ initialFilters }: MemorySectionProps) {
                 }}>
                 All Queries
               </div>
-              {filteredQueries.map(queryId => (
+              {filteredQueries.map(({ queryId }) => (
                 <div
                   key={queryId}
                   className="flex cursor-pointer items-center px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800"
@@ -503,8 +526,15 @@ export function MemorySection({ initialFilters }: MemorySectionProps) {
         </Button>
         <DeleteMemoryDropdownMenu
           className="ml-auto"
-          selectedQuery={searchParams.get('queryId')}
+          selectedQuery={
+            searchParams.get('queryId')
+              ? filteredQueries.find(
+                  q => q.queryId === searchParams.get('queryId'),
+                )
+              : undefined
+          }
           selectedSession={searchParams.get('sessionId')}
+          onSuccess={clearFilters}
         />
       </div>
 
