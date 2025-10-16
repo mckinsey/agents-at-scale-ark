@@ -113,6 +113,15 @@ spec:
           kind: Evaluation
           metadata:
             name: test-query-ref-evaluation
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Evaluation
+          metadata:
+            name: test-query-ref-evaluation
             # Verify that evaluation response metadata is added as annotations
             (contains(keys(annotations), 'evaluation.metadata/reasoning')): true
     catch:

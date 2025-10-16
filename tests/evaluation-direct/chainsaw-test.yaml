@@ -74,6 +74,15 @@ spec:
           metadata:
             name: test-direct-evaluation
           status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Evaluation
+          metadata:
+            name: test-direct-evaluation
+          status:
             (type(score) == 'string'): true
             (to_number(score) >= `0.0` && to_number(score) <= `1.0`): true
             (type(passed) == 'boolean'): true
