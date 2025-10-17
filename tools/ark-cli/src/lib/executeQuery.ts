@@ -5,20 +5,29 @@
 import {execa} from 'execa';
 import ora from 'ora';
 import output from './output.js';
-import type {Query, QueryTarget, K8sCondition} from './types.js';
+import type {Query, QueryTarget} from './types.js';
 
 export interface QueryOptions {
   targetType: string; // 'model', 'agent', 'team'
   targetName: string; // 'default', 'weather-agent', etc.
   message: string;
+  timeoutSeconds?: number;
   verbose?: boolean;
+  cleanup?: boolean;
+}
+
+const DEFAULT_QUERY_OPTIONS = {
+  timeoutSeconds: 300,
+  cleanup: true,
 }
 
 /**
  * Execute a query against any ARK target (model, agent, team)
  * This is the shared implementation used by all query commands
  */
-export async function executeQuery(options: QueryOptions): Promise<void> {
+export async function executeQuery(overrides: QueryOptions): Promise<void> {
+  const options = { ...DEFAULT_QUERY_OPTIONS, ...overrides };
+
   const spinner = ora('Creating query...').start();
 
   // Generate a unique query name with timestamp and random suffix
@@ -44,101 +53,58 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
     },
   };
 
+  // Apply the query
   try {
-    // Apply the query
     spinner.text = 'Submitting query...';
     await execa('kubectl', ['apply', '-f', '-'], {
       input: JSON.stringify(queryManifest),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
-
-    // Watch for query completion
-    spinner.text = 'Query status: initializing';
-
-    let queryComplete = false;
-    let attempts = 0;
-    const maxAttempts = 300; // 5 minutes with 1 second intervals
-
-    while (!queryComplete && attempts < maxAttempts) {
-      attempts++;
-
-      try {
-        const {stdout} = await execa(
-          'kubectl',
-          ['get', 'query', queryName, '-o', 'json'],
-          {stdio: 'pipe'}
-        );
-
-        const query = JSON.parse(stdout) as Query;
-        const phase = query.status?.phase;
-
-        // Update spinner with current phase
-        if (phase) {
-          spinner.text = `Query status: ${phase}`;
-        }
-
-        // Check if query is complete based on phase
-        if (phase === 'done') {
-          queryComplete = true;
-          spinner.succeed('Query completed');
-
-          // Extract and display the response from responses array
-          if (query.status?.responses && query.status.responses.length > 0) {
-            const response = query.status.responses[0];
-            console.log('\n' + (response.content || response));
-          } else {
-            output.warning('No response received');
-          }
-        } else if (phase === 'error') {
-          queryComplete = true;
-          spinner.fail('Query failed');
-
-          // Try to get error message from conditions or status
-          const errorCondition = query.status?.conditions?.find(
-            (c: K8sCondition) => {
-              return c.type === 'Complete' && c.status === 'False';
-            }
-          );
-          if (errorCondition?.message) {
-            output.error(errorCondition.message);
-          } else if (query.status?.error) {
-            output.error(query.status.error);
-          } else {
-            output.error('Query failed with unknown error');
-          }
-        } else if (phase === 'canceled') {
-          queryComplete = true;
-          spinner.warn('Query canceled');
-
-          // Try to get cancellation reason if available
-          if (query.status?.message) {
-            output.warning(query.status.message);
-          }
-        }
-      } catch {
-        // Query might not exist yet, continue waiting
-        spinner.text = 'Query status: waiting for query to be created';
-      }
-
-      if (!queryComplete) {
-        await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second
-      }
+  } catch (_) {
+    spinner.fail('Query failed to apply');
+    output.error('Query failed to apply');
+    if (options.cleanup) {
+      await cleanupQuery(queryName);
     }
-
-    if (!queryComplete) {
-      spinner.fail('Query timed out');
-      output.error('Query did not complete within 5 minutes');
-    }
-  } catch (error) {
-    spinner.fail('Query failed');
-    output.error(error instanceof Error ? error.message : 'Unknown error');
     process.exit(1);
+  }
+
+  spinner.text = 'Submitted query. Waiting for it to complete...';
+
+  try {
+    // Wait for query completion
+    const query = await waitForQueryCompletion(queryName, options.timeoutSeconds);
+    if (!query) {
+      spinner.fail('Query timed out');
+      output.error(`Query did not complete within ${options.timeoutSeconds} seconds`);
+    } else {
+      const phase = query.status?.phase;
+
+      if (phase === 'done') {
+        spinner.succeed('Query completed');
+        if (query.status?.responses && query.status.responses.length > 0) {
+          const response = query.status.responses[0];
+          console.log('\n' + (response.content || response));
+        } else {
+          output.warning('No response received');
+        }
+      } else if (phase === 'error') {
+        spinner.fail('Query failed');
+  
+        // Try to get error message from conditions or status
+        const completedCondition = query.status?.conditions?.find(c => c.type === 'Completed');
+        output.error(completedCondition?.message || 'Query failed with unknown error');
+      } else if (phase === 'canceled') {
+        spinner.warn('Query canceled');
+        output.warning('Query was canceled');
+      } else {
+        spinner.warn('Query completed but with unknown status');
+        output.warning('Query completed but with unknown status');
+      }
+    }
   } finally {
-    // Clean up the query resource
-    try {
-      await execa('kubectl', ['delete', 'query', queryName], {stdio: 'pipe'});
-    } catch {
-      // Ignore cleanup errors
+    if (options.cleanup) {
+      await cleanupQuery(queryName);
     }
   }
 }
@@ -156,4 +122,27 @@ export function parseTarget(target: string): QueryTarget | null {
     type: parts[0],
     name: parts[1],
   };
+}
+
+async function waitForQueryCompletion(queryName: string, timeoutSeconds: number): Promise<Query | null> {
+  // Wait for the query to be completed within the timeout
+  try {
+      await execa('kubectl', ['wait', '--for=condition=Completed=True', 'query', queryName, `--timeout=${timeoutSeconds}s`], {stdio: 'pipe'});
+  } catch (_) {
+      // Error is expected if the query is not completed within the timeout
+      return null;
+  }
+  const { stdout } = await execa('kubectl', ['get', 'query', queryName, '-o', 'json'], {stdio: 'pipe'});
+  return JSON.parse(stdout) as Query;
+}
+
+async function cleanupQuery(queryName: string): Promise<void> {
+  output.info(`Cleaning up query ${queryName}...`);
+  try {
+    // Force delete the query
+    await execa('kubectl', ['delete', 'query', queryName, '--force'], {stdio: 'pipe'});
+    output.info(`Cleaned up query ${queryName}`);
+  } catch {
+    output.error(`Failed to cleanup query ${queryName}`);
+  }
 }

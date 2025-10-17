@@ -21,6 +21,7 @@ jest.unstable_mockModule('ora', () => ({
 const mockOutput = {
   warning: jest.fn(),
   error: jest.fn(),
+  info: jest.fn(),
 };
 jest.unstable_mockModule('./output.js', () => ({
   default: mockOutput,
@@ -78,6 +79,9 @@ describe('executeQuery', () => {
         if (args.includes('apply')) {
           return {stdout: '', stderr: '', exitCode: 0};
         }
+        if (args.includes('wait')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
         if (args.includes('get') && args.includes('query')) {
           return {
             stdout: JSON.stringify(mockQueryResponse),
@@ -102,16 +106,24 @@ describe('executeQuery', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith('\nTest response');
     });
 
-    it('should handle query error phase', async () => {
+    it('should handle query error phase with condition message', async () => {
       const mockQueryResponse = {
         status: {
           phase: 'error',
-          error: 'Query failed with test error',
+          conditions: [
+            {
+              type: 'Completed',
+              message: 'Query failed with test error',
+            },
+          ],
         },
       };
 
       mockExeca.mockImplementation(async (command: string, args: string[]) => {
         if (args.includes('apply')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('wait')) {
           return {stdout: '', stderr: '', exitCode: 0};
         }
         if (args.includes('get') && args.includes('query')) {
@@ -139,6 +151,46 @@ describe('executeQuery', () => {
       );
     });
 
+    it('should handle query error phase without condition message', async () => {
+      const mockQueryResponse = {
+        status: {
+          phase: 'error',
+          conditions: [],
+        },
+      };
+
+      mockExeca.mockImplementation(async (command: string, args: string[]) => {
+        if (args.includes('apply')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('wait')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('get') && args.includes('query')) {
+          return {
+            stdout: JSON.stringify(mockQueryResponse),
+            stderr: '',
+            exitCode: 0,
+          };
+        }
+        if (args.includes('delete')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        return {stdout: '', stderr: '', exitCode: 0};
+      });
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+      });
+
+      expect(mockSpinner.fail).toHaveBeenCalledWith('Query failed');
+      expect(mockOutput.error).toHaveBeenCalledWith(
+        'Query failed with unknown error'
+      );
+    });
+
     it('should handle query canceled phase', async () => {
       const mockQueryResponse = {
         status: {
@@ -149,6 +201,9 @@ describe('executeQuery', () => {
 
       mockExeca.mockImplementation(async (command: string, args: string[]) => {
         if (args.includes('apply')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('wait')) {
           return {stdout: '', stderr: '', exitCode: 0};
         }
         if (args.includes('get') && args.includes('query')) {
@@ -174,7 +229,7 @@ describe('executeQuery', () => {
       expect(mockOutput.warning).toHaveBeenCalledWith('Query was canceled');
     });
 
-    it('should clean up query resource even on failure', async () => {
+    it('should clean up query resource when it failed to apply', async () => {
       mockExeca.mockImplementation(async (command: string, args: string[]) => {
         if (args.includes('apply')) {
           throw new Error('Failed to apply');
@@ -193,9 +248,256 @@ describe('executeQuery', () => {
         })
       ).rejects.toThrow('process.exit called');
 
-      expect(mockSpinner.fail).toHaveBeenCalledWith('Query failed');
-      expect(mockOutput.error).toHaveBeenCalledWith('Failed to apply');
+      expect(mockSpinner.fail).toHaveBeenCalledWith('Query failed to apply');
+      expect(mockOutput.error).toHaveBeenCalledWith('Query failed to apply');
       expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
+    it('should not clean up query resource when it failed to apply and cleanup is disabled', async () => {
+      const mockCleanupQuery = jest.fn();
+      mockExeca.mockImplementation(async (command: string, args: string[]) => {
+        if (args.includes('apply')) {
+          throw new Error('Failed to apply');
+        }
+        if (args.includes('delete')) {
+          mockCleanupQuery();
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        return {stdout: '', stderr: '', exitCode: 0};
+      });
+
+      await expect(
+        executeQuery({
+          targetType: 'model',
+          targetName: 'default',
+          message: 'Hello',
+          cleanup: false,
+        })
+      ).rejects.toThrow('process.exit called');
+
+      expect(mockSpinner.fail).toHaveBeenCalledWith('Query failed to apply');
+      expect(mockOutput.error).toHaveBeenCalledWith('Query failed to apply');
+      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(mockCleanupQuery).not.toHaveBeenCalled();
+    });
+
+
+    it('should handle query timeout', async () => {
+      mockExeca.mockImplementation(async (command: string, args: string[]) => {
+        if (args.includes('apply')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('wait')) {
+          throw new Error('Timeout');
+        }
+        if (args.includes('delete')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        return {stdout: '', stderr: '', exitCode: 0};
+      });
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+        timeoutSeconds: 5,
+      });
+
+      expect(mockSpinner.fail).toHaveBeenCalledWith('Query timed out');
+      expect(mockOutput.error).toHaveBeenCalledWith(
+        'Query did not complete within 5 seconds'
+      );
+    });
+
+    it('should handle query with no responses', async () => {
+      const mockQueryResponse = {
+        status: {
+          phase: 'done',
+          responses: [],
+        },
+      };
+
+      mockExeca.mockImplementation(async (command: string, args: string[]) => {
+        if (args.includes('apply')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('wait')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('get') && args.includes('query')) {
+          return {
+            stdout: JSON.stringify(mockQueryResponse),
+            stderr: '',
+            exitCode: 0,
+          };
+        }
+        if (args.includes('delete')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        return {stdout: '', stderr: '', exitCode: 0};
+      });
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+      });
+
+      expect(mockSpinner.succeed).toHaveBeenCalledWith('Query completed');
+      expect(mockOutput.warning).toHaveBeenCalledWith('No response received');
+    });
+
+    it('should handle query with response without content', async () => {
+      const mockQueryResponse = {
+        status: {
+          phase: 'done',
+          responses: ['Raw response string'],
+        },
+      };
+
+      mockExeca.mockImplementation(async (command: string, args: string[]) => {
+        if (args.includes('apply')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('wait')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('get') && args.includes('query')) {
+          return {
+            stdout: JSON.stringify(mockQueryResponse),
+            stderr: '',
+            exitCode: 0,
+          };
+        }
+        if (args.includes('delete')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        return {stdout: '', stderr: '', exitCode: 0};
+      });
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+      });
+
+      expect(mockSpinner.succeed).toHaveBeenCalledWith('Query completed');
+      expect(mockConsoleLog).toHaveBeenCalledWith('\nRaw response string');
+    });
+
+    it('should handle query with custom timeout and cleanup disabled', async () => {
+      const mockQueryResponse = {
+        status: {
+          phase: 'done',
+          responses: [{content: 'Test response'}],
+        },
+      };
+
+      mockExeca.mockImplementation(async (command: string, args: string[]) => {
+        if (args.includes('apply')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('wait')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('get') && args.includes('query')) {
+          return {
+            stdout: JSON.stringify(mockQueryResponse),
+            stderr: '',
+            exitCode: 0,
+          };
+        }
+        // No delete calls should be made when cleanup is disabled
+        return {stdout: '', stderr: '', exitCode: 0};
+      });
+
+      await executeQuery({
+        targetType: 'agent',
+        targetName: 'test-agent',
+        message: 'Hello',
+        timeoutSeconds: 60,
+        cleanup: false,
+      });
+
+      expect(mockSpinner.succeed).toHaveBeenCalledWith('Query completed');
+      expect(mockConsoleLog).toHaveBeenCalledWith('\nTest response');
+    });
+
+    it('should handle cleanup failure gracefully', async () => {
+      const mockQueryResponse = {
+        status: {
+          phase: 'done',
+          responses: [{content: 'Test response'}],
+        },
+      };
+
+      mockExeca.mockImplementation(async (command: string, args: string[]) => {
+        if (args.includes('apply')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('wait')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('get') && args.includes('query')) {
+          return {
+            stdout: JSON.stringify(mockQueryResponse),
+            stderr: '',
+            exitCode: 0,
+          };
+        }
+        if (args.includes('delete')) {
+          throw new Error('Delete failed');
+        }
+        return {stdout: '', stderr: '', exitCode: 0};
+      });
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+      });
+
+      expect(mockSpinner.succeed).toHaveBeenCalledWith('Query completed');
+      expect(mockOutput.error).toHaveBeenCalledWith(
+        expect.stringMatching(/^Failed to cleanup query cli-query-/)
+      );
+    });
+
+    it('should handle query with unknown phase', async () => {
+      const mockQueryResponse = {
+        status: {
+          phase: 'unknown',
+        },
+      };
+
+      mockExeca.mockImplementation(async (command: string, args: string[]) => {
+        if (args.includes('apply')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('wait')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('get') && args.includes('query')) {
+          return {
+            stdout: JSON.stringify(mockQueryResponse),
+            stderr: '',
+            exitCode: 0,
+          };
+        }
+        if (args.includes('delete')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        return {stdout: '', stderr: '', exitCode: 0};
+      });
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+      });
+
+      expect(mockSpinner.warn).toHaveBeenCalledWith('Query completed but with unknown status');
+      expect(mockOutput.warning).toHaveBeenCalledWith('Query completed but with unknown status');
     });
   });
 });

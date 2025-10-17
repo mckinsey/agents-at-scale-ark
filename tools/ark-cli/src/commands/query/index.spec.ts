@@ -54,6 +54,8 @@ describe('createQueryCommand', () => {
       targetType: 'model',
       targetName: 'default',
       message: 'Hello world',
+      timeoutSeconds: 300,
+      cleanup: true,
     });
   });
 
