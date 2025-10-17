@@ -71,8 +71,11 @@ export interface K8sMetadata {
 
 export interface K8sCondition {
   type: string;
-  status: string;
-  message?: string;
+  status: "True" | "False" | "Unknown";
+  observedGeneration?: number;
+  lastTransitionTime: string;
+  reason: string;
+  message: string;
 }
 
 export interface K8sListResource<T> {
