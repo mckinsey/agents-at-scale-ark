@@ -21,9 +21,10 @@ export interface QueryOptions {
 export async function executeQuery(options: QueryOptions): Promise<void> {
   const spinner = ora('Creating query...').start();
 
-  // Generate a unique query name
+  // Generate a unique query name with timestamp and random suffix
   const timestamp = Date.now();
-  const queryName = `cli-query-${timestamp}`;
+  const randomSuffix = Math.random().toString(36).substring(2, 8);
+  const queryName = `cli-query-${timestamp}-${randomSuffix}`;
 
   // Create the Query resource
   const queryManifest: Partial<Query> = {
