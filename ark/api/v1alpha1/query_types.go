@@ -11,6 +11,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+type QueryConditionType string
+
+// Query condition types
+const (
+	// QueryCompleted indicates that the query has finished (regardless of outcome)
+	QueryCompleted QueryConditionType = "Completed"
+)
+
 const (
 	// QueryTypeUser represents a query with string input that gets converted to a single message with role="user"
 	QueryTypeUser = "user"
@@ -103,9 +111,12 @@ type TokenUsage struct {
 type QueryStatus struct {
 	// +kubebuilder:default="pending"
 	// +kubebuilder:validation:Enum=pending;running;error;done;canceled
-	Phase      string     `json:"phase,omitempty"`
-	Responses  []Response `json:"responses,omitempty"`
-	TokenUsage TokenUsage `json:"tokenUsage,omitempty"`
+	Phase string `json:"phase,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Conditions represent the latest available observations of a query's state
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+	Responses  []Response         `json:"responses,omitempty"`
+	TokenUsage TokenUsage         `json:"tokenUsage,omitempty"`
 	// +kubebuilder:validation:Optional
 	Duration *metav1.Duration `json:"duration,omitempty"`
 }

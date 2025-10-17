@@ -151,3 +151,7 @@ node_modules/
 .devspace/
 services/*/ark_sdk-*.whl
 services/ark-dashboard/ark-dashboard/lib/api/generated/openapi.json
+
+# Ignore vendored langfuse chart artifacts
+services/langfuse/chart/charts/
+services/langfuse/chart/charts/*.tgz

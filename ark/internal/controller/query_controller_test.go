@@ -10,6 +10,7 @@ import (
 	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -79,6 +80,136 @@ var _ = Describe("Query Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
 			// Example: If you expect a certain status condition after reconciliation, verify it here.
+		})
+	})
+	Context("When setting status.conditions", func() {
+		It("Should initialize conditions when query is created", func() {
+			ctx := context.Background()
+
+			// Create query
+			query := &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-query-conditions",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.QuerySpec{
+					Targets: []arkv1alpha1.QueryTarget{
+						{
+							Type: "agent",
+							Name: "test-agent",
+						},
+					},
+				},
+			}
+
+			// Set input using RawExtension helper
+			err := query.Spec.SetInputString("test input question")
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(k8sClient.Create(ctx, query)).Should(Succeed())
+
+			queryLookupKey := types.NamespacedName{Name: "test-query-conditions", Namespace: "default"}
+
+			controllerReconciler := &QueryReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			// First reconcile
+			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: queryLookupKey,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile should set status.conditions to QueryNotStarted
+			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: queryLookupKey,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify conditions were initialized
+			createdQuery := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, queryLookupKey, createdQuery)).Should(Succeed())
+
+			Expect(createdQuery.Status.Conditions).To(HaveLen(1))
+			condition := createdQuery.Status.Conditions[0]
+			Expect(condition.Type).To(Equal(string(arkv1alpha1.QueryCompleted)))
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal("QueryNotStarted"))
+			Expect(condition.Message).To(Equal("The query has not been started yet"))
+			Expect(condition.ObservedGeneration).To(Equal(createdQuery.Generation))
+
+			// Cleanup
+			Expect(k8sClient.Delete(ctx, createdQuery)).Should(Succeed())
+		})
+
+		It("Should update conditions when query status changes", func() {
+			ctx := context.Background()
+
+			// Create query
+			query := &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-query-conditions-2",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.QuerySpec{
+					Targets: []arkv1alpha1.QueryTarget{
+						{
+							Type: "agent",
+							Name: "test-agent",
+						},
+					},
+				},
+			}
+
+			// Set input using RawExtension helper
+			err := query.Spec.SetInputString("test input question")
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(k8sClient.Create(ctx, query)).Should(Succeed())
+
+			queryLookupKey := types.NamespacedName{Name: "test-query-conditions-2", Namespace: "default"}
+
+			controllerReconciler := &QueryReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			// First reconcile
+			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: queryLookupKey,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile should set status.conditions to QueryNotStarted
+			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: queryLookupKey,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Third reconcile should set status.conditions to QueryRunning
+			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: queryLookupKey,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify conditions were initialized
+			createdQuery := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, queryLookupKey, createdQuery)).Should(Succeed())
+
+			// Verify conditions were updated for running state
+			Expect(k8sClient.Get(ctx, queryLookupKey, createdQuery)).Should(Succeed())
+
+			Expect(createdQuery.Status.Conditions).To(HaveLen(1))
+			condition := createdQuery.Status.Conditions[0]
+			Expect(condition.Type).To(Equal(string(arkv1alpha1.QueryCompleted)))
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal("QueryRunning"))
+			Expect(condition.Message).To(Equal("Query is running"))
+			Expect(condition.ObservedGeneration).To(Equal(createdQuery.Generation))
+
+			// Cleanup
+			Expect(k8sClient.Delete(ctx, createdQuery)).Should(Succeed())
 		})
 	})
 })

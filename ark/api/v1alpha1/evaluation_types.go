@@ -6,6 +6,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type EvaluationConditionType string
+
+// Evaluation condition types
+const (
+	// EvaluationCompleted indicates that the evaluation has finished (regardless of outcome)
+	EvaluationCompleted EvaluationConditionType = "Completed"
+)
+
 // EvaluationEvaluatorRef references an evaluator resource for evaluation with parameters
 type EvaluationEvaluatorRef struct {
 	// +kubebuilder:validation:Required
@@ -224,6 +232,9 @@ type EvaluationStatus struct {
 	// +kubebuilder:validation:Optional
 	// Batch evaluation progress (only set for batch type evaluations)
 	BatchProgress *BatchEvaluationProgress `json:"batchProgress,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Conditions represent the latest available observations of an evaluation's state
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 // +kubebuilder:object:root=true

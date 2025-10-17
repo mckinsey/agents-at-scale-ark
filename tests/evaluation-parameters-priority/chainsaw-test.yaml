@@ -75,6 +75,15 @@ spec:
           kind: Evaluation
           metadata:
             name: test-direct-evaluation
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Evaluation
+          metadata:
+            name: test-direct-evaluation
             (contains(keys(annotations), 'evaluation.metadata/reasoning')): true
             (contains(keys(annotations), 'evaluation.metadata/criteria_scores')): true
             (contains(keys(annotations), 'evaluation.metadata/evaluation_scope')): true
