@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	corev1 "k8s.io/api/core/v1"
@@ -197,8 +198,19 @@ func (r *MCPServerReconciler) createMCPClient(ctx context.Context, mcpServer *ar
 		}
 		headers = resolvedHeaders
 	}
+
+	// Parse timeout from MCPServer spec (default to 30s if not specified)
+	timeout := 30 * time.Second
+	if mcpServer.Spec.Timeout != "" {
+		parsedTimeout, err := time.ParseDuration(mcpServer.Spec.Timeout)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse timeout %s: %w", mcpServer.Spec.Timeout, err)
+		}
+		timeout = parsedTimeout
+	}
+
 	// MCP settings are not needed for listing tools, etc.
-	mcpClient, err := genai.NewMCPClient(ctx, mcpURL, headers, mcpServer.Spec.Transport, genai.MCPSettings{})
+	mcpClient, err := genai.NewMCPClient(ctx, mcpURL, headers, mcpServer.Spec.Transport, timeout, genai.MCPSettings{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create MCP client: %w", err)
 	}
