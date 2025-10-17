@@ -33,6 +33,7 @@ import { getKubernetesNameError } from "@/lib/utils/kubernetes-validation";
 import { Badge } from "@/components/ui/badge";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
+import { cn } from "@/lib/utils";
 
 type GraphEdge = components["schemas"]["GraphEdge"];
 
@@ -97,10 +98,10 @@ function DraggableCard({
       style={{ opacity: isDragging ? 0.4 : 1 }}
     >
       <label
-        className={`flex items-center space-x-2 p-1 rounded ${isSelected
-          ? "cursor-pointer hover:bg-accent"
-          : "cursor-not-allowed opacity-50"
-          }`}
+        className={cn(
+          "flex items-center space-x-2 p-1 rounded cursor-pointer",
+          isSelected ? "hover:bg-accent" : "opacity-50"
+        )}
       >
         <input
           type="checkbox"
@@ -190,9 +191,9 @@ export function TeamEditor({
       selector:
         selectorModel || selectorPrompt
           ? {
-            model: selectorModel || undefined,
-            selectorPrompt: selectorPrompt || undefined
-          }
+              model: selectorModel || undefined,
+              selectorPrompt: selectorPrompt || undefined
+            }
           : undefined,
       graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined
     };
@@ -356,10 +357,6 @@ export function TeamEditor({
           </div>
           <div className="grid gap-2">
             <Label>Members</Label>
-            <p className="text-xs text-muted-foreground">
-              Note: Teams cannot mix internal and external agents. External
-              agents are marked with an &quot;External&quot; badge.
-            </p>
             <div className="border rounded-md p-2 space-y-2 max-h-40 overflow-y-auto">
               {agents.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-2">
