@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
-import { modelsService, type Model, type ModelCreateRequest, type ModelUpdateRequest } from "@/lib/services"
+import { modelsService, type Model } from "@/lib/services"
 import { ModelCard } from "@/components/cards"
 import { useDelayedLoading } from "@/lib/hooks"
 import { ModelRow } from "@/components/rows/model-row"
@@ -43,31 +43,6 @@ export const ModelsSection = function ModelsSection({ namespace }: ModelsSection
     loadData()
   }, [namespace])
 
-  const handleSaveModel = async (model: ModelCreateRequest | (ModelUpdateRequest & { id: string })) => {
-    try {
-      if ('id' in model) {
-        // Update existing model
-        const { id, ...updateData } = model
-        await modelsService.updateById(id, updateData)
-        toast.success("Model Updated", {
-          description: `Successfully updated model`
-        })
-      } else {
-        // Create new model
-        await modelsService.create(model)
-        toast.success("Model Created", {
-          description: `Successfully created ${model.name}`
-        })
-      }
-      // Reload data
-      const updatedModels = await modelsService.getAll()
-      setModels(updatedModels)
-    } catch (error) {
-      toast.error('id' in model ? "Failed to Update Model" : "Failed to Create Model", {
-        description: error instanceof Error ? error.message : "An unexpected error occurred"
-      })
-    }
-  }
 
   const handleDeleteModel = async (id: string) => {
     try {
@@ -114,9 +89,7 @@ export const ModelsSection = function ModelsSection({ namespace }: ModelsSection
                 <ModelCard
                   key={model.id}
                   model={model}
-                  onUpdate={handleSaveModel}
                   onDelete={handleDeleteModel}
-                  namespace={namespace}
                 />
               ))}
             </div>
@@ -128,9 +101,7 @@ export const ModelsSection = function ModelsSection({ namespace }: ModelsSection
                 <ModelRow
                   key={model.id}
                   model={model}
-                  onUpdate={handleSaveModel}
                   onDelete={handleDeleteModel}
-                  namespace={namespace}
                 />
               ))}
             </div>
