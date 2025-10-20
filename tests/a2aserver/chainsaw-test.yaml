@@ -38,10 +38,8 @@ spec:
       try:
         - script:
             content: |
-              helm install hosted-langchain-agents ../../samples/agent-hosting/hosted-langchain-agents/chart --wait --timeout=30s \
-                --namespace $NAMESPACE \
-                --set app.image.repository=${HOSTED_LANGCHAIN_AGENTS_IMAGE_REPOSITORY:-hosted-langchain-agents} \
-                --set app.image.tag=${HOSTED_LANGCHAIN_AGENTS_IMAGE_TAG}
+              kubectl apply -f ../../samples/a2a/langchain-weather-agent/manifests.yaml --namespace $NAMESPACE
+              kubectl wait --for=condition=ready pod -l app=langchain-weather-agent -n $NAMESPACE --timeout=60s
             env:
               - name: NAMESPACE
                 value: ($namespace)
@@ -50,7 +48,7 @@ spec:
               apiVersion: apps/v1
               kind: Deployment
               metadata:
-                name: hosted-langchain-agents
+                name: langchain-weather-agent
               status:
                 readyReplicas: 1
         - assert:
@@ -58,7 +56,7 @@ spec:
               apiVersion: ark.mckinsey.com/v1prealpha1
               kind: A2AServer
               metadata:
-                name: hosted-langchain-agents
+                name: langchain-weather-agent
               status:
                 (conditions[?type == 'Discovering'].status | [0]): "True"
                 phase: ready
@@ -67,11 +65,11 @@ spec:
         - describe:
             apiVersion: apps/v1
             kind: Deployment
-            name: hosted-langchain-agents
+            name: langchain-weather-agent
         - describe:
             apiVersion: ark.mckinsey.com/v1prealpha1
             kind: A2AServer
-            name: hosted-langchain-agents
+            name: langchain-weather-agent
 
     - name: assert-weather-agent-created
       try:
@@ -88,7 +86,7 @@ spec:
                 ownerReferences:
                   - apiVersion: ark.mckinsey.com/v1prealpha1
                     kind: A2AServer
-                    name: hosted-langchain-agents
+                    name: langchain-weather-agent
               spec:
                 description: (not_null(@))
                 executionEngine:

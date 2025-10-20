@@ -8,7 +8,7 @@ RUN adduser --system --uid 1001 --home /home/ark ark && \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 COPY src/ ./src/
 
 RUN uv sync --frozen --no-install-project
