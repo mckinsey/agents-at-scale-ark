@@ -5,6 +5,13 @@
 import chalk from 'chalk';
 import fs from 'fs';
 
+export const ExitCodes = {
+  Success: 0,
+  CliError: 1,
+  OperationError: 2,
+  Timeout: 3,
+} as const;
+
 export enum ErrorCode {
   INVALID_INPUT = 'INVALID_INPUT',
   FILE_NOT_FOUND = 'FILE_NOT_FOUND',

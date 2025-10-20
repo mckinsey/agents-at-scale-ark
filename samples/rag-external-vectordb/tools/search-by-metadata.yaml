@@ -1,0 +1,38 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: search-by-metadata
+  namespace: default
+spec:
+  type: http
+  description: "Search for document chunks based on metadata key-value pairs"
+  http:
+    url: "http://rag-retrieval-http.default.svc.cluster.local:8000/search_by_metadata"
+    method: POST
+    headers:
+      - name: Content-Type
+        value:
+          value: "application/json"
+    body: |
+      {
+        "key": "{{.input.key}}",
+        "value": "{{.input.value}}",
+        "top_k": {{if .input.top_k}}{{.input.top_k}}{{else}}5{{end}}
+      }
+  inputSchema:
+    type: object
+    properties:
+      key:
+        type: string
+        description: "Metadata key to search by"
+      value:
+        type: string
+        description: "Metadata value to match"
+      top_k:
+        type: integer
+        description: "Number of chunks to return"
+        default: 5
+    required:
+      - key
+      - value
+

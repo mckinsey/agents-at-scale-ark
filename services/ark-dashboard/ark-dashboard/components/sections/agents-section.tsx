@@ -18,6 +18,10 @@ import { AgentCard } from "@/components/cards";
 import { useDelayedLoading } from "@/lib/hooks";
 import { AgentRow } from "@/components/rows/agent-row";
 import { ToggleSwitch, type ToggleOption } from "@/components/ui/toggle-switch";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { ArrowUpRightIcon, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { DASHBOARD_SECTIONS } from "@/lib/constants";
 
 export const AgentsSection = forwardRef<
   { openAddEditor: () => void },
@@ -132,6 +136,49 @@ export const AgentsSection = forwardRef<
         <div className="text-center py-8">Loading...</div>
       </div>
     );
+  }
+
+  if (agents.length === 0 && !loading) {
+    return (
+      <>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.agents.icon />
+            </EmptyMedia>
+            <EmptyTitle>No Agents Yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t created any agents yet. Get started by creating
+              your first agent.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={() => setAgentEditorOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Create Agent
+            </Button>
+          </EmptyContent>
+          <Button
+            variant="link"
+            asChild
+            className="text-muted-foreground"
+            size="sm"
+          >
+            <a href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/agents/" target="_blank">
+              Learn More <ArrowUpRightIcon />
+            </a>
+          </Button>
+        </Empty>
+        <AgentEditor
+          open={agentEditorOpen}
+          onOpenChange={setAgentEditorOpen}
+          agent={null}
+          models={models}
+          teams={teams}
+          onSave={handleSaveAgent}
+        />
+      </>
+    )
   }
 
   return (

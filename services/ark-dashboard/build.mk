@@ -29,20 +29,27 @@ CLEAN_TARGETS += $(ARK_DASHBOARD_SERVICE_SOURCE_DIR)/coverage
 CLEAN_TARGETS += $(ARK_DASHBOARD_SERVICE_SOURCE_DIR)/dist
 CLEAN_TARGETS += $(ARK_DASHBOARD_SERVICE_SOURCE_DIR)/out
 
+# Cross-service dependency: ARK API OpenAPI specification file
+ARK_API_OPENAPI := services/ark-api/openapi.json
+ARK_API_STAMP_TEST := $(OUT)/ark-api/stamp-test
+
 # Define phony targets
 .PHONY: $(ARK_DASHBOARD_SERVICE_NAME)-build $(ARK_DASHBOARD_SERVICE_NAME)-install $(ARK_DASHBOARD_SERVICE_NAME)-uninstall $(ARK_DASHBOARD_SERVICE_NAME)-dev $(ARK_DASHBOARD_SERVICE_NAME)-test $(ARK_DASHBOARD_SERVICE_NAME)-clean-stamps
 
 # Generate clean-stamps target
 $(eval $(call CLEAN_STAMPS_TEMPLATE,$(ARK_DASHBOARD_SERVICE_NAME)))
 
-# OpenAPI dependency
-$(DASHBOARD_OPENAPI): $(OUT)/ark-api/stamp-test | $(OUT)
+# OpenAPI dependency: Copy ARK API's OpenAPI specification to dashboard build directories
+# Prerequisites:
+# 1. ARK API tests must complete successfully (generates fresh openapi.json)
+# 2. The actual openapi.json file must exist
+$(DASHBOARD_OPENAPI): $(ARK_API_STAMP_TEST) $(ARK_API_OPENAPI) | $(OUT)
 	@mkdir -p $(ARK_DASHBOARD_SERVICE_DIR)/out
 	@mkdir -p $(dir $@)
-	cp services/ark-api/openapi.json $(ARK_DASHBOARD_SERVICE_DIR)/out/openapi.json
-	cp services/ark-api/openapi.json $@
+	cp $(ARK_API_OPENAPI) $(ARK_DASHBOARD_SERVICE_DIR)/out/openapi.json
+	cp $(ARK_API_OPENAPI) $@
 
-# Dependencies
+# Dependencies: Install ARK Dashboard dependencies and generate TypeScript types
 $(ARK_DASHBOARD_SERVICE_NAME)-deps: $(ARK_DASHBOARD_STAMP_DEPS) # HELP: Install ARK Dashboard dependencies
 $(ARK_DASHBOARD_STAMP_DEPS): $(ARK_DASHBOARD_SERVICE_SOURCE_DIR)/package.json $(DASHBOARD_OPENAPI) | $(OUT)
 	@mkdir -p $(dir $@)

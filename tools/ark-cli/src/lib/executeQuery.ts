@@ -5,7 +5,9 @@
 import {execa} from 'execa';
 import ora from 'ora';
 import output from './output.js';
-import type {Query, QueryTarget} from './types.js';
+import type {Query, QueryTarget, K8sCondition} from './types.js';
+import {ExitCodes} from './errors.js';
+import {parseDuration} from './duration.js';
 
 export interface QueryOptions {
   targetType: string; // 'model', 'agent', 'team'
@@ -35,7 +37,6 @@ export async function executeQuery(overrides: QueryOptions): Promise<void> {
   const randomSuffix = Math.random().toString(36).substring(2, 8);
   const queryName = `cli-query-${timestamp}-${randomSuffix}`;
 
-  // Create the Query resource
   const queryManifest: Partial<Query> = {
     apiVersion: 'ark.mckinsey.com/v1alpha1',
     kind: 'Query',
@@ -44,6 +45,7 @@ export async function executeQuery(overrides: QueryOptions): Promise<void> {
     },
     spec: {
       input: options.message,
+      ...(options.timeout && {timeout: options.timeout}),
       targets: [
         {
           type: options.targetType,
@@ -66,17 +68,19 @@ export async function executeQuery(overrides: QueryOptions): Promise<void> {
     if (options.cleanup) {
       await cleanupQuery(queryName);
     }
-    process.exit(1);
+    process.exit(ExitCodes.CliError);
   }
 
   spinner.text = 'Submitted query. Waiting for it to complete...';
 
+  let exitCode = ExitCodes.Success;
   try {
     // Wait for query completion
     const query = await waitForQueryCompletion(queryName, options.timeoutSeconds);
     if (!query) {
       spinner.fail('Query timed out');
       output.error(`Query did not complete within ${options.timeoutSeconds} seconds`);
+      exitCode = ExitCodes.Timeout;
     } else {
       const phase = query.status?.phase;
 
@@ -89,15 +93,18 @@ export async function executeQuery(overrides: QueryOptions): Promise<void> {
           output.warning('No response received');
         }
       } else if (phase === 'error') {
+        exitCode = ExitCodes.OperationError;
         spinner.fail('Query failed');
   
         // Try to get error message from conditions or status
         const completedCondition = query.status?.conditions?.find(c => c.type === 'Completed');
         output.error(completedCondition?.message || 'Query failed with unknown error');
       } else if (phase === 'canceled') {
+        exitCode = ExitCodes.OperationError;
         spinner.warn('Query canceled');
         output.warning('Query was canceled');
       } else {
+        exitCode = ExitCodes.OperationError;
         spinner.warn('Query completed but with unknown status');
         output.warning('Query completed but with unknown status');
       }
@@ -106,6 +113,7 @@ export async function executeQuery(overrides: QueryOptions): Promise<void> {
     if (options.cleanup) {
       await cleanupQuery(queryName);
     }
+    process.exit(exitCode);
   }
 }
 

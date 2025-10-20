@@ -2,6 +2,7 @@ import {Command} from 'commander';
 import type {ArkConfig} from '../../lib/config.js';
 import output from '../../lib/output.js';
 import {executeQuery, parseTarget} from '../../lib/executeQuery.js';
+import {ExitCodes} from '../../lib/errors.js';
 
 export function createQueryCommand(_: ArkConfig): Command {
   const queryCommand = new Command('query');
@@ -19,7 +20,7 @@ export function createQueryCommand(_: ArkConfig): Command {
         output.error(
           'Invalid target format. Use: model/name or agent/name etc'
         );
-        process.exit(1);
+        process.exit(ExitCodes.CliError);
       }
 
       await executeQuery({

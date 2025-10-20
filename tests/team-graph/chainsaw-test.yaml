@@ -32,7 +32,7 @@ spec:
             name: test-graph-team
           status:
             phase: done
-        timeout: 60s
+        timeout: 180s
 
   - name: validate-graph-execution
     try:

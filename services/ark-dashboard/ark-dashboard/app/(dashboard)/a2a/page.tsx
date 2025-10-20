@@ -3,7 +3,7 @@
 import { A2AServersSection } from "@/components/sections/a2a-servers-section";
 import type { A2AServersSectionHandle } from "@/components/sections/a2a-servers-section";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useRef } from "react";
+import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { BreadcrumbElement, PageHeader } from "@/components/common/page-header";
@@ -12,7 +12,7 @@ const breadcrumbs: BreadcrumbElement[] = [
   { href: '/', label: "ARK Dashboard" }
 ]
 
-function A2AContent() {
+export default function A2APage() {
   const searchParams = useSearchParams();
   const namespace = searchParams.get("namespace") || "default";
   const a2aSectionRef = useRef<A2AServersSectionHandle>(null);
@@ -21,7 +21,7 @@ function A2AContent() {
     <>
       <PageHeader breadcrumbs={breadcrumbs} currentPage="A2A Servers" actions={
         <Button onClick={() => a2aSectionRef.current?.openAddEditor()}>
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="h-4 w-4" />
           Add A2A Server
         </Button>
       } />
@@ -29,19 +29,5 @@ function A2AContent() {
         <A2AServersSection ref={a2aSectionRef} namespace={namespace} />
       </div>
     </>
-  );
-}
-
-export default function A2APage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex h-full items-center justify-center">
-          Loading...
-        </div>
-      }
-    >
-      <A2AContent />
-    </Suspense>
   );
 }

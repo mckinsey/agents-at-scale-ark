@@ -23,8 +23,10 @@ import {
 } from "@/lib/services/memory";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, useMemo, useRef } from "react";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 
-import { Database, MessageSquare, ChevronDown } from "lucide-react";
+import { Database, ChevronDown } from "lucide-react";
+import { DASHBOARD_SECTIONS } from "@/lib/constants";
 
 interface MemorySectionProps {
   readonly initialFilters?: Partial<MemoryFilters>;
@@ -500,15 +502,14 @@ export function MemorySection({
                     colSpan={5}
                     className="px-3 py-8 text-center text-xs text-gray-500 dark:text-gray-400"
                   >
-                    <div className="flex flex-col items-center">
-                      <MessageSquare className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                      <p>No messages found</p>
-                      {totalMessages > 0 && (
-                        <p className="mt-1 text-xs text-gray-400">
-                          Try adjusting your filters or page selection
-                        </p>
-                      )}
-                    </div>
+                    <Empty>
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <DASHBOARD_SECTIONS.memory.icon />
+                        </EmptyMedia>
+                        <EmptyTitle>No Messages Yet</EmptyTitle>
+                      </EmptyHeader>
+                    </Empty>
                   </td>
                 </tr>
               ) : (

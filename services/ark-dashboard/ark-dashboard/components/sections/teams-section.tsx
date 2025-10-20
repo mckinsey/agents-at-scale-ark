@@ -7,6 +7,10 @@ import { TeamEditor } from "@/components/editors"
 import { teamsService, agentsService, modelsService, type Team, type TeamCreateRequest, type TeamUpdateRequest, type Agent, type Model } from "@/lib/services"
 import { TeamCard } from "@/components/cards"
 import { useDelayedLoading } from "@/lib/hooks"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { DASHBOARD_SECTIONS } from "@/lib/constants"
+import { Button } from "@/components/ui/button"
+import { ArrowUpRightIcon, Plus } from "lucide-react"
 
 export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function TeamsSection(_, ref) {
   const [teams, setTeams] = useState<Team[]>([])
@@ -97,6 +101,49 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function T
       <div className="flex h-full items-center justify-center">
         <div className="text-center py-8">Loading...</div>
       </div>
+    )
+  }
+
+  if (teams.length === 0 && !loading) {
+    return (
+      <>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.teams.icon />
+            </EmptyMedia>
+            <EmptyTitle>No Teams Yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t created any teams yet. Get started by creating
+              your first team.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={() => setTeamEditorOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Create Team
+            </Button>
+          </EmptyContent>
+          <Button
+            variant="link"
+            asChild
+            className="text-muted-foreground"
+            size="sm"
+          >
+            <a href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/teams/" target="_blank">
+              Learn More <ArrowUpRightIcon />
+            </a>
+          </Button>
+        </Empty>
+        <TeamEditor
+          open={teamEditorOpen}
+          onOpenChange={setTeamEditorOpen}
+          team={null}
+          agents={agents}
+          models={models}
+          onSave={handleSaveTeam}
+        />
+      </>
     )
   }
 

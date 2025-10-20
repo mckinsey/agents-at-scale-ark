@@ -34,6 +34,7 @@ const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
 
 const {executeQuery, parseTarget} = await import('./executeQuery.js');
+const {ExitCodes} = await import('./errors.js');
 
 describe('executeQuery', () => {
   beforeEach(() => {
@@ -89,9 +90,6 @@ describe('executeQuery', () => {
             exitCode: 0,
           };
         }
-        if (args.includes('delete')) {
-          return {stdout: '', stderr: '', exitCode: 0};
-        }
         return {stdout: '', stderr: '', exitCode: 0};
       });
 
@@ -106,7 +104,7 @@ describe('executeQuery', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith('\nTest response');
     });
 
-    it('should handle query error phase with condition message', async () => {
+    it('should handle query error phase with condition message and exit with code 2', async () => {
       const mockQueryResponse = {
         status: {
           phase: 'error',
@@ -133,22 +131,24 @@ describe('executeQuery', () => {
             exitCode: 0,
           };
         }
-        if (args.includes('delete')) {
-          return {stdout: '', stderr: '', exitCode: 0};
-        }
         return {stdout: '', stderr: '', exitCode: 0};
       });
 
-      await executeQuery({
-        targetType: 'model',
-        targetName: 'default',
-        message: 'Hello',
-      });
+      try {
+        await executeQuery({
+          targetType: 'model',
+          targetName: 'default',
+          message: 'Hello',
+        });
+      } catch (error: any) {
+        expect(error.message).toBe('process.exit called');
+      }
 
       expect(mockSpinner.fail).toHaveBeenCalledWith('Query failed');
       expect(mockOutput.error).toHaveBeenCalledWith(
         'Query failed with test error'
       );
+      expect(mockExit).toHaveBeenCalledWith(ExitCodes.OperationError);
     });
 
     it('should handle query error phase without condition message', async () => {
@@ -191,7 +191,7 @@ describe('executeQuery', () => {
       );
     });
 
-    it('should handle query canceled phase', async () => {
+    it('should handle query canceled phase and exit with code 2', async () => {
       const mockQueryResponse = {
         status: {
           phase: 'canceled',
@@ -213,28 +213,32 @@ describe('executeQuery', () => {
             exitCode: 0,
           };
         }
-        if (args.includes('delete')) {
-          return {stdout: '', stderr: '', exitCode: 0};
-        }
         return {stdout: '', stderr: '', exitCode: 0};
       });
 
-      await executeQuery({
-        targetType: 'agent',
-        targetName: 'test-agent',
-        message: 'Hello',
-      });
+      try {
+        await executeQuery({
+          targetType: 'agent',
+          targetName: 'test-agent',
+          message: 'Hello',
+        });
+      } catch (error: any) {
+        expect(error.message).toBe('process.exit called');
+      }
 
       expect(mockSpinner.warn).toHaveBeenCalledWith('Query canceled');
       expect(mockOutput.warning).toHaveBeenCalledWith('Query was canceled');
+      expect(mockExit).toHaveBeenCalledWith(ExitCodes.OperationError);
     });
 
-    it('should clean up query resource when it failed to apply', async () => {
+    it('should clean up query resource when it failed to apply and exit with exit code 1', async () => {
+      const mockCleanupQuery = jest.fn();
       mockExeca.mockImplementation(async (command: string, args: string[]) => {
         if (args.includes('apply')) {
           throw new Error('Failed to apply');
         }
         if (args.includes('delete')) {
+          mockCleanupQuery();
           return {stdout: '', stderr: '', exitCode: 0};
         }
         return {stdout: '', stderr: '', exitCode: 0};
@@ -250,7 +254,8 @@ describe('executeQuery', () => {
 
       expect(mockSpinner.fail).toHaveBeenCalledWith('Query failed to apply');
       expect(mockOutput.error).toHaveBeenCalledWith('Query failed to apply');
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(mockExit).toHaveBeenCalledWith(ExitCodes.CliError);
+      expect(mockCleanupQuery).toHaveBeenCalled();
     });
 
     it('should not clean up query resource when it failed to apply and cleanup is disabled', async () => {
@@ -385,7 +390,46 @@ describe('executeQuery', () => {
       expect(mockConsoleLog).toHaveBeenCalledWith('\nRaw response string');
     });
 
-    it('should handle query with custom timeout and cleanup disabled', async () => {
+    it('should handle query timeout and exit with code 3', async () => {
+      const mockQueryResponse = {
+        status: {
+          phase: 'running',
+        },
+      };
+
+      mockExeca.mockImplementation(async (command: string, args: string[]) => {
+        if (args.includes('apply')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('get') && args.includes('query')) {
+          return {
+            stdout: JSON.stringify(mockQueryResponse),
+            stderr: '',
+            exitCode: 0,
+          };
+        }
+        return {stdout: '', stderr: '', exitCode: 0};
+      });
+
+      try {
+        await executeQuery({
+          targetType: 'model',
+          targetName: 'default',
+          message: 'Hello',
+          timeout: '100ms',
+          watchTimeout: '200ms',
+        });
+      } catch (error: any) {
+        expect(error.message).toBe('process.exit called');
+      }
+
+      expect(mockSpinner.fail).toHaveBeenCalledWith('Query timed out');
+      expect(mockOutput.error).toHaveBeenCalledWith(
+        'Query did not complete within 200ms'
+      );
+      expect(mockExit).toHaveBeenCalledWith(ExitCodes.Timeout);
+
+    it('should handle query with custom timeout and cleanup both disabled', async () => {
       const mockQueryResponse = {
         status: {
           phase: 'done',
