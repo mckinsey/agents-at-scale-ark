@@ -120,7 +120,7 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 	}
 
 	switch obj.Status.Phase {
-	case statusDone, statusError:
+	case statusDone, statusError, statusCanceled:
 		return ctrl.Result{
 			RequeueAfter: time.Until(expiry),
 		}, nil
