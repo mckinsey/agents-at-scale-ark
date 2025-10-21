@@ -73,10 +73,23 @@ type QuerySpec struct {
 	TTL *metav1.Duration `json:"ttl,omitempty"`
 	// +kubebuilder:default="5m"
 	// Timeout for query execution (e.g., "30s", "5m", "1h")
+	// This is the overall timeout for the entire query execution.
+	// For A2A agents, individual gateway calls will use the context deadline directly.
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 	// +kubebuilder:validation:Optional
 	// When true, indicates intent to cancel the query
 	Cancel bool `json:"cancel,omitempty"`
+	// +kubebuilder:validation:Optional
+	// A2A contains A2A-specific configuration
+	A2A *A2AConfig `json:"a2a,omitempty"`
+}
+
+// A2AConfig contains A2A-specific configuration
+type A2AConfig struct {
+	// +kubebuilder:validation:Optional
+	// GatewayTimeout for individual A2A gateway calls (e.g., "30s", "5m")
+	// This timeout applies to each A2A agent call, separate from the overall query timeout
+	GatewayTimeout *metav1.Duration `json:"gatewayTimeout,omitempty"`
 }
 
 // Response defines a response from a query target.

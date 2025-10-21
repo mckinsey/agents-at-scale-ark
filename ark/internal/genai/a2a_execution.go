@@ -61,26 +61,17 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		return nil, fmt.Errorf("unable to get A2AServer %v: %w", serverKey, err)
 	}
 
-	// Determine timeout: Query timeout (from context) > A2AServer timeout > default (5m)
-	timeout := 5 * time.Minute
-	if a2aServer.Spec.Timeout != "" {
-		if parsedTimeout, err := time.ParseDuration(a2aServer.Spec.Timeout); err == nil {
-			timeout = parsedTimeout
-		} else {
-			log.Info("failed to parse A2AServer timeout, using default", "timeout", a2aServer.Spec.Timeout, "error", err)
-		}
-	}
-	
-	// Check if Query timeout is set in context (higher priority)
-	if queryTimeout := getQueryTimeout(ctx); queryTimeout > 0 {
-		timeout = queryTimeout
-		log.Info("using Query timeout for A2A execution", "timeout", timeout)
+	// Check if A2A gateway timeout is set
+	if a2aGatewayTimeout := getA2AGatewayTimeout(ctx); a2aGatewayTimeout > 0 {
+		// Create sub-context with A2A timeout
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, a2aGatewayTimeout)
+		defer cancel()
+		log.Info("using A2A gateway timeout in sub-context", "timeout", a2aGatewayTimeout)
 	} else {
-		log.Info("using A2AServer timeout for A2A execution", "timeout", timeout)
+		// Otherwise, use existing context with remaining query time
+		log.Info("A2A execution using remaining query time")
 	}
-
-	// Add timeout to context for downstream use
-	ctx = withA2ATimeout(ctx, timeout)
 
 	// Extract content from the userInput message
 	content := ""

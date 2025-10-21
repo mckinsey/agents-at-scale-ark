@@ -295,11 +295,31 @@ spec:
 
 ### For A2A Agents
 
-For A2A agents specifically, timeouts follow a precedence hierarchy:
+A2A execution uses native context deadline propagation:
 
-1. **Query.spec.timeout** (highest priority) - overrides all other timeouts
-2. **A2AServer.spec.timeout** - default for that A2A server
-3. **Deployment defaults** - see [Building A2A Servers](/developer-guide/building-a2a-servers#timeout-configuration)
+1. **Query.spec.timeout** sets the overall execution time limit
+2. **Query.spec.a2a.gatewayTimeout** (optional) limits individual A2A calls within that time
+
+The A2A execution automatically uses the remaining time from the query context.
+
+#### Example: Long Query with Short A2A Calls
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: multi-step-query
+spec:
+  input: "Multi-step task"
+  targets:
+    - type: agent
+      name: agent-1
+  timeout: 30m  # Overall query has 30 minutes
+  a2a:
+    gatewayTimeout: 5m  # But each A2A call limited to 5 minutes
+```
+
+This ensures that if the query involves multiple agents or retry logic, no single A2A call monopolizes all the remaining time.
 
 See the [Building A2A Servers guide](/developer-guide/building-a2a-servers#timeout-configuration) for detailed timeout configuration for A2A agents.
 

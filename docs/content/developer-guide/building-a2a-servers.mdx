@@ -170,14 +170,42 @@ ark agent query langchain-weather-agent "What's the weather in Chicago?"
 
 ARK provides flexible timeout configuration for A2A agent execution through multiple layers:
 
-### Timeout Precedence
+### Timeout Behavior
 
-Timeouts are resolved in the following order (highest to lowest priority):
+A2A execution uses native Go context deadlines:
 
-1. **Query.spec.timeout** - Per-query timeout specified when creating a Query resource
-2. **A2AServer.spec.timeout** - Default timeout for all agents served by this A2A server
-3. **A2A_DEFAULT_TIMEOUT** environment variable - Deployment-wide default (ark-api-a2a gateway)
-4. **Hardcoded default** - 5 minutes (300 seconds)
+1. **Query sets the overall time limit** via `query.spec.timeout`
+2. **A2A gateway timeout** (optional) can create a sub-context to limit individual A2A calls
+3. If no A2A gateway timeout is set, A2A uses the remaining query time
+
+### How It Works
+
+- Query creates a context with deadline: `context.WithTimeout(ctx, query.spec.timeout)`
+- A2A execution receives this context with remaining time already tracked
+- If `query.spec.a2a.gatewayTimeout` is set, A2A creates a sub-context
+- HTTP clients automatically derive timeout from context deadline
+
+### Example Scenarios
+
+**Scenario 1: No A2A timeout set**
+```yaml
+spec:
+  timeout: 10m  # Query has 10 minutes total
+  # No a2a.gatewayTimeout set
+```
+
+→ A2A uses whatever time remains when it starts (e.g., 7 minutes if 3 minutes already passed)
+
+**Scenario 2: A2A timeout set**
+
+```yaml
+spec:
+  timeout: 10m  # Query has 10 minutes total
+  a2a:
+    gatewayTimeout: 2m  # Each A2A call limited to 2 minutes
+```
+
+→ A2A creates sub-context with 2-minute timeout (but still respects the 7 minutes remaining)
 
 ### Configuring A2AServer Timeout
 
@@ -216,9 +244,9 @@ spec:
 
 ### Best Practices
 
-- **Set reasonable defaults**: Configure A2AServer timeout based on typical agent response times
-- **Use Query timeout for exceptions**: Override timeout for queries you know will take longer
-- **Account for overhead**: Set A2AServer timeout slightly higher than expected agent processing time
+- **Set Query timeout appropriately**: Configure query timeout based on expected total execution time
+- **Monitor context deadlines**: HTTP clients automatically respect context deadlines with buffer
+- **Use A2AServer timeout for documentation**: Set A2AServer timeout to document expected response times
 - **Monitor and adjust**: Use ARK telemetry to identify queries that timeout and adjust accordingly
 ## Further Reading
 

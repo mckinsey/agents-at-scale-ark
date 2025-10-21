@@ -99,12 +99,8 @@ func ExecuteA2AAgentWithRecorder(ctx context.Context, k8sClient client.Client, a
 func createA2AClientForExecution(ctx context.Context, k8sClient client.Client, rpcURL string, headers []arkv1prealpha1.Header, namespace, agentName string, recorder record.EventRecorder, obj client.Object) (*a2aclient.A2AClient, error) {
 	log := logf.FromContext(ctx)
 	
-	// Get timeout from context (set by A2A execution engine)
-	timeout := getA2ATimeout(ctx)
-	if timeout == 0 {
-		timeout = 5 * time.Minute
-		log.Info("no timeout in context, using default", "timeout", timeout)
-	}
+	// Derive HTTP client timeout from context deadline
+	httpTimeout := getHTTPClientTimeout(ctx, 5*time.Minute)
 	
 	var clientOptions []a2aclient.Option
 	if len(headers) > 0 {
@@ -116,14 +112,14 @@ func createA2AClientForExecution(ctx context.Context, k8sClient client.Client, r
 			return nil, err
 		}
 
-		httpClient := &http.Client{Timeout: timeout}
+		httpClient := &http.Client{Timeout: httpTimeout}
 		clientOptions = append(clientOptions, a2aclient.WithHTTPClient(httpClient))
 		clientOptions = append(clientOptions, a2aclient.WithHTTPReqHandler(&customA2ARequestHandler{
 			headers: resolvedHeaders,
 		}))
 	} else {
 		// No headers, but still need to set timeout via client options
-		clientOptions = append(clientOptions, a2aclient.WithTimeout(timeout))
+		clientOptions = append(clientOptions, a2aclient.WithTimeout(httpTimeout))
 	}
 
 	a2aClient, err := a2aclient.NewA2AClient(rpcURL, clientOptions...)
@@ -134,7 +130,7 @@ func createA2AClientForExecution(ctx context.Context, k8sClient client.Client, r
 		return nil, fmt.Errorf("failed to create A2A client: %w", err)
 	}
 	
-	log.Info("created A2A client with timeout", "timeout", timeout, "agent", agentName)
+	log.Info("created A2A client with HTTP timeout", "timeout", httpTimeout, "agent", agentName)
 	return a2aClient, nil
 }
 

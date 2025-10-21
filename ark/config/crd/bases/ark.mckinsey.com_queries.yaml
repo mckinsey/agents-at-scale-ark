@@ -50,6 +50,15 @@ spec:
             type: object
           spec:
             properties:
+              a2a:
+                description: A2A contains A2A-specific configuration
+                properties:
+                  gatewayTimeout:
+                    description: |-
+                      GatewayTimeout for individual A2A gateway calls (e.g., "30s", "5m")
+                      This timeout applies to each A2A agent call, separate from the overall query timeout
+                    type: string
+                type: object
               cancel:
                 description: When true, indicates intent to cancel the query
                 type: boolean
@@ -239,7 +248,10 @@ spec:
                 type: array
               timeout:
                 default: 5m
-                description: Timeout for query execution (e.g., "30s", "5m", "1h")
+                description: |-
+                  Timeout for query execution (e.g., "30s", "5m", "1h")
+                  This is the overall timeout for the entire query execution.
+                  For A2A agents, individual gateway calls will use context deadline with buffer.
                 type: string
               ttl:
                 default: 720h

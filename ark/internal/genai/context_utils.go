@@ -20,8 +20,8 @@ const (
 	teamKey        contextKey = "team"        // Current team name
 	agentKey       contextKey = "agent"       // Current agent name
 	modelKey       contextKey = "model"       // Current model name
-	queryTimeoutKey contextKey = "queryTimeout" // Query timeout duration
-	a2aTimeoutKey   contextKey = "a2aTimeout"   // A2A specific timeout
+	a2aTimeoutKey       contextKey = "a2aTimeout"       // A2A specific timeout
+	a2aGatewayTimeoutKey contextKey = "a2aGatewayTimeout" // A2A gateway timeout
 )
 
 func WithQueryContext(ctx context.Context, queryID, sessionID, queryName string) context.Context {
@@ -88,29 +88,23 @@ func GetExecutionMetadata(ctx context.Context) map[string]interface{} {
 	return metadata
 }
 
-// WithQueryTimeout adds Query timeout to context
-func WithQueryTimeout(ctx context.Context, timeout time.Duration) context.Context {
-	return context.WithValue(ctx, queryTimeoutKey, timeout)
-}
-
-// getQueryTimeout retrieves Query timeout from context
-func getQueryTimeout(ctx context.Context) time.Duration {
-	if val := ctx.Value(queryTimeoutKey); val != nil {
-		if timeout, ok := val.(time.Duration); ok {
-			return timeout
-		}
+// getHTTPClientTimeout derives HTTP client timeout from context deadline
+func getHTTPClientTimeout(ctx context.Context, defaultTimeout time.Duration) time.Duration {
+	if deadline, ok := ctx.Deadline(); ok {
+		return time.Until(deadline)
 	}
-	return 0
+	// No deadline set, use default timeout
+	return defaultTimeout
 }
 
-// withA2ATimeout adds A2A-specific timeout to context
-func withA2ATimeout(ctx context.Context, timeout time.Duration) context.Context {
-	return context.WithValue(ctx, a2aTimeoutKey, timeout)
+// WithA2AGatewayTimeout adds A2A gateway timeout to context
+func WithA2AGatewayTimeout(ctx context.Context, timeout time.Duration) context.Context {
+	return context.WithValue(ctx, a2aGatewayTimeoutKey, timeout)
 }
 
-// getA2ATimeout retrieves A2A timeout from context
-func getA2ATimeout(ctx context.Context) time.Duration {
-	if val := ctx.Value(a2aTimeoutKey); val != nil {
+// getA2AGatewayTimeout retrieves A2A gateway timeout from context
+func getA2AGatewayTimeout(ctx context.Context) time.Duration {
+	if val := ctx.Value(a2aGatewayTimeoutKey); val != nil {
 		if timeout, ok := val.(time.Duration); ok {
 			return timeout
 		}
