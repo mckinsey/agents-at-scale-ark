@@ -1,0 +1,16 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: test-tool
+spec:
+  type: http
+  description: "Returns coordinates for the given city name for testing tool targets."
+  inputSchema:
+    type: object
+    properties:
+      city:
+        type: string
+        description: City name to get coordinates for
+    required: ["city"]
+  http:
+    url: https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1
