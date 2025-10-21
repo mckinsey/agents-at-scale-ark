@@ -143,10 +143,11 @@ func (v *TeamCustomValidator) validateStrategy(ctx context.Context, team *arkv1a
 }
 
 func (v *TeamCustomValidator) validateSelectorAgent(ctx context.Context, team *arkv1alpha1.Team) error {
-	agentName := "default"
-	if team.Spec.Selector != nil && team.Spec.Selector.Agent != "" {
-		agentName = team.Spec.Selector.Agent
+	if team.Spec.Selector == nil || team.Spec.Selector.Agent == "" {
+		return fmt.Errorf("selector strategy requires selector.agent to be specified")
 	}
+
+	agentName := team.Spec.Selector.Agent
 
 	err := v.ValidateLoadAgent(ctx, agentName, team.Namespace)
 	if err != nil {

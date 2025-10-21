@@ -21,8 +21,6 @@ Read the following conversation. Then select the next role from {{.Participants}
 
 Read the above conversation. Then select the next role from {{.Participants}} to play. Only return the role.`
 
-const defaultSelectorAgent = "default"
-
 type SelectorTemplateData struct {
 	Roles        string
 	Participants string
@@ -63,10 +61,11 @@ func buildRoles(members []TeamMember) string {
 }
 
 func (t *Team) loadSelectorAgent(ctx context.Context) (*Agent, error) {
-	agentName := defaultSelectorAgent
-	if t.Selector != nil && t.Selector.Agent != "" {
-		agentName = t.Selector.Agent
+	if t.Selector == nil || t.Selector.Agent == "" {
+		return nil, fmt.Errorf("selector agent must be specified")
 	}
+
+	agentName := t.Selector.Agent
 
 	var agentCRD arkv1alpha1.Agent
 	key := types.NamespacedName{Name: agentName, Namespace: t.Namespace}
