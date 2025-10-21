@@ -18,6 +18,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"maps"
+
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
@@ -379,6 +381,58 @@ func CreateToolFromCRD(toolCRD *arkv1alpha1.Tool) ToolDefinition {
 	description := getToolDescription(toolCRD)
 	parameters := getToolParameters(toolCRD)
 	return ToolDefinition{Name: toolCRD.Name, Description: description, Parameters: parameters}
+}
+
+func CreatePartialToolDefinition(tooldefinition ToolDefinition, partial *arkv1alpha1.ToolPartial) ToolDefinition {
+	newName := tooldefinition.Name
+	newDesc := tooldefinition.Description
+
+	// Deep copy parameters map
+	newParams := map[string]any{}
+	maps.Copy(newParams, tooldefinition.Parameters)
+
+	// Remove partial parameters from schema if present in context
+	if partial != nil {
+		if partial.Name != "" {
+			newName = partial.Name
+		}
+
+		if partial.Description != "" {
+			newDesc = partial.Description
+		}
+
+		if props, ok := newParams["properties"].(map[string]any); ok {
+			propsCopy := map[string]any{}
+			maps.Copy(propsCopy, props)
+			for _, param := range partial.Parameters {
+				delete(propsCopy, param.Name)
+			}
+			newParams["properties"] = propsCopy
+		}
+
+		if reqList, ok := newParams["required"].([]string); ok {
+			newReq := []string{}
+			for _, req := range reqList {
+				skip := false
+				for _, param := range partial.Parameters {
+					if req == param.Name {
+						skip = true
+						break
+					}
+				}
+				if !skip {
+					newReq = append(newReq, req)
+				}
+			}
+			newParams["required"] = newReq
+		}
+	}
+
+	return ToolDefinition{
+		Name:        newName,
+		Description: newDesc,
+		Parameters:  newParams,
+	}
 }
 
 func getToolDescription(toolCRD *arkv1alpha1.Tool) string {

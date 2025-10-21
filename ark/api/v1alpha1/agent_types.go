@@ -15,6 +15,16 @@ type ToolFunction struct {
 	Value string `json:"value,omitempty"`
 }
 
+type ToolPartial struct {
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name,omitempty"`
+	// +kubebuilder:validation:Optional
+	Description string `json:"description,omitempty"`
+	// +kubebuilder:validation:Optional
+	Parameters []ToolFunction `json:"parameters,omitempty"`
+}
+
 type AgentTool struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=built-in;custom
@@ -24,6 +34,8 @@ type AgentTool struct {
 	Name string `json:"name,omitempty"`
 	// +kubebuilder:validation:Optional
 	Functions []ToolFunction `json:"functions,omitempty"`
+	// +kubebuilder:validation:Optional
+	Partial *ToolPartial `json:"partial,omitempty"`
 }
 
 type AgentModelRef struct {
