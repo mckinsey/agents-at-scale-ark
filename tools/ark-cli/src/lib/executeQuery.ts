@@ -6,7 +6,7 @@ import {execa} from 'execa';
 import ora from 'ora';
 import chalk from 'chalk';
 import output from './output.js';
-import type {Query, QueryTarget, K8sCondition} from './types.js';
+import type {Query, QueryTarget} from './types.js';
 import {ExitCodes} from './errors.js';
 import {parseDuration} from './duration.js';
 
@@ -104,7 +104,9 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
           spinner.stop();
 
           const response = query.status?.responses?.[0];
-          console.error(chalk.red(response?.content || 'Query failed with unknown error'));
+          console.error(
+            chalk.red(response?.content || 'Query failed with unknown error')
+          );
           process.exit(ExitCodes.OperationError);
         } else if (phase === 'canceled') {
           queryComplete = true;
@@ -126,7 +128,7 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
     }
 
     if (!queryComplete) {
-      spinner.fail();
+      spinner.stop();
       console.error(
         chalk.red(
           `Query did not complete within ${options.watchTimeout ?? `${Math.floor(watchTimeoutMs / 1000)}s`}`
@@ -136,7 +138,9 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
     }
   } catch (error) {
     spinner.stop();
-    console.error(chalk.red(error instanceof Error ? error.message : 'Unknown error'));
+    console.error(
+      chalk.red(error instanceof Error ? error.message : 'Unknown error')
+    );
     process.exit(ExitCodes.CliError);
   }
 }
