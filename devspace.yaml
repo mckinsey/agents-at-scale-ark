@@ -92,17 +92,17 @@ profiles:
 pipelines:
   deploy: |-
     
-    if [ "${ENABLE_CERT_MANAGER}" == "true ]; then
+    if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
       create_deployments cert-manager
     fi
     
-    if [ "${ENABLE_GATEWAY_API_CRDS}" == "true ]; then
+    if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
       create_deployments gateway-api
     fi
     
     run_dependency_pipelines ark --pipeline=deploy
     
-    if [ "${ENABLE_ARK_TENANT}" == "true ]; then
+    if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
       create_deployments ark-tenant
     fi
     
