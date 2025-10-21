@@ -3,6 +3,8 @@ package genai
 import (
 	"context"
 	"encoding/json"
+	"net/url"
+	"path"
 	"fmt"
 	"net"
 	"net/http"
@@ -100,8 +102,12 @@ func createTransport(baseURL string, headers map[string]string, timeout time.Dur
 		}
 	}
 
+    u, _ := url.Parse(baseURL)
+    u.Path = path.Join(u.Path, "mcp")
+    fullURL := u.String()
+
 	return &mcp.StreamableClientTransport{
-		Endpoint:   baseURL + "/mcp",
+		Endpoint:   fullURL,
 		HTTPClient: httpClient,
 		MaxRetries: 5,
 	}

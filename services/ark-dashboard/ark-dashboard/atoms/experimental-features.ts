@@ -12,3 +12,11 @@ export const storedIsExperimentalDarkModeEnabledAtom = atomWithStorage<boolean>(
 export const isExperimentalDarkModeEnabledAtom = atom((get) => {
   return get(isExperimentalFeaturesEnabledAtom) ? get(storedIsExperimentalDarkModeEnabledAtom) : false
 })
+
+export const storedIsExperimentalExecutionEngineEnabledAtom = atomWithStorage<boolean>(
+  'experimental-dark-mode', false, undefined, { getOnInit: true }
+)
+
+export const isExperimentalExecutionEngineEnabledAtom = atom((get) => {
+  return get(isExperimentalFeaturesEnabledAtom) ? get(storedIsExperimentalExecutionEngineEnabledAtom) : false
+})
