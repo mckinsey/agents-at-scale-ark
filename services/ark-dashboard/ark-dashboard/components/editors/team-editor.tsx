@@ -30,8 +30,11 @@ import type {
 import type { components } from "@/lib/api/generated/types";
 import { getKubernetesNameError } from "@/lib/utils/kubernetes-validation";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
+import { cn } from "@/lib/utils";
+import { AlertCircle } from "lucide-react";
 
 type GraphEdge = components["schemas"]["GraphEdge"];
 
@@ -95,10 +98,10 @@ function DraggableCard({
       style={{ opacity: isDragging ? 0.4 : 1 }}
     >
       <label
-        className={`flex items-center space-x-2 p-1 rounded ${isSelected
-          ? "cursor-pointer hover:bg-accent"
-          : "cursor-not-allowed opacity-50"
-          }`}
+        className={cn(
+          "flex items-center space-x-2 p-1 rounded cursor-pointer",
+          isSelected ? "hover:bg-accent" : "opacity-50"
+        )}
       >
         <input
           type="checkbox"
@@ -271,7 +274,7 @@ export function TeamEditor({
 
   const isGraphValid =
     strategy !== "graph" ||
-    (graphEdges.length > 0 && graphEdges.every((edge) => edge.to));
+    (graphEdges.length > 0 && graphEdges.every((edge) => edge.to) && maxTurns.trim() !== "");
   const isSelectorValid =
     strategy !== "selector" || (selectorAgent && selectorAgent !== "__none__");
   const isValid =
@@ -356,13 +359,17 @@ export function TeamEditor({
               onChange={(e) => setMaxTurns(e.target.value)}
               placeholder="e.g., 10"
             />
+            {strategy === "graph" && !maxTurns && (
+              <Alert variant="destructive" className="py-2">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-sm">
+                  Graph strategy requires Max Turns to be set
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
           <div className="grid gap-2">
             <Label>Members</Label>
-            <p className="text-xs text-muted-foreground">
-              Note: Teams cannot mix internal and external agents. External
-              agents are marked with an &quot;External&quot; badge.
-            </p>
             <div className="border rounded-md p-2 space-y-2 max-h-40 overflow-y-auto">
               {agents.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-2">

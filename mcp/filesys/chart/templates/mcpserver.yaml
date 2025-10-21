@@ -7,6 +7,9 @@ metadata:
 spec:
   description: "MCP Filesystem Server providing file operations"
   transport: sse
+  {{- if .Values.mcpServer.timeout }}
+  timeout: {{ .Values.mcpServer.timeout | quote }}
+  {{- end }}
   address:
     valueFrom:
       serviceRef:

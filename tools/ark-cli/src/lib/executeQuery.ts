@@ -6,11 +6,15 @@ import {execa} from 'execa';
 import ora from 'ora';
 import output from './output.js';
 import type {Query, QueryTarget, K8sCondition} from './types.js';
+import {ExitCodes} from './errors.js';
+import {parseDuration} from './duration.js';
 
 export interface QueryOptions {
   targetType: string; // 'model', 'agent', 'team'
   targetName: string; // 'default', 'weather-agent', etc.
   message: string;
+  timeout?: string; // Query execution timeout (e.g., "30s", "5m", default "5m")
+  watchTimeout?: string; // CLI watch timeout (e.g., "6m", default timeout + 1 minute)
   verbose?: boolean;
 }
 
@@ -21,11 +25,16 @@ export interface QueryOptions {
 export async function executeQuery(options: QueryOptions): Promise<void> {
   const spinner = ora('Creating query...').start();
 
-  // Generate a unique query name
+  const queryTimeoutMs = options.timeout
+    ? parseDuration(options.timeout)
+    : parseDuration('5m');
+  const watchTimeoutMs = options.watchTimeout
+    ? parseDuration(options.watchTimeout)
+    : queryTimeoutMs + 60000;
+
   const timestamp = Date.now();
   const queryName = `cli-query-${timestamp}`;
 
-  // Create the Query resource
   const queryManifest: Partial<Query> = {
     apiVersion: 'ark.mckinsey.com/v1alpha1',
     kind: 'Query',
@@ -34,6 +43,7 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
     },
     spec: {
       input: options.message,
+      ...(options.timeout && {timeout: options.timeout}),
       targets: [
         {
           type: options.targetType,
@@ -56,7 +66,7 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
 
     let queryComplete = false;
     let attempts = 0;
-    const maxAttempts = 300; // 5 minutes with 1 second intervals
+    const maxAttempts = Math.floor(watchTimeoutMs / 1000);
 
     while (!queryComplete && attempts < maxAttempts) {
       attempts++;
@@ -92,7 +102,6 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
           queryComplete = true;
           spinner.fail('Query failed');
 
-          // Try to get error message from conditions or status
           const errorCondition = query.status?.conditions?.find(
             (c: K8sCondition) => {
               return c.type === 'Complete' && c.status === 'False';
@@ -105,14 +114,15 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
           } else {
             output.error('Query failed with unknown error');
           }
+          process.exit(ExitCodes.OperationError);
         } else if (phase === 'canceled') {
           queryComplete = true;
           spinner.warn('Query canceled');
 
-          // Try to get cancellation reason if available
           if (query.status?.message) {
             output.warning(query.status.message);
           }
+          process.exit(ExitCodes.OperationError);
         }
       } catch {
         // Query might not exist yet, continue waiting
@@ -126,19 +136,15 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
 
     if (!queryComplete) {
       spinner.fail('Query timed out');
-      output.error('Query did not complete within 5 minutes');
+      output.error(
+        `Query did not complete within ${options.watchTimeout ?? `${Math.floor(watchTimeoutMs / 1000)}s`}`
+      );
+      process.exit(ExitCodes.Timeout);
     }
   } catch (error) {
     spinner.fail('Query failed');
     output.error(error instanceof Error ? error.message : 'Unknown error');
-    process.exit(1);
-  } finally {
-    // Clean up the query resource
-    try {
-      await execa('kubectl', ['delete', 'query', queryName], {stdio: 'pipe'});
-    } catch {
-      // Ignore cleanup errors
-    }
+    process.exit(ExitCodes.CliError);
   }
 }
 

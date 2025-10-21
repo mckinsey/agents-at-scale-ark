@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useRef } from "react"
+import { useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,7 @@ const breadcrumbs: BreadcrumbElement[] = [
   { href: '/', label: "ARK Dashboard" }
 ]
 
-function EvaluationsContent() {
+export default function EvaluationsPage() {
   const searchParams = useSearchParams()
   const queryFilter = searchParams.get("query")
   const evaluationsSectionRef = useRef<{ openAddEditor: () => void }>(null)
@@ -21,7 +21,7 @@ function EvaluationsContent() {
       <PageHeader breadcrumbs={breadcrumbs} currentPage="Evaluations" actions={
         <Button onClick={() => evaluationsSectionRef.current?.openAddEditor()}>
           <Plus className="h-4 w-4" />
-          Add Evaluation
+          Create Evaluation
         </Button>
       } />
       <div className="flex flex-1 flex-col gap-4 p-4">
@@ -31,13 +31,5 @@ function EvaluationsContent() {
         />
       </div>
     </>
-  )
-}
-
-export default function EvaluationsPage() {
-  return (
-    <Suspense>
-      <EvaluationsContent />
-    </Suspense>
   )
 }

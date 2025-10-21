@@ -1,0 +1,26 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: invalid-team-graph-no-maxturns
+spec:
+  strategy: graph
+  members:
+  - type: agent
+    name: agent-a
+  - type: agent
+    name: agent-b
+  - type: agent
+    name: agent-c
+  - type: agent
+    name: agent-d
+  graph:
+    edges:
+    - from: agent-a
+      to: agent-b
+    - from: agent-b
+      to: agent-c
+    - from: agent-c
+      to: agent-d
+    - from: agent-d
+      to: agent-a
+

@@ -1,0 +1,30 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: rag-agent
+  namespace: default
+  labels:
+    app: rag-demo
+    category: knowledge-base
+spec:
+  prompt: |
+    You are a helpful AI assistant with access to a knowledge base about ARK.
+    
+    When answering questions, follow this process:
+    1. Use the retrieve-chunks tool to find relevant information from the knowledge base
+    2. Review the retrieved chunks and their similarity scores
+    3. Provide an answer based primarily on the retrieved context
+    4. If no highly relevant information is found (similarity < 0.5), acknowledge this
+    5. Always be honest if you don't have enough context to answer confidently
+    
+    Use the retrieved context to ground your responses in factual information.
+  
+  description: "AI assistant with RAG capabilities for ARK knowledge base queries"
+  
+  modelRef:
+    name: default
+  
+  tools:
+    - type: custom
+      name: retrieve-chunks
+

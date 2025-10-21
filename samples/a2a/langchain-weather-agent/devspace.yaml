@@ -1,0 +1,58 @@
+version: v2beta1
+
+# This section tells devspace what docker images we want to build.
+images:
+  # We have one docker image - the langchain weather agent image.
+  langchain-weather-agent:
+    image: langchain-weather-agent
+    dockerfile: Dockerfile
+    context: .
+
+# These pipelines tell devspace what to do for 'devspace deploy' and 'devspace
+# dev'.
+pipelines:
+  # To deploy, first build the images and then deploy the k8s resources.
+  deploy: |-
+    build_images --all
+    create_deployments --all
+
+  # For dev mode, we don't need to build the images, we just deploy the
+  # resources and then swap out the container for our dev mode container with
+  # live reload.
+  dev: |-
+    create_deployments --all
+    start_dev --all
+
+# To deploy, we apply the 'manifest' that contains the deployment, service and
+# A2A server resources.
+deployments:
+  langchain-weather-agent:
+    kubectl:
+      manifests:
+        - manifests.yaml
+
+# This section configures how 'devspace dev' works.
+dev:
+  # Find the 'langchain weather agent' image by label.
+  langchain-weather-agent:
+    imageSelector: langchain-weather-agent
+    
+    # Use a basic python image for dev mode, and pip install / uv with live
+    # reload.
+    devImage: python:3.12-slim
+    command:
+      - sh
+      - -c
+      - "cd /app && pip install uv && uv sync && uv run uvicorn langchain_weather_agent.a2a_server:app --reload --host 0.0.0.0 --port 8000"
+    # Show the server logs on the screen.
+    logs:
+      lastLines: 50
+    sync:
+      # Copy over the source to 'app', start the container, don't synchronise
+      # file changes from in the container back to the host, and don't upload
+      # files in '.dockerignore'.
+      - path: .:/app
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+

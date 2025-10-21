@@ -82,3 +82,4 @@ mcpServer:
   name: ""
   description: "{{ .Values.description }}"
   path: "/mcp"
+  # timeout: "30s"  # Uncomment and adjust for long-running operations (e.g., "5m", "10m")

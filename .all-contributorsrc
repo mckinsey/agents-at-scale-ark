@@ -318,6 +318,17 @@
         "bug",
         "code"
       ]
+    },
+    {
+      "login": "d4nyll",
+      "name": "Daniel Li",
+      "avatar_url": "https://avatars.githubusercontent.com/u/9997953?v=4",
+      "profile": "https://github.com/d4nyll",
+      "contributions": [
+        "code",
+        "bug",
+        "doc"
+      ]
     }
   ],
   "contributorsPerLine": 7,

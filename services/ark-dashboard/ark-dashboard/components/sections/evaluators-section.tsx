@@ -9,6 +9,10 @@ import { EvaluatorCard } from "@/components/cards"
 import { EvaluatorRow } from "@/components/rows/evaluator-row"
 import { useDelayedLoading } from "@/lib/hooks"
 import { ToggleSwitch, type ToggleOption } from "@/components/ui/toggle-switch"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { DASHBOARD_SECTIONS } from "@/lib/constants"
+import { Button } from "@/components/ui/button"
+import { ArrowUpRightIcon, Plus } from "lucide-react"
 
 export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(function EvaluatorsSection(_, ref) {
   const [evaluators, setEvaluators] = useState<Evaluator[]>([])
@@ -84,6 +88,47 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(funct
       <div className="flex h-full items-center justify-center">
         <div className="text-center py-8">Loading...</div>
       </div>
+    )
+  }
+
+  if (evaluators.length === 0 && !loading) {
+    return (
+      <>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.evaluators.icon />
+            </EmptyMedia>
+            <EmptyTitle>No Evaluators Yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t added any evaluators yet. Get started by adding
+              your first evaluator.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={() => setEvaluatorEditorOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add Evaluator
+            </Button>
+          </EmptyContent>
+          <Button
+            variant="link"
+            asChild
+            className="text-muted-foreground"
+            size="sm"
+          >
+            <a href="https://mckinsey.github.io/agents-at-scale-ark/reference/evaluations/evaluations/" target="_blank">
+              Learn More <ArrowUpRightIcon />
+            </a>
+          </Button>
+        </Empty>
+        <EvaluatorEditor
+          open={evaluatorEditorOpen}
+          onOpenChange={setEvaluatorEditorOpen}
+          evaluator={null}
+          onSave={handleCreateEvaluator as any} // eslint-disable-line @typescript-eslint/no-explicit-any
+        />
+      </>
     )
   }
 

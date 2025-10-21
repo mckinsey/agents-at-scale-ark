@@ -1,0 +1,579 @@
+---
+title: RAG Implementation Guide
+description: Implement Retrieval-Augmented Generation with external vector databases in ARK
+---
+
+# RAG Implementation Guide for ARK
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Architecture](#architecture)
+3. [Prerequisites](#prerequisites)
+4. [Vector Database Setup](#vector-database-setup)
+5. [Custom Retrieval Tool Development](#custom-retrieval-tool-development)
+6. [Ingestion Pipeline](#ingestion-pipeline)
+7. [Agent Configuration](#agent-configuration)
+8. [Testing & Validation](#testing--validation)
+9. [Production Considerations](#production-considerations)
+10. [Troubleshooting](#troubleshooting)
+
+---
+
+## Overview
+
+This guide explains how to implement Retrieval-Augmented Generation (RAG) functionality in ARK by integrating with a vector database. The approach enables agents to retrieve relevant context from your knowledge base before generating responses.
+
+### Built-in vs Custom RAG
+
+**ARK includes built-in RAG support** via the LangChain Execution Engine:
+- Enables by adding `langchain: rag` label to agents
+- Uses FAISS for in-memory vector storage
+- Automatically indexes local Python files
+- Suitable for: Code-aware agents, temporary knowledge bases
+
+**Custom RAG implementation is needed when**:
+- Using persistent vector databases (pgvector, Weaviate, Pinecone)
+- Ingesting custom documents/data
+- Sharing knowledge base across multiple agents
+- Deploying to production environments
+- Requiring cloud-hosted vector databases
+
+This guide focuses on **custom RAG implementation** for production use cases.
+
+---
+
+## Architecture
+
+### Component Overview
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                        ARK Platform                          │
+│                                                              │
+│  ┌────────────┐          ┌──────────────┐                    │
+│  │   Agent    │────┬────▶│ HTTP Tools   │                    │
+│  │            │    │     │ (CRDs)       │                    │
+│  └────────────┘    │     └──────┬───────┘                    │
+│                    │            │                            │
+│  ┌────────────┐    │            │                            │
+│  │   Agent    │────┘            │                            │
+│  └────────────┘                 │                            │
+└─────────────────────────────────┼────────────────────────────┘
+                                  │
+                    Service Reference
+                                  │
+                                  ▼
+                  ┌────────────────────────────────┐
+                  │   Retrieval Service Pod        │
+                  │   ┌──────────────────────┐     │
+                  │   │  FastMCP HTTP Server │     │
+                  │   │  - Query embeddings  │     │
+                  │   │  - Vector search     │     │
+                  │   │  - Return chunks     │     │
+                  │   └──────────┬───────────┘     │
+                  │              │                 │
+                  │   Environment Variables:       │
+                  │   - PGVECTOR_HOST              │
+                  │   - PGVECTOR_CREDENTIALS       │
+                  └──────────────┼─────────────────┘
+                                 │
+                                 │ Query
+                                 ▼
+                      ┌─────────────────────┐
+                      │   Vector Database   │
+                      │   (pgvector)        │
+                      │                     │
+                      │  - Documents        │
+                      │  - Embeddings       │
+                      │  - Metadata         │
+                      └─────────────────────┘
+                                 ▲
+                                 │ Ingest
+                                 │
+                      ┌────────────────────────┐
+                      │  Ingestion Pipeline    │
+                      │  - Load documents      │
+                      │  - Generate embeddings │
+                      │  - Store vectors       │
+                      └────────────────────────┘
+```
+
+### Data Flow
+
+1. **Ingestion** (Offline):
+   - Documents → Embedding Model → Vector DB
+
+2. **Retrieval** (Runtime):
+   - Agent Query → HTTP Tool → Embedding → Vector Search → Relevant Chunks → Agent
+
+3. **Generation**:
+   - Agent receives chunks as context → Generates response using LLM
+
+---
+
+## Prerequisites
+
+### Required
+
+- **ARK Platform**: Controller and API server installed and running
+- **Kubernetes cluster**: Version 1.19+ with kubectl configured
+- **Azure OpenAI**: Account with API key for embeddings
+- **Docker**: For building custom retrieval service image
+- **Python 3.9+**: For running ingestion scripts
+
+### Knowledge Prerequisites
+
+- Basic understanding of:
+  - Kubernetes resources (Deployments, Services, Secrets)
+  - Vector databases and embeddings
+  - Python development
+
+For a complete working example with step-by-step setup, see `samples/rag-external-vectordb/README.md`.
+
+---
+
+## Vector Database Setup
+
+### pgvector
+
+**Why pgvector?**
+- PostgreSQL extension - familiar SQL interface
+- Good performance for moderate scale (millions of vectors)
+- Easy to deploy in Kubernetes
+- Cloud provider support (AWS RDS, GCP Cloud SQL, Azure PostgreSQL)
+
+**Deployment Files**:
+
+A complete working deployment is available in `samples/rag-external-vectordb/pgvector/`:
+
+- `secret.yaml` - Database credentials
+- `pvc.yaml` - Persistent storage (10Gi)
+- `configmap.yaml` - Init SQL (creates vector extension, documents table, IVFFlat index)
+- `deployment.yaml` - PostgreSQL 16 with pgvector
+- `service.yaml` - ClusterIP service
+
+**Key Configuration**:
+- Vector dimension: 1536 (for Azure OpenAI text-embedding-ada-002)
+- Index type: IVFFlat for fast similarity search
+- Resources: 512Mi-2Gi memory, 500m-2000m CPU
+
+**Deploy**:
+```bash
+kubectl apply -k samples/rag-external-vectordb/pgvector/
+kubectl wait --for=condition=ready pod -l app=pgvector --timeout=120s
+```
+
+---
+
+## Custom Retrieval Tool Development
+
+### HTTP Tool Approach
+
+ARK HTTP Tools provide a simple way to expose retrieval functions as tools that agents can use.
+
+**Complete Implementation Available**:
+
+The full working retrieval service is in `samples/rag-external-vectordb/retrieval-service/`:
+
+- `src/rest_server.py` - Flask REST API with Azure OpenAI embeddings
+- `Dockerfile` - Container image definition
+- `pyproject.toml` - Python dependencies
+- `deployment/` - Kubernetes manifests
+
+**Key Components**:
+
+The implementation provides three tools:
+
+1. **`retrieve_chunks`** - Semantic similarity search using Azure OpenAI embeddings
+2. **`search_by_metadata`** - Filter documents by metadata key-value pairs  
+3. **`get_document_stats`** - Get database statistics
+
+**Technology Stack**:
+- Flask REST API for HTTP endpoints
+- Azure OpenAI for query embeddings (text-embedding-ada-002, 1536 dimensions)
+- psycopg2 + pgvector for database queries
+- Kubernetes Secrets for credentials (database + Azure OpenAI)
+
+See `samples/rag-external-vectordb/retrieval-service/src/rest_server.py` for the complete source code.
+
+**ARK Tool CRDs**:
+
+The three HTTP Tools are defined in `samples/rag-external-vectordb/tools/`:
+
+- `retrieve-chunks.yaml` - Main RAG retrieval tool
+- `search-by-metadata.yaml` - Metadata filtering
+- `get-document-stats.yaml` - Database statistics
+
+Each Tool CRD defines:
+- HTTP endpoint (via serviceRef)
+- Input schema (query parameters)
+- Request body template
+
+### Deploying the Service
+
+**Prerequisites**:
+- ARK platform installed and running (controller, API server)
+- Kubernetes cluster with kubectl configured
+- Docker for building images
+- Azure OpenAI account with API key
+
+For complete deployment instructions, see `samples/rag-external-vectordb/README.md`.
+
+**Summary**:
+1. Deploy pgvector database
+2. Configure Azure OpenAI credentials
+3. Ingest sample data
+4. Build and deploy retrieval service
+5. Deploy ARK Tool CRDs
+6. Test with RAG agent
+
+The guide includes detailed commands, verification steps, and troubleshooting tips.
+
+---
+
+## Ingestion Pipeline
+
+ARK **does not include** built-in data ingestion. You need to create a separate pipeline.
+
+### Sample Ingestion Script
+
+A complete working ingestion script is available: `samples/rag-external-vectordb/ingestion/ingest_sample_data.py`
+
+**Features**:
+- Loads 12 sample documents about ARK concepts
+- Generates embeddings using Azure OpenAI (text-embedding-ada-002)
+- Stores content, metadata, and embeddings in pgvector
+- Includes verbose logging and error handling
+- Automatically clears existing data
+
+**Usage**:
+```bash
+# 1. Port-forward pgvector
+kubectl port-forward svc/pgvector 5432:5432 &
+
+# 2. Set Azure OpenAI credentials
+export AZURE_OPENAI_API_KEY="$(kubectl get secret azure-openai-creds -o jsonpath='{.data.api-key}' | base64 -d)"
+export AZURE_OPENAI_ENDPOINT="$(kubectl get secret azure-openai-creds -o jsonpath='{.data.endpoint}' | base64 -d)"
+export AZURE_OPENAI_API_VERSION="2024-04-01-preview"
+export AZURE_EMBEDDING_MODEL="text-embedding-ada-002"
+
+# 3. Install dependencies
+cd samples/rag-external-vectordb/ingestion
+pip install -r requirements.txt
+
+# 4. Run ingestion
+python ingest_sample_data.py
+```
+
+### Embedding Model Selection
+
+| Model | Dimensions | Use Case | Performance |
+|-------|------------|----------|-------------|
+| all-MiniLM-L6-v2 | 384 | General purpose, fast | Good |
+| all-mpnet-base-v2 | 768 | Better quality | Slower |
+| text-embedding-ada-002 (OpenAI) | 1536 | Best quality | API cost |
+| multilingual-e5-large | 1024 | Multilingual | Medium |
+
+**Considerations**:
+- Match embedding dimensions in database schema
+- Consider inference speed vs quality trade-off
+- Cloud embeddings (OpenAI, Cohere) vs local models
+
+---
+
+## Agent Configuration
+
+### Basic RAG Agent
+
+A complete RAG-enabled agent example is available: `samples/rag-external-vectordb/agents/rag-agent.yaml`
+
+**Key Configuration**:
+- **Prompt**: Instructions on when/how to use the `retrieve-chunks` tool
+- **Model**: References the default ARK model (configurable)
+- **Tools**: Uses `retrieve-chunks` for semantic search
+
+**Deploy**:
+```bash
+kubectl apply -f samples/rag-external-vectordb/agents/rag-agent.yaml
+```
+
+### Prompt Engineering Tips
+
+1. **Explicit Tool Usage Instructions**: Tell the agent when/how to use retrieval
+2. **Citation Requirements**: Specify if sources should be cited
+3. **Fallback Behavior**: Define what to do when no relevant chunks found
+4. **Confidence Thresholds**: Guide agent on when retrieved context is sufficient
+5. **Context Window Management**: Remind agent of token limits when relevant
+
+---
+
+## Testing & Validation
+
+### 1. Database Connectivity
+
+```bash
+# Port-forward database
+kubectl port-forward svc/pgvector 5432:5432
+
+# Test connection
+psql -h localhost -U postgres -d vectors -c "SELECT COUNT(*) FROM documents;"
+```
+
+### 2. Embedding Quality
+
+```python
+# Test similarity search
+query = "How do I create an agent?"
+results = retrieve_chunks(query, top_k=3)
+
+for r in results:
+    print(f"[{r['similarity']:.3f}] {r['content'][:100]}...")
+```
+
+**Expected**: Similarity scores > 0.5 for relevant content
+
+### 3. End-to-End Agent Test
+
+Use the sample query: `samples/rag-external-vectordb/queries/rag-query.yaml`
+
+```bash
+# Deploy query
+kubectl apply -f samples/rag-external-vectordb/queries/rag-query.yaml
+
+# Wait for completion
+kubectl wait --for=condition=complete query/rag-query --timeout=60s
+
+# View results
+kubectl get query rag-query -o jsonpath='{.status.responses[0].content}'
+```
+
+### 4. Tool Call Verification
+
+Check ARK controller logs for tool calls:
+
+```bash
+kubectl logs -n ark-system -l control-plane=controller-manager | grep "retrieve_chunks"
+```
+
+### 5. Monitoring Metrics
+
+- Query latency
+- Retrieval accuracy (relevance of chunks)
+- Token usage (with vs without RAG)
+- Cache hit rates (if applicable)
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+#### 1. HTTP Tool Not Responding
+
+**Symptoms**:
+```bash
+$ kubectl get tools
+NAME              AGE
+retrieve-chunks   5m
+$ kubectl logs -n ark-system -l control-plane=controller-manager | grep "retrieve-chunks"
+ERROR: failed to call tool retrieve-chunks: connection refused
+```
+
+**Checks**:
+```bash
+# Check pod status
+kubectl get pods -l app=rag-retrieval-http
+
+# Check logs
+kubectl logs -l app=rag-retrieval-http
+
+# Check service and endpoints
+kubectl get svc rag-retrieval-http
+kubectl get endpoints rag-retrieval-http
+
+# Test endpoint directly
+kubectl port-forward svc/rag-retrieval-http 8000:8000
+curl -X POST http://localhost:8000/tools/call \
+  -H "Content-Type: application/json" \
+  -d '{"name": "retrieve_chunks", "arguments": {"query": "test"}}'
+```
+
+**Common Causes**:
+- Service not ready
+- Pod crashlooping
+- Network policy blocking access
+- Incorrect tool CRD configuration
+
+#### 2. Database Connection Failures
+
+**Symptoms**: Tool returns errors like "connection refused" or "authentication failed"
+
+**Checks**:
+```bash
+# Test from retrieval service pod
+kubectl exec -it deploy/rag-retrieval-http -- sh
+# Inside pod:
+# Install psql if needed or use python
+python -c "import psycopg2; conn = psycopg2.connect(host='pgvector', database='vectors', user='postgres', password='PASSWORD'); print('Connected')"
+
+# Check secrets
+kubectl get secret pgvector-creds -o yaml
+
+# Check network connectivity
+kubectl exec -it deploy/rag-retrieval-http -- nc -zv pgvector 5432
+
+# Or port-forward and test locally
+kubectl port-forward svc/pgvector 5432:5432
+psql -h localhost -U postgres -d vectors -c "SELECT COUNT(*) FROM documents;"
+```
+
+**Solutions**:
+- Verify secret values
+- Check service DNS resolution
+- Ensure database is ready
+- Check pgvector logs
+
+#### 3. Poor Retrieval Quality
+
+**Symptoms**: Retrieved chunks not relevant, low similarity scores
+
+**Diagnosis**:
+```python
+# Test embedding model
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer('all-MiniLM-L6-v2')
+q1 = model.encode("What is an agent?")
+q2 = model.encode("How to create an agent?")
+
+# Cosine similarity
+from numpy import dot
+from numpy.linalg import norm
+similarity = dot(q1, q2) / (norm(q1) * norm(q2))
+print(f"Similarity: {similarity}")  # Should be > 0.7 for similar queries
+```
+
+**Solutions**:
+- Use better embedding model
+- Improve document chunking strategy
+- Add more training data
+- Tune similarity threshold
+- Implement hybrid search (keyword + vector)
+
+#### 4. Slow Performance
+
+**Metrics to Check**:
+- Query latency: Should be < 500ms for vector search
+- Embedding generation time
+- Network latency
+
+**Optimizations**:
+- Add pgvector index tuning
+- Increase pod resources
+- Use faster embedding model
+- Implement caching
+- Add read replicas
+
+#### 5. Token Limit Exceeded
+
+**Issue**: Too many retrieved chunks exceed LLM context window
+
+**Solutions**:
+```python
+# Limit chunk size
+def truncate_chunks(chunks, max_tokens=2000):
+    total = 0
+    result = []
+    for chunk in chunks:
+        tokens = len(chunk['content']) // 4  # Rough estimate
+        if total + tokens > max_tokens:
+            break
+        result.append(chunk)
+        total += tokens
+    return result
+```
+
+Or reduce `top_k` in retrieval.
+
+### Debug Mode
+
+Enable verbose logging:
+
+```yaml
+# In MCP server deployment
+env:
+- name: LOG_LEVEL
+  value: "DEBUG"
+- name: PYTHONUNBUFFERED
+  value: "1"
+```
+
+### Health Checks
+
+Implement health endpoints:
+
+```python
+@mcp.tool
+def health_check() -> Dict:
+    """Check system health"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        cursor.close()
+        conn.close()
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}
+```
+
+---
+
+## Summary
+
+This guide covered:
+
+✅ **Architecture**: Understanding RAG components in ARK  
+✅ **Vector DB Setup**: Deploying pgvector with proper configuration  
+✅ **Tool Development**: Building HTTP Tools for retrieval  
+✅ **Ingestion**: Creating pipelines to load your data  
+✅ **Agent Config**: Configuring agents to use RAG effectively  
+✅ **Troubleshooting**: Debugging common issues  
+
+### Key Takeaways
+
+1. **ARK has built-in RAG** (LangChain executor) for simple use cases
+2. **Custom RAG needed** for persistent, production knowledge bases
+3. **pgvector** is a good starting point, easy to deploy
+4. **HTTP Tools** provide simple, reliable tool integration
+5. **Ingestion is separate** - build your own pipeline
+6. **Azure OpenAI** provides production-grade embeddings without SSL issues
+7. **Test thoroughly** - retrieval quality directly impacts agent responses
+
+### Next Steps
+
+**For Immediate Implementation**:
+1. Follow the Quick Start Guide in `samples/rag-external-vectordb/README.md` for complete deployment
+2. Test with the included sample data and RAG agent
+3. Customize for your use case (see guide sections above)
+
+**For Custom Implementation**:
+1. Adapt the sample ingestion script for your data
+2. Modify agent prompts for your domain
+3. Tune retrieval parameters (top_k, similarity thresholds)
+4. Add production considerations (scaling, monitoring, security)
+
+---
+
+## Additional Resources
+
+- **Working Example**: Production-ready implementation in `samples/rag-external-vectordb/`
+- **Sample README**: Quick start guide in `samples/rag-external-vectordb/README.md`
+- **ARK Documentation**: Internal documentation on Agents, Tools, HTTP Tools
+- **pgvector**: https://github.com/pgvector/pgvector
+- **Azure OpenAI**: https://learn.microsoft.com/en-us/azure/ai-services/openai/
+- **RAG Patterns**: https://arxiv.org/abs/2005.11401
+
+For questions or issues, consult your ARK support team or internal documentation.
+

@@ -73,3 +73,6 @@ config:
 serviceAccount:
   name: mcp-filesys-sa
   create: true
+
+mcpServer:
+  # timeout: "30s"  # Uncomment and adjust for long-running file operations (e.g., "5m", "10m")
