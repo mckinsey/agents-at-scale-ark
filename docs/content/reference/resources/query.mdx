@@ -295,31 +295,9 @@ spec:
 
 ### For A2A Agents
 
-A2A execution uses native context deadline propagation:
+A2A execution automatically respects the query timeout. The A2A execution uses Go's context deadline, so remaining time is automatically tracked as the query progresses.
 
-1. **Query.spec.timeout** sets the overall execution time limit
-2. **Query.spec.a2a.gatewayTimeout** (optional) limits individual A2A calls within that time
-
-The A2A execution automatically uses the remaining time from the query context.
-
-#### Example: Long Query with Short A2A Calls
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: multi-step-query
-spec:
-  input: "Multi-step task"
-  targets:
-    - type: agent
-      name: agent-1
-  timeout: 30m  # Overall query has 30 minutes
-  a2a:
-    gatewayTimeout: 5m  # But each A2A call limited to 5 minutes
-```
-
-This ensures that if the query involves multiple agents or retry logic, no single A2A call monopolizes all the remaining time.
+Individual A2A servers can also have their own timeout configured via `A2AServer.spec.timeout` to further limit specific server calls.
 
 See the [Building A2A Servers guide](/developer-guide/building-a2a-servers#timeout-configuration) for detailed timeout configuration for A2A agents.
 

@@ -61,17 +61,19 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		return nil, fmt.Errorf("unable to get A2AServer %v: %w", serverKey, err)
 	}
 
-	// Check if A2A gateway timeout is set
-	if a2aGatewayTimeout := getA2AGatewayTimeout(ctx); a2aGatewayTimeout > 0 {
-		// Create sub-context with A2A timeout
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, a2aGatewayTimeout)
-		defer cancel()
-		log.Info("using A2A gateway timeout in sub-context", "timeout", a2aGatewayTimeout)
-	} else {
-		// Otherwise, use existing context with remaining query time
-		log.Info("A2A execution using remaining query time")
+	// Check if A2AServer has a timeout configured
+	if a2aServer.Spec.Timeout != "" {
+		if timeout, err := time.ParseDuration(a2aServer.Spec.Timeout); err == nil {
+			// Create sub-context with A2AServer timeout
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, timeout)
+			defer cancel()
+			log.Info("using A2AServer timeout", "timeout", timeout)
+		} else {
+			log.Info("failed to parse A2AServer timeout", "timeout", a2aServer.Spec.Timeout, "error", err)
+		}
 	}
+	// Otherwise, use existing context deadline from query
 
 	// Extract content from the userInput message
 	content := ""

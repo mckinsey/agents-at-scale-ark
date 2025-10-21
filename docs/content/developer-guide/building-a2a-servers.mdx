@@ -172,44 +172,26 @@ ARK provides flexible timeout configuration for A2A agent execution through mult
 
 ### Timeout Behavior
 
-A2A execution uses native Go context deadlines:
+A2A execution automatically respects query timeouts:
 
-1. **Query sets the overall time limit** via `query.spec.timeout`
-2. **A2A gateway timeout** (optional) can create a sub-context to limit individual A2A calls
-3. If no A2A gateway timeout is set, A2A uses the remaining query time
+1. **Query.spec.timeout** (default: 5 minutes) sets the overall time limit
+2. **A2AServer.spec.timeout** (optional) can reduce the timeout for specific A2A servers
 
-### How It Works
-
-- Query creates a context with deadline: `context.WithTimeout(ctx, query.spec.timeout)`
-- A2A execution receives this context with remaining time already tracked
-- If `query.spec.a2a.gatewayTimeout` is set, A2A creates a sub-context
-- HTTP clients automatically derive timeout from context deadline
-
-### Example Scenarios
-
-**Scenario 1: No A2A timeout set**
-```yaml
-spec:
-  timeout: 10m  # Query has 10 minutes total
-  # No a2a.gatewayTimeout set
-```
-
-→ A2A uses whatever time remains when it starts (e.g., 7 minutes if 3 minutes already passed)
-
-**Scenario 2: A2A timeout set**
-
-```yaml
-spec:
-  timeout: 10m  # Query has 10 minutes total
-  a2a:
-    gatewayTimeout: 2m  # Each A2A call limited to 2 minutes
-```
-
-→ A2A creates sub-context with 2-minute timeout (but still respects the 7 minutes remaining)
+The A2A execution uses Go's context deadline, so remaining time is automatically tracked as the query progresses.
 
 ### Configuring A2AServer Timeout
 
-Add a timeout field to your A2AServer resource:
+```yaml
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: A2AServer
+metadata:
+  name: my-a2a-server
+spec:
+  address: "http://my-a2a-server:8000"
+  timeout: "2m"  # Limit this server's calls to 2 minutes
+```
+
+### Example Usage
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1prealpha1

@@ -2,7 +2,6 @@ package genai
 
 import (
 	"context"
-	"time"
 )
 
 type contextKey string
@@ -16,12 +15,10 @@ const (
 	// Execution metadata keys for streaming
 	// These values are sent back with streaming chunks in the 'ark' metadata field,
 	// allowing callers to differentiate the source of chunks (e.g., specific agents in a team query)
-	targetKey      contextKey = "target"      // Original query target (e.g., "team/my-team")
-	teamKey        contextKey = "team"        // Current team name
-	agentKey       contextKey = "agent"       // Current agent name
-	modelKey       contextKey = "model"       // Current model name
-	a2aTimeoutKey       contextKey = "a2aTimeout"       // A2A specific timeout
-	a2aGatewayTimeoutKey contextKey = "a2aGatewayTimeout" // A2A gateway timeout
+	targetKey contextKey = "target" // Original query target (e.g., "team/my-team")
+	teamKey   contextKey = "team"   // Current team name
+	agentKey  contextKey = "agent"  // Current agent name
+	modelKey  contextKey = "model"  // Current model name
 )
 
 func WithQueryContext(ctx context.Context, queryID, sessionID, queryName string) context.Context {
@@ -88,26 +85,3 @@ func GetExecutionMetadata(ctx context.Context) map[string]interface{} {
 	return metadata
 }
 
-// getHTTPClientTimeout derives HTTP client timeout from context deadline
-func getHTTPClientTimeout(ctx context.Context, defaultTimeout time.Duration) time.Duration {
-	if deadline, ok := ctx.Deadline(); ok {
-		return time.Until(deadline)
-	}
-	// No deadline set, use default timeout
-	return defaultTimeout
-}
-
-// WithA2AGatewayTimeout adds A2A gateway timeout to context
-func WithA2AGatewayTimeout(ctx context.Context, timeout time.Duration) context.Context {
-	return context.WithValue(ctx, a2aGatewayTimeoutKey, timeout)
-}
-
-// getA2AGatewayTimeout retrieves A2A gateway timeout from context
-func getA2AGatewayTimeout(ctx context.Context) time.Duration {
-	if val := ctx.Value(a2aGatewayTimeoutKey); val != nil {
-		if timeout, ok := val.(time.Duration); ok {
-			return timeout
-		}
-	}
-	return 0
-}

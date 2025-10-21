@@ -653,10 +653,6 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 	}
 	
 
-	// Add A2A gateway timeout if specified
-	if query.Spec.A2A != nil && query.Spec.A2A.GatewayTimeout != nil {
-		ctx = genai.WithA2AGatewayTimeout(ctx, query.Spec.A2A.GatewayTimeout.Duration)
-	}
 	
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
