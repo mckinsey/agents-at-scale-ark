@@ -376,6 +376,12 @@ func (h *HTTPExecutor) substituteURLParameters(urlTemplate string, arguments map
 }
 
 func CreateToolFromCRD(toolCRD *arkv1alpha1.Tool) ToolDefinition {
+	description := getToolDescription(toolCRD)
+	parameters := getToolParameters(toolCRD)
+	return ToolDefinition{Name: toolCRD.Name, Description: description, Parameters: parameters}
+}
+
+func getToolDescription(toolCRD *arkv1alpha1.Tool) string {
 	description := toolCRD.Spec.Description
 	if description == "" && toolCRD.Annotations != nil {
 		if desc, exists := toolCRD.Annotations["description"]; exists && desc != "" {
@@ -384,28 +390,40 @@ func CreateToolFromCRD(toolCRD *arkv1alpha1.Tool) ToolDefinition {
 	}
 
 	if description == "" {
-		switch toolCRD.Spec.Type {
-		case ToolTypeHTTP:
-			if toolCRD.Spec.HTTP != nil {
-				description = fmt.Sprintf("HTTP request to %s", toolCRD.Spec.HTTP.URL)
-			}
-		default:
-			description = fmt.Sprintf("Custom tool: %s", toolCRD.Name)
-		}
+		description = getDefaultToolDescription(toolCRD)
 	}
 
+	return description
+}
+
+func getDefaultToolDescription(toolCRD *arkv1alpha1.Tool) string {
+	switch toolCRD.Spec.Type {
+	case ToolTypeHTTP:
+		if toolCRD.Spec.HTTP != nil {
+			return fmt.Sprintf("HTTP request to %s", toolCRD.Spec.HTTP.URL)
+		}
+	case ToolTypeBuiltin:
+		// For builtin tools, use the description from the CRD itself
+		return fmt.Sprintf("Built-in tool: %s", toolCRD.Name)
+	default:
+		return fmt.Sprintf("Custom tool: %s", toolCRD.Name)
+	}
+	return fmt.Sprintf("Custom tool: %s", toolCRD.Name)
+}
+
+func getToolParameters(toolCRD *arkv1alpha1.Tool) map[string]any {
 	parameters := map[string]any{
 		"type":       "object",
 		"properties": map[string]any{},
 	}
+
 	if toolCRD.Spec.InputSchema != nil && len(toolCRD.Spec.InputSchema.Raw) > 0 {
-		// Parse runtime.RawExtension to map[string]any
 		if err := json.Unmarshal(toolCRD.Spec.InputSchema.Raw, &parameters); err != nil {
 			logf.Log.Error(err, "failed to unmarshal tool input schema")
 		}
 	}
 
-	return ToolDefinition{Name: toolCRD.Name, Description: description, Parameters: parameters}
+	return parameters
 }
 
 func CreateHTTPTool(toolCRD *arkv1alpha1.Tool) ToolDefinition {

@@ -1,0 +1,45 @@
+# Mock LLM configuration for custom headers test
+# Echoes back received headers as JSON for verification
+ark:
+  model:
+    enabled: true
+    name: test-model-custom-headers
+    type: openai
+    model: gpt-5
+    apiKey: mock-api-key
+    headers:
+    - name: X-Consumer-Application
+      value:
+        value: ark-chainsaw-test-value
+    - name: X-Authorization-Session
+      value:
+        valueFrom:
+          secretKeyRef:
+            name: test-custom-headers
+            key: auth-token
+    - name: X-Consumer-Group
+      value:
+        valueFrom:
+          configMapKeyRef:
+            name: test-custom-headers
+            key: consumer-group
+
+config:
+  rules:
+  - path: "/v1/chat/completions"
+    match: "@"
+    response:
+      status: 200
+      content: |
+        {
+          "id": "mock-{{timestamp}}",
+          "object": "chat.completion",
+          "model": "{{jmes request body.model}}",
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "content": {{jmes request headers}}
+            },
+            "finish_reason": "stop"
+          }]
+        }

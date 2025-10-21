@@ -17,14 +17,12 @@ import type {
   Team,
   TeamCreateRequest,
   TeamUpdateRequest,
-  Agent,
-  Model
+  Agent
 } from "@/lib/services";
 
 interface TeamCardProps {
   team: Team;
   agents: Agent[];
-  models: Model[];
   onUpdate?: (
     team: (TeamCreateRequest | TeamUpdateRequest) & { id?: string }
   ) => void;
@@ -34,7 +32,6 @@ interface TeamCardProps {
 export function TeamCard({
   team,
   agents,
-  models,
   onUpdate,
   onDelete
 }: TeamCardProps) {
@@ -114,7 +111,6 @@ export function TeamCard({
         onOpenChange={setEditorOpen}
         team={team}
         agents={agents}
-        models={models}
         onSave={onUpdate || (() => {})}
       />
       {onDelete && (

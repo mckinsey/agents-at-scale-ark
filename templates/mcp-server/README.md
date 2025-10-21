@@ -62,6 +62,7 @@ kubectl get queries
 | `image.repository` | string | `"{{ .Values.mcpServerName }}"` | Image repository   |
 | `image.tag`        | string | `"latest"`                      | Image tag          |
 | `service.port`     | int    | `8080`                          | Service port       |
+| `mcpServer.timeout` | string | `"30s"`                        | Timeout for MCP tool calls (e.g., "5m", "10m") |
 
 {{- if .Values.requiresAuth }}
 | `auth.token` | string | `""` | Authentication token |

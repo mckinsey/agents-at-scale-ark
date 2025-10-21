@@ -15,8 +15,12 @@ spec:
         outputs:
         - name: azure
           value: (json_parse($stdout))
-    - apply:
-        file: manifests/a00-rbac.yaml
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - apply:
         file: manifests/a01-secret.yaml
     - apply:
@@ -52,6 +56,15 @@ spec:
           metadata:
             name: test-query-input-default
           status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-input-default
+          status:
             (length(responses)): 1
             (contains(responses[*].target.name, 'test-agent')): true
             (length(join('', responses[*].content)) > `10`): true
@@ -79,8 +92,12 @@ spec:
         outputs:
         - name: azure
           value: (json_parse($stdout))
-    - apply:
-        file: manifests/a00-rbac.yaml
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - apply:
         file: manifests/a01-secret.yaml
     - apply:
@@ -116,6 +133,15 @@ spec:
           metadata:
             name: test-query-input-type-user
           status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-input-type-user
+          status:
             (length(responses)): 1
             (contains(responses[*].target.name, 'test-agent')): true
             (length(join('', responses[*].content)) > `10`): true
@@ -143,8 +169,12 @@ spec:
         outputs:
         - name: azure
           value: (json_parse($stdout))
-    - apply:
-        file: manifests/a00-rbac.yaml
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - apply:
         file: manifests/a01-secret.yaml
     - apply:
@@ -180,6 +210,15 @@ spec:
           metadata:
             name: test-query-input-type-messages
           status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-input-type-messages
+          status:
             (length(responses)): 1
             (contains(responses[*].target.name, 'test-agent')): true
             (length(join('', responses[*].content)) > `10`): true
@@ -207,8 +246,12 @@ spec:
         outputs:
         - name: azure
           value: (json_parse($stdout))
-    - apply:
-        file: manifests/a00-rbac.yaml
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - apply:
         file: manifests/a01-secret.yaml
     - apply:
@@ -237,6 +280,15 @@ spec:
             name: test-query-default-invalid-input
           status:
             phase: error
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-default-invalid-input
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     catch:
     - events: {}
     - describe:
@@ -261,8 +313,12 @@ spec:
         outputs:
         - name: azure
           value: (json_parse($stdout))
-    - apply:
-        file: manifests/a00-rbac.yaml
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - apply:
         file: manifests/a01-secret.yaml
     - apply:
@@ -291,6 +347,15 @@ spec:
             name: test-query-input-type-user-invalid-input
           status:
             phase: error
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-input-type-user-invalid-input
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     catch:
     - events: {}
     - describe:
@@ -315,8 +380,12 @@ spec:
         outputs:
         - name: azure
           value: (json_parse($stdout))
-    - apply:
-        file: manifests/a00-rbac.yaml
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - apply:
         file: manifests/a01-secret.yaml
     - apply:
@@ -345,6 +414,15 @@ spec:
             name: test-query-input-type-messages-invalid-input
           status:
             phase: error
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-input-type-messages-invalid-input
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     catch:
     - events: {}
     - describe:

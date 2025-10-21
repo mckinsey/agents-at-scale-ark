@@ -43,6 +43,20 @@ spec:
             type: object
           spec:
             properties:
+              builtin:
+                description: |-
+                  Builtin-specific configuration for builtin tools.
+                  This field is required only if Type = "builtin".
+                properties:
+                  name:
+                    description: |-
+                      Name of the Builtin being referenced.
+                      This must be a non-empty string.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
               agent:
                 description: |-
                   Agent-specific configuration for agent tools.
@@ -146,7 +160,8 @@ spec:
                             queryParameterRef:
                               properties:
                                 name:
-                                  description: Name of the parameter from the Query resource
+                                  description: Name of the parameter from the Query
+                                    resource
                                   minLength: 1
                                   type: string
                               required:
@@ -215,6 +230,29 @@ spec:
                               type: string
                             valueFrom:
                               properties:
+                                configMapKeyRef:
+                                  description: Selects a key from a ConfigMap.
+                                  properties:
+                                    key:
+                                      description: The key to select.
+                                      type: string
+                                    name:
+                                      default: ""
+                                      description: |-
+                                        Name of the referent.
+                                        This field is effectively required, but due to backwards compatibility is
+                                        allowed to be empty. Instances of this type with an empty value here are
+                                        almost certainly wrong.
+                                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                      type: string
+                                    optional:
+                                      description: Specify whether the ConfigMap or
+                                        its key must be defined
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
                                 secretKeyRef:
                                   description: SecretKeySelector selects a key of
                                     a Secret.
@@ -297,6 +335,7 @@ spec:
                 - http
                 - mcp
                 - agent
+                - builtin
                 type: string
             required:
             - type

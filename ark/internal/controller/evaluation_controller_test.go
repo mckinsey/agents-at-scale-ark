@@ -116,7 +116,13 @@ var _ = Describe("Evaluation Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Second reconcile: will attempt to call evaluator service and fail with connection error
+			// Second reconcile: initializes status.conditions to EvaluationNotStarted
+			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: evaluationLookupKey,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Third reconcile: will attempt to call evaluator service and fail with connection error
 			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
 				NamespacedName: evaluationLookupKey,
 			})
@@ -170,7 +176,13 @@ var _ = Describe("Evaluation Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Second reconcile: should fail due to missing evaluator
+			// Second reconcile: initializes status.conditions to EvaluationNotStarted
+			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: evaluationLookupKey,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Third reconcile: should fail due to missing evaluator
 			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
 				NamespacedName: evaluationLookupKey,
 			})
@@ -241,7 +253,13 @@ var _ = Describe("Evaluation Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Second reconcile: should fail due to empty input
+			// Second reconcile: initializes status.conditions to EvaluationNotStarted
+			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: evaluationLookupKey,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Third reconcile: should fail due to empty input
 			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
 				NamespacedName: evaluationLookupKey,
 			})
@@ -566,6 +584,12 @@ var _ = Describe("Evaluation Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
+			// Second reconcile: initializes status.conditions to EvaluationNotStarted
+			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: evaluationLookupKey,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
 			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
 				NamespacedName: evaluationLookupKey,
 			})
@@ -629,6 +653,12 @@ var _ = Describe("Evaluation Controller", func() {
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: evaluationLookupKey,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile: initializes status.conditions to EvaluationNotStarted
+			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
 				NamespacedName: evaluationLookupKey,
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -735,6 +765,12 @@ var _ = Describe("Evaluation Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
+			// Second reconcile: initializes status.conditions to EvaluationNotStarted
+			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: evaluationLookupKey,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
 			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
 				NamespacedName: evaluationLookupKey,
 			})
@@ -825,6 +861,12 @@ var _ = Describe("Evaluation Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
+			// Second reconcile: initializes status.conditions to EvaluationNotStarted
+			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: evaluationLookupKey,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
 			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
 				NamespacedName: evaluationLookupKey,
 			})
@@ -837,6 +879,240 @@ var _ = Describe("Evaluation Controller", func() {
 
 			Expect(k8sClient.Delete(ctx, createdEvaluation)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, query)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, evaluator)).Should(Succeed())
+		})
+	})
+
+	Context("When setting status.conditions", func() {
+		It("Should initialize conditions when evaluation is created", func() {
+			ctx := context.Background()
+
+			// Create an evaluator first
+			evaluator := &arkv1alpha1.Evaluator{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-evaluator-conditions",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.EvaluatorSpec{
+					Address: arkv1alpha1.ValueSource{
+						Value: "http://evaluator-service:8080",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, evaluator)).Should(Succeed())
+
+			// Update the evaluator status to ready
+			evaluator.Status.Phase = statusReady
+			Expect(k8sClient.Status().Update(ctx, evaluator)).Should(Succeed())
+
+			// Create evaluation
+			evaluation := &arkv1alpha1.Evaluation{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-evaluation-conditions",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.EvaluationSpec{
+					Type: "direct",
+					Config: arkv1alpha1.EvaluationConfig{
+						DirectEvaluationConfig: &arkv1alpha1.DirectEvaluationConfig{
+							Input:  "What is 2+2?",
+							Output: "4",
+						},
+					},
+					Evaluator: arkv1alpha1.EvaluationEvaluatorRef{
+						Name: "test-evaluator-conditions",
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, evaluation)).Should(Succeed())
+
+			evaluationLookupKey := types.NamespacedName{Name: "test-evaluation-conditions", Namespace: "default"}
+
+			controllerReconciler := &EvaluationReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			// First reconcile should initialize conditions
+			_, err := controllerReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: evaluationLookupKey,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify conditions were initialized
+			createdEvaluation := &arkv1alpha1.Evaluation{}
+			Expect(k8sClient.Get(ctx, evaluationLookupKey, createdEvaluation)).Should(Succeed())
+
+			Expect(createdEvaluation.Status.Conditions).To(HaveLen(1))
+			condition := createdEvaluation.Status.Conditions[0]
+			Expect(condition.Type).To(Equal(string(arkv1alpha1.EvaluationCompleted)))
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal("EvaluationNotStarted"))
+			Expect(condition.Message).To(Equal("The evaluation has not been started yet"))
+			Expect(condition.ObservedGeneration).To(Equal(createdEvaluation.Generation))
+
+			// Cleanup
+			Expect(k8sClient.Delete(ctx, createdEvaluation)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, evaluator)).Should(Succeed())
+		})
+
+		It("Should update conditions when evaluation status changes", func() {
+			ctx := context.Background()
+
+			// Create an evaluator first
+			evaluator := &arkv1alpha1.Evaluator{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-evaluator-conditions-2",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.EvaluatorSpec{
+					Address: arkv1alpha1.ValueSource{
+						Value: "http://evaluator-service:8080",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, evaluator)).Should(Succeed())
+
+			// Update the evaluator status to ready
+			evaluator.Status.Phase = statusReady
+			Expect(k8sClient.Status().Update(ctx, evaluator)).Should(Succeed())
+
+			// Create evaluation
+			evaluation := &arkv1alpha1.Evaluation{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-evaluation-conditions-2",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.EvaluationSpec{
+					Type: "direct",
+					Config: arkv1alpha1.EvaluationConfig{
+						DirectEvaluationConfig: &arkv1alpha1.DirectEvaluationConfig{
+							Input:  "What is 2+2?",
+							Output: "4",
+						},
+					},
+					Evaluator: arkv1alpha1.EvaluationEvaluatorRef{
+						Name: "test-evaluator-conditions-2",
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, evaluation)).Should(Succeed())
+
+			evaluationLookupKey := types.NamespacedName{Name: "test-evaluation-conditions-2", Namespace: "default"}
+
+			controllerReconciler := &EvaluationReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			// First reconcile: initialize conditions
+			_, err := controllerReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: evaluationLookupKey,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile: should set status to running and update conditions
+			_, err = controllerReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: evaluationLookupKey,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify conditions were updated for running state
+			createdEvaluation := &arkv1alpha1.Evaluation{}
+			Expect(k8sClient.Get(ctx, evaluationLookupKey, createdEvaluation)).Should(Succeed())
+
+			Expect(createdEvaluation.Status.Conditions).To(HaveLen(1))
+			condition := createdEvaluation.Status.Conditions[0]
+			Expect(condition.Type).To(Equal(string(arkv1alpha1.EvaluationCompleted)))
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal("EvaluationRunning"))
+			Expect(condition.ObservedGeneration).To(Equal(createdEvaluation.Generation))
+
+			// Cleanup
+			Expect(k8sClient.Delete(ctx, createdEvaluation)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, evaluator)).Should(Succeed())
+		})
+
+		It("Should set condition to True when evaluation completes successfully", func() {
+			ctx := context.Background()
+
+			// Create an evaluator first
+			evaluator := &arkv1alpha1.Evaluator{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-evaluator-conditions-3",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.EvaluatorSpec{
+					Address: arkv1alpha1.ValueSource{
+						Value: "http://evaluator-service:8080",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, evaluator)).Should(Succeed())
+
+			// Update the evaluator status to ready
+			evaluator.Status.Phase = statusReady
+			Expect(k8sClient.Status().Update(ctx, evaluator)).Should(Succeed())
+
+			// Create evaluation
+			evaluation := &arkv1alpha1.Evaluation{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-evaluation-conditions-3",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.EvaluationSpec{
+					Type: "direct",
+					Config: arkv1alpha1.EvaluationConfig{
+						DirectEvaluationConfig: &arkv1alpha1.DirectEvaluationConfig{
+							Input:  "What is 2+2?",
+							Output: "4",
+						},
+					},
+					Evaluator: arkv1alpha1.EvaluationEvaluatorRef{
+						Name: "test-evaluator-conditions-3",
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, evaluation)).Should(Succeed())
+
+			evaluationLookupKey := types.NamespacedName{Name: "test-evaluation-conditions-3", Namespace: "default"}
+
+			controllerReconciler := &EvaluationReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			// First reconcile: initialize conditions
+			_, err := controllerReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: evaluationLookupKey,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Get the evaluation after initial reconcile
+			createdEvaluation := &arkv1alpha1.Evaluation{}
+			Expect(k8sClient.Get(ctx, evaluationLookupKey, createdEvaluation)).Should(Succeed())
+
+			// Test the updateStatus method directly to verify condition setting
+			// This simulates what happens when an evaluation completes successfully
+			err = controllerReconciler.updateStatus(ctx, *createdEvaluation, statusDone, "Evaluation completed successfully")
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify conditions were updated for done state
+			Expect(k8sClient.Get(ctx, evaluationLookupKey, createdEvaluation)).Should(Succeed())
+
+			Expect(createdEvaluation.Status.Conditions).To(HaveLen(1))
+			condition := createdEvaluation.Status.Conditions[0]
+			Expect(condition.Type).To(Equal(string(arkv1alpha1.EvaluationCompleted)))
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(condition.Reason).To(Equal("EvaluationSucceeded"))
+			Expect(condition.Message).To(Equal("Evaluation completed successfully"))
+			Expect(condition.ObservedGeneration).To(Equal(createdEvaluation.Generation))
+
+			// Cleanup
+			Expect(k8sClient.Delete(ctx, createdEvaluation)).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, evaluator)).Should(Succeed())
 		})
 	})

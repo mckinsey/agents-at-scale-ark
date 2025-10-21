@@ -30,8 +30,8 @@ type MCPClient struct {
 	client  *mcp.ClientSession
 }
 
-func NewMCPClient(ctx context.Context, baseURL string, headers map[string]string, transportType string, mcpSetting MCPSettings) (*MCPClient, error) {
-	mcpClient, err := createMCPClientWithRetry(ctx, baseURL, headers, transportType, 5, 120*time.Second)
+func NewMCPClient(ctx context.Context, baseURL string, headers map[string]string, transportType string, timeout time.Duration, mcpSetting MCPSettings) (*MCPClient, error) {
+	mcpClient, err := createMCPClientWithRetry(ctx, baseURL, headers, transportType, timeout, 5, 120*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -86,10 +86,10 @@ func performBackoff(ctx context.Context, attempt int, baseURL string) error {
 	}
 }
 
-func createTransport(baseURL string, headers map[string]string) mcp.Transport {
+func createTransport(baseURL string, headers map[string]string, timeout time.Duration) mcp.Transport {
 	// Create HTTP client with headers
 	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: timeout,
 	}
 
 	// If we have headers, wrap the transport
@@ -119,10 +119,10 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.base.RoundTrip(req)
 }
 
-func attemptMCPConnection(ctx, connectCtx context.Context, mcpClient *mcp.Client, baseURL string, headers map[string]string) (*mcp.ClientSession, error) {
+func attemptMCPConnection(ctx, connectCtx context.Context, mcpClient *mcp.Client, baseURL string, headers map[string]string, httpTimeout time.Duration) (*mcp.ClientSession, error) {
 	log := logf.FromContext(ctx)
 
-	transport := createTransport(baseURL, headers)
+	transport := createTransport(baseURL, headers, httpTimeout)
 	session, err := mcpClient.Connect(connectCtx, transport, nil)
 	if err != nil {
 		if isRetryableError(err) {
@@ -135,7 +135,7 @@ func attemptMCPConnection(ctx, connectCtx context.Context, mcpClient *mcp.Client
 	return session, nil
 }
 
-func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[string]string, transportType string, maxRetries int, timeout time.Duration) (*MCPClient, error) {
+func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[string]string, transportType string, httpTimeout time.Duration, maxRetries int, connectTimeout time.Duration) (*MCPClient, error) {
 	log := logf.FromContext(ctx)
 
 	mcpClient, err := createMCPClientByTransport(transportType)
@@ -143,7 +143,7 @@ func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[s
 		return nil, err
 	}
 
-	connectCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	connectCtx, cancel := context.WithTimeout(context.Background(), connectTimeout)
 	defer cancel()
 
 	var lastErr error
@@ -155,7 +155,7 @@ func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[s
 			}
 		}
 
-		session, err = attemptMCPConnection(ctx, connectCtx, mcpClient, baseURL, headers)
+		session, err = attemptMCPConnection(ctx, connectCtx, mcpClient, baseURL, headers, httpTimeout)
 		if err == nil {
 			log.Info("MCP client connected successfully", "server", baseURL, "attempts", attempt+1)
 			return &MCPClient{
@@ -293,34 +293,63 @@ func BuildMCPServerURL(ctx context.Context, k8sClient client.Client, mcpServerCR
 	return resolver.ResolveValueSource(ctx, address, mcpServerCRD.Namespace)
 }
 
-// ResolveHeaderValue resolves header values from secrets (v1alpha1)
+// ResolveHeaderValue resolves header values from secrets or configmaps (v1alpha1)
 func ResolveHeaderValue(ctx context.Context, k8sClient client.Client, header arkv1alpha1.Header, namespace string) (string, error) {
 	if header.Value.Value != "" {
 		return header.Value.Value, nil
 	}
 
-	if header.Value.ValueFrom != nil && header.Value.ValueFrom.SecretKeyRef != nil {
-		secretRef := header.Value.ValueFrom.SecretKeyRef
-		secret := &corev1.Secret{}
-
-		secretKey := types.NamespacedName{
-			Name:      secretRef.Name,
-			Namespace: namespace,
-		}
-
-		if err := k8sClient.Get(ctx, secretKey, secret); err != nil {
-			return "", fmt.Errorf("failed to get secret %s/%s: %w", namespace, secretRef.Name, err)
-		}
-
-		value, exists := secret.Data[secretRef.Key]
-		if !exists {
-			return "", fmt.Errorf("key %s not found in secret %s/%s", secretRef.Key, namespace, secretRef.Name)
-		}
-
-		return string(value), nil
+	if header.Value.ValueFrom == nil {
+		return "", fmt.Errorf("header value must specify either value or valueFrom.secretKeyRef or valueFrom.configMapKeyRef")
 	}
 
-	return "", fmt.Errorf("header value must specify either value or valueFrom.secretKeyRef")
+	if header.Value.ValueFrom.SecretKeyRef != nil {
+		return resolveHeaderFromSecret(ctx, k8sClient, header.Value.ValueFrom.SecretKeyRef, namespace)
+	}
+
+	if header.Value.ValueFrom.ConfigMapKeyRef != nil {
+		return resolveHeaderFromConfigMap(ctx, k8sClient, header.Value.ValueFrom.ConfigMapKeyRef, namespace)
+	}
+
+	return "", fmt.Errorf("header value must specify either value or valueFrom.secretKeyRef or valueFrom.configMapKeyRef")
+}
+
+func resolveHeaderFromSecret(ctx context.Context, k8sClient client.Client, secretRef *corev1.SecretKeySelector, namespace string) (string, error) {
+	secret := &corev1.Secret{}
+	secretKey := types.NamespacedName{
+		Name:      secretRef.Name,
+		Namespace: namespace,
+	}
+
+	if err := k8sClient.Get(ctx, secretKey, secret); err != nil {
+		return "", fmt.Errorf("failed to get secret %s/%s: %w", namespace, secretRef.Name, err)
+	}
+
+	value, exists := secret.Data[secretRef.Key]
+	if !exists {
+		return "", fmt.Errorf("key %s not found in secret %s/%s", secretRef.Key, namespace, secretRef.Name)
+	}
+
+	return string(value), nil
+}
+
+func resolveHeaderFromConfigMap(ctx context.Context, k8sClient client.Client, configMapRef *corev1.ConfigMapKeySelector, namespace string) (string, error) {
+	configMap := &corev1.ConfigMap{}
+	configMapKey := types.NamespacedName{
+		Name:      configMapRef.Name,
+		Namespace: namespace,
+	}
+
+	if err := k8sClient.Get(ctx, configMapKey, configMap); err != nil {
+		return "", fmt.Errorf("failed to get configMap %s/%s: %w", namespace, configMapRef.Name, err)
+	}
+
+	value, exists := configMap.Data[configMapRef.Key]
+	if !exists {
+		return "", fmt.Errorf("key %s not found in configMap %s/%s", configMapRef.Key, namespace, configMapRef.Name)
+	}
+
+	return value, nil
 }
 
 // ResolveHeaderValueV1PreAlpha1 resolves header values from secrets (v1prealpha1)

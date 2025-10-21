@@ -4,7 +4,7 @@ import { ToolCard } from "@/components/cards";
 import { InfoDialog } from "@/components/dialogs/info-dialog";
 import { ToolRow } from "@/components/rows/tool-row";
 import { ToggleSwitch, type ToggleOption } from "@/components/ui/toggle-switch";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { useDelayedLoading } from "@/lib/hooks";
 import {
   agentsService,
@@ -20,7 +20,7 @@ import {
   CollapsibleTrigger
 } from "@radix-ui/react-collapsible";
 import { Label } from "@radix-ui/react-label";
-import { ChevronRight } from "lucide-react";
+import { ArrowUpRightIcon, ChevronRight, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   forwardRef,
@@ -29,7 +29,10 @@ import {
   useMemo,
   useState
 } from "react";
-import { ToolEditor } from "../editors/tool-editor";
+import { ToolEditor } from "@/components/editors/tool-editor";
+import { Button } from "@/components/ui/button";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { DASHBOARD_SECTIONS } from "@/lib/constants";
 interface ToolsSectionProps {
   namespace: string;
 }
@@ -69,9 +72,7 @@ export const ToolsSection = forwardRef<
         setAgents(agentsData);
       } catch (error) {
         console.error("Failed to load data:", error);
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Data",
+        toast.error("Failed to Load Data", {
           description:
             error instanceof Error
               ? error.message
@@ -107,16 +108,12 @@ export const ToolsSection = forwardRef<
     try {
       await toolsService.delete(identifier);
       setTools(tools.filter((tool) => (tool.name || tool.type) !== identifier));
-      toast({
-        variant: "success",
-        title: "Tool Deleted",
+      toast.success("Tool Deleted", {
         description: "Successfully deleted tool"
       });
     } catch (error) {
       console.error("Failed to delete tool:", error);
-      toast({
-        variant: "destructive",
-        title: "Failed to Delete Tool",
+      toast.error("Failed to Delete Tool", {
         description:
           error instanceof Error
             ? error.message
@@ -139,19 +136,15 @@ export const ToolsSection = forwardRef<
     url?: string;
   }) => {
     try {
-      await toolsService.create(toolSpec);
-      toast({
-        variant: "success",
-        title: "Tool Created",
+      await toolsService.create({ ...toolSpec, namespace });
+      toast.success("Tool Created", {
         description: `Successfully created ${toolSpec.name}`
       });
 
       const updatedTools = await toolsService.getAll();
       setTools(updatedTools);
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Create Tool",
+      toast.error("Failed to Create Tool", {
         description:
           error instanceof Error
             ? error.message
@@ -212,6 +205,7 @@ export const ToolsSection = forwardRef<
     }
     return fields;
   };
+
   if (showLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -219,6 +213,48 @@ export const ToolsSection = forwardRef<
       </div>
     );
   }
+
+  if (groupedTools.length === 0 && !loading) {
+    return (
+      <>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.tools.icon />
+            </EmptyMedia>
+            <EmptyTitle>No Tools Yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t added any tools yet. Get started by adding
+              your first tool.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={() => setToolEditorOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add Tool
+            </Button>
+          </EmptyContent>
+          <Button
+            variant="link"
+            asChild
+            className="text-muted-foreground"
+            size="sm"
+          >
+            <a href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/tools/" target="_blank">
+              Learn More <ArrowUpRightIcon />
+            </a>
+          </Button>
+        </Empty>
+        <ToolEditor
+          open={toolEditorOpen}
+          onOpenChange={setToolEditorOpen}
+          onSave={handleSaveTool}
+          namespace={namespace}
+        />
+      </>
+    )
+  }
+
   return (
     <>
       <div className="flex h-full flex-col">
@@ -310,9 +346,8 @@ export const ToolsSection = forwardRef<
           <InfoDialog
             open={infoDialogOpen}
             onOpenChange={setInfoDialogOpen}
-            title={`Tool: ${
-              selectedTool.name || selectedTool.type || "Unnamed"
-            }`}
+            title={`Tool: ${selectedTool.name || selectedTool.type || "Unnamed"
+              }`}
             data={selectedTool}
             additionalFields={getAdditionalFields(selectedTool)}
           />

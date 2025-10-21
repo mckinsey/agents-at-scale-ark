@@ -1,8 +1,8 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
-import { toast } from "@/components/ui/use-toast";
+import { useState, useEffect, forwardRef, useImperativeHandle, useCallback } from "react";
+import { toast } from "sonner";
 import { SecretEditor } from "@/components/editors";
 import {
   secretsService,
@@ -12,6 +12,10 @@ import {
 } from "@/lib/services";
 import { SecretRow } from "@/components/rows/secret-row";
 import { useDelayedLoading } from "@/lib/hooks";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { DASHBOARD_SECTIONS } from "@/lib/constants";
+import { Button } from "@/components/ui/button";
+import { ArrowUpRightIcon, Plus } from "lucide-react";
 
 interface SecretsSectionProps {
   namespace: string;
@@ -28,11 +32,13 @@ export const SecretsSection = forwardRef<
   const [loading, setLoading] = useState(true);
   const showLoading = useDelayedLoading(loading);
 
+  const handleOpenAddEditor = useCallback(() => {
+    setEditingSecret(null);
+    setSecretEditorOpen(true);
+  }, [])
+
   useImperativeHandle(ref, () => ({
-    openAddEditor: () => {
-      setEditingSecret(null);
-      setSecretEditorOpen(true);
-    }
+    openAddEditor: handleOpenAddEditor
   }));
 
   useEffect(() => {
@@ -47,9 +53,7 @@ export const SecretsSection = forwardRef<
         setModels(modelsData);
       } catch (error) {
         console.error("Failed to load data:", error);
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Data",
+        toast.error("Failed to Load Data", {
           description:
             error instanceof Error
               ? error.message
@@ -70,16 +74,12 @@ export const SecretsSection = forwardRef<
 
       if (existingSecret) {
         await secretsService.update(name, password);
-        toast({
-          variant: "success",
-          title: "Secret Updated",
+        toast.success("Secret Updated", {
           description: `Successfully updated ${name}`
         });
       } else {
         await secretsService.create(name, password);
-        toast({
-          variant: "success",
-          title: "Secret Created",
+        toast.success("Secret Created", {
           description: `Successfully created ${name}`
         });
       }
@@ -88,9 +88,7 @@ export const SecretsSection = forwardRef<
       setSecrets(updatedSecrets);
     } catch (error) {
       const isUpdate = secrets.some((s) => s.name === name);
-      toast({
-        variant: "destructive",
-        title: isUpdate ? "Failed to Update Secret" : "Failed to Create Secret",
+      toast.error(isUpdate ? "Failed to Update Secret" : "Failed to Create Secret", {
         description:
           error instanceof Error
             ? error.message
@@ -106,18 +104,14 @@ export const SecretsSection = forwardRef<
         throw new Error("Secret not found");
       }
       await secretsService.delete(secret.name);
-      toast({
-        variant: "success",
-        title: "Secret Deleted",
+      toast.success("Secret Deleted", {
         description: "Successfully deleted the secret"
       });
       // Reload data
       const updatedSecrets = await secretsService.getAll();
       setSecrets(updatedSecrets);
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Delete Secret",
+      toast.error("Failed to Delete Secret", {
         description:
           error instanceof Error
             ? error.message
@@ -132,6 +126,53 @@ export const SecretsSection = forwardRef<
         <div className="text-center py-8">Loading...</div>
       </div>
     );
+  }
+
+  if (secrets.length === 0 && !loading) {
+    return (
+      <>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.secrets.icon />
+            </EmptyMedia>
+            <EmptyTitle>No Secrets Yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t added any secrets yet. Get started by adding
+              your first secret.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={handleOpenAddEditor}>
+              <Plus className="h-4 w-4" />
+              Add Secret
+            </Button>
+          </EmptyContent>
+          <Button
+            variant="link"
+            asChild
+            className="text-muted-foreground"
+            size="sm"
+          >
+            <a href="https://mckinsey.github.io/agents-at-scale-ark/" target="_blank">
+              Learn More <ArrowUpRightIcon />
+            </a>
+          </Button>
+        </Empty>
+        <SecretEditor
+          open={secretEditorOpen}
+          onOpenChange={(open) => {
+            setSecretEditorOpen(open);
+            if (!open) {
+              setEditingSecret(null);
+            }
+          }}
+          secret={editingSecret}
+          onSave={handleSaveSecret}
+          existingSecrets={secrets}
+        />
+      </>
+    )
   }
 
   return (

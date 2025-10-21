@@ -3,7 +3,7 @@
 import { MetricCard } from "./metric-card";
 import { DASHBOARD_SECTIONS } from "@/lib/constants";
 import { useGetAllMcpServers } from "@/lib/services/mcp-servers-hooks";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { useEffect } from "react";
 
 export function HomepageMcpServersCard() {
@@ -16,9 +16,7 @@ export function HomepageMcpServersCard() {
 
   useEffect(() => {
     if (error) {
-      toast({
-        variant: "destructive",
-        title: `Failed to get MCP Servers`,
+      toast.error("Failed to get MCP Servers", {
         description:
           error instanceof Error
             ? error.message

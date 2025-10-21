@@ -15,6 +15,12 @@ spec:
         outputs:
         - name: azure
           value: (json_parse($stdout))
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - apply:
         file: manifests/*.yaml
 
@@ -37,7 +43,6 @@ spec:
           kind: Agent
           metadata:
             name: token-test-agent
-        timeout: 10s
 
   - name: wait-for-query-completion
     try:
@@ -49,7 +54,6 @@ spec:
             name: token-usage-query
           status:
             phase: done
-
   - name: validate-response
     try:
     - assert:
@@ -66,5 +70,7 @@ spec:
             (tokenUsage.promptTokens > `0`): true
             (tokenUsage.completionTokens > `0`): true
             (tokenUsage.promptTokens + tokenUsage.completionTokens == to_number(tokenUsage.totalTokens)): true
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     catch:
       - events: {}

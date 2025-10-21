@@ -2,13 +2,17 @@
 
 import type React from 'react';
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from 'sonner';
 import { mcpServersService, type MCPServer } from '@/lib/services';
 import { McpServerCard } from '@/components/cards';
 import { useDelayedLoading } from '@/lib/hooks';
 import { InfoDialog } from '@/components/dialogs/info-dialog';
-import { McpEditor } from '../editors/mcp-editor';
+import { McpEditor } from '@/components/editors/mcp-editor';
 import { MCPServerConfiguration } from '@/lib/services/mcp-servers';
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import { Button } from '@/components/ui/button';
+import { ArrowUpRightIcon, Plus } from 'lucide-react';
 
 interface McpServersSectionProps {
   namespace: string;
@@ -34,9 +38,7 @@ export const McpServersSection = forwardRef<{ openAddEditor: () => void }, McpSe
         setMcpServers(data);
       } catch (error) {
         console.error('Failed to load MCP servers:', error);
-        toast({
-          variant: 'destructive',
-          title: 'Failed to Load MCP Servers',
+        toast.error('Failed to Load MCP Servers', {
           description:
             error instanceof Error
               ? error.message
@@ -56,16 +58,12 @@ export const McpServersSection = forwardRef<{ openAddEditor: () => void }, McpSe
       setMcpServers(
         mcpServers.filter((server) => (server.name || server.id) !== identifier)
       );
-      toast({
-        variant: 'success',
-        title: 'MCP Server Deleted',
+      toast.success('MCP Server Deleted', {
         description: 'Successfully deleted MCP server'
       });
     } catch (error) {
       console.error('Failed to delete MCP server:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Failed to Delete MCP Server',
+      toast.error('Failed to Delete MCP Server', {
         description:
           error instanceof Error
             ? error.message
@@ -82,29 +80,23 @@ export const McpServersSection = forwardRef<{ openAddEditor: () => void }, McpSe
 
   const handleSave = async (mcpServer: MCPServerConfiguration, edit: boolean) => {
     try {
-      if(!edit){
-      await mcpServersService.create(mcpServer);
-      toast({
-        variant: 'success',
-        title: 'Mcp Created',
-        description: `Successfully created ${mcpServer.name}`
-      });
-    }
-    else {
-      await mcpServersService.update(mcpServer.name, {spec: mcpServer.spec});
-      toast({
-        variant: 'success',
-        title: 'Mcp Updated',
-        description: `Successfully updated ${mcpServer.name}`
-      });
-    }
+      if (!edit) {
+        await mcpServersService.create(mcpServer);
+        toast.success('Mcp Created', {
+          description: `Successfully created ${mcpServer.name}`
+        });
+      }
+      else {
+        await mcpServersService.update(mcpServer.name, { spec: mcpServer.spec });
+        toast.success('Mcp Updated', {
+          description: `Successfully updated ${mcpServer.name}`
+        });
+      }
       const data = await mcpServersService.getAll();
       setMcpServers(data);
       setMcpEditorOpen(false);
     } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: `Failed to ${mcpServer.namespace ? 'Create': 'Update'} MCP`,
+      toast.error(`Failed to ${mcpServer.namespace ? 'Create' : 'Update'} MCP`, {
         description:
           error instanceof Error
             ? error.message
@@ -120,6 +112,48 @@ export const McpServersSection = forwardRef<{ openAddEditor: () => void }, McpSe
         <div className='text-center py-8'>Loading...</div>
       </div>
     );
+  }
+
+  if (mcpServers.length === 0 && !loading) {
+    return (
+      <>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.mcp.icon />
+            </EmptyMedia>
+            <EmptyTitle>No MCP Servers Yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t added any MCP Servers yet. Get started by adding
+              your first MCP Server.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={() => setMcpEditorOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add MCP Server
+            </Button>
+          </EmptyContent>
+          <Button
+            variant="link"
+            asChild
+            className="text-muted-foreground"
+            size="sm"
+          >
+            <a href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/tools/" target="_blank">
+              Learn More <ArrowUpRightIcon />
+            </a>
+          </Button>
+        </Empty>
+        <McpEditor
+          open={mcpEditorOpen}
+          onOpenChange={setMcpEditorOpen}
+          mcpServer={null}
+          onSave={handleSave}
+          namespace={namespace}
+        />
+      </>
+    )
   }
 
   return (

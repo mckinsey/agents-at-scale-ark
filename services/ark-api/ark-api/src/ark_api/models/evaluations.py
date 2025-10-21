@@ -108,6 +108,7 @@ class EvaluationResponse(BaseModel):
     namespace: str
     type: str
     phase: Optional[str] = None
+    conditions: Optional[List[Dict[str, Any]]] = None
     score: Optional[str] = None
     passed: Optional[bool] = None
     message: Optional[str] = None
@@ -119,6 +120,7 @@ class EnhancedEvaluationResponse(BaseModel):
     namespace: str
     type: str
     phase: Optional[str] = None
+    conditions: Optional[List[Dict[str, Any]]] = None
     score: Optional[str] = None
     passed: Optional[bool] = None
     message: Optional[str] = None
@@ -224,6 +226,7 @@ def evaluation_to_response(evaluation: dict) -> EvaluationResponse:
         namespace=evaluation["metadata"]["namespace"],
         type=spec.get("type", "direct"),
         phase=status.get("phase"),
+        conditions=status.get("conditions"),
         score=status.get("score"),
         passed=status.get("passed"),
         message=status.get("message")
@@ -274,6 +277,7 @@ def enhanced_evaluation_to_response(evaluation: dict) -> EnhancedEvaluationRespo
         namespace=evaluation["metadata"]["namespace"],
         type=spec.get("type", "direct"),
         phase=status.get("phase"),
+        conditions=status.get("conditions"),
         score=status.get("score"),
         passed=status.get("passed"),
         message=status.get("message"),

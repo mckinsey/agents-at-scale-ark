@@ -10,7 +10,7 @@ import {
   CardTitle
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import type { components } from "@/lib/api/generated/types";
 import { useDelayedLoading } from "@/lib/hooks/use-delayed-loading";
 import { evaluationsService } from "@/lib/services/evaluations";
@@ -139,9 +139,7 @@ export function EvaluationDetailView({
         setEnhancedAvailable(false);
       }
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Load Evaluation",
+      toast.error("Failed to Load Evaluation", {
         description:
           error instanceof Error
             ? error.message
@@ -183,18 +181,14 @@ export function EvaluationDetailView({
     setCanceling(true);
     try {
       await evaluationsService.cancel(evaluation.name);
-      toast({
-        variant: "success",
-        title: "Evaluation Canceled",
+      toast.success("Evaluation Canceled", {
         description: "Successfully canceled the evaluation"
       });
 
       // Reload evaluation data
       await loadEvaluation();
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Cancel Evaluation",
+      toast.error("Failed to Cancel Evaluation", {
         description:
           error instanceof Error
             ? error.message
@@ -411,19 +405,18 @@ export function EvaluationDetailView({
                     <AlertCircle className="h-4 w-4 text-red-600" />
                   ) : null}
                   <span
-                    className={`font-medium ${
-                      status?.passed === true
+                    className={`font-medium ${status?.passed === true
                         ? "text-green-600"
                         : status?.passed === false
-                        ? "text-red-600"
-                        : "text-muted-foreground"
-                    }`}
+                          ? "text-red-600"
+                          : "text-muted-foreground"
+                      }`}
                   >
                     {status?.passed === true
                       ? "Yes"
                       : status?.passed === false
-                      ? "No"
-                      : "Unknown"}
+                        ? "No"
+                        : "Unknown"}
                   </span>
                 </div>
               </div>
@@ -553,8 +546,8 @@ export function EvaluationDetailView({
                       typeof value === "string"
                         ? parseFloat(value)
                         : typeof value === "number"
-                        ? value
-                        : undefined;
+                          ? value
+                          : undefined;
                   }
                 }
               });
@@ -586,8 +579,8 @@ export function EvaluationDetailView({
             typeof status?.score === "number"
               ? status.score
               : typeof status?.score === "string"
-              ? parseFloat(status.score)
-              : undefined
+                ? parseFloat(status.score)
+                : undefined
           }
         />
       ) : isQualityEvaluation ? (
@@ -600,8 +593,8 @@ export function EvaluationDetailView({
             typeof status?.score === "number"
               ? status.score
               : typeof status?.score === "string"
-              ? parseFloat(status.score)
-              : undefined
+                ? parseFloat(status.score)
+                : undefined
           }
         />
       ) : hasMetadata ? (

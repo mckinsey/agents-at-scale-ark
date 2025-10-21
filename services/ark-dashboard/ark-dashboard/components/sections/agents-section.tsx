@@ -2,7 +2,7 @@
 
 import type React from "react";
 import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { AgentEditor } from "@/components/editors";
 import {
   agentsService,
@@ -18,11 +18,15 @@ import { AgentCard } from "@/components/cards";
 import { useDelayedLoading } from "@/lib/hooks";
 import { AgentRow } from "@/components/rows/agent-row";
 import { ToggleSwitch, type ToggleOption } from "@/components/ui/toggle-switch";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { ArrowUpRightIcon, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { DASHBOARD_SECTIONS } from "@/lib/constants";
 
 export const AgentsSection = forwardRef<
   { openAddEditor: () => void },
   object
->(function AgentsSection({}, ref) {
+>(function AgentsSection({ }, ref) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [models, setModels] = useState<Model[]>([]);
@@ -54,9 +58,7 @@ export const AgentsSection = forwardRef<
         setModels(modelsData);
       } catch (error) {
         console.error("Failed to load data:", error);
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Data",
+        toast.error("Failed to Load Data", {
           description:
             error instanceof Error
               ? error.message
@@ -81,18 +83,14 @@ export const AgentsSection = forwardRef<
           updateRequest.id,
           updateRequest
         );
-        toast({
-          variant: "success",
-          title: "Agent Updated",
+        toast.success("Agent Updated", {
           description: "Successfully updated the agent"
         });
       } else {
         // This is a create
         const createRequest = agent as AgentCreateRequest;
         await agentsService.create(createRequest);
-        toast({
-          variant: "success",
-          title: "Agent Created",
+        toast.success("Agent Created", {
           description: `Successfully created ${createRequest.name}`
         });
       }
@@ -100,9 +98,7 @@ export const AgentsSection = forwardRef<
       const updatedAgents = await agentsService.getAll();
       setAgents(updatedAgents);
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: agent.id ? "Failed to Update Agent" : "Failed to Create Agent",
+      toast.error(agent.id ? "Failed to Update Agent" : "Failed to Create Agent", {
         description:
           error instanceof Error
             ? error.message
@@ -118,18 +114,14 @@ export const AgentsSection = forwardRef<
         throw new Error("Agent not found");
       }
       await agentsService.deleteById(id);
-      toast({
-        variant: "success",
-        title: "Agent Deleted",
+      toast.success("Agent Deleted", {
         description: `Successfully deleted ${agent.name}`
       });
       // Reload data
       const updatedAgents = await agentsService.getAll();
       setAgents(updatedAgents);
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Delete Agent",
+      toast.error("Failed to Delete Agent", {
         description:
           error instanceof Error
             ? error.message
@@ -144,6 +136,49 @@ export const AgentsSection = forwardRef<
         <div className="text-center py-8">Loading...</div>
       </div>
     );
+  }
+
+  if (agents.length === 0 && !loading) {
+    return (
+      <>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.agents.icon />
+            </EmptyMedia>
+            <EmptyTitle>No Agents Yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t created any agents yet. Get started by creating
+              your first agent.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={() => setAgentEditorOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Create Agent
+            </Button>
+          </EmptyContent>
+          <Button
+            variant="link"
+            asChild
+            className="text-muted-foreground"
+            size="sm"
+          >
+            <a href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/agents/" target="_blank">
+              Learn More <ArrowUpRightIcon />
+            </a>
+          </Button>
+        </Empty>
+        <AgentEditor
+          open={agentEditorOpen}
+          onOpenChange={setAgentEditorOpen}
+          agent={null}
+          models={models}
+          teams={teams}
+          onSave={handleSaveAgent}
+        />
+      </>
+    )
   }
 
   return (

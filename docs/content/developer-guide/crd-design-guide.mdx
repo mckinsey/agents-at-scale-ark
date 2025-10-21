@@ -365,3 +365,13 @@ func init() {
 - Missing validation annotations
 - Inconsistent naming patterns
 - Inventing patterns that conflict with established Kubernetes conventions
+
+## Breaking Changes
+
+When making breaking changes to CRD schemas or behavior:
+
+- Update the [Upgrade Guide](../../reference/upgrading) with a new version section documenting what changed and migration steps
+- Add an entry to [Troubleshooting](../../reference/troubleshooting) describing the error users will see and linking to the upgrade guide
+- Update relevant resource documentation in [Resources](../../reference/resources) to clarify new behavior
+
+See [Upgrading](../../reference/upgrading#v0134) and [Troubleshooting](../../reference/troubleshooting#agents) for v0.1.34 agent modelRef example.

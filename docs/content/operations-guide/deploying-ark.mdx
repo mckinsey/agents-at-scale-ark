@@ -122,6 +122,11 @@ kubectl get deployment ark-controller -n ark-system \
 
 The Ark CLI can be used to show the status of all running Ark services and their versions, with the `ark status` command.
 
+```bash
+# Check overall system status
+ark status
+```
+
 ## Cluster Preparation for CI/CD Deployments
 
 Before using GitHub Actions to deploy Ark to a cluster, platform administrators need to set up the required RBAC permissions.
@@ -161,7 +166,7 @@ When enabled (default), the controller can impersonate any service account speci
 
 ### Setting Up Tenant Namespaces
 
-The `ark-tenant` Helm chart provisions namespaces with the required RBAC configuration:
+The `ark-tenant` Helm chart provisions namespaces for Ark workloads:
 
 ```bash
 helm install ark-tenant oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-tenant \
@@ -175,6 +180,7 @@ This creates:
 - The service account
 - An `ark-tenant-role` with Ark and Kubernetes permissions
 - A RoleBinding linking the service account to the role
+- Builtin tools (`terminate`, `noop`) for agent workflows
 
 Additional options include resource quotas and network policies, which are documented in the chart.
 

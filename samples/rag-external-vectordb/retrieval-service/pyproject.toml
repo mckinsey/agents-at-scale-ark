@@ -1,0 +1,14 @@
+[project]
+name = "rag-retrieval-http"
+version = "0.1.0"
+description = "RAG retrieval HTTP tools with pgvector integration"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "flask>=3.0.0",
+    "psycopg2-binary>=2.9.9",
+    "pgvector>=0.2.4",
+    "openai>=1.0.0",
+    "numpy>=1.24.0",
+]
+

@@ -1,4 +1,14 @@
-"""Authentication configuration for ark-api routes."""
+"""Authentication configuration for ark-api routes.
+
+The authentication system supports multiple modes (see AuthMode enum in constants.py):
+- AuthMode.SSO: OIDC/JWT authentication only
+- AuthMode.BASIC: API key basic authentication only  
+- AuthMode.HYBRID: Both OIDC/JWT and basic authentication
+- AuthMode.OPEN: No authentication required (development mode)
+
+All routes except PUBLIC_ROUTES require authentication when auth is enabled.
+Both JWT and API key authentication work on all authenticated routes.
+"""
 
 from typing import Set
 
@@ -16,6 +26,7 @@ def is_route_authenticated(path: str) -> bool:
     """
     Check if a route path requires authentication.
     By default, all routes are protected except those in PUBLIC_ROUTES.
+    Both JWT and API key authentication work on all authenticated routes.
     
     Args:
         path: The route path to check

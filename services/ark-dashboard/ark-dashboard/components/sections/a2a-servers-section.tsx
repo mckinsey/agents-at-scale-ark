@@ -2,13 +2,17 @@
 
 import type React from "react";
 import { useState, useEffect, forwardRef, useImperativeHandle, useCallback } from "react";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { A2AServersService, type A2AServer } from "@/lib/services";
 import { A2AServerCard } from "@/components/cards";
 import { useDelayedLoading } from "@/lib/hooks";
 import { InfoDialog } from "@/components/dialogs/info-dialog";
 import { A2AEditor } from "@/components/editors/a2a-editor";
 import type { A2AServerConfiguration } from "@/lib/services/a2a-servers";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { DASHBOARD_SECTIONS } from "@/lib/constants";
+import { ArrowUpRightIcon, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface A2AServersSectionProps {
   namespace: string;
@@ -44,9 +48,7 @@ export const A2AServersSection = forwardRef<
       setA2AServers(data);
     } catch (error) {
       console.error("Failed to load A2A servers:", error);
-      toast({
-        variant: "destructive",
-        title: "Failed to Load A2A Servers",
+      toast.error("Failed to Load A2A Servers", {
         description:
           error instanceof Error ? error.message : "An unexpected error occurred"
       });
@@ -67,17 +69,13 @@ export const A2AServersSection = forwardRef<
   const handleSave = async (config: A2AServerConfiguration) => {
     try {
       await A2AServersService.create(config);
-      toast({
-        variant: "success",
-        title: "A2A Server Created",
+      toast.success("A2A Server Created", {
         description: `Successfully created ${config.name}`
       });
       await loadData();
       setA2aEditorOpen(false);
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Create A2A Server",
+      toast.error("Failed to Create A2A Server", {
         description:
           error instanceof Error ? error.message : "An unexpected error occurred"
       });
@@ -90,6 +88,47 @@ export const A2AServersSection = forwardRef<
         <div className="text-center py-8">Loading...</div>
       </div>
     );
+  }
+
+  if (a2aServers.length === 0 && !loading) {
+    return (
+      <>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.a2a.icon />
+            </EmptyMedia>
+            <EmptyTitle>No A2A Servers Yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t added any A2A Servers yet. Get started by adding
+              your first A2A Server.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={() => setA2aEditorOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add A2A Server
+            </Button>
+          </EmptyContent>
+          <Button
+            variant="link"
+            asChild
+            className="text-muted-foreground"
+            size="sm"
+          >
+            <a href="https://mckinsey.github.io/agents-at-scale-ark/" target="_blank">
+              Learn More <ArrowUpRightIcon />
+            </a>
+          </Button>
+        </Empty>
+        <A2AEditor
+          open={a2aEditorOpen}
+          onOpenChange={setA2aEditorOpen}
+          namespace={namespace}
+          onSave={handleSave}
+        />
+      </>
+    )
   }
 
   return (

@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from ark_sdk import ExecutorApp
+from ark_sdk.executor_app import ExecutorApp
 from .executor import LangChainExecutor
 
 # Create the executor and app

@@ -90,6 +90,16 @@ const defaultArkServices: ServiceCollection = {
     k8sDevDeploymentName: 'ark-controller-devspace',
   },
 
+  'ark-tenant': {
+    name: 'ark-tenant',
+    helmReleaseName: 'ark-tenant',
+    description: 'Tenant provisioning with RBAC and resource quotas',
+    enabled: true,
+    category: 'core',
+    chartPath: `${REGISTRY_BASE}/ark-tenant`,
+    installArgs: [],
+  },
+
   'ark-api': {
     name: 'ark-api',
     helmReleaseName: 'ark-api',

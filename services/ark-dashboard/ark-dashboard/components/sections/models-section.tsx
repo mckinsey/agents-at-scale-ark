@@ -2,12 +2,17 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { toast } from "@/components/ui/use-toast"
-import { modelsService, type Model, type ModelCreateRequest, type ModelUpdateRequest } from "@/lib/services"
+import { toast } from "sonner"
+import { modelsService, type Model } from "@/lib/services"
 import { ModelCard } from "@/components/cards"
 import { useDelayedLoading } from "@/lib/hooks"
 import { ModelRow } from "@/components/rows/model-row"
 import { ToggleSwitch, type ToggleOption } from "@/components/ui/toggle-switch"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { DASHBOARD_SECTIONS } from "@/lib/constants"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { ArrowUpRightIcon, Plus } from "lucide-react"
 
 interface ModelsSectionProps {
   namespace: string
@@ -32,9 +37,7 @@ export const ModelsSection = function ModelsSection({ namespace }: ModelsSection
         setModels(modelsData)
       } catch (error) {
         console.error("Failed to load data:", error)
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Data",
+        toast.error("Failed to Load Data", {
           description: error instanceof Error ? error.message : "An unexpected error occurred"
         })
       } finally {
@@ -45,37 +48,6 @@ export const ModelsSection = function ModelsSection({ namespace }: ModelsSection
     loadData()
   }, [namespace])
 
-  const handleSaveModel = async (model: ModelCreateRequest | (ModelUpdateRequest & { id: string })) => {
-    try {
-      if ('id' in model) {
-        // Update existing model
-        const { id, ...updateData } = model
-        await modelsService.updateById(id, updateData)
-        toast({
-          variant: "success",
-          title: "Model Updated",
-          description: `Successfully updated model`
-        })
-      } else {
-        // Create new model
-        await modelsService.create(model)
-        toast({
-          variant: "success",
-          title: "Model Created",
-          description: `Successfully created ${model.name}`
-        })
-      }
-      // Reload data
-      const updatedModels = await modelsService.getAll()
-      setModels(updatedModels)
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: 'id' in model ? "Failed to Update Model" : "Failed to Create Model",
-        description: error instanceof Error ? error.message : "An unexpected error occurred"
-      })
-    }
-  }
 
   const handleDeleteModel = async (id: string) => {
     try {
@@ -84,18 +56,14 @@ export const ModelsSection = function ModelsSection({ namespace }: ModelsSection
         throw new Error("Model not found")
       }
       await modelsService.deleteById(id)
-      toast({
-        variant: "success",
-        title: "Model Deleted",
+      toast.success("Model Deleted", {
         description: `Successfully deleted ${model.name}`
       })
       // Reload data
       const updatedModels = await modelsService.getAll()
       setModels(updatedModels)
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Delete Model",
+      toast.error("Failed to Delete Model", {
         description: error instanceof Error ? error.message : "An unexpected error occurred"
       })
     }
@@ -106,6 +74,43 @@ export const ModelsSection = function ModelsSection({ namespace }: ModelsSection
       <div className="flex h-full items-center justify-center">
         <div className="text-center py-8">Loading...</div>
       </div>
+    )
+  }
+
+  if (models.length === 0 && !loading) {
+    return (
+      <>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.models.icon />
+            </EmptyMedia>
+            <EmptyTitle>No Models Yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t added any models yet. Get started by adding
+              your first model.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Link href="/models/new">
+              <Button>
+                <Plus className="h-4 w-4" />
+                Add Model
+              </Button>
+            </Link>
+          </EmptyContent>
+          <Button
+            variant="link"
+            asChild
+            className="text-muted-foreground"
+            size="sm"
+          >
+            <a href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/models/" target="_blank">
+              Learn More <ArrowUpRightIcon />
+            </a>
+          </Button>
+        </Empty>
+      </>
     )
   }
 
@@ -126,9 +131,7 @@ export const ModelsSection = function ModelsSection({ namespace }: ModelsSection
                 <ModelCard
                   key={model.id}
                   model={model}
-                  onUpdate={handleSaveModel}
                   onDelete={handleDeleteModel}
-                  namespace={namespace}
                 />
               ))}
             </div>
@@ -140,9 +143,7 @@ export const ModelsSection = function ModelsSection({ namespace }: ModelsSection
                 <ModelRow
                   key={model.id}
                   model={model}
-                  onUpdate={handleSaveModel}
                   onDelete={handleDeleteModel}
-                  namespace={namespace}
                 />
               ))}
             </div>

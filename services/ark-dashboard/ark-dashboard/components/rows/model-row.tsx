@@ -10,33 +10,23 @@ import {
 import { AvailabilityStatusBadge } from "@/components/ui/availability-status-badge";
 import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import { DASHBOARD_SECTIONS } from "@/lib/constants/dashboard-icons";
-import { ModelEditor } from "@/components/editors";
 import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog";
-import type {
-  Model,
-  ModelCreateRequest,
-  ModelUpdateRequest
-} from "@/lib/services";
+import type { Model } from "@/lib/services";
 import { getCustomIcon } from "@/lib/utils/icon-resolver";
 import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
+import Link from "next/link";
 
 interface ModelRowProps {
   model: Model;
-  onUpdate?: (
-    model: ModelCreateRequest | (ModelUpdateRequest & { id: string })
-  ) => void;
   onDelete?: (id: string) => void;
-  namespace: string;
+
 }
 
 export function ModelRow({
   model,
-  onUpdate,
-  onDelete,
-  namespace
+  onDelete
 }: ModelRowProps) {
-  const [editorOpen, setEditorOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Get custom icon or default model icon
@@ -44,7 +34,6 @@ export function ModelRow({
     model.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
     DASHBOARD_SECTIONS.models.icon
   );
-
 
   return (
     <>
@@ -64,34 +53,30 @@ export function ModelRow({
             </p>
           </div>
         </div>
-
-
         <div className="flex-shrink-0 mr-4">
           <AvailabilityStatusBadge
             status={model.available}
             eventsLink={`/events?kind=Model&name=${model.name}&page=1`}
           />
         </div>
-
         <div className="flex items-center gap-1 flex-shrink-0">
-          {onUpdate && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={() => setEditorOpen(true)}
-                  >
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  asChild
+                >
+                  <Link href={`/models/${model.id}/update`}>
                     <Pencil className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Edit model</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-
+                  </Link>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Edit model</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           {onDelete && (
             <TooltipProvider>
               <Tooltip>
@@ -113,14 +98,6 @@ export function ModelRow({
           )}
         </div>
       </div>
-
-      <ModelEditor
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        model={model}
-        onSave={onUpdate || (() => {})}
-        namespace={namespace}
-      />
       {onDelete && (
         <ConfirmationDialog
           open={deleteConfirmOpen}

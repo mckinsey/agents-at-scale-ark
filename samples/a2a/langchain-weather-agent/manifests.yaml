@@ -1,0 +1,78 @@
+# Deployment runs the langchain-weather-agent container with the A2A server
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langchain-weather-agent
+  labels:
+    app: langchain-weather-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: langchain-weather-agent
+  template:
+    metadata:
+      labels:
+        app: langchain-weather-agent
+    spec:
+      containers:
+      - name: langchain-weather-agent
+        image: langchain-weather-agent:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        env:
+        - name: AZURE_OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: langchain-azure-openai-secret
+              key: api-key
+        - name: AZURE_API_BASE
+          valueFrom:
+            secretKeyRef:
+              name: langchain-azure-openai-secret
+              key: base-url
+        - name: LLM_MODEL_NAME
+          value: "gpt-4o-mini"
+        - name: AZURE_API_VERSION
+          value: "2024-12-01-preview"
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+# Service exposes the langchain-weather-agent A2A server on port 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langchain-weather-agent
+  labels:
+    app: langchain-weather-agent
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: langchain-weather-agent
+# A2AServer registers the langchain-weather-agent with Ark for agent discovery
+---
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: A2AServer
+metadata:
+  name: langchain-weather-agent
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: langchain-weather-agent
+        port: http
+  description: "Weather forecasting agent using LangChain and OpenMeteo API"
+  # timeout: "5m"  # Optional: timeout for A2A agent execution (default: 5m)
+

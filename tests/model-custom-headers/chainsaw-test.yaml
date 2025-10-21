@@ -1,0 +1,73 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: model-custom-headers
+spec:
+  description: Test model with custom HTTP headers from static values, Secrets, and ConfigMaps
+  steps:
+  - name: step-1
+    try:
+    # Install mock-llm with Ark Model and custom headers
+    - script:
+        content: |
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.12 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    # Install ark-tenant for RBAC
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    # Apply Secret and ConfigMap for headers
+    - apply:
+        file: manifests/a0[1-2]-*.yaml
+    # Wait for Model to be available
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-model-custom-headers
+          status:
+            conditions:
+            - type: ModelAvailable
+              status: "True"
+    # Apply Agent and Query
+    - apply:
+        file: manifests/a0[5-6]-*.yaml
+    # Wait for Query to complete
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: custom-headers-query
+          status:
+            phase: done
+    # Verify headers were received correctly
+    # Mock-llm echoes back the headers object as JSON in the response content
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: custom-headers-query
+          status:
+            (length(responses)): 1
+            (contains(responses[*].target.name, 'headers-test-agent')): true
+            # Headers are echoed back as JSON object (Express lowercases header names)
+            (contains(responses[0].content, '"x-consumer-application":"ark-chainsaw-test-value"')): true
+            (contains(responses[0].content, '"x-authorization-session":"test-secret-token-chainsaw-12345"')): true
+            (contains(responses[0].content, '"x-consumer-group":"chainsaw-test-consumer-group"')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: custom-headers-query

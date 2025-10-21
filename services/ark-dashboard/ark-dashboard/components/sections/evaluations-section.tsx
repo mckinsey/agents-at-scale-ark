@@ -13,22 +13,26 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import type { components } from "@/lib/api/generated/types";
 import type { Evaluation, EvaluationDetailResponse } from "@/lib/services";
 import { evaluationsService } from "@/lib/services/evaluations";
 import {
+  ArrowUpRightIcon,
   ChevronDown,
   ChevronUp,
   Edit,
+  Plus,
   RefreshCw,
   StopCircle,
   Trash2
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
-import { useGetAllEvaluationsWithDetails } from "../../lib/services/evaluations-hooks";
-import { formatAge } from "../../lib/utils/time";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from "react";
+import { useGetAllEvaluationsWithDetails } from "@/lib/services/evaluations-hooks";
+import { formatAge } from "@/lib/utils/time";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { DASHBOARD_SECTIONS } from "@/lib/constants";
 
 type EvaluationCreateRequest = components["schemas"]["EvaluationCreateRequest"];
 type EvaluationUpdateRequest = components["schemas"]["EvaluationUpdateRequest"];
@@ -109,11 +113,13 @@ export const EvaluationsSection = forwardRef<
   });
   const router = useRouter();
 
+  const handleOpenAddEditor = useCallback(() => {
+    setEditingEvaluation(null);
+    setEditorOpen(true);
+  }, [])
+
   useImperativeHandle(ref, () => ({
-    openAddEditor: () => {
-      setEditingEvaluation(null);
-      setEditorOpen(true);
-    }
+    openAddEditor: handleOpenAddEditor
   }));
 
   const {
@@ -131,9 +137,7 @@ export const EvaluationsSection = forwardRef<
     }
 
     if (listEvaluationsError) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Load Evaluations",
+      toast.error("Failed to Load Evaluations", {
         description:
           listEvaluationsErrorObject instanceof Error
             ? listEvaluationsErrorObject.message
@@ -548,17 +552,13 @@ export const EvaluationsSection = forwardRef<
   const handleDelete = async (evaluationName: string) => {
     try {
       await evaluationsService.delete(evaluationName);
-      toast({
-        variant: "success",
-        title: "Evaluation Deleted",
+      toast.success("Evaluation Deleted", {
         description: "Successfully deleted evaluation"
       });
       // Reload evaluations
       await loadEvaluations();
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Delete Evaluation",
+      toast.error("Failed to Delete Evaluation", {
         description:
           error instanceof Error
             ? error.message
@@ -570,17 +570,13 @@ export const EvaluationsSection = forwardRef<
   const handleCancel = async (evaluationName: string) => {
     try {
       await evaluationsService.cancel(evaluationName);
-      toast({
-        variant: "success",
-        title: "Evaluation Canceled",
+      toast.success("Evaluation Canceled", {
         description: "Successfully canceled evaluation"
       });
       // Reload evaluations
       await loadEvaluations();
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Cancel Evaluation",
+      toast.error("Failed to Cancel Evaluation", {
         description:
           error instanceof Error
             ? error.message
@@ -603,17 +599,13 @@ export const EvaluationsSection = forwardRef<
           updateRequest.id,
           updateRequest
         );
-        toast({
-          variant: "success",
-          title: "Evaluation Updated",
+        toast.success("Evaluation Updated", {
           description: "Successfully updated evaluation"
         });
       } else {
         const createRequest = evaluation as EvaluationCreateRequest;
         await evaluationsService.create(createRequest);
-        toast({
-          variant: "success",
-          title: "Evaluation Created",
+        toast.success("Evaluation Created", {
           description: "Successfully created evaluation"
         });
       }
@@ -621,9 +613,7 @@ export const EvaluationsSection = forwardRef<
       // Reload evaluations
       await loadEvaluations();
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Save Evaluation",
+      toast.error("Failed to Save Evaluation", {
         description:
           error instanceof Error
             ? error.message
@@ -724,11 +714,37 @@ export const EvaluationsSection = forwardRef<
             {sortedEvaluations.length === 0 ? (
               <tr>
                 <td
-                  colSpan={activeTab === "dataset" ? 7 : 8}
+                  colSpan={activeTab === "dataset" ? 8 : 9}
                   className="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
                 >
-                  No {activeTab === "dataset" ? "dataset" : "standard"}{" "}
-                  evaluations found
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <DASHBOARD_SECTIONS.evaluations.icon />
+                      </EmptyMedia>
+                      <EmptyTitle>No Evaluations Yet</EmptyTitle>
+                      <EmptyDescription>
+                        You haven&apos;t created any evaluations yet. Get started by creating
+                        your first evaluation.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                    <EmptyContent>
+                      <Button onClick={handleOpenAddEditor}>
+                        <Plus className="h-4 w-4" />
+                        Create Evaluation
+                      </Button>
+                    </EmptyContent>
+                    <Button
+                      variant="link"
+                      asChild
+                      className="text-muted-foreground"
+                      size="sm"
+                    >
+                      <a href="https://mckinsey.github.io/agents-at-scale-ark/reference/evaluations/evaluations/" target="_blank">
+                        Learn More <ArrowUpRightIcon />
+                      </a>
+                    </Button>
+                  </Empty>
                 </td>
               </tr>
             ) : (
@@ -758,11 +774,10 @@ export const EvaluationsSection = forwardRef<
                     </td>
                     <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                       <span
-                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          activeTab === "dataset"
-                            ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
-                            : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                        }`}
+                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${activeTab === "dataset"
+                          ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+                          : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                          }`}
                       >
                         {getTypeDisplay(evaluation)}
                       </span>
@@ -791,8 +806,8 @@ export const EvaluationsSection = forwardRef<
                           return passed
                             ? "text-green-600"
                             : passed === false
-                            ? "text-red-600"
-                            : "text-gray-400";
+                              ? "text-red-600"
+                              : "text-gray-400";
                         })()}`}
                       >
                         {getPassedDisplay(evaluation)}
@@ -884,9 +899,8 @@ export const EvaluationsSection = forwardRef<
             disabled={listEvaluationsFetching}
           >
             <RefreshCw
-              className={`h-4 w-4 ${
-                listEvaluationsFetching ? "animate-spin" : ""
-              }`}
+              className={`h-4 w-4 ${listEvaluationsFetching ? "animate-spin" : ""
+                }`}
             />
             Refresh
           </Button>

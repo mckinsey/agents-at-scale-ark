@@ -115,7 +115,7 @@ func (v *TeamCustomValidator) validateNoMixedTeam(ctx context.Context, team *ark
 		if err := v.Client.Get(ctx, key, &agent); err != nil {
 			return fmt.Errorf("team member %d: failed to load agent '%s': %v", i, member.Name, err)
 		}
-		isExternal := agent.Spec.ExecutionEngine != nil && agent.Spec.ExecutionEngine.Name != "" && agent.Spec.ExecutionEngine.Name != ExecutionEngineA2A
+		isExternal := agent.Spec.ExecutionEngine != nil && agent.Spec.ExecutionEngine.Name != "" && agent.Spec.ExecutionEngine.Name != genai.ExecutionEngineA2A
 		if isExternal {
 			hasExternalAgents = true
 		} else {
@@ -134,7 +134,7 @@ func (v *TeamCustomValidator) validateStrategy(ctx context.Context, team *arkv1a
 	case "sequential", "round-robin":
 		return nil
 	case "selector":
-		return v.validateSelectorModel(ctx, team)
+		return v.validateSelectorAgent(ctx, team)
 	case "graph":
 		return v.validateGraphStrategy(team)
 	default:
@@ -142,14 +142,16 @@ func (v *TeamCustomValidator) validateStrategy(ctx context.Context, team *arkv1a
 	}
 }
 
-func (v *TeamCustomValidator) validateSelectorModel(ctx context.Context, team *arkv1alpha1.Team) error {
-	// Resolve selector model name with default fallback
-	modelName, namespace := genai.ResolveModelSpec(team.Spec.Selector, team.Namespace)
+func (v *TeamCustomValidator) validateSelectorAgent(ctx context.Context, team *arkv1alpha1.Team) error {
+	if team.Spec.Selector == nil || team.Spec.Selector.Agent == "" {
+		return fmt.Errorf("selector strategy requires selector.agent to be specified")
+	}
 
-	// Validate that the model exists
-	err := v.ValidateLoadModel(ctx, modelName, namespace)
+	agentName := team.Spec.Selector.Agent
+
+	err := v.ValidateLoadAgent(ctx, agentName, team.Namespace)
 	if err != nil {
-		return fmt.Errorf("selector model %s not found in namespace %s: %v", modelName, namespace, err)
+		return fmt.Errorf("selector agent '%s' not found in namespace %s: %v", agentName, team.Namespace, err)
 	}
 
 	return nil
@@ -181,6 +183,10 @@ func (v *TeamCustomValidator) validateGraphStrategy(team *arkv1alpha1.Team) erro
 			return fmt.Errorf("member '%s' has more than one outgoing edge", edge.From)
 		}
 		transitionMap[edge.From] = true
+	}
+
+	if team.Spec.MaxTurns == nil {
+		return fmt.Errorf("graph strategy requires maxTurns to prevent infinite execution")
 	}
 
 	return nil

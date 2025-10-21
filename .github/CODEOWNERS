@@ -1,9 +1,17 @@
-# Technical Lead / Technical Architect / TSC Chair: @dwmkerr
-# Solution Architect and Frontier Tech: @chi-wai-cheung-mckinsey
-# Ark Technicial Lead: @Roman-Galeev
-# vNext Technicial Lead: @cm94242 
+# Code Ownership
+# @Nab-0    - Product Manager
+# @dwmkerr  - Technical Lead
+# @cm94242  - vNext Technical Lead
+# @av3n93rz - UI Lead
 
-* @dwmkerr
+# Dashboard: av3n93rz primary, dwmkerr/Nab-0 secondary for releases
 
-/ark/config/crd/ @dwmkerr @Roman-Galeev @cm94242
-/ark/api/ @dwmkerr @Roman-Galeev @cm94242
+# Root - tech lead or PM for all changes.
+* @dwmkerr @cm94242 @Nab-0
+
+# Significant changes to K8S CRDs.
+/ark/config/crd/ @dwmkerr @cm94242
+/ark/api/ @dwmkerr @cm94242
+
+# UI - led by @av3n93rz. TLs/PM fallback.
+/services/ark-dashboard/ @av3n93rz @dwmkerr @cm94242 @Nab-0

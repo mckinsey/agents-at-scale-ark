@@ -128,7 +128,7 @@ You can use the [OpenAI List Models API](https://platform.openai.com/docs/api-re
 See all available agents, teams, models, and tools:
 
 ```bash
-curl http://localhost:8000/openai/v1/models
+curl http://ark-api.default.127.0.0.1.nip.io:8080/openai/v1/models
 ```
 
 ### Query a Agent
@@ -136,7 +136,7 @@ curl http://localhost:8000/openai/v1/models
 Query a model, agent, team or tool using the exact same syntax that you would use to query an LLM with the OpenAI SDK:
 
 ```bash
-curl -X POST http://localhost:8000/openai/v1/chat/completions \
+curl -X POST http://ark-api.default.127.0.0.1.nip.io:8080/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "agent/weather-agent",
@@ -179,7 +179,7 @@ from openai import OpenAI
 
 client = OpenAI(
     api_key="not-needed",
-    base_url="http://localhost:8000/openai/v1"
+    base_url="http://ark-api.default.127.0.0.1.nip.io:8080/openai/v1"
 )
 
 response = client.chat.completions.create(
@@ -195,7 +195,7 @@ print(response.choices[0].message.content)
 ### Query a Team
 
 ```bash
-curl -X POST http://localhost:8000/openai/v1/chat/completions \
+curl -X POST http://ark-api.default.127.0.0.1.nip.io:8080/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "team/team-seq",

@@ -108,7 +108,12 @@ class ProjectGenerator {
 
       // Get project configuration
       spinner.start('Gathering project configuration');
-      const config = await this.getProjectConfig(name, destination, options);
+      const config = await this.getProjectConfig(
+        name,
+        destination,
+        options,
+        spinner
+      );
       spinner.succeed(`Project "${config.name}" configured`);
 
       // Discover and configure models (only if not skipped)
@@ -191,16 +196,13 @@ class ProjectGenerator {
   private async getProjectConfig(
     name: string,
     destination: string,
-    options: GeneratorOptions
+    options: GeneratorOptions,
+    spinner: any
   ): Promise<ProjectConfig> {
-    console.log(chalk.gray(`\n${'─'.repeat(50)}`));
-    console.log(chalk.cyan('Project Configuration'));
-    console.log(chalk.gray(`${'─'.repeat(50)}\n`));
-
-    // Use command line options if provided, otherwise prompt
+    // Use command line options if provided
     let projectType = options.projectType;
     let parentDir = destination;
-    let namespace = options.namespace || name;
+    let namespace = options.namespace;
 
     // Validate project type if provided
     if (
@@ -213,12 +215,21 @@ class ProjectGenerator {
       );
     }
 
-    // Validate and normalize namespace
-    namespace = toKebabCase(namespace);
-    validateNameStrict(namespace, 'namespace');
+    // Default to interactive mode unless all required options are provided
+    // or explicitly set to non-interactive
+    const shouldPrompt =
+      options.interactive !== false &&
+      (!options.projectType || !options.namespace);
 
-    // Only prompt if in interactive mode and missing required options
-    if (options.interactive || !options.projectType || !options.namespace) {
+    if (shouldPrompt) {
+      // Stop spinner before showing prompts
+      spinner.stop();
+
+      // Show configuration header only when prompting
+      console.log(chalk.gray(`\n${'─'.repeat(50)}`));
+      console.log(chalk.cyan('Project Configuration'));
+      console.log(chalk.gray(`${'─'.repeat(50)}\n`));
+
       const prompts = [];
 
       if (!options.projectType) {
@@ -262,14 +273,23 @@ class ProjectGenerator {
         parentDir = answers.parentDir || parentDir;
         namespace = answers.namespace || namespace;
       }
+
+      // Restart spinner after prompts
+      spinner.start('Finalizing configuration');
     }
 
-    // Ensure projectType has a value
+    // Use defaults for missing options
     if (!projectType) {
-      throw new Error(
-        'Project type is required. Use --project-type <empty|with-samples> or run in interactive mode.'
-      );
+      projectType = GENERATOR_DEFAULTS.projectType; // 'with-samples'
     }
+
+    if (!namespace) {
+      namespace = name; // Default namespace to project name
+    }
+
+    // Validate and normalize namespace
+    namespace = toKebabCase(namespace);
+    validateNameStrict(namespace, 'namespace');
 
     const projectPath = path.join(parentDir, name);
 
@@ -466,7 +486,10 @@ class ProjectGenerator {
   }
 
   private async configureGit(config: ProjectConfig): Promise<void> {
-    console.log(chalk.cyan('📋 Git Repository Configuration\n'));
+    // If git setup is explicitly skipped, don't do anything
+    if (!config.initGit) {
+      return;
+    }
 
     // Check if git is available
     const gitAvailable = await this.isGitAvailable();
@@ -479,7 +502,7 @@ class ProjectGenerator {
       return;
     }
 
-    // Check if git is configured
+    // Check if git is configured (only if we're initializing git)
     try {
       await execa('git', ['config', 'user.name'], {stdio: 'pipe'});
       await execa('git', ['config', 'user.email'], {stdio: 'pipe'});
@@ -491,17 +514,9 @@ class ProjectGenerator {
       );
     }
 
-    const gitAnswers = await inquirer.prompt([
-      {
-        type: 'confirm',
-        name: 'initGit',
-        message: 'Initialize git repository with initial commit?',
-        default: true,
-      },
-    ]);
-
-    config.initGit = gitAnswers.initGit;
-    config.createCommit = gitAnswers.initGit; // Always create commit if initializing git
+    // Since initGit is already true from command line options or defaults,
+    // we can proceed without prompting
+    config.createCommit = true; // Always create commit if initializing git
   }
 
   private async generateProject(config: ProjectConfig): Promise<void> {

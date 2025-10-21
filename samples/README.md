@@ -95,6 +95,33 @@ Agent with template parameters demonstrating shared configuration.
 
 This example shows how multiple agents can share common behavior patterns while allowing individual customization.
 
+#### `rag-external-vectordb/` - RAG with External Vector Database
+Complete RAG implementation with external vector database (pgvector) for persistent knowledge base.
+- **Components**: pgvector database, Flask REST API, ARK HTTP Tools, ingestion scripts
+- **Agent**: `rag-agent` - Knowledge base Q&A with semantic search
+- **Tools**: `retrieve-chunks`, `search-by-metadata`, `get-document-stats`
+- **Prerequisites**: 
+  - Azure OpenAI account with API key
+  - Kubernetes cluster
+  - Docker for building retrieval service
+- **Use case**: Production-ready RAG with persistent vector storage
+- **Quick Deploy**:
+  ```bash
+  cd samples/rag-external-vectordb
+  # Edit retrieval-service/deployment/azure-openai-secret.yaml with your credentials
+  make rag-demo
+  ```
+- **Full Guide**: See `rag-external-vectordb/README.md` for complete setup
+
+**RAG Features Demonstrated:**
+- **Persistent Storage**: Vector database survives pod restarts
+- **Semantic Search**: Azure OpenAI embeddings (1536 dimensions)
+- **Custom HTTP Tools**: Flask REST API exposing retrieval endpoints
+- **Data Ingestion**: Python script for loading documents with embeddings
+- **End-to-End Workflow**: Database → API → Tools → Agent
+
+For detailed implementation guide, see `docs/content/developer-guide/rag-implementation.mdx`.
+
 ### 👥 Team Examples
 
 #### `team.yaml` - Sequential Team

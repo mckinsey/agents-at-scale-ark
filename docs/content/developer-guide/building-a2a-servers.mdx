@@ -1,0 +1,172 @@
+---
+title: Building A2A Servers
+description: Create and host your own A2A-compatible agents
+---
+
+# Building A2A Servers
+
+This guide shows you how to create A2A servers that host custom agents. Exposing agents via A2A servers allows you to develop agents using your preferred tools and frameworks, such as LangChain, CrewAI, AutoGen, or custom agent code and expose them to Ark using the A2A protocol.
+
+## Quickstart
+
+You can get started is with the [Simple Agent sample](https://github.com/mckinsey/agents-at-scale-ark/tree/main/samples/a2a/simple-agent). This sample has the following basic structure:
+
+```
+simple-agent/
+├── src/
+│   └── simple_a2a_server/    # Python package with A2A server implementation
+│       ├── __init__.py
+│       ├── __main__.py
+│       └── main.py           # Main server with agent logic and A2A handlers
+├── Dockerfile                 # Container image for deployment
+├── devspace.yaml              # DevSpace config for k8s deployment with hot reload
+├── manifests.yaml             # K8s resources (Deployment, Service, A2AServer)
+├── Makefile                   # Build and run commands
+├── pyproject.toml             # Python dependencies (a2a-sdk, uvicorn, starlette)
+└── README.md                  # Usage instructions
+```
+
+This A2A server demonstrates:
+
+- ✅ How to run an A2A server
+- ✅ How to expose an agent via an "Agent Card"
+- ✅ How to respond to queries
+- ✅ Local in-cluster development with devspace
+- ✅ Required Kubernetes resources to deploy to a cluster
+
+## Running Locally and Testing with the A2A Inspector
+
+You can run your A2A server locally and test with the [A2A Inspector](https://github.com/a2aproject/a2a-inspector). Run the server locally first:
+
+```bash
+# Go to the simple agent sample and run locally.
+cd samples/a2a/simple-agent
+make dev
+```
+
+The A2A server is now running on: http://0.0.0.0:8000
+
+Now install and run the A2A inspector:
+
+```bash
+git clone https://github.com/a2aproject/a2a-inspector.git
+cd a2a-inspector
+chmod +x scripts/run.sh
+bash scripts/run.sh
+```
+
+Open the A2A Inspector at `http://127.0.0.1:5001`. Enter the URL of your A2A server, which for the sample is: `http://localhost:8000`
+
+You can also send requests directly to the A2A server for lower-level testing. Some basic `curl` commands are below:
+
+```bash
+# Show the Agent Card.
+curl http://localhost:8000/.well-known/agent.json | jq .
+
+# Test health endpoint
+curl http://localhost:8000/health
+
+# Send a message
+curl -X POST http://localhost:8000/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "messageId": "test-1",
+        "contextId": "ctx-1",
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Hello world"}]
+      }
+    },
+    "id": 1
+  }' | jq .
+```
+
+## Integrating with Ark
+
+Ark can discover the agent running in an A2A server and create an agent resource from it. This allows you to query the agent, put it into teams, expose it via APIs and so on.
+
+Rather than running the sample agent locally, you can run it in the cluster with [`devspace`](http://devspace.sh). Devspace can run your code in a container with live reload as well as deploy Kubernetes resources:
+
+```bash
+# Start the a2a server with live reload.
+cd samples/a2a/simple-agent
+devspace dev
+```
+
+Running with devspace applies the resources in the `manifest.yaml` file. These are:
+
+```
+Deployment - simple-agent    # This tells kubernetes to deploy your sample agent server
+Service - simple-agent       # This tells k8s that your server is exposed on port 8080
+A2AServer - simple-agent     # This tells Ark it should load your a2a server from the service
+```
+
+You can see each of these resources like so:
+
+```bash
+kubectl get deployments
+# NAME                    READY   UP-TO-DATE   AVAILABLE   AGE
+# simple-agent-devspace   1/1     1            1           5m32s
+
+kubectl get services
+# NAME           TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+# simple-agent   ClusterIP   10.96.204.83    <none>        80/TCP     5m53s
+
+kubectl get a2aservers
+# NAME           READY   DISCOVERING   ADDRESS                                             AGE
+# simple-agent   True    False         http://simple-agent.mock-llm.svc.cluster.local:80   6m13s
+```
+
+Note that to enable live reload, devspace creates a special 'dev' deployment. Details are in the devspace docs.
+
+Ark will monitor the `A2AServer` resource that has been created, and will attempt to load the agent card. If the agent card is loaded successfully, it will create a new `Agent` - when this agent is queried, the query will be passed to your A2A server. Check these resources like so:
+
+```bash
+# Check the A2AServer status.
+kubectl get a2aserver simple-agent -o yaml
+# NAME           READY   DISCOVERING   ADDRESS                                             AGE
+# simple-agent   True    False         http://simple-agent.mock-llm.svc.cluster.local:80   6m13s
+
+# Check if Ark created an Agent from the A2A server.
+kubectl get agents
+# NAME           MODEL   AVAILABLE   AGE
+# simple-agent           True        2m20s
+
+# Query the agent you created.
+ark agent query simple-agent "who are you?"
+# I received your message: 'who are you?'. I'm a simple agent, so I can help with basic tasks like greetings, simple math, or just echoing your messages back to you. Try asking for help to see what I can do!
+```
+
+You can uninstall / cleanup your deployment with:
+
+```bash
+devspace purge
+```
+
+## LangChain Integration Example
+
+For a more advanced example that integrates with LangChain, see the [LangChain Weather Agent sample](https://github.com/mckinsey/agents-at-scale-ark/tree/main/samples/a2a/langchain-weather-agent). This sample demonstrates:
+
+- ✅ Building agents with LangChain framework
+- ✅ Custom tool integration (weather APIs)
+- ✅ Azure OpenAI connectivity
+- ✅ Self-contained LLM configuration (no ARK Model resources required)
+
+The LangChain Weather Agent shows how to wrap existing LangChain agents with the A2A protocol, making them accessible to ARK while keeping your existing agent implementation intact.
+
+```bash
+# Deploy and test the LangChain weather agent
+cd samples/a2a/langchain-weather-agent
+devspace dev
+
+# Query the agent
+ark agent query langchain-weather-agent "What's the weather in Chicago?"
+```
+
+## Further Reading
+
+- The [`A2AServer`](/reference/resources/a2aserver) specification has the full details of the `A2AServer` resource
+- The [`Agent`](/reference/resources/agent) specification has the full details of the `Agent` resource

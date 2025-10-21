@@ -17,6 +17,12 @@ spec:
         outputs:
         - name: azure
           value: (json_parse($stdout))
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - apply:
         file: manifests/*.yaml
     - assert:
@@ -63,6 +69,15 @@ spec:
             (type(score) == 'string'): true
             (to_number(score) >= `0.0` && to_number(score) <= `1.0`): true
             (type(passed) == 'boolean'): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Evaluation
+          metadata:
+            name: test-direct-evaluation
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

@@ -1,0 +1,119 @@
+---
+title: Ark CLI Developer Guide
+description: Conventions and patterns for developing Ark CLI commands
+---
+
+# Ark CLI Developer Guide
+
+Conventions for developing the Ark CLI and commands. Ark provides two CLIs: **`ark`** (Node.js) for general-purpose interactive use with non-interactive mode for scripting, and **`fark`** (Go) optimized for resource management and low latency. Both are located in `tools/`.
+
+## Design Conventions
+
+Ark's CLI design draws from `kubectl` and `argo`, aiming to make the experience familiar for users.
+
+Kubernetes `kubectl` provides resource-oriented operations:
+
+```bash
+kubectl get pods                    # List resources
+kubectl get pods -o json            # JSON output
+kubectl describe pod my-pod         # Detailed view
+kubectl get pods --timeout=30s      # With timeout
+```
+
+Argo Workflows manages workflow execution and monitoring:
+
+```bash
+argo list                    # List workflows
+argo list --running          # Filter by status
+argo get my-workflow         # Get workflow details
+argo logs my-workflow        # View logs
+argo submit workflow.yaml    # Submit workflow (interactive by default)
+argo list -o wide            # Extended output
+```
+
+Both use the default kubeconfig context for Kubernetes connections.
+
+## Command Conventions
+
+Global level commands can be created to manage the Ark platform - these commands should be created judiciously. They are interactive by default but can also be scripted.
+
+```bash
+ark install                  # Install platform (interactive)
+ark install --yes            # Non-interactive (for scripts)
+ark status                   # Check system health
+ark dashboard                # Open dashboard
+ark completion               # Shell completion
+```
+
+Resource level commands follow the pattern: `ark <resource> <action> [name] [options]`
+
+```bash
+# Resources: models, agents, teams, tools
+# Common verbs: list (default), create, status, query, delete
+
+ark models                          # List models
+ark models create default           # Create model
+ark agents query weather "msg"      # Query agent
+ark models status default           # Check model health
+```
+
+Shorthand options can occasionally be offered if they provide clearer scripting or interactive syntax:
+
+```bash
+# Standard resource / verb / noun syntax.
+ark models query default "What is 2+2?"
+
+# Shorthand verb syntax, more natural for some of the more essential commands.
+ark query model/default "What is 2+2?"
+```
+
+Note that the target format is `<type>/<name>` (e.g., `agent/weather`, `team/my-team`), as per the Ark APIs.
+
+## Parameter Conventions
+
+Following kubectl/argo patterns. Essential parameters:
+
+| Flag | Purpose | Example |
+|------|---------|---------|
+| `-o, --output` | Output format (json, yaml, text) | `ark models -o json` |
+| `--timeout` | Operation timeout | `ark agents query weather "msg" --timeout 30s` |
+
+## Exit Code and Error Handling Conventions
+
+Four main status codes are used:
+
+| Code | Meaning | When to Use |
+|------|---------|-------------|
+| `0` | Success | Command completed |
+| `1` | CLI Error | Invalid arguments, config issues |
+| `2` | Operation Error | Backend failure, resource error |
+| `3` | Timeout | Operation exceeded time limit |
+
+This helps scripts distinguish between usage errors, operational failures, and timeouts. Error details are printed by the CLI.
+
+Query operations return exit code `2` when execution fails and `3` on timeout, making error handling in scripts straightforward. This behavior aligns with Argo Workflows' `--wait` flag pattern (see [argoproj/argo-workflows#1008](https://github.com/argoproj/argo-workflows/issues/1008)).
+
+Example handling exit codes:
+
+```bash
+if ! ark agents query weather "What's the weather?"; then
+   echo "Query failed with exit code $?"
+fi
+```
+
+## Interactive Conventions
+
+Colors and progress indicators are enabled by default in interactive terminals and automatically disabled when output is piped, `NO_COLOR` is set, or running in non-TTY environments. Default output is human-readable text. Use `-o json` for machine-readable output.
+
+Ark uses [`chalk`](https://github.com/chalk/chalk) for terminal colors and [`ora`](https://github.com/sindresorhus/ora), which automatically respect TTY and non-TTY environments.
+
+The `ark chat` offers full interactive experience inspired by Claude Code, and uses [Ink](https://github.com/vadimdemedes/ink).
+
+## Debugging Conventions
+
+Enable debug logging using the `DEBUG` environment variable. The Node.js [`debug` module](https://github.com/debug-js/debug) is used:
+
+```bash
+# Enable all ark debug output
+DEBUG=ark:* ark status
+```

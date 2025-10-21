@@ -5,6 +5,7 @@ description = ""
 requires-python = ">=3.11"
 dependencies = [
     "aiofiles>=24.1.0",
+    "bcrypt>=4.0.0",
     "dpath>=2.2.0",
     "fastapi>=0.115.8",
     "kubernetes-asyncio>=33.3.0",
@@ -23,7 +24,7 @@ dependencies = [
 package = true
 
 [tool.uv.sources]
-ark-sdk = { path = "../../../out/ark-sdk/py-sdk/dist/ark_sdk-0.1.36-py3-none-any.whl" }
+ark-sdk = { path = "out/ark_sdk-0.1.37-py3-none-any.whl" }
 
 [tool.coverage.run]
 data_file = "coverage/.coverage"

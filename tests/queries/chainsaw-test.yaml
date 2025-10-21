@@ -13,6 +13,12 @@ spec:
           outputs:
           - name: azure
             value: (json_parse($stdout))
+      - script:
+          content: |
+            helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
       - apply:
           file: "manifests/*.yaml"
       - assert:
@@ -39,6 +45,15 @@ spec:
               name: test-query
             status:
               phase: done
+      - assert:
+          resource:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            metadata:
+              name: test-query
+            status:
+              (conditions[?type == 'Completed']):
+              - status: 'True'
       - assert:
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1

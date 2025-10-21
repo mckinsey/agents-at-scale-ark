@@ -17,6 +17,12 @@ spec:
         outputs:
         - name: azure
           value: (json_parse($stdout))
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - apply:
         file: manifests/*.yaml
     - assert:
@@ -57,7 +63,7 @@ spec:
             strategy: selector
             maxTurns: 6
             selector:
-              model: test-model
+              agent: coordinator
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

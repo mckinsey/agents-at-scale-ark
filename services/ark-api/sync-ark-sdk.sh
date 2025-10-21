@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+## This script copies the build ARK SDK file into the current service directory
+## so it can be used a dependency
+
 set -euo pipefail
 
 rm -rf out

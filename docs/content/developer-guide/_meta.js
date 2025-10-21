@@ -3,6 +3,7 @@ export default {
   'local-development': 'Local Development',
   'logging-and-events': 'Logging and Events',
   'ark-sdk': 'ARK SDK',
+  'ark-cli': 'Ark CLI Developer Guide',
   'design-principles': 'Design Principles',
   'crd-design-guide': 'CRD Design Guidelines',
   'cli-tools': 'CLI Tools',
@@ -10,10 +11,11 @@ export default {
   services: 'Services',
   'ark-dashboard': 'ARK Dashboard',
   'ark-gateway': 'ARK Gateway',
-  'a2a-server': 'A2A Gateway',
+  'building-a2a-servers': 'Building A2A Servers',
   'ark-evaluator': 'Evaluation Engine Service',
   testing: 'End-to-End Testing',
   observability: 'Observability',
   'langchain-execution-engine': 'LangChain Execution Engine',
+  'rag-implementation': 'RAG Implementation Guide',
   'authentication': 'Authentication'
 }

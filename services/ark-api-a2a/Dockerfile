@@ -22,7 +22,6 @@ COPY out/ark*.whl /tmp/wheels/
 
 # Copy source code only (not pyproject.toml again)
 COPY src/ ./
-COPY *.py ./
 
 # Add ark-sdk wheel as a dependency and sync all dependencies
 RUN uv add file://$(ls /tmp/wheels/ark*.whl) && \

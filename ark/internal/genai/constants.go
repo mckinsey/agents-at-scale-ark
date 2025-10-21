@@ -28,7 +28,14 @@ const (
 
 // Tool type constants
 const (
-	ToolTypeHTTP  = "http"
-	ToolTypeMCP   = "mcp"
-	ToolTypeAgent = "agent"
+	ToolTypeHTTP    = "http"
+	ToolTypeMCP     = "mcp"
+	ToolTypeAgent   = "agent"
+	ToolTypeBuiltin = "builtin"
+)
+
+// Built-in tool name constants
+const (
+	BuiltinToolNoop      = "noop"
+	BuiltinToolTerminate = "terminate"
 )

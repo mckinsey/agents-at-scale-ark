@@ -15,6 +15,7 @@ type AzureProvider struct {
 	BaseURL      string
 	APIVersion   string
 	APIKey       string
+	Headers      map[string]string
 	Properties   map[string]string
 	outputSchema *runtime.RawExtension
 	schemaName   string
@@ -139,13 +140,17 @@ func (ap *AzureProvider) createClient(ctx context.Context) openai.Client {
 	httpClient := common.NewHTTPClientWithLogging(ctx)
 
 	deploymentURL := fmt.Sprintf("%s/openai/deployments/%s", ap.BaseURL, ap.Model)
-	return openai.NewClient(
+	options := []option.RequestOption{
 		option.WithBaseURL(deploymentURL),
 		option.WithHeader("api-key", ap.APIKey),
 		option.WithAPIKey(ap.APIKey),
 		option.WithHTTPClient(httpClient),
 		option.WithQueryAdd("api-version", ap.APIVersion),
-	)
+	}
+
+	options = applyHeadersToOptions(ctx, ap.Headers, options, ap.Model)
+
+	return openai.NewClient(options...)
 }
 
 func (ap *AzureProvider) BuildConfig() map[string]any {

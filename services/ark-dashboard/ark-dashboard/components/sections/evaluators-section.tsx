@@ -2,13 +2,17 @@
 
 import type React from "react"
 import { useState, useEffect, forwardRef, useImperativeHandle } from "react"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { EvaluatorEditor } from "@/components/editors"
 import { evaluatorsService, type Evaluator, type EvaluatorCreateRequest } from "@/lib/services"
 import { EvaluatorCard } from "@/components/cards"
 import { EvaluatorRow } from "@/components/rows/evaluator-row"
 import { useDelayedLoading } from "@/lib/hooks"
 import { ToggleSwitch, type ToggleOption } from "@/components/ui/toggle-switch"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { DASHBOARD_SECTIONS } from "@/lib/constants"
+import { Button } from "@/components/ui/button"
+import { ArrowUpRightIcon, Plus } from "lucide-react"
 
 export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(function EvaluatorsSection(_, ref) {
   const [evaluators, setEvaluators] = useState<Evaluator[]>([])
@@ -33,9 +37,7 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(funct
         const evaluatorsData = await evaluatorsService.getAll()
         setEvaluators(evaluatorsData)
       } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Failed to Load Evaluators",
+        toast.error("Failed to Load Evaluators", {
           description: error instanceof Error ? error.message : "An unexpected error occurred"
         })
       } finally {
@@ -50,17 +52,13 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(funct
     try {
       const { id: _, ...createData } = evaluator
       await evaluatorsService.create(createData)
-      toast({
-        variant: "success",
-        title: "Evaluator Created",
+      toast.success("Evaluator Created", {
         description: `Successfully created ${createData.name}`
       })
       const updatedEvaluators = await evaluatorsService.getAll()
       setEvaluators(updatedEvaluators)
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Create Evaluator",
+      toast.error("Failed to Create Evaluator", {
         description: error instanceof Error ? error.message : "An unexpected error occurred"
       })
     }
@@ -73,17 +71,13 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(funct
         throw new Error("Evaluator not found")
       }
       await evaluatorsService.delete(name)
-      toast({
-        variant: "success",
-        title: "Evaluator Deleted",
+      toast.success("Evaluator Deleted", {
         description: `Successfully deleted ${evaluator.name}`
       })
       const updatedEvaluators = await evaluatorsService.getAll()
       setEvaluators(updatedEvaluators)
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to Delete Evaluator",
+      toast.error("Failed to Delete Evaluator", {
         description: error instanceof Error ? error.message : "An unexpected error occurred"
       })
     }
@@ -94,6 +88,47 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(funct
       <div className="flex h-full items-center justify-center">
         <div className="text-center py-8">Loading...</div>
       </div>
+    )
+  }
+
+  if (evaluators.length === 0 && !loading) {
+    return (
+      <>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.evaluators.icon />
+            </EmptyMedia>
+            <EmptyTitle>No Evaluators Yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t added any evaluators yet. Get started by adding
+              your first evaluator.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={() => setEvaluatorEditorOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add Evaluator
+            </Button>
+          </EmptyContent>
+          <Button
+            variant="link"
+            asChild
+            className="text-muted-foreground"
+            size="sm"
+          >
+            <a href="https://mckinsey.github.io/agents-at-scale-ark/reference/evaluations/evaluations/" target="_blank">
+              Learn More <ArrowUpRightIcon />
+            </a>
+          </Button>
+        </Empty>
+        <EvaluatorEditor
+          open={evaluatorEditorOpen}
+          onOpenChange={setEvaluatorEditorOpen}
+          evaluator={null}
+          onSave={handleCreateEvaluator as any} // eslint-disable-line @typescript-eslint/no-explicit-any
+        />
+      </>
     )
   }
 
@@ -133,7 +168,7 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(funct
           )}
         </main>
       </div>
-      
+
       <EvaluatorEditor
         open={evaluatorEditorOpen}
         onOpenChange={setEvaluatorEditorOpen}

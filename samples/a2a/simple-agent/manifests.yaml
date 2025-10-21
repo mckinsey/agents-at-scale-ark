@@ -1,0 +1,61 @@
+# Deployment runs the simple-agent container with the A2A server
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simple-agent
+  labels:
+    app: simple-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: simple-agent
+  template:
+    metadata:
+      labels:
+        app: simple-agent
+    spec:
+      containers:
+      - name: simple-agent
+        image: simple-agent:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+# Service exposes the simple-agent A2A server on port 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: simple-agent
+  labels:
+    app: simple-agent
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: simple-agent
+# A2AServer registers the simple-agent with Ark for agent discovery
+---
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: A2AServer
+metadata:
+  name: simple-agent
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: simple-agent
+        port: http
+  description: "Simple agent with conversation, math, and echo capabilities"

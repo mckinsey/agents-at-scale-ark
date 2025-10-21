@@ -89,17 +89,17 @@ func (r *ExecutionRecorder) ParticipantSelected(ctx context.Context, teamName, s
 	r.emitter.EmitEvent(ctx, corev1.EventTypeNormal, "ParticipantSelected", event)
 }
 
-func (r *ExecutionRecorder) SelectorModelResponse(ctx context.Context, teamName, modelName, selectedName, availableParticipants string) {
+func (r *ExecutionRecorder) SelectorAgentResponse(ctx context.Context, teamName, agentName, selectedName, availableParticipants string) {
 	event := ExecutionEvent{
 		BaseEvent: BaseEvent{
 			Name: teamName,
 			Metadata: map[string]string{
-				"model":                  modelName,
+				"agent":                  agentName,
 				"selected_name":          selectedName,
 				"available_participants": availableParticipants,
 			},
 		},
 		Type: "team_selector_response",
 	}
-	r.emitter.EmitEvent(ctx, corev1.EventTypeNormal, "SelectorModelResponse", event)
+	r.emitter.EmitEvent(ctx, corev1.EventTypeNormal, "SelectorAgentResponse", event)
 }
