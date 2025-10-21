@@ -137,7 +137,6 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function T
           onOpenChange={setTeamEditorOpen}
           team={null}
           agents={agents}
-          models={models}
           onSave={handleSaveTeam}
         />
       </>
