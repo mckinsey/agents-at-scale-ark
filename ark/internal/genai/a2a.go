@@ -130,9 +130,17 @@ func executeA2AAgentMessage(ctx context.Context, a2aClient *a2aclient.A2AClient,
 		protocol.NewTextPart(input),
 	})
 
+	blocking := true
 	params := protocol.SendMessageParams{
 		RPCID:   protocol.GenerateRPCID(),
 		Message: message,
+		// Blocking: true causes the A2A server to wait for task completion before responding.
+		// When false, the server returns immediately with a Task in "submitted" state, requiring
+		// the client to poll for updates. Ark currently only supports blocking mode, expecting
+		// Tasks to be in terminal state ("completed" or "failed") when returned.
+		Configuration: &protocol.SendMessageConfiguration{
+			Blocking: &blocking,
+		},
 	}
 
 	result, err := a2aClient.SendMessage(ctx, params)

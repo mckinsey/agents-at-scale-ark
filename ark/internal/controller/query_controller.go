@@ -506,7 +506,14 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	case statusDone:
 		r.setConditionCompleted(query, metav1.ConditionTrue, "QuerySucceeded", "Query completed successfully")
 	case statusError:
-		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryErrored", "Query completed with error")
+		errorMsg := "Query completed with error"
+		for _, response := range query.Status.Responses {
+			if response.Phase == statusError && response.Content != "" {
+				errorMsg = response.Content
+				break
+			}
+		}
+		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryErrored", errorMsg)
 	case statusCanceled:
 		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryCanceled", "Query canceled")
 	}
