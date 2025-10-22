@@ -4,49 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"text/template"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/common"
 )
 
 type PartialToolExecutor struct {
 	BaseExecutor ToolExecutor
 	Partial      *arkv1alpha1.ToolPartial
-}
-
-// resolveTemplate resolves Go template strings using query parameters
-func resolveTemplate(tmpl string, query *arkv1alpha1.Query) string {
-	if tmpl == "" || query == nil {
-		return tmpl
-	}
-
-	t, err := template.New("partial").Parse(tmpl)
-	if err != nil {
-		return tmpl
-	}
-
-	data := map[string]any{"Query": map[string]any{}}
-	for _, p := range query.Spec.Parameters {
-		data["Query"].(map[string]any)[p.Name] = p.Value
-	}
-
-	var result string
-
-	err = t.Execute(&stringWriter{&result}, data)
-	if err != nil {
-		return tmpl
-	}
-
-	return result
-}
-
-type stringWriter struct {
-	str *string
-}
-
-func (w *stringWriter) Write(p []byte) (int, error) {
-	*w.str += string(p)
-	return len(p), nil
 }
 
 func (p *PartialToolExecutor) Execute(ctx context.Context, call ToolCall, recorder EventEmitter) (ToolResult, error) {
@@ -62,39 +27,50 @@ func (p *PartialToolExecutor) Execute(ctx context.Context, call ToolCall, record
 		}
 	}
 
-	// Print partial params
-	partialParams := map[string]any{}
+	mergedParams := map[string]any{}
+
 	if p.Partial != nil {
+		partialParams := map[string]any{}
+
+		queryVal := ctx.Value(QueryContextKey)
+		query, ok := queryVal.(*arkv1alpha1.Query)
+		if !ok {
+			return ToolResult{
+				ID:    call.ID,
+				Name:  call.Function.Name,
+				Error: "failed to resolve query context for partial parameter template",
+			}, fmt.Errorf("failed to resolve query context for partial parameter template")
+		}
+
+		// Prepare template data as {"Query": {paramName: paramValue, ...}}
+		data := map[string]any{"Query": map[string]any{}}
+		for _, p := range query.Spec.Parameters {
+			data["Query"].(map[string]any)[p.Name] = p.Value
+		}
+
 		for _, param := range p.Partial.Parameters {
-			// Defensive: handle panics if QueryContextKey is missing or wrong type
-			var resolved string
-			queryVal := ctx.Value(QueryContextKey)
-			query, ok := queryVal.(*arkv1alpha1.Query)
-			if !ok {
+			resolved, err := common.ResolveTemplate(param.Value, data)
+			if err != nil {
 				return ToolResult{
 					ID:    call.ID,
 					Name:  call.Function.Name,
-					Error: "failed to resolve query context for partial parameter template",
-				}, fmt.Errorf("failed to resolve query context for partial parameter template")
+					Error: fmt.Sprintf("failed to resolve template for partial parameter '%s': %v", param.Name, err),
+				}, fmt.Errorf("failed to resolve template for partial parameter '%s': %w", param.Name, err)
 			}
-			resolved = resolveTemplate(param.Value, query)
 			partialParams[param.Name] = resolved
+		}
+
+		for k, v := range partialParams {
+			mergedParams[k] = v
 		}
 	}
 
-	// Merge partial parameters
-	merged := map[string]any{}
-
-	for k, v := range partialParams {
-		merged[k] = v
-	}
-
 	for k, v := range agentParams {
-		merged[k] = v
+		mergedParams[k] = v
 	}
 
 	// Marshal merged params back to JSON
-	argsBytes, err := json.Marshal(merged)
+	argsBytes, err := json.Marshal(mergedParams)
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
