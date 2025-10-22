@@ -89,6 +89,20 @@ spec:
                     description: A human-readable title for the tool.
                     type: string
                 type: object
+              builtin:
+                description: |-
+                  Builtin-specific configuration for builtin tools.
+                  This field is required only if Type = "builtin".
+                properties:
+                  name:
+                    description: |-
+                      Name of the Builtin being referenced.
+                      This must be a non-empty string.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
               description:
                 description: Tool description
                 type: string
