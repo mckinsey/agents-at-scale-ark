@@ -24,7 +24,7 @@ func resolveTemplate(tmpl string, query *arkv1alpha1.Query) string {
 	if err != nil {
 		return tmpl
 	}
-	
+
 	data := map[string]any{"Query": map[string]any{}}
 	for _, p := range query.Spec.Parameters {
 		data["Query"].(map[string]any)[p.Name] = p.Value

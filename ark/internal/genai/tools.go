@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -15,12 +16,9 @@ import (
 	"github.com/openai/openai-go/shared"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	"maps"
-
-	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
 type ToolDefinition struct {
@@ -384,6 +382,10 @@ func CreateToolFromCRD(toolCRD *arkv1alpha1.Tool) ToolDefinition {
 }
 
 func CreatePartialToolDefinition(tooldefinition ToolDefinition, partial *arkv1alpha1.ToolPartial) ToolDefinition {
+	if partial == nil {
+		return tooldefinition
+	}
+
 	newName := tooldefinition.Name
 	newDesc := tooldefinition.Description
 
@@ -391,41 +393,39 @@ func CreatePartialToolDefinition(tooldefinition ToolDefinition, partial *arkv1al
 	newParams := map[string]any{}
 	maps.Copy(newParams, tooldefinition.Parameters)
 
+	if partial.Name != "" {
+		newName = partial.Name
+	}
+
+	if partial.Description != "" {
+		newDesc = partial.Description
+	}
+
 	// Remove partial parameters from schema if present in context
-	if partial != nil {
-		if partial.Name != "" {
-			newName = partial.Name
+	if props, ok := newParams["properties"].(map[string]any); ok {
+		propsCopy := map[string]any{}
+		maps.Copy(propsCopy, props)
+		for _, param := range partial.Parameters {
+			delete(propsCopy, param.Name)
 		}
+		newParams["properties"] = propsCopy
+	}
 
-		if partial.Description != "" {
-			newDesc = partial.Description
-		}
-
-		if props, ok := newParams["properties"].(map[string]any); ok {
-			propsCopy := map[string]any{}
-			maps.Copy(propsCopy, props)
+	if reqList, ok := newParams["required"].([]string); ok {
+		newReq := []string{}
+		for _, req := range reqList {
+			skip := false
 			for _, param := range partial.Parameters {
-				delete(propsCopy, param.Name)
-			}
-			newParams["properties"] = propsCopy
-		}
-
-		if reqList, ok := newParams["required"].([]string); ok {
-			newReq := []string{}
-			for _, req := range reqList {
-				skip := false
-				for _, param := range partial.Parameters {
-					if req == param.Name {
-						skip = true
-						break
-					}
-				}
-				if !skip {
-					newReq = append(newReq, req)
+				if req == param.Name {
+					skip = true
+					break
 				}
 			}
-			newParams["required"] = newReq
+			if !skip {
+				newReq = append(newReq, req)
+			}
 		}
+		newParams["required"] = newReq
 	}
 
 	return ToolDefinition{
