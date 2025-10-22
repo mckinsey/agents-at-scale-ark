@@ -381,9 +381,9 @@ func CreateToolFromCRD(toolCRD *arkv1alpha1.Tool) ToolDefinition {
 	return ToolDefinition{Name: toolCRD.Name, Description: description, Parameters: parameters}
 }
 
-func CreatePartialToolDefinition(tooldefinition ToolDefinition, partial *arkv1alpha1.ToolPartial) ToolDefinition {
+func CreatePartialToolDefinition(tooldefinition ToolDefinition, partial *arkv1alpha1.ToolPartial) (ToolDefinition, error) {
 	if partial == nil {
-		return tooldefinition
+		return tooldefinition, nil
 	}
 
 	newName := tooldefinition.Name
@@ -401,17 +401,27 @@ func CreatePartialToolDefinition(tooldefinition ToolDefinition, partial *arkv1al
 		newDesc = partial.Description
 	}
 
-	// Remove partial parameters from schema if present in context
-	if props, ok := newParams["properties"].(map[string]any); ok {
-		propsCopy := map[string]any{}
-		maps.Copy(propsCopy, props)
-		for _, param := range partial.Parameters {
-			delete(propsCopy, param.Name)
-		}
-		newParams["properties"] = propsCopy
+	// Remove partial parameters from schema
+	props, ok := newParams["properties"].(map[string]any)
+	if !ok {
+		return ToolDefinition{}, fmt.Errorf("tool schema missing or invalid 'properties' field")
 	}
+	propsCopy := map[string]any{}
+	maps.Copy(propsCopy, props)
+	for _, param := range partial.Parameters {
+		delete(propsCopy, param.Name)
+	}
+	newParams["properties"] = propsCopy
 
-	if reqList, ok := newParams["required"].([]string); ok {
+	// Remove partial parameters from required fields
+	// In this case if the required field is not present
+	// that usually means non of the params are required
+	reqVal, exists := newParams["required"]
+	if exists {
+		reqList, ok := reqVal.([]string)
+		if !ok {
+			return ToolDefinition{}, fmt.Errorf("tool schema 'required' field is not []string, got %T", reqVal)
+		}
 		newReq := []string{}
 		for _, req := range reqList {
 			skip := false
@@ -432,7 +442,7 @@ func CreatePartialToolDefinition(tooldefinition ToolDefinition, partial *arkv1al
 		Name:        newName,
 		Description: newDesc,
 		Parameters:  newParams,
-	}
+	}, nil
 }
 
 func getToolDescription(toolCRD *arkv1alpha1.Tool) string {
