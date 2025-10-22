@@ -414,14 +414,12 @@ func CreatePartialToolDefinition(tooldefinition ToolDefinition, partial *arkv1al
 	newParams["properties"] = propsCopy
 
 	// Remove partial parameters from required fields
-	// In this case if the required field is not present
-	// that usually means non of the params are required
-	reqVal, exists := newParams["required"]
+	reqList, exists, err := getRequiredFields(newParams)
+	if err != nil {
+		return ToolDefinition{}, err
+	}
 	if exists {
-		reqList, ok := reqVal.([]string)
-		if !ok {
-			return ToolDefinition{}, fmt.Errorf("tool schema 'required' field is not []string, got %T", reqVal)
-		}
+		// Remove any required fields that match partial parameters
 		newReq := []string{}
 		for _, req := range reqList {
 			skip := false
@@ -443,6 +441,38 @@ func CreatePartialToolDefinition(tooldefinition ToolDefinition, partial *arkv1al
 		Description: newDesc,
 		Parameters:  newParams,
 	}, nil
+}
+
+func getRequiredFields(params map[string]any) ([]string, bool, error) {
+	// In this case if the required field is not present that usually means non of the params are required
+	// The 'required' field may be missing, a []string, or a []interface{} (from JSON unmarshalling)
+	reqVal, exists := params["required"]
+
+	if !exists {
+		return nil, exists, nil
+	}
+
+	// Convert type to []string if necessary
+	var reqList []string
+	switch v := reqVal.(type) {
+	case []string:
+		// Already the correct type
+		reqList = v
+	case []interface{}:
+		// Convert []interface{} to []string, as JSON unmarshalling often produces this
+		for _, item := range v {
+			str, ok := item.(string)
+			if !ok {
+				// Defensive: fail if any required value is not a string
+				return nil, exists, fmt.Errorf("tool schema 'required' field contains non-string value: %v", item)
+			}
+			reqList = append(reqList, str)
+		}
+	default:
+		// Defensive: fail if required is an unexpected type
+		return nil, exists, fmt.Errorf("tool schema 'required' field is not []string or []interface{}, got %T", reqVal)
+	}
+	return reqList, exists, nil
 }
 
 func getToolDescription(toolCRD *arkv1alpha1.Tool) string {
