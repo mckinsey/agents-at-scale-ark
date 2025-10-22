@@ -70,7 +70,12 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 			defer cancel()
 			log.Info("using A2AServer timeout", "timeout", timeout)
 		} else {
-			log.Info("failed to parse A2AServer timeout", "timeout", a2aServer.Spec.Timeout, "error", err)
+			log.Error(err, "failed to parse A2AServer timeout, falling back to 5m default", "timeout", a2aServer.Spec.Timeout)
+			// Create sub-context with default 5m timeout as fallback
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, 5*time.Minute)
+			defer cancel()
+			log.Info("using default 5m timeout due to parsing error")
 		}
 	}
 	// Otherwise, use existing context deadline from query
