@@ -115,7 +115,7 @@ func createA2AClientForExecution(ctx context.Context, k8sClient client.Client, r
 			return nil, err
 		}
 
-				httpClient := &http.Client{Timeout: timeout}
+		httpClient := &http.Client{Timeout: timeout}
 		clientOptions = append(clientOptions, a2aclient.WithHTTPClient(httpClient))
 		clientOptions = append(clientOptions, a2aclient.WithHTTPReqHandler(&customA2ARequestHandler{
 			headers: resolvedHeaders,
