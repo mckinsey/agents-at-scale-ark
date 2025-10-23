@@ -17,6 +17,7 @@ venv/
 help.mk
 
 .venv/
+testenv/
 
 # Coverage reports
 coverage/
@@ -32,6 +33,7 @@ __pycache__/
 *.pyd
 .Python
 *.egg-info/
+.pytest_cache/
 
 # Local development
 .ark-sdk-local/
@@ -126,6 +128,7 @@ terraform.rc
 *.iws
 *.iml
 *.ipr
+screenshots
 
 # Runtime binaries
 runtime/bin/controller-gen*
