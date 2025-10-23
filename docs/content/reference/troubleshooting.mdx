@@ -40,7 +40,7 @@ Warning    Failed    pod/ark-controller-xxxxxxxxx-xxxx Error: container has runA
 
 This is due to an the Docker Desktop Kubernetes cluster trying to run containers as root, when they shouldn't be.
 
-To fix this, within your Docker Compose Kubernetes set up:
+To fix this, within your Docker Desktop Kubernetes set up:
  - Stop the Kubernetes cluster
  - Start the Kubernetes cluster again, but change the cluster type from Kubeadm to kind
 
