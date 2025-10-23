@@ -22,9 +22,10 @@ func NewQueryRecorder(tracer telemetry.Tracer) telemetry.QueryRecorder {
 }
 
 func (r *queryRecorder) StartQuery(ctx context.Context, queryName, queryNamespace, phase string) (context.Context, telemetry.Span) {
-	spanName := "query." + phase
+	spanName := "query." + queryName
 
 	return r.tracer.Start(ctx, spanName,
+		telemetry.WithSpanKind(telemetry.SpanKindChain),
 		telemetry.WithAttributes(
 			telemetry.String(telemetry.AttrQueryName, queryName),
 			telemetry.String(telemetry.AttrQueryNamespace, queryNamespace),
@@ -36,7 +37,7 @@ func (r *queryRecorder) StartQuery(ctx context.Context, queryName, queryNamespac
 }
 
 func (r *queryRecorder) StartTarget(ctx context.Context, targetType, targetName string) (context.Context, telemetry.Span) {
-	spanName := "query." + targetType
+	spanName := "target." + targetName
 
 	attrs := []telemetry.Attribute{
 		telemetry.String(telemetry.AttrTargetType, targetType),

@@ -65,6 +65,47 @@ type AgentRecorder interface {
 	RecordError(span Span, err error)
 }
 
+// ModelRecorder provides domain-specific telemetry for model execution.
+// Encapsulates LLM call lifecycle and token usage tracking.
+type ModelRecorder interface {
+	// StartModelExecution begins tracing a model execution.
+	StartModelExecution(ctx context.Context, modelName, modelType string) (context.Context, Span)
+
+	// RecordInput records the input messages for the model call.
+	RecordInput(span Span, messages []string)
+
+	// RecordOutput records the output content from the model.
+	RecordOutput(span Span, content string)
+
+	// RecordTokenUsage records token consumption for the model call.
+	RecordTokenUsage(span Span, promptTokens, completionTokens, totalTokens int64)
+
+	// RecordModelDetails records model provider and configuration.
+	RecordModelDetails(span Span, modelName, provider, modelType string)
+
+	// RecordSuccess marks a span as successfully completed.
+	RecordSuccess(span Span)
+
+	// RecordError marks a span as failed with error details.
+	RecordError(span Span, err error)
+}
+
+// ToolRecorder provides domain-specific telemetry for tool execution.
+// Encapsulates tool call lifecycle and result tracking.
+type ToolRecorder interface {
+	// StartToolExecution begins tracing a tool execution.
+	StartToolExecution(ctx context.Context, toolName, toolType, toolID, arguments string) (context.Context, Span)
+
+	// RecordToolResult records the tool execution result.
+	RecordToolResult(span Span, result string)
+
+	// RecordSuccess marks a span as successfully completed.
+	RecordSuccess(span Span)
+
+	// RecordError marks a span as failed with error details.
+	RecordError(span Span, err error)
+}
+
 // Standardized attribute keys for ARK telemetry.
 // Following OpenTelemetry semantic conventions where applicable.
 const (
@@ -123,6 +164,16 @@ const (
 	// Finish reason (aligned with OpenTelemetry GenAI conventions)
 	AttrFinishReason = "gen_ai.completion.finish_reason"
 )
+
+// Provider is an interface for telemetry providers that can create recorders.
+type Provider interface {
+	Tracer() Tracer
+	QueryRecorder() QueryRecorder
+	AgentRecorder() AgentRecorder
+	ModelRecorder() ModelRecorder
+	ToolRecorder() ToolRecorder
+	Shutdown() error
+}
 
 // Target types for query execution
 const (

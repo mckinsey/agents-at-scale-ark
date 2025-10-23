@@ -51,7 +51,7 @@ type Attribute struct {
 	Value interface{}
 }
 
-// SpanKind follows OpenTelemetry span kind semantics.
+// SpanKind follows OpenTelemetry span kind semantics with extensions for AI/LLM operations.
 type SpanKind int
 
 const (
@@ -60,6 +60,10 @@ const (
 	SpanKindServer
 	SpanKindProducer
 	SpanKindConsumer
+	SpanKindChain
+	SpanKindAgent
+	SpanKindLLM
+	SpanKindTool
 )
 
 // Status represents the result status of a span.

@@ -16,6 +16,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/genai"
+	"mckinsey.com/ark/internal/telemetry/noop"
 )
 
 const (
@@ -91,7 +92,7 @@ func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Mode
 	resolvedModel, err := genai.LoadModel(ctx, r.Client, &arkv1alpha1.AgentModelRef{
 		Name:      model.Name,
 		Namespace: model.Namespace,
-	}, model.Namespace)
+	}, model.Namespace, noop.NewModelRecorder())
 	if err != nil {
 		return genai.ProbeResult{
 			Available:     false,

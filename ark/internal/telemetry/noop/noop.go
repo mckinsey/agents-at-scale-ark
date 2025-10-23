@@ -86,3 +86,66 @@ func (r *noopAgentRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, 
 }                                                                       //nolint:revive
 func (r *noopAgentRecorder) RecordSuccess(span telemetry.Span)          {} //nolint:revive
 func (r *noopAgentRecorder) RecordError(span telemetry.Span, err error) {} //nolint:revive
+
+type noopModelRecorder struct{}
+
+func NewModelRecorder() telemetry.ModelRecorder {
+	return &noopModelRecorder{}
+}
+
+func (r *noopModelRecorder) StartModelExecution(ctx context.Context, modelName, modelType string) (context.Context, telemetry.Span) {
+	return ctx, &noopSpan{}
+}
+
+func (r *noopModelRecorder) RecordInput(span telemetry.Span, messages []string) {} //nolint:revive
+func (r *noopModelRecorder) RecordOutput(span telemetry.Span, content string)   {} //nolint:revive
+func (r *noopModelRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {
+} //nolint:revive
+func (r *noopModelRecorder) RecordModelDetails(span telemetry.Span, modelName, provider, modelType string) {
+}                                                                       //nolint:revive
+func (r *noopModelRecorder) RecordSuccess(span telemetry.Span)          {} //nolint:revive
+func (r *noopModelRecorder) RecordError(span telemetry.Span, err error) {} //nolint:revive
+
+type noopToolRecorder struct{}
+
+func NewToolRecorder() telemetry.ToolRecorder {
+	return &noopToolRecorder{}
+}
+
+func (r *noopToolRecorder) StartToolExecution(ctx context.Context, toolName, toolType, toolID, arguments string) (context.Context, telemetry.Span) {
+	return ctx, &noopSpan{}
+}
+
+func (r *noopToolRecorder) RecordToolResult(span telemetry.Span, result string) {} //nolint:revive
+func (r *noopToolRecorder) RecordSuccess(span telemetry.Span)                   {} //nolint:revive
+func (r *noopToolRecorder) RecordError(span telemetry.Span, err error)          {} //nolint:revive
+
+type noopProvider struct{}
+
+func NewProvider() *noopProvider {
+	return &noopProvider{}
+}
+
+func (p *noopProvider) Tracer() telemetry.Tracer {
+	return NewTracer()
+}
+
+func (p *noopProvider) QueryRecorder() telemetry.QueryRecorder {
+	return NewQueryRecorder()
+}
+
+func (p *noopProvider) AgentRecorder() telemetry.AgentRecorder {
+	return NewAgentRecorder()
+}
+
+func (p *noopProvider) ModelRecorder() telemetry.ModelRecorder {
+	return NewModelRecorder()
+}
+
+func (p *noopProvider) ToolRecorder() telemetry.ToolRecorder {
+	return NewToolRecorder()
+}
+
+func (p *noopProvider) Shutdown() error {
+	return nil
+}
