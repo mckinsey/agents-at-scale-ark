@@ -36,6 +36,18 @@ func (r *modelRecorder) StartModelExecution(ctx context.Context, modelName, mode
 	)
 }
 
+func (r *modelRecorder) StartModelProbe(ctx context.Context, modelName, modelNamespace string) (context.Context, telemetry.Span) {
+	return r.tracer.Start(ctx, "model.probe",
+		telemetry.WithSpanKind(telemetry.SpanKindLLM),
+		telemetry.WithAttributes(
+			telemetry.String(telemetry.AttrModelName, modelName),
+			telemetry.String(telemetry.AttrQueryNamespace, modelNamespace),
+			telemetry.String(telemetry.AttrComponentName, "model"),
+			telemetry.String("type", "probe"),
+		),
+	)
+}
+
 func (r *modelRecorder) RecordInput(span telemetry.Span, messages any) {
 	if messages == nil {
 		return

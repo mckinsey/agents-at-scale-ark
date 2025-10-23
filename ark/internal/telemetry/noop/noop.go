@@ -97,6 +97,10 @@ func (r *noopModelRecorder) StartModelExecution(ctx context.Context, modelName, 
 	return ctx, &noopSpan{}
 }
 
+func (r *noopModelRecorder) StartModelProbe(ctx context.Context, modelName, modelNamespace string) (context.Context, telemetry.Span) {
+	return ctx, &noopSpan{}
+}
+
 func (r *noopModelRecorder) RecordInput(span telemetry.Span, messages any)    {} //nolint:revive
 func (r *noopModelRecorder) RecordOutput(span telemetry.Span, content string) {} //nolint:revive
 func (r *noopModelRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {

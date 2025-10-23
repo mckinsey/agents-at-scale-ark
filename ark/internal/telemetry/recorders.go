@@ -71,6 +71,9 @@ type ModelRecorder interface {
 	// StartModelExecution begins tracing a model execution.
 	StartModelExecution(ctx context.Context, modelName, modelType string) (context.Context, Span)
 
+	// StartModelProbe begins tracing a model availability probe.
+	StartModelProbe(ctx context.Context, modelName, modelNamespace string) (context.Context, Span)
+
 	// RecordInput records the input messages for the model call.
 	RecordInput(span Span, messages any)
 
