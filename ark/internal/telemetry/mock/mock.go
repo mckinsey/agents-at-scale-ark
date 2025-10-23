@@ -240,10 +240,9 @@ func (r *MockQueryRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, 
 	)
 }
 
-func (r *MockQueryRecorder) RecordModelDetails(span telemetry.Span, modelName, provider, modelType string) {
+func (r *MockQueryRecorder) RecordModelDetails(span telemetry.Span, modelName, modelType string) {
 	span.SetAttributes(
 		telemetry.String(telemetry.AttrModelName, modelName),
-		telemetry.String(telemetry.AttrModelProvider, provider),
 		telemetry.String(telemetry.AttrModelType, modelType),
 	)
 }

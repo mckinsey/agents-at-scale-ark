@@ -27,8 +27,8 @@ type QueryRecorder interface {
 	// RecordTokenUsage records LLM token consumption.
 	RecordTokenUsage(span Span, promptTokens, completionTokens, totalTokens int64)
 
-	// RecordModelDetails records model provider and configuration.
-	RecordModelDetails(span Span, modelName, provider, modelType string)
+	// RecordModelDetails records model configuration. Provider is extracted from modelType.
+	RecordModelDetails(span Span, modelName, modelType string)
 
 	// RecordSessionID associates a span with a session for multi-query tracking.
 	RecordSessionID(span Span, sessionID string)
@@ -72,7 +72,7 @@ type ModelRecorder interface {
 	StartModelExecution(ctx context.Context, modelName, modelType string) (context.Context, Span)
 
 	// RecordInput records the input messages for the model call.
-	RecordInput(span Span, messages []string)
+	RecordInput(span Span, messages any)
 
 	// RecordOutput records the output content from the model.
 	RecordOutput(span Span, content string)
@@ -80,8 +80,8 @@ type ModelRecorder interface {
 	// RecordTokenUsage records token consumption for the model call.
 	RecordTokenUsage(span Span, promptTokens, completionTokens, totalTokens int64)
 
-	// RecordModelDetails records model provider and configuration.
-	RecordModelDetails(span Span, modelName, provider, modelType string)
+	// RecordModelDetails records model configuration. Provider is extracted from modelType.
+	RecordModelDetails(span Span, modelName, modelType string)
 
 	// RecordSuccess marks a span as successfully completed.
 	RecordSuccess(span Span)

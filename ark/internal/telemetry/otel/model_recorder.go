@@ -5,6 +5,7 @@ package otel
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/openai/openai-go"
 	"mckinsey.com/ark/internal/telemetry"
@@ -35,18 +36,73 @@ func (r *modelRecorder) StartModelExecution(ctx context.Context, modelName, mode
 	)
 }
 
-func (r *modelRecorder) RecordInput(span telemetry.Span, messages []string) {
-	if len(messages) == 0 {
+func (r *modelRecorder) RecordInput(span telemetry.Span, messages any) {
+	if messages == nil {
 		return
 	}
-	messagesJSON, err := json.Marshal(messages)
-	if err != nil {
-		return
+
+	// For OpenInference/Phoenix compatibility, we need to set individual message attributes
+	// Format: llm.input_messages.{index}.message.{role|content}
+	switch msgs := messages.(type) {
+	case []openai.ChatCompletionMessageParamUnion:
+		for i, msg := range msgs {
+			prefix := fmt.Sprintf("llm.input_messages.%d.message", i)
+			recordMessage(span, msg, prefix)
+		}
+	default:
+		// Fallback: just marshal to JSON string
+		messagesJSON, err := json.Marshal(messages)
+		if err != nil {
+			return
+		}
+		span.SetAttributes(
+			telemetry.String(telemetry.AttrMessagesInput, string(messagesJSON)),
+		)
 	}
+}
+
+func recordMessage(span telemetry.Span, msg openai.ChatCompletionMessageParamUnion, prefix string) {
+	switch {
+	case msg.OfSystem != nil:
+		span.SetAttributes(
+			telemetry.String(prefix+".role", "system"),
+			telemetry.String(prefix+".content", msg.OfSystem.Content.OfString.Value),
+		)
+	case msg.OfUser != nil:
+		span.SetAttributes(
+			telemetry.String(prefix+".role", "user"),
+			telemetry.String(prefix+".content", msg.OfUser.Content.OfString.Value),
+		)
+	case msg.OfAssistant != nil:
+		recordAssistantMessage(span, msg.OfAssistant, prefix)
+	case msg.OfTool != nil:
+		span.SetAttributes(
+			telemetry.String(prefix+".role", "tool"),
+			telemetry.String(prefix+".content", msg.OfTool.Content.OfString.Value),
+			telemetry.String(prefix+".tool_call_id", msg.OfTool.ToolCallID),
+		)
+	}
+}
+
+func recordAssistantMessage(span telemetry.Span, assistant *openai.ChatCompletionAssistantMessageParam, prefix string) {
 	span.SetAttributes(
-		telemetry.String(telemetry.AttrMessagesInput, string(messagesJSON)),
-		telemetry.Int64(telemetry.AttrMessagesInputCount, int64(len(messages))),
+		telemetry.String(prefix+".role", "assistant"),
 	)
+	if assistant.Content.OfString.Value != "" {
+		span.SetAttributes(telemetry.String(prefix+".content", assistant.Content.OfString.Value))
+	}
+	// Handle tool calls if present - record each tool call as structured data
+	if len(assistant.ToolCalls) > 0 {
+		for j, toolCall := range assistant.ToolCalls {
+			tcPrefix := fmt.Sprintf("%s.tool_calls.%d", prefix, j)
+			span.SetAttributes(
+				telemetry.String(tcPrefix+".id", toolCall.ID),
+				telemetry.String(tcPrefix+".type", string(toolCall.Type)),
+				telemetry.String(tcPrefix+".function.name", toolCall.Function.Name),
+				telemetry.String(tcPrefix+".function.arguments", toolCall.Function.Arguments),
+			)
+		}
+	}
 }
 
 func (r *modelRecorder) RecordOutput(span telemetry.Span, content string) {
@@ -61,13 +117,11 @@ func (r *modelRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, comp
 	)
 }
 
-func (r *modelRecorder) RecordModelDetails(span telemetry.Span, modelName, provider, modelType string) {
+func (r *modelRecorder) RecordModelDetails(span telemetry.Span, modelName, modelType string) {
 	span.SetAttributes(
 		telemetry.String(telemetry.AttrModelName, modelName),
-		telemetry.String(telemetry.AttrModelProvider, provider),
 		telemetry.String(telemetry.AttrModelType, modelType),
 		telemetry.String(telemetry.AttrLangfuseModel, modelName),
-		telemetry.String(telemetry.AttrLangfuseProvider, provider),
 		telemetry.String(telemetry.AttrLangfuseType, modelType),
 	)
 }

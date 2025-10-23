@@ -42,14 +42,8 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStr
 		otelMessages[i] = openai.ChatCompletionMessageParamUnion(msg)
 	}
 
-	messageStrings := make([]string, len(otelMessages))
-	for i, msg := range otelMessages {
-		messageStrings[i] = fmt.Sprintf("%v", msg)
-	}
-	m.ModelRecorder.RecordInput(span, messageStrings)
-
-	provider := telemetry.ExtractProviderFromType(m.Type)
-	m.ModelRecorder.RecordModelDetails(span, m.Model, provider, m.Type)
+	m.ModelRecorder.RecordInput(span, otelMessages)
+	m.ModelRecorder.RecordModelDetails(span, m.Model, m.Type)
 
 	if m.OutputSchema != nil {
 		m.Provider.SetOutputSchema(m.OutputSchema, m.SchemaName)

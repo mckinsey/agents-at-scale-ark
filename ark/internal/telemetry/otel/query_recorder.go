@@ -88,17 +88,12 @@ func (r *queryRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, comp
 	)
 }
 
-func (r *queryRecorder) RecordModelDetails(span telemetry.Span, modelName, provider, modelType string) {
+func (r *queryRecorder) RecordModelDetails(span telemetry.Span, modelName, modelType string) {
 	span.SetAttributes(
-		// OpenTelemetry GenAI semantic conventions
 		telemetry.String(telemetry.AttrModelName, modelName),
-		telemetry.String(telemetry.AttrModelProvider, provider),
 		telemetry.String(telemetry.AttrModelType, modelType),
-		// Langfuse compatibility attributes
 		telemetry.String(telemetry.AttrLangfuseModel, modelName),
-		telemetry.String(telemetry.AttrLangfuseProvider, provider),
-		// OpenTelemetry GenAI system
-		telemetry.String("gen_ai.system", provider),
+		telemetry.String(telemetry.AttrLangfuseType, modelType),
 		telemetry.String("gen_ai.request.model", modelName),
 	)
 }

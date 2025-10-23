@@ -223,20 +223,6 @@ func ExtractMessageContentForTelemetry(msg openai.ChatCompletionMessageParamUnio
 	return ""
 }
 
-// ExtractProviderFromType extracts provider name from model type for telemetry
-func ExtractProviderFromType(modelType string) string {
-	switch modelType {
-	case "openai", "openai-compatible":
-		return "openai"
-	case "azure-openai":
-		return "azure"
-	case "bedrock":
-		return "aws"
-	default:
-		return modelType
-	}
-}
-
 // SetLLMCompletionInput sets input attributes on LLM completion span with full conversation
 func SetLLMCompletionInput(span trace.Span, messages []openai.ChatCompletionMessageParamUnion) {
 	if len(messages) > 0 {

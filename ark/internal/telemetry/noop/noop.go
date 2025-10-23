@@ -54,7 +54,7 @@ func (r *noopQueryRecorder) RecordOutput(span telemetry.Span, content string)   
 func (r *noopQueryRecorder) RecordMessages(span telemetry.Span, messages []string) {} //nolint:revive
 func (r *noopQueryRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {
 } //nolint:revive
-func (r *noopQueryRecorder) RecordModelDetails(span telemetry.Span, modelName, provider, modelType string) {
+func (r *noopQueryRecorder) RecordModelDetails(span telemetry.Span, modelName, modelType string) {
 }                                                                                  //nolint:revive
 func (r *noopQueryRecorder) RecordSessionID(span telemetry.Span, sessionID string) {} //nolint:revive
 func (r *noopQueryRecorder) RecordSuccess(span telemetry.Span)                     {} //nolint:revive
@@ -97,11 +97,11 @@ func (r *noopModelRecorder) StartModelExecution(ctx context.Context, modelName, 
 	return ctx, &noopSpan{}
 }
 
-func (r *noopModelRecorder) RecordInput(span telemetry.Span, messages []string) {} //nolint:revive
-func (r *noopModelRecorder) RecordOutput(span telemetry.Span, content string)   {} //nolint:revive
+func (r *noopModelRecorder) RecordInput(span telemetry.Span, messages any)    {} //nolint:revive
+func (r *noopModelRecorder) RecordOutput(span telemetry.Span, content string) {} //nolint:revive
 func (r *noopModelRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {
 } //nolint:revive
-func (r *noopModelRecorder) RecordModelDetails(span telemetry.Span, modelName, provider, modelType string) {
+func (r *noopModelRecorder) RecordModelDetails(span telemetry.Span, modelName, modelType string) {
 }                                                                       //nolint:revive
 func (r *noopModelRecorder) RecordSuccess(span telemetry.Span)          {} //nolint:revive
 func (r *noopModelRecorder) RecordError(span telemetry.Span, err error) {} //nolint:revive
