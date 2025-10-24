@@ -301,7 +301,6 @@ func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember
 	})
 
 	memberNewMessages, err := member.Execute(ctx, userInput, *messages, t.memory, t.eventStream)
-
 	if err != nil {
 		if IsTerminateTeam(err) {
 			memberTracker.CompleteWithTermination(err.Error())
