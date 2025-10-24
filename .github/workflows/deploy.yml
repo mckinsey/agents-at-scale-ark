@@ -96,6 +96,8 @@ jobs:
             prebuild: "make ark-evaluator-deps"
           - path: tools/ark-cli
             image: ark
+          - path: images/ark-tools
+            image: ark-tools
     steps:
       - name: Validate version tag exists
         run: |
