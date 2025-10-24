@@ -326,9 +326,9 @@ jobs:
             ghcr.io:
               endpoint:
                 - "https://ghcr.io"
-            "localhost:5000"
+            ttl.sh
               endpoint:
-                - "http://localhost:5000"
+                - ttl.sh
           configs:
             ghcr.io:
               auth:
