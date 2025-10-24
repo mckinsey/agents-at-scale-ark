@@ -4,7 +4,6 @@ package otel
 
 import (
 	"context"
-	"encoding/json"
 
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -22,9 +21,10 @@ func NewQueryRecorder(tracer telemetry.Tracer) telemetry.QueryRecorder {
 }
 
 func (r *queryRecorder) StartQuery(ctx context.Context, queryName, queryNamespace, phase string) (context.Context, telemetry.Span) {
-	spanName := "query." + phase
+	spanName := "query." + queryName
 
 	return r.tracer.Start(ctx, spanName,
+		telemetry.WithSpanKind(telemetry.SpanKindChain),
 		telemetry.WithAttributes(
 			telemetry.String(telemetry.AttrQueryName, queryName),
 			telemetry.String(telemetry.AttrQueryNamespace, queryNamespace),
@@ -36,7 +36,7 @@ func (r *queryRecorder) StartQuery(ctx context.Context, queryName, queryNamespac
 }
 
 func (r *queryRecorder) StartTarget(ctx context.Context, targetType, targetName string) (context.Context, telemetry.Span) {
-	spanName := "query." + targetType
+	spanName := "target." + targetName
 
 	attrs := []telemetry.Attribute{
 		telemetry.String(telemetry.AttrTargetType, targetType),
@@ -59,21 +59,6 @@ func (r *queryRecorder) RecordOutput(span telemetry.Span, content string) {
 	span.SetAttributes(telemetry.String(telemetry.AttrQueryOutput, content))
 }
 
-func (r *queryRecorder) RecordMessages(span telemetry.Span, messages []string) {
-	if len(messages) == 0 {
-		return
-	}
-
-	span.SetAttributes(
-		telemetry.Int(telemetry.AttrMessagesInputCount, len(messages)),
-	)
-
-	// Serialize messages as JSON for structured storage
-	if messagesJSON, err := json.Marshal(messages); err == nil {
-		span.SetAttributes(telemetry.String(telemetry.AttrMessagesInput, string(messagesJSON)))
-	}
-}
-
 func (r *queryRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {
 	span.SetAttributes(
 		// OpenTelemetry GenAI semantic conventions
@@ -84,21 +69,6 @@ func (r *queryRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, comp
 		telemetry.Int64("tokens.prompt", promptTokens),
 		telemetry.Int64("tokens.completion", completionTokens),
 		telemetry.Int64("tokens.total", totalTokens),
-	)
-}
-
-func (r *queryRecorder) RecordModelDetails(span telemetry.Span, modelName, provider, modelType string) {
-	span.SetAttributes(
-		// OpenTelemetry GenAI semantic conventions
-		telemetry.String(telemetry.AttrModelName, modelName),
-		telemetry.String(telemetry.AttrModelProvider, provider),
-		telemetry.String(telemetry.AttrModelType, modelType),
-		// Langfuse compatibility attributes
-		telemetry.String(telemetry.AttrLangfuseModel, modelName),
-		telemetry.String(telemetry.AttrLangfuseProvider, provider),
-		// OpenTelemetry GenAI system
-		telemetry.String("gen_ai.system", provider),
-		telemetry.String("gen_ai.request.model", modelName),
 	)
 }
 

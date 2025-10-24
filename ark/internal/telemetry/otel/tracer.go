@@ -46,6 +46,13 @@ func (t *tracer) Start(ctx context.Context, spanName string, opts ...telemetry.S
 	// Add span kind
 	if cfg.SpanKind != telemetry.SpanKindInternal {
 		otelOpts = append(otelOpts, trace.WithSpanKind(convertSpanKind(cfg.SpanKind)))
+
+		// Add OpenInference span kind attribute for Phoenix
+		if spanKindAttr := getOpenInferenceSpanKind(cfg.SpanKind); spanKindAttr != "" {
+			otelOpts = append(otelOpts, trace.WithAttributes(
+				attribute.String("openinference.span.kind", spanKindAttr),
+			))
+		}
 	}
 
 	// Add timestamp
@@ -165,5 +172,22 @@ func convertStatus(status telemetry.Status) codes.Code {
 		return codes.Error
 	default:
 		return codes.Unset
+	}
+}
+
+// getOpenInferenceSpanKind maps custom span kinds to OpenInference span kinds for Phoenix.
+// Phoenix recognizes: CHAIN, AGENT, LLM, TOOL, RETRIEVER, RERANKER, EMBEDDING
+func getOpenInferenceSpanKind(kind telemetry.SpanKind) string {
+	switch kind {
+	case telemetry.SpanKindChain:
+		return "CHAIN"
+	case telemetry.SpanKindAgent:
+		return "AGENT"
+	case telemetry.SpanKindLLM:
+		return "LLM"
+	case telemetry.SpanKindTool:
+		return "TOOL"
+	default:
+		return ""
 	}
 }

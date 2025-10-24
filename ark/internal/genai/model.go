@@ -11,6 +11,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
+	"mckinsey.com/ark/internal/telemetry"
 )
 
 const defaultModelName = "default"
@@ -41,7 +42,7 @@ func ResolveModelSpec(modelSpec any, defaultNamespace string) (string, string, e
 }
 
 // LoadModel loads a model by resolving modelSpec and defaultNamespace
-func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface{}, defaultNamespace string) (*Model, error) {
+func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface{}, defaultNamespace string, modelRecorder telemetry.ModelRecorder) (*Model, error) {
 	modelName, namespace, err := ResolveModelSpec(modelSpec, defaultNamespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve model spec: %w", err)
@@ -58,8 +59,9 @@ func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface
 	}
 
 	modelInstance := &Model{
-		Model: model,
-		Type:  modelCRD.Spec.Type,
+		Model:         model,
+		Type:          modelCRD.Spec.Type,
+		ModelRecorder: modelRecorder,
 	}
 
 	switch modelCRD.Spec.Type {

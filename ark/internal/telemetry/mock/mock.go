@@ -226,25 +226,11 @@ func (r *MockQueryRecorder) RecordOutput(span telemetry.Span, content string) {
 	span.SetAttributes(telemetry.String(telemetry.AttrQueryOutput, content))
 }
 
-func (r *MockQueryRecorder) RecordMessages(span telemetry.Span, messages []string) {
-	span.SetAttributes(
-		telemetry.Int(telemetry.AttrMessagesInputCount, len(messages)),
-	)
-}
-
 func (r *MockQueryRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {
 	span.SetAttributes(
 		telemetry.Int64(telemetry.AttrTokensPrompt, promptTokens),
 		telemetry.Int64(telemetry.AttrTokensCompletion, completionTokens),
 		telemetry.Int64(telemetry.AttrTokensTotal, totalTokens),
-	)
-}
-
-func (r *MockQueryRecorder) RecordModelDetails(span telemetry.Span, modelName, provider, modelType string) {
-	span.SetAttributes(
-		telemetry.String(telemetry.AttrModelName, modelName),
-		telemetry.String(telemetry.AttrModelProvider, provider),
-		telemetry.String(telemetry.AttrModelType, modelType),
 	)
 }
 
@@ -319,5 +305,59 @@ func (r *MockAgentRecorder) RecordSuccess(span telemetry.Span) {
 }
 
 func (r *MockAgentRecorder) RecordError(span telemetry.Span, err error) {
+	span.RecordError(err)
+}
+
+type MockTeamRecorder struct {
+	Tracer *MockTracer
+}
+
+func NewTeamRecorder() *MockTeamRecorder {
+	return &MockTeamRecorder{
+		Tracer: NewTracer(),
+	}
+}
+
+func (r *MockTeamRecorder) StartTeamExecution(ctx context.Context, teamName, namespace, strategy string, memberCount, maxTurns int) (context.Context, telemetry.Span) {
+	return r.Tracer.Start(ctx, "team.execution",
+		telemetry.WithAttributes(
+			telemetry.String(telemetry.AttrTeamName, teamName),
+			telemetry.String(telemetry.AttrQueryNamespace, namespace),
+			telemetry.String("team.strategy", strategy),
+			telemetry.Int("team.member_count", memberCount),
+			telemetry.Int("team.max_turns", maxTurns),
+		),
+	)
+}
+
+func (r *MockTeamRecorder) StartTurn(ctx context.Context, turn int, memberName, memberType string) (context.Context, telemetry.Span) {
+	return r.Tracer.Start(ctx, "team.turn",
+		telemetry.WithAttributes(
+			telemetry.Int("turn.number", turn),
+			telemetry.String("turn.member.name", memberName),
+			telemetry.String("turn.member.type", memberType),
+		),
+	)
+}
+
+func (r *MockTeamRecorder) RecordTurnOutput(span telemetry.Span, messages any, messageCount int) {
+	span.SetAttributes(
+		telemetry.Int("turn.output_message_count", messageCount),
+	)
+}
+
+func (r *MockTeamRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {
+	span.SetAttributes(
+		telemetry.Int64(telemetry.AttrTokensPrompt, promptTokens),
+		telemetry.Int64(telemetry.AttrTokensCompletion, completionTokens),
+		telemetry.Int64(telemetry.AttrTokensTotal, totalTokens),
+	)
+}
+
+func (r *MockTeamRecorder) RecordSuccess(span telemetry.Span) {
+	span.SetStatus(telemetry.StatusOk, "success")
+}
+
+func (r *MockTeamRecorder) RecordError(span telemetry.Span, err error) {
 	span.RecordError(err)
 }

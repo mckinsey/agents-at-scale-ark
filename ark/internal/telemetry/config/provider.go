@@ -25,6 +25,9 @@ type Provider struct {
 	tracer        telemetry.Tracer
 	queryRecorder telemetry.QueryRecorder
 	agentRecorder telemetry.AgentRecorder
+	modelRecorder telemetry.ModelRecorder
+	toolRecorder  telemetry.ToolRecorder
+	teamRecorder  telemetry.TeamRecorder
 	shutdown      func() error
 }
 
@@ -72,6 +75,9 @@ func NewProvider() *Provider {
 	tracer := otelimpl.NewTracer("ark/controller")
 	queryRecorder := otelimpl.NewQueryRecorder(tracer)
 	agentRecorder := otelimpl.NewAgentRecorder(tracer)
+	modelRecorder := otelimpl.NewModelRecorder(tracer)
+	toolRecorder := otelimpl.NewToolRecorder(tracer)
+	teamRecorder := otelimpl.NewTeamRecorder(tracer)
 
 	log.Info("OTEL telemetry initialized successfully")
 
@@ -79,6 +85,9 @@ func NewProvider() *Provider {
 		tracer:        tracer,
 		queryRecorder: queryRecorder,
 		agentRecorder: agentRecorder,
+		modelRecorder: modelRecorder,
+		toolRecorder:  toolRecorder,
+		teamRecorder:  teamRecorder,
 		shutdown: func() error {
 			log.Info("shutting down telemetry")
 			return tp.Shutdown(context.Background())
@@ -91,11 +100,17 @@ func newNoopProvider() *Provider {
 	tracer := noop.NewTracer()
 	queryRecorder := noop.NewQueryRecorder()
 	agentRecorder := noop.NewAgentRecorder()
+	modelRecorder := noop.NewModelRecorder()
+	toolRecorder := noop.NewToolRecorder()
+	teamRecorder := noop.NewTeamRecorder()
 
 	return &Provider{
 		tracer:        tracer,
 		queryRecorder: queryRecorder,
 		agentRecorder: agentRecorder,
+		modelRecorder: modelRecorder,
+		toolRecorder:  toolRecorder,
+		teamRecorder:  teamRecorder,
 		shutdown:      func() error { return nil },
 	}
 }
@@ -113,6 +128,21 @@ func (p *Provider) QueryRecorder() telemetry.QueryRecorder {
 // AgentRecorder returns the agent recorder instance.
 func (p *Provider) AgentRecorder() telemetry.AgentRecorder {
 	return p.agentRecorder
+}
+
+// ModelRecorder returns the model recorder instance.
+func (p *Provider) ModelRecorder() telemetry.ModelRecorder {
+	return p.modelRecorder
+}
+
+// ToolRecorder returns the tool recorder instance.
+func (p *Provider) ToolRecorder() telemetry.ToolRecorder {
+	return p.toolRecorder
+}
+
+// TeamRecorder returns the team recorder instance.
+func (p *Provider) TeamRecorder() telemetry.TeamRecorder {
+	return p.teamRecorder
 }
 
 // Shutdown gracefully shuts down the telemetry provider.

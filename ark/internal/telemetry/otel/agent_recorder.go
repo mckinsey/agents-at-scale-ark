@@ -22,7 +22,9 @@ func NewAgentRecorder(tracer telemetry.Tracer) telemetry.AgentRecorder {
 
 // StartAgentExecution begins tracing an agent execution.
 func (r *agentRecorder) StartAgentExecution(ctx context.Context, agentName, namespace string) (context.Context, telemetry.Span) {
-	return r.tracer.Start(ctx, "agent.execution",
+	spanName := "agent." + namespace + "/" + agentName
+	return r.tracer.Start(ctx, spanName,
+		telemetry.WithSpanKind(telemetry.SpanKindAgent),
 		telemetry.WithAttributes(
 			telemetry.String(telemetry.AttrAgentName, agentName),
 			telemetry.String(telemetry.AttrQueryNamespace, namespace),

@@ -21,14 +21,8 @@ type QueryRecorder interface {
 	// RecordOutput sets the output content on a span.
 	RecordOutput(span Span, content string)
 
-	// RecordMessages records input messages for multi-turn conversations.
-	RecordMessages(span Span, messages []string)
-
 	// RecordTokenUsage records LLM token consumption.
 	RecordTokenUsage(span Span, promptTokens, completionTokens, totalTokens int64)
-
-	// RecordModelDetails records model provider and configuration.
-	RecordModelDetails(span Span, modelName, provider, modelType string)
 
 	// RecordSessionID associates a span with a session for multi-query tracking.
 	RecordSessionID(span Span, sessionID string)
@@ -56,6 +50,73 @@ type AgentRecorder interface {
 	RecordToolResult(span Span, result string)
 
 	// RecordTokenUsage records token consumption for LLM calls.
+	RecordTokenUsage(span Span, promptTokens, completionTokens, totalTokens int64)
+
+	// RecordSuccess marks a span as successfully completed.
+	RecordSuccess(span Span)
+
+	// RecordError marks a span as failed with error details.
+	RecordError(span Span, err error)
+}
+
+// ModelRecorder provides domain-specific telemetry for model execution.
+// Encapsulates LLM call lifecycle and token usage tracking.
+type ModelRecorder interface {
+	// StartModelExecution begins tracing a model execution.
+	StartModelExecution(ctx context.Context, modelName, modelType string) (context.Context, Span)
+
+	// StartModelProbe begins tracing a model availability probe.
+	StartModelProbe(ctx context.Context, modelName, modelNamespace string) (context.Context, Span)
+
+	// RecordInput records the input messages for the model call.
+	RecordInput(span Span, messages any)
+
+	// RecordOutput records the output message from the model.
+	// Can accept a string (simple text) or openai.ChatCompletionMessage (with tool calls).
+	RecordOutput(span Span, output any)
+
+	// RecordTokenUsage records token consumption for the model call.
+	RecordTokenUsage(span Span, promptTokens, completionTokens, totalTokens int64)
+
+	// RecordModelDetails records model configuration. Provider is extracted from modelType.
+	RecordModelDetails(span Span, modelName, modelType string)
+
+	// RecordSuccess marks a span as successfully completed.
+	RecordSuccess(span Span)
+
+	// RecordError marks a span as failed with error details.
+	RecordError(span Span, err error)
+}
+
+// ToolRecorder provides domain-specific telemetry for tool execution.
+// Encapsulates tool call lifecycle and result tracking.
+type ToolRecorder interface {
+	// StartToolExecution begins tracing a tool execution.
+	StartToolExecution(ctx context.Context, toolName, toolType, toolID, arguments string) (context.Context, Span)
+
+	// RecordToolResult records the tool execution result.
+	RecordToolResult(span Span, result string)
+
+	// RecordSuccess marks a span as successfully completed.
+	RecordSuccess(span Span)
+
+	// RecordError marks a span as failed with error details.
+	RecordError(span Span, err error)
+}
+
+// TeamRecorder provides domain-specific telemetry for team execution.
+// Encapsulates team lifecycle, strategy execution, and member coordination tracing.
+type TeamRecorder interface {
+	// StartTeamExecution begins tracing a team execution.
+	StartTeamExecution(ctx context.Context, teamName, namespace, strategy string, memberCount, maxTurns int) (context.Context, Span)
+
+	// StartTurn begins tracing a single turn in team execution.
+	StartTurn(ctx context.Context, turn int, memberName, memberType string) (context.Context, Span)
+
+	// RecordTurnOutput records turn execution output messages.
+	RecordTurnOutput(span Span, messages any, messageCount int)
+
+	// RecordTokenUsage records token consumption for team execution.
 	RecordTokenUsage(span Span, promptTokens, completionTokens, totalTokens int64)
 
 	// RecordSuccess marks a span as successfully completed.
@@ -123,6 +184,17 @@ const (
 	// Finish reason (aligned with OpenTelemetry GenAI conventions)
 	AttrFinishReason = "gen_ai.completion.finish_reason"
 )
+
+// Provider is an interface for telemetry providers that can create recorders.
+type Provider interface {
+	Tracer() Tracer
+	QueryRecorder() QueryRecorder
+	AgentRecorder() AgentRecorder
+	ModelRecorder() ModelRecorder
+	ToolRecorder() ToolRecorder
+	TeamRecorder() TeamRecorder
+	Shutdown() error
+}
 
 // Target types for query execution
 const (

@@ -19,6 +19,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/telemetry"
 )
 
 type ToolDefinition struct {
@@ -177,18 +178,20 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall, recorder Even
 }
 
 type ToolRegistry struct {
-	tools       map[string]ToolDefinition
-	executors   map[string]ToolExecutor
-	mcpPool     *MCPClientPool         // One MCP client pool per agent
-	mcpSettings map[string]MCPSettings // MCP settings per MCP server (namespace/name)
+	tools        map[string]ToolDefinition
+	executors    map[string]ToolExecutor
+	mcpPool      *MCPClientPool         // One MCP client pool per agent
+	mcpSettings  map[string]MCPSettings // MCP settings per MCP server (namespace/name)
+	toolRecorder telemetry.ToolRecorder
 }
 
-func NewToolRegistry(mcpSettings map[string]MCPSettings) *ToolRegistry {
+func NewToolRegistry(mcpSettings map[string]MCPSettings, toolRecorder telemetry.ToolRecorder) *ToolRegistry {
 	return &ToolRegistry{
-		tools:       make(map[string]ToolDefinition),
-		executors:   make(map[string]ToolExecutor),
-		mcpPool:     NewMCPClientPool(),
-		mcpSettings: mcpSettings,
+		tools:        make(map[string]ToolDefinition),
+		executors:    make(map[string]ToolExecutor),
+		mcpPool:      NewMCPClientPool(),
+		mcpSettings:  mcpSettings,
+		toolRecorder: toolRecorder,
 	}
 }
 
@@ -237,7 +240,20 @@ func (tr *ToolRegistry) ExecuteTool(ctx context.Context, call ToolCall, recorder
 		}, fmt.Errorf("tool %s not found", call.Function.Name)
 	}
 
-	return executor.Execute(ctx, call, recorder)
+	toolType := tr.GetToolType(call.Function.Name)
+	ctx, span := tr.toolRecorder.StartToolExecution(ctx, call.Function.Name, toolType, call.ID, call.Function.Arguments)
+	defer span.End()
+
+	result, err := executor.Execute(ctx, call, recorder)
+	if err != nil {
+		tr.toolRecorder.RecordError(span, err)
+		return result, err
+	}
+
+	tr.toolRecorder.RecordToolResult(span, result.Content)
+	tr.toolRecorder.RecordSuccess(span)
+
+	return result, nil
 }
 
 func (tr *ToolRegistry) ToOpenAITools() []openai.ChatCompletionToolParam {
