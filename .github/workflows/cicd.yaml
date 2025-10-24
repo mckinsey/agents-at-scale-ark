@@ -372,9 +372,9 @@ jobs:
           ARK_QUICKSTART_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
           ARK_QUICKSTART_API_VERSION: 2024-12-01-preview
           ARK_QUICKSTART_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
-          ARK_QUICKSTART_CONTROLLER_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry-hostname || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller
+          ARK_QUICKSTART_CONTROLLER_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller
           ARK_QUICKSTART_CONTROLLER_TAG: ${{ github.sha }}
-          CACHE_ARGS: --cache-from type=registry,ref=${{ needs.setup-container-cache-registry.outputs.ci-cache-registry-hostname || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache --cache-to type=registry,ref=${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache,mode=max
+          CACHE_ARGS: --cache-from type=registry,ref=${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache --cache-to type=registry,ref=${{ needs.setup-container-cache-registry.outputs.ci-cache-registry|| format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache,mode=max
         run: |
           echo "Environment variables set:"
           echo "ARK_QUICKSTART_PROMPT_YES=$ARK_QUICKSTART_PROMPT_YES"
@@ -444,7 +444,7 @@ jobs:
           helm upgrade --install ark-api services/ark-api/chart \
             --namespace default \
             --create-namespace \
-            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry-hostname || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-api" \
+            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-api" \
             --set app.image.tag="${{ github.sha }}" \
             --set app.image.pullPolicy="Always" \
             --wait \
@@ -456,7 +456,7 @@ jobs:
           helm upgrade --install ark-api-a2a services/ark-api-a2a/chart \
             --namespace default \
             --create-namespace \
-            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry-hostname || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-api-a2a" \
+            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-api-a2a" \
             --set app.image.tag="${{ github.sha }}" \
             --set app.image.pullPolicy="Always" \
             --wait \
@@ -468,7 +468,10 @@ jobs:
           helm upgrade --install ark-dashboard services/ark-dashboard/chart \
             --namespace default \
             --create-namespace \
-            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry-hostname || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-dashboard" \
+            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry
+          
+          
+          || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-dashboard" \
             --set app.image.tag="${{ github.sha }}" \
             --set app.image.pullPolicy="Always" \
             --wait \
@@ -584,7 +587,7 @@ jobs:
         with:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "true"
-          install-evaluator: "true" # Evaluated tests need ark-evaluator service
+          install-evaluator: ${{ !needs.setup-container-cache-registry.outputs.is-fork-pr }} # Evaluated tests need ark-evaluator service
           azure-openai-key: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
           azure-openai-base-url: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
