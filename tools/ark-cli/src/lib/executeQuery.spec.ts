@@ -10,6 +10,7 @@ const mockSpinner = {
   succeed: jest.fn(),
   fail: jest.fn(),
   warn: jest.fn(),
+  stop: jest.fn(),
   text: '',
 };
 
@@ -31,6 +32,9 @@ const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
 }) as any);
 
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+const mockConsoleError = jest
+  .spyOn(console, 'error')
+  .mockImplementation(() => {});
 
 const {executeQuery, parseTarget} = await import('./executeQuery.js');
 const {ExitCodes} = await import('./errors.js');
@@ -96,15 +100,15 @@ describe('executeQuery', () => {
       });
 
       expect(mockSpinner.start).toHaveBeenCalled();
-      expect(mockSpinner.succeed).toHaveBeenCalledWith('Query completed');
-      expect(mockConsoleLog).toHaveBeenCalledWith('\nTest response');
+      expect(mockSpinner.stop).toHaveBeenCalled();
+      expect(mockConsoleLog).toHaveBeenCalledWith('Test response');
     });
 
     it('should handle query error phase and exit with code 2', async () => {
       const mockQueryResponse = {
         status: {
           phase: 'error',
-          error: 'Query failed with test error',
+          responses: [{content: 'Query failed with test error'}],
         },
       };
 
@@ -132,9 +136,9 @@ describe('executeQuery', () => {
         expect(error.message).toBe('process.exit called');
       }
 
-      expect(mockSpinner.fail).toHaveBeenCalledWith('Query failed');
-      expect(mockOutput.error).toHaveBeenCalledWith(
-        'Query failed with test error'
+      expect(mockSpinner.stop).toHaveBeenCalled();
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Query failed with test error')
       );
       expect(mockExit).toHaveBeenCalledWith(ExitCodes.OperationError);
     });
@@ -192,8 +196,10 @@ describe('executeQuery', () => {
         })
       ).rejects.toThrow('process.exit called');
 
-      expect(mockSpinner.fail).toHaveBeenCalledWith('Query failed');
-      expect(mockOutput.error).toHaveBeenCalledWith('Failed to apply');
+      expect(mockSpinner.stop).toHaveBeenCalled();
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to apply')
+      );
       expect(mockExit).toHaveBeenCalledWith(ExitCodes.CliError);
     });
 
@@ -230,9 +236,9 @@ describe('executeQuery', () => {
         expect(error.message).toBe('process.exit called');
       }
 
-      expect(mockSpinner.fail).toHaveBeenCalledWith('Query timed out');
-      expect(mockOutput.error).toHaveBeenCalledWith(
-        'Query did not complete within 200ms'
+      expect(mockSpinner.stop).toHaveBeenCalled();
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Query did not complete within 200ms')
       );
       expect(mockExit).toHaveBeenCalledWith(ExitCodes.Timeout);
     });
