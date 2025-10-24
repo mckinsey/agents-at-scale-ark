@@ -77,8 +77,9 @@ type ModelRecorder interface {
 	// RecordInput records the input messages for the model call.
 	RecordInput(span Span, messages any)
 
-	// RecordOutput records the output content from the model.
-	RecordOutput(span Span, content string)
+	// RecordOutput records the output message from the model.
+	// Can accept a string (simple text) or openai.ChatCompletionMessage (with tool calls).
+	RecordOutput(span Span, output any)
 
 	// RecordTokenUsage records token consumption for the model call.
 	RecordTokenUsage(span Span, promptTokens, completionTokens, totalTokens int64)

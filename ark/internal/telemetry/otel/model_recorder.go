@@ -117,8 +117,41 @@ func recordAssistantMessage(span telemetry.Span, assistant *openai.ChatCompletio
 	}
 }
 
-func (r *modelRecorder) RecordOutput(span telemetry.Span, content string) {
-	span.SetAttributes(telemetry.String(telemetry.AttrMessagesOutput, content))
+func (r *modelRecorder) RecordOutput(span telemetry.Span, output any) {
+	if output == nil {
+		return
+	}
+
+	switch out := output.(type) {
+	case string:
+		span.SetAttributes(telemetry.String(telemetry.AttrMessagesOutput, out))
+	case openai.ChatCompletionMessage:
+		prefix := "llm.output_messages.0.message"
+		span.SetAttributes(telemetry.String(prefix+".role", "assistant"))
+
+		if out.Content != "" {
+			span.SetAttributes(telemetry.String(prefix+".content", out.Content))
+			span.SetAttributes(telemetry.String(telemetry.AttrMessagesOutput, out.Content))
+		}
+
+		if len(out.ToolCalls) > 0 {
+			for j, toolCall := range out.ToolCalls {
+				tcPrefix := fmt.Sprintf("%s.tool_calls.%d", prefix, j)
+				span.SetAttributes(
+					telemetry.String(tcPrefix+".id", toolCall.ID),
+					telemetry.String(tcPrefix+".type", string(toolCall.Type)),
+					telemetry.String(tcPrefix+".function.name", toolCall.Function.Name),
+					telemetry.String(tcPrefix+".function.arguments", toolCall.Function.Arguments),
+				)
+			}
+		}
+	default:
+		outputJSON, err := json.Marshal(output)
+		if err != nil {
+			return
+		}
+		span.SetAttributes(telemetry.String(telemetry.AttrMessagesOutput, string(outputJSON)))
+	}
 }
 
 func (r *modelRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {

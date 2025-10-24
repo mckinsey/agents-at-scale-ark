@@ -73,8 +73,7 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStr
 	}
 
 	if len(response.Choices) > 0 {
-		content := response.Choices[0].Message.Content
-		m.ModelRecorder.RecordOutput(span, content)
+		m.ModelRecorder.RecordOutput(span, response.Choices[0].Message)
 	}
 
 	m.ModelRecorder.RecordTokenUsage(span, response.Usage.PromptTokens, response.Usage.CompletionTokens, response.Usage.TotalTokens)
