@@ -16,7 +16,6 @@ import (
 	"github.com/openai/openai-go/shared"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
