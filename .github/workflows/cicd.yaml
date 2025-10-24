@@ -385,6 +385,7 @@ jobs:
           ./scripts/query.sh agent/sample-agent "confirm you have read this message"
           # Test fark.
           fark agent sample-agent "confirm you have read this message"
+          fark agent sample-agent "confirm you have read this message"
 
   e2e-ark-cli:
     needs: [build-ark-cli]
