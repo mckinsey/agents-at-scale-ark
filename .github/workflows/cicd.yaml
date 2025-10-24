@@ -371,7 +371,7 @@ jobs:
           ARK_QUICKSTART_CONTROLLER_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller
           ARK_QUICKSTART_CONTROLLER_TAG: ${{ github.sha }}
           CACHE_ARGS: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' 
-            && 'cache-from type=gha,scope=ark-controller --cache-to type=gha,mode=max,scope=ark-controller
+            && 'cache-from type=gha,scope=ark-controller --cache-to type=gha,mode=max,scope=ark-controller'
             || format(
               '--cache-from type=registry,ref={0}/ark-controller:cache --cache-to type=registry,ref={0}/ark-controller:cache,mode=max',
               vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name)
