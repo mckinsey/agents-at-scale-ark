@@ -28,7 +28,6 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/controller"
-	"mckinsey.com/ark/internal/telemetry"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 	webhookv1 "mckinsey.com/ark/internal/webhook/v1"
 	webhookv1prealpha1 "mckinsey.com/ark/internal/webhook/v1prealpha1"
@@ -74,11 +73,7 @@ func main() {
 
 	setupLog.Info("starting ark controller", "version", Version, "commit", GitCommit)
 
-	// Initialize legacy telemetry (keep for gradual migration)
-	telemetryShutdown := telemetry.Initialize()
-	defer telemetryShutdown()
-
-	// Initialize new telemetry provider
+	// Initialize telemetry provider
 	telemetryProvider := telemetryconfig.NewProvider()
 	defer func() {
 		if err := telemetryProvider.Shutdown(); err != nil {
