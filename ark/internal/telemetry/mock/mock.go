@@ -226,24 +226,11 @@ func (r *MockQueryRecorder) RecordOutput(span telemetry.Span, content string) {
 	span.SetAttributes(telemetry.String(telemetry.AttrQueryOutput, content))
 }
 
-func (r *MockQueryRecorder) RecordMessages(span telemetry.Span, messages []string) {
-	span.SetAttributes(
-		telemetry.Int(telemetry.AttrMessagesInputCount, len(messages)),
-	)
-}
-
 func (r *MockQueryRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {
 	span.SetAttributes(
 		telemetry.Int64(telemetry.AttrTokensPrompt, promptTokens),
 		telemetry.Int64(telemetry.AttrTokensCompletion, completionTokens),
 		telemetry.Int64(telemetry.AttrTokensTotal, totalTokens),
-	)
-}
-
-func (r *MockQueryRecorder) RecordModelDetails(span telemetry.Span, modelName, modelType string) {
-	span.SetAttributes(
-		telemetry.String(telemetry.AttrModelName, modelName),
-		telemetry.String(telemetry.AttrModelType, modelType),
 	)
 }
 

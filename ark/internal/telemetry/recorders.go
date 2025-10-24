@@ -21,14 +21,8 @@ type QueryRecorder interface {
 	// RecordOutput sets the output content on a span.
 	RecordOutput(span Span, content string)
 
-	// RecordMessages records input messages for multi-turn conversations.
-	RecordMessages(span Span, messages []string)
-
 	// RecordTokenUsage records LLM token consumption.
 	RecordTokenUsage(span Span, promptTokens, completionTokens, totalTokens int64)
-
-	// RecordModelDetails records model configuration. Provider is extracted from modelType.
-	RecordModelDetails(span Span, modelName, modelType string)
 
 	// RecordSessionID associates a span with a session for multi-query tracking.
 	RecordSessionID(span Span, sessionID string)

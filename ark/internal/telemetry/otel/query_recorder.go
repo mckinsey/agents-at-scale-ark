@@ -4,7 +4,6 @@ package otel
 
 import (
 	"context"
-	"encoding/json"
 
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -60,21 +59,6 @@ func (r *queryRecorder) RecordOutput(span telemetry.Span, content string) {
 	span.SetAttributes(telemetry.String(telemetry.AttrQueryOutput, content))
 }
 
-func (r *queryRecorder) RecordMessages(span telemetry.Span, messages []string) {
-	if len(messages) == 0 {
-		return
-	}
-
-	span.SetAttributes(
-		telemetry.Int(telemetry.AttrMessagesInputCount, len(messages)),
-	)
-
-	// Serialize messages as JSON for structured storage
-	if messagesJSON, err := json.Marshal(messages); err == nil {
-		span.SetAttributes(telemetry.String(telemetry.AttrMessagesInput, string(messagesJSON)))
-	}
-}
-
 func (r *queryRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {
 	span.SetAttributes(
 		// OpenTelemetry GenAI semantic conventions
@@ -85,16 +69,6 @@ func (r *queryRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, comp
 		telemetry.Int64("tokens.prompt", promptTokens),
 		telemetry.Int64("tokens.completion", completionTokens),
 		telemetry.Int64("tokens.total", totalTokens),
-	)
-}
-
-func (r *queryRecorder) RecordModelDetails(span telemetry.Span, modelName, modelType string) {
-	span.SetAttributes(
-		telemetry.String(telemetry.AttrModelName, modelName),
-		telemetry.String(telemetry.AttrModelType, modelType),
-		telemetry.String(telemetry.AttrLangfuseModel, modelName),
-		telemetry.String(telemetry.AttrLangfuseType, modelType),
-		telemetry.String("gen_ai.request.model", modelName),
 	)
 }
 
