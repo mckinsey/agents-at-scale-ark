@@ -131,7 +131,6 @@ func (r *modelRecorder) RecordOutput(span telemetry.Span, output any) {
 
 		if out.Content != "" {
 			span.SetAttributes(telemetry.String(prefix+".content", out.Content))
-			span.SetAttributes(telemetry.String(telemetry.AttrMessagesOutput, out.Content))
 		}
 
 		if len(out.ToolCalls) > 0 {

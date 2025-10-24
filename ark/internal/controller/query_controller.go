@@ -732,7 +732,7 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 		return nil, fmt.Errorf("unable to fetch team %v, error:%w", teamKey, err)
 	}
 
-	team, err := genai.MakeTeam(ctx, impersonatedClient, &teamCRD, tokenCollector)
+	team, err := genai.MakeTeam(ctx, impersonatedClient, &teamCRD, tokenCollector, r.Telemetry)
 	if err != nil {
 		return nil, fmt.Errorf("unable to make team %v, error:%w", teamKey, err)
 	}

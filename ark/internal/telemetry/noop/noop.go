@@ -121,6 +121,27 @@ func (r *noopToolRecorder) RecordToolResult(span telemetry.Span, result string) 
 func (r *noopToolRecorder) RecordSuccess(span telemetry.Span)                   {} //nolint:revive
 func (r *noopToolRecorder) RecordError(span telemetry.Span, err error)          {} //nolint:revive
 
+type noopTeamRecorder struct{}
+
+func NewTeamRecorder() telemetry.TeamRecorder {
+	return &noopTeamRecorder{}
+}
+
+func (r *noopTeamRecorder) StartTeamExecution(ctx context.Context, teamName, namespace, strategy string, memberCount, maxTurns int) (context.Context, telemetry.Span) {
+	return ctx, &noopSpan{}
+}
+
+func (r *noopTeamRecorder) StartTurn(ctx context.Context, turn int, memberName, memberType string) (context.Context, telemetry.Span) {
+	return ctx, &noopSpan{}
+}
+
+func (r *noopTeamRecorder) RecordTurnOutput(span telemetry.Span, messages any, messageCount int) {
+} //nolint:revive
+func (r *noopTeamRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {
+}                                                                      //nolint:revive
+func (r *noopTeamRecorder) RecordSuccess(span telemetry.Span)          {} //nolint:revive
+func (r *noopTeamRecorder) RecordError(span telemetry.Span, err error) {} //nolint:revive
+
 type noopProvider struct{}
 
 func NewProvider() *noopProvider {
@@ -145,6 +166,10 @@ func (p *noopProvider) ModelRecorder() telemetry.ModelRecorder {
 
 func (p *noopProvider) ToolRecorder() telemetry.ToolRecorder {
 	return NewToolRecorder()
+}
+
+func (p *noopProvider) TeamRecorder() telemetry.TeamRecorder {
+	return NewTeamRecorder()
 }
 
 func (p *noopProvider) Shutdown() error {

@@ -104,6 +104,28 @@ type ToolRecorder interface {
 	RecordError(span Span, err error)
 }
 
+// TeamRecorder provides domain-specific telemetry for team execution.
+// Encapsulates team lifecycle, strategy execution, and member coordination tracing.
+type TeamRecorder interface {
+	// StartTeamExecution begins tracing a team execution.
+	StartTeamExecution(ctx context.Context, teamName, namespace, strategy string, memberCount, maxTurns int) (context.Context, Span)
+
+	// StartTurn begins tracing a single turn in team execution.
+	StartTurn(ctx context.Context, turn int, memberName, memberType string) (context.Context, Span)
+
+	// RecordTurnOutput records turn execution output messages.
+	RecordTurnOutput(span Span, messages any, messageCount int)
+
+	// RecordTokenUsage records token consumption for team execution.
+	RecordTokenUsage(span Span, promptTokens, completionTokens, totalTokens int64)
+
+	// RecordSuccess marks a span as successfully completed.
+	RecordSuccess(span Span)
+
+	// RecordError marks a span as failed with error details.
+	RecordError(span Span, err error)
+}
+
 // Standardized attribute keys for ARK telemetry.
 // Following OpenTelemetry semantic conventions where applicable.
 const (
@@ -170,6 +192,7 @@ type Provider interface {
 	AgentRecorder() AgentRecorder
 	ModelRecorder() ModelRecorder
 	ToolRecorder() ToolRecorder
+	TeamRecorder() TeamRecorder
 	Shutdown() error
 }
 
