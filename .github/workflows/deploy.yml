@@ -95,7 +95,7 @@ jobs:
             image: ark-evaluator
             prebuild: "make ark-evaluator-deps"
           - path: tools/ark-cli
-            image: ark
+            image: ark-cli
           - path: images/ark-tools
             image: ark-tools
     steps:
