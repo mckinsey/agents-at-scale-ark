@@ -140,3 +140,12 @@ class QueryDetailResponse(BaseModel):
     cancel: Optional[bool] = None
     metadata: Optional[Dict[str, Any]] = None
     status: Optional[Dict[str, Any]] = None
+
+
+class ArkOpenAICompletionsMetadata(BaseModel):
+    """Ark-specific metadata for OpenAI chat completions.
+
+    Passed via the 'ark' key in request metadata as a JSON string.
+    Follows the pattern used by OpenAI for provider-specific extensions.
+    """
+    annotations: Optional[Dict[str, str]] = None
