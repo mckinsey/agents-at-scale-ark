@@ -2,6 +2,8 @@
 
 package genai
 
+import "github.com/openai/openai-go"
+
 // PrepareExecutionMessages separates the current message from context messages
 // and combines with memory history for agent/team execution.
 // This pattern is used when the last message in inputMessages should be treated
@@ -13,6 +15,21 @@ func PrepareExecutionMessages(inputMessages, memoryMessages []Message) (currentM
 	contextMessages = append(contextMessages, memoryMessages...)
 	contextMessages = append(contextMessages, inputMessages[:len(inputMessages)-1]...)
 	return currentMessage, contextMessages
+}
+
+// ExtractUserMessageContent extracts the first user message content from messages.
+// Returns empty string if no user message is found. This is used for telemetry
+// to capture the initial query input.
+func ExtractUserMessageContent(messages []Message) string {
+	for _, msg := range messages {
+		msgUnion := openai.ChatCompletionMessageParamUnion(msg)
+		if msgUnion.OfUser != nil {
+			if content := msgUnion.OfUser.Content; content.OfString.Value != "" {
+				return content.OfString.Value
+			}
+		}
+	}
+	return ""
 }
 
 // PrepareModelMessages combines all messages for direct model execution.

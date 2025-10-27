@@ -1,0 +1,20 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: partial-tool-calling
+spec:
+  prompt: |
+    Use tools available to help the user with the answer.
+  tools:
+    - type: custom
+      name: get-coordinates # Actual Tool CRD name
+      partial: 
+        name: get-current-location-coordinates # Name exposed to Agent
+        description: Get the current location coordinates of the user # Description exposed to Agent
+        parameters:
+          - name: city
+            value: "{{ .Query.city }}" # From query parameters
+          - name: units
+            value: metric # Static value
+          - name: country
+            value: nil # Explicitly exclude parameter to be provided by Agent

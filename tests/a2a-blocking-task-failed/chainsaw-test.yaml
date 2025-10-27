@@ -1,0 +1,68 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: a2a-blocking-task-failed
+spec:
+  description: Test A2A agent with blocking Task that fails with error
+  steps:
+  - name: step-1
+    try:
+    # Install mock-llm with A2A agents enabled
+    - script:
+        content: |
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.14 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    # Install ark-tenant for RBAC
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    # Wait for countdown A2AServer to be Ready
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1prealpha1
+          kind: A2AServer
+          metadata:
+            name: mock-llm-countdown
+          status:
+            (contains(conditions[?type == 'Ready'].status, 'True')): true
+    # Apply Query targeting countdown agent with invalid input
+    - apply:
+        file: manifests/a01-query.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: countdown-fail-query
+          status:
+            phase: error
+    # Verify error message from failed task
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: countdown-fail-query
+          status:
+            (length(responses)): 1
+            (contains(responses[*].target.name, 'countdown-agent')): true
+            (contains(responses[0].content, 'Cannot countdown from negative number -5')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1prealpha1
+        kind: A2AServer
+        name: mock-llm-countdown
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: countdown-fail-query

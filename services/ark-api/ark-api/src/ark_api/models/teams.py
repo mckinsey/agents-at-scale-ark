@@ -27,7 +27,7 @@ class Graph(BaseModel):
 
 class Selector(BaseModel):
     """Team selector configuration."""
-    model: Optional[str] = None
+    agent: Optional[str] = None
     selectorPrompt: Optional[str] = None
 
 

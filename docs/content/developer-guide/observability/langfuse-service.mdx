@@ -40,8 +40,7 @@ Langfuse is automatically configured with:
 
 The installation automatically:
 1. Deploys Langfuse to the `telemetry` namespace
-2. Configures OTEL environment variables for ARK services
-3. Restarts ARK controller with proper telemetry configuration
+2. Creates OTEL environment variable secrets in configured namespaces (default: `ark-system`, `default`)
 
 ## Accessing Langfuse Dashboard
 
@@ -112,13 +111,34 @@ Langfuse is deployed with these default settings:
 - **Public Key**: `lf_pk_1234567890`
 - **Secret Key**: `lf_sk_1234567890`
 
-### Automatic OTEL Header Deployment
+### Configuring Services for OTEL
 
-The installation automatically deploys OTEL configuration to:
-- `ark-system` namespace
-- `default` namespace
+The installation creates `otel-environment-variables` secrets in configured namespaces. To use in your deployments, add this to your container spec:
 
-This enables automatic telemetry collection from ARK services.
+```yaml
+containers:
+- name: my-service
+  envFrom:
+  - secretRef:
+      name: otel-environment-variables
+      optional: true
+```
+
+**Note**: If deployments are already running when Langfuse is installed, restart them to pick up the OTEL configuration:
+
+```bash
+kubectl rollout restart deployment/ark-controller-devspace -n ark-system
+```
+
+To configure which namespaces receive OTEL secrets, set in `services/langfuse/chart/values.yaml`:
+
+```yaml
+otelEnvironmentVariableSecrets:
+  enabled: true
+  namespaces:
+    - ark-system
+    - default
+```
 
 ## Using Langfuse Dashboard
 

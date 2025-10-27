@@ -54,11 +54,26 @@ demo:
     username: "ark@ark.com"
     password: "password123"
   admin:
-    username: "admin" 
+    username: "admin"
     password: "changeme123"
   project:
     publicKey: "lf_pk_1234567890"
     secretKey: "lf_sk_1234567890"
+
+# OTEL environment variable secrets - creates secrets in specified namespaces
+# To use in deployments, add this to container spec:
+#   envFrom:
+#   - secretRef:
+#       name: otel-environment-variables
+#       optional: true
+#
+# Note: Existing deployments must be restarted to pick up new/updated secrets:
+#   kubectl rollout restart deployment/<name> -n <namespace>
+otelEnvironmentVariableSecrets:
+  enabled: true
+  namespaces:
+    - ark-system
+    - default
 
 # Langfuse helm chart values (passed to dependency)
 langfuse:

@@ -238,3 +238,32 @@ tools:
 ```
 
 Note: Built-in tools must be defined as Tool resources with `type: builtin` before they can be referenced by agents.
+### Agent as Tools
+
+Agent used as tools:
+
+```yaml
+tools:
+  - type: custom
+    name: call-research-agent
+```
+
+### Partial tools
+
+The partial tool calling feature in allows to pre-configure certain parameters of a tool at the agent configuration level, while leaving other parameters to be filled by the Agent at runtime. This enables parameter injection, template resolution, and simplified tool interfaces for the Agents.
+
+```
+tools:
+  - type: custom
+    name: weather-forecast  # Name exposed to Agent
+    description: "Get latest weather forecast"  # Description exposed to Agent
+    partial:
+      name: weather-api  # Actual Tool CRD name
+      parameters:
+        - name: city
+          value: "{{ .Query.city }}"  # From query parameters
+        - name: units
+          value: "metric"  # Static value
+        - name: language
+          value: nil  # Explicitly exclude parameter to be provided by Agent
+```

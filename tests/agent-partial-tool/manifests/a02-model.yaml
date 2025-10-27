@@ -1,7 +1,7 @@
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Model
 metadata:
-  name: default
+  name: test-model
 spec:
   type: azure
   model:
@@ -11,6 +11,9 @@ spec:
       baseUrl:
         value: ($azure.url)
       apiKey:
-        value: ($azure.token)
+        valueFrom:
+          secretKeyRef:
+            name: test-agent-token
+            key: token
       apiVersion:
         value: "2024-12-01-preview"

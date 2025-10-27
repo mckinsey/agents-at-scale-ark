@@ -14,6 +14,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	"mckinsey.com/ark/internal/telemetry"
 )
 
 type Agent struct {
@@ -163,10 +164,15 @@ func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatComplet
 		"toolType":   a.Tools.GetToolType(toolCall.Function.Name),
 	})
 
+	toolType := a.Tools.GetToolType(toolCall.Function.Name)
+	ctx, toolSpan := telemetry.StartToolExecution(ctx, toolCall.Function.Name, toolType, toolCall.ID, toolCall.Function.Arguments)
+	defer toolSpan.End()
+
 	result, err := a.Tools.ExecuteTool(ctx, ToolCall(toolCall), a.Recorder)
 	toolMessage := ToolMessage(result.Content, result.ID)
 
 	if err != nil {
+		telemetry.RecordToolError(toolSpan, err)
 		if IsTerminateTeam(err) {
 			toolTracker.CompleteWithTermination(err.Error())
 		} else {
@@ -175,6 +181,7 @@ func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatComplet
 		return toolMessage, err
 	}
 
+	telemetry.RecordToolSuccess(toolSpan, result.Content)
 	toolTracker.CompleteWithMetadata(result.Content, map[string]string{
 		"resultLength": fmt.Sprintf("%d", len(result.Content)),
 		"hasError":     "false",

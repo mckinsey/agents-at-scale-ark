@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -15,10 +16,9 @@ import (
 	"github.com/openai/openai-go/shared"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
 type ToolDefinition struct {
@@ -379,6 +379,100 @@ func CreateToolFromCRD(toolCRD *arkv1alpha1.Tool) ToolDefinition {
 	description := getToolDescription(toolCRD)
 	parameters := getToolParameters(toolCRD)
 	return ToolDefinition{Name: toolCRD.Name, Description: description, Parameters: parameters}
+}
+
+func CreatePartialToolDefinition(tooldefinition ToolDefinition, partial *arkv1alpha1.ToolPartial) (ToolDefinition, error) {
+	if partial == nil {
+		return tooldefinition, nil
+	}
+
+	newName := tooldefinition.Name
+	newDesc := tooldefinition.Description
+
+	// Deep copy parameters map
+	newParams := map[string]any{}
+	maps.Copy(newParams, tooldefinition.Parameters)
+
+	if partial.Name != "" {
+		newName = partial.Name
+	}
+
+	if partial.Description != "" {
+		newDesc = partial.Description
+	}
+
+	// Remove partial parameters from schema
+	props, ok := newParams["properties"].(map[string]any)
+	if !ok {
+		return ToolDefinition{}, fmt.Errorf("tool schema missing or invalid 'properties' field")
+	}
+	propsCopy := map[string]any{}
+	maps.Copy(propsCopy, props)
+	for _, param := range partial.Parameters {
+		delete(propsCopy, param.Name)
+	}
+	newParams["properties"] = propsCopy
+
+	// Remove partial parameters from required fields
+	reqList, exists, err := getRequiredFields(newParams)
+	if err != nil {
+		return ToolDefinition{}, err
+	}
+	if exists {
+		// Remove any required fields that match partial parameters
+		newReq := []string{}
+		for _, req := range reqList {
+			skip := false
+			for _, param := range partial.Parameters {
+				if req == param.Name {
+					skip = true
+					break
+				}
+			}
+			if !skip {
+				newReq = append(newReq, req)
+			}
+		}
+		newParams["required"] = newReq
+	}
+
+	return ToolDefinition{
+		Name:        newName,
+		Description: newDesc,
+		Parameters:  newParams,
+	}, nil
+}
+
+func getRequiredFields(params map[string]any) ([]string, bool, error) {
+	// In this case if the required field is not present that usually means non of the params are required
+	// The 'required' field may be missing, a []string, or a []interface{} (from JSON unmarshalling)
+	reqVal, exists := params["required"]
+
+	if !exists {
+		return nil, exists, nil
+	}
+
+	// Convert type to []string if necessary
+	var reqList []string
+	switch v := reqVal.(type) {
+	case []string:
+		// Already the correct type
+		reqList = v
+	case []interface{}:
+		// Convert []interface{} to []string, as JSON unmarshalling often produces this
+		for _, item := range v {
+			str, ok := item.(string)
+			if !ok {
+				// Defensive: fail if any required value is not a string
+				return nil, exists, fmt.Errorf("tool schema 'required' field contains non-string value: %v", item)
+			}
+			reqList = append(reqList, str)
+		}
+	default:
+		// Defensive: fail if required is an unexpected type
+		return nil, exists, fmt.Errorf("tool schema 'required' field is not []string or []interface{}, got %T", reqVal)
+	}
+	return reqList, exists, nil
 }
 
 func getToolDescription(toolCRD *arkv1alpha1.Tool) string {

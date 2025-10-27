@@ -130,9 +130,17 @@ func executeA2AAgentMessage(ctx context.Context, a2aClient *a2aclient.A2AClient,
 		protocol.NewTextPart(input),
 	})
 
+	blocking := true
 	params := protocol.SendMessageParams{
 		RPCID:   protocol.GenerateRPCID(),
 		Message: message,
+		// Blocking: true causes the A2A server to wait for task completion before responding.
+		// When false, the server returns immediately with a Task in "submitted" state, requiring
+		// the client to poll for updates. Ark currently only supports blocking mode, expecting
+		// Tasks to be in terminal state ("completed" or "failed") when returned.
+		Configuration: &protocol.SendMessageConfiguration{
+			Blocking: &blocking,
+		},
 	}
 
 	result, err := a2aClient.SendMessage(ctx, params)
@@ -189,29 +197,59 @@ func extractTextFromMessageResult(result *protocol.MessageResult) (string, error
 
 	switch r := result.Result.(type) {
 	case *protocol.Message:
-		text := extractTextFromParts(r.Parts)
-		logf.Log.Info("A2A message extracted", "text", text, "parts_count", len(r.Parts))
-		return text, nil
+		return extractTextFromParts(r.Parts), nil
 	case *protocol.Task:
-		return "", fmt.Errorf("received task response, streaming not yet supported")
+		return extractTextFromTask(r)
 	default:
 		return "", fmt.Errorf("unexpected result type: %T", result.Result)
+	}
+}
+
+// extractTextFromTask extracts text from a completed or failed Task
+func extractTextFromTask(task *protocol.Task) (string, error) {
+	if task.Status.State == "" {
+		return "", fmt.Errorf("task has no status state")
+	}
+
+	switch task.Status.State {
+	case TaskStateCompleted:
+		// Extract all agent messages from history
+		var text strings.Builder
+		for _, msg := range task.History {
+			if msg.Role == protocol.MessageRoleAgent && len(msg.Parts) > 0 {
+				msgText := extractTextFromParts(msg.Parts)
+				if msgText != "" {
+					if text.Len() > 0 {
+						text.WriteString("\n")
+					}
+					text.WriteString(msgText)
+				}
+			}
+		}
+
+		return text.String(), nil
+
+	case TaskStateFailed:
+		// Extract error message from status.message
+		errorMsg := "task failed"
+		if task.Status.Message != nil && len(task.Status.Message.Parts) > 0 {
+			errorMsg = extractTextFromParts(task.Status.Message.Parts)
+		}
+		return "", fmt.Errorf("%s", errorMsg)
+
+	default:
+		return "", fmt.Errorf("task in state '%s' (expected %s or %s)", task.Status.State, TaskStateCompleted, TaskStateFailed)
 	}
 }
 
 // extractTextFromParts extracts text from message parts in a type-safe way
 func extractTextFromParts(parts []protocol.Part) string {
 	var text strings.Builder
-	for i, part := range parts {
-		logf.Log.Info("A2A part debug", "index", i, "part_type", fmt.Sprintf("%T", part))
+	for _, part := range parts {
 		if textPart, ok := part.(protocol.TextPart); ok {
-			logf.Log.Info("A2A text part found", "text", textPart.Text)
 			text.WriteString(textPart.Text)
 		} else if textPartPtr, ok := part.(*protocol.TextPart); ok {
-			logf.Log.Info("A2A text part pointer found", "text", textPartPtr.Text)
 			text.WriteString(textPartPtr.Text)
-		} else {
-			logf.Log.Info("A2A non-text part skipped", "part_type", fmt.Sprintf("%T", part))
 		}
 	}
 	return text.String()

@@ -21,6 +21,12 @@ const (
 	ComponentName = "ark-controller"
 )
 
+var targetToObservationType = map[string]string{
+	"agent": "agent",
+	"model": "generation",
+	"tool":  "tool",
+}
+
 type TraceContext struct {
 	tracer trace.Tracer
 }
@@ -50,18 +56,26 @@ func (tc *TraceContext) StartQuerySpan(ctx context.Context, queryName, queryName
 }
 
 func (tc *TraceContext) StartTargetSpan(ctx context.Context, targetType, targetName string) (context.Context, trace.Span) {
-	// Use specific span names based on target type for better clarity
-	spanName := fmt.Sprintf("%s.execute", targetType)
-	return tc.StartSpan(ctx, spanName,
+	spanName := fmt.Sprintf("query.%s", targetType)
+
+	attrs := []attribute.KeyValue{
 		attribute.String("target.type", targetType),
 		attribute.String("target.name", targetName),
-	)
+	}
+
+	if obsType, ok := targetToObservationType[targetType]; ok {
+		attrs = append(attrs, attribute.String("type", obsType))
+	}
+
+	return tc.StartSpan(ctx, spanName, attrs...)
 }
 
 func (tc *TraceContext) StartAgentSpan(ctx context.Context, agentName, modelName string) (context.Context, trace.Span) {
 	return tc.StartSpan(ctx, "agent.execute",
 		attribute.String("agent.name", agentName),
 		attribute.String("model.name", modelName),
+		// Langfuse observation type for agents
+		attribute.String("type", "agent"),
 	)
 }
 
@@ -69,13 +83,8 @@ func (tc *TraceContext) StartModelSpan(ctx context.Context, modelName, provider 
 	return tc.StartSpan(ctx, "model.execute",
 		attribute.String("model.name", modelName),
 		attribute.String("model.provider", provider),
-	)
-}
-
-func (tc *TraceContext) StartToolSpan(ctx context.Context, toolName, toolType string) (context.Context, trace.Span) {
-	return tc.StartSpan(ctx, "tool.execute",
-		attribute.String("tool.name", toolName),
-		attribute.String("tool.type", toolType),
+		// Langfuse observation type for LLM generations
+		attribute.String("type", "generation"),
 	)
 }
 
@@ -231,13 +240,37 @@ func ExtractProviderFromType(modelType string) string {
 // SetLLMCompletionInput sets input attributes on LLM completion span with full conversation
 func SetLLMCompletionInput(span trace.Span, messages []openai.ChatCompletionMessageParamUnion) {
 	if len(messages) > 0 {
-		// Convert full conversation to JSON for telemetry
-		conversationJSON, err := json.Marshal(messages)
+		// Extract content strings from messages for detailed telemetry
+		var messageContents []map[string]string
+
+		for _, msg := range messages {
+			content := ExtractMessageContentForTelemetry(msg)
+			role := ""
+
+			switch {
+			case msg.OfUser != nil:
+				role = "user"
+			case msg.OfAssistant != nil:
+				role = "assistant"
+			case msg.OfSystem != nil:
+				role = "system"
+			case msg.OfTool != nil:
+				role = "tool"
+			}
+
+			if content != "" && role != "" {
+				messageContents = append(messageContents, map[string]string{
+					"role":    role,
+					"content": content,
+				})
+			}
+		}
+
+		conversationJSON, err := json.Marshal(messageContents)
 		if err == nil {
 			span.SetAttributes(attribute.String("input.value", string(conversationJSON)))
 		}
 
-		// Also set the count of messages for analytics
 		span.SetAttributes(attribute.Int("gen_ai.request.messages.count", len(messages)))
 	}
 }
@@ -251,14 +284,83 @@ func SetLLMCompletionOutput(span trace.Span, response *openai.ChatCompletion) {
 			attribute.String("gen_ai.completion.finish_reason", choice.FinishReason),
 		)
 
-		// Add tool calls as span attributes if present
 		if len(choice.Message.ToolCalls) > 0 {
 			span.SetAttributes(
 				attribute.Int("tools.called", len(choice.Message.ToolCalls)),
-				attribute.String("tools.functions", choice.Message.ToolCalls[0].Function.Name), // Just first tool for simplicity
+				attribute.String("tools.functions", choice.Message.ToolCalls[0].Function.Name),
 			)
 		}
 	}
+}
+
+// SetToolInput sets input attributes on tool execution span
+func SetToolInput(span trace.Span, toolCallID, input string) {
+	if toolCallID != "" {
+		span.SetAttributes(attribute.String("gen_ai.tool.call.id", toolCallID))
+	}
+	if input != "" {
+		span.SetAttributes(attribute.String("input.value", input))
+	}
+}
+
+// SetToolOutput sets output attributes on tool execution span
+func SetToolOutput(span trace.Span, output string) {
+	if output != "" {
+		span.SetAttributes(attribute.String("output.value", output))
+	}
+}
+
+// SetToolDescription sets description attribute on tool execution span
+func SetToolDescription(span trace.Span, description string) {
+	if description != "" {
+		span.SetAttributes(attribute.String("gen_ai.tool.description", description))
+	}
+}
+
+// SetQueryInput sets input attribute on query span with user message content
+func SetQueryInput(span trace.Span, userContent string) {
+	if userContent != "" {
+		span.SetAttributes(attribute.String("input.value", userContent))
+	}
+}
+
+// StartToolExecution starts a tool execution span with OTEL and Langfuse attributes
+func StartToolExecution(ctx context.Context, toolName, toolType, toolCallID, input string) (context.Context, trace.Span) {
+	spanName := fmt.Sprintf("execute_tool %s", toolName)
+	tracer := otel.Tracer(TracerName)
+
+	ctx, span := tracer.Start(ctx, spanName,
+		trace.WithAttributes(
+			attribute.String("service.name", ServiceName),
+			attribute.String("component", ComponentName),
+			attribute.String("gen_ai.operation.name", "execute_tool"),
+			attribute.String("gen_ai.tool.name", toolName),
+			attribute.String("gen_ai.tool.type", toolType),
+			attribute.String("type", "tool"),
+		),
+	)
+
+	if toolCallID != "" {
+		span.SetAttributes(attribute.String("gen_ai.tool.call.id", toolCallID))
+	}
+	if input != "" {
+		span.SetAttributes(attribute.String("input.value", input))
+	}
+
+	return ctx, span
+}
+
+// RecordToolSuccess records successful tool execution with output
+func RecordToolSuccess(span trace.Span, output string) {
+	if output != "" {
+		span.SetAttributes(attribute.String("output.value", output))
+	}
+	RecordSuccess(span)
+}
+
+// RecordToolError records tool execution failure
+func RecordToolError(span trace.Span, err error) {
+	RecordError(span, err)
 }
 
 // Session tracking functions

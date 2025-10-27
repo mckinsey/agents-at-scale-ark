@@ -1,0 +1,76 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: a2a-agent-discovery
+spec:
+  description: Test A2A agent discovery from mock-llm A2AServer resources
+  steps:
+  - name: step-1
+    try:
+    # Install mock-llm with A2A agents enabled
+    - script:
+        content: |
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.14 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    # Wait for A2AServer resources to be created
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1prealpha1
+          kind: A2AServer
+          metadata:
+            name: mock-llm-echo
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1prealpha1
+          kind: A2AServer
+          metadata:
+            name: mock-llm-countdown
+    # Wait for both A2AServers to be Ready
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1prealpha1
+          kind: A2AServer
+          metadata:
+            name: mock-llm-echo
+          status:
+            (contains(conditions[?type == 'Ready'].status, 'True')): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1prealpha1
+          kind: A2AServer
+          metadata:
+            name: mock-llm-countdown
+          status:
+            (contains(conditions[?type == 'Ready'].status, 'True')): true
+    # Verify agent addresses are resolved
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1prealpha1
+          kind: A2AServer
+          metadata:
+            name: mock-llm-echo
+          status:
+            (lastResolvedAddress != null): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1prealpha1
+          kind: A2AServer
+          metadata:
+            name: mock-llm-countdown
+          status:
+            (lastResolvedAddress != null): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1prealpha1
+        kind: A2AServer
+        name: mock-llm-echo
+    - describe:
+        apiVersion: ark.mckinsey.com/v1prealpha1
+        kind: A2AServer
+        name: mock-llm-countdown
