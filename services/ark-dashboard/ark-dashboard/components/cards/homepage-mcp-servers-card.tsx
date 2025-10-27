@@ -1,10 +1,12 @@
-"use client";
+'use client';
 
-import { MetricCard } from "./metric-card";
-import { DASHBOARD_SECTIONS } from "@/lib/constants";
-import { useGetAllMcpServers } from "@/lib/services/mcp-servers-hooks";
-import { toast } from "sonner";
-import { useEffect } from "react";
+import { useEffect } from 'react';
+import { toast } from 'sonner';
+
+import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import { useGetAllMcpServers } from '@/lib/services/mcp-servers-hooks';
+
+import { MetricCard } from './metric-card';
 
 export function HomepageMcpServersCard() {
   const { data, isPending, error } = useGetAllMcpServers();
@@ -16,11 +18,11 @@ export function HomepageMcpServersCard() {
 
   useEffect(() => {
     if (error) {
-      toast.error("Failed to get MCP Servers", {
+      toast.error('Failed to get MCP Servers', {
         description:
           error instanceof Error
             ? error.message
-            : "An unexpected error occurred"
+            : 'An unexpected error occurred',
       });
     }
   }, [error]);

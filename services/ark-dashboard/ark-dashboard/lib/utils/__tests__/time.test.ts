@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { formatAge, simplifyDuration } from '../time';
 
 describe('formatAge', () => {
@@ -27,15 +28,15 @@ describe('formatAge', () => {
 
   it('should format minutes correctly', () => {
     const now = new Date('2024-01-01T12:00:00Z');
-    
+
     // 5 minutes ago
     const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
     expect(formatAge(fiveMinutesAgo.toISOString())).toBe('5m');
-    
+
     // 12 minutes ago
     const twelveMinutesAgo = new Date(now.getTime() - 12 * 60 * 1000);
     expect(formatAge(twelveMinutesAgo.toISOString())).toBe('12m');
-    
+
     // 59 minutes ago
     const fiftyNineMinutesAgo = new Date(now.getTime() - 59 * 60 * 1000);
     expect(formatAge(fiftyNineMinutesAgo.toISOString())).toBe('59m');
@@ -43,31 +44,37 @@ describe('formatAge', () => {
 
   it('should format hours correctly', () => {
     const now = new Date('2024-01-01T12:00:00Z');
-    
+
     // Exactly 3 hours ago
     const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
     expect(formatAge(threeHoursAgo.toISOString())).toBe('3h');
-    
+
     // 3 hours and 5 minutes ago
-    const threeHoursFiveMinutesAgo = new Date(now.getTime() - (3 * 60 + 5) * 60 * 1000);
+    const threeHoursFiveMinutesAgo = new Date(
+      now.getTime() - (3 * 60 + 5) * 60 * 1000,
+    );
     expect(formatAge(threeHoursFiveMinutesAgo.toISOString())).toBe('3h5m');
-    
+
     // 3 hours and 14 minutes ago
-    const threeHoursFourteenMinutesAgo = new Date(now.getTime() - (3 * 60 + 14) * 60 * 1000);
+    const threeHoursFourteenMinutesAgo = new Date(
+      now.getTime() - (3 * 60 + 14) * 60 * 1000,
+    );
     expect(formatAge(threeHoursFourteenMinutesAgo.toISOString())).toBe('3h14m');
   });
 
   it('should format days correctly', () => {
     const now = new Date('2024-01-01T12:00:00Z');
-    
+
     // Exactly 2 days ago
     const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
     expect(formatAge(twoDaysAgo.toISOString())).toBe('2d');
-    
+
     // 2 days and 1 hour ago
-    const twoDaysOneHourAgo = new Date(now.getTime() - (2 * 24 + 1) * 60 * 60 * 1000);
+    const twoDaysOneHourAgo = new Date(
+      now.getTime() - (2 * 24 + 1) * 60 * 60 * 1000,
+    );
     expect(formatAge(twoDaysOneHourAgo.toISOString())).toBe('2d1h');
-    
+
     // 40 hours ago (1d16h)
     const fortyHoursAgo = new Date(now.getTime() - 40 * 60 * 60 * 1000);
     expect(formatAge(fortyHoursAgo.toISOString())).toBe('1d16h');
@@ -76,7 +83,7 @@ describe('formatAge', () => {
   it('should return full date for times more than a week ago', () => {
     const now = new Date('2024-01-01T12:00:00Z');
     const eightDaysAgo = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000);
-    
+
     // Should return a date string (format may vary by locale)
     const result = formatAge(eightDaysAgo.toISOString());
     expect(result).not.toBe('-');

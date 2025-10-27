@@ -1,11 +1,11 @@
-"use client"
+'use client';
 
-import { useAutoSignout } from "@/hooks/useAutoSignout";
-import { useRefreshAccessToken } from "@/hooks/useRefreshAccessToken";
+import { useAutoSignout } from '@/hooks/useAutoSignout';
+import { useRefreshAccessToken } from '@/hooks/useRefreshAccessToken';
 
 export function AuthUtilsWrapper() {
-  useAutoSignout()
-  useRefreshAccessToken()
+  useAutoSignout();
+  useRefreshAccessToken();
 
   return null;
 }

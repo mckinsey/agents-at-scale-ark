@@ -1,38 +1,47 @@
-"use client";
+'use client';
 
-import { ToolCard } from "@/components/cards";
-import { InfoDialog } from "@/components/dialogs/info-dialog";
-import { ToolRow } from "@/components/rows/tool-row";
-import { ToggleSwitch, type ToggleOption } from "@/components/ui/toggle-switch";
-import { toast } from "sonner";
-import { useDelayedLoading } from "@/lib/hooks";
-import {
-  agentsService,
-  toolsService,
-  type Agent,
-  type AgentTool,
-  type Tool
-} from "@/lib/services";
-import { groupToolsByLabel } from "@/lib/utils/groupToolsByLabels";
 import {
   Collapsible,
   CollapsibleContent,
-  CollapsibleTrigger
-} from "@radix-ui/react-collapsible";
-import { Label } from "@radix-ui/react-label";
-import { ArrowUpRightIcon, ChevronRight, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
+  CollapsibleTrigger,
+} from '@radix-ui/react-collapsible';
+import { Label } from '@radix-ui/react-label';
+import { ArrowUpRightIcon, ChevronRight, Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import {
   forwardRef,
   useEffect,
   useImperativeHandle,
   useMemo,
-  useState
-} from "react";
-import { ToolEditor } from "@/components/editors/tool-editor";
-import { Button } from "@/components/ui/button";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { DASHBOARD_SECTIONS } from "@/lib/constants";
+  useState,
+} from 'react';
+import { toast } from 'sonner';
+
+import { ToolCard } from '@/components/cards';
+import { InfoDialog } from '@/components/dialogs/info-dialog';
+import { ToolEditor } from '@/components/editors/tool-editor';
+import { ToolRow } from '@/components/rows/tool-row';
+import { Button } from '@/components/ui/button';
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
+import { type ToggleOption, ToggleSwitch } from '@/components/ui/toggle-switch';
+import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import { useDelayedLoading } from '@/lib/hooks';
+import {
+  type Agent,
+  type AgentTool,
+  type Tool,
+  agentsService,
+  toolsService,
+} from '@/lib/services';
+import { groupToolsByLabel } from '@/lib/utils/groupToolsByLabels';
+
 interface ToolsSectionProps {
   namespace: string;
 }
@@ -52,12 +61,12 @@ export const ToolsSection = forwardRef<
   const [toolEditorOpen, setToolEditorOpen] = useState(false);
 
   useImperativeHandle(ref, () => ({
-    openAddEditor: () => setToolEditorOpen(true)
+    openAddEditor: () => setToolEditorOpen(true),
   }));
 
   const viewOptions: ToggleOption[] = [
-    { id: "compact", label: "compact view", active: !showCompactView },
-    { id: "card", label: "card view", active: showCompactView }
+    { id: 'compact', label: 'compact view', active: !showCompactView },
+    { id: 'card', label: 'card view', active: showCompactView },
   ];
   const groupedTools = useMemo(() => groupToolsByLabel(tools), [tools]);
   useEffect(() => {
@@ -66,17 +75,17 @@ export const ToolsSection = forwardRef<
       try {
         const [toolsData, agentsData] = await Promise.all([
           toolsService.getAll(),
-          agentsService.getAll()
+          agentsService.getAll(),
         ]);
         setTools(toolsData);
         setAgents(agentsData);
       } catch (error) {
-        console.error("Failed to load data:", error);
-        toast.error("Failed to Load Data", {
+        console.error('Failed to load data:', error);
+        toast.error('Failed to Load Data', {
           description:
             error instanceof Error
               ? error.message
-              : "An unexpected error occurred"
+              : 'An unexpected error occurred',
         });
       } finally {
         setLoading(false);
@@ -87,10 +96,10 @@ export const ToolsSection = forwardRef<
 
   const toolUsageMap = useMemo(() => {
     const usageMap: Record<string, { inUse: boolean; agents: Agent[] }> = {};
-    tools.forEach((tool) => {
+    tools.forEach(tool => {
       usageMap[tool.name] = { inUse: false, agents: [] };
     });
-    agents.forEach((agent) => {
+    agents.forEach(agent => {
       agent.tools?.forEach((tool: AgentTool) => {
         if (tool.name && usageMap[tool.name]) {
           usageMap[tool.name].inUse = true;
@@ -107,17 +116,17 @@ export const ToolsSection = forwardRef<
     }
     try {
       await toolsService.delete(identifier);
-      setTools(tools.filter((tool) => (tool.name || tool.type) !== identifier));
-      toast.success("Tool Deleted", {
-        description: "Successfully deleted tool"
+      setTools(tools.filter(tool => (tool.name || tool.type) !== identifier));
+      toast.success('Tool Deleted', {
+        description: 'Successfully deleted tool',
       });
     } catch (error) {
-      console.error("Failed to delete tool:", error);
-      toast.error("Failed to Delete Tool", {
+      console.error('Failed to delete tool:', error);
+      toast.error('Failed to Delete Tool', {
         description:
           error instanceof Error
             ? error.message
-            : "An unexpected error occurred"
+            : 'An unexpected error occurred',
       });
     }
   };
@@ -137,23 +146,23 @@ export const ToolsSection = forwardRef<
   }) => {
     try {
       await toolsService.create({ ...toolSpec, namespace });
-      toast.success("Tool Created", {
-        description: `Successfully created ${toolSpec.name}`
+      toast.success('Tool Created', {
+        description: `Successfully created ${toolSpec.name}`,
       });
 
       const updatedTools = await toolsService.getAll();
       setTools(updatedTools);
     } catch (error) {
-      toast.error("Failed to Create Tool", {
+      toast.error('Failed to Create Tool', {
         description:
           error instanceof Error
             ? error.message
-            : "An unexpected error occurred"
+            : 'An unexpected error occurred',
       });
     }
   };
   const parseAnnotations = (
-    annotations: unknown
+    annotations: unknown,
   ): Record<string, unknown> | null => {
     try {
       if (!annotations) return null;
@@ -161,7 +170,7 @@ export const ToolsSection = forwardRef<
         string,
         unknown
       >;
-      if (typeof parsed === "string") {
+      if (typeof parsed === 'string') {
         parsed = JSON.parse(parsed);
       }
       return parsed;
@@ -170,16 +179,16 @@ export const ToolsSection = forwardRef<
     }
   };
   const extractDescriptionFromAnnotations = (
-    annotations: unknown
+    annotations: unknown,
   ): string | null => {
     const parsed = parseAnnotations(annotations);
     if (!parsed) return null;
     const lastApplied =
-      parsed["kubectl.kubernetes.io/last-applied-configuration"];
+      parsed['kubectl.kubernetes.io/last-applied-configuration'];
     if (!lastApplied) return null;
     try {
       const config =
-        typeof lastApplied === "string" ? JSON.parse(lastApplied) : lastApplied;
+        typeof lastApplied === 'string' ? JSON.parse(lastApplied) : lastApplied;
       return config?.spec?.tool?.description ?? null;
     } catch {
       return null;
@@ -189,18 +198,18 @@ export const ToolsSection = forwardRef<
     const fields = [];
     if (tool.description) {
       fields.push({
-        key: "description",
+        key: 'description',
         value: tool.description,
-        label: "Description"
+        label: 'Description',
       });
       return fields;
     }
     const desc = extractDescriptionFromAnnotations(tool.annotations);
     if (desc) {
       fields.push({
-        key: "description",
+        key: 'description',
         value: desc,
-        label: "Description"
+        label: 'Description',
       });
     }
     return fields;
@@ -209,7 +218,7 @@ export const ToolsSection = forwardRef<
   if (showLoading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-center py-8">Loading...</div>
+        <div className="py-8 text-center">Loading...</div>
       </div>
     );
   }
@@ -224,8 +233,8 @@ export const ToolsSection = forwardRef<
             </EmptyMedia>
             <EmptyTitle>No Tools Yet</EmptyTitle>
             <EmptyDescription>
-              You haven&apos;t added any tools yet. Get started by adding
-              your first tool.
+              You haven&apos;t added any tools yet. Get started by adding your
+              first tool.
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
@@ -238,9 +247,10 @@ export const ToolsSection = forwardRef<
             variant="link"
             asChild
             className="text-muted-foreground"
-            size="sm"
-          >
-            <a href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/tools/" target="_blank">
+            size="sm">
+            <a
+              href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/tools/"
+              target="_blank">
               Learn More <ArrowUpRightIcon />
             </a>
           </Button>
@@ -252,7 +262,7 @@ export const ToolsSection = forwardRef<
           namespace={namespace}
         />
       </>
-    )
+    );
   }
 
   return (
@@ -261,7 +271,7 @@ export const ToolsSection = forwardRef<
         <div className="flex items-center justify-end px-6 py-3">
           <ToggleSwitch
             options={viewOptions}
-            onChange={(id) => setShowCompactView(id === "card")}
+            onChange={id => setShowCompactView(id === 'card')}
           />
         </div>
         <main className="flex-1 overflow-auto p-6">
@@ -270,28 +280,27 @@ export const ToolsSection = forwardRef<
               <Collapsible
                 defaultOpen
                 className="group/collapsible"
-                key={`${toolGroup.groupName}-${index}`}
-              >
+                key={`${toolGroup.groupName}-${index}`}>
                 <div className="bg-card text-card-foreground flex flex-col rounded-xl border p-4">
                   <CollapsibleTrigger className="w-full py-4">
-                    <div className="flex flex-row items-center justify-between w-full">
+                    <div className="flex w-full flex-row items-center justify-between">
                       <Label className="text-lg font-bold">
                         {toolGroup.groupName}
                       </Label>
-                      <ChevronRight className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90 h-4 w-4" />
+                      <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
                     </div>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     {showCompactView ? (
                       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        {toolGroup.tools.map((tool) => {
+                        {toolGroup.tools.map(tool => {
                           const toolData = toolUsageMap[tool.name] || {
                             inUse: false,
-                            agents: []
+                            agents: [],
                           };
                           const agentNames = toolData.agents
-                            .map((agent) => agent.name)
-                            .join(", ");
+                            .map(agent => agent.name)
+                            .join(', ');
                           return (
                             <ToolCard
                               key={tool.id}
@@ -310,14 +319,14 @@ export const ToolsSection = forwardRef<
                       </div>
                     ) : (
                       <div className="flex flex-col gap-3">
-                        {toolGroup.tools.map((tool) => {
+                        {toolGroup.tools.map(tool => {
                           const toolData = toolUsageMap[tool.name] || {
                             inUse: false,
-                            agents: []
+                            agents: [],
                           };
                           const agentNames = toolData.agents
-                            .map((agent) => agent.name)
-                            .join(", ");
+                            .map(agent => agent.name)
+                            .join(', ');
                           return (
                             <ToolRow
                               key={tool.id}
@@ -346,8 +355,9 @@ export const ToolsSection = forwardRef<
           <InfoDialog
             open={infoDialogOpen}
             onOpenChange={setInfoDialogOpen}
-            title={`Tool: ${selectedTool.name || selectedTool.type || "Unnamed"
-              }`}
+            title={`Tool: ${
+              selectedTool.name || selectedTool.type || 'Unnamed'
+            }`}
             data={selectedTool}
             additionalFields={getAdditionalFields(selectedTool)}
           />

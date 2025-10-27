@@ -1,128 +1,142 @@
-"use client"
+'use client';
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import {
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  Filter,
+  Play,
+  Search,
+  Square,
+  X,
+  XCircle,
+} from 'lucide-react';
+import { useState } from 'react';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue
-} from "@/components/ui/select"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger
-} from "@/components/ui/popover"
-import { Badge } from "@/components/ui/badge"
-import { 
-  Filter, 
-  X, 
-  Search,
-  CheckCircle,
-  XCircle,
-  Clock,
-  AlertCircle,
-  Play,
-  Square
-} from "lucide-react"
-import { Separator } from "@/components/ui/separator"
+  SelectValue,
+} from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 
 export interface EvaluationFilters {
-  search: string
-  status: string[]
-  evaluator: string[]
-  mode: string[]
-  passed: string // 'all' | 'passed' | 'failed' | 'unknown'
-  scoreMin: string
-  scoreMax: string
-  evaluationType: string[] // For enhanced filtering
+  search: string;
+  status: string[];
+  evaluator: string[];
+  mode: string[];
+  passed: string; // 'all' | 'passed' | 'failed' | 'unknown'
+  scoreMin: string;
+  scoreMax: string;
+  evaluationType: string[]; // For enhanced filtering
 }
 
 interface EvaluationFilterProps {
-  filters: EvaluationFilters
-  onFiltersChange: (filters: EvaluationFilters) => void
-  availableEvaluators: string[]
-  availableTypes: string[]
+  filters: EvaluationFilters;
+  onFiltersChange: (filters: EvaluationFilters) => void;
+  availableEvaluators: string[];
+  availableTypes: string[];
 }
 
 const DEFAULT_FILTERS: EvaluationFilters = {
-  search: "",
+  search: '',
   status: [],
   evaluator: [],
   mode: [],
-  passed: "all",
-  scoreMin: "",
-  scoreMax: "",
-  evaluationType: []
-}
+  passed: 'all',
+  scoreMin: '',
+  scoreMax: '',
+  evaluationType: [],
+};
 
 const STATUS_OPTIONS = [
-  { value: "done", label: "Done", icon: CheckCircle, color: "text-green-600" },
-  { value: "running", label: "Running", icon: Play, color: "text-blue-600" },
-  { value: "error", label: "Error", icon: AlertCircle, color: "text-red-600" },
-  { value: "canceled", label: "Canceled", icon: Square, color: "text-gray-600" }
-]
+  { value: 'done', label: 'Done', icon: CheckCircle, color: 'text-green-600' },
+  { value: 'running', label: 'Running', icon: Play, color: 'text-blue-600' },
+  { value: 'error', label: 'Error', icon: AlertCircle, color: 'text-red-600' },
+  {
+    value: 'canceled',
+    label: 'Canceled',
+    icon: Square,
+    color: 'text-gray-600',
+  },
+];
 
 const PASSED_OPTIONS = [
-  { value: "all", label: "All" },
-  { value: "passed", label: "Passed", icon: CheckCircle, color: "text-green-600" },
-  { value: "failed", label: "Failed", icon: XCircle, color: "text-red-600" },
-  { value: "unknown", label: "Unknown", icon: Clock, color: "text-gray-600" }
-]
+  { value: 'all', label: 'All' },
+  {
+    value: 'passed',
+    label: 'Passed',
+    icon: CheckCircle,
+    color: 'text-green-600',
+  },
+  { value: 'failed', label: 'Failed', icon: XCircle, color: 'text-red-600' },
+  { value: 'unknown', label: 'Unknown', icon: Clock, color: 'text-gray-600' },
+];
 
 export function EvaluationFilter({
   filters,
   onFiltersChange,
   availableEvaluators,
-  availableTypes
+  availableTypes,
 }: EvaluationFilterProps) {
-  const [isOpen, setIsOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(false);
 
-  const updateFilter = <K extends keyof EvaluationFilters>(
-    key: K,
-    value: EvaluationFilters[K]
+  const updateFilter = <TK extends keyof EvaluationFilters>(
+    key: TK,
+    value: EvaluationFilters[TK],
   ) => {
-    onFiltersChange({ ...filters, [key]: value })
-  }
+    onFiltersChange({ ...filters, [key]: value });
+  };
 
-  const toggleArrayFilter = (key: 'status' | 'evaluator' | 'mode' | 'evaluationType', value: string) => {
-    const currentArray = filters[key]
+  const toggleArrayFilter = (
+    key: 'status' | 'evaluator' | 'mode' | 'evaluationType',
+    value: string,
+  ) => {
+    const currentArray = filters[key];
     const newArray = currentArray.includes(value)
       ? currentArray.filter(item => item !== value)
-      : [...currentArray, value]
-    updateFilter(key, newArray)
-  }
+      : [...currentArray, value];
+    updateFilter(key, newArray);
+  };
 
   const clearFilters = () => {
-    onFiltersChange(DEFAULT_FILTERS)
-  }
+    onFiltersChange(DEFAULT_FILTERS);
+  };
 
   const getActiveFilterCount = () => {
-    let count = 0
-    if (filters.search) count++
-    if (filters.status.length > 0) count++
-    if (filters.evaluator.length > 0) count++
-    if (filters.mode.length > 0) count++
-    if (filters.passed !== "all") count++
-    if (filters.scoreMin || filters.scoreMax) count++
-    if (filters.evaluationType.length > 0) count++
-    return count
-  }
+    let count = 0;
+    if (filters.search) count++;
+    if (filters.status.length > 0) count++;
+    if (filters.evaluator.length > 0) count++;
+    if (filters.mode.length > 0) count++;
+    if (filters.passed !== 'all') count++;
+    if (filters.scoreMin || filters.scoreMax) count++;
+    if (filters.evaluationType.length > 0) count++;
+    return count;
+  };
 
-  const activeFilterCount = getActiveFilterCount()
+  const activeFilterCount = getActiveFilterCount();
 
   return (
     <div className="flex items-center gap-2">
       {/* Search Input */}
-      <div className="relative flex-1 max-w-sm">
-        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+      <div className="relative max-w-sm flex-1">
+        <Search className="text-muted-foreground absolute top-2.5 left-2 h-4 w-4" />
         <Input
           placeholder="Search evaluations..."
           value={filters.search}
-          onChange={(e) => updateFilter("search", e.target.value)}
+          onChange={e => updateFilter('search', e.target.value)}
           className="pl-8"
         />
       </div>
@@ -149,8 +163,7 @@ export function EvaluationFilter({
                   variant="ghost"
                   size="sm"
                   onClick={clearFilters}
-                  className="h-auto p-1 text-xs"
-                >
+                  className="h-auto p-1 text-xs">
                   Clear all
                 </Button>
               )}
@@ -162,21 +175,22 @@ export function EvaluationFilter({
             <div className="space-y-2">
               <Label className="text-sm font-medium">Status</Label>
               <div className="grid grid-cols-2 gap-2">
-                {STATUS_OPTIONS.map((option) => {
-                  const Icon = option.icon
-                  const isSelected = filters.status.includes(option.value)
+                {STATUS_OPTIONS.map(option => {
+                  const Icon = option.icon;
+                  const isSelected = filters.status.includes(option.value);
                   return (
                     <Button
                       key={option.value}
-                      variant={isSelected ? "default" : "outline"}
+                      variant={isSelected ? 'default' : 'outline'}
                       size="sm"
-                      onClick={() => toggleArrayFilter("status", option.value)}
-                      className="justify-start gap-2"
-                    >
-                      <Icon className={`h-3 w-3 ${isSelected ? "" : option.color}`} />
+                      onClick={() => toggleArrayFilter('status', option.value)}
+                      className="justify-start gap-2">
+                      <Icon
+                        className={`h-3 w-3 ${isSelected ? '' : option.color}`}
+                      />
                       {option.label}
                     </Button>
-                  )
+                  );
                 })}
               </div>
             </div>
@@ -186,20 +200,19 @@ export function EvaluationFilter({
             {/* Evaluator Filter */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">Evaluator</Label>
-              <div className="space-y-1 max-h-32 overflow-y-auto">
-                {availableEvaluators.map((evaluator) => {
-                  const isSelected = filters.evaluator.includes(evaluator)
+              <div className="max-h-32 space-y-1 overflow-y-auto">
+                {availableEvaluators.map(evaluator => {
+                  const isSelected = filters.evaluator.includes(evaluator);
                   return (
                     <Button
                       key={evaluator}
-                      variant={isSelected ? "default" : "outline"}
+                      variant={isSelected ? 'default' : 'outline'}
                       size="sm"
-                      onClick={() => toggleArrayFilter("evaluator", evaluator)}
-                      className="w-full justify-start text-xs"
-                    >
+                      onClick={() => toggleArrayFilter('evaluator', evaluator)}
+                      className="w-full justify-start text-xs">
                       {evaluator}
                     </Button>
-                  )
+                  );
                 })}
               </div>
             </div>
@@ -210,19 +223,18 @@ export function EvaluationFilter({
             <div className="space-y-2">
               <Label className="text-sm font-medium">Evaluation Type</Label>
               <div className="flex flex-wrap gap-1">
-                {availableTypes.map((type) => {
-                  const isSelected = filters.mode.includes(type)
+                {availableTypes.map(type => {
+                  const isSelected = filters.mode.includes(type);
                   return (
                     <Button
                       key={type}
-                      variant={isSelected ? "default" : "outline"}
+                      variant={isSelected ? 'default' : 'outline'}
                       size="sm"
-                      onClick={() => toggleArrayFilter("mode", type)}
-                      className="text-xs capitalize"
-                    >
+                      onClick={() => toggleArrayFilter('mode', type)}
+                      className="text-xs capitalize">
                       {type}
                     </Button>
-                  )
+                  );
                 })}
               </div>
             </div>
@@ -234,22 +246,23 @@ export function EvaluationFilter({
               <Label className="text-sm font-medium">Pass Status</Label>
               <Select
                 value={filters.passed}
-                onValueChange={(value) => updateFilter("passed", value)}
-              >
+                onValueChange={value => updateFilter('passed', value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {PASSED_OPTIONS.map((option) => {
-                    const Icon = option.icon
+                  {PASSED_OPTIONS.map(option => {
+                    const Icon = option.icon;
                     return (
                       <SelectItem key={option.value} value={option.value}>
                         <div className="flex items-center gap-2">
-                          {Icon && <Icon className={`h-3 w-3 ${option.color || ""}`} />}
+                          {Icon && (
+                            <Icon className={`h-3 w-3 ${option.color || ''}`} />
+                          )}
                           {option.label}
                         </div>
                       </SelectItem>
-                    )
+                    );
                   })}
                 </SelectContent>
               </Select>
@@ -268,10 +281,10 @@ export function EvaluationFilter({
                   max="1"
                   step="0.01"
                   value={filters.scoreMin}
-                  onChange={(e) => updateFilter("scoreMin", e.target.value)}
+                  onChange={e => updateFilter('scoreMin', e.target.value)}
                   className="text-xs"
                 />
-                <span className="text-xs text-muted-foreground">to</span>
+                <span className="text-muted-foreground text-xs">to</span>
                 <Input
                   type="number"
                   placeholder="Max"
@@ -279,7 +292,7 @@ export function EvaluationFilter({
                   max="1"
                   step="0.01"
                   value={filters.scoreMax}
-                  onChange={(e) => updateFilter("scoreMax", e.target.value)}
+                  onChange={e => updateFilter('scoreMax', e.target.value)}
                   className="text-xs"
                 />
               </div>
@@ -290,69 +303,72 @@ export function EvaluationFilter({
 
       {/* Active Filters Display */}
       {activeFilterCount > 0 && (
-        <div className="flex items-center gap-1 flex-wrap">
+        <div className="flex flex-wrap items-center gap-1">
           {filters.search && (
             <Badge variant="secondary" className="gap-1">
               Search: {filters.search}
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() => updateFilter("search", "")}
+                onClick={() => updateFilter('search', '')}
               />
             </Badge>
           )}
-          {filters.status.map((status) => (
+          {filters.status.map(status => (
             <Badge key={status} variant="secondary" className="gap-1">
               {status}
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() => toggleArrayFilter("status", status)}
+                onClick={() => toggleArrayFilter('status', status)}
               />
             </Badge>
           ))}
-          {filters.evaluator.map((evaluator) => (
-            <Badge key={evaluator} variant="secondary" className="gap-1 text-xs">
+          {filters.evaluator.map(evaluator => (
+            <Badge
+              key={evaluator}
+              variant="secondary"
+              className="gap-1 text-xs">
               {evaluator}
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() => toggleArrayFilter("evaluator", evaluator)}
+                onClick={() => toggleArrayFilter('evaluator', evaluator)}
               />
             </Badge>
           ))}
-          {filters.mode.map((mode) => (
+          {filters.mode.map(mode => (
             <Badge key={mode} variant="secondary" className="gap-1">
               {mode}
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() => toggleArrayFilter("mode", mode)}
+                onClick={() => toggleArrayFilter('mode', mode)}
               />
             </Badge>
           ))}
-          {filters.evaluationType.map((type) => (
+          {filters.evaluationType.map(type => (
             <Badge key={type} variant="secondary" className="gap-1">
               Type: {type}
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() => toggleArrayFilter("evaluationType", type)}
+                onClick={() => toggleArrayFilter('evaluationType', type)}
               />
             </Badge>
           ))}
-          {filters.passed !== "all" && (
+          {filters.passed !== 'all' && (
             <Badge variant="secondary" className="gap-1">
               {filters.passed}
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() => updateFilter("passed", "all")}
+                onClick={() => updateFilter('passed', 'all')}
               />
             </Badge>
           )}
           {(filters.scoreMin || filters.scoreMax) && (
             <Badge variant="secondary" className="gap-1">
-              Score: {filters.scoreMin || "0"}-{filters.scoreMax || "1"}
+              Score: {filters.scoreMin || '0'}-{filters.scoreMax || '1'}
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() => {
-                  updateFilter("scoreMin", "")
-                  updateFilter("scoreMax", "")
+                  updateFilter('scoreMin', '');
+                  updateFilter('scoreMax', '');
                 }}
               />
             </Badge>
@@ -360,5 +376,5 @@ export function EvaluationFilter({
         </div>
       )}
     </div>
-  )
+  );
 }

@@ -1,37 +1,39 @@
-"use client"
+'use client';
 
-import { ComponentProps, Fragment, ReactNode } from "react"
-import { SidebarTrigger } from "@/components/ui/sidebar"
-import { Separator } from "@/components/ui/separator"
+import { Info } from 'lucide-react';
+import Link from 'next/link';
+import type { ComponentProps, ReactNode } from 'react';
+import { Fragment } from 'react';
+
 import {
   Breadcrumb,
+  BreadcrumbEllipsis,
   BreadcrumbItem,
+  BreadcrumbLink,
   BreadcrumbList,
   BreadcrumbPage,
-  BreadcrumbLink,
-  BreadcrumbEllipsis,
-  BreadcrumbSeparator
-} from "@/components/ui/breadcrumb"
-
-import Link from "next/link"
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu"
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
-import { Button } from "../ui/button"
-import { Info } from "lucide-react"
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Separator } from '@/components/ui/separator';
+import { SidebarTrigger } from '@/components/ui/sidebar';
+
+import { Button } from '../ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 
 export type BreadcrumbElement = {
   label: string;
-  href: ComponentProps<typeof Link>["href"];
-}
+  href: ComponentProps<typeof Link>['href'];
+};
 
 type BreadcrumbsDropdownProps = {
-  elements: BreadcrumbElement[]
-}
+  elements: BreadcrumbElement[];
+};
 
 function BreadcrumbsDropdown({ elements }: BreadcrumbsDropdownProps) {
   return (
@@ -41,36 +43,35 @@ function BreadcrumbsDropdown({ elements }: BreadcrumbsDropdownProps) {
         <span className="sr-only">Toggle menu</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
-        {elements.map((e) => (
+        {elements.map(e => (
           <Link href={e.href} key={e.label}>
-            <DropdownMenuItem >{e.label}</DropdownMenuItem>
+            <DropdownMenuItem>{e.label}</DropdownMenuItem>
           </Link>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
-  )
+  );
 }
 
 type BreadcrumbsLinksProps = {
-  elements?: BreadcrumbElement[]
-}
+  elements?: BreadcrumbElement[];
+};
 
 function BreadcrumbsLinks({ elements }: BreadcrumbsLinksProps) {
   return (
     <>
-      {elements?.map((link) => (
+      {elements?.map(link => (
         <Fragment key={link.label}>
-          <BreadcrumbItem >
+          <BreadcrumbItem>
             <BreadcrumbLink asChild>
               <Link href={link.href}>{link.label}</Link>
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
         </Fragment>
-      ))
-      }
+      ))}
     </>
-  )
+  );
 }
 
 function HeaderTooltip() {
@@ -78,7 +79,9 @@ function HeaderTooltip() {
     <Tooltip>
       <TooltipTrigger asChild>
         <Button variant="ghost" asChild>
-          <a href="https://mckinsey.github.io/agents-at-scale-ark/" target="_blank">
+          <a
+            href="https://mckinsey.github.io/agents-at-scale-ark/"
+            target="_blank">
             <Info className="h-4 w-4" />
           </a>
         </Button>
@@ -87,25 +90,34 @@ function HeaderTooltip() {
         <span>Help</span>
       </TooltipContent>
     </Tooltip>
-  )
+  );
 }
 
 type PageHeaderProps = {
-  breadcrumbs?: BreadcrumbElement[]
-  currentPage: string
-  actions?: ReactNode
-}
+  breadcrumbs?: BreadcrumbElement[];
+  currentPage: string;
+  actions?: ReactNode;
+};
 
-export function PageHeader({ breadcrumbs, currentPage, actions }: PageHeaderProps) {
-  const firstCrumb = (breadcrumbs?.length || 0) > 2 ? breadcrumbs?.[0] : undefined;
-  const crumbsInDropdown = (breadcrumbs?.length || 0) > 2 ? breadcrumbs?.slice(1, -1) : undefined;
-  const visibleCrumbs = (breadcrumbs?.length || 0) > 2 ? breadcrumbs?.slice(-1) : breadcrumbs;
-
+export function PageHeader({
+  breadcrumbs,
+  currentPage,
+  actions,
+}: PageHeaderProps) {
+  const firstCrumb =
+    (breadcrumbs?.length || 0) > 2 ? breadcrumbs?.[0] : undefined;
+  const crumbsInDropdown =
+    (breadcrumbs?.length || 0) > 2 ? breadcrumbs?.slice(1, -1) : undefined;
+  const visibleCrumbs =
+    (breadcrumbs?.length || 0) > 2 ? breadcrumbs?.slice(-1) : breadcrumbs;
 
   return (
     <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
       <SidebarTrigger className="-ml-1" />
-      <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
+      <Separator
+        orientation="vertical"
+        className="mr-2 data-[orientation=vertical]:h-4"
+      />
       {/* Mobile */}
       <Breadcrumb className="block md:hidden">
         <BreadcrumbList>
@@ -129,9 +141,7 @@ export function PageHeader({ breadcrumbs, currentPage, actions }: PageHeaderProp
             <>
               <BreadcrumbItem>
                 <BreadcrumbLink asChild>
-                  <Link href={firstCrumb.href}>
-                    {firstCrumb.label}
-                  </Link>
+                  <Link href={firstCrumb.href}>{firstCrumb.label}</Link>
                 </BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator />
@@ -151,10 +161,10 @@ export function PageHeader({ breadcrumbs, currentPage, actions }: PageHeaderProp
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
-      <div className="ml-auto space-x-2 flex items-center">
-        {actions && (actions)}
+      <div className="ml-auto flex items-center space-x-2">
+        {actions && actions}
         <HeaderTooltip />
       </div>
     </header>
-  )
+  );
 }

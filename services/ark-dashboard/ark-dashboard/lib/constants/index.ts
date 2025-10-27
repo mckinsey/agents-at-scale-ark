@@ -1,1 +1,1 @@
-export * from './dashboard-icons'
+export * from './dashboard-icons';
