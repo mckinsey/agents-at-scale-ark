@@ -12,7 +12,7 @@ type TeamMember struct {
 }
 
 type TeamSelectorSpec struct {
-	Model          string `json:"model,omitempty"`
+	Agent          string `json:"agent,omitempty"`
 	SelectorPrompt string `json:"selectorPrompt,omitempty"`
 }
 

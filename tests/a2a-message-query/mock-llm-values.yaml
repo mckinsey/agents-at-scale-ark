@@ -1,0 +1,5 @@
+# Mock LLM configuration for A2A message query test
+ark:
+  a2a:
+    enabled: true
+    pollInterval: "3s"

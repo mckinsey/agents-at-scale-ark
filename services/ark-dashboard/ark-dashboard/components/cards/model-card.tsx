@@ -7,46 +7,34 @@ import { getCustomIcon } from "@/lib/utils/icon-resolver";
 import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
 import { BaseCard, type BaseCardAction } from "./base-card";
 import { AvailabilityStatusBadge } from "@/components/ui/availability-status-badge";
-import { ModelEditor } from "@/components/editors";
 import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog";
-import type {
-  Model,
-  ModelCreateRequest,
-  ModelUpdateRequest
-} from "@/lib/services";
+import type { Model } from "@/lib/services";
+import { useRouter } from "next/navigation";
 
 interface ModelCardProps {
   model: Model;
-  onUpdate?: (
-    model: ModelCreateRequest | (ModelUpdateRequest & { id: string })
-  ) => void;
   onDelete?: (id: string) => void;
-  namespace: string;
 }
 
 export function ModelCard({
   model,
-  onUpdate,
-  onDelete,
-  namespace
+  onDelete
 }: ModelCardProps) {
-  const [editorOpen, setEditorOpen] = useState(false);
+  const router = useRouter();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-
-
   // Get custom icon or default model icon
   const IconComponent = getCustomIcon(model.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], DASHBOARD_SECTIONS.models.icon);
 
-  const actions: BaseCardAction[] = [];
-
-  if (onUpdate) {
-    actions.push({
+  const actions: BaseCardAction[] = [
+    {
       icon: Pencil,
       label: "Edit model",
-      onClick: () => setEditorOpen(true),
+      onClick: () => {
+        router.push(`/models/${model.id}/update`)
+      },
       disabled: false
-    });
-  }
+    }
+  ];
 
   if (onDelete) {
     actions.push({
@@ -78,13 +66,6 @@ export function ModelCard({
             />
           </div>
         }
-      />
-      <ModelEditor
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        model={model}
-        onSave={onUpdate || (() => {})}
-        namespace={namespace}
       />
       {onDelete && (
         <ConfirmationDialog

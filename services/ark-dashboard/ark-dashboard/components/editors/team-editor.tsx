@@ -25,14 +25,16 @@ import type {
   TeamCreateRequest,
   TeamUpdateRequest,
   TeamMember,
-  Agent,
-  Model
+  Agent
 } from "@/lib/services";
 import type { components } from "@/lib/api/generated/types";
 import { getKubernetesNameError } from "@/lib/utils/kubernetes-validation";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
+import { cn } from "@/lib/utils";
+import { AlertCircle } from "lucide-react";
 
 type GraphEdge = components["schemas"]["GraphEdge"];
 
@@ -41,7 +43,6 @@ interface TeamEditorProps {
   onOpenChange: (open: boolean) => void;
   team?: Team | null;
   agents: Agent[];
-  models: Model[];
   onSave: (
     team: (TeamCreateRequest | TeamUpdateRequest) & { id?: string }
   ) => void;
@@ -97,10 +98,10 @@ function DraggableCard({
       style={{ opacity: isDragging ? 0.4 : 1 }}
     >
       <label
-        className={`flex items-center space-x-2 p-1 rounded ${isSelected
-          ? "cursor-pointer hover:bg-accent"
-          : "cursor-not-allowed opacity-50"
-          }`}
+        className={cn(
+          "flex items-center space-x-2 p-1 rounded cursor-pointer",
+          isSelected ? "hover:bg-accent" : "opacity-50"
+        )}
       >
         <input
           type="checkbox"
@@ -131,7 +132,6 @@ export function TeamEditor({
   onOpenChange,
   team,
   agents,
-  models,
   onSave
 }: Readonly<TeamEditorProps>) {
   const [name, setName] = useState("");
@@ -139,7 +139,7 @@ export function TeamEditor({
   const [selectedMembers, setSelectedMembers] = useState<TeamMember[]>([]);
   const [strategy, setStrategy] = useState<string>("round-robin");
   const [maxTurns, setMaxTurns] = useState<string>("");
-  const [selectorModel, setSelectorModel] = useState<string>("");
+  const [selectorAgent, setSelectorAgent] = useState<string>("");
   const [selectorPrompt, setSelectorPrompt] = useState<string>("");
   const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -152,7 +152,7 @@ export function TeamEditor({
       setSelectedMembers(team.members || []);
       setStrategy(team.strategy || "round-robin");
       setMaxTurns(team.maxTurns ? String(team.maxTurns) : "");
-      setSelectorModel(team.selector?.model ?? "");
+      setSelectorAgent(team.selector?.agent ?? "");
       setSelectorPrompt(team.selector?.selectorPrompt ?? "");
       setGraphEdges(team.graph?.edges || []);
     } else {
@@ -161,7 +161,7 @@ export function TeamEditor({
       setSelectedMembers([]);
       setStrategy("round-robin");
       setMaxTurns("");
-      setSelectorModel("");
+      setSelectorAgent("");
       setSelectorPrompt("");
       setGraphEdges([]);
       setOrderedAgents(agents);
@@ -188,11 +188,11 @@ export function TeamEditor({
       strategy: strategy || undefined,
       maxTurns: maxTurns ? parseInt(maxTurns) : undefined,
       selector:
-        selectorModel || selectorPrompt
+        selectorAgent || selectorPrompt
           ? {
-            model: selectorModel || undefined,
-            selectorPrompt: selectorPrompt || undefined
-          }
+              agent: selectorAgent || undefined,
+              selectorPrompt: selectorPrompt || undefined
+            }
           : undefined,
       graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined
     };
@@ -274,9 +274,15 @@ export function TeamEditor({
 
   const isGraphValid =
     strategy !== "graph" ||
-    (graphEdges.length > 0 && graphEdges.every((edge) => edge.to));
+    (graphEdges.length > 0 && graphEdges.every((edge) => edge.to) && maxTurns.trim() !== "");
+  const isSelectorValid =
+    strategy !== "selector" || (selectorAgent && selectorAgent !== "__none__");
   const isValid =
-    name.trim() && selectedMembers.length > 0 && isGraphValid && !nameError;
+    name.trim() &&
+    selectedMembers.length > 0 &&
+    isGraphValid &&
+    isSelectorValid &&
+    !nameError;
 
   const moveCard = (dragIndex: number, hoverIndex: number) => {
     const updated = [...orderedAgents];
@@ -353,13 +359,17 @@ export function TeamEditor({
               onChange={(e) => setMaxTurns(e.target.value)}
               placeholder="e.g., 10"
             />
+            {strategy === "graph" && !maxTurns && (
+              <Alert variant="destructive" className="py-2">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-sm">
+                  Graph strategy requires Max Turns to be set
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
           <div className="grid gap-2">
             <Label>Members</Label>
-            <p className="text-xs text-muted-foreground">
-              Note: Teams cannot mix internal and external agents. External
-              agents are marked with an &quot;External&quot; badge.
-            </p>
             <div className="border rounded-md p-2 space-y-2 max-h-40 overflow-y-auto">
               {agents.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-2">
@@ -396,10 +406,10 @@ export function TeamEditor({
           {strategy === "selector" && (
             <>
               <div className="grid gap-2">
-                <Label htmlFor="selector-model">Selector Model</Label>
-                <Select value={selectorModel} onValueChange={setSelectorModel}>
-                  <SelectTrigger id="selector-model">
-                    <SelectValue placeholder="Select a model" />
+                <Label htmlFor="selector-agent">Selector Agent</Label>
+                <Select value={selectorAgent} onValueChange={setSelectorAgent}>
+                  <SelectTrigger id="selector-agent">
+                    <SelectValue placeholder="Select an agent" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">
@@ -407,9 +417,9 @@ export function TeamEditor({
                         None (Unset)
                       </span>
                     </SelectItem>
-                    {models.map((model) => (
-                      <SelectItem key={model.name} value={model.name}>
-                        {model.name}
+                    {agents.map((agent) => (
+                      <SelectItem key={agent.name} value={agent.name}>
+                        {agent.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

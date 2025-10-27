@@ -4,7 +4,7 @@ import { EvaluationStatusIndicator } from "@/components/evaluation";
 import { useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import { toast } from "sonner";
 import type { components } from "@/lib/api/generated/types";
-import { Trash2, ChevronUp, ChevronDown, RefreshCw, FileText } from "lucide-react";
+import { Trash2, ChevronUp, ChevronDown, RefreshCw, FileText, ArrowUpRightIcon, Plus } from "lucide-react";
 import { formatAge } from "@/lib/utils/time";
 import {
   Tooltip,
@@ -16,7 +16,10 @@ import { queriesService } from "@/lib/services/queries";
 import { getResourceEventsUrl } from "@/lib/utils/events";
 import { useRouter } from "next/navigation";
 import { useListQueries } from "@/lib/services/queries-hooks";
-import { Button } from "../ui/button";
+import { Button } from "@/components/ui/button";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { DASHBOARD_SECTIONS } from "@/lib/constants";
+import Link from "next/link";
 
 type QueryResponse = components["schemas"]["QueryResponse-Output"];
 
@@ -273,6 +276,8 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function
     );
   }
 
+
+
   return (
     <div className="flex h-full flex-col">
       {listQueriesFetching ? (
@@ -363,120 +368,153 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(function
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedQueries.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={8}
-                          className="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
-                        >
-                          No queries found
-                        </td>
-                      </tr>
-                    ) : (
-                      sortedQueries.map((query) => {
-                        const target = getTargetDisplay(query);
-                        const output = getOutput(query);
-                        const inputDisplayText = getInputDisplayText(query.input);
-                        return (
-                          <tr
-                            key={query.name}
-                            className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/30 cursor-pointer"
-                            onClick={() =>
-                              router.push(
-                                `/query/${query.name}`
-                              )
-                            }
+                    {
+                      sortedQueries.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={11}
+                            className="px-3 py-8 text-center text-xs text-gray-500 dark:text-gray-400"
                           >
-                            <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100 font-mono">
-                              {query.name}
-                            </td>
-                            <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                              {formatAge(query.creationTimestamp)}
-                            </td>
-                            <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                              {target}
-                            </td>
-                            <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger className="text-left">
-                                    {truncateText(inputDisplayText)}
-                                  </TooltipTrigger>
-                                  {inputDisplayText && inputDisplayText.length > 50 && (
-                                    <TooltipContent className="max-w-md">
-                                      <p className="whitespace-pre-wrap">
-                                        {inputDisplayText}
-                                      </p>
-                                    </TooltipContent>
-                                  )}
-                                </Tooltip>
-                              </TooltipProvider>
-                            </td>
-                            <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger className="text-left">
-                                    {truncateText(output)}
-                                  </TooltipTrigger>
-                                  {output && output.length > 50 && (
-                                    <TooltipContent className="max-w-md">
-                                      <p className="whitespace-pre-wrap">
-                                        {output}
-                                      </p>
-                                    </TooltipContent>
-                                  )}
-                                </Tooltip>
-                              </TooltipProvider>
-                            </td>
-                            <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                              {renderOutputCell(query)}
-                            </td>
-                            <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                              {formatTokenUsage(query)}
-                            </td>
-                            <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100 align-middle">
-                              <div className="flex items-center justify-center">
-                                <EvaluationStatusIndicator
-                                  queryName={query.name}
-                                  compact={true}
-                                />
-                              </div>
-                            </td>
-                            <td className="px-3 py-3 text-center">
-                              {getStatusBadge(getStatus(query), query.name)}
-                            </td>
-                            <td className="px-3 py-3">
-                              <div className="flex items-center justify-start gap-1">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const eventsUrl = getResourceEventsUrl(
-                                      "Query",
-                                      query.name
-                                    );
-                                    window.open(eventsUrl, "_blank");
-                                  }}
-                                  className="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-                                  title="View query events"
-                                >
-                                  <FileText className="h-4 w-4" />
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDelete(query.name);
-                                  }}
-                                  className="p-1 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-                                  title="Delete query"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
+                            <Empty>
+                              <EmptyHeader>
+                                <EmptyMedia variant="icon">
+                                  <DASHBOARD_SECTIONS.queries.icon />
+                                </EmptyMedia>
+                                <EmptyTitle>No Queries Yet</EmptyTitle>
+                                <EmptyDescription>
+                                  You haven&apos;t created any queries yet. Get started by creating
+                                  your first query.
+                                </EmptyDescription>
+                              </EmptyHeader>
+                              <EmptyContent>
+                                <Link href="/query/new">
+                                  <Button asChild>
+                                    <div>
+                                      <Plus className="h-4 w-4" />
+                                      Create Query
+                                    </div>
+                                  </Button>
+                                </Link>
+                              </EmptyContent>
+                              <Button
+                                variant="link"
+                                asChild
+                                className="text-muted-foreground"
+                                size="sm"
+                              >
+                                <a href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/queries/" target="_blank">
+                                  Learn More <ArrowUpRightIcon />
+                                </a>
+                              </Button>
+                            </Empty>
+                          </td>
+                        </tr>
+                      ) : (
+                        sortedQueries.map((query) => {
+                          const target = getTargetDisplay(query);
+                          const output = getOutput(query);
+                          const inputDisplayText = getInputDisplayText(query.input);
+                          return (
+                            <tr
+                              key={query.name}
+                              className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/30 cursor-pointer"
+                              onClick={() =>
+                                router.push(
+                                  `/query/${query.name}`
+                                )
+                              }
+                            >
+                              <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100 font-mono">
+                                {query.name}
+                              </td>
+                              <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                                {formatAge(query.creationTimestamp)}
+                              </td>
+                              <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                                {target}
+                              </td>
+                              <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger className="text-left">
+                                      {truncateText(inputDisplayText)}
+                                    </TooltipTrigger>
+                                    {inputDisplayText && inputDisplayText.length > 50 && (
+                                      <TooltipContent className="max-w-md">
+                                        <p className="whitespace-pre-wrap">
+                                          {inputDisplayText}
+                                        </p>
+                                      </TooltipContent>
+                                    )}
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </td>
+                              <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger className="text-left">
+                                      {truncateText(output)}
+                                    </TooltipTrigger>
+                                    {output && output.length > 50 && (
+                                      <TooltipContent className="max-w-md">
+                                        <p className="whitespace-pre-wrap">
+                                          {output}
+                                        </p>
+                                      </TooltipContent>
+                                    )}
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </td>
+                              <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                                {renderOutputCell(query)}
+                              </td>
+                              <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                                {formatTokenUsage(query)}
+                              </td>
+                              <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100 align-middle">
+                                <div className="flex items-center justify-center">
+                                  <EvaluationStatusIndicator
+                                    queryName={query.name}
+                                    compact={true}
+                                  />
+                                </div>
+                              </td>
+                              <td className="px-3 py-3 text-center">
+                                {getStatusBadge(getStatus(query), query.name)}
+                              </td>
+                              <td className="px-3 py-3">
+                                <div className="flex items-center justify-start gap-1">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const eventsUrl = getResourceEventsUrl(
+                                        "Query",
+                                        query.name
+                                      );
+                                      window.open(eventsUrl, "_blank");
+                                    }}
+                                    className="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+                                    title="View query events"
+                                  >
+                                    <FileText className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDelete(query.name);
+                                    }}
+                                    className="p-1 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+                                    title="Delete query"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })
+                      )
+                    }
                   </tbody>
                 </table>
               </div>

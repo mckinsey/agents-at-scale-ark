@@ -4,6 +4,7 @@ metadata:
   name: graph-team
 spec:
   strategy: graph
+  maxTurns: 10
   members:
     - type: agent
       name: researcher

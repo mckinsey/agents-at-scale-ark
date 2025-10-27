@@ -77,11 +77,11 @@ function HeaderTooltip() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Link href="https://mckinsey.github.io/agents-at-scale-ark/">
-          <Button variant="ghost">
+        <Button variant="ghost" asChild>
+          <a href="https://mckinsey.github.io/agents-at-scale-ark/" target="_blank">
             <Info className="h-4 w-4" />
-          </Button>
-        </Link>
+          </a>
+        </Button>
       </TooltipTrigger>
       <TooltipContent>
         <span>Help</span>

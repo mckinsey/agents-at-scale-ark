@@ -40,7 +40,7 @@ spec:
     - name: reviewer
       type: agent
   selector:
-    model: default
+    agent: coordinator
 ```
 
 Query the team and let AI choose the best participant for each step:
@@ -49,13 +49,13 @@ Query the team and let AI choose the best participant for each step:
 fark team research-team 'analyze market trends for electric vehicles'
 ```
 
-The selector model will automatically choose which team member should respond based on the conversation context and member descriptions.
+The selector agent will automatically choose which team member should respond based on the conversation context and member descriptions.
 
 ## How It Works
 
-1. **Model Selection**: LLM analyzes conversation history and selects next participant
+1. **Agent Selection**: LLM analyzes conversation history and selects next participant
 2. **Template Processing**: Fills selector prompt with team roles, participants, and history
-3. **Participant Selection**: Model returns name of selected team member
+3. **Participant Selection**: Agent returns name of selected team member
 4. **Execution**: Selected member processes messages and adds response
 5. **Loop**: Process repeats until max turns reached or team terminates
 
@@ -74,14 +74,14 @@ You can customize the selection logic by providing your own selector prompt:
 ```yaml
 spec:
   selector:
-    model: default
+    agent: coordinator
     selectorPrompt: |
       Select the best team member to respond next.
-      
+
       Available roles: {{.Roles}}
       Conversation: {{.History}}
       Choose from: {{.Participants}}
-      
+
       Return only the participant name.
 ```
 
@@ -94,19 +94,19 @@ spec:
   members:
     - name: researcher
       type: agent
-    - name: analyst  
+    - name: analyst
       type: agent
     - name: reviewer
       type: agent
   selector:
-    model: default
+    agent: coordinator
     selectorPrompt: |
       Research workflow coordinator. Select next participant:
-      
+
       Roles: {{.Roles}}
       History: {{.History}}
       Options: {{.Participants}}
-      
+
       Start with researcher, follow with analyst, end with reviewer.
 ```
 
@@ -120,10 +120,10 @@ spec:
     - name: consultant
       type: agent
   selector:
-    model: gpt-4
+    agent: coordinator
     selectorPrompt: |
       Choose the most appropriate consultant based on expertise needed.
-      
+
       Available: {{.Roles}}
       Context: {{.History}}
       Select from: {{.Participants}}
@@ -131,7 +131,7 @@ spec:
 
 ## Agent Descriptions
 
-Team member descriptions guide the selector model's decision-making:
+Team member descriptions guide the selector agent's decision-making:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1

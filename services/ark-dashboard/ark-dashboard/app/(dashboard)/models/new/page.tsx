@@ -1,5 +1,5 @@
 import { BreadcrumbElement, PageHeader } from "@/components/common/page-header";
-import { ModelConfiguratorForm } from "@/components/forms/model-configuration-form";
+import { CreateModelForm } from "@/components/forms";
 
 type SearchParams = {
   name?: string
@@ -21,7 +21,7 @@ export default async function CreateModelPage({ searchParams }: Props) {
     <div className="min-h-screen">
       <PageHeader breadcrumbs={breadcrumbs} currentPage="Add New Model" />
       <main className="container px-6 py-8">
-        <ModelConfiguratorForm defaultName={params.name} />
+        <CreateModelForm defaultName={params.name} />
       </main>
     </div>
   )

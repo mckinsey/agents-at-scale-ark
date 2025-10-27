@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useRef } from "react"
+import { useRef } from "react"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { EvaluatorsSection } from "@/components/sections"
@@ -10,7 +10,7 @@ const breadcrumbs: BreadcrumbElement[] = [
   { href: '/', label: "ARK Dashboard" }
 ]
 
-function EvaluatorsContent() {
+export default function EvaluatorsPage() {
   const evaluatorsSectionRef = useRef<{ openAddEditor: () => void }>(null)
 
   return (
@@ -25,13 +25,5 @@ function EvaluatorsContent() {
         <EvaluatorsSection ref={evaluatorsSectionRef} />
       </div>
     </>
-  )
-}
-
-export default function EvaluatorsPage() {
-  return (
-    <Suspense>
-      <EvaluatorsContent />
-    </Suspense>
   )
 }

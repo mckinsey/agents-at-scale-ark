@@ -140,7 +140,7 @@ export function SecretEditor({ open, onOpenChange, secret, onSave, existingSecre
               Cancel
             </Button>
             <Button type="submit" disabled={!isValid}>
-              {secret ? "Update Secret" : "Create Secret"}
+              {secret ? "Update Secret" : "Add Secret"}
             </Button>
           </DialogFooter>
         </form>

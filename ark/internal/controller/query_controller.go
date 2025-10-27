@@ -120,7 +120,7 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 	}
 
 	switch obj.Status.Phase {
-	case statusDone, statusError:
+	case statusDone, statusError, statusCanceled:
 		return ctrl.Result{
 			RequeueAfter: time.Until(expiry),
 		}, nil
@@ -506,7 +506,14 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	case statusDone:
 		r.setConditionCompleted(query, metav1.ConditionTrue, "QuerySucceeded", "Query completed successfully")
 	case statusError:
-		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryErrored", "Query completed with error")
+		errorMsg := "Query completed with error"
+		for _, response := range query.Status.Responses {
+			if response.Phase == statusError && response.Content != "" {
+				errorMsg = response.Content
+				break
+			}
+		}
+		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryErrored", errorMsg)
 	case statusCanceled:
 		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryCanceled", "Query canceled")
 	}
@@ -567,9 +574,8 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 	// Create trace based on target type with input/output at trace level
 	tracer := telemetry.NewTraceContext()
 
-	ctx, span := tracer.StartSpan(ctx, fmt.Sprintf("query.%s", target.Type),
-		attribute.String("target.type", target.Type),
-		attribute.String("target.name", target.Name),
+	ctx, span := tracer.StartTargetSpan(ctx, target.Type, target.Name)
+	span.SetAttributes(
 		attribute.String("query.name", query.Name),
 		attribute.String("query.namespace", query.Namespace),
 	)
@@ -586,9 +592,6 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 		"target": targetString,
 	})
 
-	// Get input messages and marshal to JSON for comprehensive telemetry
-	var inputValue string
-
 	var err error
 	metadata := map[string]string{"targetType": target.Type, "targetName": target.Name}
 
@@ -604,19 +607,9 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 		return nil, err
 	}
 
-	// Convert messages to JSON for telemetry
-	if jsonBytes, err := json.Marshal(inputMessages); err != nil {
-		telemetry.RecordError(span, err)
-		event := genai.ExecutionEvent{
-			BaseEvent: genai.BaseEvent{Name: target.Name, Metadata: metadata},
-			Type:      target.Type,
-		}
-		tokenCollector.EmitEvent(ctx, corev1.EventTypeWarning, "QueryResolveError", event)
-		return nil, err
-	} else {
-		inputValue = string(jsonBytes)
-		span.SetAttributes(attribute.String("input.value", inputValue))
-	}
+	// Set query input for telemetry
+	userContent := genai.ExtractUserMessageContent(inputMessages)
+	telemetry.SetQueryInput(span, userContent)
 
 	timeout := 5 * time.Minute
 	if query.Spec.Timeout != nil {

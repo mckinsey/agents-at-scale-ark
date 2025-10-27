@@ -4,14 +4,17 @@ import type React from "react"
 import { useState, useEffect, forwardRef, useImperativeHandle } from "react"
 import { toast } from "sonner"
 import { TeamEditor } from "@/components/editors"
-import { teamsService, agentsService, modelsService, type Team, type TeamCreateRequest, type TeamUpdateRequest, type Agent, type Model } from "@/lib/services"
+import { teamsService, agentsService, type Team, type TeamCreateRequest, type TeamUpdateRequest, type Agent } from "@/lib/services"
 import { TeamCard } from "@/components/cards"
 import { useDelayedLoading } from "@/lib/hooks"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { DASHBOARD_SECTIONS } from "@/lib/constants"
+import { Button } from "@/components/ui/button"
+import { ArrowUpRightIcon, Plus } from "lucide-react"
 
 export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function TeamsSection(_, ref) {
   const [teams, setTeams] = useState<Team[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
-  const [models, setModels] = useState<Model[]>([])
   const [teamEditorOpen, setTeamEditorOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const showLoading = useDelayedLoading(loading)
@@ -24,14 +27,12 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function T
     const loadData = async () => {
       setLoading(true)
       try {
-        const [teamsData, agentsData, modelsData] = await Promise.all([
+        const [teamsData, agentsData] = await Promise.all([
           teamsService.getAll(),
-          agentsService.getAll(),
-          modelsService.getAll()
+          agentsService.getAll()
         ])
         setTeams(teamsData)
         setAgents(agentsData)
-        setModels(modelsData)
       } catch (error) {
         console.error("Failed to load data:", error)
         toast.error("Failed to Load Data", {
@@ -100,6 +101,48 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function T
     )
   }
 
+  if (teams.length === 0 && !loading) {
+    return (
+      <>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.teams.icon />
+            </EmptyMedia>
+            <EmptyTitle>No Teams Yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t created any teams yet. Get started by creating
+              your first team.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={() => setTeamEditorOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Create Team
+            </Button>
+          </EmptyContent>
+          <Button
+            variant="link"
+            asChild
+            className="text-muted-foreground"
+            size="sm"
+          >
+            <a href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/teams/" target="_blank">
+              Learn More <ArrowUpRightIcon />
+            </a>
+          </Button>
+        </Empty>
+        <TeamEditor
+          open={teamEditorOpen}
+          onOpenChange={setTeamEditorOpen}
+          team={null}
+          agents={agents}
+          onSave={handleSaveTeam}
+        />
+      </>
+    )
+  }
+
   return (
     <>
       <div className="flex h-full flex-col">
@@ -110,7 +153,6 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function T
                 key={team.id}
                 team={team}
                 agents={agents}
-                models={models}
                 onUpdate={handleSaveTeam}
                 onDelete={handleDeleteTeam}
               />
@@ -124,7 +166,6 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(function T
         onOpenChange={setTeamEditorOpen}
         team={null}
         agents={agents}
-        models={models}
         onSave={handleSaveTeam}
       />
     </>

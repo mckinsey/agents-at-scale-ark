@@ -20,7 +20,7 @@ import {
   CollapsibleTrigger
 } from "@radix-ui/react-collapsible";
 import { Label } from "@radix-ui/react-label";
-import { ChevronRight } from "lucide-react";
+import { ArrowUpRightIcon, ChevronRight, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   forwardRef,
@@ -29,7 +29,10 @@ import {
   useMemo,
   useState
 } from "react";
-import { ToolEditor } from "../editors/tool-editor";
+import { ToolEditor } from "@/components/editors/tool-editor";
+import { Button } from "@/components/ui/button";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { DASHBOARD_SECTIONS } from "@/lib/constants";
 interface ToolsSectionProps {
   namespace: string;
 }
@@ -202,6 +205,7 @@ export const ToolsSection = forwardRef<
     }
     return fields;
   };
+
   if (showLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -209,6 +213,48 @@ export const ToolsSection = forwardRef<
       </div>
     );
   }
+
+  if (groupedTools.length === 0 && !loading) {
+    return (
+      <>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.tools.icon />
+            </EmptyMedia>
+            <EmptyTitle>No Tools Yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t added any tools yet. Get started by adding
+              your first tool.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={() => setToolEditorOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add Tool
+            </Button>
+          </EmptyContent>
+          <Button
+            variant="link"
+            asChild
+            className="text-muted-foreground"
+            size="sm"
+          >
+            <a href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/tools/" target="_blank">
+              Learn More <ArrowUpRightIcon />
+            </a>
+          </Button>
+        </Empty>
+        <ToolEditor
+          open={toolEditorOpen}
+          onOpenChange={setToolEditorOpen}
+          onSave={handleSaveTool}
+          namespace={namespace}
+        />
+      </>
+    )
+  }
+
   return (
     <>
       <div className="flex h-full flex-col">

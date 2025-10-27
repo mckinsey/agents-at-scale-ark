@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: query-partial-tool-calling
+spec:
+  input: 'What are my coordinates?'
+  parameters:
+    # Direct values for simple parameters
+    - name: city
+      value: "Los Angeles"
+  targets:
+    - type: agent
+      name: partial-tool-calling

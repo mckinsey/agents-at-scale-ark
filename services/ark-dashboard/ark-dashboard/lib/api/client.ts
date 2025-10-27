@@ -34,7 +34,7 @@ class APIClient {
     const { params, headers, ...requestOptions } = options;
 
     let url = `${this.baseURL}${endpoint}`;
-    
+
     // Add query parameters if provided
     if (params) {
       const searchParams = new URLSearchParams();
@@ -81,7 +81,7 @@ class APIClient {
       if (error instanceof APIError) {
         throw error;
       }
-      
+
       // Network errors or other fetch errors
       throw new APIError(
         error instanceof Error ? error.message : 'An unknown error occurred'

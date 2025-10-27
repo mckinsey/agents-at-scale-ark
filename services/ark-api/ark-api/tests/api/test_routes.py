@@ -1370,15 +1370,15 @@ class TestTeamsEndpoint(unittest.TestCase):
                 "strategy": "selector",
                 "maxTurns": 10,
                 "selector": {
-                    "model": "gpt-4",
+                    "agent": "selector-agent",
                     "selectorPrompt": "Choose the best agent for the task"
                 }
             },
             "status": {"phase": "pending"}
         }
-        
+
         mock_client.teams.a_create = AsyncMock(return_value=mock_team)
-        
+
         # Make the request
         request_data = {
             "name": "full-team",
@@ -1387,18 +1387,18 @@ class TestTeamsEndpoint(unittest.TestCase):
             "strategy": "selector",
             "maxTurns": 10,
             "selector": {
-                "model": "gpt-4",
+                "agent": "selector-agent",
                 "selectorPrompt": "Choose the best agent for the task"
             }
         }
         response = self.client.post("/v1/teams?namespace=default", json=request_data)
-        
+
         # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["name"], "full-team")
         self.assertEqual(data["maxTurns"], 10)
-        self.assertEqual(data["selector"]["model"], "gpt-4")
+        self.assertEqual(data["selector"]["agent"], "selector-agent")
         self.assertEqual(data["selector"]["selectorPrompt"], "Choose the best agent for the task")
     
     @patch('ark_api.api.v1.teams.with_ark_client')
@@ -1561,3 +1561,44 @@ class TestTeamsEndpoint(unittest.TestCase):
         
         # Verify the delete was called correctly
         mock_client.teams.a_delete.assert_called_once_with("test-team")
+    
+    @patch('ark_api.api.v1.teams.with_ark_client')
+    def test_create_team_validation_error_from_webhook(self, mock_ark_client):
+        """Test that admission webhook validation errors return 403 with proper error message."""
+        from kubernetes.client.exceptions import ApiException as SyncApiException
+        
+        # Setup async context manager mock
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        # Create a realistic admission webhook error (403 from Kubernetes)
+        webhook_error_body = '{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"admission webhook \\"vteam-v1.kb.io\\" denied the request: graph strategy requires maxTurns to prevent infinite execution","reason":"Forbidden","code":403}'
+        
+        api_exception = SyncApiException(status=403, reason="Forbidden")
+        api_exception.body = webhook_error_body
+        
+        # Wrap it like ark-sdk does
+        wrapped_exception = Exception(f"Failed to create Team: {api_exception}")
+        wrapped_exception.__cause__ = api_exception
+        
+        mock_client.teams.a_create = AsyncMock(side_effect=wrapped_exception)
+        
+        # Make the request (graph team without maxTurns)
+        request_data = {
+            "name": "invalid-graph-team",
+            "members": [
+                {"name": "agent1", "type": "agent"},
+                {"name": "agent2", "type": "agent"}
+            ],
+            "strategy": "graph",
+            "graph": {
+                "edges": [{"from": "agent1", "to": "agent2"}]
+            }
+        }
+        response = self.client.post("/v1/teams?namespace=default", json=request_data)
+        
+        # Assert that we get 403 (not 500) with the proper validation message
+        self.assertEqual(response.status_code, 403)
+        data = response.json()
+        self.assertIn("graph strategy requires maxTurns", data["detail"])
+        self.assertIn("admission webhook", data["detail"])

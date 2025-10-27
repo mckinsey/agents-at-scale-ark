@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -24,7 +25,7 @@ func NewMCPClientPool() *MCPClientPool {
 }
 
 // GetOrCreateClient returns an existing MCP client or creates a new one for the given server
-func (p *MCPClientPool) GetOrCreateClient(ctx context.Context, serverName, serverNamespace, serverURL string, headers map[string]string, transport string, mcpSettings map[string]MCPSettings) (*MCPClient, error) {
+func (p *MCPClientPool) GetOrCreateClient(ctx context.Context, serverName, serverNamespace, serverURL string, headers map[string]string, transport string, timeout time.Duration, mcpSettings map[string]MCPSettings) (*MCPClient, error) {
 	key := fmt.Sprintf("%s/%s", serverNamespace, serverName)
 	if mcpClient, exists := p.clients[key]; exists {
 		return mcpClient, nil
@@ -34,7 +35,7 @@ func (p *MCPClientPool) GetOrCreateClient(ctx context.Context, serverName, serve
 	mcpSetting := mcpSettings[key]
 
 	// Create new client for this MCP server
-	mcpClient, err := NewMCPClient(ctx, serverURL, headers, transport, mcpSetting)
+	mcpClient, err := NewMCPClient(ctx, serverURL, headers, transport, timeout, mcpSetting)
 	if err != nil {
 		return nil, err
 	}
@@ -155,6 +156,16 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 		headers[header.Name] = value
 	}
 
+	// Parse timeout from MCPServer spec (default to 30s if not specified)
+	timeout := 30 * time.Second
+	if mcpServerCRD.Spec.Timeout != "" {
+		parsedTimeout, err := time.ParseDuration(mcpServerCRD.Spec.Timeout)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse timeout %s: %w", mcpServerCRD.Spec.Timeout, err)
+		}
+		timeout = parsedTimeout
+	}
+
 	// Use the MCP client pool to get or create the client
 	mcpClient, err := mcpPool.GetOrCreateClient(
 		ctx,
@@ -163,6 +174,7 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 		mcpURL,
 		headers,
 		mcpServerCRD.Spec.Transport,
+		timeout,
 		mcpSettings,
 	)
 	if err != nil {
@@ -187,6 +199,19 @@ func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client
 	executor, err := CreateToolExecutor(ctx, k8sClient, tool, namespace, r.mcpPool, r.mcpSettings)
 	if err != nil {
 		return fmt.Errorf("failed to create executor for tool %s: %w", agentTool.Name, err)
+	}
+
+	if agentTool.Partial != nil {
+		var err error
+		toolDef, err = CreatePartialToolDefinition(toolDef, agentTool.Partial)
+		if err != nil {
+			return fmt.Errorf("failed to create partial tool definition for tool %s: %w", agentTool.Name, err)
+		}
+		// Wrap with PartialToolExecutor if partial is specified
+		executor = &PartialToolExecutor{
+			BaseExecutor: executor,
+			Partial:      agentTool.Partial,
+		}
 	}
 
 	// Apply function filtering if specified

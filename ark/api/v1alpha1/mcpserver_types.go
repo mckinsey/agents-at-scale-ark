@@ -11,6 +11,9 @@ type MCPServerSpec struct {
 	Address ValueSource `json:"address"`
 	// +kubebuilder:validation:Optional
 	Headers []Header `json:"headers,omitempty"`
+	// Timeout specifies the maximum duration for MCP tool calls to this server.
+	// Use this to support long-running operations (e.g., "5m", "10m", "30m").
+	// Defaults to "30s" if not specified.
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default="30s"
 	Timeout string `json:"timeout,omitempty"`

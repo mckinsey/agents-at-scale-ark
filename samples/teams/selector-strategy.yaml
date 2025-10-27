@@ -40,8 +40,6 @@ spec:
   strategy: selector
   description: AI consulting team with intelligent participant selection
   members:
-    - name: project-manager
-      type: agent
     - name: research-analyst
       type: agent
     - name: strategy-consultant
@@ -49,6 +47,7 @@ spec:
     - name: technical-expert
       type: agent
   selector:
+    agent: project-manager
     selectorPrompt: |
       You are coordinating a consulting team. Select the most appropriate team member
       to respond next based on the conversation flow and expertise needed.

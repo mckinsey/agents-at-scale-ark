@@ -1,0 +1,5 @@
+# Mock LLM configuration for A2A agent discovery test
+ark:
+  a2a:
+    enabled: true
+    pollInterval: "3s"

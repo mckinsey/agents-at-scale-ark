@@ -1,12 +1,31 @@
 """Common exception handlers for Kubernetes API operations."""
+import json
 import logging
 from functools import wraps
 from typing import Callable, Any
 
 from fastapi import HTTPException
 from kubernetes_asyncio.client.rest import ApiException
+from kubernetes.client.exceptions import ApiException as SyncApiException
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_error_detail(exception: ApiException | SyncApiException) -> str:
+    """
+    Extract detailed error message from Kubernetes ApiException.
+    
+    Tries to parse the JSON body to get a detailed message, falls back to reason.
+    """
+    error_detail = exception.reason
+    if exception.body:
+        try:
+            body_json = json.loads(exception.body)
+            if body_json.get("message"):
+                error_detail = body_json["message"]
+        except (json.JSONDecodeError, AttributeError):
+            pass
+    return error_detail
 
 
 def handle_k8s_errors(
@@ -28,7 +47,7 @@ def handle_k8s_errors(
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
                 return await func(*args, **kwargs)
-            except ApiException as e:
+            except (ApiException, SyncApiException) as e:
                 # Build context for error messages
                 namespace = kwargs.get("namespace", "")
                 resource_name = kwargs.get(f"{resource_type}_name", "")
@@ -72,10 +91,15 @@ def handle_k8s_errors(
                         detail += f" in namespace {namespace}"
                     raise HTTPException(status_code=409, detail=detail)
                 
-                # Generic Kubernetes API error
+                elif e.status == 422:
+                    raise HTTPException(status_code=422, detail=_extract_error_detail(e))
+                
+                elif e.status == 403:
+                    raise HTTPException(status_code=403, detail=_extract_error_detail(e))
+                
                 raise HTTPException(
                     status_code=e.status,
-                    detail=f"Kubernetes API error: {e.reason}"
+                    detail=_extract_error_detail(e)
                 )
                 
             except HTTPException:
@@ -83,9 +107,18 @@ def handle_k8s_errors(
                 raise
                 
             except Exception as e:
-                # Log unexpected errors with full details
                 logger.error(f"Unexpected error during {operation} {resource_type}: {e}")
                 logger.exception("Full traceback:")
+                
+                error_message = str(e)
+                
+                original_exception = e.__cause__ or e.__context__
+                if isinstance(original_exception, (ApiException, SyncApiException)):
+                    if original_exception.status == 422:
+                        raise HTTPException(status_code=422, detail=_extract_error_detail(original_exception))
+                    elif original_exception.status == 403:
+                        raise HTTPException(status_code=403, detail=_extract_error_detail(original_exception))
+                
                 raise HTTPException(
                     status_code=500,
                     detail="Internal server error"

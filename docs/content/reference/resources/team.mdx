@@ -32,8 +32,8 @@ spec:
 
   # Selector configuration - for strategy: selector
   selector:
-    model: gpt-4  # Model to use for selection (optional)
-    selectorPrompt: "Choose the best agent for: {{.Input}}"
+    agent: planner  # Agent to use for selection (required)
+    selectorPrompt: "Choose the best agent for: {{.Input}}"  # Optional
 
   # # Round-robin configuration - for strategy: round-robin
   # strategy: round-robin

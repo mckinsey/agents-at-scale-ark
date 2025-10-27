@@ -1,6 +1,4 @@
 {{- if .Values.webhook.enable }}
-# Mutating webhook modifies resources during admission.
-# Currently used to set default model for agents without explicit modelRef.
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
