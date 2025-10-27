@@ -11,7 +11,7 @@ spec:
     - script:
         content: |
           helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.14 \
+            --version 0.1.16 \
             --namespace $NAMESPACE \
             --values mock-llm-values.yaml
         env:
