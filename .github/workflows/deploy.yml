@@ -96,8 +96,10 @@ jobs:
             prebuild: "make ark-evaluator-deps"
           - path: tools/ark-cli
             image: ark-cli
+            prebuild: "make ark-cli-build"
           - path: images/ark-tools
             image: ark-tools
+            prebuild: "make ark-cli-build && cp -r tools ark images/ark-tools/"
     steps:
       - name: Validate version tag exists
         run: |
