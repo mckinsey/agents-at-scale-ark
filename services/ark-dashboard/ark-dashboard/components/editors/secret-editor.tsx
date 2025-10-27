@@ -1,101 +1,112 @@
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
+import { useEffect, useState } from 'react';
+
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import type { Secret } from "@/lib/services/secrets"
-import { kubernetesNameSchema } from "@/lib/utils/kubernetes-validation"
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import type { Secret } from '@/lib/services/secrets';
+import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 
 interface SecretEditorProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  secret: Secret | null
-  onSave: (name: string, password: string) => void
-  existingSecrets?: Secret[]
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  secret: Secret | null;
+  onSave: (name: string, password: string) => void;
+  existingSecrets?: Secret[];
 }
 
-export function SecretEditor({ open, onOpenChange, secret, onSave, existingSecrets = [] }: SecretEditorProps) {
-  const [name, setName] = useState(secret?.name || "")
-  const [password, setPassword] = useState("")
-  const [nameError, setNameError] = useState("")
+export function SecretEditor({
+  open,
+  onOpenChange,
+  secret,
+  onSave,
+  existingSecrets = [],
+}: SecretEditorProps) {
+  const [name, setName] = useState(secret?.name || '');
+  const [password, setPassword] = useState('');
+  const [nameError, setNameError] = useState('');
 
   useEffect(() => {
     if (open) {
-      setName(secret?.name || "")
-      setPassword("")
-      setNameError("")
+      setName(secret?.name || '');
+      setPassword('');
+      setNameError('');
     }
-  }, [open, secret])
+  }, [open, secret]);
 
   const validateName = (value: string) => {
     // Check if name is empty
     if (!value.trim()) {
-      setNameError("Name is required")
-      return false
+      setNameError('Name is required');
+      return false;
     }
 
     // Check Kubernetes naming rules
     if (!kubernetesNameSchema.safeParse(value).success) {
-      setNameError("Name must consist of lowercase alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character (max 253 chars)")
-      return false
+      setNameError(
+        "Name must consist of lowercase alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character (max 253 chars)",
+      );
+      return false;
     }
 
     // Check uniqueness (only for new secrets)
     if (!secret && existingSecrets.some(s => s.name === value)) {
-      setNameError("A secret with this name already exists")
-      return false
+      setNameError('A secret with this name already exists');
+      return false;
     }
 
-    setNameError("")
-    return true
-  }
+    setNameError('');
+    return true;
+  };
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    setName(value)
+    const value = e.target.value;
+    setName(value);
     if (value) {
-      validateName(value)
+      validateName(value);
     } else {
-      setNameError("")
+      setNameError('');
     }
-  }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
 
     // Validate name before submitting
     if (!secret && !validateName(name)) {
-      return
+      return;
     }
 
     if (!password.trim()) {
-      return
+      return;
     }
 
-    onSave(name, password)
-    onOpenChange(false)
-    setName("")
-    setPassword("")
-    setNameError("")
-  }
+    onSave(name, password);
+    onOpenChange(false);
+    setName('');
+    setPassword('');
+    setNameError('');
+  };
 
-  const isValid = (secret || (name && !nameError)) && password.trim()
+  const isValid = (secret || (name && !nameError)) && password.trim();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>{secret ? "Edit Secret" : "Add Secret"}</DialogTitle>
+            <DialogTitle>{secret ? 'Edit Secret' : 'Add Secret'}</DialogTitle>
             <DialogDescription>
-              {secret ? "Update the password for this secret. The name cannot be changed." : "Enter the details for the new secret."}
+              {secret
+                ? 'Update the password for this secret. The name cannot be changed.'
+                : 'Enter the details for the new secret.'}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -112,7 +123,7 @@ export function SecretEditor({ open, onOpenChange, secret, onSave, existingSecre
                     placeholder="e.g. api-key-production"
                     required
                     disabled={!!secret}
-                    className={nameError ? "border-red-500" : ""}
+                    className={nameError ? 'border-red-500' : ''}
                   />
                   {nameError && (
                     <p className="text-xs text-red-500">{nameError}</p>
@@ -128,7 +139,7 @@ export function SecretEditor({ open, onOpenChange, secret, onSave, existingSecre
                 id="password"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={e => setPassword(e.target.value)}
                 className="col-span-3"
                 placeholder="Enter the secret password"
                 required
@@ -136,15 +147,18 @@ export function SecretEditor({ open, onOpenChange, secret, onSave, existingSecre
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={!isValid}>
-              {secret ? "Update Secret" : "Add Secret"}
+              {secret ? 'Update Secret' : 'Add Secret'}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

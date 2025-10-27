@@ -1,20 +1,20 @@
+import { NoDefaultModelAlert } from '@/components/alerts';
 import {
   HomepageAgentsCard,
+  HomepageMcpServersCard,
   HomepageMemoryCard,
   HomepageModelsCard,
-  HomepageMcpServersCard,
-  HomepageTeamsCard
-} from "@/components/cards";
-import { PageHeader } from "@/components/common/page-header";
-import { NoDefaultModelAlert } from "@/components/alerts";
+  HomepageTeamsCard,
+} from '@/components/cards';
+import { PageHeader } from '@/components/common/page-header';
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background min-h-screen">
       <PageHeader currentPage="ARK Dashboard" />
-      <main className="container p-6 py-8 space-y-8">
+      <main className="container space-y-8 p-6 py-8">
         <section>
-          <h2 className="text-3xl font-bold text-balance mb-2">
+          <h2 className="mb-2 text-3xl font-bold text-balance">
             Welcome to the ARK Dashboard
           </h2>
           <p className="text-muted-foreground text-pretty">
@@ -24,7 +24,7 @@ export default function HomePage() {
         <section>
           <NoDefaultModelAlert />
         </section>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <HomepageModelsCard />
           <HomepageAgentsCard />
           <HomepageTeamsCard />

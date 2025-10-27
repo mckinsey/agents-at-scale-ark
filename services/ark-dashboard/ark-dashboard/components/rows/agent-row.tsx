@@ -1,38 +1,39 @@
-"use client";
+'use client';
 
-import { Button } from "@/components/ui/button";
+import { Bot, MessageCircle, Pencil, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+
+import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
+import { AgentEditor } from '@/components/editors';
+import { AvailabilityStatusBadge } from '@/components/ui/availability-status-badge';
+import { Button } from '@/components/ui/button';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
-  TooltipTrigger
-} from "@/components/ui/tooltip";
-import { AvailabilityStatusBadge } from "@/components/ui/availability-status-badge";
-import { useChatState } from "@/lib/chat-context";
-import { toggleFloatingChat } from "@/lib/chat-events";
-import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
-import { AgentEditor } from "@/components/editors";
-import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog";
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { useChatState } from '@/lib/chat-context';
+import { toggleFloatingChat } from '@/lib/chat-events';
+import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import type {
   Agent,
   AgentCreateRequest,
   AgentUpdateRequest,
   Model,
-  Team
-} from "@/lib/services";
-import { cn } from "@/lib/utils";
-import { getCustomIcon } from "@/lib/utils/icon-resolver";
-import { Bot, MessageCircle, Pencil, Trash2 } from "lucide-react";
-import { useState } from "react";
+  Team,
+} from '@/lib/services';
+import { cn } from '@/lib/utils';
+import { getCustomIcon } from '@/lib/utils/icon-resolver';
 
 interface AgentRowProps {
-  readonly   agent: Agent;
-  readonly   teams: Team[];
-  readonly   models: Model[];
-  readonly   onUpdate?: (
-    agent: (AgentCreateRequest | AgentUpdateRequest) & { id?: string }
+  readonly agent: Agent;
+  readonly teams: Team[];
+  readonly models: Model[];
+  readonly onUpdate?: (
+    agent: (AgentCreateRequest | AgentUpdateRequest) & { id?: string },
   ) => void;
-  readonly   onDelete?: (id: string) => void;
+  readonly onDelete?: (id: string) => void;
 }
 
 export function AgentRow({
@@ -40,7 +41,7 @@ export function AgentRow({
   teams,
   models,
   onUpdate,
-  onDelete
+  onDelete,
 }: AgentRowProps) {
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(agent.name);
@@ -48,7 +49,7 @@ export function AgentRow({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Get the model name from the modelRef
-  const modelName = agent.modelRef?.name || "No model assigned";
+  const modelName = agent.modelRef?.name || 'No model assigned';
 
   // Check if this is an A2A agent
   const isA2A = agent.isA2A || false;
@@ -56,29 +57,28 @@ export function AgentRow({
   // Get custom icon or default Bot icon
   const IconComponent = getCustomIcon(
     agent.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
-    Bot
+    Bot,
   );
 
   return (
     <>
-      <div className="flex items-center py-3 px-4 bg-card border rounded-md hover:bg-accent/5 transition-colors w-full gap-4 flex-wrap">
-        <div className="flex items-center gap-3 flex-grow overflow-hidden">
-          <IconComponent className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+      <div className="bg-card hover:bg-accent/5 flex w-full flex-wrap items-center gap-4 rounded-md border px-4 py-3 transition-colors">
+        <div className="flex flex-grow items-center gap-3 overflow-hidden">
+          <IconComponent className="text-muted-foreground h-5 w-5 flex-shrink-0" />
 
-          <div className="flex flex-col gap-1 min-w-0 max-w-[400px]">
-            <p className="font-medium text-sm truncate" title={agent.name}>
+          <div className="flex max-w-[400px] min-w-0 flex-col gap-1">
+            <p className="truncate text-sm font-medium" title={agent.name}>
               {agent.name}
             </p>
             <p
-              className="text-xs text-muted-foreground truncate"
-              title={agent.description || ""}
-            >
-              {agent.description || "No description"}
+              className="text-muted-foreground truncate text-xs"
+              title={agent.description || ''}>
+              {agent.description || 'No description'}
             </p>
           </div>
         </div>
 
-        <div className="text-sm text-muted-foreground flex-shrink-0 mr-4">
+        <div className="text-muted-foreground mr-4 flex-shrink-0 text-sm">
           {!isA2A && <span>Model: {modelName}</span>}
           {isA2A && <span>A2A Agent</span>}
         </div>
@@ -88,7 +88,7 @@ export function AgentRow({
           eventsLink={`/events?kind=Agent&name=${agent.name}&page=1`}
         />
 
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex flex-shrink-0 items-center gap-1">
           {onUpdate && (
             <TooltipProvider>
               <Tooltip>
@@ -97,8 +97,7 @@ export function AgentRow({
                     variant="ghost"
                     size="sm"
                     className="h-8 w-8 p-0"
-                    onClick={() => setEditorOpen(true)}
-                  >
+                    onClick={() => setEditorOpen(true)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
@@ -115,17 +114,16 @@ export function AgentRow({
                     variant="ghost"
                     size="sm"
                     className={cn(
-                      "h-8 w-8 p-0",
-                      isChatOpen && "opacity-50 cursor-not-allowed"
+                      'h-8 w-8 p-0',
+                      isChatOpen && 'cursor-not-allowed opacity-50',
                     )}
                     onClick={() => !isChatOpen && setDeleteConfirmOpen(true)}
-                    disabled={isChatOpen}
-                  >
+                    disabled={isChatOpen}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {isChatOpen ? "Cannot delete agent in use" : "Delete agent"}
+                  {isChatOpen ? 'Cannot delete agent in use' : 'Delete agent'}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -137,13 +135,10 @@ export function AgentRow({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={cn("h-8 w-8 p-0", isChatOpen && "text-primary")}
-                  onClick={() =>
-                    toggleFloatingChat(agent.name, "agent")
-                  }
-                >
+                  className={cn('h-8 w-8 p-0', isChatOpen && 'text-primary')}
+                  onClick={() => toggleFloatingChat(agent.name, 'agent')}>
                   <MessageCircle
-                    className={cn("h-4 w-4", isChatOpen && "fill-primary")}
+                    className={cn('h-4 w-4', isChatOpen && 'fill-primary')}
                   />
                 </Button>
               </TooltipTrigger>

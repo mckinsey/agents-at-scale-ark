@@ -1,59 +1,65 @@
-"use client"
+'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, { createContext, useContext, useEffect, useState } from 'react';
 
 interface ChatContextType {
-  openChats: string[]
-  isOpen: (name: string) => boolean
+  openChats: string[];
+  isOpen: (name: string) => boolean;
 }
 
-const ChatContext = createContext<ChatContextType | undefined>(undefined)
+const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
-  const [openChats, setOpenChats] = useState<string[]>([])
+  const [openChats, setOpenChats] = useState<string[]>([]);
 
   useEffect(() => {
     const handleChatOpened = (event: CustomEvent) => {
-      const { name } = event.detail
+      const { name } = event.detail;
       setOpenChats(prev => {
         if (!prev.includes(name)) {
-          return [...prev, name]
+          return [...prev, name];
         }
-        return prev
-      })
-    }
+        return prev;
+      });
+    };
 
     const handleChatClosed = (event: CustomEvent) => {
-      const { name } = event.detail
-      setOpenChats(prev => prev.filter(chat => chat !== name))
-    }
+      const { name } = event.detail;
+      setOpenChats(prev => prev.filter(chat => chat !== name));
+    };
 
-    window.addEventListener('chat-opened', handleChatOpened as EventListener)
-    window.addEventListener('chat-closed', handleChatClosed as EventListener)
+    window.addEventListener('chat-opened', handleChatOpened as EventListener);
+    window.addEventListener('chat-closed', handleChatClosed as EventListener);
 
     return () => {
-      window.removeEventListener('chat-opened', handleChatOpened as EventListener)
-      window.removeEventListener('chat-closed', handleChatClosed as EventListener)
-    }
-  }, [])
+      window.removeEventListener(
+        'chat-opened',
+        handleChatOpened as EventListener,
+      );
+      window.removeEventListener(
+        'chat-closed',
+        handleChatClosed as EventListener,
+      );
+    };
+  }, []);
 
-  const isOpen = (name: string) => openChats.includes(name)
+  const isOpen = (name: string) => openChats.includes(name);
 
   return (
     <ChatContext.Provider value={{ openChats, isOpen }}>
       {children}
     </ChatContext.Provider>
-  )
+  );
 }
 
 export function useChatState() {
-  const context = useContext(ChatContext)
+  const context = useContext(ChatContext);
   if (!context) {
     // Return a default implementation when outside provider
     return {
       openChats: [],
-      isOpen: () => false
-    }
+      isOpen: () => false,
+    };
   }
-  return context
+  return context;
 }

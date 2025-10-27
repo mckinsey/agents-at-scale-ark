@@ -201,6 +201,19 @@ func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client
 		return fmt.Errorf("failed to create executor for tool %s: %w", agentTool.Name, err)
 	}
 
+	if agentTool.Partial != nil {
+		var err error
+		toolDef, err = CreatePartialToolDefinition(toolDef, agentTool.Partial)
+		if err != nil {
+			return fmt.Errorf("failed to create partial tool definition for tool %s: %w", agentTool.Name, err)
+		}
+		// Wrap with PartialToolExecutor if partial is specified
+		executor = &PartialToolExecutor{
+			BaseExecutor: executor,
+			Partial:      agentTool.Partial,
+		}
+	}
+
 	// Apply function filtering if specified
 	if len(agentTool.Functions) > 0 {
 		executor = &FilteredToolExecutor{

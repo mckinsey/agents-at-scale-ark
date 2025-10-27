@@ -1,5 +1,10 @@
-import { isExperimentalFeaturesEnabledAtom, storedIsExperimentalDarkModeEnabledAtom, storedIsExperimentalExecutionEngineEnabledAtom } from "@/atoms/experimental-features";
-import { ExperimentalFeatureGroup } from "./types";
+import {
+  isExperimentalFeaturesEnabledAtom,
+  storedIsExperimentalDarkModeEnabledAtom,
+  storedIsExperimentalExecutionEngineEnabledAtom,
+} from '@/atoms/experimental-features';
+
+import type { ExperimentalFeatureGroup } from './types';
 
 export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
   {
@@ -8,9 +13,9 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
       {
         feature: 'Experimental Features',
         description: 'Turning this off will disable experimental features',
-        atom: isExperimentalFeaturesEnabledAtom
-      }
-    ]
+        atom: isExperimentalFeaturesEnabledAtom,
+      },
+    ],
   },
   {
     groupKey: 'ui-ux',
@@ -19,9 +24,9 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
       {
         feature: 'Experimental Dark Mode',
         description: 'Enables experimental Dark Mode',
-        atom: storedIsExperimentalDarkModeEnabledAtom
-      }
-    ]
+        atom: storedIsExperimentalDarkModeEnabledAtom,
+      },
+    ],
   },
   {
     groupKey: 'agents',
@@ -29,9 +34,14 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
     features: [
       {
         feature: 'Experimental Execution Engine Field',
-        description: <span>Enables the experimental <span className='font-bold'>Execution Engine</span> field on Agents</span>,
-        atom: storedIsExperimentalExecutionEngineEnabledAtom
-      }
-    ]
-  }
-]
+        description: (
+          <span>
+            Enables the experimental{' '}
+            <span className="font-bold">Execution Engine</span> field on Agents
+          </span>
+        ),
+        atom: storedIsExperimentalExecutionEngineEnabledAtom,
+      },
+    ],
+  },
+];

@@ -1,1 +1,1 @@
-export * from './no-default-model-alert'
+export * from './no-default-model-alert';

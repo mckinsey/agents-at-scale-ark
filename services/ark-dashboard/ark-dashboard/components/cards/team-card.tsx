@@ -1,40 +1,37 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { MessageCircle, Pencil, Trash2, Users } from "lucide-react";
-import { BaseCard, type BaseCardAction } from "./base-card";
+import { MessageCircle, Pencil, Trash2, Users } from 'lucide-react';
+import { useState } from 'react';
+
+import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
+import { TeamEditor } from '@/components/editors';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
-  TooltipTrigger
-} from "@/components/ui/tooltip";
-import { toggleFloatingChat } from "@/lib/chat-events";
-import { useChatState } from "@/lib/chat-context";
-import { TeamEditor } from "@/components/editors";
-import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog";
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { useChatState } from '@/lib/chat-context';
+import { toggleFloatingChat } from '@/lib/chat-events';
 import type {
+  Agent,
   Team,
   TeamCreateRequest,
   TeamUpdateRequest,
-  Agent
-} from "@/lib/services";
+} from '@/lib/services';
+
+import { BaseCard, type BaseCardAction } from './base-card';
 
 interface TeamCardProps {
   team: Team;
   agents: Agent[];
   onUpdate?: (
-    team: (TeamCreateRequest | TeamUpdateRequest) & { id?: string }
+    team: (TeamCreateRequest | TeamUpdateRequest) & { id?: string },
   ) => void;
   onDelete?: (id: string) => void;
 }
 
-export function TeamCard({
-  team,
-  agents,
-  onUpdate,
-  onDelete
-}: TeamCardProps) {
+export function TeamCard({ team, agents, onUpdate, onDelete }: TeamCardProps) {
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(team.name);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -42,36 +39,36 @@ export function TeamCard({
 
   // Get the names of member agents
   const memberAgents = team.members
-    .filter((member) => member.type === "agent")
-    .map((member) => agents.find((agent) => agent.name === member.name))
+    .filter(member => member.type === 'agent')
+    .map(member => agents.find(agent => agent.name === member.name))
     .filter(Boolean) as Agent[];
 
-  const memberNames = memberAgents.map((agent) => agent.name).join(", ");
+  const memberNames = memberAgents.map(agent => agent.name).join(', ');
 
   const actions: BaseCardAction[] = [];
 
   if (onUpdate) {
     actions.push({
       icon: Pencil,
-      label: "Edit team",
-      onClick: () => setEditorOpen(true)
+      label: 'Edit team',
+      onClick: () => setEditorOpen(true),
     });
   }
 
   if (onDelete) {
     actions.push({
       icon: Trash2,
-      label: "Delete team",
+      label: 'Delete team',
       onClick: () => setDeleteConfirmOpen(true),
-      disabled: isChatOpen
+      disabled: isChatOpen,
     });
   }
 
   actions.push({
     icon: MessageCircle,
-    label: "Chat with team",
-    onClick: () => toggleFloatingChat(team.name, "team"),
-    className: isChatOpen ? "fill-current" : ""
+    label: 'Chat with team',
+    onClick: () => toggleFloatingChat(team.name, 'team'),
+    className: isChatOpen ? 'fill-current' : '',
   });
 
   return (
@@ -82,18 +79,18 @@ export function TeamCard({
         icon={<Users className="h-5 w-5" />}
         actions={
           team.members.length === 0
-            ? actions.filter((a) => a.label !== "Chat with team")
+            ? actions.filter(a => a.label !== 'Chat with team')
             : actions
         }
         footer={
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <Users className="h-4 w-4" />
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="cursor-help">
                     {team.members.length} member
-                    {team.members.length !== 1 ? "s" : ""}
+                    {team.members.length !== 1 ? 's' : ''}
                   </span>
                 </TooltipTrigger>
                 {team.members.length > 0 && (

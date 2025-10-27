@@ -1,10 +1,12 @@
-"use client";
+'use client';
 
-import { MetricCard } from "./metric-card";
-import { DASHBOARD_SECTIONS } from "@/lib/constants";
-import { useGetMemoryResources } from "@/lib/services/memory-hooks";
-import { useEffect } from "react";
-import { toast } from "sonner";
+import { useEffect } from 'react';
+import { toast } from 'sonner';
+
+import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import { useGetMemoryResources } from '@/lib/services/memory-hooks';
+
+import { MetricCard } from './metric-card';
 
 export function HomepageMemoryCard() {
   const { data, isPending, error } = useGetMemoryResources();
@@ -16,11 +18,11 @@ export function HomepageMemoryCard() {
 
   useEffect(() => {
     if (error) {
-      toast.error("Failed to get Memory", {
+      toast.error('Failed to get Memory', {
         description:
           error instanceof Error
             ? error.message
-            : "An unexpected error occurred"
+            : 'An unexpected error occurred',
       });
     }
   }, [error]);
