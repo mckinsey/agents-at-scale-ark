@@ -5,6 +5,21 @@ global:
   annotations:
     ark.mckinsey.com/service: phoenix
 
+# HTTPRoute configuration (Gateway API - modern routing method)
+# Disabled by default. Enable this for Gateway API routing with namespace-based access.
+# Example values below show localhost development setup.
+httpRoute:
+  enabled: false
+  annotations: {}
+    # Custom annotations can be added here
+  # Gateway references
+  parentRefs:
+    - name: localhost-gateway
+      namespace: ark-system
+  # Hostnames this route matches
+  hostnames:
+    - "phoenix.phoenix.127.0.0.1.nip.io"
+
 # Service configuration for OTEL
 service:
   name: phoenix-svc

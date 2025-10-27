@@ -1,0 +1,235 @@
+---
+title: Phoenix Service
+description: AI/ML observability and evaluation platform for monitoring agent performance
+---
+
+# Phoenix Service
+
+Phoenix ([Arize Phoenix](https://arize.com/docs/phoenix)) provides comprehensive observability and evaluation for AI/ML applications, offering detailed tracing, performance monitoring, and model evaluation capabilities for your ARK agents and teams. This guide covers setting up and using Phoenix with ARK.
+
+## Overview
+
+Phoenix integration with ARK provides:
+- **LLM Call Tracing** - Track all model interactions and API calls
+- **Cost Monitoring** - Monitor API usage and associated costs
+- **Performance Analytics** - Response times, throughput, and latency metrics
+- **Session Management** - Group related interactions and conversations
+- **Error Tracking** - Identify and debug issues in agent workflows
+
+## Installation
+
+### Quick Start
+
+Deploy Phoenix as part of your ARK installation:
+
+```bash
+# From repository root - install Phoenix
+make phoenix-install
+
+# Start dashboard with automatic port-forward (recommended)
+make phoenix-dashboard
+```
+
+### Configuration
+
+Phoenix is automatically configured with:
+- **Namespace**: `phoenix`
+- **Service**: `phoenix-svc:6006`
+- **OTEL Endpoint**: `http://phoenix-svc.phoenix.svc.cluster.local:6006/v1/traces`
+
+The installation automatically:
+1. Deploys Phoenix to the `phoenix` namespace
+2. Creates OTEL environment variable secrets in configured namespaces (default: `ark-system`, `default`)
+
+## Accessing Phoenix Dashboard
+
+### Local Development Access
+
+After installation, start the dashboard with automatic port-forwarding:
+
+```bash
+make phoenix-dashboard
+# Output:
+# Starting Phoenix dashboard...
+# 
+# Dashboard available at: http://localhost:6006
+# Press Ctrl+C to stop
+```
+
+The dashboard command automatically:
+- Finds an available port (starting from 6006)
+- Shows you the exact URL to visit
+- Starts port-forwarding to Phoenix
+- No authentication required - Phoenix is ready to use immediately
+
+Simply visit the URL shown to access the Phoenix dashboard.
+
+### Gateway API Access
+
+Phoenix can be configured with Gateway API HTTPRoute for namespace-based access:
+
+```bash
+# Access via nip.io DNS pattern (if HTTPRoute is enabled)
+open http://phoenix.phoenix.127.0.0.1.nip.io:8080
+```
+
+**Note**: HTTPRoute is disabled by default. To enable it, update `services/phoenix/chart/values.yaml`:
+
+```yaml
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: localhost-gateway
+      namespace: ark-system
+  hostnames:
+    - "phoenix.phoenix.127.0.0.1.nip.io"
+```
+
+Then reinstall Phoenix:
+
+```bash
+make phoenix-uninstall
+make phoenix-install
+```
+
+## Configuration
+
+### OTEL Environment Variables
+
+The installation automatically configures these OpenTelemetry environment variables:
+
+```bash
+# Automatically configured by make phoenix-install
+OTEL_EXPORTER_OTLP_ENDPOINT=http://phoenix-svc.phoenix.svc.cluster.local:6006/v1/traces
+```
+
+**Note**: Unlike Langfuse, Phoenix does not require authentication headers for OTEL integration.
+
+### Service Configuration
+
+Phoenix is deployed with these default settings:
+
+- **Namespace**: `phoenix`
+- **Service Name**: `phoenix-svc`
+- **Port**: `6006`
+- **Authentication**: Disabled (no credentials required)
+
+### Configuring Services for OTEL
+
+The installation creates `otel-environment-variables` secrets in configured namespaces. To use in your deployments, add this to your container spec:
+
+```yaml
+containers:
+- name: my-service
+  envFrom:
+  - secretRef:
+      name: otel-environment-variables
+      optional: true
+```
+
+**Note**: If deployments are already running when Phoenix is installed, restart them to pick up the OTEL configuration:
+
+```bash
+kubectl rollout restart deployment/ark-controller-devspace -n ark-system
+```
+
+To configure which namespaces receive OTEL secrets, set in `services/phoenix/chart/values.yaml`:
+
+```yaml
+otelEnvironmentVariableSecrets:
+  enabled: true
+  namespaces:
+    - ark-system
+    - default
+```
+
+## Using Phoenix Dashboard
+
+### Dashboard Overview
+
+The Phoenix dashboard provides several key views:
+
+**Traces View**
+- Complete execution traces for ARK operations
+- Span-level details with timing information
+- Filter and search capabilities
+
+### Viewing ARK Traces
+
+After installation and configuration, Phoenix will collect traces from ARK components:
+
+Traces include:
+- Controller operations
+- Query execution flows
+- Model inference calls
+- Tool executions
+- Agent interactions
+- Team interactions
+
+## Troubleshooting
+
+### Phoenix Service Issues
+
+```bash
+# Check Phoenix pod status
+kubectl get pods -n phoenix
+
+# Check service connectivity
+kubectl exec -it <ark-controller-pod> -n ark-system -- \
+  curl http://phoenix-svc.phoenix.svc.cluster.local:6006/healthz
+```
+
+### OTEL Configuration Issues
+
+```bash
+# Check OTEL environment variables
+kubectl get secret otel-environment-variables -n ark-system -o yaml
+
+# Verify OTEL endpoint is reachable
+kubectl run -it --rm debug --image=curlimages/curl --restart=Never -- \
+  curl http://phoenix-svc.phoenix.svc.cluster.local:6006/v1/traces
+```
+
+### No Traces Appearing
+
+If traces aren't showing up in Phoenix:
+
+1. **Verify OTEL configuration is applied**:
+   ```bash
+   kubectl exec -it <ark-controller-pod> -n ark-system -- env | grep OTEL
+   ```
+
+2. **Check controller logs for telemetry initialization**:
+   ```bash
+   kubectl logs deployment/ark-controller -n ark-system | grep telemetry
+   ```
+
+3. **Restart deployments to pick up OTEL secrets**:
+   ```bash
+   kubectl rollout restart deployment/ark-controller-manager -n ark-system
+   ```
+
+## Uninstalling
+
+To remove Phoenix and clean up OTEL configuration:
+
+```bash
+# Uninstall Phoenix
+make phoenix-uninstall
+```
+
+This will:
+1. Remove Phoenix from the `phoenix` namespace
+2. Remove the Helm release
+3. Clean up installation stamps
+
+**Note**: OTEL environment variable secrets in other namespaces are not automatically removed. To clean them up:
+
+```bash
+kubectl delete secret otel-environment-variables -n ark-system
+kubectl delete secret otel-environment-variables -n default
+```
+
+---
+
+**Previous**: [Langfuse Service](/developer-guide/observability/langfuse-service)
