@@ -73,7 +73,6 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (*Agent, error) {
 		return nil, fmt.Errorf("failed to get selector agent %s in namespace %s: %w", agentName, t.Namespace, err)
 	}
 
-	// TODO: Thread telemetry provider through teams - for now use no-op
 	agent, err := MakeAgent(ctx, t.Client, &agentCRD, t.Recorder, t.TelemetryProvider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create selector agent: %w", err)
