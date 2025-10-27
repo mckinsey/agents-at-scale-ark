@@ -1,28 +1,30 @@
-"use client";
+'use client';
 
-import { BreadcrumbElement, PageHeader } from "@/components/common/page-header";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useParams, useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { toast } from 'sonner';
+
+import type { BreadcrumbElement } from '@/components/common/page-header';
+import { PageHeader } from '@/components/common/page-header';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
-  TooltipTrigger
-} from "@/components/ui/tooltip";
-import { toast } from "sonner";
-import type { Event } from "@/lib/services/events";
-import { eventsService } from "@/lib/services/events";
-import { useParams, useRouter } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import type { Event } from '@/lib/services/events';
+import { eventsService } from '@/lib/services/events';
 
 const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: "ARK Dashboard" },
-  { href: '/events', label: "Events" }
-]
+  { href: '/', label: 'ARK Dashboard' },
+  { href: '/events', label: 'Events' },
+];
 
 // Reusable styles for table field headings
 const FIELD_HEADING_STYLES =
-  "px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 w-1/3 text-left";
+  'px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 w-1/3 text-left';
 
 interface EventFieldProps {
   readonly label: string;
@@ -46,7 +48,7 @@ function EventField({ label, value, tooltip }: EventFieldProps) {
         </TooltipProvider>
       </td>
       <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-        {value ?? "—"}
+        {value ?? '—'}
       </td>
     </tr>
   );
@@ -54,7 +56,7 @@ function EventField({ label, value, tooltip }: EventFieldProps) {
 
 function EventTimestampField({ label, value, tooltip }: EventFieldProps) {
   const formatTimestamp = (timestamp: string | undefined | null) => {
-    if (!timestamp) return "—";
+    if (!timestamp) return '—';
     try {
       return new Date(timestamp).toLocaleString();
     } catch {
@@ -86,12 +88,12 @@ function EventTimestampField({ label, value, tooltip }: EventFieldProps) {
 function EventTypeField({ label, value, tooltip }: EventFieldProps) {
   const getTypeColor = (type: string) => {
     switch (type?.toLowerCase()) {
-      case "warning":
-        return "text-red-600 dark:text-red-400";
-      case "normal":
-        return "text-green-600 dark:text-green-400";
+      case 'warning':
+        return 'text-red-600 dark:text-red-400';
+      case 'normal':
+        return 'text-green-600 dark:text-green-400';
       default:
-        return "text-gray-600 dark:text-gray-400";
+        return 'text-gray-600 dark:text-gray-400';
     }
   };
 
@@ -111,10 +113,9 @@ function EventTypeField({ label, value, tooltip }: EventFieldProps) {
       </td>
       <td
         className={`px-3 py-2 text-xs font-medium ${getTypeColor(
-          value as string
-        )}`}
-      >
-        {value ?? "—"}
+          value as string,
+        )}`}>
+        {value ?? '—'}
       </td>
     </tr>
   );
@@ -134,11 +135,11 @@ function EventDetailContent() {
         const eventData = await eventsService.get(eventId);
         setEvent(eventData);
       } catch (error) {
-        toast.error("Failed to Load Event", {
+        toast.error('Failed to Load Event', {
           description:
             error instanceof Error
               ? error.message
-              : "An unexpected error occurred"
+              : 'An unexpected error occurred',
         });
       } finally {
         setLoading(false);
@@ -160,7 +161,7 @@ function EventDetailContent() {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-center">
-          <h1 className="text-xl font-semibold mb-2">Event Not Found</h1>
+          <h1 className="mb-2 text-xl font-semibold">Event Not Found</h1>
           <Button variant="outline" onClick={() => router.back()}>
             ← Back to Events
           </Button>
@@ -174,11 +175,11 @@ function EventDetailContent() {
       <PageHeader breadcrumbs={breadcrumbs} currentPage={event.name} />
       <div className="flex h-full flex-col">
         {/* Event Details - Four Column Layout */}
-        <div className="px-4 py-3 border-b bg-gray-50/30 dark:bg-gray-900/10">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        <div className="border-b bg-gray-50/30 px-4 py-3 dark:bg-gray-900/10">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
             {/* Basic Information Column */}
-            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-              <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b">
+            <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
+              <div className="border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
                 <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
                   Basic Information
                 </h3>
@@ -220,8 +221,8 @@ function EventDetailContent() {
             </div>
 
             {/* Involved Object Column */}
-            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-              <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b">
+            <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
+              <div className="border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
                 <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
                   Involved Object
                 </h3>
@@ -253,8 +254,8 @@ function EventDetailContent() {
             </div>
 
             {/* Source Information Column */}
-            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-              <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b">
+            <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
+              <div className="border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
                 <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
                   Source Information
                 </h3>
@@ -276,8 +277,8 @@ function EventDetailContent() {
             </div>
 
             {/* Timestamps Column */}
-            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-              <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b">
+            <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
+              <div className="border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
                 <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
                   Timestamps
                 </h3>
@@ -306,19 +307,19 @@ function EventDetailContent() {
         </div>
 
         {/* Message Section */}
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex min-h-0 flex-1 flex-col">
           <ScrollArea className="flex-1 p-3">
             <div className="space-y-3">
               {/* Message Table */}
-              <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                <div className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b flex items-center justify-between">
+              <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
+                <div className="flex items-center justify-between border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
                   <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
                     Event Message
                   </h3>
                 </div>
                 <div className="p-3">
-                  <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900/50 p-3 rounded">
-                    {event.message || "No message available"}
+                  <pre className="rounded bg-gray-50 p-3 font-mono text-sm whitespace-pre-wrap text-gray-700 dark:bg-gray-900/50 dark:text-gray-300">
+                    {event.message || 'No message available'}
                   </pre>
                 </div>
               </div>
@@ -337,8 +338,7 @@ export default function EventDetailPage() {
         <div className="flex h-screen items-center justify-center">
           Loading...
         </div>
-      }
-    >
+      }>
       <EventDetailContent />
     </Suspense>
   );

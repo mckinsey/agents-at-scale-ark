@@ -1,19 +1,21 @@
-"use client";
+'use client';
 
-import { BreadcrumbElement, PageHeader } from "@/components/common/page-header";
-import { EvaluatorEditForm } from "@/components/forms/evaluator-edit-form";
-import { toast } from "sonner";
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { toast } from 'sonner';
+
+import type { BreadcrumbElement } from '@/components/common/page-header';
+import { PageHeader } from '@/components/common/page-header';
+import { EvaluatorEditForm } from '@/components/forms/evaluator-edit-form';
 import {
+  type EvaluatorDetailResponse,
   evaluatorsService,
-  type EvaluatorDetailResponse
-} from "@/lib/services";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+} from '@/lib/services';
 
 const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: "ARK Dashboard" },
-  { href: '/evaluators', label: "Evaluators" }
-]
+  { href: '/', label: 'ARK Dashboard' },
+  { href: '/evaluators', label: 'Evaluators' },
+];
 
 interface EvaluatorEditContentProps {
   namespace: string;
@@ -22,11 +24,11 @@ interface EvaluatorEditContentProps {
 
 function EvaluatorEditContent({
   namespace,
-  evaluatorName
+  evaluatorName,
 }: EvaluatorEditContentProps) {
   const router = useRouter();
   const [evaluator, setEvaluator] = useState<EvaluatorDetailResponse | null>(
-    null
+    null,
   );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -34,16 +36,14 @@ function EvaluatorEditContent({
   useEffect(() => {
     const loadEvaluator = async () => {
       try {
-        const data = await evaluatorsService.getDetailsByName(
-          evaluatorName
-        );
+        const data = await evaluatorsService.getDetailsByName(evaluatorName);
         setEvaluator(data);
       } catch (error) {
-        toast.error("Failed to Load Evaluator", {
+        toast.error('Failed to Load Evaluator', {
           description:
             error instanceof Error
               ? error.message
-              : "An unexpected error occurred"
+              : 'An unexpected error occurred',
         });
         router.push(`/evaluators`);
       } finally {
@@ -58,16 +58,16 @@ function EvaluatorEditContent({
     setSaving(true);
     try {
       await evaluatorsService.update(evaluatorName, data);
-      toast.success("Evaluator Updated", {
-        description: "Successfully updated the evaluator"
+      toast.success('Evaluator Updated', {
+        description: 'Successfully updated the evaluator',
       });
       router.push(`/evaluators`);
     } catch (error) {
-      toast.error("Failed to Update Evaluator", {
+      toast.error('Failed to Update Evaluator', {
         description:
           error instanceof Error
             ? error.message
-            : "An unexpected error occurred"
+            : 'An unexpected error occurred',
       });
     } finally {
       setSaving(false);
@@ -81,7 +81,7 @@ function EvaluatorEditContent({
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-center py-8">Loading evaluator...</div>
+        <div className="py-8 text-center">Loading evaluator...</div>
       </div>
     );
   }
@@ -89,14 +89,17 @@ function EvaluatorEditContent({
   if (!evaluator) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-center py-8">Evaluator not found</div>
+        <div className="py-8 text-center">Evaluator not found</div>
       </div>
     );
   }
 
   return (
     <>
-      <PageHeader breadcrumbs={breadcrumbs} currentPage={`Edit ${evaluator.name}`} />
+      <PageHeader
+        breadcrumbs={breadcrumbs}
+        currentPage={`Edit ${evaluator.name}`}
+      />
       <div className="flex-1 overflow-hidden">
         <EvaluatorEditForm
           evaluator={evaluator}
@@ -113,7 +116,7 @@ function EvaluatorEditContent({
 function EvaluatorEditPageContent() {
   const searchParams = useSearchParams();
   const params = useParams();
-  const namespace = searchParams.get("namespace") || "default";
+  const namespace = searchParams.get('namespace') || 'default';
   const evaluatorName = params.name as string;
 
   return (

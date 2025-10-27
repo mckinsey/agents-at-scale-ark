@@ -1,2 +1,2 @@
-export * from './model-forms'
-export * from './evaluator-edit-form'
+export * from './model-forms';
+export * from './evaluator-edit-form';

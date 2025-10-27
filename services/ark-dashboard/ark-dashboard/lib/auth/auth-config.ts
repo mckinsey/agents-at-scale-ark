@@ -1,22 +1,30 @@
-import { NextAuthConfig } from "next-auth";
-import { createOIDCProvider } from "./create-oidc-provider";
-import { TokenManager } from "./token-manager";
+import type { NextAuthConfig } from 'next-auth';
+
 import {
-  SIGNIN_PATH,
-  COOKIE_SESSION_TOKEN,
   COOKIE_CALLBACK_URL,
   COOKIE_CSRF_TOKEN,
-  COOKIE_PKCE_CODE_VERIFIER,
-  COOKIE_STATE,
   COOKIE_NONCE,
-  DEFAULT_SESSION_MAX_AGE
-} from "@/lib/constants/auth";
+  COOKIE_PKCE_CODE_VERIFIER,
+  COOKIE_SESSION_TOKEN,
+  COOKIE_STATE,
+  DEFAULT_SESSION_MAX_AGE,
+  SIGNIN_PATH,
+} from '@/lib/constants/auth';
+
+import { createOIDCProvider } from './create-oidc-provider';
+import { TokenManager } from './token-manager';
 
 // Extract the jwt callback type from NextAuthConfig
 type JwtCallback = NonNullable<NonNullable<NextAuthConfig['callbacks']>['jwt']>;
 
-async function jwtCallback({token, profile, account, trigger, session}: Parameters<JwtCallback>['0']): Promise<Awaited<ReturnType<JwtCallback>>> {
-  if(trigger === 'signIn') {
+async function jwtCallback({
+  token,
+  profile,
+  account,
+  trigger,
+  session,
+}: Parameters<JwtCallback>['0']): Promise<Awaited<ReturnType<JwtCallback>>> {
+  if (trigger === 'signIn') {
     if (profile) {
       token.image = profile.avatar_url || profile.picture;
     }
@@ -25,89 +33,98 @@ async function jwtCallback({token, profile, account, trigger, session}: Paramete
       token.refresh_token = account.refresh_token;
       token.expires_at = account.expires_at!;
     }
-    if(account?.id_token){
+    if (account?.id_token) {
       token.id_token = account.id_token;
     }
   }
 
-  if(trigger === 'update' && session?.shouldRefreshToken) {
+  if (trigger === 'update' && session?.shouldRefreshToken) {
     return await TokenManager.getNewAccessToken(token);
   }
 
   return token;
 }
 
-type SessionCallback = NonNullable<NonNullable<NextAuthConfig['callbacks']>['session']>;
+type SessionCallback = NonNullable<
+  NonNullable<NextAuthConfig['callbacks']>['session']
+>;
 
-function sessionCallback({ session, token }: Parameters<SessionCallback>['0']): ReturnType<SessionCallback> {
+function sessionCallback({
+  session,
+  token,
+}: Parameters<SessionCallback>['0']): ReturnType<SessionCallback> {
   if (session?.user && token?.id) {
     session.user.id = String(token.id);
   }
   return session;
-};
+}
 
-type AuthorizedCallback = NonNullable<NonNullable<NextAuthConfig['callbacks']>['authorized']>;
+type AuthorizedCallback = NonNullable<
+  NonNullable<NextAuthConfig['callbacks']>['authorized']
+>;
 
-function authorizedCallback({ auth: session }: Parameters<AuthorizedCallback>['0']): ReturnType<AuthorizedCallback> {
+function authorizedCallback({
+  auth: session,
+}: Parameters<AuthorizedCallback>['0']): ReturnType<AuthorizedCallback> {
   return !!session?.user; //When the JWT signed by auth js expires the session becomes null
-};
+}
 
 const OIDCProvider = createOIDCProvider({
   clientId: process.env.OIDC_CLIENT_ID,
   issuer: process.env.OIDC_ISSUER_URL,
   name: process.env.OIDC_PROVIDER_NAME || 'unknown',
   id: process.env.OIDC_PROVIDER_ID || 'unknown',
-  clientSecret: process.env.OIDC_CLIENT_SECRET
+  clientSecret: process.env.OIDC_CLIENT_SECRET,
 });
 
 function getSessionMaxAge() {
-  const maxAgeFromEnv = parseInt(process.env.SESSION_MAX_AGE || '') //An empty string will result in NaN
+  const maxAgeFromEnv = parseInt(process.env.SESSION_MAX_AGE || ''); //An empty string will result in NaN
   //If SESSION_MAX_AGE is not set or is not a valid value we default to DEFAULT_SESSION_MAX_AGE (30mins)
   return isNaN(maxAgeFromEnv) ? DEFAULT_SESSION_MAX_AGE : maxAgeFromEnv;
 }
 
 const session: NextAuthConfig['session'] = {
   strategy: 'jwt',
-  maxAge: getSessionMaxAge()
+  maxAge: getSessionMaxAge(),
 };
 
-const debug = process.env.AUTH_DEBUG === "true";
+const debug = process.env.AUTH_DEBUG === 'true';
 
 // Since we are using custom cookie names we have to manage these settings ourselfs.
 // https://authjs.dev/reference/nextjs#cookies
-const useSecureCookies = process.env.AUTH_URL?.startsWith("https://") || false;
-const cookiePrefix = useSecureCookies ? "__Secure-" : ""
+const useSecureCookies = process.env.AUTH_URL?.startsWith('https://') || false;
+const cookiePrefix = useSecureCookies ? '__Secure-' : '';
 const cookies: NextAuthConfig['cookies'] = {
   sessionToken: {
-    name: `${cookiePrefix}${COOKIE_SESSION_TOKEN}`
+    name: `${cookiePrefix}${COOKIE_SESSION_TOKEN}`,
   },
   callbackUrl: {
-    name: `${cookiePrefix}${COOKIE_CALLBACK_URL}`
+    name: `${cookiePrefix}${COOKIE_CALLBACK_URL}`,
   },
   csrfToken: {
     // Default to __Host- for CSRF token for additional protection if using useSecureCookies
     // NB: The `__Host-` prefix is stricter than the `__Secure-` prefix.
-    name: `${useSecureCookies ? "__Host-" : ""}${COOKIE_CSRF_TOKEN}`
+    name: `${useSecureCookies ? '__Host-' : ''}${COOKIE_CSRF_TOKEN}`,
   },
   pkceCodeVerifier: {
-    name: `${cookiePrefix}${COOKIE_PKCE_CODE_VERIFIER}`
+    name: `${cookiePrefix}${COOKIE_PKCE_CODE_VERIFIER}`,
   },
   state: {
-    name: `${cookiePrefix}${COOKIE_STATE}`
+    name: `${cookiePrefix}${COOKIE_STATE}`,
   },
   nonce: {
-    name: `${cookiePrefix}${COOKIE_NONCE}`
-  }
+    name: `${cookiePrefix}${COOKIE_NONCE}`,
+  },
 };
 
 const callbacks: NextAuthConfig['callbacks'] = {
   jwt: jwtCallback,
   session: sessionCallback,
-  authorized: authorizedCallback
+  authorized: authorizedCallback,
 };
 
 const pages: NextAuthConfig['pages'] = {
-  signIn: SIGNIN_PATH
+  signIn: SIGNIN_PATH,
 };
 
 export const authConfig: NextAuthConfig = {
@@ -119,5 +136,5 @@ export const authConfig: NextAuthConfig = {
   cookies,
   callbacks,
   useSecureCookies,
-  pages
-}
+  pages,
+};

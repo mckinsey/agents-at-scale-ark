@@ -1,47 +1,49 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
-import { DASHBOARD_SECTIONS } from "@/lib/constants/dashboard-icons";
-import { getCustomIcon } from "@/lib/utils/icon-resolver";
-import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
-import { BaseCard, type BaseCardAction } from "./base-card";
-import { AvailabilityStatusBadge } from "@/components/ui/availability-status-badge";
-import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog";
-import type { Model } from "@/lib/services";
-import { useRouter } from "next/navigation";
+import { Pencil, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+
+import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
+import { AvailabilityStatusBadge } from '@/components/ui/availability-status-badge';
+import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
+import { DASHBOARD_SECTIONS } from '@/lib/constants/dashboard-icons';
+import type { Model } from '@/lib/services';
+import { getCustomIcon } from '@/lib/utils/icon-resolver';
+
+import { BaseCard, type BaseCardAction } from './base-card';
 
 interface ModelCardProps {
   model: Model;
   onDelete?: (id: string) => void;
 }
 
-export function ModelCard({
-  model,
-  onDelete
-}: ModelCardProps) {
+export function ModelCard({ model, onDelete }: ModelCardProps) {
   const router = useRouter();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   // Get custom icon or default model icon
-  const IconComponent = getCustomIcon(model.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], DASHBOARD_SECTIONS.models.icon);
+  const IconComponent = getCustomIcon(
+    model.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
+    DASHBOARD_SECTIONS.models.icon,
+  );
 
   const actions: BaseCardAction[] = [
     {
       icon: Pencil,
-      label: "Edit model",
+      label: 'Edit model',
       onClick: () => {
-        router.push(`/models/${model.id}/update`)
+        router.push(`/models/${model.id}/update`);
       },
-      disabled: false
-    }
+      disabled: false,
+    },
   ];
 
   if (onDelete) {
     actions.push({
       icon: Trash2,
-      label: "Delete model",
+      label: 'Delete model',
       onClick: () => setDeleteConfirmOpen(true),
-      disabled: false
+      disabled: false,
     });
   }
 
@@ -58,7 +60,7 @@ export function ModelCard({
         icon={<IconComponent className="h-5 w-5" />}
         actions={actions}
         footer={
-          <div className="flex flex-row items-end w-full justify-between">
+          <div className="flex w-full flex-row items-end justify-between">
             <div className="w-full">{description}</div>
             <AvailabilityStatusBadge
               status={model.available}

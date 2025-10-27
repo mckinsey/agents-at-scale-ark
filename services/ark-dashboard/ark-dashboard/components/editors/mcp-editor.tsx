@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { Plus } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -8,32 +10,28 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle
+  DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  MCPServer,
-  Secret,
-  secretsService,
-  mcpServersService
-} from '@/lib/services';
-import { getKubernetesNameError } from '@/lib/utils/kubernetes-validation';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue
+  SelectValue,
 } from '@/components/ui/select';
-import { ConditionalInputRow } from '../ui/conditionalInputRow';
-import { Plus } from 'lucide-react';
-import {
+import type { MCPServer, Secret } from '@/lib/services';
+import { mcpServersService, secretsService } from '@/lib/services';
+import type {
   DirectHeader,
   Header,
   MCPServerConfiguration,
-  SecretHeader
+  SecretHeader,
 } from '@/lib/services/mcp-servers';
+import { getKubernetesNameError } from '@/lib/utils/kubernetes-validation';
+
+import { ConditionalInputRow } from '../ui/conditionalInputRow';
 
 interface McpEditorProps {
   open: boolean;
@@ -54,7 +52,7 @@ export function McpEditor({
   onOpenChange,
   mcpServer,
   onSave,
-  namespace
+  namespace,
 }: McpEditorProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -62,34 +60,34 @@ export function McpEditor({
   const [nameError, setNameError] = useState<string | null>(null);
   const [transport, setTransport] = useState<'http' | 'sse'>('http');
   const [headers, setHeaders] = useState<HeaderData[]>([
-    { key: 'row-1', name: '', type: 'direct', value: '' }
+    { key: 'row-1', name: '', type: 'direct', value: '' },
   ]);
 
   const updateRow = (index: number, updated: Partial<HeaderData>) => {
-    setHeaders((prev) =>
-      prev.map((row, i) => (i === index ? { ...row, ...updated } : row))
+    setHeaders(prev =>
+      prev.map((row, i) => (i === index ? { ...row, ...updated } : row)),
     );
   };
-  const generateUniqueKey = () =>{
-    const randomValue = window.crypto.getRandomValues(new Uint32Array(1))[0]
-    const generatedSuffix = randomValue % 100000
-    return `row-${Date.now()}-${generatedSuffix}`
+  const generateUniqueKey = () => {
+    const randomValue = window.crypto.getRandomValues(new Uint32Array(1))[0];
+    const generatedSuffix = randomValue % 100000;
+    return `row-${Date.now()}-${generatedSuffix}`;
   };
 
   const addRow = () => {
-    setHeaders((prev) => [
+    setHeaders(prev => [
       ...prev,
       {
         key: generateUniqueKey(),
         name: '',
         type: 'direct',
-        value: ''
-      }
+        value: '',
+      },
     ]);
   };
 
   const deleteRow = (key: string) => {
-    const updatedHeaders = headers.filter((header) => header.key !== key);
+    const updatedHeaders = headers.filter(header => header.key !== key);
     setHeaders(updatedHeaders);
   };
 
@@ -97,26 +95,24 @@ export function McpEditor({
     const mcpServerData = await mcpServersService.get(mcpServer?.name ?? '');
     setBaseUrl(mcpServerData?.spec?.address?.value ?? '');
     setTransport(mcpServerData?.spec?.transport ?? 'http');
-  
+
     if (mcpServerData?.spec?.headers) {
-      const transformedHeaders: HeaderData[] = mcpServerData?.spec?.headers?.map(
-        (header: Header) => {
+      const transformedHeaders: HeaderData[] =
+        mcpServerData?.spec?.headers?.map((header: Header) => {
           const isSecret = 'valueFrom' in header.value;
-  
+
           return {
             key: generateUniqueKey(),
             name: header.name,
             type: isSecret ? 'secret' : 'direct',
             value: isSecret
               ? (header as SecretHeader).value.valueFrom.secretKeyRef.name
-              : (header as DirectHeader).value.value || ''
+              : (header as DirectHeader).value.value || '',
           };
-        }
-      );
+        });
       setHeaders(transformedHeaders);
     }
   }, [mcpServer?.name]);
-  
 
   useEffect(() => {
     if (mcpServer && open) {
@@ -135,8 +131,8 @@ export function McpEditor({
       return {
         name: header.name,
         value: {
-          value: header.value
-        }
+          value: header.value,
+        },
       };
     } else {
       return {
@@ -145,32 +141,32 @@ export function McpEditor({
           valueFrom: {
             secretKeyRef: {
               name: header.value,
-              key: 'token'
-            }
-          }
-        }
+              key: 'token',
+            },
+          },
+        },
       };
     }
   };
 
   const handleSave = () => {
-      const modifiedHeaders: Header[] = headers.map((header) => {
-        return returnHeaderObj(header);
-      });
-      const createData: MCPServerConfiguration = {
-        name,
-        namespace,
-        spec: {
-          description: description,
-          transport,
-          address: {
-            value: baseUrl
-          },
-          headers: modifiedHeaders
-        }
-      };
-      onSave(createData, !!mcpServer);
-      onOpenChange(false);
+    const modifiedHeaders: Header[] = headers.map(header => {
+      return returnHeaderObj(header);
+    });
+    const createData: MCPServerConfiguration = {
+      name,
+      namespace,
+      spec: {
+        description: description,
+        transport,
+        address: {
+          value: baseUrl,
+        },
+        headers: modifiedHeaders,
+      },
+    };
+    onSave(createData, !!mcpServer);
+    onOpenChange(false);
   };
 
   const handleNameChange = (value: string) => {
@@ -192,7 +188,7 @@ export function McpEditor({
   }, [open, namespace]);
 
   const allFieldsFilled = headers.every(
-    (row) => row.name.trim() !== '' && row.value.trim() !== ''
+    row => row.name.trim() !== '' && row.value.trim() !== '',
   );
 
   const isValid =
@@ -205,7 +201,7 @@ export function McpEditor({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-4xl max-h-[90vh] overflow-y-auto'>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>
             {mcpServer ? 'Edit Mcp Server' : 'Create New MCP Server'}
@@ -216,74 +212,73 @@ export function McpEditor({
               : 'Fill in the information for the new mcp server.'}
           </DialogDescription>
         </DialogHeader>
-        <div className='grid gap-4 py-4'>
-          <div className='grid gap-2'>
-            <Label htmlFor='name'>Name</Label>
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Label htmlFor="name">Name</Label>
             <Input
-              id='name'
+              id="name"
               value={name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              placeholder='e.g., gpt-4-turbo'
+              onChange={e => handleNameChange(e.target.value)}
+              placeholder="e.g., gpt-4-turbo"
               disabled={!!mcpServer}
               className={nameError ? 'border-red-500' : ''}
             />
             {nameError && (
-              <p className='text-sm text-red-500 mt-1'>{nameError}</p>
+              <p className="mt-1 text-sm text-red-500">{nameError}</p>
             )}
           </div>
-          <div className='grid gap-2'>
-            <Label htmlFor='description'>Description</Label>
+          <div className="grid gap-2">
+            <Label htmlFor="description">Description</Label>
             <Input
-              id='description'
+              id="description"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder='e.g., This is a remote github mcp server'
+              onChange={e => setDescription(e.target.value)}
+              placeholder="e.g., This is a remote github mcp server"
             />
           </div>
-          <div className='grid gap-2'>
-            <Label htmlFor='base-url'>URL</Label>
+          <div className="grid gap-2">
+            <Label htmlFor="base-url">URL</Label>
             <Input
-              id='base-url'
+              id="base-url"
               value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder='https:/github.com/v1'
+              onChange={e => setBaseUrl(e.target.value)}
+              placeholder="https:/github.com/v1"
               disabled={!!mcpServer}
             />
           </div>
-          <div className='grid gap-2'>
-            <Label htmlFor='transport'>Transport</Label>
+          <div className="grid gap-2">
+            <Label htmlFor="transport">Transport</Label>
             <Select
               value={transport}
-              onValueChange={(value) => setTransport(value as 'http' | 'sse')}
-              disabled={!!mcpServer}
-            >
-              <SelectTrigger id='transport'>
-                <SelectValue placeholder='Select a transport' />
+              onValueChange={value => setTransport(value as 'http' | 'sse')}
+              disabled={!!mcpServer}>
+              <SelectTrigger id="transport">
+                <SelectValue placeholder="Select a transport" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value='http'>http</SelectItem>
-                <SelectItem value='sse'>sse</SelectItem>
+                <SelectItem value="http">http</SelectItem>
+                <SelectItem value="sse">sse</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div className='grid gap-2'>
-            <Label htmlFor='base-url'>Headers</Label>
+          <div className="grid gap-2">
+            <Label htmlFor="base-url">Headers</Label>
             {headers.map((row, index) => (
               <ConditionalInputRow
                 key={row.key}
                 data={row}
-                onChange={(updated) => updateRow(index, updated)}
+                onChange={updated => updateRow(index, updated)}
                 secrets={secrets}
                 deleteRow={deleteRow}
               />
             ))}
-            <Button onClick={() => addRow()} variant='outline' size='icon'>
-              <Plus className='h-2 w-2' />
+            <Button onClick={() => addRow()} variant="outline" size="icon">
+              <Plus className="h-2 w-2" />
             </Button>
           </div>
         </div>
         <DialogFooter>
-          <Button variant='outline' onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={!isValid}>

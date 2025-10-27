@@ -1,18 +1,32 @@
-"use client";
+'use client';
 
-import type React from "react";
-import { useState, useEffect, forwardRef, useImperativeHandle, useCallback } from "react";
-import { toast } from "sonner";
-import { A2AServersService, type A2AServer } from "@/lib/services";
-import { A2AServerCard } from "@/components/cards";
-import { useDelayedLoading } from "@/lib/hooks";
-import { InfoDialog } from "@/components/dialogs/info-dialog";
-import { A2AEditor } from "@/components/editors/a2a-editor";
-import type { A2AServerConfiguration } from "@/lib/services/a2a-servers";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
-import { DASHBOARD_SECTIONS } from "@/lib/constants";
-import { ArrowUpRightIcon, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowUpRightIcon, Plus } from 'lucide-react';
+import type React from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useState,
+} from 'react';
+import { toast } from 'sonner';
+
+import { A2AServerCard } from '@/components/cards';
+import { InfoDialog } from '@/components/dialogs/info-dialog';
+import { A2AEditor } from '@/components/editors/a2a-editor';
+import { Button } from '@/components/ui/button';
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
+import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import { useDelayedLoading } from '@/lib/hooks';
+import { type A2AServer, A2AServersService } from '@/lib/services';
+import type { A2AServerConfiguration } from '@/lib/services/a2a-servers';
 
 interface A2AServersSectionProps {
   namespace: string;
@@ -36,9 +50,9 @@ export const A2AServersSection = forwardRef<
   useImperativeHandle(
     ref,
     () => ({
-      openAddEditor: () => setA2aEditorOpen(true)
+      openAddEditor: () => setA2aEditorOpen(true),
     }),
-    []
+    [],
   );
 
   const loadData = useCallback(async () => {
@@ -47,10 +61,12 @@ export const A2AServersSection = forwardRef<
       const data = await A2AServersService.getAll();
       setA2AServers(data);
     } catch (error) {
-      console.error("Failed to load A2A servers:", error);
-      toast.error("Failed to Load A2A Servers", {
+      console.error('Failed to load A2A servers:', error);
+      toast.error('Failed to Load A2A Servers', {
         description:
-          error instanceof Error ? error.message : "An unexpected error occurred"
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred',
       });
     } finally {
       setLoading(false);
@@ -69,15 +85,17 @@ export const A2AServersSection = forwardRef<
   const handleSave = async (config: A2AServerConfiguration) => {
     try {
       await A2AServersService.create(config);
-      toast.success("A2A Server Created", {
-        description: `Successfully created ${config.name}`
+      toast.success('A2A Server Created', {
+        description: `Successfully created ${config.name}`,
       });
       await loadData();
       setA2aEditorOpen(false);
     } catch (error) {
-      toast.error("Failed to Create A2A Server", {
+      toast.error('Failed to Create A2A Server', {
         description:
-          error instanceof Error ? error.message : "An unexpected error occurred"
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred',
       });
     }
   };
@@ -85,7 +103,7 @@ export const A2AServersSection = forwardRef<
   if (showLoading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-center py-8">Loading...</div>
+        <div className="py-8 text-center">Loading...</div>
       </div>
     );
   }
@@ -114,9 +132,10 @@ export const A2AServersSection = forwardRef<
             variant="link"
             asChild
             className="text-muted-foreground"
-            size="sm"
-          >
-            <a href="https://mckinsey.github.io/agents-at-scale-ark/" target="_blank">
+            size="sm">
+            <a
+              href="https://mckinsey.github.io/agents-at-scale-ark/"
+              target="_blank">
               Learn More <ArrowUpRightIcon />
             </a>
           </Button>
@@ -128,14 +147,14 @@ export const A2AServersSection = forwardRef<
           onSave={handleSave}
         />
       </>
-    )
+    );
   }
 
   return (
     <div className="flex h-full flex-col">
       <main className="flex-1 overflow-auto p-6">
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pb-6">
-          {a2aServers.map((server) => (
+        <div className="grid gap-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
+          {a2aServers.map(server => (
             <A2AServerCard
               key={server.name || server.id}
               a2aServer={server}
@@ -150,7 +169,7 @@ export const A2AServersSection = forwardRef<
         <InfoDialog
           open={infoDialogOpen}
           onOpenChange={setInfoDialogOpen}
-          title={`A2A Server: ${selectedServer.name || "Unnamed"}`}
+          title={`A2A Server: ${selectedServer.name || 'Unnamed'}`}
           data={selectedServer}
         />
       )}

@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils';
 
 export interface ToggleOption {
   id: string;
@@ -17,14 +17,14 @@ interface ToggleSwitchProps {
 export function ToggleSwitch({
   options,
   onChange,
-  className
+  className,
 }: ToggleSwitchProps) {
   if (!options || !Array.isArray(options) || options.length < 2) {
     return null;
   }
 
   return (
-    <div className={cn("flex items-center", className)}>
+    <div className={cn('flex items-center', className)}>
       {options.map((option, index) => {
         const isFirst = index === 0;
         const isLast = index === options.length - 1;
@@ -33,18 +33,18 @@ export function ToggleSwitch({
           <button
             key={option.id}
             className={cn(
-              "cursor-pointer border border-gray-300 px-3 py-1 text-sm transition-colors",
+              'cursor-pointer border border-gray-300 px-3 py-1 text-sm transition-colors',
               {
-                "bg-gray-100": option.active,
-                "rounded-l-sm rounded-tr-none rounded-br-none border-r-0": isFirst,
-                "rounded-r-sm rounded-tl-none rounded-bl-none": isLast,
-                "border-r-0": !isFirst && !isLast
-              }
+                'bg-gray-100': option.active,
+                'rounded-l-sm rounded-tr-none rounded-br-none border-r-0':
+                  isFirst,
+                'rounded-tl-none rounded-r-sm rounded-bl-none': isLast,
+                'border-r-0': !isFirst && !isLast,
+              },
             )}
             onClick={() => onChange(option.id)}
             type="button"
-            aria-pressed={option.active}
-          >
+            aria-pressed={option.active}>
             {option.label}
           </button>
         );

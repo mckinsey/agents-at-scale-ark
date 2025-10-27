@@ -1,1 +1,1 @@
-export * from './AuthUtilsWrapper'
+export * from './AuthUtilsWrapper';

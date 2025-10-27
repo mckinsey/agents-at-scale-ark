@@ -1,22 +1,5 @@
-"use client";
+'use client';
 
-import { EvaluationEditor } from "@/components/editors";
-import {
-  EvaluationFilter,
-  type EvaluationFilters
-} from "@/components/filtering";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from "@/components/ui/tooltip";
-import { toast } from "sonner";
-import type { components } from "@/lib/api/generated/types";
-import type { Evaluation, EvaluationDetailResponse } from "@/lib/services";
-import { evaluationsService } from "@/lib/services/evaluations";
 import {
   ArrowUpRightIcon,
   ChevronDown,
@@ -25,61 +8,91 @@ import {
   Plus,
   RefreshCw,
   StopCircle,
-  Trash2
-} from "lucide-react";
-import { useRouter } from "next/navigation";
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from "react";
-import { useGetAllEvaluationsWithDetails } from "@/lib/services/evaluations-hooks";
-import { formatAge } from "@/lib/utils/time";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
-import { DASHBOARD_SECTIONS } from "@/lib/constants";
+  Trash2,
+} from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useState,
+} from 'react';
+import { toast } from 'sonner';
 
-type EvaluationCreateRequest = components["schemas"]["EvaluationCreateRequest"];
-type EvaluationUpdateRequest = components["schemas"]["EvaluationUpdateRequest"];
+import { EvaluationEditor } from '@/components/editors';
+import {
+  EvaluationFilter,
+  type EvaluationFilters,
+} from '@/components/filtering';
+import { Button } from '@/components/ui/button';
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import type { components } from '@/lib/api/generated/types';
+import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import type { Evaluation, EvaluationDetailResponse } from '@/lib/services';
+import { evaluationsService } from '@/lib/services/evaluations';
+import { useGetAllEvaluationsWithDetails } from '@/lib/services/evaluations-hooks';
+import { formatAge } from '@/lib/utils/time';
+
+type EvaluationCreateRequest = components['schemas']['EvaluationCreateRequest'];
+type EvaluationUpdateRequest = components['schemas']['EvaluationUpdateRequest'];
 
 interface EvaluationsSectionProps {
   initialQueryFilter?: string | null;
 }
 
-type SortField = "name" | "score" | "status";
-type SortDirection = "asc" | "desc";
+type SortField = 'name' | 'score' | 'status';
+type SortDirection = 'asc' | 'desc';
 
 const StatusDot = ({
   variant,
-  onCancel
+  onCancel,
 }: {
-  variant: "done" | "error" | "running" | "canceled" | "default";
+  variant: 'done' | 'error' | 'running' | 'canceled' | 'default';
   onCancel?: () => void;
 }) => {
   const getColor = () => {
     switch (variant) {
-      case "done":
-        return "bg-green-500";
-      case "error":
-        return "bg-red-500";
-      case "running":
-        return "bg-blue-500 animate-pulse";
-      case "canceled":
-        return "bg-gray-500";
+      case 'done':
+        return 'bg-green-500';
+      case 'error':
+        return 'bg-red-500';
+      case 'running':
+        return 'bg-blue-500 animate-pulse';
+      case 'canceled':
+        return 'bg-gray-500';
       default:
-        return "bg-gray-400";
+        return 'bg-gray-400';
     }
   };
 
   return (
     <div className="flex items-center gap-2">
-      <div className={`w-2 h-2 rounded-full ${getColor()}`} />
+      <div className={`h-2 w-2 rounded-full ${getColor()}`} />
       <span className="text-sm capitalize">{variant}</span>
       {onCancel && (
         <Button
           variant="ghost"
           size="sm"
-          onClick={(e) => {
+          onClick={e => {
             e.stopPropagation();
             onCancel();
           }}
-          className="h-6 w-6 p-0"
-        >
+          className="h-6 w-6 p-0">
           <StopCircle className="h-3 w-3" />
         </Button>
       )}
@@ -94,32 +107,32 @@ export const EvaluationsSection = forwardRef<
   const [evaluations, setEvaluations] = useState<
     (Evaluation | EvaluationDetailResponse)[]
   >([]);
-  const [sortField, setSortField] = useState<SortField>("name");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingEvaluation, setEditingEvaluation] = useState<Evaluation | null>(
-    null
+    null,
   );
-  const [activeTab, setActiveTab] = useState("standard");
+  const [activeTab, setActiveTab] = useState('standard');
   const [filters, setFilters] = useState<EvaluationFilters>({
-    search: initialQueryFilter || "",
+    search: initialQueryFilter || '',
     status: [],
     evaluator: [],
     mode: [],
-    passed: "all",
-    scoreMin: "",
-    scoreMax: "",
-    evaluationType: []
+    passed: 'all',
+    scoreMin: '',
+    scoreMax: '',
+    evaluationType: [],
   });
   const router = useRouter();
 
   const handleOpenAddEditor = useCallback(() => {
     setEditingEvaluation(null);
     setEditorOpen(true);
-  }, [])
+  }, []);
 
   useImperativeHandle(ref, () => ({
-    openAddEditor: handleOpenAddEditor
+    openAddEditor: handleOpenAddEditor,
   }));
 
   const {
@@ -128,7 +141,7 @@ export const EvaluationsSection = forwardRef<
     isFetching: listEvaluationsFetching,
     isError: listEvaluationsError,
     error: listEvaluationsErrorObject,
-    refetch: loadEvaluations
+    refetch: loadEvaluations,
   } = useGetAllEvaluationsWithDetails({});
 
   useEffect(() => {
@@ -137,17 +150,17 @@ export const EvaluationsSection = forwardRef<
     }
 
     if (listEvaluationsError) {
-      toast.error("Failed to Load Evaluations", {
+      toast.error('Failed to Load Evaluations', {
         description:
           listEvaluationsErrorObject instanceof Error
             ? listEvaluationsErrorObject.message
-            : "An unexpected error occurred"
+            : 'An unexpected error occurred',
       });
     }
   }, [listEvaluationsError, listEvaluationsData, listEvaluationsErrorObject]);
 
   const getEvaluatorDisplay = (
-    evaluation: Evaluation | EvaluationDetailResponse
+    evaluation: Evaluation | EvaluationDetailResponse,
   ) => {
     // First try to get from spec if available (detailed API response)
     const spec = (evaluation as EvaluationDetailResponse)?.spec;
@@ -161,21 +174,21 @@ export const EvaluationsSection = forwardRef<
     // Examples:
     // cost-evaluator-expensive-complex-query-eval -> cost-evaluator
     // evaluator-llm-with-selector-math-query-2-eval -> evaluator-llm-with-selector
-    if (evaluation.name.endsWith("-eval")) {
-      const nameWithoutSuffix = evaluation.name.replace(/-eval$/, "");
+    if (evaluation.name.endsWith('-eval')) {
+      const nameWithoutSuffix = evaluation.name.replace(/-eval$/, '');
 
       // Known evaluator patterns
       const evaluatorPatterns = [
-        { prefix: "cost-evaluator-", name: "cost-evaluator" },
-        { prefix: "performance-evaluator-", name: "performance-evaluator" },
+        { prefix: 'cost-evaluator-', name: 'cost-evaluator' },
+        { prefix: 'performance-evaluator-', name: 'performance-evaluator' },
         {
-          prefix: "high-performance-evaluator-",
-          name: "high-performance-evaluator"
+          prefix: 'high-performance-evaluator-',
+          name: 'high-performance-evaluator',
         },
         {
-          prefix: "evaluator-llm-with-selector-",
-          name: "evaluator-llm-with-selector"
-        }
+          prefix: 'evaluator-llm-with-selector-',
+          name: 'evaluator-llm-with-selector',
+        },
       ];
 
       for (const pattern of evaluatorPatterns) {
@@ -185,22 +198,22 @@ export const EvaluationsSection = forwardRef<
       }
 
       // Fallback: assume the first few parts are the evaluator name
-      const parts = nameWithoutSuffix.split("-");
+      const parts = nameWithoutSuffix.split('-');
       if (parts.length >= 2) {
         // Take the first 2-3 parts as evaluator name
-        if (parts[0] === "evaluator" && parts.length > 3) {
-          return parts.slice(0, 4).join("-"); // Handle "evaluator-llm-with-selector"
+        if (parts[0] === 'evaluator' && parts.length > 3) {
+          return parts.slice(0, 4).join('-'); // Handle "evaluator-llm-with-selector"
         } else {
-          return parts.slice(0, 2).join("-"); // Handle "cost-evaluator", "performance-evaluator"
+          return parts.slice(0, 2).join('-'); // Handle "cost-evaluator", "performance-evaluator"
         }
       }
     }
 
-    return "-";
+    return '-';
   };
 
   const getQueryRefDisplay = (
-    evaluation: Evaluation | EvaluationDetailResponse
+    evaluation: Evaluation | EvaluationDetailResponse,
   ) => {
     // First try to get from spec if available (detailed API response)
     const spec = (evaluation as EvaluationDetailResponse)?.spec;
@@ -213,7 +226,7 @@ export const EvaluationsSection = forwardRef<
 
     // For dataset evaluations, check for datasetRef first
     const mode = getTypeDisplay(evaluation);
-    if (mode === "dataset" && datasetRefSpec?.name) {
+    if (mode === 'dataset' && datasetRefSpec?.name) {
       return datasetRefSpec.name;
     }
 
@@ -227,15 +240,15 @@ export const EvaluationsSection = forwardRef<
     // cost-evaluator-expensive-complex-query-eval -> expensive-complex-query
     // evaluator-llm-with-selector-math-query-2-eval -> math-query-2
     // dataset-evaluator-math-dataset-eval -> math-dataset
-    if (evaluation.name.endsWith("-eval")) {
-      const nameWithoutSuffix = evaluation.name.replace(/-eval$/, "");
+    if (evaluation.name.endsWith('-eval')) {
+      const nameWithoutSuffix = evaluation.name.replace(/-eval$/, '');
 
       // Known evaluator prefixes to remove
       const evaluatorPrefixes = [
-        "cost-evaluator-",
-        "performance-evaluator-",
-        "high-performance-evaluator-",
-        "evaluator-llm-with-selector-"
+        'cost-evaluator-',
+        'performance-evaluator-',
+        'high-performance-evaluator-',
+        'evaluator-llm-with-selector-',
       ];
 
       for (const prefix of evaluatorPrefixes) {
@@ -245,13 +258,13 @@ export const EvaluationsSection = forwardRef<
       }
 
       // Fallback: assume the last few parts are the reference name
-      const parts = nameWithoutSuffix.split("-");
+      const parts = nameWithoutSuffix.split('-');
       if (parts.length >= 2) {
         // Take the last 2-3 parts as reference name
-        const refName = parts.slice(-3).join("-");
+        const refName = parts.slice(-3).join('-');
         if (
-          refName.includes("query") ||
-          refName.includes("dataset") ||
+          refName.includes('query') ||
+          refName.includes('dataset') ||
           refName.match(/\d/) ||
           parts.length <= 4
         ) {
@@ -260,20 +273,20 @@ export const EvaluationsSection = forwardRef<
       }
     }
 
-    return "-";
+    return '-';
   };
 
   const getTypeDisplay = (
-    evaluation: Evaluation | EvaluationDetailResponse
+    evaluation: Evaluation | EvaluationDetailResponse,
   ) => {
     const spec = (evaluation as EvaluationDetailResponse)?.spec;
     const specMode = spec?.type as string;
     const basicMode = (evaluation as Evaluation).type;
-    return specMode || basicMode || "unknown";
+    return specMode || basicMode || 'unknown';
   };
 
   const getScoreDisplay = (
-    evaluation: Evaluation | EvaluationDetailResponse
+    evaluation: Evaluation | EvaluationDetailResponse,
   ) => {
     // Try to get score from basic evaluation first
     let score: string | number | null | undefined = (evaluation as Evaluation)
@@ -286,14 +299,14 @@ export const EvaluationsSection = forwardRef<
       score = detailedStatus?.score as string | number;
     }
 
-    if (score === null || score === undefined) return "-";
-    if (typeof score === "number") return score.toFixed(2);
-    if (typeof score === "string") return score;
+    if (score === null || score === undefined) return '-';
+    if (typeof score === 'number') return score.toFixed(2);
+    if (typeof score === 'string') return score;
     return String(score);
   };
 
   const getPassedDisplay = (
-    evaluation: Evaluation | EvaluationDetailResponse
+    evaluation: Evaluation | EvaluationDetailResponse,
   ) => {
     // Try to get passed from basic evaluation first
     let passed = (evaluation as Evaluation).passed;
@@ -305,16 +318,16 @@ export const EvaluationsSection = forwardRef<
       passed = detailedStatus?.passed as boolean;
     }
 
-    if (passed === null || passed === undefined) return "-";
-    return passed ? "✓" : "✗";
+    if (passed === null || passed === undefined) return '-';
+    return passed ? '✓' : '✗';
   };
 
   // Extract unique values for filter options based on current tab
   const getAvailableEvaluators = () => {
     const evaluators = new Set<string>();
-    currentEvaluations.forEach((evaluation) => {
+    currentEvaluations.forEach(evaluation => {
       const evaluatorName = getEvaluatorDisplay(evaluation);
-      if (evaluatorName !== "-") {
+      if (evaluatorName !== '-') {
         evaluators.add(evaluatorName);
       }
     });
@@ -323,9 +336,9 @@ export const EvaluationsSection = forwardRef<
 
   const getAvailableTypes = () => {
     const modes = new Set<string>();
-    currentEvaluations.forEach((evaluation) => {
+    currentEvaluations.forEach(evaluation => {
       const mode = getTypeDisplay(evaluation);
-      if (mode !== "unknown") {
+      if (mode !== 'unknown') {
         modes.add(mode);
       }
     });
@@ -333,22 +346,22 @@ export const EvaluationsSection = forwardRef<
   };
 
   // Separate evaluations by type
-  const standardEvaluations = evaluations.filter((evaluation) => {
+  const standardEvaluations = evaluations.filter(evaluation => {
     const mode = getTypeDisplay(evaluation);
-    return ["direct", "query", "batch", "manual", "event"].includes(mode);
+    return ['direct', 'query', 'batch', 'manual', 'event'].includes(mode);
   });
 
-  const datasetEvaluations = evaluations.filter((evaluation) => {
+  const datasetEvaluations = evaluations.filter(evaluation => {
     const mode = getTypeDisplay(evaluation);
-    return mode === "baseline";
+    return mode === 'baseline';
   });
 
   // Get current evaluations based on active tab
   const currentEvaluations =
-    activeTab === "dataset" ? datasetEvaluations : standardEvaluations;
+    activeTab === 'dataset' ? datasetEvaluations : standardEvaluations;
 
   // Filter evaluations based on current filters
-  const filteredEvaluations = currentEvaluations.filter((evaluation) => {
+  const filteredEvaluations = currentEvaluations.filter(evaluation => {
     // Search filter
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
@@ -378,7 +391,7 @@ export const EvaluationsSection = forwardRef<
     }
 
     // Pass/Fail filter
-    if (filters.passed !== "all") {
+    if (filters.passed !== 'all') {
       // Try to get passed from basic evaluation first
       let passed = (evaluation as Evaluation).passed;
 
@@ -389,10 +402,10 @@ export const EvaluationsSection = forwardRef<
         passed = detailedStatus?.passed as boolean;
       }
 
-      if (filters.passed === "passed" && passed !== true) return false;
-      if (filters.passed === "failed" && passed !== false) return false;
+      if (filters.passed === 'passed' && passed !== true) return false;
+      if (filters.passed === 'failed' && passed !== false) return false;
       if (
-        filters.passed === "unknown" &&
+        filters.passed === 'unknown' &&
         passed !== null &&
         passed !== undefined
       )
@@ -412,7 +425,7 @@ export const EvaluationsSection = forwardRef<
         score = detailedStatus?.score as string | number;
       }
 
-      if (typeof score === "number") {
+      if (typeof score === 'number') {
         const min = filters.scoreMin ? parseFloat(filters.scoreMin) : 0;
         const max = filters.scoreMax ? parseFloat(filters.scoreMax) : 1;
         if (score < min || score > max) return false;
@@ -427,21 +440,21 @@ export const EvaluationsSection = forwardRef<
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
-      setSortDirection("desc");
+      setSortDirection('desc');
     }
   };
 
   const sortedEvaluations = [...filteredEvaluations].sort((a, b) => {
-    if (sortField === "name") {
-      const aName = a.name || "";
-      const bName = b.name || "";
-      return sortDirection === "desc"
+    if (sortField === 'name') {
+      const aName = a.name || '';
+      const bName = b.name || '';
+      return sortDirection === 'desc'
         ? bName.localeCompare(aName)
         : aName.localeCompare(bName);
-    } else if (sortField === "score") {
+    } else if (sortField === 'score') {
       // Get scores using the same logic as getScoreDisplay
       let aScore: number = 0;
       let bScore: number = 0;
@@ -450,7 +463,7 @@ export const EvaluationsSection = forwardRef<
       const aScoreRaw = (a as Evaluation).score;
       if (aScoreRaw !== null && aScoreRaw !== undefined) {
         aScore =
-          typeof aScoreRaw === "number"
+          typeof aScoreRaw === 'number'
             ? aScoreRaw
             : parseFloat(String(aScoreRaw)) || 0;
       } else {
@@ -458,7 +471,7 @@ export const EvaluationsSection = forwardRef<
           ?.status as Record<string, unknown>;
         const aScoreDetailed = aDetailedStatus?.score;
         aScore =
-          typeof aScoreDetailed === "number"
+          typeof aScoreDetailed === 'number'
             ? aScoreDetailed
             : parseFloat(String(aScoreDetailed)) || 0;
       }
@@ -467,7 +480,7 @@ export const EvaluationsSection = forwardRef<
       const bScoreRaw = (b as Evaluation).score;
       if (bScoreRaw !== null && bScoreRaw !== undefined) {
         bScore =
-          typeof bScoreRaw === "number"
+          typeof bScoreRaw === 'number'
             ? bScoreRaw
             : parseFloat(String(bScoreRaw)) || 0;
       } else {
@@ -475,29 +488,29 @@ export const EvaluationsSection = forwardRef<
           ?.status as Record<string, unknown>;
         const bScoreDetailed = bDetailedStatus?.score;
         bScore =
-          typeof bScoreDetailed === "number"
+          typeof bScoreDetailed === 'number'
             ? bScoreDetailed
             : parseFloat(String(bScoreDetailed)) || 0;
       }
 
-      return sortDirection === "desc" ? bScore - aScore : aScore - bScore;
-    } else if (sortField === "status") {
+      return sortDirection === 'desc' ? bScore - aScore : aScore - bScore;
+    } else if (sortField === 'status') {
       // Get status using the same logic as getStatus
-      let aStatus = (a as Evaluation).phase || "pending";
-      let bStatus = (b as Evaluation).phase || "pending";
+      let aStatus = (a as Evaluation).phase || 'pending';
+      let bStatus = (b as Evaluation).phase || 'pending';
 
-      if (!aStatus || aStatus === "pending") {
+      if (!aStatus || aStatus === 'pending') {
         const aDetailedStatus = (a as EvaluationDetailResponse)
           ?.status as Record<string, unknown>;
-        aStatus = (aDetailedStatus?.phase as string) || "pending";
+        aStatus = (aDetailedStatus?.phase as string) || 'pending';
       }
-      if (!bStatus || bStatus === "pending") {
+      if (!bStatus || bStatus === 'pending') {
         const bDetailedStatus = (b as EvaluationDetailResponse)
           ?.status as Record<string, unknown>;
-        bStatus = (bDetailedStatus?.phase as string) || "pending";
+        bStatus = (bDetailedStatus?.phase as string) || 'pending';
       }
 
-      return sortDirection === "desc"
+      return sortDirection === 'desc'
         ? bStatus.localeCompare(aStatus)
         : aStatus.localeCompare(bStatus);
     }
@@ -515,35 +528,30 @@ export const EvaluationsSection = forwardRef<
       phase = detailedStatus?.phase as string;
     }
 
-    return phase || "pending";
+    return phase || 'pending';
   };
 
   const getStatusBadge = (
     status: string | undefined,
-    evaluationName: string
+    evaluationName: string,
   ) => {
     const normalizedStatus = status as
-      | "done"
-      | "error"
-      | "running"
-      | "canceled"
-      | "default";
-    const variant = [
-      "done",
-      "error",
-      "running",
-      "canceled"
-    ].includes(status || "")
+      | 'done'
+      | 'error'
+      | 'running'
+      | 'canceled'
+      | 'default';
+    const variant = ['done', 'error', 'running', 'canceled'].includes(
+      status || '',
+    )
       ? normalizedStatus
-      : "default";
+      : 'default';
 
     return (
       <StatusDot
         variant={variant}
         onCancel={
-          status === "running"
-            ? () => handleCancel(evaluationName)
-            : undefined
+          status === 'running' ? () => handleCancel(evaluationName) : undefined
         }
       />
     );
@@ -552,17 +560,17 @@ export const EvaluationsSection = forwardRef<
   const handleDelete = async (evaluationName: string) => {
     try {
       await evaluationsService.delete(evaluationName);
-      toast.success("Evaluation Deleted", {
-        description: "Successfully deleted evaluation"
+      toast.success('Evaluation Deleted', {
+        description: 'Successfully deleted evaluation',
       });
       // Reload evaluations
       await loadEvaluations();
     } catch (error) {
-      toast.error("Failed to Delete Evaluation", {
+      toast.error('Failed to Delete Evaluation', {
         description:
           error instanceof Error
             ? error.message
-            : "An unexpected error occurred"
+            : 'An unexpected error occurred',
       });
     }
   };
@@ -570,17 +578,17 @@ export const EvaluationsSection = forwardRef<
   const handleCancel = async (evaluationName: string) => {
     try {
       await evaluationsService.cancel(evaluationName);
-      toast.success("Evaluation Canceled", {
-        description: "Successfully canceled evaluation"
+      toast.success('Evaluation Canceled', {
+        description: 'Successfully canceled evaluation',
       });
       // Reload evaluations
       await loadEvaluations();
     } catch (error) {
-      toast.error("Failed to Cancel Evaluation", {
+      toast.error('Failed to Cancel Evaluation', {
         description:
           error instanceof Error
             ? error.message
-            : "An unexpected error occurred"
+            : 'An unexpected error occurred',
       });
     }
   };
@@ -588,42 +596,39 @@ export const EvaluationsSection = forwardRef<
   const handleSaveEvaluation = async (
     evaluation: (EvaluationCreateRequest | EvaluationUpdateRequest) & {
       id?: string;
-    }
+    },
   ) => {
     try {
       if (evaluation.id) {
         const updateRequest = evaluation as EvaluationUpdateRequest & {
           id: string;
         };
-        await evaluationsService.update(
-          updateRequest.id,
-          updateRequest
-        );
-        toast.success("Evaluation Updated", {
-          description: "Successfully updated evaluation"
+        await evaluationsService.update(updateRequest.id, updateRequest);
+        toast.success('Evaluation Updated', {
+          description: 'Successfully updated evaluation',
         });
       } else {
         const createRequest = evaluation as EvaluationCreateRequest;
         await evaluationsService.create(createRequest);
-        toast.success("Evaluation Created", {
-          description: "Successfully created evaluation"
+        toast.success('Evaluation Created', {
+          description: 'Successfully created evaluation',
         });
       }
 
       // Reload evaluations
       await loadEvaluations();
     } catch (error) {
-      toast.error("Failed to Save Evaluation", {
+      toast.error('Failed to Save Evaluation', {
         description:
           error instanceof Error
             ? error.message
-            : "An unexpected error occurred"
+            : 'An unexpected error occurred',
       });
     }
   };
 
   const handleEditEvaluation = (
-    evaluation: Evaluation | EvaluationDetailResponse
+    evaluation: Evaluation | EvaluationDetailResponse,
   ) => {
     setEditingEvaluation(evaluation as Evaluation);
     setEditorOpen(true);
@@ -638,19 +643,18 @@ export const EvaluationsSection = forwardRef<
   }
 
   const renderEvaluationTable = () => (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+    <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[800px]">
           <thead>
-            <tr className="border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
+            <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/50">
               <th
-                className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
-                onClick={() => handleSort("name")}
-              >
+                className="cursor-pointer px-3 py-2 text-left text-sm font-medium text-gray-900 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-800"
+                onClick={() => handleSort('name')}>
                 <div className="flex items-center">
                   Name
-                  {sortField === "name" &&
-                    (sortDirection === "desc" ? (
+                  {sortField === 'name' &&
+                    (sortDirection === 'desc' ? (
                       <ChevronDown className="ml-1 h-4 w-4" />
                     ) : (
                       <ChevronUp className="ml-1 h-4 w-4" />
@@ -658,9 +662,8 @@ export const EvaluationsSection = forwardRef<
                 </div>
               </th>
               <th
-                className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
-                onClick={() => handleSort("name")}
-              >
+                className="cursor-pointer px-3 py-2 text-left text-sm font-medium text-gray-900 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-800"
+                onClick={() => handleSort('name')}>
                 <div className="flex items-center">Age</div>
               </th>
               <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -669,19 +672,18 @@ export const EvaluationsSection = forwardRef<
               <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
                 Type
               </th>
-              {activeTab !== "dataset" && (
+              {activeTab !== 'dataset' && (
                 <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
                   Query Ref
                 </th>
               )}
               <th
-                className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
-                onClick={() => handleSort("score")}
-              >
+                className="cursor-pointer px-3 py-2 text-left text-sm font-medium text-gray-900 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-800"
+                onClick={() => handleSort('score')}>
                 <div className="flex items-center">
                   Score
-                  {sortField === "score" &&
-                    (sortDirection === "desc" ? (
+                  {sortField === 'score' &&
+                    (sortDirection === 'desc' ? (
                       <ChevronDown className="ml-1 h-4 w-4" />
                     ) : (
                       <ChevronUp className="ml-1 h-4 w-4" />
@@ -692,13 +694,12 @@ export const EvaluationsSection = forwardRef<
                 Passed
               </th>
               <th
-                className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
-                onClick={() => handleSort("status")}
-              >
+                className="cursor-pointer px-3 py-2 text-left text-sm font-medium text-gray-900 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-800"
+                onClick={() => handleSort('status')}>
                 <div className="flex items-center">
                   Status
-                  {sortField === "status" &&
-                    (sortDirection === "desc" ? (
+                  {sortField === 'status' &&
+                    (sortDirection === 'desc' ? (
                       <ChevronDown className="ml-1 h-4 w-4" />
                     ) : (
                       <ChevronUp className="ml-1 h-4 w-4" />
@@ -714,9 +715,8 @@ export const EvaluationsSection = forwardRef<
             {sortedEvaluations.length === 0 ? (
               <tr>
                 <td
-                  colSpan={activeTab === "dataset" ? 8 : 9}
-                  className="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
-                >
+                  colSpan={activeTab === 'dataset' ? 8 : 9}
+                  className="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
                   <Empty>
                     <EmptyHeader>
                       <EmptyMedia variant="icon">
@@ -724,8 +724,8 @@ export const EvaluationsSection = forwardRef<
                       </EmptyMedia>
                       <EmptyTitle>No Evaluations Yet</EmptyTitle>
                       <EmptyDescription>
-                        You haven&apos;t created any evaluations yet. Get started by creating
-                        your first evaluation.
+                        You haven&apos;t created any evaluations yet. Get
+                        started by creating your first evaluation.
                       </EmptyDescription>
                     </EmptyHeader>
                     <EmptyContent>
@@ -738,9 +738,10 @@ export const EvaluationsSection = forwardRef<
                       variant="link"
                       asChild
                       className="text-muted-foreground"
-                      size="sm"
-                    >
-                      <a href="https://mckinsey.github.io/agents-at-scale-ark/reference/evaluations/evaluations/" target="_blank">
+                      size="sm">
+                      <a
+                        href="https://mckinsey.github.io/agents-at-scale-ark/reference/evaluations/evaluations/"
+                        target="_blank">
                         Learn More <ArrowUpRightIcon />
                       </a>
                     </Button>
@@ -748,25 +749,22 @@ export const EvaluationsSection = forwardRef<
                 </td>
               </tr>
             ) : (
-              sortedEvaluations.map((evaluation) => {
+              sortedEvaluations.map(evaluation => {
                 const status = getStatus(evaluation);
                 return (
                   <tr
                     key={evaluation.name}
-                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/30 cursor-pointer"
+                    className="cursor-pointer border-b border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/30"
                     onClick={() => {
-                      router.push(
-                        `/evaluation/${evaluation.name}`
-                      );
-                    }}
-                  >
-                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100 font-mono">
+                      router.push(`/evaluation/${evaluation.name}`);
+                    }}>
+                    <td className="px-3 py-3 font-mono text-sm text-gray-900 dark:text-gray-100">
                       {evaluation.name}
                     </td>
                     <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                       {formatAge(
                         (evaluation as EvaluationDetailResponse)?.metadata
-                          ?.creationTimestamp as string | undefined
+                          ?.creationTimestamp as string | undefined,
                       )}
                     </td>
                     <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
@@ -774,15 +772,15 @@ export const EvaluationsSection = forwardRef<
                     </td>
                     <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                       <span
-                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${activeTab === "dataset"
-                          ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
-                          : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                          }`}
-                      >
+                        className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                          activeTab === 'dataset'
+                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                            : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                        }`}>
                         {getTypeDisplay(evaluation)}
                       </span>
                     </td>
-                    {activeTab !== "dataset" && (
+                    {activeTab !== 'dataset' && (
                       <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                         {getQueryRefDisplay(evaluation)}
                       </td>
@@ -804,12 +802,11 @@ export const EvaluationsSection = forwardRef<
                             passed = detailedStatus?.passed as boolean;
                           }
                           return passed
-                            ? "text-green-600"
+                            ? 'text-green-600'
                             : passed === false
-                              ? "text-red-600"
-                              : "text-gray-400";
-                        })()}`}
-                      >
+                              ? 'text-red-600'
+                              : 'text-gray-400';
+                        })()}`}>
                         {getPassedDisplay(evaluation)}
                       </span>
                     </td>
@@ -825,11 +822,10 @@ export const EvaluationsSection = forwardRef<
                                 variant="ghost"
                                 size="sm"
                                 className="h-8 w-8 p-0"
-                                onClick={(e) => {
+                                onClick={e => {
                                   e.stopPropagation();
                                   handleEditEvaluation(evaluation);
-                                }}
-                              >
+                                }}>
                                 <Edit className="h-4 w-4" />
                               </Button>
                             </TooltipTrigger>
@@ -845,11 +841,10 @@ export const EvaluationsSection = forwardRef<
                                 variant="ghost"
                                 size="sm"
                                 className="h-8 w-8 p-0"
-                                onClick={(e) => {
+                                onClick={e => {
                                   e.stopPropagation();
                                   handleDelete(evaluation.name);
-                                }}
-                              >
+                                }}>
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </TooltipTrigger>
@@ -872,7 +867,7 @@ export const EvaluationsSection = forwardRef<
 
   return (
     <div className="flex h-full flex-col space-y-4">
-      <div className="border-b space-y-4 pb-4">
+      <div className="space-y-4 border-b pb-4">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
             <TabsTrigger value="standard" className="text-sm">
@@ -896,11 +891,11 @@ export const EvaluationsSection = forwardRef<
 
           <Button
             onClick={() => loadEvaluations()}
-            disabled={listEvaluationsFetching}
-          >
+            disabled={listEvaluationsFetching}>
             <RefreshCw
-              className={`h-4 w-4 ${listEvaluationsFetching ? "animate-spin" : ""
-                }`}
+              className={`h-4 w-4 ${
+                listEvaluationsFetching ? 'animate-spin' : ''
+              }`}
             />
             Refresh
           </Button>
