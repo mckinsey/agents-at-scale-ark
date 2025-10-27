@@ -1,10 +1,12 @@
-"use client";
+'use client';
 
-import { MetricCard } from "./metric-card";
-import { DASHBOARD_SECTIONS } from "@/lib/constants";
-import { useGetAllTeams } from "@/lib/services/teams-hooks";
-import { useEffect } from "react";
-import { toast } from "sonner";
+import { useEffect } from 'react';
+import { toast } from 'sonner';
+
+import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import { useGetAllTeams } from '@/lib/services/teams-hooks';
+
+import { MetricCard } from './metric-card';
 
 export function HomepageTeamsCard() {
   const { data, isPending, error } = useGetAllTeams();
@@ -16,11 +18,11 @@ export function HomepageTeamsCard() {
 
   useEffect(() => {
     if (error) {
-      toast.error("Failed to get Teams", {
+      toast.error('Failed to get Teams', {
         description:
           error instanceof Error
             ? error.message
-            : "An unexpected error occurred"
+            : 'An unexpected error occurred',
       });
     }
   }, [error]);

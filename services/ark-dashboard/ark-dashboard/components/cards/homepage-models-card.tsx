@@ -1,10 +1,12 @@
-"use client";
+'use client';
 
-import { useGetAllModels } from "@/lib/services/models-hooks";
-import { MetricCard } from "./metric-card";
-import { DASHBOARD_SECTIONS } from "@/lib/constants";
-import { useEffect } from "react";
-import { toast } from "sonner";
+import { useEffect } from 'react';
+import { toast } from 'sonner';
+
+import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import { useGetAllModels } from '@/lib/services/models-hooks';
+
+import { MetricCard } from './metric-card';
 
 export function HomepageModelsCard() {
   const { data, isPending, error } = useGetAllModels();
@@ -14,11 +16,11 @@ export function HomepageModelsCard() {
 
   useEffect(() => {
     if (error) {
-      toast.error("Failed to get Models", {
+      toast.error('Failed to get Models', {
         description:
           error instanceof Error
             ? error.message
-            : "An unexpected error occurred"
+            : 'An unexpected error occurred',
       });
     }
   }, [error]);

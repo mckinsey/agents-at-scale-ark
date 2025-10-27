@@ -1,34 +1,37 @@
-'use client'
-import { BreadcrumbElement, PageHeader } from "@/components/common/page-header"
-import { UpdateModelForm } from "@/components/forms"
-import { Spinner } from "@/components/ui/spinner"
-import { useGetModelbyId } from "@/lib/services/models-hooks"
-import { use } from 'react'
+'use client';
+
+import { use } from 'react';
+
+import type { BreadcrumbElement } from '@/components/common/page-header';
+import { PageHeader } from '@/components/common/page-header';
+import { UpdateModelForm } from '@/components/forms';
+import { Spinner } from '@/components/ui/spinner';
+import { useGetModelbyId } from '@/lib/services/models-hooks';
 
 const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: "ARK Dashboard" },
-  { href: '/models', label: 'Models' }
-]
+  { href: '/', label: 'ARK Dashboard' },
+  { href: '/models', label: 'Models' },
+];
 
 type PageProps = {
-  params: Promise<{ model_id: string }>
-}
+  params: Promise<{ model_id: string }>;
+};
 
 export default function ModelUpdatePage({ params }: PageProps) {
-  const { model_id } = use(params)
-  const { data, isPending } = useGetModelbyId({ model_id })
+  const { model_id: modelId } = use(params);
+  const { data, isPending } = useGetModelbyId({ modelId });
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <PageHeader breadcrumbs={breadcrumbs} currentPage={model_id} />
+    <div className="flex min-h-screen flex-col">
+      <PageHeader breadcrumbs={breadcrumbs} currentPage={modelId} />
       {isPending && (
-        <div className="w-full flex justify-center items-center flex-1">
+        <div className="flex w-full flex-1 items-center justify-center">
           <Spinner />
         </div>
       )}
       <main className="container px-6 py-8">
-        {data && (<UpdateModelForm model={data} />)}
+        {data && <UpdateModelForm model={data} />}
       </main>
     </div>
-  )
+  );
 }

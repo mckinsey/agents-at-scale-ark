@@ -1,5 +1,7 @@
-"use client";
-import { User } from "@/lib/types/user";
+'use client';
+
+import type { User } from '@/lib/types/user';
+
 /* eslint-disable @next/next/no-img-element */
 
 type Props = {
@@ -9,19 +11,19 @@ type Props = {
 export function UserDetails({ user }: Props) {
   return (
     <div className="flex gap-2">
-      <span className="relative flex size-8 shrink-0 overflow-hidden h-8 w-8 rounded-lg select-none">
+      <span className="relative flex size-8 h-8 w-8 shrink-0 overflow-hidden rounded-lg select-none">
         {user.image ? (
           <img
             src={user.image}
-            alt={user.name || "Avatar"}
+            alt={user.name || 'Avatar'}
             className="aspect-square select-none"
           />
         ) : (
-          <div className="aspect-square flex items-center justify-center bg-foreground text-background">
+          <div className="bg-foreground text-background flex aspect-square items-center justify-center">
             {user.name
-              ?.split(" ")
+              ?.split(' ')
               .slice(0, 2)
-              .map((i) => i[0])}
+              .map(i => i[0])}
           </div>
         )}
       </span>

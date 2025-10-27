@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react";
-import { Label } from "@radix-ui/react-label";
+import { Label } from '@radix-ui/react-label';
+import { useEffect, useState } from 'react';
+
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
-import { agentsService, type Agent } from "@/lib/services";
+  SelectValue,
+} from '@/components/ui/select';
+import { type Agent, agentsService } from '@/lib/services';
 
 interface AgentFieldsProps {
   selectedAgent: string;
@@ -16,7 +17,12 @@ interface AgentFieldsProps {
   open: boolean;
 }
 
-function AgentFields({ selectedAgent, setSelectedAgent, namespace, open }: AgentFieldsProps) {
+function AgentFields({
+  selectedAgent,
+  setSelectedAgent,
+  namespace,
+  open,
+}: AgentFieldsProps) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(false);
 
@@ -28,7 +34,7 @@ function AgentFields({ selectedAgent, setSelectedAgent, namespace, open }: Agent
           const agentList = await agentsService.getAll();
           setAgents(agentList);
         } catch (error) {
-          console.error("Failed to load agents:", error);
+          console.error('Failed to load agents:', error);
         } finally {
           setLoadingAgents(false);
         }
@@ -42,15 +48,23 @@ function AgentFields({ selectedAgent, setSelectedAgent, namespace, open }: Agent
       <Label htmlFor="agent">Agent</Label>
       <Select value={selectedAgent} onValueChange={setSelectedAgent}>
         <SelectTrigger id="agent">
-          <SelectValue placeholder={loadingAgents ? "Loading agents..." : "Select agent..."} />
+          <SelectValue
+            placeholder={
+              loadingAgents ? 'Loading agents...' : 'Select agent...'
+            }
+          />
         </SelectTrigger>
         <SelectContent>
           {loadingAgents ? (
-            <SelectItem value="loading" disabled>Loading agents...</SelectItem>
+            <SelectItem value="loading" disabled>
+              Loading agents...
+            </SelectItem>
           ) : agents.length === 0 ? (
-            <SelectItem value="no-agents" disabled>No agents available</SelectItem>
+            <SelectItem value="no-agents" disabled>
+              No agents available
+            </SelectItem>
           ) : (
-            agents.map((agent) => (
+            agents.map(agent => (
               <SelectItem key={agent.id} value={agent.name}>
                 {agent.name}
               </SelectItem>

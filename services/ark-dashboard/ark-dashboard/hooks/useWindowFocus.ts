@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from 'react';
 
 type UseWindowFocusOptions = {
   enabled?: boolean;
   onBlur?: () => void;
   onFocus?: () => void;
-}
+};
 
 export function useWindowFocus(options: UseWindowFocusOptions = {}) {
   const { onFocus, onBlur, enabled = true } = options;
@@ -41,12 +41,12 @@ export function useWindowFocus(options: UseWindowFocusOptions = {}) {
       return;
     }
 
-    window.addEventListener("focus", handleFocus);
-    window.addEventListener("blur", handleBlur);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
 
     return () => {
-      window.removeEventListener("focus", handleFocus);
-      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
     };
   }, [enabled, handleFocus, handleBlur]);
 }

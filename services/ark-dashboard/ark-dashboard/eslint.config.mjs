@@ -5,7 +5,9 @@ import { globalIgnores } from 'eslint/config';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
 const __filename = fileURLToPath(import.meta.url);
+// eslint-disable-next-line @typescript-eslint/naming-convention
 const __dirname = dirname(__filename);
 
 const compat = new FlatCompat({
