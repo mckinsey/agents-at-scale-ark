@@ -1,0 +1,181 @@
+package genai
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"testing"
+	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/stretchr/testify/require"
+)
+
+type mcpConnectionOps struct {
+	host      string
+	port      string
+	transport string
+}
+type testOptions struct {
+	mcpServer struct {
+		connectionOptions mcpConnectionOps
+	}
+	mcpClient struct {
+		connectionOptions mcpConnectionOps
+	}
+}
+
+func TestNewMCPClient(t *testing.T) {
+	testCases := map[string]testOptions{
+		"Creates MCPClient over HTTP transport": {
+			mcpServer: struct{ connectionOptions mcpConnectionOps }{
+				connectionOptions: mcpConnectionOps{
+					host:      "localhost",
+					port:      "8888",
+					transport: "http",
+				},
+			},
+			mcpClient: struct{ connectionOptions mcpConnectionOps }{
+				connectionOptions: mcpConnectionOps{
+					host:      "localhost",
+					port:      "8888",
+					transport: "http",
+				},
+			},
+		},
+		"Creates MCPClient over SSE transport": {
+			mcpServer: struct{ connectionOptions mcpConnectionOps }{
+				connectionOptions: mcpConnectionOps{
+					host:      "localhost",
+					port:      "8888",
+					transport: "sse",
+				},
+			},
+			mcpClient: struct{ connectionOptions mcpConnectionOps }{
+				connectionOptions: mcpConnectionOps{
+					host:      "localhost",
+					port:      "8888",
+					transport: "sse",
+				},
+			},
+		},
+	}
+
+	for testName, tc := range testCases {
+		t.Run(testName, func(t *testing.T) {
+			mcpServerMock := mcpServerMock{}.New(t, tc.mcpServer.connectionOptions)
+
+			// Start server in a goroutine since ListenAndServe blocks
+			go func() {
+				fmt.Println("Starting MCP server mock...")
+				err := mcpServerMock.ListenAndServe(t)
+				if err != nil && err != http.ErrServerClosed {
+					t.Errorf("Failed to start MCP server mock: %v", err)
+				}
+			}()
+
+			// Clean up server when test completes
+			t.Cleanup(func() {
+				fmt.Println("Shutting down MCP server mock...")
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				_ = mcpServerMock.Shutdown(ctx)
+
+				// Ensure server has time to shut down
+				time.Sleep(300 * time.Millisecond)
+			})
+
+			// Give the server time to start
+			time.Sleep(300 * time.Millisecond)
+
+			ctx := t.Context()
+			client, err := NewMCPClient(
+				ctx,
+				fmt.Sprintf("http://%s:%s", tc.mcpClient.connectionOptions.host, tc.mcpClient.connectionOptions.port),
+				nil,
+				tc.mcpClient.connectionOptions.transport,
+				30*time.Second,
+				MCPSettings{},
+			)
+			if err != nil {
+				t.Fatalf("Expected no error, got %v", err)
+			}
+			if client == nil {
+				t.Fatal("Expected a valid MCP client, got nil")
+			}
+
+			tools, err := client.ListTools(ctx)
+			require.NoError(t, err)
+			require.Equal(t, "greet", tools[0].Name)
+		})
+	}
+}
+
+type mcpServerMock struct {
+	server     *mcp.Server
+	httpServer *http.Server
+	opts       mcpConnectionOps
+}
+
+func (m mcpServerMock) New(t *testing.T, opts mcpConnectionOps) *mcpServerMock {
+	mcpServer := mcp.NewServer(&mcp.Implementation{Name: "greeter", Version: "v0.0.1"}, nil)
+
+	mcp.AddTool(mcpServer, &mcp.Tool{Name: "greet", Description: "say hi"}, m.sayHi)
+
+	return &mcpServerMock{
+		server: mcpServer,
+		opts:   opts,
+	}
+}
+
+func (m *mcpServerMock) ListenAndServe(t *testing.T) error {
+	t.Helper()
+
+	var handler http.Handler
+	switch m.opts.transport {
+	case "sse":
+		handler = mcp.NewSSEHandler(m.getServerFn())
+	case "http":
+		handler = mcp.NewStreamableHTTPHandler(m.getServerFn(), nil)
+	default:
+		panic("unsupported transport")
+	}
+
+	m.httpServer = &http.Server{
+		Addr:    fmt.Sprintf("%s:%s", m.opts.host, m.opts.port),
+		Handler: handler,
+	}
+	return m.httpServer.ListenAndServe()
+}
+
+func (m *mcpServerMock) Shutdown(ctx context.Context) error {
+	if m.httpServer != nil {
+		return m.httpServer.Shutdown(ctx)
+	}
+	return nil
+}
+
+func (m *mcpServerMock) getServerFn() func(request *http.Request) *mcp.Server {
+	return func(request *http.Request) *mcp.Server {
+		fmt.Printf("incoming request: %+v\n", request)
+		url := request.URL.Path
+		switch url {
+		case "/mcp", "/sse":
+			return m.server
+		default:
+			panic("endpoint not implemented")
+		}
+	}
+}
+
+type sayHiParams struct {
+	Name string `json:"name"`
+}
+
+func (m *mcpServerMock) sayHi(ctx context.Context, req *mcp.CallToolRequest, args sayHiParams) (*mcp.CallToolResult, any, error) {
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: "Hi " + args.Name},
+		},
+	}, nil, nil
+}

@@ -49,11 +49,6 @@ func NewMCPClient(ctx context.Context, baseURL string, headers map[string]string
 	return mcpClient, nil
 }
 
-func createSSEClient() (*mcp.Client, error) {
-	// Create HTTP client which is backwards compatible with SSE transport
-	return createHTTPClient()
-}
-
 func createHTTPClient() (*mcp.Client, error) {
 	impl := &mcp.Implementation{
 		Name:    arkv1alpha1.GroupVersion.Group,
@@ -62,17 +57,6 @@ func createHTTPClient() (*mcp.Client, error) {
 
 	mcpClient := mcp.NewClient(impl, nil)
 	return mcpClient, nil
-}
-
-func createMCPClientByTransport(transportType string) (*mcp.Client, error) {
-	switch transportType {
-	case "sse":
-		return createSSEClient()
-	case "http":
-		return createHTTPClient()
-	default:
-		return nil, fmt.Errorf("unsupported transport type: %s", transportType)
-	}
 }
 
 func performBackoff(ctx context.Context, attempt int, baseURL string) error {
@@ -88,7 +72,7 @@ func performBackoff(ctx context.Context, attempt int, baseURL string) error {
 	}
 }
 
-func createTransport(baseURL string, headers map[string]string, timeout time.Duration) mcp.Transport {
+func createTransport(baseURL string, headers map[string]string, timeout time.Duration, transportType string) mcp.Transport {
 	// Create HTTP client with headers
 	httpClient := &http.Client{
 		Timeout: timeout,
@@ -102,14 +86,26 @@ func createTransport(baseURL string, headers map[string]string, timeout time.Dur
 		}
 	}
 
-	u, _ := url.Parse(baseURL)
-	u.Path = path.Join(u.Path, "mcp")
-	fullURL := u.String()
-
-	return &mcp.StreamableClientTransport{
-		Endpoint:   fullURL,
-		HTTPClient: httpClient,
-		MaxRetries: 5,
+	switch transportType {
+	case "sse":
+		u, _ := url.Parse(baseURL)
+		u.Path = path.Join(u.Path, "sse")
+		fullURL := u.String()
+		return &mcp.SSEClientTransport{
+			Endpoint:   fullURL,
+			HTTPClient: httpClient,
+		}
+	case "http":
+		u, _ := url.Parse(baseURL)
+		u.Path = path.Join(u.Path, "mcp")
+		fullURL := u.String()
+		return &mcp.StreamableClientTransport{
+			Endpoint:   fullURL,
+			HTTPClient: httpClient,
+			MaxRetries: 5,
+		}
+	default:
+		panic("unsupported transport type: " + transportType)
 	}
 }
 
@@ -128,10 +124,10 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.base.RoundTrip(req)
 }
 
-func attemptMCPConnection(ctx, connectCtx context.Context, mcpClient *mcp.Client, baseURL string, headers map[string]string, httpTimeout time.Duration) (*mcp.ClientSession, error) {
+func attemptMCPConnection(ctx, connectCtx context.Context, mcpClient *mcp.Client, baseURL string, headers map[string]string, httpTimeout time.Duration, transportType string) (*mcp.ClientSession, error) {
 	log := logf.FromContext(ctx)
 
-	transport := createTransport(baseURL, headers, httpTimeout)
+	transport := createTransport(baseURL, headers, httpTimeout, transportType)
 	session, err := mcpClient.Connect(connectCtx, transport, nil)
 	if err != nil {
 		if isRetryableError(err) {
@@ -147,7 +143,7 @@ func attemptMCPConnection(ctx, connectCtx context.Context, mcpClient *mcp.Client
 func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[string]string, transportType string, httpTimeout time.Duration, maxRetries int, connectTimeout time.Duration) (*MCPClient, error) {
 	log := logf.FromContext(ctx)
 
-	mcpClient, err := createMCPClientByTransport(transportType)
+	mcpClient, err := createHTTPClient()
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +160,7 @@ func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[s
 			}
 		}
 
-		session, err = attemptMCPConnection(ctx, connectCtx, mcpClient, baseURL, headers, httpTimeout)
+		session, err = attemptMCPConnection(ctx, connectCtx, mcpClient, baseURL, headers, httpTimeout, transportType)
 		if err == nil {
 			log.Info("MCP client connected successfully", "server", baseURL, "attempts", attempt+1)
 			return &MCPClient{
