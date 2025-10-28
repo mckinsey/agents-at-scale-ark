@@ -3,7 +3,7 @@ import logging
 from typing import Dict, Any
 from unittest.mock import patch
 
-from src.evaluator.types import EvaluationParameters, EvaluationScope
+from src.evaluator.types import EvaluationParameters, EvaluationScope, EvaluationRequest, Response, QueryTarget
 
 # Configure logging for tests
 logging.basicConfig(level=logging.WARNING)
@@ -305,3 +305,249 @@ def sample_request_params():
         "evaluation-criteria": ["accuracy", "clarity"],
         "custom-metadata": {"user_id": "123"}
     }
+
+
+class TestEvaluationRequest:
+    """Test suite for EvaluationRequest class with chat message support"""
+
+    def test_evaluation_request_with_string_input(self):
+        """Test that string input continues to work (backward compatibility)"""
+        request = EvaluationRequest(
+            queryId="test-query-123",
+            input="What is the weather today?",
+            responses=[
+                Response(
+                    target=QueryTarget(type="llm", name="gpt-4"),
+                    content="The weather is sunny."
+                )
+            ],
+            query={"name": "weather-query"}
+        )
+
+        assert request.queryId == "test-query-123"
+        assert request.input == "What is the weather today?"
+        assert isinstance(request.input, str)
+
+    def test_evaluation_request_with_chat_messages(self):
+        """Test that chat message list is properly converted with role prefixes"""
+        chat_messages = [
+            {"content": "Hello, how can you help me?", "role": "user"},
+            {"content": "I can assist with various tasks!", "role": "assistant"},
+            {"content": "Can you check the weather?", "role": "user"}
+        ]
+
+        request = EvaluationRequest(
+            queryId="test-query-456",
+            input=chat_messages,
+            responses=[
+                Response(
+                    target=QueryTarget(type="llm", name="gpt-4"),
+                    content="The weather is sunny."
+                )
+            ],
+            query={"name": "chat-query"}
+        )
+
+        expected_output = "user: Hello, how can you help me?\nassistant: I can assist with various tasks!\nuser: Can you check the weather?"
+        assert request.input == expected_output
+        assert isinstance(request.input, str)
+
+    def test_evaluation_request_with_single_chat_message(self):
+        """Test single message in list"""
+        chat_messages = [
+            {"content": "Hello there", "role": "user"}
+        ]
+
+        request = EvaluationRequest(
+            queryId="test-query-789",
+            input=chat_messages,
+            responses=[
+                Response(
+                    target=QueryTarget(type="llm", name="gpt-4"),
+                    content="Hi!"
+                )
+            ],
+            query={"name": "single-chat-query"}
+        )
+
+        assert request.input == "user: Hello there"
+
+    def test_evaluation_request_with_empty_message_list(self):
+        """Test that empty message list raises validation error"""
+        with pytest.raises(ValueError, match="Chat message list is empty or malformed"):
+            EvaluationRequest(
+                queryId="test-query-empty",
+                input=[],
+                responses=[
+                    Response(
+                        target=QueryTarget(type="llm", name="gpt-4"),
+                        content="Response"
+                    )
+                ],
+                query={"name": "empty-chat-query"}
+            )
+
+    def test_evaluation_request_with_malformed_messages_no_content(self):
+        """Test that messages without 'content' field are skipped"""
+        chat_messages = [
+            {"role": "user"},
+            {"content": "Valid message", "role": "assistant"}
+        ]
+
+        request = EvaluationRequest(
+            queryId="test-query-malformed",
+            input=chat_messages,
+            responses=[
+                Response(
+                    target=QueryTarget(type="llm", name="gpt-4"),
+                    content="Response"
+                )
+            ],
+            query={"name": "malformed-chat-query"}
+        )
+
+        assert request.input == "assistant: Valid message"
+
+    def test_evaluation_request_with_missing_role(self):
+        """Test that messages without 'role' field use 'unknown' as default"""
+        chat_messages = [
+            {"content": "Message without role"}
+        ]
+
+        request = EvaluationRequest(
+            queryId="test-query-no-role",
+            input=chat_messages,
+            responses=[
+                Response(
+                    target=QueryTarget(type="llm", name="gpt-4"),
+                    content="Response"
+                )
+            ],
+            query={"name": "no-role-chat-query"}
+        )
+
+        assert request.input == "unknown: Message without role"
+
+    def test_evaluation_request_with_empty_content(self):
+        """Test that messages with empty content are included"""
+        chat_messages = [
+            {"content": "", "role": "user"},
+            {"content": "Response", "role": "assistant"}
+        ]
+
+        request = EvaluationRequest(
+            queryId="test-query-empty-content",
+            input=chat_messages,
+            responses=[
+                Response(
+                    target=QueryTarget(type="llm", name="gpt-4"),
+                    content="Response"
+                )
+            ],
+            query={"name": "empty-content-chat-query"}
+        )
+
+        assert request.input == "user: \nassistant: Response"
+
+    def test_evaluation_request_with_all_malformed_messages(self):
+        """Test that list of all malformed messages raises error"""
+        chat_messages = [
+            {"role": "user"},
+            {"role": "assistant"},
+            {}
+        ]
+
+        with pytest.raises(ValueError, match="Chat message list is empty or malformed"):
+            EvaluationRequest(
+                queryId="test-query-all-malformed",
+                input=chat_messages,
+                responses=[
+                    Response(
+                        target=QueryTarget(type="llm", name="gpt-4"),
+                        content="Response"
+                    )
+                ],
+                query={"name": "all-malformed-chat-query"}
+            )
+
+    def test_evaluation_request_with_invalid_input_type(self):
+        """Test that invalid input type raises Pydantic validation error"""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match="Input should be a valid"):
+            EvaluationRequest(
+                queryId="test-query-invalid",
+                input=12345,
+                responses=[
+                    Response(
+                        target=QueryTarget(type="llm", name="gpt-4"),
+                        content="Response"
+                    )
+                ],
+                query={"name": "invalid-input-query"}
+            )
+
+    def test_evaluation_request_with_system_role(self):
+        """Test chat messages with system role"""
+        chat_messages = [
+            {"content": "You are a helpful assistant", "role": "system"},
+            {"content": "Hello", "role": "user"},
+            {"content": "Hi there!", "role": "assistant"}
+        ]
+
+        request = EvaluationRequest(
+            queryId="test-query-system",
+            input=chat_messages,
+            responses=[
+                Response(
+                    target=QueryTarget(type="llm", name="gpt-4"),
+                    content="Response"
+                )
+            ],
+            query={"name": "system-chat-query"}
+        )
+
+        expected_output = "system: You are a helpful assistant\nuser: Hello\nassistant: Hi there!"
+        assert request.input == expected_output
+
+    def test_evaluation_request_with_multiline_content(self):
+        """Test that multiline content is preserved"""
+        chat_messages = [
+            {"content": "Line 1\nLine 2\nLine 3", "role": "user"}
+        ]
+
+        request = EvaluationRequest(
+            queryId="test-query-multiline",
+            input=chat_messages,
+            responses=[
+                Response(
+                    target=QueryTarget(type="llm", name="gpt-4"),
+                    content="Response"
+                )
+            ],
+            query={"name": "multiline-chat-query"}
+        )
+
+        assert request.input == "user: Line 1\nLine 2\nLine 3"
+
+    def test_evaluation_request_with_special_characters(self):
+        """Test that special characters in content are preserved"""
+        chat_messages = [
+            {"content": "Hello! How are you? 🎉", "role": "user"},
+            {"content": "I'm great, thanks! 😊", "role": "assistant"}
+        ]
+
+        request = EvaluationRequest(
+            queryId="test-query-special",
+            input=chat_messages,
+            responses=[
+                Response(
+                    target=QueryTarget(type="llm", name="gpt-4"),
+                    content="Response"
+                )
+            ],
+            query={"name": "special-chat-query"}
+        )
+
+        expected_output = "user: Hello! How are you? 🎉\nassistant: I'm great, thanks! 😊"
+        assert request.input == expected_output
