@@ -34,6 +34,15 @@ type AgentToolRef struct {
 	Name string `json:"name"`
 }
 
+// BuiltinToolRef defines a reference to a Builtin Tool.
+type BuiltinToolRef struct {
+	// Name of the Builtin being referenced.
+	// This must be a non-empty string.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+}
+
 // ToolAnnotations contains optional additional tool information
 type ToolAnnotations struct {
 	// If true, the tool may perform destructive updates to its environment. If
@@ -82,6 +91,10 @@ type ToolSpec struct {
 	// This field is required only if Type = "agent".
 	// +kubebuilder:validation:Optional
 	Agent *AgentToolRef `json:"agent,omitempty"`
+	// Builtin-specific configuration for builtin tools.
+	// This field is required only if Type = "builtin".
+	// +kubebuilder:validation:Optional
+	Builtin *BuiltinToolRef `json:"builtin,omitempty"`
 }
 
 type HTTPSpec struct {

@@ -72,7 +72,7 @@ spec:
                 type: array
               selector:
                 properties:
-                  model:
+                  agent:
                     type: string
                   selectorPrompt:
                     type: string

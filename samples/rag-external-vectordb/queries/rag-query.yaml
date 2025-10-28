@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: rag-query
+  namespace: default
+  labels:
+    app: rag-demo
+spec:
+  input: "What are the main features of ARK? How do teams work?"
+  targets:
+    - type: agent
+      name: rag-agent
+

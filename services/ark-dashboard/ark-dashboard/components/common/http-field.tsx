@@ -1,7 +1,14 @@
-import { Label } from "@radix-ui/react-label";
-import { Input } from "../ui/input";
+import { Label } from '@radix-ui/react-label';
 
-function HttpFields({ url, setUrl }: { url: string; setUrl: (v: string) => void }) {
+import { Input } from '../ui/input';
+
+function HttpFields({
+  url,
+  setUrl,
+}: {
+  url: string;
+  setUrl: (v: string) => void;
+}) {
   return (
     <div className="grid gap-2">
       <Label htmlFor="http-url">URL</Label>

@@ -81,7 +81,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 				"address":   a2aAddress,
 			},
 		})
-		return nil, fmt.Errorf("A2A agent execution failed: %w", err)
+		return nil, err
 	}
 
 	log.Info("A2A agent execution completed", "agent", agentName, "response_length", len(response))

@@ -63,7 +63,7 @@ spec:
             strategy: selector
             maxTurns: 6
             selector:
-              model: test-model
+              agent: coordinator
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

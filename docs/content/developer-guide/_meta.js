@@ -16,5 +16,6 @@ export default {
   testing: 'End-to-End Testing',
   observability: 'Observability',
   'langchain-execution-engine': 'LangChain Execution Engine',
+  'rag-implementation': 'RAG Implementation Guide',
   'authentication': 'Authentication'
 }

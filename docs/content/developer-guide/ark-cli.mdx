@@ -80,15 +80,18 @@ Following kubectl/argo patterns. Essential parameters:
 
 ## Exit Code and Error Handling Conventions
 
-Three main status codes are used:
+Four main status codes are used:
 
 | Code | Meaning | When to Use |
 |------|---------|-------------|
 | `0` | Success | Command completed |
 | `1` | CLI Error | Invalid arguments, config issues |
-| `2` | Operation Error | Backend failure, timeout, resource error |
+| `2` | Operation Error | Backend failure, resource error |
+| `3` | Timeout | Operation exceeded time limit |
 
-This helps scripts distinguish between usage errors and operational failures. Error details are printed by the CLI.
+This helps scripts distinguish between usage errors, operational failures, and timeouts. Error details are printed by the CLI.
+
+Query operations return exit code `2` when execution fails and `3` on timeout, making error handling in scripts straightforward. This behavior aligns with Argo Workflows' `--wait` flag pattern (see [argoproj/argo-workflows#1008](https://github.com/argoproj/argo-workflows/issues/1008)).
 
 Example handling exit codes:
 

@@ -202,6 +202,26 @@ spec:
                     name:
                       minLength: 1
                       type: string
+                    partial:
+                      properties:
+                        description:
+                          type: string
+                        name:
+                          minLength: 1
+                          type: string
+                        parameters:
+                          items:
+                            properties:
+                              name:
+                                minLength: 1
+                                type: string
+                              value:
+                                type: string
+                            required:
+                              - name
+                            type: object
+                          type: array
+                      type: object
                     type:
                       enum:
                       - built-in

@@ -1,0 +1,5 @@
+# Mock LLM configuration for A2A blocking task failed test
+ark:
+  a2a:
+    enabled: true
+    pollInterval: "3s"

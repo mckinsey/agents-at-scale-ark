@@ -1,11 +1,12 @@
-"use client";
+'use client';
 
-import { signout } from "@/lib/auth/signout";
-import { useSession } from "next-auth/react";
-import { useEffect } from "react";
+import { useSession } from 'next-auth/react';
+import { useEffect } from 'react';
+
+import { signout } from '@/lib/auth/signout';
 
 const fallbackInactivityTimeoutFromEnv = parseInt(
-  process.env.NEXT_PUBLIC_FALLBACK_INACTIVITY_TIMEOUT || ""
+  process.env.NEXT_PUBLIC_FALLBACK_INACTIVITY_TIMEOUT || '',
 );
 const defaultFallbackInactivityTimeout = 30 * 60 * 1000; //30mins
 const fallbackInactivityTimeout = isNaN(fallbackInactivityTimeoutFromEnv)

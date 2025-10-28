@@ -15,6 +15,19 @@ type ToolFunction struct {
 	Value string `json:"value,omitempty"`
 }
 
+type ToolPartial struct {
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MinLength=1
+	// Name to override the tool's name as exposed to the agent (optional)
+	Name string `json:"name,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Description to override the tool's description as exposed to the agent (optional)
+	Description string `json:"description,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Parameters to preconfigure and hide from the agent; injected at runtime and not visible/editable by the agent (optional)
+	Parameters []ToolFunction `json:"parameters,omitempty"`
+}
+
 type AgentTool struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=built-in;custom
@@ -24,6 +37,11 @@ type AgentTool struct {
 	Name string `json:"name,omitempty"`
 	// +kubebuilder:validation:Optional
 	Functions []ToolFunction `json:"functions,omitempty"`
+	// +kubebuilder:validation:Optional
+	// ToolPartial allows overriding the tool's name and description as exposed to the agent,
+	// and preconfiguring or hiding tool parameters from the agent. Parameters defined here
+	// are injected at runtime and are not visible or editable by the agent itself.
+	Partial *ToolPartial `json:"partial,omitempty"`
 }
 
 type AgentModelRef struct {

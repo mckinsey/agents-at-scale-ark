@@ -1,7 +1,8 @@
 import {Command} from 'commander';
+import chalk from 'chalk';
 import type {ArkConfig} from '../../lib/config.js';
-import output from '../../lib/output.js';
 import {executeQuery, parseTarget} from '../../lib/executeQuery.js';
+import {ExitCodes} from '../../lib/errors.js';
 
 export function createQueryCommand(_: ArkConfig): Command {
   const queryCommand = new Command('query');
@@ -11,13 +12,12 @@ export function createQueryCommand(_: ArkConfig): Command {
     .argument('<target>', 'Query target (e.g., model/default, agent/my-agent)')
     .argument('<message>', 'Message to send')
     .action(async (target: string, message: string) => {
-      // Parse and validate target format
       const parsed = parseTarget(target);
       if (!parsed) {
-        output.error(
-          'Invalid target format. Use: model/name or agent/name etc'
+        console.error(
+          chalk.red('Invalid target format. Use: model/name or agent/name etc')
         );
-        process.exit(1);
+        process.exit(ExitCodes.CliError);
       }
 
       await executeQuery({

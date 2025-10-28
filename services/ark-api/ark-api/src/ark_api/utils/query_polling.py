@@ -71,10 +71,10 @@ def _get_error_detail(status: dict) -> dict:
 
     # Determine the main error message
     if target_errors:
-        # Use the first target error as the main message
-        main_message = f"Query execution failed: {target_errors[0]['message']}"
+        # Use the first target error message directly
+        main_message = target_errors[0]['message']
     elif error_message:
-        main_message = f"Query execution failed: {error_message}"
+        main_message = error_message
     else:
         main_message = "Query execution failed: No error details available"
 
@@ -88,15 +88,13 @@ async def poll_query_completion(ark_client, query_name: str, model: str, message
     """Poll for query completion and return chat completion response."""
     max_attempts = 60  # 5 minutes with 5 second intervals
 
-    for _ in range(max_attempts):
-        await asyncio.sleep(5)
-
+    for attempt in range(max_attempts):
         query = await ark_client.queries.a_get(query_name)
         query_dict = query.to_dict()
         status = query_dict.get("status", {})
         phase = status.get("phase", "pending")
 
-        logger.info(f"Query {query_name} status: {phase}")
+        logger.info(f"Query {query_name} status: {phase} (attempt {attempt + 1}/{max_attempts})")
 
         if phase == "done":
             responses = status.get("responses", [])
@@ -105,10 +103,14 @@ async def poll_query_completion(ark_client, query_name: str, model: str, message
 
             content = responses[0].get("content", "")
             return _create_chat_completion_response(query_name, model, content, messages)
-                    
+
         elif phase == "error":
             error_detail = _get_error_detail(status)
             raise HTTPException(status_code=500, detail=error_detail)
-                
+
+        # Sleep before next attempt (but not after last attempt)
+        if attempt < max_attempts - 1:
+            await asyncio.sleep(5)
+
     # If we get here, we timed out waiting for completion
     raise HTTPException(status_code=504, detail=f"Query {query_name} timed out after 5 minutes")

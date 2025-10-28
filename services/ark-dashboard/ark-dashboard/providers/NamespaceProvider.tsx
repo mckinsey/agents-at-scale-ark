@@ -1,21 +1,22 @@
-"use client";
+'use client';
 
-import { toast } from "sonner";
-import { Namespace } from "@/lib/services";
-import {
-  useCreateNamespace,
-  useGetContext
-} from "@/lib/services/namespaces-hooks";
-import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import type { PropsWithChildren } from "react";
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import type { PropsWithChildren } from 'react';
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
   useMemo,
-  useState
-} from "react";
+  useState,
+} from 'react';
+import { toast } from 'sonner';
+
+import type { Namespace } from '@/lib/services';
+import {
+  useCreateNamespace,
+  useGetContext,
+} from '@/lib/services/namespaces-hooks';
 
 interface NamespaceContext {
   availableNamespaces: Namespace[];
@@ -32,13 +33,13 @@ function NamespaceProvider({ children }: PropsWithChildren) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const namespaceFromQueryParams = searchParams.get("namespace") || "default";
+  const namespaceFromQueryParams = searchParams.get('namespace') || 'default';
 
   const [availableNamespaces] = useState<Namespace[]>([
     {
       name: namespaceFromQueryParams,
-      id: 0
-    }
+      id: 0,
+    },
   ]);
   const [isNamespaceResolved, setIsNamespaceResolved] = useState(false);
 
@@ -53,38 +54,38 @@ function NamespaceProvider({ children }: PropsWithChildren) {
 
   const setNamespace = useCallback(
     (namespace: string) => {
-      const newQueryParams = createQueryString("namespace", namespace);
-      router.push(pathname + "?" + newQueryParams);
+      const newQueryParams = createQueryString('namespace', namespace);
+      router.push(pathname + '?' + newQueryParams);
     },
-    [pathname, router, createQueryString]
+    [pathname, router, createQueryString],
   );
 
   const { mutate } = useCreateNamespace({
-    onSuccess: setNamespace
+    onSuccess: setNamespace,
   });
 
   const createNamespace = useCallback(
     (name: string) => {
       mutate(name);
     },
-    [mutate]
+    [mutate],
   );
 
   useEffect(() => {
     if (error) {
-      toast.error("Failed to get namespace", {
+      toast.error('Failed to get namespace', {
         description:
           error instanceof Error
             ? error.message
-            : "An unexpected error occurred"
+            : 'An unexpected error occurred',
       });
     }
   }, [error]);
 
   useEffect(() => {
     if (!data && !isPending) {
-      toast.error("Failed to get namespace", {
-        description: "An unexpected error occurred"
+      toast.error('Failed to get namespace', {
+        description: 'An unexpected error occurred',
       });
     }
   }, [data, isPending]);
@@ -107,7 +108,7 @@ function NamespaceProvider({ children }: PropsWithChildren) {
       isPending,
       namespace: namespaceFromQueryParams,
       isNamespaceResolved: isNamespaceResolved,
-      setNamespace
+      setNamespace,
     }),
     [
       availableNamespaces,
@@ -115,8 +116,8 @@ function NamespaceProvider({ children }: PropsWithChildren) {
       isPending,
       namespaceFromQueryParams,
       isNamespaceResolved,
-      setNamespace
-    ]
+      setNamespace,
+    ],
   );
 
   return (
@@ -129,7 +130,7 @@ function NamespaceProvider({ children }: PropsWithChildren) {
 function useNamespace() {
   const context = useContext(NamespaceContext);
   if (!context) {
-    throw new Error("useNamespace must be used within a NamespaceProvider");
+    throw new Error('useNamespace must be used within a NamespaceProvider');
   }
 
   return context;

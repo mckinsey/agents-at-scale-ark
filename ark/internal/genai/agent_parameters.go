@@ -1,16 +1,15 @@
 package genai
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"text/template"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/common"
 )
 
 func (a *Agent) resolvePrompt(ctx context.Context) (string, error) {
@@ -28,17 +27,11 @@ func (a *Agent) resolvePrompt(ctx context.Context) (string, error) {
 		return a.Prompt, nil
 	}
 
-	tmpl, err := template.New("agent-prompt").Parse(a.Prompt)
+	resolved, err := common.ResolveTemplate(a.Prompt, templateData)
 	if err != nil {
-		return "", fmt.Errorf("invalid template syntax in prompt: %w", err)
+		return "", fmt.Errorf("template resolution failed: %w", err)
 	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, templateData); err != nil {
-		return "", fmt.Errorf("template execution failed: %w", err)
-	}
-
-	return buf.String(), nil
+	return resolved, nil
 }
 
 func (a *Agent) resolveParameters(ctx context.Context) (map[string]string, error) {

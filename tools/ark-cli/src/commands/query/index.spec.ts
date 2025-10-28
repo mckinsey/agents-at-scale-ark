@@ -20,6 +20,10 @@ const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
   throw new Error('process.exit called');
 }) as any);
 
+const mockConsoleError = jest
+  .spyOn(console, 'error')
+  .mockImplementation(() => {});
+
 const {createQueryCommand} = await import('./index.js');
 
 describe('createQueryCommand', () => {
@@ -68,8 +72,8 @@ describe('createQueryCommand', () => {
 
     expect(mockParseTarget).toHaveBeenCalledWith('invalid-target');
     expect(mockExecuteQuery).not.toHaveBeenCalled();
-    expect(mockOutput.error).toHaveBeenCalledWith(
-      'Invalid target format. Use: model/name or agent/name etc'
+    expect(mockConsoleError).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid target format')
     );
     expect(mockExit).toHaveBeenCalledWith(1);
   });

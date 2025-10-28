@@ -30,6 +30,20 @@ Verify your cluster context:
 kubectl config get-contexts
 ```
 
+### Issues with Docker Desktop
+
+If you are using Docker Desktop to launch your kubernetes cluster, you may encounter an issue where pods fail to start. When describing said pods, you may see an error like this.
+
+```logs
+Warning    Failed    pod/ark-controller-xxxxxxxxx-xxxx Error: container has runAsNonRoot and image will run as root
+```
+
+This is due to an the Docker Desktop Kubernetes cluster trying to run containers as root, when they shouldn't be.
+
+To fix this, within your Docker Desktop Kubernetes set up:
+ - Stop the Kubernetes cluster
+ - Start the Kubernetes cluster again, but change the cluster type from Kubeadm to kind
+
 ### Installing Ark on Windows
 
 Ark requires a Kubernetes cluster to run. There are a number of potential issues that can arise from permissions, organizational policies and so on, particularly around running Hypervisors (which is needed to run services like Docker and local Kubernetes clusters).

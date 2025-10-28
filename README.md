@@ -51,9 +51,7 @@ To troubleshoot an installation, run `ark status`.
 
 ## What is Ark?
 
-ARK codifies patterns and practices developed across dozens of client agentic application projects. These projects span multiple sectors, functions, and technology stacks. Through this experience, we identified recurring challenges around platform-agnostic operations for agentic resources and the need for standardized deployment and management approaches.
-
-This project represents the distillation of those learnings into an open-source runtime. While in early access and rapidly evolving based on ongoing team feedback, ARK provides a foundation built on real-world production experience with agentic systems at scale.
+ARK is a runtime environment built on Kubernetes to host AI agents - with built-in CRDs for agents, models, memory, tools, and evaluation, it abstracts away plumbing so teams can build agentic applications faster and reliably.
 
 ## Technical Preview
 

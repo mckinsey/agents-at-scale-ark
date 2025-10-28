@@ -1,0 +1,71 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: a2a-blocking-task-completed
+spec:
+  description: Test A2A agent with blocking Task that completes successfully
+  steps:
+  - name: step-1
+    try:
+    # Install mock-llm with A2A agents enabled
+    - script:
+        content: |
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.14 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    # Install ark-tenant for RBAC
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    # Wait for countdown A2AServer to be Ready
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1prealpha1
+          kind: A2AServer
+          metadata:
+            name: mock-llm-countdown
+          status:
+            (contains(conditions[?type == 'Ready'].status, 'True')): true
+    # Apply Query targeting countdown agent
+    - apply:
+        file: manifests/a01-query.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: countdown-test-query
+          status:
+            phase: done
+    # Verify response contains full countdown history
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: countdown-test-query
+          status:
+            (length(responses)): 1
+            (contains(responses[*].target.name, 'countdown-agent')): true
+            (contains(responses[0].content, 'Starting countdown from 2 seconds')): true
+            (contains(responses[0].content, '1 seconds remaining')): true
+            (contains(responses[0].content, '0 seconds remaining')): true
+            (contains(responses[0].content, 'Countdown complete!')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1prealpha1
+        kind: A2AServer
+        name: mock-llm-countdown
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: countdown-test-query

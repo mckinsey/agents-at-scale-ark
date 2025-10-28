@@ -1,0 +1,4 @@
+psycopg2-binary>=2.9.9
+pgvector>=0.2.4
+sentence-transformers>=2.2.2
+

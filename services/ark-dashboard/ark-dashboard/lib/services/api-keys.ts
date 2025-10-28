@@ -1,14 +1,14 @@
 /**
  * API Key management service for ARK Dashboard
  */
-
 import { apiClient } from '../api/client';
 import type { components } from '../api/generated/types';
 
 // Use generated types from OpenAPI
 export type APIKey = components['schemas']['APIKeyResponse'];
 export type APIKeyCreateRequest = components['schemas']['APIKeyCreateRequest'];
-export type APIKeyCreateResponse = components['schemas']['APIKeyCreateResponse'];
+export type APIKeyCreateResponse =
+  components['schemas']['APIKeyCreateResponse'];
 export type APIKeyListResponse = components['schemas']['APIKeyListResponse'];
 
 // API Key service following ARK Dashboard patterns
@@ -32,5 +32,5 @@ export const apiKeysService = {
    */
   async delete(publicKey: string): Promise<void> {
     return apiClient.delete(`/api/v1/api-keys/${publicKey}`);
-  }
+  },
 };

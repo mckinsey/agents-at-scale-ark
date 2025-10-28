@@ -1,16 +1,15 @@
 package genai
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"text/template"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/common"
 )
 
 func ResolveQueryInput(ctx context.Context, k8sClient client.Client, namespace, input string, parameters []arkv1alpha1.Parameter) (string, error) {
@@ -23,17 +22,11 @@ func ResolveQueryInput(ctx context.Context, k8sClient client.Client, namespace, 
 		return "", fmt.Errorf("failed to resolve parameters: %w", err)
 	}
 
-	tmpl, err := template.New("query-input").Parse(input)
+	resolved, err := common.ResolveTemplate(input, toAnyMap(templateData))
 	if err != nil {
-		return "", fmt.Errorf("invalid template syntax in input: %w", err)
+		return "", fmt.Errorf("template resolution failed: %w", err)
 	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, templateData); err != nil {
-		return "", fmt.Errorf("template execution failed: %w", err)
-	}
-
-	return buf.String(), nil
+	return resolved, nil
 }
 
 func resolveQueryParameters(ctx context.Context, k8sClient client.Client, namespace string, parameters []arkv1alpha1.Parameter) (map[string]string, error) {
@@ -114,17 +107,11 @@ func ResolveBodyTemplate(ctx context.Context, k8sClient client.Client, namespace
 		}
 	}
 
-	tmpl, err := template.New("body-template").Parse(bodyTemplate)
+	resolved, err := common.ResolveTemplate(bodyTemplate, templateData)
 	if err != nil {
-		return "", fmt.Errorf("invalid template syntax in body: %w", err)
+		return "", fmt.Errorf("body template resolution failed: %w", err)
 	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, templateData); err != nil {
-		return "", fmt.Errorf("body template execution failed: %w", err)
-	}
-
-	return buf.String(), nil
+	return resolved, nil
 }
 
 // GetQueryInputMessages returns a message array based on query type, handling both input and messages
@@ -159,4 +146,13 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 		}
 		return messages, nil
 	}
+}
+
+// toAnyMap converts map[string]string to map[string]any
+func toAnyMap(m map[string]string) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }

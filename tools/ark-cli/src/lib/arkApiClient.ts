@@ -53,6 +53,7 @@ export class ArkApiClient {
       baseURL: `${arkApiUrl}/openai/v1`,
       apiKey: 'dummy', // ark-api doesn't require an API key
       dangerouslyAllowBrowser: false,
+      maxRetries: 0, // Disable automatic retries for query errors
     });
   }
 

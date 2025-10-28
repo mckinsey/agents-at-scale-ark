@@ -69,4 +69,5 @@ endef
 include $(BUILD_ROOT)/lib/lib.mk
 include $(BUILD_ROOT)/services/services.mk
 include $(BUILD_ROOT)/tools/tools.mk
+include $(BUILD_ROOT)/images/images.mk
 
