@@ -20,10 +20,10 @@ graph TD
     end
 
     subgraph "Selector Strategy"
-        SEL_INPUT[Input] --> SEL_MODEL[Selector Model]
-        SEL_MODEL --> SEL_A[Select Agent A]
-        SEL_MODEL --> SEL_B[Select Agent B]
-        SEL_MODEL --> SEL_C[Select Agent C]
+        SEL_INPUT[Input] --> SEL_AGENT[Selector Agent]
+        SEL_AGENT --> SEL_A[Select Agent A]
+        SEL_AGENT --> SEL_B[Select Agent B]
+        SEL_AGENT --> SEL_C[Select Agent C]
     end
 ```
 
@@ -78,7 +78,7 @@ spec:
 
 ## Selector Strategy
 
-AI model chooses next participant based on conversation context.
+AI agent chooses next participant based on conversation context.
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -89,7 +89,7 @@ spec:
   strategy: selector
   maxTurns: 10
   selector:
-    model: gpt-4
+    agent: coordinator
     selectorPrompt: |
       Choose the best participant for the next response.
       Available: {{.Participants}}
@@ -102,7 +102,7 @@ spec:
 ```
 
 **Implementation**: `runtime/internal/genai/team_selector.go:66`
-- Uses AI model to select next participant
+- Uses AI agent to select next participant
 - Template-based prompts with conversation history
 - Fallback to first member if selection fails
 - Prevents consecutive execution by same member
@@ -173,7 +173,7 @@ spec:
 - `members`: Array of TeamMember objects
 
 ### Strategy-Specific Settings
-- **Selector**: `selector.model`, `selector.selectorPrompt`
+- **Selector**: `selector.agent`, `selector.selectorPrompt`
 - **Graph**: `graph.edges` array with `from`/`to` references
 
 ## Error Handling

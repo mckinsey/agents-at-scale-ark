@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-retrieval-http
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rag-retrieval-http
+  template:
+    metadata:
+      labels:
+        app: rag-retrieval-http
+    spec:
+      serviceAccountName: rag-retrieval-http
+      containers:
+      - name: rag-retrieval-http
+        image: rag-retrieval-http:azure-openai
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        env:
+        - name: PGVECTOR_HOST
+          value: "pgvector.default.svc.cluster.local"
+        - name: PGVECTOR_DB
+          valueFrom:
+            secretKeyRef:
+              name: pgvector-creds
+              key: database
+        - name: PGVECTOR_USER
+          valueFrom:
+            secretKeyRef:
+              name: pgvector-creds
+              key: user
+        - name: PGVECTOR_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pgvector-creds
+              key: password
+        - name: AZURE_OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: azure-openai-creds
+              key: api-key
+        - name: AZURE_OPENAI_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: azure-openai-creds
+              key: endpoint
+        - name: AZURE_OPENAI_API_VERSION
+          valueFrom:
+            secretKeyRef:
+              name: azure-openai-creds
+              key: api-version
+              optional: true
+        - name: AZURE_EMBEDDING_MODEL
+          valueFrom:
+            secretKeyRef:
+              name: azure-openai-creds
+              key: embedding-model
+              optional: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+

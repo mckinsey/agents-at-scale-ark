@@ -1,4 +1,4 @@
-//The OIDC endpoint to use to fetch openid configuration 
+//The OIDC endpoint to use to fetch openid configuration
 export const OIDC_CONFIG_URL = `${process.env.OIDC_ISSUER_URL}/.well-known/openid-configuration`;
 
 //Paths we use for signing in and out
@@ -15,4 +15,4 @@ export const COOKIE_STATE = 'state';
 export const COOKIE_NONCE = 'nonce';
 
 //Default auth session max age
-export const DEFAULT_SESSION_MAX_AGE = 30 * 60 //30mins
+export const DEFAULT_SESSION_MAX_AGE = 30 * 60; //30mins

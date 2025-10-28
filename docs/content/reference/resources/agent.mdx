@@ -192,6 +192,30 @@ spec:
       value: "expert"  # Static value
 ```
 
+### Agent with Partial Tools
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: my-agent
+spec:
+  tools:
+    - type: custom
+      name: weather-forecast  # Name exposed to Agent
+      description: "Get latest weather forecast"  # Description exposed to Agent
+      partial:
+        name: weather-api  # Actual Tool CRD name
+        parameters:
+          - name: city
+            value: "{{ .Query.city }}"  # From query parameters
+          - name: units
+            value: "metric"  # Static value
+          - name: language
+            value: nil  # Explicitly exclude parameter to be provided by Agent
+```
+
+
+
 ### A2A Agent (Created by A2AServer)
 
 Agents created by [A2AServer](/reference/resources/a2aserver) resources use the A2A execution engine:

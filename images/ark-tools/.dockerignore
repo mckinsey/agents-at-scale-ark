@@ -1,0 +1,20 @@
+# Exclude everything except what we need
+**/*
+
+# Include ark module (required by fark)
+!ark/go.mod
+!ark/go.sum
+!ark/api/
+!ark/internal/
+
+# Include fark
+!tools/fark/go.mod
+!tools/fark/go.sum
+!tools/fark/cmd/
+
+# Include ark-cli
+!tools/ark-cli/package.json
+!tools/ark-cli/package-lock.json
+!tools/ark-cli/tsconfig.json
+!tools/ark-cli/src/
+!tools/ark-cli/templates/

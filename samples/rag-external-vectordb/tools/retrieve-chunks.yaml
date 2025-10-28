@@ -1,0 +1,33 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: retrieve-chunks
+  namespace: default
+spec:
+  type: http
+  description: "Retrieve the most relevant document chunks from the vector database using semantic similarity search"
+  http:
+    url: "http://rag-retrieval-http.default.svc.cluster.local:8000/retrieve_chunks"
+    method: POST
+    headers:
+      - name: Content-Type
+        value:
+          value: "application/json"
+    body: |
+      {
+        "query": "{{.input.query}}",
+        "top_k": {{if .input.top_k}}{{.input.top_k}}{{else}}5{{end}}
+      }
+  inputSchema:
+    type: object
+    properties:
+      query:
+        type: string
+        description: "The query text to find relevant chunks for"
+      top_k:
+        type: integer
+        description: "Number of chunks to return"
+        default: 5
+    required:
+      - query
+

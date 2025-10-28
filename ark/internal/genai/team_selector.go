@@ -8,6 +8,9 @@ import (
 	"text/template"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
 const defaultSelectorPrompt = `You are in a role play game. The following roles are available:
@@ -57,6 +60,27 @@ func buildRoles(members []TeamMember) string {
 	return strings.Join(roles, ", ")
 }
 
+func (t *Team) loadSelectorAgent(ctx context.Context) (*Agent, error) {
+	if t.Selector == nil || t.Selector.Agent == "" {
+		return nil, fmt.Errorf("selector agent must be specified")
+	}
+
+	agentName := t.Selector.Agent
+
+	var agentCRD arkv1alpha1.Agent
+	key := types.NamespacedName{Name: agentName, Namespace: t.Namespace}
+	if err := t.Client.Get(ctx, key, &agentCRD); err != nil {
+		return nil, fmt.Errorf("failed to get selector agent %s in namespace %s: %w", agentName, t.Namespace, err)
+	}
+
+	agent, err := MakeAgent(ctx, t.Client, &agentCRD, t.Recorder, t.TelemetryProvider)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create selector agent: %w", err)
+	}
+
+	return agent, nil
+}
+
 func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList, previousMember string) (TeamMember, int, error) {
 	history := buildHistory(messages)
 	data := SelectorTemplateData{
@@ -70,28 +94,33 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		return nil, 0, err
 	}
 
-	model, err := LoadModel(ctx, t.Client, t.Selector, t.Namespace)
+	selectorAgent, err := t.loadSelectorAgent(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	selectorMessages := []Message{
-		NewSystemMessage(buf.String()),
-		NewUserMessage("Select the next participant to respond."),
-	}
-
-	response, err := model.ChatCompletion(ctx, selectorMessages, nil, 1)
+	response, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(buf.String())}, nil, nil)
 	if err != nil {
-		return nil, 0, fmt.Errorf("selector model call failed: %w", err)
+		if IsTerminateTeam(err) {
+			return nil, 0, err
+		}
+		return nil, 0, fmt.Errorf("selector agent call failed: %w", err)
 	}
 
-	if len(response.Choices) == 0 {
-		return nil, 0, fmt.Errorf("selector model returned no choices")
+	if len(response) == 0 {
+		return nil, 0, fmt.Errorf("selector agent returned no messages")
 	}
 
-	selectedName := strings.TrimSpace(response.Choices[0].Message.Content)
+	var selectedName string
+	lastMsg := response[len(response)-1]
+	if lastMsg.OfAssistant != nil && lastMsg.OfAssistant.Content.OfString.Value != "" {
+		selectedName = strings.TrimSpace(lastMsg.OfAssistant.Content.OfString.Value)
+	} else {
+		return nil, 0, fmt.Errorf("selector agent returned invalid response")
+	}
+
 	rec := NewExecutionRecorder(t.Recorder)
-	rec.SelectorModelResponse(ctx, t.FullName(), model.Model, selectedName, participantsList)
+	rec.SelectorAgentResponse(ctx, t.FullName(), selectorAgent.Name, selectedName, participantsList)
 
 	// Find selected member
 	for i, member := range t.Members {
@@ -140,15 +169,32 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 
 		nextMember, memberIndex, err := t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember)
 		if err != nil {
-			return newMessages, err
-		}
-
-		if err := t.executeMemberAndAccumulate(ctx, nextMember, userInput, &messages, &newMessages, memberIndex); err != nil {
 			if IsTerminateTeam(err) {
 				return newMessages, nil
 			}
 			return newMessages, err
 		}
+
+		// Start turn-level telemetry span
+		turnCtx, turnSpan := t.TeamRecorder.StartTurn(ctx, turn, nextMember.GetName(), nextMember.GetType())
+		defer turnSpan.End()
+
+		err = t.executeMemberAndAccumulate(turnCtx, nextMember, userInput, &messages, &newMessages, memberIndex)
+
+		// Record turn output
+		if len(newMessages) > 0 {
+			t.TeamRecorder.RecordTurnOutput(turnSpan, newMessages, len(newMessages))
+		}
+
+		if err != nil {
+			if IsTerminateTeam(err) {
+				return newMessages, nil
+			}
+			t.TeamRecorder.RecordError(turnSpan, err)
+			return newMessages, err
+		}
+
+		t.TeamRecorder.RecordSuccess(turnSpan)
 
 		previousMember = nextMember.GetName()
 

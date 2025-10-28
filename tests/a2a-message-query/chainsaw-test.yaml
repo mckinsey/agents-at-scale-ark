@@ -1,0 +1,70 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: a2a-message-query
+spec:
+  description: Test querying mock-llm echo A2A agent and verifying message echo
+  steps:
+  - name: step-1
+    try:
+    # Install mock-llm with A2A agents enabled
+    - script:
+        content: |
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.14 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    # Install ark-tenant for RBAC
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    # Wait for echo A2AServer to be Ready
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1prealpha1
+          kind: A2AServer
+          metadata:
+            name: mock-llm-echo
+          status:
+            (contains(conditions[?type == 'Ready'].status, 'True')): true
+    # Apply Query targeting echo agent
+    - apply:
+        file: manifests/a01-query.yaml
+    # Wait for Query to complete
+    - assert:
+        timeout: 10s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: echo-test-query
+          status:
+            phase: done
+    # Verify response contains the echoed message
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: echo-test-query
+          status:
+            (length(responses)): 1
+            (contains(responses[*].target.name, 'echo-agent')): true
+            (contains(responses[0].content, 'Hello from A2A echo agent!')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1prealpha1
+        kind: A2AServer
+        name: mock-llm-echo
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: echo-test-query

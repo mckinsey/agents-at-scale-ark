@@ -3,31 +3,37 @@
  */
 
 export type ResponseForView = {
-  body: unknown | string;                        // extracted text you show today
+  body: unknown | string; // extracted text you show today
   headers?: Record<string, string | undefined>; // optional
-  rawJson?: unknown | string;                   // original JSON envelope
+  rawJson?: unknown | string; // original JSON envelope
 };
 
-export type ViewMode = "text" | "markdown" | "json" | "chat";
+export type ViewMode = 'text' | 'markdown' | 'json' | 'chat';
 
 /**
  * Check if content type indicates JSON
  */
-export function isJsonContentType(headers?: Record<string, string | undefined>) {
+export function isJsonContentType(
+  headers?: Record<string, string | undefined>,
+) {
   if (!headers) return false;
-  const ct = (headers["content-type"] || headers["Content-Type"] || "").toLowerCase();
-  return ct.includes("application/json") || ct.includes("application/ld+json");
+  const ct = (
+    headers['content-type'] ||
+    headers['Content-Type'] ||
+    ''
+  ).toLowerCase();
+  return ct.includes('application/json') || ct.includes('application/ld+json');
 }
 
 /**
  * Check if a string is valid JSON
  */
 export function isParsableJson(s: string) {
-  try { 
-    JSON.parse(s); 
-    return true; 
-  } catch { 
-    return false; 
+  try {
+    JSON.parse(s);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -37,16 +43,20 @@ export function isParsableJson(s: string) {
 export function responseIsJson(res: ResponseForView) {
   if (res.rawJson !== undefined) return true;
   const headerJson = isJsonContentType(res.headers);
-  const bodyIsObject = typeof res.body === "object" && res.body !== null;
-  const bodyIsJsonString = typeof res.body === "string" && isParsableJson(res.body);
+  const bodyIsObject = typeof res.body === 'object' && res.body !== null;
+  const bodyIsJsonString =
+    typeof res.body === 'string' && isParsableJson(res.body);
   return headerJson || bodyIsObject || bodyIsJsonString;
 }
 
 /**
  * Default to JSON when JSON is detected (your ask).
  */
-export function pickDefaultView(res: ResponseForView, fallback: ViewMode = "text"): ViewMode {
-  return responseIsJson(res) ? "json" : fallback;
+export function pickDefaultView(
+  res: ResponseForView,
+  fallback: ViewMode = 'text',
+): ViewMode {
+  return responseIsJson(res) ? 'json' : fallback;
 }
 
 /**
@@ -65,7 +75,7 @@ export function tryParseJson<T = unknown>(text: string): T | undefined {
  */
 export function safeStringify(value: unknown, space = 2): string {
   try {
-    if (typeof value === "string") {
+    if (typeof value === 'string') {
       const parsed = tryParseJson(value);
       return parsed ? JSON.stringify(parsed, null, space) : value;
     }
@@ -99,24 +109,24 @@ export function getJsonSize(value: unknown): number {
 export function formatJsonWithTruncation(
   value: unknown,
   maxBytes = 300_000,
-  space = 2
+  space = 2,
 ): { formatted: string; truncated: boolean; originalSize: number } {
   const formatted = safeStringify(value, space);
   const originalSize = formatted.length;
   const truncated = originalSize > maxBytes;
-  
+
   if (truncated) {
     return {
-      formatted: formatted.slice(0, maxBytes) + "\n… (truncated)",
+      formatted: formatted.slice(0, maxBytes) + '\n… (truncated)',
       truncated: true,
-      originalSize
+      originalSize,
     };
   }
-  
+
   return {
     formatted,
     truncated: false,
-    originalSize
+    originalSize,
   };
 }
 
@@ -161,13 +171,16 @@ export function deepEqual(a: unknown, b: unknown): boolean {
 /**
  * Flatten a nested JSON object
  */
-export function flattenJson(obj: unknown, prefix = ''): Record<string, unknown> {
+export function flattenJson(
+  obj: unknown,
+  prefix = '',
+): Record<string, unknown> {
   const result: Record<string, unknown> = {};
-  
+
   if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
     for (const [key, value] of Object.entries(obj)) {
       const newKey = prefix ? `${prefix}.${key}` : key;
-      
+
       if (value && typeof value === 'object' && !Array.isArray(value)) {
         Object.assign(result, flattenJson(value, newKey));
       } else {
@@ -177,7 +190,7 @@ export function flattenJson(obj: unknown, prefix = ''): Record<string, unknown> 
   } else {
     result[prefix] = obj;
   }
-  
+
   return result;
 }
 
@@ -186,7 +199,7 @@ export function flattenJson(obj: unknown, prefix = ''): Record<string, unknown> 
  */
 export function extractAllKeys(obj: unknown): string[] {
   const keys = new Set<string>();
-  
+
   function traverse(value: unknown, path = '') {
     if (value && typeof value === 'object') {
       if (Array.isArray(value)) {
@@ -202,7 +215,7 @@ export function extractAllKeys(obj: unknown): string[] {
       }
     }
   }
-  
+
   traverse(obj);
   return Array.from(keys).sort();
 }

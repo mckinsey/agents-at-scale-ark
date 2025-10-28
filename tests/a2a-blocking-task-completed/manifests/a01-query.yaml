@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: countdown-test-query
+spec:
+  input: countdown from 2
+  targets:
+    - type: agent
+      name: countdown-agent

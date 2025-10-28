@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -19,6 +20,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/telemetry"
 )
 
 type ToolDefinition struct {
@@ -177,18 +179,20 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall, recorder Even
 }
 
 type ToolRegistry struct {
-	tools       map[string]ToolDefinition
-	executors   map[string]ToolExecutor
-	mcpPool     *MCPClientPool         // One MCP client pool per agent
-	mcpSettings map[string]MCPSettings // MCP settings per MCP server (namespace/name)
+	tools        map[string]ToolDefinition
+	executors    map[string]ToolExecutor
+	mcpPool      *MCPClientPool         // One MCP client pool per agent
+	mcpSettings  map[string]MCPSettings // MCP settings per MCP server (namespace/name)
+	toolRecorder telemetry.ToolRecorder
 }
 
-func NewToolRegistry(mcpSettings map[string]MCPSettings) *ToolRegistry {
+func NewToolRegistry(mcpSettings map[string]MCPSettings, toolRecorder telemetry.ToolRecorder) *ToolRegistry {
 	return &ToolRegistry{
-		tools:       make(map[string]ToolDefinition),
-		executors:   make(map[string]ToolExecutor),
-		mcpPool:     NewMCPClientPool(),
-		mcpSettings: mcpSettings,
+		tools:        make(map[string]ToolDefinition),
+		executors:    make(map[string]ToolExecutor),
+		mcpPool:      NewMCPClientPool(),
+		mcpSettings:  mcpSettings,
+		toolRecorder: toolRecorder,
 	}
 }
 
@@ -237,7 +241,20 @@ func (tr *ToolRegistry) ExecuteTool(ctx context.Context, call ToolCall, recorder
 		}, fmt.Errorf("tool %s not found", call.Function.Name)
 	}
 
-	return executor.Execute(ctx, call, recorder)
+	toolType := tr.GetToolType(call.Function.Name)
+	ctx, span := tr.toolRecorder.StartToolExecution(ctx, call.Function.Name, toolType, call.ID, call.Function.Arguments)
+	defer span.End()
+
+	result, err := executor.Execute(ctx, call, recorder)
+	if err != nil {
+		tr.toolRecorder.RecordError(span, err)
+		return result, err
+	}
+
+	tr.toolRecorder.RecordToolResult(span, result.Content)
+	tr.toolRecorder.RecordSuccess(span)
+
+	return result, nil
 }
 
 func (tr *ToolRegistry) ToOpenAITools() []openai.ChatCompletionToolParam {
@@ -379,6 +396,100 @@ func CreateToolFromCRD(toolCRD *arkv1alpha1.Tool) ToolDefinition {
 	description := getToolDescription(toolCRD)
 	parameters := getToolParameters(toolCRD)
 	return ToolDefinition{Name: toolCRD.Name, Description: description, Parameters: parameters}
+}
+
+func CreatePartialToolDefinition(tooldefinition ToolDefinition, partial *arkv1alpha1.ToolPartial) (ToolDefinition, error) {
+	if partial == nil {
+		return tooldefinition, nil
+	}
+
+	newName := tooldefinition.Name
+	newDesc := tooldefinition.Description
+
+	// Deep copy parameters map
+	newParams := map[string]any{}
+	maps.Copy(newParams, tooldefinition.Parameters)
+
+	if partial.Name != "" {
+		newName = partial.Name
+	}
+
+	if partial.Description != "" {
+		newDesc = partial.Description
+	}
+
+	// Remove partial parameters from schema
+	props, ok := newParams["properties"].(map[string]any)
+	if !ok {
+		return ToolDefinition{}, fmt.Errorf("tool schema missing or invalid 'properties' field")
+	}
+	propsCopy := map[string]any{}
+	maps.Copy(propsCopy, props)
+	for _, param := range partial.Parameters {
+		delete(propsCopy, param.Name)
+	}
+	newParams["properties"] = propsCopy
+
+	// Remove partial parameters from required fields
+	reqList, exists, err := getRequiredFields(newParams)
+	if err != nil {
+		return ToolDefinition{}, err
+	}
+	if exists {
+		// Remove any required fields that match partial parameters
+		newReq := []string{}
+		for _, req := range reqList {
+			skip := false
+			for _, param := range partial.Parameters {
+				if req == param.Name {
+					skip = true
+					break
+				}
+			}
+			if !skip {
+				newReq = append(newReq, req)
+			}
+		}
+		newParams["required"] = newReq
+	}
+
+	return ToolDefinition{
+		Name:        newName,
+		Description: newDesc,
+		Parameters:  newParams,
+	}, nil
+}
+
+func getRequiredFields(params map[string]any) ([]string, bool, error) {
+	// In this case if the required field is not present that usually means non of the params are required
+	// The 'required' field may be missing, a []string, or a []interface{} (from JSON unmarshalling)
+	reqVal, exists := params["required"]
+
+	if !exists {
+		return nil, exists, nil
+	}
+
+	// Convert type to []string if necessary
+	var reqList []string
+	switch v := reqVal.(type) {
+	case []string:
+		// Already the correct type
+		reqList = v
+	case []interface{}:
+		// Convert []interface{} to []string, as JSON unmarshalling often produces this
+		for _, item := range v {
+			str, ok := item.(string)
+			if !ok {
+				// Defensive: fail if any required value is not a string
+				return nil, exists, fmt.Errorf("tool schema 'required' field contains non-string value: %v", item)
+			}
+			reqList = append(reqList, str)
+		}
+	default:
+		// Defensive: fail if required is an unexpected type
+		return nil, exists, fmt.Errorf("tool schema 'required' field is not []string or []interface{}, got %T", reqVal)
+	}
+	return reqList, exists, nil
 }
 
 func getToolDescription(toolCRD *arkv1alpha1.Tool) string {
