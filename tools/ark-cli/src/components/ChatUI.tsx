@@ -1106,7 +1106,7 @@ const ChatUI: React.FC<ChatUIProps> = ({
             : t.name;
         }}
         formatInlineDetail={(t) => t.description}
-        showDetailPanel={false}
+        showDetailPanel={true}
         onSelect={(target) => {
           const team = teams.find((tm) => tm.name === target.name);
           if (!team) return;
