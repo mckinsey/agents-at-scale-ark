@@ -49,14 +49,10 @@ interface EvaluationManifest {
 }
 
 interface EvaluationStatus {
-  phase?: 'pending' | 'running' | 'completed' | 'failed';
-  result?: {
-    score?: number;
-    passed?: boolean;
-    details?: string;
-  };
+  phase?: 'pending' | 'running' | 'done' | 'error';
+  score?: string;
+  passed?: boolean;
   message?: string;
-  error?: string;
 }
 
 interface Evaluation {
@@ -64,6 +60,74 @@ interface Evaluation {
     name: string;
   };
   status?: EvaluationStatus;
+}
+
+async function waitForEvaluationAndDisplayResults(
+  evaluationName: string,
+  watchTimeoutMs: number,
+  watchTimeoutDisplay: string
+): Promise<void> {
+  const spinner = ora('Waiting for evaluation completion...').start();
+
+  try {
+    await execa(
+      'kubectl',
+      [
+        'wait',
+        '--for=condition=Completed',
+        `evaluation/${evaluationName}`,
+        `--timeout=${Math.floor(watchTimeoutMs / 1000)}s`,
+      ],
+      {timeout: watchTimeoutMs}
+    );
+  } catch (error) {
+    spinner.stop();
+    if (error instanceof Error && error.message.includes('timed out waiting')) {
+      console.error(
+        chalk.red(
+          `Evaluation did not complete within ${watchTimeoutDisplay}`
+        )
+      );
+      process.exit(ExitCodes.Timeout);
+    }
+    throw error;
+  }
+
+  spinner.stop();
+
+  const {stdout} = await execa(
+    'kubectl',
+    ['get', 'evaluation', evaluationName, '-o', 'json'],
+    {stdio: 'pipe'}
+  );
+
+  const evaluation = JSON.parse(stdout) as Evaluation;
+  const status = evaluation.status;
+
+  if (status?.phase === 'done') {
+    console.log(chalk.green('\nEvaluation completed successfully:'));
+    if (status.score !== undefined) {
+      console.log(`Score: ${status.score}`);
+    }
+    if (status.passed !== undefined) {
+      console.log(
+        `Result: ${status.passed ? chalk.green('PASSED') : chalk.red('FAILED')}`
+      );
+    }
+    if (status.message) {
+      console.log(`Message: ${status.message}`);
+    }
+    if (status.passed === false) {
+      process.exit(ExitCodes.EvaluationFailed);
+    }
+  } else if (status?.phase === 'error') {
+    console.error(
+      chalk.red(status.message || 'Evaluation failed with unknown error')
+    );
+    process.exit(ExitCodes.OperationError);
+  } else {
+    output.warning(`Unexpected evaluation phase: ${status?.phase}`);
+  }
 }
 
 export async function executeDirectEvaluation(
@@ -107,84 +171,16 @@ export async function executeDirectEvaluation(
       input: JSON.stringify(evaluationManifest),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
-
-    spinner.text = 'Waiting for evaluation completion...';
-
-    try {
-      await execa(
-        'kubectl',
-        [
-          'wait',
-          '--for=condition=Completed',
-          `evaluation/${evaluationName}`,
-          `--timeout=${Math.floor(watchTimeoutMs / 1000)}s`,
-        ],
-        {timeout: watchTimeoutMs}
-      );
-    } catch (error) {
-      spinner.stop();
-      if (
-        error instanceof Error &&
-        error.message.includes('timed out waiting')
-      ) {
-        console.error(
-          chalk.red(
-            `Evaluation did not complete within ${options.watchTimeout ?? `${Math.floor(watchTimeoutMs / 1000)}s`}`
-          )
-        );
-        process.exit(ExitCodes.Timeout);
-      }
-    }
-
     spinner.stop();
 
-    try {
-      const {stdout} = await execa(
-        'kubectl',
-        ['get', 'evaluation', evaluationName, '-o', 'json'],
-        {stdio: 'pipe'}
-      );
+    const watchTimeoutDisplay =
+      options.watchTimeout ?? `${Math.floor(watchTimeoutMs / 1000)}s`;
 
-      const evaluation = JSON.parse(stdout) as Evaluation;
-      const phase = evaluation.status?.phase;
-      const result = evaluation.status?.result;
-
-      if (phase === 'completed') {
-        if (result) {
-          console.log(chalk.green('\nEvaluation completed successfully:'));
-          if (result.score !== undefined) {
-            console.log(`Score: ${result.score}`);
-          }
-          if (result.passed !== undefined) {
-            console.log(
-              `Result: ${result.passed ? chalk.green('PASSED') : chalk.red('FAILED')}`
-            );
-          }
-          if (result.details) {
-            console.log(`Details: ${result.details}`);
-          }
-        } else {
-          output.warning('Evaluation completed but no result received');
-        }
-      } else if (phase === 'failed') {
-        console.error(
-          chalk.red(
-            evaluation.status?.error ||
-              'Evaluation failed with unknown error'
-          )
-        );
-        process.exit(ExitCodes.OperationError);
-      }
-    } catch (error) {
-      console.error(
-        chalk.red(
-          error instanceof Error
-            ? error.message
-            : 'Failed to fetch evaluation result'
-        )
-      );
-      process.exit(ExitCodes.CliError);
-    }
+    await waitForEvaluationAndDisplayResults(
+      evaluationName,
+      watchTimeoutMs,
+      watchTimeoutDisplay
+    );
   } catch (error) {
     spinner.stop();
     console.error(
@@ -256,84 +252,16 @@ export async function executeQueryEvaluation(
       input: JSON.stringify(evaluationManifest),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
-
-    spinner.text = 'Waiting for evaluation completion...';
-
-    try {
-      await execa(
-        'kubectl',
-        [
-          'wait',
-          '--for=condition=Completed',
-          `evaluation/${evaluationName}`,
-          `--timeout=${Math.floor(watchTimeoutMs / 1000)}s`,
-        ],
-        {timeout: watchTimeoutMs}
-      );
-    } catch (error) {
-      spinner.stop();
-      if (
-        error instanceof Error &&
-        error.message.includes('timed out waiting')
-      ) {
-        console.error(
-          chalk.red(
-            `Evaluation did not complete within ${options.watchTimeout ?? `${Math.floor(watchTimeoutMs / 1000)}s`}`
-          )
-        );
-        process.exit(ExitCodes.Timeout);
-      }
-    }
-
     spinner.stop();
 
-    try {
-      const {stdout} = await execa(
-        'kubectl',
-        ['get', 'evaluation', evaluationName, '-o', 'json'],
-        {stdio: 'pipe'}
-      );
+    const watchTimeoutDisplay =
+      options.watchTimeout ?? `${Math.floor(watchTimeoutMs / 1000)}s`;
 
-      const evaluation = JSON.parse(stdout) as Evaluation;
-      const phase = evaluation.status?.phase;
-      const result = evaluation.status?.result;
-
-      if (phase === 'completed') {
-        if (result) {
-          console.log(chalk.green('\nEvaluation completed successfully:'));
-          if (result.score !== undefined) {
-            console.log(`Score: ${result.score}`);
-          }
-          if (result.passed !== undefined) {
-            console.log(
-              `Result: ${result.passed ? chalk.green('PASSED') : chalk.red('FAILED')}`
-            );
-          }
-          if (result.details) {
-            console.log(`Details: ${result.details}`);
-          }
-        } else {
-          output.warning('Evaluation completed but no result received');
-        }
-      } else if (phase === 'failed') {
-        console.error(
-          chalk.red(
-            evaluation.status?.error ||
-              'Evaluation failed with unknown error'
-          )
-        );
-        process.exit(ExitCodes.OperationError);
-      }
-    } catch (error) {
-      console.error(
-        chalk.red(
-          error instanceof Error
-            ? error.message
-            : 'Failed to fetch evaluation result'
-        )
-      );
-      process.exit(ExitCodes.CliError);
-    }
+    await waitForEvaluationAndDisplayResults(
+      evaluationName,
+      watchTimeoutMs,
+      watchTimeoutDisplay
+    );
   } catch (error) {
     spinner.stop();
     console.error(

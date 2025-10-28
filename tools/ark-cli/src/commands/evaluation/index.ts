@@ -1,4 +1,5 @@
 import {Command} from 'commander';
+import chalk from 'chalk';
 import type {ArkConfig} from '../../lib/config.js';
 import {
   executeDirectEvaluation,
@@ -8,67 +9,58 @@ import {
 export function createEvaluationCommand(_: ArkConfig): Command {
   const evaluationCommand = new Command('evaluation');
 
-  evaluationCommand.description('Execute evaluations against evaluators');
-
-  const directCommand = new Command('direct')
-    .description('Execute a direct evaluation with input and output')
+  evaluationCommand
+    .description('Execute evaluations against evaluators')
     .argument('<evaluator-name>', 'Name of the evaluator to use')
-    .requiredOption('--input <input>', 'Input text for evaluation')
-    .requiredOption('--output <output>', 'Output text for evaluation')
-    .option('--timeout <timeout>', 'Evaluation timeout (e.g., "30s", "5m")')
-    .option('--watch-timeout <timeout>', 'CLI watch timeout')
-    .action(
-      async (
-        evaluatorName: string,
-        options: {
-          input: string;
-          output: string;
-          timeout?: string;
-          watchTimeout?: string;
-        }
-      ) => {
-        await executeDirectEvaluation({
-          evaluatorName,
-          input: options.input,
-          output: options.output,
-          timeout: options.timeout,
-          watchTimeout: options.watchTimeout,
-        });
-      }
-    );
-
-  const queryCommand = new Command('query')
-    .description('Execute a query-based evaluation')
-    .argument('<evaluator-name>', 'Name of the evaluator to use')
-    .requiredOption('--query <query-name>', 'Name of the query to evaluate')
+    .argument('[query-name]', 'Name of the query to evaluate (for query-based evaluation)')
+    .option('--input <input>', 'Input text for direct evaluation')
+    .option('--output <output>', 'Output text for direct evaluation')
     .option(
       '--response-target <target>',
-      'Response target (e.g., agent:my-agent)'
+      'Response target for query evaluation (e.g., agent:my-agent)'
     )
     .option('--timeout <timeout>', 'Evaluation timeout (e.g., "30s", "5m")')
     .option('--watch-timeout <timeout>', 'CLI watch timeout')
     .action(
       async (
         evaluatorName: string,
+        queryName: string | undefined,
         options: {
-          query: string;
+          input?: string;
+          output?: string;
           responseTarget?: string;
           timeout?: string;
           watchTimeout?: string;
         }
       ) => {
-        await executeQueryEvaluation({
-          evaluatorName,
-          queryName: options.query,
-          responseTarget: options.responseTarget,
-          timeout: options.timeout,
-          watchTimeout: options.watchTimeout,
-        });
+        if (options.input && options.output) {
+          await executeDirectEvaluation({
+            evaluatorName,
+            input: options.input,
+            output: options.output,
+            timeout: options.timeout,
+            watchTimeout: options.watchTimeout,
+          });
+        } else if (queryName) {
+          await executeQueryEvaluation({
+            evaluatorName,
+            queryName,
+            responseTarget: options.responseTarget,
+            timeout: options.timeout,
+            watchTimeout: options.watchTimeout,
+          });
+        } else {
+          console.error(chalk.red('Error: Must provide either:'));
+          console.error('  - --input and --output for direct evaluation');
+          console.error('  - <query-name> for query-based evaluation');
+          console.error('\nExamples:');
+          console.error('  ark evaluation my-evaluator --input "test" --output "result"');
+          console.error('  ark evaluation my-evaluator my-query');
+          console.error('  ark evaluation my-evaluator my-query --response-target agent:my-agent');
+          process.exit(1);
+        }
       }
     );
-
-  evaluationCommand.addCommand(directCommand);
-  evaluationCommand.addCommand(queryCommand);
 
   return evaluationCommand;
 }
