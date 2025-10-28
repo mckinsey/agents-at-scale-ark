@@ -51,6 +51,14 @@ func (r *queryRecorder) StartTarget(ctx context.Context, targetType, targetName 
 	return r.tracer.Start(ctx, spanName, telemetry.WithAttributes(attrs...))
 }
 
+func (r *queryRecorder) RecordRootInput(span telemetry.Span, content string) {
+	span.SetAttributes(telemetry.String(telemetry.AttrQueryRootInput, content))
+}
+
+func (r *queryRecorder) RecordRootOutput(span telemetry.Span, content string) {
+	span.SetAttributes(telemetry.String(telemetry.AttrQueryRootOutput, content))
+}
+
 func (r *queryRecorder) RecordInput(span telemetry.Span, content string) {
 	span.SetAttributes(telemetry.String(telemetry.AttrQueryInput, content))
 }

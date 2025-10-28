@@ -200,6 +200,12 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		return
 	}
 
+	inputMessages, err := genai.GetQueryInputMessages(opCtx, obj, impersonatedClient)
+	if err == nil {
+		queryInput := genai.ExtractUserMessageContent(inputMessages)
+		r.Telemetry.QueryRecorder().RecordRootInput(span, queryInput)
+	}
+
 	responses, eventStream, err := r.reconcileQueue(opCtx, obj, impersonatedClient, memory, tokenCollector)
 	if err != nil {
 		queryTracker.Fail(err)
@@ -210,6 +216,10 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	queryTracker.Complete("resolved")
 	obj.Status.Responses = responses
+
+	if len(responses) > 0 && responses[0].Phase == statusDone {
+		r.Telemetry.QueryRecorder().RecordRootOutput(span, responses[0].Content)
+	}
 
 	tokenSummary := tokenCollector.GetTokenSummary()
 	obj.Status.TokenUsage = arkv1alpha1.TokenUsage{
