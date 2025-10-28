@@ -1,0 +1,19 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: test-model
+spec:
+  type: azure
+  model:
+    value: gpt-4.1-mini
+  config:
+    azure:
+      baseUrl:
+        value: ($azure.url)
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: test-model-token
+            key: token
+      apiVersion:
+        value: "2024-12-01-preview"

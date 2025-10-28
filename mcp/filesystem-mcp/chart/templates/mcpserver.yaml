@@ -1,0 +1,14 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: MCPServer
+metadata:
+  name: {{ include "mcp-filesystem.name" . }}
+  labels:
+    {{- include "mcp-filesystem.labels" . | nindent 4 }}
+spec:
+  description: "MCP Filesystem Server with session management"
+  transport: http
+  address:
+    valueFrom:
+      serviceRef:
+        name: {{ include "mcp-filesystem.name" . }}-server
+        port: http

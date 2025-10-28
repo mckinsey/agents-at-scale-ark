@@ -89,6 +89,8 @@ jobs:
           - path: services/ark-mcp
             image: ark-mcp
             prebuild: "make ark-mcp-deps && mkdir -p services/ark-mcp/ark-mcp/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-mcp/ark-mcp/out/"
+          - path: mcp/filesystem-mcp
+            image: filesystem-mcp-server
           - path: services/ark-cluster-memory/ark-cluster-memory
             image: ark-cluster-memory
           - path: services/ark-evaluator
@@ -213,6 +215,7 @@ jobs:
           - ark-api
           - ark-dashboard
           - ark-mcp
+          - mcp-filesystem
           - localhost-gateway
           - ark-tenant
     steps:
