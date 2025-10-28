@@ -3,6 +3,8 @@ title: Ark APIs
 description: REST APIs for managing ARK resources and OpenAI-compatible endpoints
 ---
 
+import { Tabs } from 'nextra/components'
+
 # Ark APIs
 
 ARK provides REST APIs for managing resources and executing queries. The APIs include both native ARK endpoints and OpenAI-compatible endpoints.
@@ -78,29 +80,6 @@ Standard REST APIs for managing ARK resources, for example:
 
 Standard Kubernetes REST patterns are followed, such as `POST` to create, `DELETE` to delete.
 
-## OpenAI-Compatible APIs
-
-Use familiar OpenAI SDK patterns to interact with ARK:
-
-### List Models
-
-```bash
-curl http://localhost:8000/openai/v1/models
-```
-
-Returns all available agents, teams, models, and tools in OpenAI format.
-
-### Chat Completions
-
-```bash
-curl -X POST http://localhost:8000/openai/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "agent/my-agent",
-    "messages": [{"role": "user", "content": "Hello"}]
-  }'
-```
-
 ### Evaluators and Evaluations (v1)
 
 - Base: `/v1`
@@ -133,23 +112,47 @@ curl -s -X POST http://localhost:8000/v1/namespaces/default/evaluations \
 
 For full request and response schemas, use the service OpenAPI UI at `/docs` when ark-api is running.
 
-### Using OpenAI SDK
+## OpenAI-Compatible APIs
 
-```python
-from openai import OpenAI
+The `openai/v1/` endpoint has been designed to mimic the [OpenAI API Specification](https://platform.openai.com/docs/api-reference/introduction). This allows Ark resources to be accessed using standard OpenAI compliant tools and SDKs.
 
-client = OpenAI(
-    api_key="not-needed",
-    base_url="http://localhost:8000/openai/v1"
-)
+### List Models API
 
-response = client.chat.completions.create(
-    model="agent/my-agent",
-    messages=[{"role": "user", "content": "Hello"}]
-)
+The `v1/models` API lists all available query targets in Ark:
+
+```bash
+curl http://localhost:8000/openai/v1/models
 ```
 
-## Model Naming
+Example Response:
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "agent/aws-operator-agent",
+      "created": 1760345001,
+      "object": "model",
+      "owned_by": "ark"
+    },
+    {
+      "id": "team/coding-team",
+      "created": 1761159225,
+      "object": "model",
+      "owned_by": "ark"
+    },
+    {
+      "id": "model/gpt-4",
+      "created": 1761137042,
+      "object": "model",
+      "owned_by": "ark"
+    }
+  ]
+}
+```
+
+Returns all available agents, teams, models, and tools in the format `<target_type>/<target_name>`. Any of these targets can be queried.
 
 When using OpenAI endpoints, specify targets with these prefixes:
 
@@ -157,3 +160,123 @@ When using OpenAI endpoints, specify targets with these prefixes:
 - `team/team-name` - Query a team
 - `model/model-name` - Query a model directly
 - `tool/tool-name` - Query a tool
+
+### Chat Completions
+
+The `v1/chat/completions` API can be used to execute a query against a target:
+
+```bash
+curl -X POST http://localhost:8000/openai/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "agent/my-agent",
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
+```
+
+Example response:
+
+```json
+{
+  "id": "openai-query-ce031d64",
+  "object": "chat.completion",
+  "created": 1761224998,
+  "model": "agent/my-agent",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello! How can I help you today?"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 9,
+    "total_tokens": 19
+  }
+}
+```
+
+### Ark Metadata Extensions
+
+Ark extends the OpenAI API with optional metadata for passing annotations and retrieving query information:
+
+```json
+{
+  "model": "agent/my-agent",
+  "messages": [{"role": "user", "content": "Hello"}],
+  "stream": true,
+  "metadata": {
+    "user_id": "12345",
+    "ark": "{\"annotations\": {\"ark.mckinsey.com/a2a-context-id\": \"abc-123\"}}"
+  }
+}
+```
+
+The `ark` field is a JSON string containing:
+- `annotations`: Custom Kubernetes annotations applied to the query
+
+Example Response:
+
+```json
+{
+  "id": "openai-query-ce031d64",
+  "object": "chat.completion",
+  "model": "agent/my-agent",
+  "choices": [...],
+  "usage": {...},
+  "ark": {
+    "query_name": "openai-query-ce031d64",
+    "annotations": {
+      "ark.mckinsey.com/a2a-context-id": "abc-123",
+      "ark.mckinsey.com/streaming-enabled": "true"
+    }
+  }
+}
+```
+
+As per the OpenAI spec, additional fields can be included in the response. The field `ark` is used rather than `metadata` - as `metadata` is more likely to clash with other providers.
+
+### Using OpenAI SDKs
+
+Standard OpenAI SDKs and tools can be used:
+
+<Tabs items={['Python', 'Node.js']}>
+  <Tabs.Tab>
+    ```python
+    from openai import OpenAI
+
+    client = OpenAI(
+        api_key="not-needed",
+        base_url="http://localhost:8000/openai/v1"
+    )
+
+    response = client.chat.completions.create(
+        model="agent/my-agent",
+        messages=[{"role": "user", "content": "Hello"}]
+    )
+
+    print(response.choices[0].message.content)
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```javascript
+    import OpenAI from 'openai';
+
+    const client = new OpenAI({
+      apiKey: 'not-needed',
+      baseURL: 'http://localhost:8000/openai/v1'
+    });
+
+    const response = await client.chat.completions.create({
+      model: 'agent/my-agent',
+      messages: [{ role: 'user', content: 'Hello' }]
+    });
+
+    console.log(response.choices[0].message.content);
+    ```
+  </Tabs.Tab>
+</Tabs>
