@@ -9,8 +9,6 @@ image:
   pullPolicy: IfNotPresent
   # tag defaults to .Chart.AppVersion if not specified
 
- 
-
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
