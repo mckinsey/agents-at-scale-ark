@@ -100,6 +100,49 @@ describe('createEvaluationCommand', () => {
       });
     });
 
+    it('should execute query evaluation from stdin', async () => {
+      mockExecuteQueryEvaluation.mockResolvedValue(undefined);
+
+      const command = createEvaluationCommand({} as any);
+
+      const mockStdin = {
+        isTTY: false,
+        setEncoding: jest.fn(),
+        on: jest.fn((event: string, callback: (data?: string) => void) => {
+          if (event === 'data') {
+            callback('piped-query-name');
+          } else if (event === 'end') {
+            callback();
+          }
+        }),
+      };
+
+      const originalStdin = process.stdin;
+      Object.defineProperty(process, 'stdin', {
+        value: mockStdin,
+        writable: true,
+        configurable: true,
+      });
+
+      try {
+        await command.parseAsync(['node', 'test', 'my-evaluator']);
+
+        expect(mockExecuteQueryEvaluation).toHaveBeenCalledWith({
+          evaluatorName: 'my-evaluator',
+          queryName: 'piped-query-name',
+          responseTarget: undefined,
+          timeout: undefined,
+          watchTimeout: undefined,
+        });
+      } finally {
+        Object.defineProperty(process, 'stdin', {
+          value: originalStdin,
+          writable: true,
+          configurable: true,
+        });
+      }
+    });
+
     it('should execute query evaluation with response-target option', async () => {
       mockExecuteQueryEvaluation.mockResolvedValue(undefined);
 
