@@ -6,6 +6,24 @@ import {
   executeQueryEvaluation,
 } from '../../lib/executeEvaluation.js';
 
+async function readStdin(): Promise<string> {
+  return new Promise((resolve) => {
+    if (process.stdin.isTTY) {
+      resolve('');
+      return;
+    }
+
+    let data = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk) => {
+      data += chunk;
+    });
+    process.stdin.on('end', () => {
+      resolve(data.trim());
+    });
+  });
+}
+
 export function createEvaluationCommand(_: ArkConfig): Command {
   const evaluationCommand = new Command('evaluation');
 
@@ -50,14 +68,27 @@ export function createEvaluationCommand(_: ArkConfig): Command {
             watchTimeout: options.watchTimeout,
           });
         } else {
-          console.error(chalk.red('Error: Must provide either:'));
-          console.error('  - --input and --output for direct evaluation');
-          console.error('  - <query-name> for query-based evaluation');
-          console.error('\nExamples:');
-          console.error('  ark evaluation my-evaluator --input "test" --output "result"');
-          console.error('  ark evaluation my-evaluator my-query');
-          console.error('  ark evaluation my-evaluator my-query --response-target agent:my-agent');
-          process.exit(1);
+          const stdinQueryName = await readStdin();
+
+          if (stdinQueryName) {
+            await executeQueryEvaluation({
+              evaluatorName,
+              queryName: stdinQueryName,
+              responseTarget: options.responseTarget,
+              timeout: options.timeout,
+              watchTimeout: options.watchTimeout,
+            });
+          } else {
+            console.error(chalk.red('Error: Must provide either:'));
+            console.error('  - --input and --output for direct evaluation');
+            console.error('  - <query-name> for query-based evaluation');
+            console.error('  - Pipe query name from stdin');
+            console.error('\nExamples:');
+            console.error('  ark evaluation my-evaluator --input "test" --output "result"');
+            console.error('  ark evaluation my-evaluator my-query');
+            console.error('  echo "my-query" | ark evaluation my-evaluator');
+            process.exit(1);
+          }
         }
       }
     );
