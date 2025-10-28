@@ -57,6 +57,20 @@ ark agents query weather "msg"      # Query agent
 ark models status default           # Check model health
 ```
 
+Evaluation commands follow a simplified syntax:
+
+```bash
+# Direct evaluation (with input/output)
+ark evaluation <evaluator-name> --input "..." --output "..."
+
+# Query-based evaluation
+ark evaluation <evaluator-name> <query-name>
+ark evaluation <evaluator-name> <query-name> --response-target agent:my-agent
+
+# Optional flags for both types
+ark evaluation <evaluator-name> ... --timeout 30s --watch-timeout 60s
+```
+
 Shorthand options can occasionally be offered if they provide clearer scripting or interactive syntax:
 
 ```bash
@@ -80,24 +94,36 @@ Following kubectl/argo patterns. Essential parameters:
 
 ## Exit Code and Error Handling Conventions
 
-Four main status codes are used:
+Five main status codes are used:
 
 | Code | Meaning | When to Use |
 |------|---------|-------------|
-| `0` | Success | Command completed |
+| `0` | Success | Command completed successfully |
 | `1` | CLI Error | Invalid arguments, config issues |
 | `2` | Operation Error | Backend failure, resource error |
 | `3` | Timeout | Operation exceeded time limit |
+| `4` | Evaluation Failed | Evaluation completed but test failed |
 
-This helps scripts distinguish between usage errors, operational failures, and timeouts. Error details are printed by the CLI.
+This helps scripts distinguish between usage errors, operational failures, timeouts, and evaluation failures. Error details are printed by the CLI.
 
-Query operations return exit code `2` when execution fails and `3` on timeout, making error handling in scripts straightforward. This behavior aligns with Argo Workflows' `--wait` flag pattern (see [argoproj/argo-workflows#1008](https://github.com/argoproj/argo-workflows/issues/1008)).
+Query operations return exit code `2` when execution fails and `3` on timeout. Evaluation operations return exit code `4` when the evaluation completes successfully but the test fails (e.g., `passed: false`), allowing CI/CD pipelines to distinguish between operational failures and actual test failures. This behavior aligns with Argo Workflows' `--wait` flag pattern (see [argoproj/argo-workflows#1008](https://github.com/argoproj/argo-workflows/issues/1008)).
 
 Example handling exit codes:
 
 ```bash
+# Query example
 if ! ark agents query weather "What's the weather?"; then
    echo "Query failed with exit code $?"
+fi
+
+# Evaluation example
+if ! ark evaluation my-evaluator my-query; then
+   case $? in
+      1) echo "CLI error: Invalid arguments" ;;
+      2) echo "Operation error: Evaluation service failed" ;;
+      3) echo "Timeout: Evaluation took too long" ;;
+      4) echo "Test failed: Evaluation completed but test did not pass" ;;
+   esac
 fi
 ```
 
