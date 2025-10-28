@@ -96,6 +96,7 @@ for CHART_CRD_FILE in $CRD_FILES; do
     # 1. Remove Helm source comment lines
     # 2. Remove the labels section (lines with "  labels:" and all following indented lines until next metadata property)
     # 3. Keep only the controller-gen annotation
+    set +e  # Temporarily disable exit on error for this pipeline
     grep -v "^# Source:" "$RENDERED_FILE" | \
     awk '
     BEGIN { skip_labels = 0 }
@@ -126,11 +127,15 @@ for CHART_CRD_FILE in $CRD_FILES; do
         print
     }
     ' | \
-    sed '/"helm.sh\/resource-policy": keep/d' > "$STRIPPED_RENDERED" 2>/dev/null || {
+    sed '/"helm.sh\/resource-policy": keep/d' > "$STRIPPED_RENDERED"
+    STRIP_EXIT_CODE=$?
+    set -e  # Re-enable exit on error
+    
+    if [ $STRIP_EXIT_CODE -ne 0 ]; then
         echo -e "${RED}FAIL (stripping failed)${NC}"
         FAILED_FILES+=("$CRD_NAME (strip failed)")
         continue
-    }
+    fi
     
     # Remove the --- separator from both files if present
     # Strip --- from rendered file
