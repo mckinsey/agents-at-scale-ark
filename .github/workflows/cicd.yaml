@@ -903,6 +903,7 @@ jobs:
           - ark-api
           - ark-dashboard
           - ark-mcp
+          - mcp-filesystem
           - localhost-gateway
           - ark-tenant
     steps:

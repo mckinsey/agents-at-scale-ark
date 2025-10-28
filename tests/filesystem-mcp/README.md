@@ -75,7 +75,7 @@ The annotation determines WHERE the file gets created (`/data/workspace-a/`).
 ## Running
 
 ```bash
-chainsaw test tests/mcp-filesys-session-isolation/
+chainsaw test tests/filesystem-mcp/
 ```
 
 Successful completion validates:
