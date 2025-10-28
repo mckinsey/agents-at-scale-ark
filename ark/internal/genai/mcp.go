@@ -74,8 +74,15 @@ func performBackoff(ctx context.Context, attempt int, baseURL string) error {
 
 func createTransport(baseURL string, headers map[string]string, timeout time.Duration, transportType string) mcp.Transport {
 	// Create HTTP client with headers
-	httpClient := &http.Client{
-		Timeout: timeout,
+	var httpClient *http.Client
+	if transportType == "sse" {
+		httpClient = &http.Client{
+			// No timeout for SSE: connections are long-lived
+		}
+	} else {
+		httpClient = &http.Client{
+			Timeout: timeout,
+		}
 	}
 
 	// If we have headers, wrap the transport
@@ -124,11 +131,14 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.base.RoundTrip(req)
 }
 
-func attemptMCPConnection(ctx, connectCtx context.Context, mcpClient *mcp.Client, baseURL string, headers map[string]string, httpTimeout time.Duration, transportType string) (*mcp.ClientSession, error) {
+func attemptMCPConnection(ctx context.Context, mcpClient *mcp.Client, baseURL string, headers map[string]string, httpTimeout time.Duration, transportType string) (*mcp.ClientSession, error) {
 	log := logf.FromContext(ctx)
 
 	transport := createTransport(baseURL, headers, httpTimeout, transportType)
-	session, err := mcpClient.Connect(connectCtx, transport, nil)
+
+	// For SSE, the context passed here controls the connection lifetime
+	// It should be the caller's context, not a temporary one
+	session, err := mcpClient.Connect(ctx, transport, nil)
 	if err != nil {
 		if isRetryableError(err) {
 			log.V(1).Info("retryable error connecting MCP client", "error", err)
@@ -148,19 +158,24 @@ func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[s
 		return nil, err
 	}
 
-	connectCtx, cancel := context.WithTimeout(context.Background(), connectTimeout)
-	defer cancel()
+	// Create a context with timeout ONLY for the retry loop
+	// The caller's context (ctx) is used for the actual connection and should control its lifetime
+	retryCtx, retryCancel := context.WithTimeout(context.Background(), connectTimeout)
+	defer retryCancel()
 
 	var lastErr error
 	var session *mcp.ClientSession
 	for attempt := range maxRetries {
 		if attempt > 0 {
-			if err := performBackoff(connectCtx, attempt, baseURL); err != nil {
+			if err := performBackoff(retryCtx, attempt, baseURL); err != nil {
 				return nil, err
 			}
 		}
 
-		session, err = attemptMCPConnection(ctx, connectCtx, mcpClient, baseURL, headers, httpTimeout, transportType)
+		// Use the caller's context for the connection
+		// For SSE: This context controls the connection lifetime - when ctx is canceled, connection closes
+		// For HTTP: This context is used per-request
+		session, err = attemptMCPConnection(ctx, mcpClient, baseURL, headers, httpTimeout, transportType)
 		if err == nil {
 			log.Info("MCP client connected successfully", "server", baseURL, "attempts", attempt+1)
 			return &MCPClient{

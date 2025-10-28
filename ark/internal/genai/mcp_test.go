@@ -63,7 +63,19 @@ func TestNewMCPClient(t *testing.T) {
 
 	for testName, tc := range testCases {
 		t.Run(testName, func(t *testing.T) {
+			// Store server and client for cleanup
 			mcpServerMock := mcpServerMock{}.New(t, tc.mcpServer.connectionOptions)
+			var mcpClient *MCPClient
+
+			t.Cleanup(func() {
+				// Release connections when test completes
+				if mcpClient != nil && mcpClient.client != nil {
+					_ = mcpClient.client.Close()
+				}
+
+				// And shut down server
+				_ = mcpServerMock.Shutdown(t.Context())
+			})
 
 			// Start server in a goroutine since ListenAndServe blocks
 			go func() {
@@ -73,20 +85,7 @@ func TestNewMCPClient(t *testing.T) {
 					t.Errorf("Failed to start MCP server mock: %v", err)
 				}
 			}()
-
-			// Clean up server when test completes
-			t.Cleanup(func() {
-				fmt.Println("Shutting down MCP server mock...")
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				_ = mcpServerMock.Shutdown(ctx)
-
-				// Ensure server has time to shut down
-				time.Sleep(300 * time.Millisecond)
-			})
-
-			// Give the server time to start
-			time.Sleep(300 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 
 			ctx := t.Context()
 			client, err := NewMCPClient(
@@ -103,6 +102,9 @@ func TestNewMCPClient(t *testing.T) {
 			if client == nil {
 				t.Fatal("Expected a valid MCP client, got nil")
 			}
+
+			// Store client for cleanup
+			mcpClient = client
 
 			tools, err := client.ListTools(ctx)
 			require.NoError(t, err)
@@ -134,7 +136,7 @@ func (m *mcpServerMock) ListenAndServe(t *testing.T) error {
 	var handler http.Handler
 	switch m.opts.transport {
 	case "sse":
-		handler = mcp.NewSSEHandler(m.getServerFn())
+		handler = mcp.NewSSEHandler(m.getServerFn(), nil)
 	case "http":
 		handler = mcp.NewStreamableHTTPHandler(m.getServerFn(), nil)
 	default:
@@ -157,14 +159,7 @@ func (m *mcpServerMock) Shutdown(ctx context.Context) error {
 
 func (m *mcpServerMock) getServerFn() func(request *http.Request) *mcp.Server {
 	return func(request *http.Request) *mcp.Server {
-		fmt.Printf("incoming request: %+v\n", request)
-		url := request.URL.Path
-		switch url {
-		case "/mcp", "/sse":
-			return m.server
-		default:
-			panic("endpoint not implemented")
-		}
+		return m.server
 	}
 }
 
