@@ -30,8 +30,12 @@ echo "Validating Helm chart CRDs match source CRDs..."
 # Check if helm is installed
 if ! command -v helm &> /dev/null; then
     echo -e "${RED}Error: helm is not installed${NC}"
+    echo "Please install helm: https://helm.sh/docs/intro/install/"
     exit 1
 fi
+
+# Show helm version for debugging
+echo "Using helm version: $(helm version --short 2>/dev/null || echo 'unknown')"
 
 # Check if directories exist
 if [ ! -d "$CHART_DIR" ]; then
@@ -71,15 +75,18 @@ for CHART_CRD_FILE in $CRD_FILES; do
     RENDERED_FILE="$TEMP_DIR/$CRD_NAME"
     # Use relative path from chart root for --show-only
     CRD_REL_PATH="${CHART_CRD_FILE#$CHART_DIR/}"
-    helm template test-release "$CHART_DIR" \
+    HELM_ERROR=$(helm template test-release "$CHART_DIR" \
         --set crd.enable=true \
         --set crd.keep=false \
         --show-only "$CRD_REL_PATH" \
-        > "$RENDERED_FILE" 2>/dev/null || {
+        2>&1 > "$RENDERED_FILE")
+    
+    if [ $? -ne 0 ]; then
         echo -e "${RED}FAIL (helm template failed)${NC}"
+        echo -e "${YELLOW}Helm error: $HELM_ERROR${NC}"
         FAILED_FILES+=("$CRD_NAME (template failed)")
         continue
-    }
+    fi
     
     # Strip Helm-specific additions from the rendered CRD
     # The rendered file has Helm labels added, we need to remove them

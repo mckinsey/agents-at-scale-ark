@@ -127,6 +127,11 @@ jobs:
             ark/go.sum
             tools/fark/go.sum
 
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.18.6"
+
       - name: Install gcov2lcov
         run: go install github.com/jandelgado/gcov2lcov@latest
 
