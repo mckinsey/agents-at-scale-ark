@@ -62,79 +62,79 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    // Watch for query completion
-    spinner.text = 'Query status: initializing';
+    // Watch for query completion using kubectl wait
+    spinner.text = 'Waiting for query completion...';
 
-    let queryComplete = false;
-    let attempts = 0;
-    const maxAttempts = Math.floor(watchTimeoutMs / 1000);
-
-    while (!queryComplete && attempts < maxAttempts) {
-      attempts++;
-
-      try {
-        const {stdout} = await execa(
-          'kubectl',
-          ['get', 'query', queryName, '-o', 'json'],
-          {stdio: 'pipe'}
+    try {
+      await execa(
+        'kubectl',
+        [
+          'wait',
+          '--for=condition=Completed',
+          `query/${queryName}`,
+          `--timeout=${Math.floor(watchTimeoutMs / 1000)}s`,
+        ],
+        {timeout: watchTimeoutMs}
+      );
+    } catch (error) {
+      spinner.stop();
+      // Check if it's a timeout or other error
+      if (
+        error instanceof Error &&
+        error.message.includes('timed out waiting')
+      ) {
+        console.error(
+          chalk.red(
+            `Query did not complete within ${options.watchTimeout ?? `${Math.floor(watchTimeoutMs / 1000)}s`}`
+          )
         );
-
-        const query = JSON.parse(stdout) as Query;
-        const phase = query.status?.phase;
-
-        // Update spinner with current phase
-        if (phase) {
-          spinner.text = `Query status: ${phase}`;
-        }
-
-        // Check if query is complete based on phase
-        if (phase === 'done') {
-          queryComplete = true;
-          spinner.stop();
-
-          // Extract and display the response from responses array
-          if (query.status?.responses && query.status.responses.length > 0) {
-            const response = query.status.responses[0];
-            console.log(response.content || response);
-          } else {
-            output.warning('No response received');
-          }
-        } else if (phase === 'error') {
-          queryComplete = true;
-          spinner.stop();
-
-          const response = query.status?.responses?.[0];
-          console.error(
-            chalk.red(response?.content || 'Query failed with unknown error')
-          );
-          process.exit(ExitCodes.OperationError);
-        } else if (phase === 'canceled') {
-          queryComplete = true;
-          spinner.warn('Query canceled');
-
-          if (query.status?.message) {
-            output.warning(query.status.message);
-          }
-          process.exit(ExitCodes.OperationError);
-        }
-      } catch {
-        // Query might not exist yet, continue waiting
-        spinner.text = 'Query status: waiting for query to be created';
+        process.exit(ExitCodes.Timeout);
       }
-
-      if (!queryComplete) {
-        await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second
-      }
+      // For other errors, fetch the query to check status
     }
 
-    if (!queryComplete) {
-      spinner.stop();
+    spinner.stop();
+
+    // Fetch final query state
+    try {
+      const {stdout} = await execa(
+        'kubectl',
+        ['get', 'query', queryName, '-o', 'json'],
+        {stdio: 'pipe'}
+      );
+
+      const query = JSON.parse(stdout) as Query;
+      const phase = query.status?.phase;
+
+      // Check if query completed successfully or with error
+      if (phase === 'done') {
+        // Extract and display the response from responses array
+        if (query.status?.responses && query.status.responses.length > 0) {
+          const response = query.status.responses[0];
+          console.log(response.content || response);
+        } else {
+          output.warning('No response received');
+        }
+      } else if (phase === 'error') {
+        const response = query.status?.responses?.[0];
+        console.error(
+          chalk.red(response?.content || 'Query failed with unknown error')
+        );
+        process.exit(ExitCodes.OperationError);
+      } else if (phase === 'canceled') {
+        spinner.warn('Query canceled');
+        if (query.status?.message) {
+          output.warning(query.status.message);
+        }
+        process.exit(ExitCodes.OperationError);
+      }
+    } catch (error) {
       console.error(
         chalk.red(
-          `Query did not complete within ${options.watchTimeout ?? `${Math.floor(watchTimeoutMs / 1000)}s`}`
+          error instanceof Error ? error.message : 'Failed to fetch query result'
         )
       );
-      process.exit(ExitCodes.Timeout);
+      process.exit(ExitCodes.CliError);
     }
   } catch (error) {
     spinner.stop();

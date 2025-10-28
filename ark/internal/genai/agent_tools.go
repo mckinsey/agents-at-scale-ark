@@ -11,6 +11,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/telemetry"
 )
 
 // Add MCP client pool to ToolRegistry
@@ -58,23 +59,23 @@ func (p *MCPClientPool) Close() error {
 	return lastErr
 }
 
-func (r *ToolRegistry) registerTools(ctx context.Context, k8sClient client.Client, agent *arkv1alpha1.Agent) error {
+func (r *ToolRegistry) registerTools(ctx context.Context, k8sClient client.Client, agent *arkv1alpha1.Agent, telemetryProvider telemetry.Provider) error {
 	for _, agentTool := range agent.Spec.Tools {
-		if err := r.registerTool(ctx, k8sClient, agentTool, agent.Namespace); err != nil {
+		if err := r.registerTool(ctx, k8sClient, agentTool, agent.Namespace, telemetryProvider); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *MCPClientPool, mcpSettings map[string]MCPSettings) (ToolExecutor, error) {
+func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *MCPClientPool, mcpSettings map[string]MCPSettings, telemetryProvider telemetry.Provider) (ToolExecutor, error) {
 	switch tool.Spec.Type {
 	case ToolTypeHTTP:
 		return createHTTPExecutor(k8sClient, tool, namespace)
 	case ToolTypeMCP:
 		return createMCPExecutor(ctx, k8sClient, tool, namespace, mcpPool, mcpSettings)
 	case ToolTypeAgent:
-		return createAgentExecutor(ctx, k8sClient, tool, namespace)
+		return createAgentExecutor(ctx, k8sClient, tool, namespace, telemetryProvider)
 	case ToolTypeBuiltin:
 		return createBuiltinExecutor(tool)
 	default:
@@ -82,7 +83,7 @@ func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv
 	}
 }
 
-func createAgentExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string) (ToolExecutor, error) {
+func createAgentExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, telemetryProvider telemetry.Provider) (ToolExecutor, error) {
 	if tool.Spec.Agent.Name == "" {
 		return nil, fmt.Errorf("agent spec is required for tool %s", tool.Name)
 	}
@@ -94,10 +95,11 @@ func createAgentExecutor(ctx context.Context, k8sClient client.Client, tool *ark
 	}
 
 	return &AgentToolExecutor{
-		AgentName: tool.Spec.Agent.Name,
-		Namespace: namespace,
-		AgentCRD:  agentCRD,
-		k8sClient: k8sClient,
+		AgentName:         tool.Spec.Agent.Name,
+		Namespace:         namespace,
+		AgentCRD:          agentCRD,
+		k8sClient:         k8sClient,
+		telemetryProvider: telemetryProvider,
 	}, nil
 }
 
@@ -187,7 +189,7 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 	}, nil
 }
 
-func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client, agentTool arkv1alpha1.AgentTool, namespace string) error {
+func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client, agentTool arkv1alpha1.AgentTool, namespace string, telemetryProvider telemetry.Provider) error {
 	tool := &arkv1alpha1.Tool{}
 	key := client.ObjectKey{Name: agentTool.Name, Namespace: namespace}
 
@@ -196,7 +198,7 @@ func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client
 	}
 
 	toolDef := CreateToolFromCRD(tool)
-	executor, err := CreateToolExecutor(ctx, k8sClient, tool, namespace, r.mcpPool, r.mcpSettings)
+	executor, err := CreateToolExecutor(ctx, k8sClient, tool, namespace, r.mcpPool, r.mcpSettings, telemetryProvider)
 	if err != nil {
 		return fmt.Errorf("failed to create executor for tool %s: %w", agentTool.Name, err)
 	}
@@ -228,10 +230,11 @@ func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client
 
 // AgentToolExecutor executes agent tools by calling other agents via MCP
 type AgentToolExecutor struct {
-	AgentName string
-	Namespace string
-	AgentCRD  *arkv1alpha1.Agent
-	k8sClient client.Client
+	AgentName         string
+	Namespace         string
+	AgentCRD          *arkv1alpha1.Agent
+	k8sClient         client.Client
+	telemetryProvider telemetry.Provider
 }
 
 func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall, recorder EventEmitter) (ToolResult, error) {
@@ -269,7 +272,7 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall, recorder
 	log.Info("calling agent directly", "agent", a.AgentName, "namespace", a.Namespace, "input", inputStr)
 
 	// Create the Agent object using the Agent CRD and recorder
-	agent, err := MakeAgent(ctx, a.k8sClient, a.AgentCRD, recorder)
+	agent, err := MakeAgent(ctx, a.k8sClient, a.AgentCRD, recorder, a.telemetryProvider)
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,

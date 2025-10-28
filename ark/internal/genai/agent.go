@@ -26,6 +26,7 @@ type Agent struct {
 	Model           *Model
 	Tools           *ToolRegistry
 	Recorder        EventEmitter
+	AgentRecorder   telemetry.AgentRecorder
 	ExecutionEngine *arkv1alpha1.ExecutionEngineRef
 	Annotations     map[string]string
 	OutputSchema    *runtime.RawExtension
@@ -53,20 +54,37 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	})
 	defer agentTracker.Complete("")
 
+	ctx, span := a.AgentRecorder.StartAgentExecution(ctx, a.Name, a.Namespace)
+	defer span.End()
+
+	var messages []Message
+	var err error
+
 	if a.ExecutionEngine != nil {
 		// Check if this is the reserved 'a2a' execution engine
 		if a.ExecutionEngine.Name == ExecutionEngineA2A {
-			return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
+			messages, err = a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
+		} else {
+			messages, err = a.executeWithExecutionEngine(ctx, userInput, history)
 		}
-		return a.executeWithExecutionEngine(ctx, userInput, history)
+	} else {
+		// Regular agents require a model
+		if a.Model == nil {
+			err = fmt.Errorf("agent %s has no model configured", a.FullName())
+			a.AgentRecorder.RecordError(span, err)
+			return nil, err
+		}
+
+		messages, err = a.executeLocally(ctx, userInput, history, memory, eventStream)
 	}
 
-	// Regular agents require a model
-	if a.Model == nil {
-		return nil, fmt.Errorf("agent %s has no model configured", a.FullName())
+	if err != nil {
+		a.AgentRecorder.RecordError(span, err)
+		return messages, err
 	}
 
-	return a.executeLocally(ctx, userInput, history, memory, eventStream)
+	a.AgentRecorder.RecordSuccess(span)
+	return messages, nil
 }
 
 func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
@@ -164,15 +182,10 @@ func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatComplet
 		"toolType":   a.Tools.GetToolType(toolCall.Function.Name),
 	})
 
-	toolType := a.Tools.GetToolType(toolCall.Function.Name)
-	ctx, toolSpan := telemetry.StartToolExecution(ctx, toolCall.Function.Name, toolType, toolCall.ID, toolCall.Function.Arguments)
-	defer toolSpan.End()
-
 	result, err := a.Tools.ExecuteTool(ctx, ToolCall(toolCall), a.Recorder)
 	toolMessage := ToolMessage(result.Content, result.ID)
 
 	if err != nil {
-		telemetry.RecordToolError(toolSpan, err)
 		if IsTerminateTeam(err) {
 			toolTracker.CompleteWithTermination(err.Error())
 		} else {
@@ -181,7 +194,6 @@ func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatComplet
 		return toolMessage, err
 	}
 
-	telemetry.RecordToolSuccess(toolSpan, result.Content)
 	toolTracker.CompleteWithMetadata(result.Content, map[string]string{
 		"resultLength": fmt.Sprintf("%d", len(result.Content)),
 		"hasError":     "false",
@@ -285,13 +297,13 @@ func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, execu
 	return nil
 }
 
-func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Agent, eventRecorder EventEmitter) (*Agent, error) {
+func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Agent, eventRecorder EventEmitter, telemetryProvider telemetry.Provider) (*Agent, error) {
 	var resolvedModel *Model
 
 	// A2A agents don't need models - they delegate to external A2A servers
 	if crd.Spec.ExecutionEngine == nil || crd.Spec.ExecutionEngine.Name != ExecutionEngineA2A {
 		var err error
-		resolvedModel, err = LoadModel(ctx, k8sClient, crd.Spec.ModelRef, crd.Namespace)
+		resolvedModel, err = LoadModel(ctx, k8sClient, crd.Spec.ModelRef, crd.Namespace, telemetryProvider.ModelRecorder())
 		if err != nil {
 			return nil, fmt.Errorf("failed to load model for agent %s/%s: %w", crd.Namespace, crd.Name, err)
 		}
@@ -314,9 +326,9 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 	if err != nil {
 		return nil, fmt.Errorf("failed to make query from context for agent %s/%s: %w", crd.Namespace, crd.Name, err)
 	}
-	tools := NewToolRegistry(query.McpSettings)
+	tools := NewToolRegistry(query.McpSettings, telemetryProvider.ToolRecorder())
 
-	if err := tools.registerTools(ctx, k8sClient, crd); err != nil {
+	if err := tools.registerTools(ctx, k8sClient, crd, telemetryProvider); err != nil {
 		return nil, err
 	}
 
@@ -329,6 +341,7 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		Model:           resolvedModel,
 		Tools:           tools,
 		Recorder:        eventRecorder,
+		AgentRecorder:   telemetryProvider.AgentRecorder(),
 		ExecutionEngine: crd.Spec.ExecutionEngine,
 		Annotations:     crd.Annotations,
 		OutputSchema:    crd.Spec.OutputSchema,

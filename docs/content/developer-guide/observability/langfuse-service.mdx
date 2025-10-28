@@ -191,11 +191,8 @@ kubectl exec -it <ark-controller-pod> -- curl http://langfuse-web.telemetry.svc.
 # Check OTEL environment variables
 kubectl get secret otel-environment-variables -n ark-system -o yaml
 
-# Verify ARK controller has OTEL config
-kubectl describe deployment ark-controller-manager -n ark-system | grep -A 10 envFrom
-
 # Check telemetry initialization logs
-kubectl logs deployment/ark-controller-manager -n ark-system | grep telemetry
+kubectl logs deployment/ark-controller -n ark-system | grep telemetry
 ```
 
 ### Dashboard Access Issues

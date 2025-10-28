@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/openai/openai-go"
-	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,7 +24,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/genai"
-	"mckinsey.com/ark/internal/telemetry"
+	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 )
 
 type targetResult struct {
@@ -34,10 +33,19 @@ type targetResult struct {
 	target   arkv1alpha1.QueryTarget
 }
 
+// QueryReconciler reconciles a Query object with telemetry abstraction.
+//
+// Telemetry Pattern:
+// - QueryRecorder is injected at controller creation (see cmd/main.go)
+// - Use QueryRecorder.StartQuery() for session-level spans
+// - Use QueryRecorder.StartTarget() for target-specific spans
+// - Record inputs, outputs, errors, and token usage through QueryRecorder methods
+// - Never import OTEL packages directly - use the abstraction layer
 type QueryReconciler struct {
 	client.Client
 	Scheme     *runtime.Scheme
 	Recorder   record.EventRecorder
+	Telemetry  *telemetryconfig.Provider
 	operations sync.Map
 }
 
@@ -172,20 +180,30 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		}
 	}()
 
-	// Start session-aware query tracing
+	// Start session-aware query tracing using new abstraction
 	sessionId := obj.Spec.SessionId
 	if sessionId == "" {
 		sessionId = string(obj.UID)
 	}
 
+	// Create query execution span with session tracking.
+	// This span represents the entire query lifecycle and includes:
+	// - Session correlation for multi-query conversations
+	// - Token usage aggregation across all targets
+	opCtx, span := r.Telemetry.QueryRecorder().StartQuery(opCtx, obj.Name, obj.Namespace, "execute")
+	r.Telemetry.QueryRecorder().RecordSessionID(span, sessionId)
+	defer span.End()
+
 	impersonatedClient, memory, err := r.setupQueryExecution(opCtx, obj, queryTracker, tokenCollector, sessionId)
 	if err != nil {
+		r.Telemetry.QueryRecorder().RecordError(span, err)
 		return
 	}
 
 	responses, eventStream, err := r.reconcileQueue(opCtx, obj, impersonatedClient, memory, tokenCollector)
 	if err != nil {
 		queryTracker.Fail(err)
+		r.Telemetry.QueryRecorder().RecordError(span, err)
 		_ = r.updateStatus(opCtx, &obj, statusError)
 		return
 	}
@@ -200,6 +218,9 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		TotalTokens:      tokenSummary.TotalTokens,
 	}
 
+	// Record token usage in telemetry span
+	r.Telemetry.QueryRecorder().RecordTokenUsage(span, tokenSummary.PromptTokens, tokenSummary.CompletionTokens, tokenSummary.TotalTokens)
+
 	// Set overall query status based on whether any targets failed
 	queryStatus := r.determineQueryStatus(responses)
 	_ = r.updateStatus(opCtx, &obj, queryStatus)
@@ -207,6 +228,9 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	duration := &metav1.Duration{Duration: time.Since(startTime)}
 	r.finalizeEventStream(opCtx, eventStream)
 	_ = r.updateStatusWithDuration(opCtx, &obj, queryStatus, duration)
+
+	// Mark span as successful
+	r.Telemetry.QueryRecorder().RecordSuccess(span)
 }
 
 // finalizeEventStream sends the completion message to the event stream and
@@ -571,14 +595,13 @@ func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query
 func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) {
 	// Store query in context for access in deeper call stacks
 	ctx = context.WithValue(ctx, genai.QueryContextKey, &query)
-	// Create trace based on target type with input/output at trace level
-	tracer := telemetry.NewTraceContext()
 
-	ctx, span := tracer.StartTargetSpan(ctx, target.Type, target.Name)
-	span.SetAttributes(
-		attribute.String("query.name", query.Name),
-		attribute.String("query.namespace", query.Namespace),
-	)
+	// Create target-specific span for observability.
+	// This span tracks execution of a single target (agent/team/model/tool) and records:
+	// - Target type and name as attributes
+	// - Input/output content for debugging
+	// - Execution time and outcome
+	ctx, span := r.Telemetry.QueryRecorder().StartTarget(ctx, target.Type, target.Name)
 	defer span.End()
 
 	// Add query and session context for streaming metadata
@@ -598,7 +621,10 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 	// Get input messages for processing and telemetry
 	inputMessages, err := genai.GetQueryInputMessages(ctx, query, impersonatedClient)
 	if err != nil {
-		telemetry.RecordError(span, err)
+		r.Telemetry.QueryRecorder().RecordError(span, err)
+		// Add trace correlation to event metadata for observability linkage
+		metadata["traceId"] = span.TraceID()
+		metadata["spanId"] = span.SpanID()
 		event := genai.ExecutionEvent{
 			BaseEvent: genai.BaseEvent{Name: target.Name, Metadata: metadata},
 			Type:      target.Type,
@@ -607,9 +633,9 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 		return nil, err
 	}
 
-	// Set query input for telemetry
+	// Record input for telemetry
 	userContent := genai.ExtractUserMessageContent(inputMessages)
-	telemetry.SetQueryInput(span, userContent)
+	r.Telemetry.QueryRecorder().RecordInput(span, userContent)
 
 	timeout := 5 * time.Minute
 	if query.Spec.Timeout != nil {
@@ -633,7 +659,10 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 	}
 
 	if err != nil {
-		telemetry.RecordError(span, err)
+		r.Telemetry.QueryRecorder().RecordError(span, err)
+		// Add trace correlation to event metadata for observability linkage
+		metadata["traceId"] = span.TraceID()
+		metadata["spanId"] = span.SpanID()
 		event := genai.ExecutionEvent{
 			BaseEvent: genai.BaseEvent{Name: target.Name, Metadata: metadata},
 			Type:      target.Type,
@@ -643,10 +672,13 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 		// Set the final response as output at trace level
 		if len(responseMessages) > 0 {
 			lastMessage := responseMessages[len(responseMessages)-1]
-			responseContent := telemetry.ExtractMessageContentForTelemetry(openai.ChatCompletionMessageParamUnion(lastMessage))
-			span.SetAttributes(attribute.String("output.value", responseContent))
+			responseContent := messageToText(lastMessage)
+			r.Telemetry.QueryRecorder().RecordOutput(span, responseContent)
 		}
-		telemetry.RecordSuccess(span)
+		r.Telemetry.QueryRecorder().RecordSuccess(span)
+		// Add trace correlation to event metadata for observability linkage
+		metadata["traceId"] = span.TraceID()
+		metadata["spanId"] = span.SpanID()
 		event := genai.ExecutionEvent{
 			BaseEvent: genai.BaseEvent{Name: target.Name, Metadata: metadata},
 			Type:      target.Type,
@@ -671,7 +703,7 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 	})
 
 	// Regular agent execution
-	agent, err := genai.MakeAgent(ctx, impersonatedClient, &agentCRD, tokenCollector)
+	agent, err := genai.MakeAgent(ctx, impersonatedClient, &agentCRD, tokenCollector, r.Telemetry)
 	if err != nil {
 		return nil, fmt.Errorf("unable to make agent %v, error:%w", agentKey, err)
 	}
@@ -707,7 +739,7 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 		return nil, fmt.Errorf("unable to fetch team %v, error:%w", teamKey, err)
 	}
 
-	team, err := genai.MakeTeam(ctx, impersonatedClient, &teamCRD, tokenCollector)
+	team, err := genai.MakeTeam(ctx, impersonatedClient, &teamCRD, tokenCollector, r.Telemetry)
 	if err != nil {
 		return nil, fmt.Errorf("unable to make team %v, error:%w", teamKey, err)
 	}
@@ -742,7 +774,7 @@ func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Qu
 		return nil, fmt.Errorf("unable to get %v, error:%w", modelKey, err)
 	}
 
-	model, err := genai.LoadModel(ctx, impersonatedClient, &arkv1alpha1.AgentModelRef{Name: modelName, Namespace: query.Namespace}, query.Namespace)
+	model, err := genai.LoadModel(ctx, impersonatedClient, &arkv1alpha1.AgentModelRef{Name: modelName, Namespace: query.Namespace}, query.Namespace, r.Telemetry.ModelRecorder())
 	if err != nil {
 		return nil, fmt.Errorf("unable to load model %v, error:%w", modelKey, err)
 	}
@@ -852,7 +884,7 @@ func (r *QueryReconciler) executeTool(ctx context.Context, crd arkv1alpha1.Query
 		Type: "function",
 	}
 
-	toolRegistry := genai.NewToolRegistry(query.McpSettings)
+	toolRegistry := genai.NewToolRegistry(query.McpSettings, r.Telemetry.ToolRecorder())
 	defer func() {
 		if err := toolRegistry.Close(); err != nil {
 			// Log the error but don't fail the request since tool execution already succeeded
@@ -864,7 +896,7 @@ func (r *QueryReconciler) executeTool(ctx context.Context, crd arkv1alpha1.Query
 	toolDefinition := genai.CreateToolFromCRD(&toolCRD)
 	// Pass the tool registry's MCP pool to CreateToolExecutor
 	mcpPool, McpSettings := toolRegistry.GetMCPPool()
-	executor, err := genai.CreateToolExecutor(ctx, impersonatedClient, &toolCRD, query.Namespace, mcpPool, McpSettings)
+	executor, err := genai.CreateToolExecutor(ctx, impersonatedClient, &toolCRD, query.Namespace, mcpPool, McpSettings, r.Telemetry)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tool executor: %w", err)
 	}

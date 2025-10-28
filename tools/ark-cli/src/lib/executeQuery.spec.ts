@@ -204,22 +204,14 @@ describe('executeQuery', () => {
     });
 
     it('should handle query timeout and exit with code 3', async () => {
-      const mockQueryResponse = {
-        status: {
-          phase: 'running',
-        },
-      };
-
       mockExeca.mockImplementation(async (command: string, args: string[]) => {
         if (args.includes('apply')) {
           return {stdout: '', stderr: '', exitCode: 0};
         }
-        if (args.includes('get') && args.includes('query')) {
-          return {
-            stdout: JSON.stringify(mockQueryResponse),
-            stderr: '',
-            exitCode: 0,
-          };
+        if (args.includes('wait')) {
+          // Simulate kubectl wait timeout
+          const error = new Error('timed out waiting for the condition');
+          throw error;
         }
         return {stdout: '', stderr: '', exitCode: 0};
       });
