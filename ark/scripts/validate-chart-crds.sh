@@ -6,6 +6,11 @@
 
 set -euo pipefail
 
+# Enable verbose mode in CI for debugging
+if [ "${CI:-false}" = "true" ]; then
+    set -x
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
