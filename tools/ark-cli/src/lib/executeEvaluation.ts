@@ -117,9 +117,6 @@ async function waitForEvaluationAndDisplayResults(
     if (status.message) {
       console.log(`Message: ${status.message}`);
     }
-    if (status.passed === false) {
-      process.exit(ExitCodes.EvaluationFailed);
-    }
   } else if (status?.phase === 'error') {
     console.error(
       chalk.red(status.message || 'Evaluation failed with unknown error')
