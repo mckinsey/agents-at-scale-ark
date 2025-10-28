@@ -153,7 +153,7 @@ for CHART_CRD_FILE in $CRD_FILES; do
     # Compare the stripped files (ignore whitespace-only differences)
     if diff -q -b -B "$STRIPPED_SOURCE" "$STRIPPED_RENDERED" > /dev/null 2>&1; then
         echo -e "${GREEN}OK${NC}"
-        ((VERIFIED_COUNT++))
+        VERIFIED_COUNT=$((VERIFIED_COUNT + 1))
     else
         echo -e "${RED}FAIL (content differs)${NC}"
         FAILED_FILES+=("$CRD_NAME")
