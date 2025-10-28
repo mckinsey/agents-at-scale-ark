@@ -329,6 +329,17 @@
         "bug",
         "doc"
       ]
+    },
+    {
+      "login": "danielemarostica",
+      "name": "Daniele Marostica",
+      "avatar_url": "https://avatars.githubusercontent.com/u/11430162?v=4",
+      "profile": "https://github.com/danielemarostica",
+      "contributions": [
+        "code",
+        "bug",
+        "test"
+      ]
     }
   ],
   "contributorsPerLine": 7,
