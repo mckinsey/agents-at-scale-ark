@@ -26,6 +26,16 @@ Deploy Phoenix as part of your ARK installation:
 # From repository root - install Phoenix
 make phoenix-install
 
+# Check the status of the phoenix pods - they will take a few minutes to show
+# as 'Ready' while the the database starts. Or explicitly wait for the
+# deployment to be ready.
+kubectl get pods -n phoenix
+kubectl wait --for=condition=ready pod -l app=phoenix -n phoenix --timeout=300s
+
+# If your ark controller is already installed/running, then restart it so that
+# it picks up the updated OTEL configuration.
+kubectl rollout restart deployment/ark-controller -n ark-system
+
 # Start dashboard with automatic port-forward (recommended)
 make phoenix-dashboard
 ```
@@ -206,7 +216,7 @@ If traces aren't showing up in Phoenix:
 
 3. **Restart deployments to pick up OTEL secrets**:
    ```bash
-   kubectl rollout restart deployment/ark-controller-manager -n ark-system
+   kubectl rollout restart deployment/ark-controller -n ark-system
    ```
 
 ## Uninstalling
