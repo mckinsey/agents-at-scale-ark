@@ -295,3 +295,342 @@ query agent/math-agent "7*8/5"
 querying: agent/math-agent....
 math-agent: The calculation 7 * 8 / 5 is equal to 11.2.
 ```
+
+## Filesystem MCP Server with Session Management
+
+The Filesystem MCP Server provides persistent file operations with annotation-driven workspace configuration. All sessions share a common base directory (`/data/`) with explicitly named workspaces configured via ARK query annotations.
+
+### Features
+
+- **Annotation-Driven Workspaces**: Workspaces configured via `ark.mckinsey.com/mcp-server-settings` annotations
+- **Shared Base Directory**: All operations under `/data/` with user-specified workspace subdirectories
+- **Persistent Sessions**: Session metadata survives pod restarts via file-based storage
+- **LRU Eviction**: Automatically evicts least recently used sessions when limit reached
+- **Comprehensive Tools**: Read, write, search, list, tree, edit files and directories
+- **Security**: Path validation prevents traversal attacks and unauthorized access
+
+### Deploying the Filesystem MCP Server
+
+Deploy using the provided Helm chart:
+
+```bash
+# From the repository root
+cd mcp/filesystem-mcp
+
+# Build the Docker image
+make build
+
+# Deploy with Helm
+make install
+
+# Verify deployment
+kubectl get pods -l app.kubernetes.io/name=mcp-filesystem
+kubectl get mcpserver mcp-filesystem
+```
+
+The deployment creates:
+- A `Deployment` running the MCP server
+- A `Service` exposing the HTTP endpoint
+- An `MCPServer` resource for ARK integration
+- A `PersistentVolumeClaim` for session storage (10Gi by default)
+
+### Configuration Options
+
+Configure via Helm values or environment variables:
+
+```yaml
+# values.yaml
+env:
+  PORT: "8080"
+  BASE_DATA_DIR: "/data"              # Shared base directory for all workspaces
+  SESSION_FILE: "/data/sessions/sessions.json"
+  MAX_SESSIONS: "1000"                    # Maximum concurrent sessions
+
+persistence:
+  enabled: true
+  size: 10Gi                               # Storage for workspace files
+  storageClass: ""                         # Use default storage class
+```
+
+### Creating an Agent with Filesystem Tools
+
+The filesystem MCP server exposes tools with the `mcp-filesystem-` prefix:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: filesystem-agent
+spec:
+  prompt: |
+    You are a helpful assistant that can manage files and directories.
+    You can read, write, search, and organize files for users.
+  tools:
+    # File operations
+    - name: mcp-filesystem-read-file
+      type: custom
+    - name: mcp-filesystem-write-file
+      type: custom
+    - name: mcp-filesystem-edit-file
+      type: custom
+
+    # Directory operations
+    - name: mcp-filesystem-list-directory
+      type: custom
+    - name: mcp-filesystem-create-directory
+      type: custom
+    - name: mcp-filesystem-tree
+      type: custom
+
+    # Search operations
+    - name: mcp-filesystem-search-files
+      type: custom
+```
+
+Apply the agent configuration:
+
+```bash
+kubectl apply -f samples/agents/filesystem.yaml
+```
+
+### Example Queries
+
+**Write and read files:**
+
+```bash
+# Create a file and read it back in a single query
+ark query agent/filesystem "Create a file called notes.txt with the content 'Meeting at 3pm', then read it back to confirm"
+```
+
+**Directory and file operations:**
+
+```bash
+# Create directory structure and list contents in one query
+ark query agent/filesystem "Create a directory called projects, then list all files and directories"
+
+# Create file and show directory tree
+ark query agent/filesystem "Create a file hello.txt with content 'Hello World' and show me the directory tree"
+```
+
+**File information:**
+
+```bash
+# Create multiple files and list them
+ark query agent/filesystem "Create test1.md with content 'markdown file', test2.txt with content 'text file', and readme.md with content 'readme', then list all files"
+
+# Get file information
+ark query agent/filesystem "Create data.txt with content 'important data', then get the file info for data.txt"
+```
+
+**Edit files:**
+
+```bash
+# Create and edit a file in one query
+ark query agent/filesystem "Create notes.txt with content 'Meeting at 3pm', then change '3pm' to '4pm'"
+```
+
+> **Important**: Each `ark query` command creates a new isolated session. To perform multiple operations on the same files, include all operations in a single query as shown above.
+
+### Workspace Configuration via Annotations
+
+**Automatic Session Creation**: Each `ark query` command creates a new MCP session. The ARK controller manages session IDs automatically.
+
+**Workspace Isolation**: Workspaces are configured via annotations, not sessions. Without annotation configuration, queries use the shared `/data/` base:
+
+```bash
+# Query without workspace annotation - files go to /data/
+ark query agent/filesystem "Create file data.txt with content 'test data'"
+
+# Different query, no workspace configured - same /data/ base
+ark query agent/filesystem "Read data.txt"
+# Result: File found (same base directory, no isolation)
+```
+
+To achieve isolation, configure workspaces via annotations (see example below).
+
+**Session Persistence**: While sessions persist across pod restarts, each `ark query` invocation currently creates a fresh session. Session persistence is primarily useful for:
+- Direct MCP client connections (via port-forward)
+- Custom applications using the MCP protocol
+- Reconnecting with explicit session IDs
+
+Example of session persistence with direct MCP connection:
+
+```bash
+# Port forward to MCP server
+kubectl port-forward svc/mcp-filesystem-server 8080:8080
+
+# Initialize session (save the Mcp-Session-Id from response headers)
+curl -i -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}},"id":1}'
+
+# Use that session ID for subsequent requests
+curl -X POST http://localhost:8080/mcp \
+  -H "Mcp-Session-Id: YOUR_SESSION_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"write_file","arguments":{"path":"test.txt","content":"data"}},"id":2}'
+
+# Pod can restart, session persists
+kubectl delete pod -l app.kubernetes.io/name=mcp-filesystem
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=mcp-filesystem
+
+# Reconnect with same session ID after restart
+curl -X POST http://localhost:8080/mcp \
+  -H "Mcp-Session-Id: YOUR_SESSION_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"read_file","arguments":{"path":"test.txt"}},"id":3}'
+```
+
+**LRU Eviction**: When `MAX_SESSIONS` is reached, the least recently used session is automatically evicted:
+
+```yaml
+# Configure lower limit for testing
+env:
+  MAX_SESSIONS: "100"
+```
+
+Sessions are evicted based on `lastAccessed` time, not creation time. Active sessions are preserved.
+
+### Available Tools
+
+The filesystem MCP server provides these tools:
+
+| Tool | Description |
+|------|-------------|
+| `mcp-filesystem-read-file` | Read complete file contents |
+| `mcp-filesystem-write-file` | Write or overwrite a file |
+| `mcp-filesystem-edit-file` | Apply edits to existing file |
+| `mcp-filesystem-create-directory` | Create a directory |
+| `mcp-filesystem-list-directory` | List directory contents |
+| `mcp-filesystem-list-directory-with-sizes` | List with file sizes |
+| `mcp-filesystem-tree` | Show directory tree structure |
+| `mcp-filesystem-move-file` | Move or rename files |
+| `mcp-filesystem-search-files` | Find files by name pattern |
+| `mcp-filesystem-get-file-info` | Get file metadata |
+| `mcp-filesystem-set-base-directory` | Set base directory for file operations |
+
+### Advanced: Workspace Configuration with Annotations
+
+Use annotations to configure explicit workspaces under `/data/` for isolation and organization:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: project-a-query
+  annotations:
+    "ark.mckinsey.com/mcp-server-settings": |
+      {
+        "default/mcp-filesystem": {
+          "toolCalls": [
+            {
+              "name": "set_base_directory",
+              "arguments": {"path": "project-a"}
+            }
+          ]
+        }
+      }
+spec:
+  input: Create a file called data.txt with content 'Project A data'
+  targets:
+  - type: agent
+    name: filesystem
+```
+
+This creates and configures `/data/project-a/` as the working directory. Different queries can use different workspace names for isolation:
+
+```yaml
+# Query for Project B - isolated from Project A
+annotations:
+  "ark.mckinsey.com/mcp-server-settings": |
+    {"default/mcp-filesystem": {
+      "toolCalls": [{
+        "name": "set_base_directory",
+        "arguments": {"path": "project-b"}
+      }]
+    }}
+```
+
+Files in `/data/project-a/` and `/data/project-b/` are completely isolated.
+
+### Monitoring and Troubleshooting
+
+**View session information:**
+
+```bash
+# Check MCP server logs
+kubectl logs -l app.kubernetes.io/name=mcp-filesystem
+
+# View session metrics
+kubectl exec -it $(kubectl get pod -l app.kubernetes.io/name=mcp-filesystem -o name) -- \
+  cat /data/sessions/sessions.json | jq .
+```
+
+**Session logs show:**
+- Session creation: `[Session] Creating new session <uuid>`
+- Workspace creation: `[Directory] Created/verified workspace directory: /data/<workspace>`
+- Eviction: `[Session] Evicting oldest session: <uuid>`
+- Deletion: `[Session] Deleting session: <uuid>`
+
+**Check storage usage:**
+
+```bash
+# View PVC status
+kubectl get pvc -l app.kubernetes.io/name=mcp-filesystem
+
+# Check disk usage
+kubectl exec -it $(kubectl get pod -l app.kubernetes.io/name=mcp-filesystem -o name) -- \
+  df -h /data
+```
+
+### Local Development and Testing
+
+For local development, use port-forward to access the MCP server directly:
+
+```bash
+# Port forward MCP server
+kubectl port-forward svc/mcp-filesystem-server 8080:8080
+
+# Test with MCP Inspector
+npx @modelcontextprotocol/inspector http://localhost:8080/mcp
+
+# Or test with curl
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{
+    "jsonrpc":"2.0",
+    "method":"initialize",
+    "params":{
+      "protocolVersion":"2024-11-05",
+      "capabilities":{},
+      "clientInfo":{"name":"test","version":"1.0.0"}
+    },
+    "id":1
+  }'
+```
+
+### Architecture
+
+The filesystem MCP server uses a wrapper + adapter architecture with clean separation:
+
+```
+┌─────────────────────────────────────────┐
+│ Wrapper (src/index.ts)                  │
+│ - Session management (generic)          │
+│ - File-based persistence                │
+│ - LRU eviction policy                   │
+│ - Transport handling                    │
+│ - NO filesystem knowledge               │
+└─────────────────────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────────┐
+│ Adapter (src/adapters/filesystem/)      │
+│ - MCP protocol implementation           │
+│ - File operations                       │
+│ - Path validation & security            │
+│ - Tool definitions                      │
+│ - Workspace management                  │
+└─────────────────────────────────────────┘
+```

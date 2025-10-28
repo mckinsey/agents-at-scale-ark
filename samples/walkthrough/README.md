@@ -261,15 +261,15 @@ chainsaw test samples/walkthrough/teams/tests/
 First, set up the MCP filesystem server for document storage:
 ```bash
 # Build and load the filesys MCP server image
-cd mcp/filesys
-docker build -t mcp-filesys:latest .
+cd mcp-servers/filesystem-mcp
+docker build -t filesystem-mcp-server:latest .
 # Load image into cluster (choose based on your setup)
-kind load docker-image mcp-filesys:latest        # For kind
-minikube image load mcp-filesys:latest           # For minikube
+kind load docker-image filesystem-mcp-server:latest        # For kind
+minikube image load filesystem-mcp-server:latest           # For minikube
 cd ../..
 
 # Deploy filesystem MCP server
-helm install mcp-filesys mcp/filesys/chart --set image.repository=mcp-filesys --set image.tag=latest
+helm install mcp-filesystem mcp-servers/filesystem-mcp/chart --set image.repository=filesystem-mcp-server --set image.tag=latest
 
 # Verify it's ready (should show READY=True)
 kubectl get mcpservers
@@ -337,10 +337,10 @@ kubectl get queries research-query -o jsonpath='{.status.responses[0]}' | jq '.'
 ### Access Generated Documents
 ```bash
 # Port forward to file browser
-kubectl port-forward svc/mcp-filesys-filebrowser 8080:8080
+kubectl port-forward svc/mcp-filesystem-filebrowser 8080:8080
 
 # Open in browser and check the logs for credentials
-kubectl logs deployment/mcp-filesys-filebrowser | grep "User 'admin' initialized"
+kubectl logs deployment/mcp-filesystem-filebrowser | grep "User 'admin' initialized"
 open http://localhost:8080
 
 # Default credentials (check logs for actual password):
@@ -354,13 +354,13 @@ If you want to deploy everything at once without the step-by-step tutorial:
 
 ```bash
 # 1. Build and load the filesys MCP server image
-cd mcp/filesys
-docker build -t mcp-filesys:latest .
-kind load docker-image mcp-filesys:latest
+cd mcp-servers/filesystem-mcp
+docker build -t filesystem-mcp-server:latest .
+kind load docker-image filesystem-mcp-server:latest
 cd ../..
 
 # Deploy MCP filesystem server
-helm install mcp-filesys mcp/filesys/chart --set image.repository=mcp-filesys --set image.tag=latest
+helm install mcp-filesystem mcp-servers/filesystem-mcp/chart --set image.repository=filesystem-mcp-server --set image.tag=latest
 
 # Verify it's ready (should show READY=True)
 kubectl get mcpservers
@@ -403,7 +403,7 @@ spec:
 kubectl delete -k samples/walkthrough/
 
 # Remove the MCP filesystem server  
-helm uninstall mcp-filesys
+helm uninstall mcp-filesystem
 
 # Remove any test resources
 kubectl delete queries --all

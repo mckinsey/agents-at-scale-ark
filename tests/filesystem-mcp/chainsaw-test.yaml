@@ -1,0 +1,494 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: filesystem-mcp-workspace-isolation
+spec:
+  timeouts:
+    exec: 300s
+  description: Test MCP Filesystem annotation-driven workspace isolation
+  steps:
+  - name: deploy-mcp-server-with-helm
+    try:
+    - script:
+        content: |
+          helm install mcp-filesystem ../../mcp/filesystem-mcp/chart --wait --timeout=180s \
+            --namespace $NAMESPACE \
+            --set image.repository=${FILESYS_IMAGE:-filesystem-mcp-server} \
+            --set image.tag=${FILESYS_IMAGE_TAG:-latest} \
+            --set persistence.enabled=false
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mcp-filesystem --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: setup-ark-resources
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          set -u
+          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+        outputs:
+        - name: azure
+          value: (json_parse($stdout))
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a04-secret.yaml
+    - apply:
+        file: manifests/a05-model.yaml
+
+  - name: wait-for-mcp-readiness
+    try:
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: mcp-filesystem
+          status:
+            readyReplicas: 1
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-model
+          status:
+            conditions:
+            - type: ModelAvailable
+              status: "True"
+    - assert:
+        timeout: 2m
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: MCPServer
+          metadata:
+            name: mcp-filesystem
+          status:
+            (toolCount > `0`): true
+
+  - name: verify-tools-discovered
+    try:
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: mcp-filesystem-write-file
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: mcp-filesystem-read-text-file
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: mcp-filesystem-list-directory
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: mcp-filesystem-create-directory
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: mcp-filesystem-set-base-directory
+
+  - name: setup-agents
+    try:
+    - apply:
+        file: manifests/a07-agent-a.yaml
+    - apply:
+        file: manifests/a08-agent-b.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: filesystem-agent-a
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: filesystem-agent-b
+
+  - name: test-agent-a-write
+    try:
+    - script:
+        skipLogOutput: true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          echo "{\"${NAMESPACE}/mcp-filesystem\": {\"toolCalls\": [{\"name\": \"set_base_directory\", \"arguments\": {\"path\": \"workspace-a\"}}]}}"
+        outputs:
+        - name: mcp_settings_a
+          value: ($stdout)
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-write-a
+            annotations:
+              ark.mckinsey.com/mcp-server-settings: ($mcp_settings_a)
+          spec:
+            input: |
+              Create a file called "agent-a-data.txt" with the following content:
+              "This is Agent A's confidential data. Created at workspace A."
+
+              After creating the file, list all files in the current directory to confirm it was created successfully.
+            targets:
+            - type: agent
+              name: filesystem-agent-a
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-write-a
+          status:
+            phase: done
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-write-a
+          status:
+            (length(responses)): 1
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: filesystem-write-a
+
+  - name: test-agent-b-write
+    try:
+    - script:
+        skipLogOutput: true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          echo "{\"${NAMESPACE}/mcp-filesystem\": {\"toolCalls\": [{\"name\": \"set_base_directory\", \"arguments\": {\"path\": \"workspace-b\"}}]}}"
+        outputs:
+        - name: mcp_settings_b
+          value: ($stdout)
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-write-b
+            annotations:
+              ark.mckinsey.com/mcp-server-settings: ($mcp_settings_b)
+          spec:
+            input: |
+              Create a file called "agent-b-data.txt" with the following content:
+              "This is Agent B's confidential data. Created at workspace B."
+
+              After creating the file, list all files in the current directory to confirm it was created successfully.
+            targets:
+            - type: agent
+              name: filesystem-agent-b
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-write-b
+          status:
+            phase: done
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-write-b
+          status:
+            (length(responses)): 1
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: filesystem-write-b
+
+  - name: verify-files-in-correct-workspaces
+    try:
+    - script:
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          echo "=== Verifying Files Written to Correct Workspaces ==="
+          POD=$(kubectl -n $NAMESPACE get pod -l app.kubernetes.io/name=mcp-filesystem -o jsonpath='{.items[0].metadata.name}')
+
+          echo ""
+          echo "Checking /data/ structure:"
+          kubectl -n $NAMESPACE exec $POD -- ls -la /data/ || true
+
+          echo ""
+          echo "Checking workspace-a:"
+          kubectl -n $NAMESPACE exec $POD -- ls -la /data/workspace-a/ || echo "workspace-a not found"
+
+          echo ""
+          echo "Checking workspace-b:"
+          kubectl -n $NAMESPACE exec $POD -- ls -la /data/workspace-b/ || echo "workspace-b not found"
+
+          echo ""
+          echo "Verifying agent-a-data.txt in workspace-a:"
+          if kubectl -n $NAMESPACE exec $POD -- test -f /data/workspace-a/agent-a-data.txt; then
+            echo "✓ agent-a-data.txt exists in workspace-a"
+            kubectl -n $NAMESPACE exec $POD -- cat /data/workspace-a/agent-a-data.txt
+          else
+            echo "✗ agent-a-data.txt NOT found in workspace-a"
+            exit 1
+          fi
+
+          echo ""
+          echo "Verifying agent-b-data.txt in workspace-b:"
+          if kubectl -n $NAMESPACE exec $POD -- test -f /data/workspace-b/agent-b-data.txt; then
+            echo "✓ agent-b-data.txt exists in workspace-b"
+            kubectl -n $NAMESPACE exec $POD -- cat /data/workspace-b/agent-b-data.txt
+          else
+            echo "✗ agent-b-data.txt NOT found in workspace-b"
+            exit 1
+          fi
+
+          echo ""
+          echo "Verifying NO cross-contamination:"
+          if kubectl -n $NAMESPACE exec $POD -- test -f /data/workspace-a/agent-b-data.txt; then
+            echo "✗ ISOLATION BREACH: agent-b-data.txt found in workspace-a"
+            exit 1
+          else
+            echo "✓ agent-b-data.txt NOT in workspace-a (correct)"
+          fi
+
+          if kubectl -n $NAMESPACE exec $POD -- test -f /data/workspace-b/agent-a-data.txt; then
+            echo "✗ ISOLATION BREACH: agent-a-data.txt found in workspace-b"
+            exit 1
+          else
+            echo "✓ agent-a-data.txt NOT in workspace-b (correct)"
+          fi
+
+          echo ""
+          echo "✅ File isolation verified - workspaces are properly separated"
+
+  - name: test-agent-a-read
+    try:
+    - script:
+        skipLogOutput: true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          echo "{\"${NAMESPACE}/mcp-filesystem\": {\"toolCalls\": [{\"name\": \"set_base_directory\", \"arguments\": {\"path\": \"workspace-a\"}}]}}"
+        outputs:
+        - name: mcp_settings_a_read
+          value: ($stdout)
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-read-a
+            annotations:
+              ark.mckinsey.com/mcp-server-settings: ($mcp_settings_a_read)
+          spec:
+            input: |
+              Read the file "agent-a-data.txt" and confirm it contains Agent A's data.
+
+              Then list all files in the current directory.
+            targets:
+            - type: agent
+              name: filesystem-agent-a
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-read-a
+          status:
+            phase: done
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-read-a
+          status:
+            (length(responses)): 1
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: filesystem-read-a
+
+  - name: test-agent-b-read
+    try:
+    - script:
+        skipLogOutput: true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          echo "{\"${NAMESPACE}/mcp-filesystem\": {\"toolCalls\": [{\"name\": \"set_base_directory\", \"arguments\": {\"path\": \"workspace-b\"}}]}}"
+        outputs:
+        - name: mcp_settings_b_read
+          value: ($stdout)
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-read-b
+            annotations:
+              ark.mckinsey.com/mcp-server-settings: ($mcp_settings_b_read)
+          spec:
+            input: |
+              Read the file "agent-b-data.txt" and confirm it contains Agent B's data.
+
+              Then list all files in the current directory.
+            targets:
+            - type: agent
+              name: filesystem-agent-b
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-read-b
+          status:
+            phase: done
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-read-b
+          status:
+            (length(responses)): 1
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: filesystem-read-b
+
+  - name: validate-annotation-based-isolation
+    try:
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-read-a
+          status:
+            (contains(responses[0].content, 'agent-a-data.txt')): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-read-a
+          status:
+            (contains(responses[0].content, 'Agent A')): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-read-b
+          status:
+            (contains(responses[0].content, 'agent-b-data.txt')): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-read-b
+          status:
+            (contains(responses[0].content, 'Agent B')): true
+    - script:
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          RESPONSE_A=$(kubectl -n $NAMESPACE get query filesystem-read-a -o jsonpath='{.status.responses[0].content}')
+          RESPONSE_B=$(kubectl -n $NAMESPACE get query filesystem-read-b -o jsonpath='{.status.responses[0].content}')
+
+          echo "=== Agent A Read Response ==="
+          echo "$RESPONSE_A"
+          echo ""
+          echo "=== Agent B Read Response ==="
+          echo "$RESPONSE_B"
+          echo ""
+          echo "=== Annotation-Based Isolation Validation ==="
+
+          if echo "$RESPONSE_A" | grep -qi "agent-a-data.txt"; then
+            echo "✓ Agent A can see their own file (agent-a-data.txt)"
+          else
+            echo "✗ Agent A cannot see their own file"
+            exit 1
+          fi
+
+          if echo "$RESPONSE_A" | grep -qi "Agent A's confidential data"; then
+            echo "✓ Agent A can read their file content"
+          else
+            echo "✗ Agent A cannot read their file content"
+            exit 1
+          fi
+
+          if echo "$RESPONSE_A" | grep -qi "agent-b-data.txt"; then
+            echo "✗ ISOLATION BREACH: Agent A can see Agent B's file"
+            exit 1
+          else
+            echo "✓ Agent A cannot see Agent B's file (correct isolation)"
+          fi
+
+          if echo "$RESPONSE_B" | grep -qi "agent-b-data.txt"; then
+            echo "✓ Agent B can see their own file (agent-b-data.txt)"
+          else
+            echo "✗ Agent B cannot see their own file"
+            exit 1
+          fi
+
+          if echo "$RESPONSE_B" | grep -qi "Agent B's confidential data"; then
+            echo "✓ Agent B can read their file content"
+          else
+            echo "✗ Agent B cannot read their file content"
+            exit 1
+          fi
+
+          if echo "$RESPONSE_B" | grep -qi "agent-a-data.txt"; then
+            echo "✗ ISOLATION BREACH: Agent B can see Agent A's file"
+            exit 1
+          else
+            echo "✓ Agent B cannot see Agent A's file (correct isolation)"
+          fi
+
+          echo ""
+          echo "✅ All annotation-based workspace isolation tests passed!"
+          echo "   - Agent prompts did NOT mention specific paths"
+          echo "   - Workspaces configured via annotations (workspace-a, workspace-b)"
+          echo "   - Files written to correct workspace directories"
+          echo "   - No cross-contamination between workspaces"
+          echo "   - Single MCPServer, isolation via annotation-driven configuration"

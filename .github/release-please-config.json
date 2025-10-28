@@ -136,6 +136,16 @@
         },
         {
           "type": "yaml",
+          "path": "mcp/filesystem-mcp/chart/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "mcp/filesystem-mcp/chart/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "yaml",
           "path": "services/ark-api-a2a/chart/Chart.yaml",
           "jsonpath": "$.version"
         },
