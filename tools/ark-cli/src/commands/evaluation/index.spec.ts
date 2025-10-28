@@ -16,20 +16,15 @@ describe('createEvaluationCommand', () => {
     jest.clearAllMocks();
   });
 
-  it('should create an evaluation command with subcommands', () => {
+  it('should create an evaluation command', () => {
     const command = createEvaluationCommand({} as any);
 
     expect(command).toBeInstanceOf(Command);
     expect(command.name()).toBe('evaluation');
     expect(command.description()).toBe('Execute evaluations against evaluators');
-
-    const subcommands = command.commands;
-    expect(subcommands).toHaveLength(2);
-    expect(subcommands[0].name()).toBe('direct');
-    expect(subcommands[1].name()).toBe('query');
   });
 
-  describe('direct subcommand', () => {
+  describe('direct evaluation', () => {
     it('should execute direct evaluation with required options', async () => {
       mockExecuteDirectEvaluation.mockResolvedValue(undefined);
 
@@ -38,7 +33,6 @@ describe('createEvaluationCommand', () => {
       await command.parseAsync([
         'node',
         'test',
-        'direct',
         'my-evaluator',
         '--input',
         'test-input',
@@ -63,7 +57,6 @@ describe('createEvaluationCommand', () => {
       await command.parseAsync([
         'node',
         'test',
-        'direct',
         'my-evaluator',
         '--input',
         'test-input',
@@ -85,8 +78,8 @@ describe('createEvaluationCommand', () => {
     });
   });
 
-  describe('query subcommand', () => {
-    it('should execute query evaluation with required options', async () => {
+  describe('query evaluation', () => {
+    it('should execute query evaluation with required arguments', async () => {
       mockExecuteQueryEvaluation.mockResolvedValue(undefined);
 
       const command = createEvaluationCommand({} as any);
@@ -94,9 +87,7 @@ describe('createEvaluationCommand', () => {
       await command.parseAsync([
         'node',
         'test',
-        'query',
         'my-evaluator',
-        '--query',
         'test-query',
       ]);
 
@@ -117,9 +108,7 @@ describe('createEvaluationCommand', () => {
       await command.parseAsync([
         'node',
         'test',
-        'query',
         'my-evaluator',
-        '--query',
         'test-query',
         '--response-target',
         'agent:my-agent',
@@ -142,9 +131,7 @@ describe('createEvaluationCommand', () => {
       await command.parseAsync([
         'node',
         'test',
-        'query',
         'my-evaluator',
-        '--query',
         'test-query',
         '--response-target',
         'agent:my-agent',
