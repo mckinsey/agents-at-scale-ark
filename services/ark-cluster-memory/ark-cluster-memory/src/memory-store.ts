@@ -166,14 +166,6 @@ export class MemoryStore {
     this.saveToFile();
   }
 
-  clearQueryMessages(queryID: string): void {
-    if (!queryID) {
-      throw new Error('Query ID cannot be empty');
-    }
-    this.messages = this.messages.filter(m => m.query_id !== queryID);
-    this.saveToFile();
-  }
-
   getSessions(): string[] {
     // Get unique session IDs from the flat list
     const sessionSet = new Set(this.messages.map(m => m.session_id));

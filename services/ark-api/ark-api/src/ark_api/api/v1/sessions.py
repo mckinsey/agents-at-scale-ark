@@ -83,6 +83,8 @@ async def delete_session(
         memory_dicts = await get_all_memory_resources(client)
         
         deleted_count = 0
+        found_404 = False
+        network_failures = []
         
         for memory_dict in memory_dicts:
             memory_name = memory_dict.get("metadata", {}).get("name", "")
@@ -99,22 +101,46 @@ async def delete_session(
                     
                     if response.status_code == 200:
                         deleted_count += 1
+                    elif response.status_code == 404:
+                        found_404 = True
+                        logger.debug(f"Session {session_id} not found in memory {memory_name}")
                     elif response.status_code == 500:
-                        # Database deletion failed - throw 500
                         raise HTTPException(
                             status_code=500,
                             detail=f"Failed to delete session {session_id} from database"
                         )
-                    # All other responses (404, 400, 401, etc.) are treated as successful
                         
             except HTTPException:
                 # Re-raise HTTP exceptions (our 500 errors)
                 raise
             except Exception as e:
-                # Network/connection errors - log but don't throw exception
-                logger.error(f"Failed to delete session {session_id} from memory {memory_name}: {e}")
+                # Network/connection errors - track but continue processing
+                error_msg = f"Failed to delete session {session_id} from memory {memory_name}: {e}"
+                logger.error(error_msg)
+                network_failures.append(error_msg)
         
-        return {"message": f"Session {session_id} deleted successfully"}
+        # If no deletions succeeded, determine appropriate error
+        if deleted_count == 0:
+            if found_404:
+                # Session not found in any reachable service
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Session {session_id} not found"
+                )
+            elif network_failures:
+                # All services unreachable
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Unable to delete session {session_id}: all memory services unreachable"
+                )
+            else:
+                # No memory services configured
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Session {session_id} not found"
+                )
+        
+        return {"message": f"Session {session_id} deleted from {deleted_count} memory service(s)"}
 
 
 @router.delete("")
@@ -149,7 +175,7 @@ async def delete_all_sessions(
                             status_code=500,
                             detail="Failed to delete all sessions from database"
                         )
-                    # All other responses (404, 400, 401, etc.) are treated as successful
+                    # Idempotent deletion: non-500 errors don't fail because the goal (sessions removed or inaccessible) is achieved
                         
             except HTTPException:
                 # Re-raise HTTP exceptions (our 500 errors)
@@ -195,7 +221,7 @@ async def delete_query_messages(
                             status_code=500,
                             detail=f"Failed to delete query {query_id} messages from database"
                         )
-                    # All other responses (404, 400, 401, etc.) are treated as successful
+                    # Idempotent deletion: non-500 errors don't fail because the goal (messages removed or inaccessible) is achieved
                         
             except HTTPException:
                 # Re-raise HTTP exceptions (our 500 errors)
