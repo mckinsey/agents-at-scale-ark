@@ -76,7 +76,7 @@ type ModelSpec struct {
 	// +kubebuilder:validation:Required
 	Config ModelConfig `json:"config"`
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:default="1m"
+	// +kubebuilder:default="5m"
 	PollInterval *metav1.Duration `json:"pollInterval,omitempty"`
 }
 

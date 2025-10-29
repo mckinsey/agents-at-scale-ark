@@ -1567,7 +1567,7 @@ spec:
                     type: object
                 type: object
               pollInterval:
-                default: 1m
+                default: 5m
                 type: string
               type:
                 enum:
