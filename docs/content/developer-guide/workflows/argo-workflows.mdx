@@ -86,6 +86,16 @@ This workflow demonstrates how to run Ark and Argo operations:
 4. Run Ark queries
 5. Fan-in and evalate results (quality, token count, etc)
 
+## Ark tools example
+
+Another sample template, `ark-tools-template.yaml` provides a simple workflow for running Ark CLI commands in containers. The [`ark-tools`](/reference/utility-images#ark-tools) image includes the Ark CLI pre-installed, enabling workflows to query agents and capture results as workflow outputs.
+
+```bash
+kubectl apply -f services/argo-workflows/samples/ark-tools-template.yaml
+```
+
+Use this template to integrate Ark agent queries into your workflows without building custom containers.
+
 ## Troubleshooting
 
 When you get errors or unexpected results:
