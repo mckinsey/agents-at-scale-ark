@@ -32,8 +32,12 @@ type MCPClient struct {
 	client  *mcp.ClientSession
 }
 
+var (
+	connectMaxReties = 5
+)
+
 func NewMCPClient(ctx context.Context, baseURL string, headers map[string]string, transportType string, timeout time.Duration, mcpSetting MCPSettings) (*MCPClient, error) {
-	mcpClient, err := createMCPClientWithRetry(ctx, baseURL, headers, transportType, timeout, 5, 120*time.Second)
+	mcpClient, err := createMCPClientWithRetry(ctx, baseURL, headers, transportType, timeout, connectMaxReties)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +154,7 @@ func attemptMCPConnection(ctx context.Context, mcpClient *mcp.Client, baseURL st
 	return session, nil
 }
 
-func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[string]string, transportType string, httpTimeout time.Duration, maxRetries int, connectTimeout time.Duration) (*MCPClient, error) {
+func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[string]string, transportType string, httpTimeout time.Duration, maxRetries int) (*MCPClient, error) {
 	log := logf.FromContext(ctx)
 
 	mcpClient, err := createHTTPClient()
@@ -160,7 +164,7 @@ func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[s
 
 	// Create a context with timeout ONLY for the retry loop
 	// The caller's context (ctx) is used for the actual connection and should control its lifetime
-	retryCtx, retryCancel := context.WithTimeout(context.Background(), connectTimeout)
+	retryCtx, retryCancel := context.WithTimeout(context.Background(), httpTimeout)
 	defer retryCancel()
 
 	var lastErr error
