@@ -647,6 +647,7 @@ jobs:
       - name: Lint and Package ${{ matrix.chart.name }}
         run: |
           cd ${{ matrix.chart.path }}
+          helm dependency update
           helm lint .
           helm package .
 
