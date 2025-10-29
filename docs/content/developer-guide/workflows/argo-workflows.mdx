@@ -51,20 +51,31 @@ A sample template is provided that shows how to run Ark queries:
 kubectl apply -f services/argo-workflows/samples/query-fanout-template.yaml
 ```
 
-Open the Argo dashboard with at [`http://localhost:2746`](http://localhost:2746) and choose "Workflows > New Workflow > From Template > Query Fanout".
+Open the Argo dashboard with at [`http://localhost:2746`](http://localhost:2746) and choose "Workflows > New Workflow > From Template > Query Fanout". The workflow will look something like this when running:
+
+![Screenshot of the fanout workflow](./images/query-fanout-screenshot.png)
 
 Workflows can also be run using the Argo CLI:
 
 ```bash
+# List workflow templates if needed.
+argo template list
+
+# output:
+# NAME
+# query-fanout-template
+
+# Run a workflow.
 argo submit --from workflowtemplate/query-fanout-template \
   -p question="Describe how to monitor argo workflows from the command-line" \
-  -p evaluator-agent="sample-agent"
+  -p evaluator-model="default"
 
 # Watch workflow progress
 argo watch @latest
 
-# View results
+# View results, or status of all workflows.
 argo logs @latest
+argo list workflows
 ```
 
 This workflow demonstrates how to run Ark and Argo operations:

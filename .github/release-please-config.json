@@ -188,6 +188,16 @@
           "type": "yaml",
           "path": "charts/ark-tenant/Chart.yaml",
           "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "yaml",
+          "path": "services/argo-workflows/chart/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "services/argo-workflows/chart/Chart.yaml",
+          "jsonpath": "$.appVersion"
         }
       ]
     }

@@ -72,7 +72,6 @@ spec:
           - name: question
       script:
         image: alpine/k8s:1.28.13
-        image: ark-tools:alpine
         command: [sh]
         source: |
           # Create a unique query name.
@@ -148,8 +147,12 @@ spec:
             name: $EVAL_QUERY
           spec:
             input: |
-              Compare these model responses and summarize which performed best.
-              Include a table showing token usage for each model.
+              Analyze these model responses and provide:
+
+              1. Summary: Brief overview of the query and results
+              2. Table: Model name, token usage, and one-liner description of response
+              3. Recommendation: Best suggested model for this query with reasoning
+              4. Comparison: Brief comparison of each model's response
 
           $RESULTS_INDENTED
             targets:
