@@ -6,11 +6,6 @@
 
 set -euo pipefail
 
-# Enable verbose mode in CI for debugging
-if [ "${CI:-false}" = "true" ]; then
-    set -x
-fi
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -38,9 +33,6 @@ if ! command -v helm &> /dev/null; then
     echo "Please install helm: https://helm.sh/docs/intro/install/"
     exit 1
 fi
-
-# Show helm version for debugging
-echo "Using helm version: $(helm version --short 2>/dev/null || echo 'unknown')"
 
 # Check if directories exist
 if [ ! -d "$CHART_DIR" ]; then
@@ -72,7 +64,8 @@ for CHART_CRD_FILE in $CRD_FILES; do
     
     # Check if corresponding source file exists
     if [ ! -f "$SOURCE_CRD_FILE" ]; then
-        echo -e "${YELLOW}SKIP (source not found)${NC}"
+        echo -e "${RED}FAIL (source not found)${NC}"
+        FAILED_FILES+=("$CRD_NAME (source not found)")
         continue
     fi
     
@@ -94,47 +87,25 @@ for CHART_CRD_FILE in $CRD_FILES; do
     fi
     
     # Strip Helm-specific additions from the rendered CRD
-    # The rendered file has Helm labels added, we need to remove them
     STRIPPED_RENDERED="$TEMP_DIR/${CRD_NAME}.stripped"
+    STRIPPED_SOURCE="$TEMP_DIR/${CRD_NAME}.source"
     
-    # Use a combination of sed and awk to clean up the file
-    # 1. Remove Helm source comment lines
-    # 2. Remove the labels section (lines with "  labels:" and all following indented lines until next metadata property)
-    # 3. Keep only the controller-gen annotation
-    set +e  # Temporarily disable exit on error for this pipeline
+    # Remove Helm additions: source comments, labels section, resource-policy annotation, and YAML separators
+    # Note: set +e temporarily because grep/awk may exit with non-zero if patterns don't match
+    set +e
     grep -v "^# Source:" "$RENDERED_FILE" | \
     awk '
     BEGIN { skip_labels = 0 }
-    
-    # Detect start of labels section
-    /^  labels:$/ {
-        skip_labels = 1
-        next
-    }
-    
-    # Stop skipping when we hit the next metadata property (annotations: or name:)
-    skip_labels && (/^  annotations:$/ || /^  name:/) {
-        skip_labels = 0
-    }
-    
-    # Skip lines in the labels section
-    skip_labels && /^    / {
-        next
-    }
-    
-    # We exited labels section at a non-indented line
-    skip_labels {
-        skip_labels = 0
-    }
-    
-    # Print all non-skipped lines
-    {
-        print
-    }
+    /^  labels:$/ { skip_labels = 1; next }
+    skip_labels && (/^  annotations:$/ || /^  name:/) { skip_labels = 0 }
+    skip_labels && /^    / { next }
+    skip_labels { skip_labels = 0 }
+    { print }
     ' | \
-    sed '/"helm.sh\/resource-policy": keep/d' > "$STRIPPED_RENDERED"
+    sed '/"helm.sh\/resource-policy": keep/d' | \
+    sed '/^---$/d' > "$STRIPPED_RENDERED"
     STRIP_EXIT_CODE=$?
-    set -e  # Re-enable exit on error
+    set -e
     
     if [ $STRIP_EXIT_CODE -ne 0 ]; then
         echo -e "${RED}FAIL (stripping failed)${NC}"
@@ -142,12 +113,7 @@ for CHART_CRD_FILE in $CRD_FILES; do
         continue
     fi
     
-    # Remove the --- separator from both files if present
-    # Strip --- from rendered file
-    sed '/^---$/d' "$STRIPPED_RENDERED" > "$STRIPPED_RENDERED.tmp" && mv "$STRIPPED_RENDERED.tmp" "$STRIPPED_RENDERED"
-    
-    # Normalize source file (remove leading --- separator and normalize whitespace)
-    STRIPPED_SOURCE="$TEMP_DIR/${CRD_NAME}.source"
+    # Normalize source file (remove YAML separators)
     sed '/^---$/d' "$SOURCE_CRD_FILE" > "$STRIPPED_SOURCE" 2>/dev/null
     
     # Compare the stripped files (ignore whitespace-only differences)
