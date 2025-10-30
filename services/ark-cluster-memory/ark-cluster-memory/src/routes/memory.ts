@@ -175,13 +175,8 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    *         description: Failed to purge memory
    */
   router.delete('/messages', (req, res) => {
-    try {
-      memory.purge();
-      res.json({ status: 'success', message: 'Memory purged' });
-    } catch (error) {
-      console.error('Memory purge failed:', error);
-      res.status(500).json({ error: 'Failed to purge memory' });
-    }
+    memory.purge();
+    res.json({ status: 'success', message: 'Memory purged' });
   });
 
   /**
@@ -219,21 +214,15 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    *         description: Failed to delete session
    */
   router.delete('/sessions/:sessionId', (req, res) => {
-    try {
-      const { sessionId } = req.params;
-      
-      if (!sessionId) {
-        res.status(400).json({ error: 'Session ID is required' });
-        return;
-      }
-      
-      memory.clearSession(sessionId);
-      res.json({ status: 'success', message: `Session ${sessionId} deleted` });
-    } catch (error) {
-      console.error('Failed to delete session:', error);
-      const err = error as Error;
-      res.status(500).json({ error: err.message });
+    const { sessionId } = req.params;
+    
+    if (!sessionId) {
+      res.status(400).json({ error: 'Session ID is required' });
+      return;
     }
+    
+    memory.clearSession(sessionId);
+    res.json({ status: 'success', message: `Session ${sessionId} deleted` });
   });
 
   /**
@@ -277,26 +266,20 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    *         description: Failed to delete query messages
    */
   router.delete('/sessions/:sessionId/queries/:queryId/messages', (req, res) => {
-    try {
-      const { sessionId, queryId } = req.params;
-      
-      if (!sessionId) {
-        res.status(400).json({ error: 'Session ID is required' });
-        return;
-      }
-      
-      if (!queryId) {
-        res.status(400).json({ error: 'Query ID is required' });
-        return;
-      }
-      
-      memory.clearQuery(sessionId, queryId);
-      res.json({ status: 'success', message: `Query ${queryId} messages deleted from session ${sessionId}` });
-    } catch (error) {
-      console.error('Failed to delete query messages:', error);
-      const err = error as Error;
-      res.status(500).json({ error: err.message });
+    const { sessionId, queryId } = req.params;
+    
+    if (!sessionId) {
+      res.status(400).json({ error: 'Session ID is required' });
+      return;
     }
+    
+    if (!queryId) {
+      res.status(400).json({ error: 'Query ID is required' });
+      return;
+    }
+    
+    memory.clearQuery(sessionId, queryId);
+    res.json({ status: 'success', message: `Query ${queryId} messages deleted from session ${sessionId}` });
   });
 
   /**
@@ -325,13 +308,8 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    *         description: Failed to delete sessions
    */
   router.delete('/sessions', (req, res) => {
-    try {
-      memory.purge();
-      res.json({ status: 'success', message: 'All sessions deleted' });
-    } catch (error) {
-      console.error('Failed to delete all sessions:', error);
-      res.status(500).json({ error: 'Failed to delete all sessions' });
-    }
+    memory.purge();
+    res.json({ status: 'success', message: 'All sessions deleted' });
   });
 
   return router;
