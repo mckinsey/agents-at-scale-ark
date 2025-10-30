@@ -42,7 +42,7 @@ func ResolveModelSpec(modelSpec any, defaultNamespace string) (string, string, e
 }
 
 // LoadModel loads a model by resolving modelSpec and defaultNamespace
-func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface{}, defaultNamespace string, additionalHeaders ...map[string]string, modelRecorder telemetry.ModelRecorder) (*Model, error) {
+func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface{}, defaultNamespace string, additionalHeaders map[string]string, modelRecorder telemetry.ModelRecorder) (*Model, error) {
 	modelName, namespace, err := ResolveModelSpec(modelSpec, defaultNamespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve model spec: %w", err)
@@ -64,18 +64,13 @@ func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface
 		ModelRecorder: modelRecorder,
 	}
 
-	var extraHeaders map[string]string
-	if len(additionalHeaders) > 0 {
-		extraHeaders = additionalHeaders[0]
-	}
-
 	switch modelCRD.Spec.Type {
 	case ModelTypeAzure:
-		if err := loadAzureConfig(ctx, resolver, modelCRD.Spec.Config.Azure, namespace, modelInstance, extraHeaders); err != nil {
+		if err := loadAzureConfig(ctx, resolver, modelCRD.Spec.Config.Azure, namespace, modelInstance, additionalHeaders); err != nil {
 			return nil, err
 		}
 	case ModelTypeOpenAI:
-		if err := loadOpenAIConfig(ctx, resolver, modelCRD.Spec.Config.OpenAI, namespace, modelInstance, extraHeaders); err != nil {
+		if err := loadOpenAIConfig(ctx, resolver, modelCRD.Spec.Config.OpenAI, namespace, modelInstance, additionalHeaders); err != nil {
 			return nil, err
 		}
 	case ModelTypeBedrock:
