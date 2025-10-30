@@ -23,7 +23,6 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { components } from '@/lib/api/generated/types';
-import type { QueryResponse } from '@/lib/services/chat';
 import {
   type Agent,
   type Evaluation,
