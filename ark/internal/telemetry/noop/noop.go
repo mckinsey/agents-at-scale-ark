@@ -49,8 +49,10 @@ func (r *noopQueryRecorder) StartTarget(ctx context.Context, targetType, targetN
 	return ctx, &noopSpan{}
 }
 
-func (r *noopQueryRecorder) RecordInput(span telemetry.Span, content string)  {} //nolint:revive
-func (r *noopQueryRecorder) RecordOutput(span telemetry.Span, content string) {} //nolint:revive
+func (r *noopQueryRecorder) RecordRootInput(span telemetry.Span, content string)  {} //nolint:revive
+func (r *noopQueryRecorder) RecordRootOutput(span telemetry.Span, content string) {} //nolint:revive
+func (r *noopQueryRecorder) RecordInput(span telemetry.Span, content string)      {} //nolint:revive
+func (r *noopQueryRecorder) RecordOutput(span telemetry.Span, content string)     {} //nolint:revive
 func (r *noopQueryRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {
 }                                                                                  //nolint:revive
 func (r *noopQueryRecorder) RecordSessionID(span telemetry.Span, sessionID string) {} //nolint:revive

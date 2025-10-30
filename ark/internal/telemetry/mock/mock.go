@@ -218,6 +218,14 @@ func (r *MockQueryRecorder) StartTarget(ctx context.Context, targetType, targetN
 	)
 }
 
+func (r *MockQueryRecorder) RecordRootInput(span telemetry.Span, content string) {
+	span.SetAttributes(telemetry.String(telemetry.AttrQueryRootInput, content))
+}
+
+func (r *MockQueryRecorder) RecordRootOutput(span telemetry.Span, content string) {
+	span.SetAttributes(telemetry.String(telemetry.AttrQueryRootOutput, content))
+}
+
 func (r *MockQueryRecorder) RecordInput(span telemetry.Span, content string) {
 	span.SetAttributes(telemetry.String(telemetry.AttrQueryInput, content))
 }

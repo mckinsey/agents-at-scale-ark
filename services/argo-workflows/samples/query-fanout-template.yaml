@@ -1,0 +1,177 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: query-fanout-template
+  annotations:
+    workflows.argoproj.io/description: 'Query all Ark models in parallel and evaluate responses'
+spec:
+  entrypoint: main
+  serviceAccountName: argo-workflow
+
+  # Arguments are inputs to a workflow.
+  arguments:
+    parameters:
+      - name: question
+        value: "What are the key benefits of using Argo Workflows?"
+      - name: evaluator-model
+        value: "default"
+  templates:
+    - name: main
+      steps:
+        # This step will list all models in ark.
+        - - name: list-models
+            template: kubectl-get-models
+
+        # This step will run a query against each model in ark.
+        - - name: query-model
+            template: query-and-wait
+            # The inputs for this step are the question input for the workflow
+            # and each individual model name.
+            arguments:
+              parameters:
+                - name: model-name
+                  value: "{{item}}"
+                - name: question
+                  value: "{{workflow.parameters.question}}"
+            # We will run *multiple* parallel steps, with the 'model-name'
+            # parameter set to each of the model names found in the previous
+            # step.
+            withParam: "{{steps.list-models.outputs.parameters.model-names}}"
+            # Even if individual query steps fail, we'll continue to the fan-in
+            # and evaluate all results.
+            continueOn:
+              failed: true
+
+        # This step will run an LLM call to evaluate the output of each of the
+        # model queries in the previous step.
+        - - name: evaluate-responses
+            template: evaluate-all
+            arguments:
+              parameters:
+                - name: evaluator-model
+                  value: "{{workflow.parameters.evaluator-model}}"
+
+    - name: kubectl-get-models
+      script:
+        image: alpine/k8s:1.28.13
+        command: [sh]
+        source: |
+          # Get the ark models, save as an output, brief info to user.
+          kubectl get models -o json | jq '[.items[].metadata.name]' | tee /tmp/model-names.json
+          echo "Found $(jq 'length' /tmp/model-names.json) models"
+      outputs:
+        parameters:
+          - name: model-names
+            valueFrom:
+              path: /tmp/model-names.json
+
+    - name: query-and-wait
+      inputs:
+        parameters:
+          - name: model-name
+          - name: question
+      script:
+        image: alpine/k8s:1.28.13
+        command: [sh]
+        source: |
+          # Create a unique query name.
+          QUERY_NAME="workflow-{{workflow.name}}-model-{{inputs.parameters.model-name}}"
+
+          # Create an ark query, the input is the workflow 'question' argument.
+          # We can have a long timeout and a large-ish TTL so we can easily
+          # review later. Label it with the workflow name for easy filtering.
+          cat <<EOF | kubectl apply -f -
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: $QUERY_NAME
+            labels:
+              workflow: "{{workflow.name}}"
+          spec:
+            input: "{{inputs.parameters.question}}"
+            targets:
+            - name: "{{inputs.parameters.model-name}}"
+              type: model
+            timeout: 5m
+            ttl: 24h
+          EOF
+
+          # Wait for the query to complete. The 'Completed' condition is error
+          # or success - essentially that no more changes will be made.
+          kubectl wait --for=condition=Completed \
+            --timeout=5m query/$QUERY_NAME || true
+
+          # Save full Query object as output, show the phase (error/done).
+          kubectl get query $QUERY_NAME -o json > /tmp/query.json
+          PHASE=$(jq -r '.status.phase' /tmp/query.json)
+          echo "Query completed: $PHASE"
+
+          # If the query failed, show the error message.
+          if [ "$PHASE" = "error" ]; then
+            ERROR=$(jq -r '.status.responses[0].content' /tmp/query.json)
+            echo "Error: $ERROR"
+            exit 1
+          fi
+      outputs:
+        parameters:
+          - name: query-json
+            valueFrom:
+              path: /tmp/query.json
+
+    - name: evaluate-all
+      inputs:
+        parameters:
+          - name: evaluator-model
+      script:
+        image: alpine/k8s:1.28.13
+        command: [sh]
+        source: |
+          # Get all queries from this workflow using the label selector
+          kubectl get queries -l workflow={{workflow.name}} -o json | \
+            jq -r '.items[] |
+              "Model: " + .spec.targets[0].name + "\n" +
+              "Status: " + .status.phase + "\n" +
+              "Response: " + (.status.responses[0].content // .status.error // "No response") + "\n" +
+              "Tokens: " + (.status.tokenUsage.totalTokens // 0 | tostring) + "\n"' \
+            > /tmp/results.txt
+
+          # Indent results so that we can drop them into a query YAML shortly.
+          RESULTS_INDENTED=$(sed 's/^/    /' /tmp/results.txt)
+
+          # Create evaluation query.
+          EVAL_QUERY="workflow-evaluation-{{workflow.name}}"
+          cat <<EOF | kubectl apply -f -
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: $EVAL_QUERY
+          spec:
+            input: |
+              Analyze these model responses and provide:
+
+              1. Summary: Brief overview of the query and results
+              2. Table: Model name, token usage, and one-liner description of response
+              3. Recommendation: Best suggested model for this query with reasoning
+              4. Comparison: Brief comparison of each model's response
+
+          $RESULTS_INDENTED
+            targets:
+            - name: "{{inputs.parameters.evaluator-model}}"
+              type: model
+            timeout: 5m
+            ttl: 1h
+          EOF
+          
+          # Wait for the query to complete, grab it.
+          kubectl wait --for=condition=Completed \
+            --timeout=5m query/$EVAL_QUERY
+          kubectl get query $EVAL_QUERY -o jsonpath='{.status.responses[0].content}' > /tmp/evaluation.txt
+          
+          # Show the final result, output it.
+          echo "Evaluation result:"
+          cat /tmp/evaluation.txt
+      outputs:
+        parameters:
+          - name: evaluation
+            valueFrom:
+              path: /tmp/evaluation.txt

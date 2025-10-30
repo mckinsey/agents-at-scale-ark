@@ -36,34 +36,28 @@ spec:
   tools:
     # Core file operations
     - type: custom
-      name: mcp-filesys-read-file
+      name: mcp-filesystem-read-file
     - type: custom
-      name: mcp-filesys-write-file
+      name: mcp-filesystem-write-file
     - type: custom
-      name: mcp-filesys-copy-file
+      name: mcp-filesystem-move-file
     - type: custom
-      name: mcp-filesys-move-file
-    - type: custom
-      name: mcp-filesys-delete-file
-    - type: custom
-      name: mcp-filesys-modify-file
-    
+      name: mcp-filesystem-edit-file
+
     # Directory operations
     - type: custom
-      name: mcp-filesys-create-directory
+      name: mcp-filesystem-create-directory
     - type: custom
-      name: mcp-filesys-list-directory
+      name: mcp-filesystem-list-directory
     - type: custom
-      name: mcp-filesys-list-allowed-directories
+      name: mcp-filesystem-list-allowed-directories
     - type: custom
-      name: mcp-filesys-tree
-    
+      name: mcp-filesystem-directory-tree
+
     # File information and search
     - type: custom
-      name: mcp-filesys-get-file-info
+      name: mcp-filesystem-get-file-info
     - type: custom
-      name: mcp-filesys-search-files
+      name: mcp-filesystem-search-files
     - type: custom
-      name: mcp-filesys-search-within-files
-    - type: custom
-      name: mcp-filesys-read-multiple-files
+      name: mcp-filesystem-read-multiple-files

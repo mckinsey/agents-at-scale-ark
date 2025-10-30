@@ -1,0 +1,17 @@
+apiVersion: v2
+name: argo-workflows
+description: Argo Workflows with Ark tenant for workflow orchestration
+type: application
+version: 0.1.40
+appVersion: 0.1.40
+annotations:
+  ark.mckinsey.com/service: argo-workflows
+  ark.mckinsey.com/resources: service
+dependencies:
+  - name: argo-workflows
+    version: 0.45.26
+    repository: https://argoproj.github.io/argo-helm
+  - name: ark-tenant
+    version: 0.1.40
+    repository: oci://ghcr.io/mckinsey/agents-at-scale-ark/charts
+    condition: ark-tenant.enabled

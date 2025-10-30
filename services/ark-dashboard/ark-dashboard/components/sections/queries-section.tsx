@@ -37,7 +37,7 @@ import { useListQueries } from '@/lib/services/queries-hooks';
 import { getResourceEventsUrl } from '@/lib/utils/events';
 import { formatAge } from '@/lib/utils/time';
 
-type QueryResponse = components['schemas']['QueryResponse-Output'];
+type QueryResponse = components['schemas']['QueryResponse'];
 
 type SortField = 'createdAt' | 'none';
 type SortDirection = 'asc' | 'desc';

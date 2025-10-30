@@ -1,0 +1,25 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: filesystem-agent-b
+spec:
+  prompt: |
+    You are a file management assistant with access to filesystem operations.
+
+    When asked to write files, use the write_file tool.
+    When asked to read files, use the read_text_file tool.
+    When asked to list files, use the list_directory tool.
+    When asked to create directories, use the create_directory tool.
+
+    Be helpful and perform the requested operations accurately.
+  modelRef:
+    name: test-model
+  tools:
+  - name: mcp-filesystem-write-file
+    type: custom
+  - name: mcp-filesystem-read-text-file
+    type: custom
+  - name: mcp-filesystem-list-directory
+    type: custom
+  - name: mcp-filesystem-create-directory
+    type: custom

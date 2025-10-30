@@ -15,6 +15,12 @@ type QueryRecorder interface {
 	// StartTarget begins tracing a specific query target (agent, team, model, tool).
 	StartTarget(ctx context.Context, targetType, targetName string) (context.Context, Span)
 
+	// RecordRootInput sets the root input content on a span.
+	RecordRootInput(span Span, content string)
+
+	// RecordRootOutput sets the root output content on a span.
+	RecordRootOutput(span Span, content string)
+
 	// RecordInput sets the input content on a span.
 	RecordInput(span Span, content string)
 
@@ -130,11 +136,13 @@ type TeamRecorder interface {
 // Following OpenTelemetry semantic conventions where applicable.
 const (
 	// Query attributes
-	AttrQueryName      = "query.name"
-	AttrQueryNamespace = "query.namespace"
-	AttrQueryPhase     = "query.phase"
-	AttrQueryInput     = "query.input"
-	AttrQueryOutput    = "query.output"
+	AttrQueryName       = "query.name"
+	AttrQueryNamespace  = "query.namespace"
+	AttrQueryPhase      = "query.phase"
+	AttrQueryInput      = "query.input"
+	AttrQueryOutput     = "query.output"
+	AttrQueryRootInput  = "input.value"
+	AttrQueryRootOutput = "output.value"
 
 	// Target attributes
 	AttrTargetType = "target.type"
