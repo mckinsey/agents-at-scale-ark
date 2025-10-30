@@ -218,6 +218,7 @@ jobs:
           - mcp-filesystem
           - localhost-gateway
           - ark-tenant
+          - argo-workflows
     steps:
       - name: Validate version tag exists
         run: |

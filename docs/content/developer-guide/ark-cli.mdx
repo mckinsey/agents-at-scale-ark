@@ -49,13 +49,15 @@ Resource level commands follow the pattern: `ark <resource> <action> [name] [opt
 
 ```bash
 # Resources: models, agents, teams, tools
-# Common verbs: list (default), create, status, query, delete
+# Common verbs: list (default), create, status, query, delete, watch
 
 ark models                          # List models
 ark models create default           # Create model
 ark agents query weather "msg"      # Query agent
 ark models status default           # Check model health
 ```
+
+Note: `watch` is not yet implemented but will likely be added soon.
 
 Shorthand options can occasionally be offered if they provide clearer scripting or interactive syntax:
 
@@ -67,7 +69,7 @@ ark models query default "What is 2+2?"
 ark query model/default "What is 2+2?"
 ```
 
-Note that the target format is `<type>/<name>` (e.g., `agent/weather`, `team/my-team`), as per the Ark APIs.
+Note that the target format is `<type>/<name>` (e.g., `agent/weather`, `team/my-team`), as per the Ark APIs. Consider supporting `@latest` as a convenience alias for the most recently created resource, similar to `argo logs @latest`. This feature is not yet implemented but will likely be added soon.
 
 ## Parameter Conventions
 
@@ -77,6 +79,7 @@ Following kubectl/argo patterns. Essential parameters:
 |------|---------|---------|
 | `-o, --output` | Output format (json, yaml, text) | `ark models -o json` |
 | `--timeout` | Operation timeout | `ark agents query weather "msg" --timeout 30s` |
+| `@latest` | Latest resource alias (planned) | `ark queries logs @latest` |
 
 ## Exit Code and Error Handling Conventions
 

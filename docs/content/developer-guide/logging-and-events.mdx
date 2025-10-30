@@ -37,7 +37,7 @@ View the controller logs with:
 
 ```bash
 # Controller logs
-kubectl logs -f deployment/ark-controller-manager -n ark-system
+kubectl logs -f deployment/ark-controller -n ark-system
 ```
 
 Use the `--follow` parameter to tail logs. You can also view logs in `k9s` by going to the `ark-controller` pod in the `ark-system` namespace. There are many options to wrap, search, copy, etc. Use `k9s` and choose `:namespace` then `ark-system` and select the `ark-controller` pod:

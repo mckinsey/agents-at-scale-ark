@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: ark-tools-template
+  annotations:
+    workflows.argoproj.io/title: "Ark Tools"
+    workflows.argoproj.io/description: |
+      Ark tools sample workflow template. 
+spec:
+  entrypoint: main
+  serviceAccountName: argo-workflow
+
+  templates:
+  - name: main
+    dag:
+      tasks:
+      - name: run-ark-tools  
+        template: run-ark-tools
+
+  - name: run-ark-tools
+    metadata:
+      annotations:
+        workflows.argoproj.io/description: "Run Ark tools"
+    script:
+      # Here we use the 'ark-tools' image, which comes pre-installed with tools
+      # like the ark cli, fark, kubectl, etc.
+      image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
+      command: [bash]
+      source: |
+        # Use the ark cli to run a simple query against the default model.
+        ark query model/default "hello world" > /tmp/result.txt
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/result.txt
