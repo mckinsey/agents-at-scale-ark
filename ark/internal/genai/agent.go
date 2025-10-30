@@ -297,34 +297,55 @@ func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, execu
 	return nil
 }
 
-func resolveModelHeadersForAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Agent) (map[string]string, error) {
+func resolveModelHeadersForAgent(ctx context.Context, k8sClient client.Client, agentCRD *arkv1alpha1.Agent, queryCRD *arkv1alpha1.Query) (map[string]string, error) {
 	log := logf.FromContext(ctx)
 
-	modelHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, crd.Spec.Overrides, crd.Namespace, OverrideTypeModel)
+	agentHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, agentCRD.Spec.Overrides, agentCRD.Namespace, OverrideTypeModel)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve model headers for agent %s/%s: %w", crd.Namespace, crd.Name, err)
+		return nil, fmt.Errorf("failed to resolve model headers for agent %s/%s: %w", agentCRD.Namespace, agentCRD.Name, err)
+	}
+
+	queryHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, queryCRD.Spec.Overrides, queryCRD.Namespace, OverrideTypeModel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve model headers from query %s/%s: %w", queryCRD.Namespace, queryCRD.Name, err)
 	}
 
 	var modelHeaders map[string]string
-	if crd.Spec.ModelRef != nil {
-		modelHeaders = modelHeadersMap[crd.Spec.ModelRef.Name]
+	if agentCRD.Spec.ModelRef != nil {
+		agentHeaders := agentHeadersMap[agentCRD.Spec.ModelRef.Name]
+		queryHeaders := queryHeadersMap[agentCRD.Spec.ModelRef.Name]
+
+		modelHeaders = make(map[string]string)
+		for k, v := range agentHeaders {
+			modelHeaders[k] = v
+		}
+		for k, v := range queryHeaders {
+			modelHeaders[k] = v
+		}
+
 		if len(modelHeaders) > 0 {
-			log.Info("resolved model headers from agent overrides", "agent", crd.Name, "model", crd.Spec.ModelRef.Name, "header_count", len(modelHeaders))
+			log.Info("resolved model headers from overrides", "agent", agentCRD.Name, "model", agentCRD.Spec.ModelRef.Name, "header_count", len(modelHeaders))
 		}
 	}
 
 	return modelHeaders, nil
 }
 
-func resolveMCPSettingsForAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Agent, queryMCPSettings map[string]MCPSettings) (map[string]MCPSettings, error) {
+func resolveMCPSettingsForAgent(ctx context.Context, k8sClient client.Client, agentCRD *arkv1alpha1.Agent, queryCRD *arkv1alpha1.Query, queryMCPSettings map[string]MCPSettings) (map[string]MCPSettings, error) {
 	log := logf.FromContext(ctx)
 
-	mcpHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, crd.Spec.Overrides, crd.Namespace, OverrideTypeMCPServer)
+	agentHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, agentCRD.Spec.Overrides, agentCRD.Namespace, OverrideTypeMCPServer)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve MCP headers for agent %s/%s: %w", crd.Namespace, crd.Name, err)
+		return nil, fmt.Errorf("failed to resolve MCP headers for agent %s/%s: %w", agentCRD.Namespace, agentCRD.Name, err)
 	}
-	if len(mcpHeadersMap) > 0 {
-		log.Info("resolved MCP server headers from agent overrides", "agent", crd.Name, "mcpServers", len(mcpHeadersMap))
+
+	queryHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, queryCRD.Spec.Overrides, queryCRD.Namespace, OverrideTypeMCPServer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve MCP headers from query %s/%s: %w", queryCRD.Namespace, queryCRD.Name, err)
+	}
+
+	if len(agentHeadersMap) > 0 || len(queryHeadersMap) > 0 {
+		log.Info("resolved MCP server headers from overrides", "agent", agentCRD.Name, "agentMCPServers", len(agentHeadersMap), "queryMCPServers", len(queryHeadersMap))
 	}
 
 	mcpSettings := queryMCPSettings
@@ -332,19 +353,39 @@ func resolveMCPSettingsForAgent(ctx context.Context, k8sClient client.Client, cr
 		mcpSettings = make(map[string]MCPSettings)
 	}
 
-	for mcpKey, headers := range mcpHeadersMap {
-		key := fmt.Sprintf("%s/%s", crd.Namespace, mcpKey)
+	for mcpKey, headers := range agentHeadersMap {
+		key := fmt.Sprintf("%s/%s", agentCRD.Namespace, mcpKey)
 		setting := mcpSettings[key]
 		setting.Headers = headers
 		mcpSettings[key] = setting
 		log.V(1).Info("configured MCP headers from agent", "mcpServer", key, "header_count", len(headers))
 	}
 
+	for mcpKey, headers := range queryHeadersMap {
+		key := fmt.Sprintf("%s/%s", queryCRD.Namespace, mcpKey)
+		setting := mcpSettings[key]
+		mergedHeaders := make(map[string]string)
+		for k, v := range setting.Headers {
+			mergedHeaders[k] = v
+		}
+		for k, v := range headers {
+			mergedHeaders[k] = v
+		}
+		setting.Headers = mergedHeaders
+		mcpSettings[key] = setting
+		log.V(1).Info("configured MCP headers from query", "mcpServer", key, "header_count", len(headers))
+	}
+
 	return mcpSettings, nil
 }
 
 func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Agent, eventRecorder EventEmitter, telemetryProvider telemetry.Provider) (*Agent, error) {
-	modelHeaders, err := resolveModelHeadersForAgent(ctx, k8sClient, crd)
+	queryCrd, ok := ctx.Value(QueryContextKey).(*arkv1alpha1.Query)
+	if !ok {
+		return nil, fmt.Errorf("missing query context for agent %s/%s", crd.Namespace, crd.Name)
+	}
+
+	modelHeaders, err := resolveModelHeadersForAgent(ctx, k8sClient, crd, queryCrd)
 	if err != nil {
 		return nil, err
 	}
@@ -368,16 +409,12 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		}
 	}
 
-	queryCrd, ok := ctx.Value(QueryContextKey).(*arkv1alpha1.Query)
-	if !ok {
-		return nil, fmt.Errorf("missing query context for agent %s/%s", crd.Namespace, crd.Name)
-	}
 	query, err := MakeQuery(queryCrd)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make query from context for agent %s/%s: %w", crd.Namespace, crd.Name, err)
 	}
 
-	mcpSettings, err := resolveMCPSettingsForAgent(ctx, k8sClient, crd, query.McpSettings)
+	mcpSettings, err := resolveMCPSettingsForAgent(ctx, k8sClient, crd, queryCrd, query.McpSettings)
 	if err != nil {
 		return nil, err
 	}
