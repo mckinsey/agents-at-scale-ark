@@ -297,7 +297,7 @@ func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, execu
 	return nil
 }
 
-func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Agent, eventRecorder EventEmitter, telemetryProvider telemetry.Provider) (*Agent, error) {
+func resolveModelHeadersForAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Agent) (map[string]string, error) {
 	log := logf.FromContext(ctx)
 
 	modelHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, crd.Spec.Overrides, crd.Namespace, OverrideTypeModel)
@@ -311,6 +311,42 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		if len(modelHeaders) > 0 {
 			log.Info("resolved model headers from agent overrides", "agent", crd.Name, "model", crd.Spec.ModelRef.Name, "header_count", len(modelHeaders))
 		}
+	}
+
+	return modelHeaders, nil
+}
+
+func resolveMCPSettingsForAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Agent, queryMCPSettings map[string]MCPSettings) (map[string]MCPSettings, error) {
+	log := logf.FromContext(ctx)
+
+	mcpHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, crd.Spec.Overrides, crd.Namespace, OverrideTypeMCPServer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve MCP headers for agent %s/%s: %w", crd.Namespace, crd.Name, err)
+	}
+	if len(mcpHeadersMap) > 0 {
+		log.Info("resolved MCP server headers from agent overrides", "agent", crd.Name, "mcpServers", len(mcpHeadersMap))
+	}
+
+	mcpSettings := queryMCPSettings
+	if mcpSettings == nil {
+		mcpSettings = make(map[string]MCPSettings)
+	}
+
+	for mcpKey, headers := range mcpHeadersMap {
+		key := fmt.Sprintf("%s/%s", crd.Namespace, mcpKey)
+		setting := mcpSettings[key]
+		setting.Headers = headers
+		mcpSettings[key] = setting
+		log.V(1).Info("configured MCP headers from agent", "mcpServer", key, "header_count", len(headers))
+	}
+
+	return mcpSettings, nil
+}
+
+func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Agent, eventRecorder EventEmitter, telemetryProvider telemetry.Provider) (*Agent, error) {
+	modelHeaders, err := resolveModelHeadersForAgent(ctx, k8sClient, crd)
+	if err != nil {
+		return nil, err
 	}
 
 	var resolvedModel *Model
@@ -341,25 +377,9 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		return nil, fmt.Errorf("failed to make query from context for agent %s/%s: %w", crd.Namespace, crd.Name, err)
 	}
 
-	mcpHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, crd.Spec.Overrides, crd.Namespace, OverrideTypeMCPServer)
+	mcpSettings, err := resolveMCPSettingsForAgent(ctx, k8sClient, crd, query.McpSettings)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve MCP headers for agent %s/%s: %w", crd.Namespace, crd.Name, err)
-	}
-	if len(mcpHeadersMap) > 0 {
-		log.Info("resolved MCP server headers from agent overrides", "agent", crd.Name, "mcpServers", len(mcpHeadersMap))
-	}
-
-	mcpSettings := query.McpSettings
-	if mcpSettings == nil {
-		mcpSettings = make(map[string]MCPSettings)
-	}
-
-	for mcpKey, headers := range mcpHeadersMap {
-		key := fmt.Sprintf("%s/%s", crd.Namespace, mcpKey)
-		setting := mcpSettings[key]
-		setting.Headers = headers
-		mcpSettings[key] = setting
-		log.V(1).Info("configured MCP headers from agent", "mcpServer", key, "header_count", len(headers))
+		return nil, err
 	}
 
 	tools := NewToolRegistry(mcpSettings, telemetryProvider.ToolRecorder())
