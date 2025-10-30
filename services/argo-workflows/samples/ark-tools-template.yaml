@@ -22,9 +22,12 @@ spec:
       annotations:
         workflows.argoproj.io/description: "Run Ark tools"
     script:
+      # Here we use the 'ark-tools' image, which comes pre-installed with tools
+      # like the ark cli, fark, kubectl, etc.
       image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
       command: [bash]
       source: |
+        # Use the ark cli to run a simple query against the default model.
         ark query model/default "hello world" > /tmp/result.txt
     outputs:
       parameters:
