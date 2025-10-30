@@ -31,7 +31,6 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import type { components } from '@/lib/api/generated/types';
-import type { QueryResponse } from '@/lib/services/chat';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { queriesService } from '@/lib/services/queries';
 import { useListQueries } from '@/lib/services/queries-hooks';
