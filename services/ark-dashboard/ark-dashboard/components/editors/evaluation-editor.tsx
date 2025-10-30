@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { components } from '@/lib/api/generated/types';
+import type { QueryResponse } from '@/lib/services/chat';
 import {
   type Agent,
   type Evaluation,
@@ -40,7 +41,7 @@ import {
 type EvaluationCreateRequest = components['schemas']['EvaluationCreateRequest'];
 type EvaluationUpdateRequest = components['schemas']['EvaluationUpdateRequest'];
 type EvaluationType = components['schemas']['EvaluationType'];
-type QueryResponse = components['schemas']['QueryResponse-Output'];
+// Use shared QueryResponse type from chat service to avoid generator-specific name drift
 
 interface EvaluationEditorProps {
   open: boolean;
