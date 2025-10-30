@@ -41,6 +41,14 @@ helm uninstall argo-workflows
 devspace purge
 ```
 
+Note: by default, the Argo chart does NOT remove installed CRDs, so that user's data is not deleted unexpectedly (this behaviour is conventional for Kubernetes). This means that re-installing to a different namespace will cause a clash. If you need to remove Argo CRDs (such as `Workflow`, `WorkflowTemplate`) then run:
+
+```bash
+kubectl get crd -o name | grep argoproj.io | xargs kubectl delete
+```
+
+This will delete all workflows, templates, etc, from the cluster - do so with caution.
+
 ## Running Workflows
 
 Start by creating a workflow or workflow template.
@@ -92,8 +100,8 @@ When you get errors or unexpected results:
 
 ```bash
 # List workflows
-kubectl get workflows -n argo-workflows
+kubectl get workflows
 
 # View logs
-argo logs @latest -n argo-workflows
+argo logs @latest
 ```
