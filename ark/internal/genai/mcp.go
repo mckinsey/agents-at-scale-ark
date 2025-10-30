@@ -119,9 +119,12 @@ type headerTransport struct {
 }
 
 func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
 	for k, v := range t.headers {
 		req.Header.Set(k, v)
 	}
+
 	return t.base.RoundTrip(req)
 }
 

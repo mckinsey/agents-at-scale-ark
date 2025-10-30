@@ -1,41 +1,46 @@
-"use client";
+'use client';
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Pagination } from "@/components/ui/pagination";
+import { AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Pagination } from '@/components/ui/pagination';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
-  TooltipTrigger
-} from "@/components/ui/tooltip";
-import { toast } from "sonner";
-import {
-  eventsService,
-  type Event
-} from "@/lib/services/events";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, CheckCircle, RefreshCw } from "lucide-react";
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
-import { DASHBOARD_SECTIONS } from "@/lib/constants";
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import { type Event, eventsService } from '@/lib/services/events';
+
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from '../ui/empty';
 
 interface EventsSectionProps {
-  readonly page: number
-  readonly limit: number
-  readonly type?: string
-  readonly kind?: string
-  readonly name?: string
+  readonly page: number;
+  readonly limit: number;
+  readonly type?: string;
+  readonly kind?: string;
+  readonly name?: string;
 }
 
-export function EventsSection({ page, limit, type, kind, name }: EventsSectionProps) {
+export function EventsSection({
+  page,
+  limit,
+  type,
+  kind,
+  name,
+}: EventsSectionProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -50,7 +55,7 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
   const [totalEvents, setTotalEvents] = useState(0);
 
   // Track last loaded filters to prevent double loading
-  const lastLoadedFilters = useRef<string>("");
+  const lastLoadedFilters = useRef<string>('');
 
   // Load events based on URL params
   const loadEvents = useCallback(
@@ -64,7 +69,7 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
           limit,
           type,
           kind,
-          name
+          name,
         };
 
         // Always load filter options from ALL events to get complete lists
@@ -85,25 +90,25 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
           // Need to get all events to properly filter names by kind
           const allEventsData = await eventsService.getAll({
             kind: kind,
-            limit: 1000 // Get more events to find all names for this kind
+            limit: 1000, // Get more events to find all names for this kind
           });
           const filteredNames = new Set(
             allEventsData.items
               .filter(e => e.involvedObjectKind === kind)
               .map(e => e.involvedObjectName)
-              .filter(Boolean)
+              .filter(Boolean),
           );
           setAvailableNames(Array.from(filteredNames).sort());
         } else {
           setAvailableNames(filterOptions.names);
         }
       } catch (error) {
-        console.error("Failed to load events:", error);
-        toast.error("Failed to Load Events", {
+        console.error('Failed to load events:', error);
+        toast.error('Failed to Load Events', {
           description:
             error instanceof Error
               ? error.message
-              : "An unexpected error occurred"
+              : 'An unexpected error occurred',
         });
       } finally {
         setLoading(false);
@@ -111,7 +116,7 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
       }
     },
     // Depend on individual URL params, not objects
-    [page, limit, type, kind, name]
+    [page, limit, type, kind, name],
   );
 
   // Load events when URL params change
@@ -132,7 +137,7 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
       const params = new URLSearchParams(searchParams.toString());
 
       Object.entries(updates).forEach(([key, value]) => {
-        if (value === undefined || value === null || value === "") {
+        if (value === undefined || value === null || value === '') {
           params.delete(key);
         } else {
           params.set(key, value);
@@ -141,41 +146,47 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
 
       return params.toString();
     },
-    [searchParams]
+    [searchParams],
   );
 
   // User interaction handlers
   const handleFilterChange = (key: string, value: string | undefined) => {
-    const effectiveValue = value === "all" ? undefined : value;
+    const effectiveValue = value === 'all' ? undefined : value;
 
     // Only update the changed filter and reset page
     const params: Record<string, string | undefined> = {
       [key]: effectiveValue,
-      page: "1" // Reset to first page on filter change
+      page: '1', // Reset to first page on filter change
     };
 
     // If changing the kind filter and it's actually different, also clear name
-    if (key === "kind" && effectiveValue !== kind) {
+    if (key === 'kind' && effectiveValue !== kind) {
       params.name = undefined; // Explicitly clear name when kind changes
     }
 
     const queryString = createQueryString(params);
-    router.push(`${pathname}${queryString ? `?${queryString}` : ''}`, { scroll: false });
+    router.push(`${pathname}${queryString ? `?${queryString}` : ''}`, {
+      scroll: false,
+    });
   };
 
   const handlePageChange = (newPage: number) => {
     // Only update the page parameter, leave everything else as-is
     const queryString = createQueryString({ page: newPage.toString() });
-    router.push(`${pathname}${queryString ? `?${queryString}` : ''}`, { scroll: false });
+    router.push(`${pathname}${queryString ? `?${queryString}` : ''}`, {
+      scroll: false,
+    });
   };
 
   const handleItemsPerPageChange = (newLimit: number) => {
     // Only update limit and reset page, leave filters as-is
     const queryString = createQueryString({
       limit: newLimit.toString(),
-      page: "1" // Reset to first page on limit change
+      page: '1', // Reset to first page on limit change
     });
-    router.push(`${pathname}${queryString ? `?${queryString}` : ''}`, { scroll: false });
+    router.push(`${pathname}${queryString ? `?${queryString}` : ''}`, {
+      scroll: false,
+    });
   };
 
   const clearFilters = () => {
@@ -183,10 +194,12 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
       type: undefined,
       kind: undefined,
       name: undefined,
-      page: "1",
-      limit: limit.toString()
+      page: '1',
+      limit: limit.toString(),
     });
-    router.push(`${pathname}${queryString ? `?${queryString}` : ''}`, { scroll: false });
+    router.push(`${pathname}${queryString ? `?${queryString}` : ''}`, {
+      scroll: false,
+    });
   };
 
   const handleEventClick = (event: Event) => {
@@ -195,7 +208,7 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
 
   // Helper functions
   const formatAge = (timestamp: string | undefined) => {
-    if (!timestamp) return "-";
+    if (!timestamp) return '-';
 
     const now = new Date();
     const eventTime = new Date(timestamp);
@@ -207,25 +220,25 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
     if (diffDays > 0) return `${diffDays}d`;
     if (diffHours > 0) return `${diffHours}h`;
     if (diffMins > 0) return `${diffMins}m`;
-    return "now";
+    return 'now';
   };
 
-  const getEventTypeIcon = (type: string) => {
-    switch (type) {
-      case "Warning":
+  const getEventTypeIcon = (eventType: string) => {
+    switch (eventType) {
+      case 'Warning':
         return <AlertCircle className="h-4 w-4 text-yellow-500" />;
-      case "Normal":
+      case 'Normal':
         return <CheckCircle className="h-4 w-4 text-green-500" />;
       default:
         return <CheckCircle className="h-4 w-4 text-gray-500" />;
     }
   };
 
-  const getEventTypeBadge = (type: string) => {
-    switch (type) {
-      case "Warning":
+  const getEventTypeBadge = (eventType: string) => {
+    switch (eventType) {
+      case 'Warning':
         return <Badge variant="destructive">{type}</Badge>;
-      case "Normal":
+      case 'Normal':
         return <Badge variant="secondary">{type}</Badge>;
       default:
         return <Badge variant="outline">{type}</Badge>;
@@ -236,9 +249,9 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <div className="text-center">
-          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-gray-400" />
+          <RefreshCw className="mx-auto mb-4 h-8 w-8 animate-spin text-gray-400" />
           <p className="text-gray-500">Loading events...</p>
         </div>
       </div>
@@ -247,53 +260,50 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
 
   return (
     <div className="space-y-4 p-4">
-      <div className="border-b flex flex-wrap gap-2 items-center pb-4">
+      <div className="flex flex-wrap items-center gap-2 border-b pb-4">
         <Select
-          value={type || "all"}
-          onValueChange={(value) => handleFilterChange("type", value)}
-        >
+          value={type || 'all'}
+          onValueChange={value => handleFilterChange('type', value)}>
           <SelectTrigger className="w-32">
             <SelectValue placeholder="Type" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Types</SelectItem>
-            {availableTypes.map((type) => (
-              <SelectItem key={type} value={type}>
-                {type}
+            {availableTypes.map(t => (
+              <SelectItem key={t} value={t}>
+                {t}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
         <Select
-          value={kind || "all"}
-          onValueChange={(value) => handleFilterChange("kind", value)}
-        >
+          value={kind || 'all'}
+          onValueChange={value => handleFilterChange('kind', value)}>
           <SelectTrigger className="w-40">
             <SelectValue placeholder="Object Kind" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Kinds</SelectItem>
-            {availableKinds.map((kind) => (
-              <SelectItem key={kind} value={kind}>
-                {kind}
+            {availableKinds.map(k => (
+              <SelectItem key={k} value={k}>
+                {k}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
         <Select
-          value={name || "all"}
-          onValueChange={(value) => handleFilterChange("name", value)}
-        >
+          value={name || 'all'}
+          onValueChange={value => handleFilterChange('name', value)}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Resource Name" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Names</SelectItem>
-            {availableNames.map((name) => (
-              <SelectItem key={name} value={name}>
-                {name}
+            {availableNames.map(n => (
+              <SelectItem key={n} value={n}>
+                {n}
               </SelectItem>
             ))}
           </SelectContent>
@@ -303,10 +313,7 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
           variant="outline"
           size="sm"
           onClick={clearFilters}
-          disabled={
-            !(type || kind || name)
-          }
-        >
+          disabled={!(type || kind || name)}>
           Clear Filters
         </Button>
 
@@ -314,10 +321,9 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
           <Button
             size="sm"
             onClick={() => loadEvents(true)}
-            disabled={refreshing}
-          >
+            disabled={refreshing}>
             <RefreshCw
-              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+              className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`}
             />
             Refresh
           </Button>
@@ -325,44 +331,43 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
       </div>
 
       {/* Events Table */}
-      <div className="rounded-lg border overflow-hidden">
+      <div className="overflow-hidden rounded-lg border">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1200px]">
             <thead className="bg-gray-50 dark:bg-gray-900/50">
               <tr>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
                   Age
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
                   Type
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
                   Reason
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
                   Object
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
                   Subobject
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
                   Source
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
                   Message
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
                   Count
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
+            <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-800 dark:bg-gray-900">
               {events.length === 0 ? (
                 <tr>
                   <td
                     colSpan={8}
-                    className="px-3 py-8 text-center text-xs text-gray-500 dark:text-gray-400"
-                  >
+                    className="px-3 py-8 text-center text-xs text-gray-500 dark:text-gray-400">
                     <Empty>
                       <EmptyHeader>
                         <EmptyMedia variant="icon">
@@ -374,25 +379,24 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
                   </td>
                 </tr>
               ) : (
-                events.map((event) => (
+                events.map(event => (
                   <tr
                     key={event.name}
                     onClick={() => handleEventClick(event)}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors"
-                  >
-                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    className="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <td className="px-3 py-3 text-sm whitespace-nowrap text-gray-500 dark:text-gray-400">
                       {formatAge(event.lastTimestamp)}
                     </td>
-                    <td className="px-3 py-3 whitespace-nowrap text-sm">
+                    <td className="px-3 py-3 text-sm whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         {getEventTypeIcon(event.type)}
                         {getEventTypeBadge(event.type)}
                       </div>
                     </td>
-                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    <td className="px-3 py-3 text-sm whitespace-nowrap text-gray-900 dark:text-gray-100">
                       {event.reason}
                     </td>
-                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    <td className="px-3 py-3 text-sm whitespace-nowrap text-gray-900 dark:text-gray-100">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -415,10 +419,10 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
                         </Tooltip>
                       </TooltipProvider>
                     </td>
-                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    <td className="px-3 py-3 text-sm whitespace-nowrap text-gray-500 dark:text-gray-400">
                       -
                     </td>
-                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    <td className="px-3 py-3 text-sm whitespace-nowrap text-gray-500 dark:text-gray-400">
                       {event.sourceComponent}
                       {event.sourceHost && ` (${event.sourceHost})`}
                     </td>
@@ -427,7 +431,7 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
                         {event.message}
                       </div>
                     </td>
-                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-center">
+                    <td className="px-3 py-3 text-center text-sm whitespace-nowrap text-gray-500 dark:text-gray-400">
                       {event.count}
                     </td>
                   </tr>
@@ -437,8 +441,6 @@ export function EventsSection({ page, limit, type, kind, name }: EventsSectionPr
           </table>
         </div>
       </div>
-
-
 
       {/* Pagination */}
       <Pagination

@@ -22,7 +22,7 @@
 
 - **`mcp/`** - Model Context Protocol servers
   - `atlassian/` - Jira and Confluence integration
-  - `filesys/` - File system operations
+  - `filesystem-mcp/` - File system operations
   - `git/` - Git repository operations
   - `github/` - GitHub API integration
   - `pyodide-python/` - Python execution in browser

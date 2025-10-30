@@ -167,7 +167,7 @@ Tools provided by Model Context Protocol servers.
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Tool
 metadata:
-  name: mcp-filesys-read-file
+  name: mcp-filesystem-read-file
 spec:
   type: mcp
   inputSchema:
@@ -218,11 +218,11 @@ Reference custom Tool resources (HTTP, MCP, Agent, or Builtin tools) by name:
 ```yaml
 tools:
   - type: custom
-    name: get-coordinates        # HTTP tool
+    name: get-coordinates            # HTTP tool
   - type: custom
-    name: mcp-filesys-read-file  # MCP tool
+    name: mcp-filesystem-read-file   # MCP tool
   - type: custom
-    name: call-research-agent    # Agent tool
+    name: call-research-agent        # Agent tool
 ```
 
 ### Built-in Tools

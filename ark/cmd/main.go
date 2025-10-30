@@ -28,7 +28,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/controller"
-	"mckinsey.com/ark/internal/telemetry"
+	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 	webhookv1 "mckinsey.com/ark/internal/webhook/v1"
 	webhookv1prealpha1 "mckinsey.com/ark/internal/webhook/v1prealpha1"
 	// +kubebuilder:scaffold:imports
@@ -73,11 +73,16 @@ func main() {
 
 	setupLog.Info("starting ark controller", "version", Version, "commit", GitCommit)
 
-	telemetryShutdown := telemetry.Initialize()
-	defer telemetryShutdown()
+	// Initialize telemetry provider
+	telemetryProvider := telemetryconfig.NewProvider()
+	defer func() {
+		if err := telemetryProvider.Shutdown(); err != nil {
+			setupLog.Error(err, "failed to shutdown telemetry provider")
+		}
+	}()
 
 	mgr, metricsCertWatcher, webhookCertWatcher := setupManager(result.config)
-	setupControllers(mgr)
+	setupControllers(mgr, telemetryProvider)
 	setupWebhooks(mgr)
 	startManager(mgr, metricsCertWatcher, webhookCertWatcher)
 }
@@ -220,18 +225,28 @@ func setupMetricsServer(cfg config, baseTLSOpts []func(*tls.Config)) (metricsser
 	return metricsServerOptions, metricsCertWatcher
 }
 
-func setupControllers(mgr ctrl.Manager) {
+func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provider) {
 	controllers := []struct {
 		name       string
 		reconciler interface{ SetupWithManager(ctrl.Manager) error }
 	}{
 		{"Agent", &controller.AgentReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("agent-controller")}},
-		{"Query", &controller.QueryReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("query-controller")}},
+		{"Query", &controller.QueryReconciler{
+			Client:    mgr.GetClient(),
+			Scheme:    mgr.GetScheme(),
+			Recorder:  mgr.GetEventRecorderFor("query-controller"),
+			Telemetry: telemetryProvider,
+		}},
 		{"Tool", &controller.ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
 		{"Team", &controller.TeamReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
 		{"A2AServer", &controller.A2AServerReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("a2aserver-controller")}},
 		{"MCPServer", &controller.MCPServerReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("mcpserver-controller")}},
-		{"Model", &controller.ModelReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("model-controller")}},
+		{"Model", &controller.ModelReconciler{
+			Client:    mgr.GetClient(),
+			Scheme:    mgr.GetScheme(),
+			Recorder:  mgr.GetEventRecorderFor("model-controller"),
+			Telemetry: telemetryProvider,
+		}},
 		{"Memory", &controller.MemoryReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("memory-controller")}},
 		{"ExecutionEngine", &controller.ExecutionEngineReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("executionengine-controller")}},
 		{"Evaluator", &controller.EvaluatorReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},

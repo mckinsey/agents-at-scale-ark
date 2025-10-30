@@ -1857,6 +1857,10 @@ export interface components {
              * @default false
              */
             stream: boolean;
+            /** Metadata */
+            metadata?: {
+                [key: string]: string;
+            } | null;
         };
         /** ChatCompletionSystemMessageParam */
         ChatCompletionSystemMessageParam: {

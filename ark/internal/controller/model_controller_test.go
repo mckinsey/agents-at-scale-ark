@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/telemetry/noop"
 )
 
 var _ = Describe("Model Controller", func() {
@@ -71,9 +72,10 @@ var _ = Describe("Model Controller", func() {
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &ModelReconciler{
-				Client:   k8sClient,
-				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Client:    k8sClient,
+				Scheme:    k8sClient.Scheme(),
+				Recorder:  record.NewFakeRecorder(10),
+				Telemetry: noop.NewProvider(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{

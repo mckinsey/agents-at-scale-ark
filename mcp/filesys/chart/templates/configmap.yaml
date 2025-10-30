@@ -1,9 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ include "mcp-filesys.fullname" . }}-config
-  labels:
-    {{- include "mcp-filesys.labels" . | nindent 4 }}
-data:
-  config.json: |
-    {{- .Values.config | toJson | nindent 4 }}

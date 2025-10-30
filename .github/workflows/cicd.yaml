@@ -234,6 +234,9 @@ jobs:
           - path: images/ark-tools
             image: ark-tools
             prebuild: "make ark-cli-build && cp -r tools ark images/ark-tools/"
+          - path: mcp/filesystem-mcp
+            image: filesystem-mcp-server
+
     steps:
       - uses: actions/checkout@v4
 
@@ -561,6 +564,7 @@ jobs:
         env:
           E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
           E2E_TEST_AZURE_OPENAI_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
+          FILESYS_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/filesystem-mcp-server
           FILESYS_IMAGE_TAG: ${{ github.sha }}
           LANGCHAIN_WEATHER_AGENT_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/langchain-weather-agent
           LANGCHAIN_WEATHER_AGENT_IMAGE_TAG: ${{ github.sha }}
@@ -602,6 +606,7 @@ jobs:
         env:
           E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
           E2E_TEST_AZURE_OPENAI_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
+          FILESYS_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/filesystem-mcp-server
           FILESYS_IMAGE_TAG: ${{ github.sha }}
           LANGCHAIN_WEATHER_AGENT_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/langchain-weather-agent
           LANGCHAIN_WEATHER_AGENT_IMAGE_TAG: ${{ github.sha }}
@@ -627,6 +632,7 @@ jobs:
           - { name: ark-api, path: services/ark-api/chart }
           - { name: ark-dashboard, path: services/ark-dashboard/chart }
           - { name: ark-mcp, path: services/ark-mcp/chart }
+          - { name: mcp-filesystem, path: mcp/filesystem-mcp/chart }
           - { name: localhost-gateway, path: services/localhost-gateway/chart }
           - { name: ark-tenant, path: charts/ark-tenant }
     steps:
@@ -897,6 +903,7 @@ jobs:
           - ark-api
           - ark-dashboard
           - ark-mcp
+          - mcp-filesystem
           - localhost-gateway
           - ark-tenant
     steps:

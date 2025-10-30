@@ -53,10 +53,10 @@ spec:
     - type: custom
       name: web-search
     - type: custom
-      name: mcp-filesys-write-file
+      name: mcp-filesystem-write-file
     - type: custom
-      name: mcp-filesys-create-directory
+      name: mcp-filesystem-create-directory
     - type: custom
-      name: mcp-filesys-list-directory
+      name: mcp-filesystem-list-directory
     - type: custom
-      name: mcp-filesys-get-file-info
+      name: mcp-filesystem-get-file-info

@@ -1,65 +1,69 @@
-"use client";
+'use client';
 
-import { DisabledFields, ModelConfigurationFormContext } from "./model-configuration-form-context";
-
-import { useCallback } from "react";
-import { useForm } from "react-hook-form";
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useUpdateModelById } from "@/lib/services/models-hooks";
-import { useRouter } from "next/navigation";
-import { FormValues, schema } from "./schema";
-import { Model } from "@/lib/services";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { ModelConfiguratorForm } from "./model-configuration-form";
-import { createModelUpdateConfig, getDefaultValuesForUpdate } from "./utils";
+import { useRouter } from 'next/navigation';
+import { useCallback } from 'react';
+import { useForm } from 'react-hook-form';
 
-const formId = "model-update-form"
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import type { Model } from '@/lib/services';
+import { useUpdateModelById } from '@/lib/services/models-hooks';
+
+import { ModelConfiguratorForm } from './model-configuration-form';
+import type { DisabledFields } from './model-configuration-form-context';
+import { ModelConfigurationFormContext } from './model-configuration-form-context';
+import type { FormValues } from './schema';
+import { schema } from './schema';
+import { createModelUpdateConfig, getDefaultValuesForUpdate } from './utils';
+
+const formId = 'model-update-form';
 
 const disabledFields: DisabledFields = {
   name: true,
-  type: true
-}
+  type: true,
+};
 
 type UpdateModelFormProps = {
-  model: Model
-}
+  model: Model;
+};
 
 export function UpdateModelForm({ model }: UpdateModelFormProps) {
-  const router = useRouter()
+  const router = useRouter();
 
-  const defaultValues = getDefaultValuesForUpdate(model)
+  const defaultValues = getDefaultValuesForUpdate(model);
   const form = useForm<FormValues>({
     mode: 'onChange',
     resolver: zodResolver(schema),
-    defaultValues
-  })
+    defaultValues,
+  });
 
   const handleSuccess = useCallback(() => {
-    router.push("/models")
-  }, [router])
+    router.push('/models');
+  }, [router]);
 
-  const { mutateAsync, isPending } = useUpdateModelById()
+  const { mutateAsync, isPending } = useUpdateModelById();
 
   const onSubmit = (formValues: FormValues) => {
-    const config = createModelUpdateConfig(formValues)
+    const config = createModelUpdateConfig(formValues);
     mutateAsync({
       id: model.id,
       model: formValues.model,
-      config
-    }).then(handleSuccess)
-  }
+      config,
+    }).then(handleSuccess);
+  };
 
   return (
-    <ModelConfigurationFormContext.Provider value={{
-      form,
-      onSubmit,
-      isSubmitPending: isPending,
-      type: defaultValues.type,
-      disabledFields,
-      formId
-    }}>
-      <div className="md:w-md md:max-w-md shrink-0 space-y-4">
+    <ModelConfigurationFormContext.Provider
+      value={{
+        form,
+        onSubmit,
+        isSubmitPending: isPending,
+        type: defaultValues.type,
+        disabledFields,
+        formId,
+      }}>
+      <div className="shrink-0 space-y-4 md:w-md md:max-w-md">
         <section>
           <div className="text-lg leading-none font-semibold">
             Update Model: {model.id}
@@ -74,14 +78,15 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
             type="submit"
             form={formId}
             disabled={isPending}
-            className="w-full mt-8"
-          >
-            {
-              isPending ? (<>
+            className="mt-8 w-full">
+            {isPending ? (
+              <>
                 <Spinner size="sm" />
                 <span>Updating Model...</span>
-              </>) : (<span>Update Model</span>)
-            }
+              </>
+            ) : (
+              <span>Update Model</span>
+            )}
           </Button>
         </section>
       </div>

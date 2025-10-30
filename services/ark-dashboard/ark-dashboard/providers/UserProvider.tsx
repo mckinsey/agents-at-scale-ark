@@ -1,28 +1,25 @@
 'use client';
 
-import { User } from '@/lib/types/user';
 import type { PropsWithChildren } from 'react';
 import { createContext, useContext } from 'react';
 
+import type { User } from '@/lib/types/user';
+
 type Props = {
+  user?: User | null;
+};
+
+interface UserContext {
   user?: User | null;
 }
 
-interface UserContext {
-  user?: User | null
-}
-
-const UserContext = createContext<UserContext | undefined>(
-  undefined
-);
+const UserContext = createContext<UserContext | undefined>(undefined);
 
 function UserProvider({ children, user }: PropsWithChildren<Props>) {
   return (
-    <UserContext.Provider value={{ user }}>
-      {children}
-    </UserContext.Provider>
+    <UserContext.Provider value={{ user }}>{children}</UserContext.Provider>
   );
-};
+}
 
 function useUser() {
   const context = useContext(UserContext);
@@ -31,6 +28,6 @@ function useUser() {
   }
 
   return context;
-};
+}
 
 export { UserProvider, useUser };

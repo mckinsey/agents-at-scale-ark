@@ -26,12 +26,13 @@ import (
 
 // StreamMetadata contains ARK-specific metadata for streaming chunks
 type StreamMetadata struct {
-	Query   string `json:"query,omitempty"`
-	Session string `json:"session,omitempty"`
-	Target  string `json:"target,omitempty"`
-	Team    string `json:"team,omitempty"`
-	Agent   string `json:"agent,omitempty"`
-	Model   string `json:"model,omitempty"`
+	Query       string            `json:"query,omitempty"`
+	Session     string            `json:"session,omitempty"`
+	Target      string            `json:"target,omitempty"`
+	Team        string            `json:"team,omitempty"`
+	Agent       string            `json:"agent,omitempty"`
+	Model       string            `json:"model,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 // ChunkWithMetadata wraps an OpenAI chunk with ARK metadata
@@ -70,9 +71,11 @@ func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChun
 		metadata.Session = sessionID
 	}
 
-	// If no metadata, return chunk as-is for backward compatibility
-	if *metadata == (StreamMetadata{}) {
-		return chunk
+	// Add query annotations if present in context
+	if queryVal := ctx.Value(QueryContextKey); queryVal != nil {
+		if query, ok := queryVal.(*arkv1alpha1.Query); ok && len(query.Annotations) > 0 {
+			metadata.Annotations = query.Annotations
+		}
 	}
 
 	return ChunkWithMetadata{
