@@ -262,7 +262,7 @@ simple-calculator-remote-http-multiply   23m
 ```
 
 - **Note**: The above MCP server URLs will be localhost when you run controller with `cd ark && make dev`
-If you are deploying the controller using `make quickstart`, there are 2 options:
+If you are deploying the controller using `devspace dev`, there are 2 options:
   - Please deploy the MCP servers in the cluster and use the kubernetes service URLs like "http://calc-service.default.svc.cluster.local"
   - Run the servers locally and use `host.docker.internal` to reach localhost from docker containers
 

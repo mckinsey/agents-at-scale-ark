@@ -635,6 +635,7 @@ jobs:
           - { name: mcp-filesystem, path: mcp/filesystem-mcp/chart }
           - { name: localhost-gateway, path: services/localhost-gateway/chart }
           - { name: ark-tenant, path: charts/ark-tenant }
+          - { name: argo-workflows, path: services/argo-workflows/chart }
     steps:
       - uses: actions/checkout@v4
 
@@ -646,6 +647,7 @@ jobs:
       - name: Lint and Package ${{ matrix.chart.name }}
         run: |
           cd ${{ matrix.chart.path }}
+          helm dependency update
           helm lint .
           helm package .
 
@@ -906,6 +908,7 @@ jobs:
           - mcp-filesystem
           - localhost-gateway
           - ark-tenant
+          - argo-workflows
     steps:
       - uses: actions/checkout@v4
 

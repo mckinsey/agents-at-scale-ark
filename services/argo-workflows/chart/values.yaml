@@ -1,0 +1,84 @@
+# Argo Workflows configuration. This is config for the actual Argo workflows
+# chart from Argo itself, which is a dependency of our own chart.
+argo-workflows:
+  # Single namespace mode. Suitable for development and does not require
+  # cluster roles.
+  singleNamespace: true
+
+  # Controller configuration
+  controller:
+    # Enable executor plugins for Ark integration
+    extraEnv:
+      - name: ARGO_EXECUTOR_PLUGINS
+        value: "true"
+
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+
+  # Server configuration
+  server:
+    # Development mode, disable auth.
+    extraArgs:
+      - --auth-mode=server
+      - --secure=false
+
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+
+  # For workflows, create a service account with RBAC - we'll give this service
+  # account permissions to ark resources.
+  workflow:
+    serviceAccount:
+      create: true
+      name: argo-workflow
+    rbac:
+      create: true
+
+  # Executor resources - these are the pods that execute steps.
+  executor:
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+
+# Additional role bindings. For development, we are generally installing argo
+# into an existing tenant namespace (such as 'default'). So we can bind the
+# argo workflow to the tenant service account.
+roleBindings:
+  - name: argo-workflow-ark-access
+    subjects:
+      - kind: ServiceAccount
+        name: argo-workflow
+    roleRef:
+      name: ark-tenant-role
+
+# Optionally deploy the 'ark-tenant' chart. If you are deploying argo workflows
+# to a new namespace and essentially creating a new tenant, then enabling this
+# option will ensure we have the appropriate rbac. Otherwise, the previous
+# 'roleBindings' config is sufficient.
+ark-tenant:
+  enabled: false
+  serviceAccount:
+    # No need to create this service account - the argo chart creates it.
+    create: false
+    name: argo-workflow
+  rbac:
+    # The argo workflow account needs tenant permissions (ie. CRUD for core
+    # ark resources).
+    create: true
+    additionalSubjects:
+      - kind: ServiceAccount
+        name: argo-workflow

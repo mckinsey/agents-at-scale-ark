@@ -1,0 +1,25 @@
+# DevSpace configuration for Argo Workflows
+version: v2beta1
+
+pipelines:
+  deploy: create_deployments argo-workflows
+  dev: |-
+    create_deployments argo-workflows
+    start_dev argo-server
+
+deployments:
+  argo-workflows:
+    helm:
+      chart:
+        path: ./chart
+
+# Development mode - port-forward to Argo UI
+dev:
+  argo-server:
+    labelSelector:
+      app.kubernetes.io/name: argo-workflows-server
+    ports:
+      - port: 2746:2746
+    logs:
+      enabled: true
+      lastLines: 100
