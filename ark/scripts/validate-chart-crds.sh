@@ -27,13 +27,6 @@ trap cleanup EXIT
 
 echo "Validating Helm chart CRDs match source CRDs..."
 
-# Check if helm is installed
-if ! command -v helm &> /dev/null; then
-    echo -e "${RED}Error: helm is not installed${NC}"
-    echo "Please install helm: https://helm.sh/docs/intro/install/"
-    exit 1
-fi
-
 # Check if directories exist
 if [ ! -d "$CHART_DIR" ]; then
     echo -e "${RED}Error: Chart directory not found: $CHART_DIR${NC}"
