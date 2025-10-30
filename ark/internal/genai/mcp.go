@@ -59,14 +59,14 @@ func NewMCPClient(ctx context.Context, baseURL string, headers map[string]string
 	return mcpClient, nil
 }
 
-func createHTTPClient() (*mcp.Client, error) {
+func createHTTPClient() *mcp.Client {
 	impl := &mcp.Implementation{
 		Name:    arkv1alpha1.GroupVersion.Group,
 		Version: arkv1alpha1.GroupVersion.Version,
 	}
 
 	mcpClient := mcp.NewClient(impl, nil)
-	return mcpClient, nil
+	return mcpClient
 }
 
 func performBackoff(ctx context.Context, attempt int, baseURL string) error {
@@ -163,10 +163,7 @@ func attemptMCPConnection(ctx context.Context, mcpClient *mcp.Client, baseURL st
 func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[string]string, transportType string, httpTimeout time.Duration, maxRetries int) (*MCPClient, error) {
 	log := logf.FromContext(ctx)
 
-	mcpClient, err := createHTTPClient()
-	if err != nil {
-		return nil, err
-	}
+	mcpClient := createHTTPClient()
 
 	// Create a context with timeout ONLY for the retry loop
 	// The caller's context (ctx) is used for the actual connection and should control its lifetime
@@ -174,7 +171,7 @@ func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[s
 	defer retryCancel()
 
 	var lastErr error
-	var session *mcp.ClientSession
+
 	for attempt := range maxRetries {
 		if attempt > 0 {
 			if err := performBackoff(retryCtx, attempt, baseURL); err != nil {
@@ -185,7 +182,7 @@ func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[s
 		// Use the caller's context for the connection
 		// For SSE: This context controls the connection lifetime - when ctx is canceled, connection closes
 		// For HTTP: This context is used per-request
-		session, err = attemptMCPConnection(ctx, mcpClient, baseURL, headers, httpTimeout, transportType)
+		session, err := attemptMCPConnection(ctx, mcpClient, baseURL, headers, httpTimeout, transportType)
 		if err == nil {
 			log.Info("MCP client connected successfully", "server", baseURL, "attempts", attempt+1)
 			return &MCPClient{

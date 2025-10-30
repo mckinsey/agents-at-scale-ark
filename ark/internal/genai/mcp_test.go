@@ -85,6 +85,8 @@ func TestNewMCPClient(t *testing.T) {
 					t.Errorf("Failed to start MCP server mock: %v", err)
 				}
 			}()
+
+			// Wait for the server to start (in CI env this may take a bit longer)
 			time.Sleep(1000 * time.Millisecond)
 
 			ctx := t.Context()
