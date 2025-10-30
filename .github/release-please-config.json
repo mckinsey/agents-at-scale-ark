@@ -43,7 +43,7 @@
         },
         {
           "type": "toml",
-          "path": "services/ark-api/pyproject.toml",
+          "path": "services/ark-api/ark-api/pyproject.toml",
           "jsonpath": "project.version"
         },
         {
@@ -202,4 +202,4 @@
       ]
     }
   }
-} 
+}
