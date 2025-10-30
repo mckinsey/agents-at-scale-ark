@@ -4,23 +4,35 @@ sidebarTitle: Introduction
 
 # Ark - Agentic Runtime for Kubernetes
 
-Ark extends Kubernetes with custom resources that make agents, teams, MCP tools, and workflows first-class citizens in your cluster.
+ARK is an Kubernetes-based platform that provides a runtime and enables management and orchestration of AI agents and their resources. It provides custom resource definitions (CRDs) and services to handle:
 
-Follow the [Quickstart](./quickstart.mdx) guide to install Ark.
+- AI model configurations
+- Autonomous agents
+- Multi-agent teams
+- Tool integrations
+- Memory persistence
+- Performance evaluation
+
+Follow the [Quickstart](./quickstart.mdx) guide to install Ark locally.
 
 > [!NOTE]
 >
-> The Agents at Scale - Agentic Runtime for Kubernetes ("Ark") Technical Preview should **not** be run without reading the [Disclaimer](./disclaimer.mdx), which covers key risk topics.
+> The Agents at Scale - Agentic platform and runtime for Kubernetes ("Ark") Technical Preview should **not** be run without reading the [Disclaimer](./disclaimer.mdx), which covers key risk topics.
 >
 > We are transitioning this project to our open-source repository. During this process we will be moving documentation URLs, artifact registries, etc. Some builds, artifacts and pipelines may be impacted.
 
 Build, deploy and operate agentic solutions using proven patterns and practices that are reliable for complex distributed systems.
 
-## What is Ark?
+## Key Features
 
-ARK codifies patterns and practices developed across dozens of client agentic application projects. These projects span multiple sectors, functions, and technology stacks. Through this experience, we identified recurring challenges around platform-agnostic operations for agentic resources and the need for standardized deployment and management approaches.
+- Platform-agnostic agent operations
+- Standardized deployment patterns
+- Transparent orchestration
+- Built-in evaluation capabilities
+- Extensible tool integration
+- Multi-agent coordination
+- Custom headers support (for e.g. request tracing, custom metadata)
 
-This project represents the distillation of those learnings into an open-source runtime. While in early access and rapidly evolving based on ongoing team feedback, ARK provides a foundation built on real-world production experience with agentic systems at scale.
 
 ## Architecture
 
@@ -28,12 +40,12 @@ This project represents the distillation of those learnings into an open-source 
 
 ## Core Resources
 
-- **Model**: Define AI model configurations and connection details
-- **Agent**: Create autonomous AI agents with specific capabilities and tools
-- **Team**: Orchestrate multiple agents working together with coordination strategies
-- **Query**: Execute prompts and manage conversations with agents or teams
-- **Tool**: Define custom tools and MCP tool references for agents
-- **MCPServer**: Configure Model Context Protocol servers for external integrations
+- [**Models**](./user-guide/models/): Configure and connect to AI models. 
+- [**Agents**](./user-guide/agents/): Create autonomous AI agents with specific capabilities and tools
+- [**Teams**](./user-guide/teams/): Orchestrate multiple agents working together with coordination strategies
+- [**Queries**](./user-guide/queries/): Execute prompts and manage conversations with agents or teams
+- [**Tools**](./user-guide/tools/): Define custom tools and MCP tool references for agents
+- [**MCPServers**](./user-guide/tools/): Configure Model Context Protocol servers for external integrations
 - **Memory**: Persistent storage for agent conversations and state
 - **Evaluator**: Services for assessing and scoring agent performance
 - **Evaluation**: Define evaluation configurations and results
@@ -42,7 +54,7 @@ This project represents the distillation of those learnings into an open-source 
 
 ## MCP Servers
 
-- **filesys**: File system operations and management
+- **filesystem-mcp**: File system operations and management
 
 ## Services
 
@@ -51,7 +63,7 @@ This project represents the distillation of those learnings into an open-source 
 - **ark-dashboard**: Web-based management interface
 - **ark-mcp**: MCP server integration service
 - **ark-evaluator**: Holistic evaluation and scoring service
-- **localhost-gateway**: Local development gateway
+- **localhost-gateway**: Local development gateway (only on local)
 - **ark-cluster-memory**: Memory storage with streaming support
 
 ## Sample Services

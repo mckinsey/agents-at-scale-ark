@@ -38,7 +38,7 @@ import { useListQueries } from '@/lib/services/queries-hooks';
 import { getResourceEventsUrl } from '@/lib/utils/events';
 import { formatAge } from '@/lib/utils/time';
 
-// Use shared QueryResponse type from chat service
+type QueryResponse = components['schemas']['QueryResponse'];
 
 type SortField = 'createdAt' | 'none';
 type SortDirection = 'asc' | 'desc';

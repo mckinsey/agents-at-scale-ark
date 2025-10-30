@@ -41,7 +41,7 @@ import {
 type EvaluationCreateRequest = components['schemas']['EvaluationCreateRequest'];
 type EvaluationUpdateRequest = components['schemas']['EvaluationUpdateRequest'];
 type EvaluationType = components['schemas']['EvaluationType'];
-// Use shared QueryResponse type from chat service to avoid generator-specific name drift
+type QueryResponse = components['schemas']['QueryResponse'];
 
 interface EvaluationEditorProps {
   open: boolean;

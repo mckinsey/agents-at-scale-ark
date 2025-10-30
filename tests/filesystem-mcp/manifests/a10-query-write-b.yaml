@@ -1,0 +1,15 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: filesystem-write-b
+  annotations:
+    "ark.mckinsey.com/mcp-server-settings": '{"($namespace)/mcp-filesystem": {"toolCalls": [{"name": "set_base_directory", "arguments": {"path": "workspace-b"}}]}}'
+spec:
+  input: |
+    Create a file called "agent-b-data.txt" with the following content:
+    "This is Agent B's confidential data. Created at workspace B."
+
+    After creating the file, list all files in the current directory to confirm it was created successfully.
+  targets:
+  - type: agent
+    name: filesystem-agent-b

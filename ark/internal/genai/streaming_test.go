@@ -8,6 +8,7 @@ import (
 
 	"github.com/openai/openai-go"
 	"github.com/stretchr/testify/assert"
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
 func TestWrapChunkWithMetadata(t *testing.T) {
@@ -59,7 +60,7 @@ func TestWrapChunkWithMetadata(t *testing.T) {
 				ID: "chunk-3",
 			},
 			modelName:     "",
-			expectWrapped: false,
+			expectWrapped: true,
 		},
 		{
 			name: "model from context overrides parameter",
@@ -76,6 +77,25 @@ func TestWrapChunkWithMetadata(t *testing.T) {
 			modelName:     "parameter-model",
 			expectWrapped: true,
 		},
+		{
+			name: "with query annotations",
+			setupContext: func() context.Context {
+				ctx := context.Background()
+				ctx = WithQueryContext(ctx, "query-123", "session-456", "test-query")
+				query := &arkv1alpha1.Query{}
+				query.Annotations = map[string]string{
+					"ark.mckinsey.com/a2a-context-id": "abc-123",
+					"custom-annotation":               "custom-value",
+				}
+				ctx = context.WithValue(ctx, QueryContextKey, query)
+				return ctx
+			},
+			chunk: &openai.ChatCompletionChunk{
+				ID: "chunk-5",
+			},
+			modelName:     "test-model",
+			expectWrapped: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -83,42 +103,47 @@ func TestWrapChunkWithMetadata(t *testing.T) {
 			ctx := tt.setupContext()
 			result := WrapChunkWithMetadata(ctx, tt.chunk, tt.modelName)
 
-			if !tt.expectWrapped {
-				// Should return chunk as-is
-				assert.Equal(t, tt.chunk, result)
-			} else {
-				// Should return wrapped chunk
-				wrapped, ok := result.(ChunkWithMetadata)
-				assert.True(t, ok, "expected ChunkWithMetadata type")
-				assert.Equal(t, tt.chunk, wrapped.ChatCompletionChunk)
-				assert.NotNil(t, wrapped.Ark)
+			wrapped, ok := result.(ChunkWithMetadata)
+			assert.True(t, ok, "expected ChunkWithMetadata type")
+			assert.Equal(t, tt.chunk, wrapped.ChatCompletionChunk)
+			assert.NotNil(t, wrapped.Ark)
 
-				// Verify metadata fields based on context
-				switch tt.name {
-				case "with full metadata":
-					assert.Equal(t, "query-123", wrapped.Ark.Query)
-					assert.Equal(t, "session-456", wrapped.Ark.Session)
-					assert.Equal(t, "test-target", wrapped.Ark.Target)
-					assert.Equal(t, "test-team", wrapped.Ark.Team)
-					assert.Equal(t, "test-agent", wrapped.Ark.Agent)
-					assert.Equal(t, "test-model", wrapped.Ark.Model) // from context, not parameter
-				case "with partial metadata":
-					assert.Equal(t, "query-123", wrapped.Ark.Query)
-					assert.Equal(t, "", wrapped.Ark.Session)
-					assert.Equal(t, "test-model", wrapped.Ark.Model) // from parameter
-				case "model from context overrides parameter":
-					assert.Equal(t, "context-model", wrapped.Ark.Model)
-				}
+			// Verify metadata fields based on context
+			switch tt.name {
+			case "with full metadata":
+				assert.Equal(t, "query-123", wrapped.Ark.Query)
+				assert.Equal(t, "session-456", wrapped.Ark.Session)
+				assert.Equal(t, "test-target", wrapped.Ark.Target)
+				assert.Equal(t, "test-team", wrapped.Ark.Team)
+				assert.Equal(t, "test-agent", wrapped.Ark.Agent)
+				assert.Equal(t, "test-model", wrapped.Ark.Model) // from context, not parameter
+			case "with partial metadata":
+				assert.Equal(t, "query-123", wrapped.Ark.Query)
+				assert.Equal(t, "", wrapped.Ark.Session)
+				assert.Equal(t, "test-model", wrapped.Ark.Model) // from parameter
+			case "with no metadata":
+				assert.Equal(t, "", wrapped.Ark.Query)
+				assert.Equal(t, "", wrapped.Ark.Model)
+			case "model from context overrides parameter":
+				assert.Equal(t, "context-model", wrapped.Ark.Model)
+			case "with query annotations":
+				assert.Equal(t, "query-123", wrapped.Ark.Query)
+				assert.Equal(t, "session-456", wrapped.Ark.Session)
+				assert.Equal(t, "test-model", wrapped.Ark.Model)
+				assert.NotNil(t, wrapped.Ark.Annotations)
+				assert.Equal(t, "abc-123", wrapped.Ark.Annotations["ark.mckinsey.com/a2a-context-id"])
+				assert.Equal(t, "custom-value", wrapped.Ark.Annotations["custom-annotation"])
 			}
 		})
 	}
 }
 
 func TestStreamMetadata_Empty(t *testing.T) {
-	// Test that empty metadata is correctly identified
 	emptyMeta := StreamMetadata{}
-	assert.True(t, emptyMeta == StreamMetadata{})
+	assert.Equal(t, "", emptyMeta.Query)
+	assert.Equal(t, "", emptyMeta.Model)
+	assert.Nil(t, emptyMeta.Annotations)
 
 	nonEmptyMeta := StreamMetadata{Query: "test"}
-	assert.False(t, nonEmptyMeta == StreamMetadata{})
+	assert.Equal(t, "test", nonEmptyMeta.Query)
 }

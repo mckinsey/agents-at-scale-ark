@@ -1,0 +1,50 @@
+# DevSpace configuration for mcp-filesystem service
+version: v2beta1
+
+pipelines:
+  deploy: |-
+    build_images --all
+    create_deployments --all
+  dev: |-
+    create_deployments --all
+    start_dev --all
+
+images:
+  mcp-filesystem:
+    image: filesystem-mcp-server
+    dockerfile: ./Dockerfile
+    context: .
+
+deployments:
+  mcp-filesystem:
+    namespace: default
+    helm:
+      chart:
+        path: ./chart
+      values:
+        image:
+          repository: ${runtime.images.mcp-filesystem.image}
+          tag: ${runtime.images.mcp-filesystem.tag}
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+
+dev:
+  mcp-filesystem:
+    imageSelector: filesystem-mcp-server
+    devImage: node:20-slim
+    command: ["sh", "-c", "cd /app && npm install && npm run dev"]
+    namespace: default
+    logs:
+      lastLines: 50
+    sync:
+      - path: .:/app
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+    ssh:
+      enabled: true
