@@ -48,17 +48,17 @@ describe('Memory Command', () => {
       expect(subcommands).toContain('list');
     });
 
-    it('should have reset subcommand with nested commands', () => {
+    it('should have delete subcommand with nested commands and flags', () => {
       const command = createMemoryCommand(mockConfig);
-      const resetCommand = command.commands.find(cmd => cmd.name() === 'reset');
+      const deleteCommand = command.commands.find(cmd => cmd.name() === 'delete');
       
-      expect(resetCommand).toBeDefined();
-      expect(resetCommand?.description()).toBe('Reset/delete memory data');
+      expect(deleteCommand).toBeDefined();
+      expect(deleteCommand?.description()).toBe('Delete memory data');
       
-      const resetSubcommands = resetCommand?.commands.map(cmd => cmd.name()) || [];
-      expect(resetSubcommands).toContain('session');
-      expect(resetSubcommands).toContain('query');
-      expect(resetSubcommands).toContain('all');
+      const deleteSubcommands = deleteCommand?.commands.map(cmd => cmd.name()) || [];
+      expect(deleteSubcommands).toContain('session');
+      expect(deleteSubcommands).toContain('query');
+      // --all flag is supported on the delete root instead of an 'all' subcommand
     });
   });
 

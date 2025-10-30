@@ -94,6 +94,7 @@ pipelines:
     
     if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
       create_deployments cert-manager
+      kubectl wait deployment.apps/cert-manager-webhook --for=condition=Available --namespace=cert-manager --timeout=5m
     fi
     
     if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
@@ -111,6 +112,7 @@ pipelines:
     
     if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
       create_deployments cert-manager
+      kubectl wait deployment.apps/cert-manager-webhook --for=condition=Available --namespace=cert-manager --timeout=5m
     fi
     
     if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then

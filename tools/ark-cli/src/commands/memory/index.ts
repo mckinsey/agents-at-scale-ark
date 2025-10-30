@@ -32,7 +32,7 @@ export async function listSessions(options: { output?: string }) {
   }
 }
 
-export async function resetSession(sessionId: string, options: { output?: string }) {
+export async function deleteSession(sessionId: string, options: { output?: string }) {
   try {
     const proxy = new ArkApiProxy();
     const arkApiClient = await proxy.start();
@@ -53,7 +53,7 @@ export async function resetSession(sessionId: string, options: { output?: string
   }
 }
 
-export async function resetQuery(sessionId: string, queryId: string, options: { output?: string }) {
+export async function deleteQuery(sessionId: string, queryId: string, options: { output?: string }) {
   try {
     const proxy = new ArkApiProxy();
     const arkApiClient = await proxy.start();
@@ -74,7 +74,7 @@ export async function resetQuery(sessionId: string, queryId: string, options: { 
   }
 }
 
-export async function resetAll(options: { output?: string }) {
+export async function deleteAll(options: { output?: string }) {
   try {
     const proxy = new ArkApiProxy();
     const arkApiClient = await proxy.start();
@@ -112,40 +112,43 @@ export function createMemoryCommand(_: ArkConfig): Command {
       await listSessions(options);
     });
 
-  // Reset command with subcommands
-  const resetCommand = memoryCommand
-    .command('reset')
-    .description('Reset/delete memory data');
+  // Delete command with subcommands (alias: reset for backward compatibility)
+  const deleteCommand = memoryCommand
+    .command('delete')
+    .alias('reset')
+    .description('Delete memory data')
+    .option('--all', 'Delete all sessions and their messages');
 
-  // Reset specific session
-  resetCommand
+  // Delete specific session
+  deleteCommand
     .command('session')
     .description('Delete a specific session')
     .argument('<sessionId>', 'Session ID to delete')
     .option('-o, --output <format>', 'output format (json or text)', 'text')
     .action(async (sessionId: string, options) => {
-      await resetSession(sessionId, options);
+      await deleteSession(sessionId, options);
     });
 
-  // Reset specific query
-  resetCommand
+  // Delete specific query
+  deleteCommand
     .command('query')
     .description('Delete messages for a specific query')
     .argument('<sessionId>', 'Session ID')
     .argument('<queryId>', 'Query ID to delete messages for')
     .option('-o, --output <format>', 'output format (json or text)', 'text')
     .action(async (sessionId: string, queryId: string, options) => {
-      await resetQuery(sessionId, queryId, options);
+      await deleteQuery(sessionId, queryId, options);
     });
 
-  // Reset all sessions
-  resetCommand
-    .command('all')
-    .description('Delete all sessions and their messages')
-    .option('-o, --output <format>', 'output format (json or text)', 'text')
-    .action(async (options) => {
-      await resetAll(options);
-    });
+  // Handle --all on delete root
+  deleteCommand.action(async (options) => {
+    if (options.all) {
+      await deleteAll(options);
+      return;
+    }
+    // If no subcommand and no --all, show help
+    deleteCommand.help();
+  });
 
   // Default action - list sessions
   memoryCommand.action(async (options) => {
