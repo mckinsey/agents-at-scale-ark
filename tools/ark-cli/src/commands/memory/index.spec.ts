@@ -15,6 +15,7 @@ jest.mock('../../lib/output.js', () => ({
 // Mock ArkApiProxy with a simpler approach
 jest.mock('../../lib/arkApiProxy.js', () => {
   return {
+    __esModule: true,
     ArkApiProxy: jest.fn().mockImplementation(() => ({
       start: jest.fn(),
       stop: jest.fn(),
