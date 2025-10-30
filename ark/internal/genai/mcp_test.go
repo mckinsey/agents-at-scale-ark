@@ -85,7 +85,7 @@ func TestNewMCPClient(t *testing.T) {
 					t.Errorf("Failed to start MCP server mock: %v", err)
 				}
 			}()
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(1000 * time.Millisecond)
 
 			ctx := t.Context()
 			client, err := NewMCPClient(

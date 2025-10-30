@@ -32,8 +32,14 @@ type MCPClient struct {
 	client  *mcp.ClientSession
 }
 
-var (
+const (
 	connectMaxReties = 5
+
+	sseTransport  = "sse"
+	httpTransport = "http"
+
+	sseEndpointPath  = "sse"
+	httpEndpointPath = "mcp"
 )
 
 func NewMCPClient(ctx context.Context, baseURL string, headers map[string]string, transportType string, timeout time.Duration, mcpSetting MCPSettings) (*MCPClient, error) {
@@ -79,7 +85,7 @@ func performBackoff(ctx context.Context, attempt int, baseURL string) error {
 func createTransport(baseURL string, headers map[string]string, timeout time.Duration, transportType string) mcp.Transport {
 	// Create HTTP client with headers
 	var httpClient *http.Client
-	if transportType == "sse" {
+	if transportType == sseTransport {
 		httpClient = &http.Client{
 			// No timeout for SSE: connections are long-lived
 		}
@@ -98,17 +104,17 @@ func createTransport(baseURL string, headers map[string]string, timeout time.Dur
 	}
 
 	switch transportType {
-	case "sse":
+	case sseTransport:
 		u, _ := url.Parse(baseURL)
-		u.Path = path.Join(u.Path, "sse")
+		u.Path = path.Join(u.Path, sseEndpointPath)
 		fullURL := u.String()
 		return &mcp.SSEClientTransport{
 			Endpoint:   fullURL,
 			HTTPClient: httpClient,
 		}
-	case "http":
+	case httpTransport:
 		u, _ := url.Parse(baseURL)
-		u.Path = path.Join(u.Path, "mcp")
+		u.Path = path.Join(u.Path, httpEndpointPath)
 		fullURL := u.String()
 		return &mcp.StreamableClientTransport{
 			Endpoint:   fullURL,
