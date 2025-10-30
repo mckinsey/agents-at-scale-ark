@@ -1,5 +1,7 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import { createMemoryCommand, deleteSession, deleteQuery, deleteAll } from './index.js';
+import { ArkApiProxy } from '../../lib/arkApiProxy.js';
+import output from '../../lib/output.js';
 
 // Mock dependencies
 jest.mock('../../lib/output.js', () => ({
@@ -77,17 +79,11 @@ describe('Memory Command', () => {
 
   describe('Error Scenarios', () => {
     let exitSpy: any;
-    let arkApiProxyModule: any;
-    let outputModule: any;
 
     beforeEach(async () => {
       exitSpy = jest
         .spyOn(process as any, 'exit')
         .mockImplementation((((..._args: unknown[]) => undefined) as unknown) as any);
-
-      // Re-require mocked modules to access instances
-      arkApiProxyModule = await import('../../lib/arkApiProxy.js');
-      outputModule = await import('../../lib/output.js');
     });
 
     afterEach(() => {
@@ -97,42 +93,42 @@ describe('Memory Command', () => {
     it('deleteSession handles 500 error', async () => {
       const err = new Error('Internal Server Error');
       const fakeClient = { deleteSession: (jest.fn() as any).mockRejectedValue(err) } as any;
-      ((arkApiProxyModule as any).ArkApiProxy as any).mockImplementation(() => ({
+      (ArkApiProxy as unknown as jest.Mock).mockImplementation(() => ({
         start: (jest.fn() as any).mockResolvedValue(fakeClient),
         stop: jest.fn(),
       }));
 
       await deleteSession('sess-1', { output: 'text' }).catch(() => {});
 
-      expect(outputModule.default.error).toHaveBeenCalled();
+      expect(output.error).toHaveBeenCalled();
       expect((process.exit as unknown as jest.Mock)).toHaveBeenCalledWith(1);
     });
 
     it('deleteQuery handles network timeout', async () => {
       const err = new Error('Network timeout');
       const fakeClient = { deleteQueryMessages: (jest.fn() as any).mockRejectedValue(err) } as any;
-      ((arkApiProxyModule as any).ArkApiProxy as any).mockImplementation(() => ({
+      (ArkApiProxy as unknown as jest.Mock).mockImplementation(() => ({
         start: (jest.fn() as any).mockResolvedValue(fakeClient),
         stop: jest.fn(),
       }));
 
       await deleteQuery('sess-2', 'query-9', { output: 'text' }).catch(() => {});
 
-      expect(outputModule.default.error).toHaveBeenCalled();
+      expect(output.error).toHaveBeenCalled();
       expect((process.exit as unknown as jest.Mock)).toHaveBeenCalledWith(1);
     });
 
     it('deleteAll handles no memory services reachable', async () => {
       const err = new Error('No memory services reachable');
       const fakeClient = { deleteAllSessions: (jest.fn() as any).mockRejectedValue(err) } as any;
-      ((arkApiProxyModule as any).ArkApiProxy as any).mockImplementation(() => ({
+      (ArkApiProxy as unknown as jest.Mock).mockImplementation(() => ({
         start: (jest.fn() as any).mockResolvedValue(fakeClient),
         stop: jest.fn(),
       }));
 
       await deleteAll({ output: 'text' }).catch(() => {});
 
-      expect(outputModule.default.error).toHaveBeenCalled();
+      expect(output.error).toHaveBeenCalled();
       expect((process.exit as unknown as jest.Mock)).toHaveBeenCalledWith(1);
     });
   });
