@@ -1,0 +1,4 @@
+# Mock LLM configuration for MCP discovery test
+ark:
+  mcp:
+    enabled: true

@@ -154,6 +154,19 @@ const defaultArkServices: ServiceCollection = {
     k8sDevDeploymentName: 'ark-mcp-devspace',
   },
 
+  'mcp-filesystem': {
+    name: 'mcp-filesystem',
+    helmReleaseName: 'mcp-filesystem',
+    description: 'Stateful filesystem MCP server with workspace isolation',
+    enabled: false,
+    category: 'service',
+    // namespace: undefined - uses current context namespace
+    chartPath: `${REGISTRY_BASE}/mcp-filesystem`,
+    installArgs: [],
+    k8sDeploymentName: 'mcp-filesystem',
+    k8sDevDeploymentName: 'mcp-filesystem-devspace',
+  },
+
   'agents-at-scale': {
     name: 'agents-at-scale',
     helmReleaseName: 'agents-at-scale',

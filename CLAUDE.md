@@ -11,7 +11,7 @@
   - Custom Resource Definitions (CRDs) for AI workloads
   - Webhooks for validation and admission control
 
-- **`services/`** - Supporting services for ARK (Go, Python, TypeScript)
+- **`services/`** - Supporting services for Ark (Go, Python, TypeScript)
   - `postgres-memory/` - Memory persistence service (Go)
   - **Execution Engines (Python):**
     - `executor-langchain/` - LangChain agent execution and tool integration engine
@@ -22,7 +22,7 @@
 
 - **`mcp/`** - Model Context Protocol servers
   - `atlassian/` - Jira and Confluence integration
-  - `filesys/` - File system operations
+  - `filesystem-mcp/` - File system operations
   - `git/` - Git repository operations
   - `github/` - GitHub API integration
   - `pyodide-python/` - Python execution in browser
@@ -120,6 +120,7 @@ make install       # Install to ~/.local/bin
 - **Keep descriptions brief** - 1-2 sentences maximum for each item
 - **Use active voice** - "Creates agent" not "Agent is created"
 - **Avoid extra adjectives**
+- **Ark capitalization** - Always write "Ark" (capital A, lowercase rk), never "ARK" in documentation
 
 ## Makefile Guidelines
 

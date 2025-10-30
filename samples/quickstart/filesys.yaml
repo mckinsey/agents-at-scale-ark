@@ -30,9 +30,9 @@ spec:
     name: gpt-4-model
   tools:
     - type: custom
-      name: mcp-filesys-write-file
+      name: mcp-filesystem-write-file
     - type: custom
-      name: mcp-filesys-list-directory
+      name: mcp-filesystem-list-directory
 ---
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
@@ -44,9 +44,9 @@ spec:
     name: gpt-4-model
   tools:
     - type: custom
-      name: mcp-filesys-read-file
+      name: mcp-filesystem-read-file
     - type: custom
-      name: mcp-filesys-list-directory
+      name: mcp-filesystem-list-directory
 ---
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Team

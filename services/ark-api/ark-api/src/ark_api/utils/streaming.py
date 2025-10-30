@@ -16,13 +16,12 @@ def create_single_chunk_sse_response(completion: ChatCompletion) -> list[str]:
     Returns:
         List of SSE-formatted strings
     """
-    # Create a single chunk with the full content
-    chunk = ChatCompletionChunk(
-        id=completion.id,
-        object="chat.completion.chunk",
-        created=completion.created,
-        model=completion.model,
-        choices=[
+    chunk_data = {
+        "id": completion.id,
+        "object": "chat.completion.chunk",
+        "created": completion.created,
+        "model": completion.model,
+        "choices": [
             ChunkChoice(
                 index=0,
                 delta=ChoiceDelta(
@@ -33,8 +32,14 @@ def create_single_chunk_sse_response(completion: ChatCompletion) -> list[str]:
             )
         ],
         # Include usage data in the final chunk (OpenAI does this too)
-        usage=completion.usage
-    )
+        "usage": completion.usage
+    }
+
+    # Add Ark metadata if present in completion
+    if hasattr(completion, 'ark'):
+        chunk_data["ark"] = completion.ark
+
+    chunk = ChatCompletionChunk(**chunk_data)
 
     # Return SSE format strings
     return [

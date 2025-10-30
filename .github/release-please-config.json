@@ -43,7 +43,7 @@
         },
         {
           "type": "toml",
-          "path": "services/ark-api/pyproject.toml",
+          "path": "services/ark-api/ark-api/pyproject.toml",
           "jsonpath": "project.version"
         },
         {
@@ -136,6 +136,16 @@
         },
         {
           "type": "yaml",
+          "path": "mcp/filesystem-mcp/chart/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "mcp/filesystem-mcp/chart/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "yaml",
           "path": "services/ark-api-a2a/chart/Chart.yaml",
           "jsonpath": "$.version"
         },
@@ -178,8 +188,18 @@
           "type": "yaml",
           "path": "charts/ark-tenant/Chart.yaml",
           "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "yaml",
+          "path": "services/argo-workflows/chart/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "services/argo-workflows/chart/Chart.yaml",
+          "jsonpath": "$.appVersion"
         }
       ]
     }
   }
-} 
+}

@@ -40,7 +40,7 @@ import {
 type EvaluationCreateRequest = components['schemas']['EvaluationCreateRequest'];
 type EvaluationUpdateRequest = components['schemas']['EvaluationUpdateRequest'];
 type EvaluationType = components['schemas']['EvaluationType'];
-type QueryResponse = components['schemas']['QueryResponse-Output'];
+type QueryResponse = components['schemas']['QueryResponse'];
 
 interface EvaluationEditorProps {
   open: boolean;

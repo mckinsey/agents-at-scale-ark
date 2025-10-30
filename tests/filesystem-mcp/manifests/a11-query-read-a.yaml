@@ -1,0 +1,14 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: filesystem-read-a
+  annotations:
+    "ark.mckinsey.com/mcp-server-settings": '{"($namespace)/mcp-filesystem": {"toolCalls": [{"name": "set_base_directory", "arguments": {"path": "workspace-a"}}]}}'
+spec:
+  input: |
+    Read the file "agent-a-data.txt" and confirm it contains Agent A's data.
+
+    Then list all files in the current directory.
+  targets:
+  - type: agent
+    name: filesystem-agent-a

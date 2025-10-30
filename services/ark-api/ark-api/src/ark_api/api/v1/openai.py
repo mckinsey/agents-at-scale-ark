@@ -1,7 +1,7 @@
 import logging
 import time
 import uuid
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from ark_sdk import QueryV1alpha1Spec
 from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
@@ -16,6 +16,7 @@ import httpx
 from kubernetes_asyncio import client as k8s_client
 
 from ark_sdk.client import with_ark_client
+from ...models.queries import ArkOpenAICompletionsMetadata
 from ...utils.query_targets import parse_model_to_query_target
 from ...utils.query_polling import poll_query_completion
 from ...utils.streaming import create_single_chunk_sse_response
@@ -54,8 +55,44 @@ class ChatCompletionRequest(BaseModel):
     temperature: float = 1.0
     max_tokens: Optional[int] = None
     stream: bool = False
+    # Optional per OpenAI spec
+    metadata: Optional[Dict[str, str]] = None
 
 
+def process_request_metadata(
+    request_metadata: Optional[Dict[str, str]],
+    base_metadata: Dict[str, any]
+) -> Optional[JSONResponse]:
+    """Process request metadata and merge Ark annotations into base metadata.
+
+    Returns JSONResponse with error if validation fails, None if successful.
+    """
+    if not request_metadata:
+        return None
+
+    # Handle Ark-specific metadata
+    if "ark" in request_metadata:
+        try:
+            ark_metadata = ArkOpenAICompletionsMetadata.model_validate_json(
+                request_metadata["ark"]
+            )
+            if ark_metadata.annotations:
+                if "annotations" not in base_metadata:
+                    base_metadata["annotations"] = {}
+                base_metadata["annotations"].update(ark_metadata.annotations)
+        except ValidationError as e:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": {
+                        "message": f"Invalid Ark metadata: {str(e)}",
+                        "type": "invalid_request_error",
+                        "code": "invalid_ark_metadata"
+                    }
+                }
+            )
+    # Ignore other metadata keys per OpenAI SDK pattern
+    return None
 
 
 async def proxy_streaming_response(streaming_url: str):
@@ -86,13 +123,19 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
     # Get the current namespace
     namespace = get_namespace()
 
-    # If the user has requested a streaming response as per the OpenAI completions spec,
-    # enable streaming on the query by adding the streaming annotation
+    # Build query metadata
     metadata = {"name": query_name, "namespace": namespace}
+
+    # Process request metadata (Ark annotations)
+    error_response = process_request_metadata(request.metadata, metadata)
+    if error_response:
+        return error_response
+
+    # Enable streaming annotation if requested
     if request.stream:
-        metadata["annotations"] = {
-            STREAMING_ENABLED_ANNOTATION: "true"
-        }
+        if "annotations" not in metadata:
+            metadata["annotations"] = {}
+        metadata["annotations"][STREAMING_ENABLED_ANNOTATION] = "true"
 
     try:
         # Create the QueryV1alpha1 object with type="messages"
