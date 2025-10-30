@@ -23,10 +23,45 @@ type testOptions struct {
 	mcpClient struct {
 		connectionOptions mcpConnectionOps
 	}
+	expectedError string
 }
 
 func TestNewMCPClient(t *testing.T) {
 	testCases := map[string]testOptions{
+		"Throws error creating MCPClient for unsupported ABC transport": {
+			mcpServer: struct{ connectionOptions mcpConnectionOps }{
+				connectionOptions: mcpConnectionOps{
+					host:      "localhost",
+					port:      "8888",
+					transport: "http",
+				},
+			},
+			mcpClient: struct{ connectionOptions mcpConnectionOps }{
+				connectionOptions: mcpConnectionOps{
+					host:      "localhost",
+					port:      "8888",
+					transport: "ABC", // NOTE: Unsupported transport to force error
+				},
+			},
+			expectedError: ErrUnsupportedTransport,
+		},
+		"Throws error when failing connection retry": {
+			mcpServer: struct{ connectionOptions mcpConnectionOps }{
+				connectionOptions: mcpConnectionOps{
+					host:      "localhost",
+					port:      "8888",
+					transport: "http",
+				},
+			},
+			mcpClient: struct{ connectionOptions mcpConnectionOps }{
+				connectionOptions: mcpConnectionOps{
+					host:      "localhost",
+					port:      "9999", // NOTE: Wrong port to force connection failure
+					transport: "http",
+				},
+			},
+			expectedError: ErrConnectionRetryFailed,
+		},
 		"Creates MCPClient over HTTP transport": {
 			mcpServer: struct{ connectionOptions mcpConnectionOps }{
 				connectionOptions: mcpConnectionOps{
@@ -95,22 +130,24 @@ func TestNewMCPClient(t *testing.T) {
 				fmt.Sprintf("http://%s:%s", tc.mcpClient.connectionOptions.host, tc.mcpClient.connectionOptions.port),
 				nil,
 				tc.mcpClient.connectionOptions.transport,
-				30*time.Second,
+				1*time.Second,
 				MCPSettings{},
 			)
-			if err != nil {
-				t.Fatalf("Expected no error, got %v", err)
-			}
-			if client == nil {
-				t.Fatal("Expected a valid MCP client, got nil")
+			if tc.expectedError != "" {
+				require.ErrorContains(t, err, tc.expectedError)
+				require.Nil(t, client)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, client)
+
+				// Store client for cleanup
+				mcpClient = client
+
+				tools, err := client.ListTools(ctx)
+				require.NoError(t, err)
+				require.Equal(t, "greet", tools[0].Name)
 			}
 
-			// Store client for cleanup
-			mcpClient = client
-
-			tools, err := client.ListTools(ctx)
-			require.NoError(t, err)
-			require.Equal(t, "greet", tools[0].Name)
 		})
 	}
 }

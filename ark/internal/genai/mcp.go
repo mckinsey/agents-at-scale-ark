@@ -42,6 +42,11 @@ const (
 	httpEndpointPath = "mcp"
 )
 
+var (
+	ErrConnectionRetryFailed = "context timeout while retrying MCP client creation for server"
+	ErrUnsupportedTransport  = "unsupported transport type"
+)
+
 func NewMCPClient(ctx context.Context, baseURL string, headers map[string]string, transportType string, timeout time.Duration, mcpSetting MCPSettings) (*MCPClient, error) {
 	mcpClient, err := createMCPClientWithRetry(ctx, baseURL, headers, transportType, timeout, connectMaxReties)
 	if err != nil {
@@ -76,13 +81,13 @@ func performBackoff(ctx context.Context, attempt int, baseURL string) error {
 
 	select {
 	case <-ctx.Done():
-		return fmt.Errorf("context timeout while retrying MCP client creation for %s: %w", baseURL, ctx.Err())
+		return fmt.Errorf("%s %s: %w", ErrConnectionRetryFailed, baseURL, ctx.Err())
 	case <-time.After(backoff):
 		return nil
 	}
 }
 
-func createTransport(baseURL string, headers map[string]string, timeout time.Duration, transportType string) mcp.Transport {
+func createTransport(baseURL string, headers map[string]string, timeout time.Duration, transportType string) (mcp.Transport, error) {
 	// Create HTTP client with headers
 	var httpClient *http.Client
 	if transportType == sseTransport {
@@ -108,21 +113,23 @@ func createTransport(baseURL string, headers map[string]string, timeout time.Dur
 		u, _ := url.Parse(baseURL)
 		u.Path = path.Join(u.Path, sseEndpointPath)
 		fullURL := u.String()
-		return &mcp.SSEClientTransport{
+		transport := &mcp.SSEClientTransport{
 			Endpoint:   fullURL,
 			HTTPClient: httpClient,
 		}
+		return transport, nil
 	case httpTransport:
 		u, _ := url.Parse(baseURL)
 		u.Path = path.Join(u.Path, httpEndpointPath)
 		fullURL := u.String()
-		return &mcp.StreamableClientTransport{
+		transport := &mcp.StreamableClientTransport{
 			Endpoint:   fullURL,
 			HTTPClient: httpClient,
 			MaxRetries: 5,
 		}
+		return transport, nil
 	default:
-		panic("unsupported transport type: " + transportType)
+		return nil, fmt.Errorf("%s: %s", ErrUnsupportedTransport, transportType)
 	}
 }
 
@@ -144,7 +151,10 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 func attemptMCPConnection(ctx context.Context, mcpClient *mcp.Client, baseURL string, headers map[string]string, httpTimeout time.Duration, transportType string) (*mcp.ClientSession, error) {
 	log := logf.FromContext(ctx)
 
-	transport := createTransport(baseURL, headers, httpTimeout, transportType)
+	transport, err := createTransport(baseURL, headers, httpTimeout, transportType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create MCP client transport for %s: %w", baseURL, err)
+	}
 
 	// For SSE, the context passed here controls the connection lifetime
 	// It should be the caller's context, not a temporary one
