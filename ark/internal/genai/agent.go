@@ -349,7 +349,18 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		log.Info("resolved MCP server headers from agent overrides", "agent", crd.Name, "mcpServers", len(mcpHeadersMap))
 	}
 
-	mcpSettings := MergeMCPSettingsWithHeaders(ctx, query.McpSettings, mcpHeadersMap)
+	mcpSettings := query.McpSettings
+	if mcpSettings == nil {
+		mcpSettings = make(map[string]MCPSettings)
+	}
+
+	for mcpKey, headers := range mcpHeadersMap {
+		key := fmt.Sprintf("%s/%s", crd.Namespace, mcpKey)
+		setting := mcpSettings[key]
+		setting.Headers = headers
+		mcpSettings[key] = setting
+		log.V(1).Info("configured MCP headers from agent", "mcpServer", key, "header_count", len(headers))
+	}
 
 	tools := NewToolRegistry(mcpSettings, telemetryProvider.ToolRecorder())
 

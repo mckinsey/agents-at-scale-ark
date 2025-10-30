@@ -278,25 +278,6 @@ func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall, recorder Event
 	return ToolResult{ID: call.ID, Name: call.Function.Name, Content: result.String()}, nil
 }
 
-// MergeMCPSettingsWithHeaders merges MCP settings from query with headers from agent overrides
-func MergeMCPSettingsWithHeaders(ctx context.Context, querySettings map[string]MCPSettings, agentHeadersMap map[string]map[string]string) map[string]MCPSettings {
-	log := logf.FromContext(ctx)
-
-	mcpSettings := querySettings
-	if mcpSettings == nil {
-		mcpSettings = make(map[string]MCPSettings)
-	}
-
-	for mcpKey, headers := range agentHeadersMap {
-		setting := mcpSettings[mcpKey]
-		setting.Headers = headers
-		mcpSettings[mcpKey] = setting
-		log.Info("configured MCP headers from agent", "mcpServer", mcpKey, "header_count", len(headers))
-	}
-
-	return mcpSettings
-}
-
 // BuildMCPServerURL builds the URL for an MCP server with full ValueSource resolution
 func BuildMCPServerURL(ctx context.Context, k8sClient client.Client, mcpServerCRD *arkv1alpha1.MCPServer) (string, error) {
 	address := mcpServerCRD.Spec.Address
