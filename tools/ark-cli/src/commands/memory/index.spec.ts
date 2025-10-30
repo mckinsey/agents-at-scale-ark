@@ -1,10 +1,15 @@
-import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
-import { createMemoryCommand, deleteSession, deleteQuery, deleteAll } from './index.js';
-import { ArkApiProxy } from '../../lib/arkApiProxy.js';
-import output from '../../lib/output.js';
+import { describe, it, expect, jest, beforeEach, afterEach, beforeAll } from '@jest/globals';
+
+// ESM-safe mocking: declare variables to hold dynamically imported modules
+let createMemoryCommand: any;
+let deleteSession: any;
+let deleteQuery: any;
+let deleteAll: any;
+let ArkApiProxy: any;
+let output: any;
 
 // Mock dependencies
-jest.mock('../../lib/output.js', () => ({
+jest.unstable_mockModule('../../lib/output.js', () => ({
   default: {
     info: jest.fn(),
     success: jest.fn(),
@@ -13,14 +18,19 @@ jest.mock('../../lib/output.js', () => ({
 }));
 
 // Mock ArkApiProxy with a simpler approach
-jest.mock('../../lib/arkApiProxy.js', () => {
-  return {
-    __esModule: true,
-    ArkApiProxy: jest.fn().mockImplementation(() => ({
-      start: jest.fn(),
-      stop: jest.fn(),
-    })),
-  };
+jest.unstable_mockModule('../../lib/arkApiProxy.js', () => ({
+  __esModule: true,
+  ArkApiProxy: jest.fn().mockImplementation(() => ({
+    start: jest.fn(),
+    stop: jest.fn(),
+  })),
+}));
+
+beforeAll(async () => {
+  // After mocks are registered, dynamically import modules
+  ({ ArkApiProxy } = await import('../../lib/arkApiProxy.js'));
+  ({ default: output } = await import('../../lib/output.js'));
+  ({ createMemoryCommand, deleteSession, deleteQuery, deleteAll } = await import('./index.js'));
 });
 
 describe('Memory Command', () => {
@@ -46,19 +56,19 @@ describe('Memory Command', () => {
 
     it('should have list subcommand', () => {
       const command = createMemoryCommand(mockConfig);
-      const subcommands = command.commands.map(cmd => cmd.name());
+      const subcommands = (command as any).commands.map((cmd: any) => cmd.name());
       
       expect(subcommands).toContain('list');
     });
 
     it('should have delete subcommand with nested commands and flags', () => {
       const command = createMemoryCommand(mockConfig);
-      const deleteCommand = command.commands.find(cmd => cmd.name() === 'delete');
+      const deleteCommand = (command as any).commands.find((cmd: any) => cmd.name() === 'delete');
       
       expect(deleteCommand).toBeDefined();
       expect(deleteCommand?.description()).toBe('Delete memory data');
       
-      const deleteSubcommands = deleteCommand?.commands.map(cmd => cmd.name()) || [];
+      const deleteSubcommands = deleteCommand?.commands.map((cmd: any) => cmd.name()) || [];
       expect(deleteSubcommands).toContain('session');
       expect(deleteSubcommands).toContain('query');
       // --all flag is supported on the delete root instead of an 'all' subcommand
