@@ -131,7 +131,9 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
     } catch (error) {
       console.error(
         chalk.red(
-          error instanceof Error ? error.message : 'Failed to fetch query result'
+          error instanceof Error
+            ? error.message
+            : 'Failed to fetch query result'
         )
       );
       process.exit(ExitCodes.CliError);
