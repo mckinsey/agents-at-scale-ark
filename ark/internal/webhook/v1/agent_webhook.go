@@ -179,12 +179,8 @@ func (v *AgentCustomValidator) validateOverrideEntry(override arkv1alpha1.Overri
 		return fmt.Errorf("overrides[%d]: resourceType must be either 'model' or 'mcpserver'", index)
 	}
 
-	if override.ResourceType == "mcpserver" && override.LabelSelector == nil {
-		return fmt.Errorf("overrides[%d]: labelSelector is required when resourceType is 'mcpserver'", index)
-	}
-
-	if override.ResourceType == "model" && override.LabelSelector != nil {
-		return fmt.Errorf("overrides[%d]: labelSelector should not be specified when resourceType is 'model'", index)
+	if override.LabelSelector == nil {
+		return fmt.Errorf("overrides[%d]: labelSelector is required", index)
 	}
 
 	if len(override.Headers) == 0 {
