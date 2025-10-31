@@ -31,6 +31,35 @@ kubectl port-forward svc/argo-workflows-server 2746:2746
 # Dashboard: http://localhost:2746
 ```
 
+### With Minio Artifact Storage
+
+Argo Workflows can use Minio for storing workflow artifacts like intermediate outputs, logs, and data files. This is useful for passing data between workflow steps or preserving workflow outputs.
+
+To enable Minio artifact storage, first install the Minio Operator:
+
+```bash
+helm upgrade minio-operator operator \
+  --install \
+  --repo https://operator.min.io \
+  --namespace minio-operator \
+  --create-namespace \
+  --version 7.1.1
+```
+
+Then enable Minio in the Argo Workflows chart:
+
+```bash
+helm upgrade --install argo-workflows \
+  oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/argo-workflows \
+  --set minio.enabled=true
+
+# Or for local development:
+cd services/argo-workflows
+devspace dev  # Select 'true' when prompted to enable Minio
+```
+
+When using `devspace dev`, you'll be prompted whether to enable Minio artifact storage. If enabled, DevSpace automatically installs the Minio Operator and tenant.
+
 To uninstall:
 
 ```bash
