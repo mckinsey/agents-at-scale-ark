@@ -147,7 +147,6 @@ func TestNewMCPClient(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, "greet", tools[0].Name)
 			}
-
 		})
 	}
 }
