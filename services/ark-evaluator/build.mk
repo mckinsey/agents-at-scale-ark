@@ -63,7 +63,7 @@ $(ARK_EVALUATOR_STAMP_BUILD): $(ARK_EVALUATOR_STAMP_DEPS)
 $(ARK_EVALUATOR_SERVICE_NAME)-install: $(ARK_EVALUATOR_STAMP_INSTALL) # HELP: Deploy evaluator service to cluster
 $(ARK_EVALUATOR_STAMP_INSTALL): $(ARK_EVALUATOR_STAMP_BUILD)
 	./scripts/build-and-push.sh -i $(EVALUATOR_IMAGE) -t $(EVALUATOR_TAG) -f $(ARK_EVALUATOR_SERVICE_DIR)/Dockerfile -c $(ARK_EVALUATOR_SERVICE_DIR)
-	cd $(ARK_EVALUATOR_SERVICE_DIR) && helm upgrade --install ark-evaluator ./chart -n $(ARK_EVALUATOR_NAMESPACE) --create-namespace --set app.image.tag=$(EVALUATOR_TAG)
+	cd $(ARK_EVALUATOR_SERVICE_DIR) && helm upgrade --install ark-evaluator ./chart -n $(ARK_EVALUATOR_NAMESPACE) --create-namespace --set image.repository=$(EVALUATOR_IMAGE) --set image.tag=$(EVALUATOR_TAG) --set image.pullPolicy=Never
 	@touch $@
 
 # Uninstall target

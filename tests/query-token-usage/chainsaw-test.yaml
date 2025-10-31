@@ -7,25 +7,24 @@ spec:
   steps:
   - name: setup-resources
     try:
+    # Install mock-llm with token usage support
     - script:
-        skipLogOutput: true
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.16 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    # Install ark-tenant for RBAC
     - script:
         content: |
           helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
         env:
         - name: NAMESPACE
           value: ($namespace)
-    - apply:
-        file: manifests/*.yaml
-
-  - name: wait-for-resources
-    try:
+    # Wait for Model to be available before creating agents/queries
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -36,7 +35,9 @@ spec:
             conditions:
             - type: ModelAvailable
               status: "True"
-        timeout: 30s
+    # Apply agent and query
+    - apply:
+        file: manifests/*.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -44,33 +45,40 @@ spec:
           metadata:
             name: token-test-agent
 
+  # Wait fort the query to complete (error or success).
   - name: wait-for-query-completion
     try:
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: token-usage-query
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: token-usage-query
+        for:
+          condition:
+            name: Completed
+            value: 'True'
   - name: validate-response
     try:
     - assert:
+        # Fast check - the resource won't change since the query is complete.
+        timeout: 1s
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
           metadata:
             name: token-usage-query
           status:
+            # Done - not error. Tokens match the mocked value.
+            phase: done
             (length(responses)): 1
             (contains(responses[*].target.name, 'token-test-agent')): true
-            (length(join('', responses[*].content)) > `50`): true
-            (tokenUsage.totalTokens > `0`): true
-            (tokenUsage.promptTokens > `0`): true
-            (tokenUsage.completionTokens > `0`): true
-            (tokenUsage.promptTokens + tokenUsage.completionTokens == to_number(tokenUsage.totalTokens)): true
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+            (responses[0].content): "Please explain the concept of distributed computing in detail, including key principles, \nadvantages, challenges, and real-world applications. Provide examples of distributed \nsystems and discuss how they handle consistency, availability, and partition tolerance.\n"
+            (tokenUsage.promptTokens): 50
+            (tokenUsage.completionTokens): 100
+            (tokenUsage.totalTokens): 150
     catch:
+      # In the case of any errors, show the full query for troubleshooting.
+      - describe:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          name: token-usage-query
       - events: {}
