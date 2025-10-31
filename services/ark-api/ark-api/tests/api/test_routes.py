@@ -289,6 +289,7 @@ class TestSessionEndpoints(unittest.TestCase):
         
         mock_http_response = Mock()
         mock_http_response.status_code = 200
+        mock_http_response.is_success = True
         mock_http_client_instance = AsyncMock()
         mock_http_client_instance.delete = AsyncMock(return_value=mock_http_response)
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
@@ -321,6 +322,7 @@ class TestSessionEndpoints(unittest.TestCase):
         
         mock_http_response = Mock()
         mock_http_response.status_code = 200
+        mock_http_response.is_success = True
         mock_http_client_instance = AsyncMock()
         mock_http_client_instance.delete.return_value = mock_http_response
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
@@ -353,6 +355,7 @@ class TestSessionEndpoints(unittest.TestCase):
         
         mock_http_response = Mock()
         mock_http_response.status_code = 200
+        mock_http_response.is_success = True
         mock_http_client_instance = AsyncMock()
         mock_http_client_instance.delete.return_value = mock_http_response
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
@@ -420,6 +423,7 @@ class TestSessionEndpoints(unittest.TestCase):
         # Both services return 200
         mock_http_response = Mock()
         mock_http_response.status_code = 200
+        mock_http_response.is_success = True
         mock_http_client_instance = AsyncMock()
         mock_http_client_instance.delete.return_value = mock_http_response
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
@@ -450,6 +454,7 @@ class TestSessionEndpoints(unittest.TestCase):
         
         mock_http_response = Mock()
         mock_http_response.status_code = 500
+        mock_http_response.is_success = False
         mock_http_client_instance = AsyncMock()
         mock_http_client_instance.delete.return_value = mock_http_response
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
@@ -479,6 +484,7 @@ class TestSessionEndpoints(unittest.TestCase):
         
         mock_http_response = Mock()
         mock_http_response.status_code = 404
+        mock_http_response.is_success = False
         mock_http_client_instance = AsyncMock()
         mock_http_client_instance.delete.return_value = mock_http_response
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
@@ -516,6 +522,7 @@ class TestSessionEndpoints(unittest.TestCase):
             if call_count[0] == 1:
                 response = Mock()
                 response.status_code = 200
+                response.is_success = True
                 return response
             else:
                 raise Exception("Connection refused")
@@ -564,6 +571,7 @@ class TestSessionEndpoints(unittest.TestCase):
         
         mock_http_response = Mock()
         mock_http_response.status_code = 500
+        mock_http_response.is_success = False
         mock_http_client_instance = AsyncMock()
         mock_http_client_instance.delete.return_value = mock_http_response
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
@@ -630,6 +638,7 @@ class TestSessionEndpoints(unittest.TestCase):
         
         mock_http_response = Mock()
         mock_http_response.status_code = 200
+        mock_http_response.is_success = True
         mock_http_client_instance = AsyncMock()
         mock_http_client_instance.delete.return_value = mock_http_response
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
@@ -658,6 +667,7 @@ class TestSessionEndpoints(unittest.TestCase):
         
         mock_http_response = Mock()
         mock_http_response.status_code = 500
+        mock_http_response.is_success = False
         mock_http_client_instance = AsyncMock()
         mock_http_client_instance.delete.return_value = mock_http_response
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
@@ -718,6 +728,7 @@ class TestSessionEndpoints(unittest.TestCase):
         
         mock_http_response = Mock()
         mock_http_response.status_code = 200
+        mock_http_response.is_success = True
         mock_http_client_instance = AsyncMock()
         mock_http_client_instance.delete.return_value = mock_http_response
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
