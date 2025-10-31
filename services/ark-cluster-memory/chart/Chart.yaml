@@ -2,8 +2,8 @@ apiVersion: v2
 name: ark-cluster-memory
 description: Simple in-cluster ephemeral memory for Ark
 type: application
-version: 0.1.40
-appVersion: 0.1.40
+version: 0.1.41
+appVersion: 0.1.41
 annotations:
   ark.mckinsey.com/service: ark-cluster-memory
   ark.mckinsey.com/resources: service

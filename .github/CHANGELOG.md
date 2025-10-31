@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.41](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.40...v0.1.41) (2025-10-30)
+
+
+### Features
+
+* add inline descriptions to target selectors in ark chat ([#367](https://github.com/mckinsey/agents-at-scale-ark/issues/367)) ([d227fd1](https://github.com/mckinsey/agents-at-scale-ark/commit/d227fd19d09d5a6afbfd61bbb578a7450a1c5291))
+* stateful filesystem mcp ([#249](https://github.com/mckinsey/agents-at-scale-ark/issues/249)) ([ffcfe6d](https://github.com/mckinsey/agents-at-scale-ark/commit/ffcfe6dd45174af8125af6e517c2beaada644dd0))
+* **workflows:** argo workflow chart, basic docs, fanout sample ([#375](https://github.com/mckinsey/agents-at-scale-ark/issues/375)) ([672f86a](https://github.com/mckinsey/agents-at-scale-ark/commit/672f86aabe416cd646089b38ea938cf0b770a227))
+
+
+### Bug Fixes
+
+* add openinference standard input and output at query root span level ([#368](https://github.com/mckinsey/agents-at-scale-ark/issues/368)) ([efb6965](https://github.com/mckinsey/agents-at-scale-ark/commit/efb696568308be8ac3f0487e1e5eb5b158e88d61))
+* update pyproject.toml version and correct the release please config ([#389](https://github.com/mckinsey/agents-at-scale-ark/issues/389)) ([5718f05](https://github.com/mckinsey/agents-at-scale-ark/commit/5718f05cfc0131e941ff211d4e3ba1d8f61842cd))
+
 ## [0.1.40](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.39...v0.1.40) (2025-10-28)
 
 
