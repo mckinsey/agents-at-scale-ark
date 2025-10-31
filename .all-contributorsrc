@@ -362,6 +362,16 @@
         "bug",
         "test"
       ]
+    },
+    {
+      "login": "pkg-mck",
+      "name": "Praveen Gandhi",
+      "avatar_url": "https://avatars.githubusercontent.com/u/96068714?v=4",
+      "profile": "https://github.com/pkg-mck",
+      "contributions": [
+        "doc",
+        "bug"
+      ]
     }
   ],
   "contributorsPerLine": 7,
