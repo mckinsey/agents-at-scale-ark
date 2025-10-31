@@ -80,11 +80,11 @@ async def delete_session(
 ) -> dict:
     """Delete a specific session and all its messages."""
     async with with_ark_client(namespace, VERSION) as client:
+        # Process all memory services to ensure session is removed from all potential locations
         memory_dicts = await get_all_memory_resources(client)
         
         deleted_count = 0
-        found_404 = False
-        network_failures = []
+        failed_services = []
         
         for memory_dict in memory_dicts:
             memory_name = memory_dict.get("metadata", {}).get("name", "")
@@ -92,7 +92,6 @@ async def delete_session(
             try:
                 service_url = get_memory_service_address(memory_dict)
                 
-                # Make DELETE request to memory service
                 async with httpx.AsyncClient() as http_client:
                     response = await http_client.delete(
                         f"{service_url}/sessions/{session_id}",
@@ -102,45 +101,29 @@ async def delete_session(
                     if response.status_code == 200:
                         deleted_count += 1
                     elif response.status_code == 404:
-                        found_404 = True
+                        # Idempotent deletion: session not found in this memory service is acceptable
                         logger.debug(f"Session {session_id} not found in memory {memory_name}")
                     elif response.status_code == 500:
+                        # Database errors require immediate failure as they indicate backend problems
                         raise HTTPException(
                             status_code=500,
                             detail=f"Failed to delete session {session_id} from database"
                         )
                         
             except HTTPException:
-                # Re-raise HTTP exceptions (our 500 errors)
                 raise
             except Exception as e:
-                # Network/connection errors - track but continue processing
-                error_msg = f"Failed to delete session {session_id} from memory {memory_name}: {e}"
-                logger.error(error_msg)
-                network_failures.append(error_msg)
+                # Network errors don't stop processing: continue attempting other memory services
+                logger.error(f"Failed to delete session {session_id} from memory {memory_name}: {e}")
+                failed_services.append(memory_name)
         
-        # If no deletions succeeded, determine appropriate error
-        if deleted_count == 0:
-            if found_404:
-                # Session not found in any reachable service
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Session {session_id} not found"
-                )
-            elif network_failures:
-                # All services unreachable
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"Unable to delete session {session_id}: all memory services unreachable"
-                )
-            else:
-                # No memory services configured
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Session {session_id} not found"
-                )
+        if len(memory_dicts) > 0 and deleted_count == 0 and failed_services:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Could not reach any memory services: {', '.join(failed_services)}"
+            )
         
-        return {"message": f"Session {session_id} deleted from {deleted_count} memory service(s)"}
+        return {"message": f"Session {session_id} deleted successfully from {deleted_count} memory service(s)"}
 
 
 @router.delete("")
@@ -150,9 +133,11 @@ async def delete_all_sessions(
 ) -> dict:
     """Delete all sessions and their messages."""
     async with with_ark_client(namespace, VERSION) as client:
+        # Process all memory services to ensure complete cleanup across the namespace
         memory_dicts = await get_all_memory_resources(client)
         
         deleted_count = 0
+        failed_services = []
         
         for memory_dict in memory_dicts:
             memory_name = memory_dict.get("metadata", {}).get("name", "")
@@ -160,7 +145,6 @@ async def delete_all_sessions(
             try:
                 service_url = get_memory_service_address(memory_dict)
                 
-                # Make DELETE request to memory service
                 async with httpx.AsyncClient() as http_client:
                     response = await http_client.delete(
                         f"{service_url}/sessions",
@@ -170,21 +154,26 @@ async def delete_all_sessions(
                     if response.status_code == 200:
                         deleted_count += 1
                     elif response.status_code == 500:
-                        # Database deletion failed - throw 500
+                        # Database errors require immediate failure as they indicate backend problems
                         raise HTTPException(
                             status_code=500,
                             detail="Failed to delete all sessions from database"
                         )
-                    # Idempotent deletion: non-500 errors don't fail because the goal (sessions removed or inaccessible) is achieved
                         
             except HTTPException:
-                # Re-raise HTTP exceptions (our 500 errors)
                 raise
             except Exception as e:
-                # Network/connection errors - log but don't throw exception
+                # Network errors don't stop processing: continue attempting other memory services
                 logger.error(f"Failed to delete all sessions from memory {memory_name}: {e}")
+                failed_services.append(memory_name)
         
-        return {"message": f"All sessions deleted successfully from {deleted_count} memory services"}
+        if len(memory_dicts) > 0 and deleted_count == 0 and failed_services:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Could not reach any memory services: {', '.join(failed_services)}"
+            )
+        
+        return {"message": f"All sessions deleted successfully from {deleted_count} memory service(s)"}
 
 
 @router.delete("/{session_id}/queries/{query_id}/messages")
@@ -196,9 +185,11 @@ async def delete_query_messages(
 ) -> dict:
     """Delete messages for a specific query within a session."""
     async with with_ark_client(namespace, VERSION) as client:
+        # Process all memory services to ensure query messages are removed from all potential locations
         memory_dicts = await get_all_memory_resources(client)
         
         deleted_count = 0
+        failed_services = []
         
         for memory_dict in memory_dicts:
             memory_name = memory_dict.get("metadata", {}).get("name", "")
@@ -206,7 +197,6 @@ async def delete_query_messages(
             try:
                 service_url = get_memory_service_address(memory_dict)
                 
-                # Make DELETE request to memory service
                 async with httpx.AsyncClient() as http_client:
                     response = await http_client.delete(
                         f"{service_url}/sessions/{session_id}/queries/{query_id}/messages",
@@ -216,18 +206,23 @@ async def delete_query_messages(
                     if response.status_code == 200:
                         deleted_count += 1
                     elif response.status_code == 500:
-                        # Database deletion failed - throw 500
+                        # Database errors require immediate failure as they indicate backend problems
                         raise HTTPException(
                             status_code=500,
                             detail=f"Failed to delete query {query_id} messages from database"
                         )
-                    # Idempotent deletion: non-500 errors don't fail because the goal (messages removed or inaccessible) is achieved
                         
             except HTTPException:
-                # Re-raise HTTP exceptions (our 500 errors)
                 raise
             except Exception as e:
-                # Network/connection errors - log but don't throw exception
+                # Network errors don't stop processing: continue attempting other memory services
                 logger.error(f"Failed to delete query {query_id} messages from session {session_id} in memory {memory_name}: {e}")
+                failed_services.append(memory_name)
         
-        return {"message": f"Query {query_id} messages deleted successfully from session {session_id}"}
+        if len(memory_dicts) > 0 and deleted_count == 0 and failed_services:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Could not reach any memory services: {', '.join(failed_services)}"
+            )
+        
+        return {"message": f"Query {query_id} messages deleted successfully from {deleted_count} memory service(s)"}

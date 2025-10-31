@@ -148,14 +148,9 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 	log := logf.FromContext(ctx)
 
 	if _, exists := r.operations.Load(req.NamespacedName); exists {
-		log.Info("Query execution already in progress, skipping")
+		log.Info("Exists")
 		return ctrl.Result{}, nil
 	}
-
-	log.Info("Starting query execution",
-		"query", obj.Name,
-		"namespace", obj.Namespace,
-		"targets", len(obj.Spec.Targets))
 
 	opCtx, cancel := context.WithCancel(ctx)
 	r.operations.Store(req.NamespacedName, cancel)
@@ -177,12 +172,8 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	startTime := time.Now()
 
 	defer func() {
-		if rec := recover(); rec != nil {
-			err := fmt.Errorf("query execution goroutine panic: %v", rec)
-			log.Error(err, "Query execution goroutine panicked")
-			// Ensure query status is updated to error on panic
-			queryTracker.Fail(err)
-			_ = r.updateStatus(opCtx, &obj, statusError)
+		if r := recover(); r != nil {
+			log.Error(fmt.Errorf("query execution goroutine panic: %v", r), "Query execution goroutine panicked")
 		}
 		if cleanupCache {
 			r.operations.Delete(namespacedName)
@@ -205,7 +196,6 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	impersonatedClient, memory, err := r.setupQueryExecution(opCtx, obj, queryTracker, tokenCollector, sessionId)
 	if err != nil {
-		log.Error(err, "Failed to setup query execution")
 		r.Telemetry.QueryRecorder().RecordError(span, err)
 		return
 	}
