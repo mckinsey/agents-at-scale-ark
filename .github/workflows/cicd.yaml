@@ -578,13 +578,14 @@ jobs:
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
-          # Retry up to 3 times with 30s delay
-          for i in 1 2 3; do
+          MAX_RETRIES=3
+          RETRY_DELAY=30
+          for ((attempt=1; attempt<=$MAX_RETRIES; attempt++)); do
             if chainsaw test --config .chainsaw.yaml --selector '!evaluated'; then
               exit 0
             fi
-            if [ $i -lt 3 ]; then
-              sleep 30
+            if [ $attempt -lt $MAX_RETRIES ]; then
+              sleep $RETRY_DELAY
             fi
           done
           exit 1
@@ -631,14 +632,14 @@ jobs:
           mkdir -p /tmp/chainsaw-report
           # Use special config for evaluated tests with longer timeouts and sequential execution
           chainsaw test --config .chainsaw-evaluated.yaml --selector 'evaluated=true'
-          # Retry up to 3 times with 30s delay
-          for i in 1 2 3; do
-            echo "Attempt $i of 3"
+          MAX_RETRIES=3
+          RETRY_DELAY=30
+          for ((attempt=1; attempt<=$MAX_RETRIES; attempt++)); do
             if chainsaw test --config .chainsaw-evaluated.yaml --selector 'evaluated=true'; then
               exit 0
             fi
-            if [ $i -lt 3 ]; then
-              sleep 30
+            if [ $attempt -lt $MAX_RETRIES ]; then
+              sleep $RETRY_DELAY
             fi
           done
           exit 1
