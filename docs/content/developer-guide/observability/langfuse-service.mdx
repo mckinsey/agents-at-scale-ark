@@ -9,9 +9,12 @@ description: Monitor and trace AI agent interactions with Langfuse integration
 
 Langfuse is open source, integrates with popular agent frameworks through OpenTelemetry, offers public APIs for all features, and can be self-hosted.
 
+![Langfuse agent trace showing detailed execution flow, tool calls, and metadata](/langfuse-agent-trace.png)
+
 ## Overview
 
 Langfuse integration with ARK provides:
+
 - **LLM Call Tracing** - Track all model interactions and API calls
 - **Cost Monitoring** - Monitor API usage and associated costs
 - **Performance Analytics** - Response times, throughput, and latency metrics
@@ -35,12 +38,14 @@ make langfuse-credentials
 ### Headless Initialization
 
 Langfuse is automatically configured with:
+
 - **Organization**: `ark`
 - **Project**: `ark`
 - **User**: `ark@ark.com` / `password123`
 - **API Keys**: Pre-configured for OpenTelemetry integration
 
 The installation automatically:
+
 1. Deploys Langfuse to the `telemetry` namespace
 2. Creates OTEL environment variable secrets in configured namespaces (default: `ark-system`, `default`)
 
@@ -51,30 +56,33 @@ The installation automatically:
 After installation, you have two options to access Langfuse:
 
 **Option 1: Get credentials only**
+
 ```bash
 make langfuse-credentials
 # Output:
 # Username: ark@ark.com
 # Password: password123
-# 
+#
 # To access the dashboard, run:
 #   make langfuse-dashboard
 ```
 
 **Option 2: Start dashboard directly (recommended)**
+
 ```bash
 make langfuse-dashboard
 # Output:
 # Starting Langfuse dashboard...
-# 
+#
 # Username: ark@ark.com
 # Password: password123
-# 
+#
 # Dashboard available at: http://localhost:3000
 # Press Ctrl+C to stop
 ```
 
 The dashboard command automatically:
+
 - Finds an available port (starting from 3000)
 - Shows you the exact URL to visit
 - Starts port-forwarding to Langfuse
@@ -119,11 +127,11 @@ The installation creates `otel-environment-variables` secrets in configured name
 
 ```yaml
 containers:
-- name: my-service
-  envFrom:
-  - secretRef:
-      name: otel-environment-variables
-      optional: true
+  - name: my-service
+    envFrom:
+      - secretRef:
+          name: otel-environment-variables
+          optional: true
 ```
 
 **Note**: If deployments are already running when Langfuse is installed, restart them to pick up the OTEL configuration:
@@ -149,15 +157,18 @@ otelEnvironmentVariableSecrets:
 Once logged in, the Langfuse dashboard provides:
 
 **Traces View**
+
 - Complete execution traces for ARK controller operations
 - Model calls and responses
 - Timing and performance metrics
 
 **Sessions View**
+
 - Grouped interactions and conversations
 - Session-level analytics
 
 **Models View**
+
 - Model usage statistics
 - Cost breakdown by model
 - Performance comparisons
@@ -167,6 +178,7 @@ Once logged in, the Langfuse dashboard provides:
 After installation, you should immediately see a 'startup' trace from the ARK controller. This confirms that telemetry is working correctly.
 
 Traces include:
+
 - Controller startup events
 - Query execution flows
 - Model interactions
@@ -220,6 +232,7 @@ make langfuse-uninstall
 ```
 
 This will:
+
 1. Remove Langfuse from the `telemetry` namespace
 2. Delete OTEL environment variable secrets from `ark-system` namespace
 3. Clean up installation stamps
