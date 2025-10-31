@@ -331,7 +331,8 @@ class TestSessionEndpoints(unittest.TestCase):
         # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertIn("All sessions deleted successfully", data["message"])
+        self.assertIn("All sessions deleted successfully from", data["message"])
+        self.assertIn("memory service(s)", data["message"])
     
     @patch('ark_api.api.v1.sessions.with_ark_client')
     @patch('ark_api.api.v1.sessions.get_all_memory_resources')
@@ -392,7 +393,7 @@ class TestSessionEndpoints(unittest.TestCase):
         # Assert response
         self.assertEqual(response.status_code, 503)
         data = response.json()
-        self.assertIn("unreachable", data["detail"])
+        self.assertIn("Could not reach any memory services", data["detail"])
     
     @patch('ark_api.api.v1.sessions.with_ark_client')
     @patch('ark_api.api.v1.sessions.get_all_memory_resources')
@@ -429,7 +430,7 @@ class TestSessionEndpoints(unittest.TestCase):
         # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertIn("deleted from 2 memory service(s)", data["message"])
+        self.assertIn("deleted successfully from 2 memory service(s)", data["message"])
     
     @patch('ark_api.api.v1.sessions.with_ark_client')
     @patch('ark_api.api.v1.sessions.get_all_memory_resources')
@@ -527,7 +528,7 @@ class TestSessionEndpoints(unittest.TestCase):
         
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertIn("deleted from 1 memory service(s)", data["message"])
+        self.assertIn("deleted successfully from 1 memory service(s)", data["message"])
     
     @patch('ark_api.api.v1.sessions.with_ark_client')
     @patch('ark_api.api.v1.sessions.get_all_memory_resources')
@@ -637,7 +638,7 @@ class TestSessionEndpoints(unittest.TestCase):
         
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertIn("deleted from 2 memory service(s)", data["message"])
+        self.assertIn("deleted successfully from 2 memory service(s)", data["message"])
     
     @patch('ark_api.api.v1.sessions.with_ark_client')
     @patch('ark_api.api.v1.sessions.get_all_memory_resources')
@@ -725,7 +726,7 @@ class TestSessionEndpoints(unittest.TestCase):
         
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertIn("deleted from 2 memory service(s)", data["message"])
+        self.assertIn("deleted successfully from 2 memory service(s)", data["message"])
 
 
 class TestAgentsEndpoint(unittest.TestCase):
