@@ -133,7 +133,6 @@ func createA2AClientForExecution(ctx context.Context, k8sClient client.Client, r
 		return nil, fmt.Errorf("failed to create A2A client: %w", err)
 	}
 	
-	log.Info("created A2A client with timeout", "timeout", timeout, "agent", agentName)
 	return a2aClient, nil
 }
 
