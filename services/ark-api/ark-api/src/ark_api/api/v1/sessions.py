@@ -98,15 +98,16 @@ async def delete_session(
                         timeout=30.0
                     )
                     
-                    if response.status_code == 200:
+                    if response.is_success:
+                        # Any 2xx response indicates successful deletion
                         deleted_count += 1
-                    elif response.status_code == 404:
+                    elif response.status_code == httpx.codes.NOT_FOUND:
                         # Idempotent deletion: session not found in this memory service is acceptable
                         logger.debug(f"Session {session_id} not found in memory {memory_name}")
-                    elif response.status_code == 500:
+                    elif response.status_code == httpx.codes.INTERNAL_SERVER_ERROR:
                         # Database errors require immediate failure as they indicate backend problems
                         raise HTTPException(
-                            status_code=500,
+                            status_code=httpx.codes.INTERNAL_SERVER_ERROR,
                             detail=f"Failed to delete session {session_id} from database"
                         )
                         
@@ -119,7 +120,7 @@ async def delete_session(
         
         if len(memory_dicts) > 0 and deleted_count == 0 and failed_services:
             raise HTTPException(
-                status_code=503,
+                status_code=httpx.codes.SERVICE_UNAVAILABLE,
                 detail=f"Could not reach any memory services: {', '.join(failed_services)}"
             )
         
@@ -151,12 +152,13 @@ async def delete_all_sessions(
                         timeout=30.0
                     )
                     
-                    if response.status_code == 200:
+                    if response.is_success:
+                        # Any 2xx response indicates successful deletion
                         deleted_count += 1
-                    elif response.status_code == 500:
+                    elif response.status_code == httpx.codes.INTERNAL_SERVER_ERROR:
                         # Database errors require immediate failure as they indicate backend problems
                         raise HTTPException(
-                            status_code=500,
+                            status_code=httpx.codes.INTERNAL_SERVER_ERROR,
                             detail="Failed to delete all sessions from database"
                         )
                         
@@ -169,7 +171,7 @@ async def delete_all_sessions(
         
         if len(memory_dicts) > 0 and deleted_count == 0 and failed_services:
             raise HTTPException(
-                status_code=503,
+                status_code=httpx.codes.SERVICE_UNAVAILABLE,
                 detail=f"Could not reach any memory services: {', '.join(failed_services)}"
             )
         
@@ -203,12 +205,13 @@ async def delete_query_messages(
                         timeout=30.0
                     )
                     
-                    if response.status_code == 200:
+                    if response.is_success:
+                        # Any 2xx response indicates successful deletion
                         deleted_count += 1
-                    elif response.status_code == 500:
+                    elif response.status_code == httpx.codes.INTERNAL_SERVER_ERROR:
                         # Database errors require immediate failure as they indicate backend problems
                         raise HTTPException(
-                            status_code=500,
+                            status_code=httpx.codes.INTERNAL_SERVER_ERROR,
                             detail=f"Failed to delete query {query_id} messages from database"
                         )
                         
@@ -221,7 +224,7 @@ async def delete_query_messages(
         
         if len(memory_dicts) > 0 and deleted_count == 0 and failed_services:
             raise HTTPException(
-                status_code=503,
+                status_code=httpx.codes.SERVICE_UNAVAILABLE,
                 detail=f"Could not reach any memory services: {', '.join(failed_services)}"
             )
         
