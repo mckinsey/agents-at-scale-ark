@@ -44,21 +44,15 @@ spec:
           jsonPath:
             path: '{.status.phase}'
             value: 'ready'
-      retry:
-        maxAttempts: 3
-        delayBeforeRetry: 30s
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
-        timeout: 10m
+        timeout: 5m
         name: test-direct-evaluation
         for:
           jsonPath:
             path: '{.status.phase}'
             value: 'done'
-      retry:
-        maxAttempts: 3
-        delayBeforeRetry: 30s
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
