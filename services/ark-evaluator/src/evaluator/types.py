@@ -25,10 +25,30 @@ class ModelRef(BaseModel):
 
 class EvaluationRequest(BaseModel):
     queryId: str
-    input: str
+    input: Union[str, List[Dict[str, Any]]]
     responses: List[Response]
     query: Dict[str, Any]
-    modelRef: Optional[ModelRef] = None  # Reference instead of inline model
+    modelRef: Optional[ModelRef] = None
+
+    @field_validator('input')
+    def normalize_input(cls, v):
+        if isinstance(v, str):
+            return v
+
+        if isinstance(v, list):
+            messages = []
+            for msg in v:
+                if isinstance(msg, dict) and 'content' in msg:
+                    role = msg.get('role', 'unknown')
+                    content = msg.get('content', '')
+                    messages.append(f"{role}: {content}")
+
+            if not messages:
+                raise ValueError("Chat message list is empty or malformed")
+
+            return "\n".join(messages)
+
+        raise ValueError(f"Input must be string or list of messages, got {type(v)}")
 
 class EvaluationType(str, Enum):
     DIRECT = "direct"
