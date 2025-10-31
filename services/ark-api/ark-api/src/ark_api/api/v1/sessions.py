@@ -222,7 +222,7 @@ async def delete_query_messages(
                 logger.error(f"Failed to delete query {query_id} messages from session {session_id} in memory {memory_name}: {e}")
                 failed_services.append(memory_name)
         
-        if len(memory_dicts) > 0 and deleted_count == 0 and failed_services:
+        if memory_dicts and not deleted_count and failed_services:
             raise HTTPException(
                 status_code=httpx.codes.SERVICE_UNAVAILABLE,
                 detail=f"Could not reach any memory services: {', '.join(failed_services)}"
