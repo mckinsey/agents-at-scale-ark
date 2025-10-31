@@ -9,12 +9,15 @@ data:
   default: |
     s3:
       bucket: argo-artifacts
-      endpoint: minio:443
+      endpoint: minio.{{ .Release.Namespace }}.svc.cluster.local:443
       insecure: false
+      caSecret:
+        name: myminio-tls
+        key: public.crt
       accessKeySecret:
-        name: {{ .Values.minio.tenant.configSecret.name }}
+        name: argo-minio-credentials
         key: accesskey
       secretKeySecret:
-        name: {{ .Values.minio.tenant.configSecret.name }}
+        name: argo-minio-credentials
         key: secretkey
 {{- end }}
