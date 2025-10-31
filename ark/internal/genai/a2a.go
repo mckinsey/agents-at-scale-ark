@@ -97,8 +97,6 @@ func ExecuteA2AAgentWithRecorder(ctx context.Context, k8sClient client.Client, a
 
 // createA2AClientForExecution creates and configures A2A client for agent execution
 func createA2AClientForExecution(ctx context.Context, k8sClient client.Client, rpcURL string, headers []arkv1prealpha1.Header, namespace, agentName string, recorder record.EventRecorder, obj client.Object) (*a2aclient.A2AClient, error) {
-	log := logf.FromContext(ctx)
-	
 	// Use context deadline if available, otherwise default
 	timeout := 5 * time.Minute
 	if deadline, ok := ctx.Deadline(); ok {
