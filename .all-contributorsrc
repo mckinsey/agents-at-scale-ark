@@ -372,6 +372,16 @@
         "doc",
         "bug"
       ]
+    },
+    {
+      "login": "marcklingen",
+      "name": "Marc Klingen",
+      "avatar_url": "https://avatars.githubusercontent.com/u/2834609?v=4",
+      "profile": "http://marcklingen.com",
+      "contributions": [
+        "doc",
+        "code"
+      ]
     }
   ],
   "contributorsPerLine": 7,
