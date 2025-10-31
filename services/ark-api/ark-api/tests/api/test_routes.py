@@ -290,7 +290,7 @@ class TestSessionEndpoints(unittest.TestCase):
         mock_http_response = Mock()
         mock_http_response.status_code = 200
         mock_http_client_instance = AsyncMock()
-        mock_http_client_instance.delete.return_value = mock_http_response
+        mock_http_client_instance.delete = AsyncMock(return_value=mock_http_response)
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
         
         # Make the request
@@ -299,7 +299,7 @@ class TestSessionEndpoints(unittest.TestCase):
         # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertIn("deleted from", data["message"])
+        self.assertIn("deleted successfully from", data["message"])
         self.assertIn("memory service(s)", data["message"])
     
     @patch('ark_api.api.v1.sessions.with_ark_client')
