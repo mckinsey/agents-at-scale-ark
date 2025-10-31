@@ -2952,6 +2952,8 @@ export interface components {
             ttl?: string | null;
             /** Cancel */
             cancel?: boolean | null;
+            /** Overrides */
+            overrides?: components["schemas"]["Override-Input"][] | null;
             /** Evaluators */
             evaluators?: components["schemas"]["Memory"][] | null;
             evaluatorSelector?: components["schemas"]["ark_api__models__queries__LabelSelector"] | null;
@@ -2989,6 +2991,8 @@ export interface components {
             ttl?: string | null;
             /** Cancel */
             cancel?: boolean | null;
+            /** Overrides */
+            overrides?: components["schemas"]["Override-Output"][] | null;
             /** Metadata */
             metadata?: {
                 [key: string]: unknown;
@@ -3087,6 +3091,8 @@ export interface components {
             ttl?: string | null;
             /** Cancel */
             cancel?: boolean | null;
+            /** Overrides */
+            overrides?: components["schemas"]["Override-Input"][] | null;
         };
         /**
          * ReadinessResponse
