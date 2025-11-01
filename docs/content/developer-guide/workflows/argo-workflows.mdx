@@ -9,7 +9,7 @@ description: Kubernetes-native workflow orchestration for multi-step agent opera
 
 Charts that are preconfigured to enable Argo workflows on Ark are available so that you can rapidly build out use cases.
 
-## Installation
+## Installing
 
 This installs Argo in single-namespace mode within the Ark tenant namespace (typically `default` in development mode). Production installations will typically use a cross-tenant Argo operator with workflow execution distributed across Ark tenant namespaces.
 
@@ -24,14 +24,14 @@ cd services/argo-workflows
 devspace dev
 
 # Check status
-kubectl get pods
+kubectl get pods -l app.kubernetes.io/part-of=argo-workflows
 
 # Port-forward to dashboard (this is done automatically when using devspace).
 kubectl port-forward svc/argo-workflows-server 2746:2746
 # Dashboard: http://localhost:2746
 ```
 
-### With Minio Artifact Storage
+### Minio Artifact Storage
 
 Argo Workflows can use Minio for storing workflow artifacts like intermediate outputs, logs, and data files. This is useful for passing data between workflow steps or preserving workflow outputs.
 
@@ -44,6 +44,9 @@ helm upgrade minio-operator operator \
   --namespace minio-operator \
   --create-namespace \
   --version 7.1.1
+
+# Check status
+kubectl get pods -n minio-operator
 ```
 
 Then enable Minio in the Argo Workflows chart:
@@ -56,27 +59,49 @@ helm upgrade --install argo-workflows \
 # Or for local development:
 cd services/argo-workflows
 devspace dev  # Select 'true' when prompted to enable Minio
+
+# Check Minio tenant status
+kubectl get tenant
 ```
 
 When using `devspace dev`, you'll be prompted whether to enable Minio artifact storage. If enabled, DevSpace automatically installs the Minio Operator and tenant.
 
-To uninstall:
+## Uninstalling
+
+Uninstall Argo workflows:
 
 ```bash
-# Uninstall a Helm installation.
+# Uninstall a Helm installation
 helm uninstall argo-workflows
 
-# Or purge if using devspace.
+# Or purge if using devspace
 devspace purge
 ```
 
-Note: by default, the Argo chart does NOT remove installed CRDs, so that user's data is not deleted unexpectedly (this behaviour is conventional for Kubernetes). This means that re-installing to a different namespace will cause a clash. If you need to remove Argo CRDs (such as `Workflow`, `WorkflowTemplate`) then run:
+Note: by default, the Argo chart does NOT remove installed CRDs to prevent accidental data deletion. This means re-installing to a different namespace will cause a clash.
+
+To remove Argo CRDs (including `Workflow`, `WorkflowTemplate`, etc.):
 
 ```bash
 kubectl get crd -o name | grep argoproj.io | xargs kubectl delete
 ```
 
-This will delete all workflows, templates, etc, from the cluster - do so with caution.
+This will delete all workflows, templates, and related data from the cluster. Use with caution.
+
+### Uninstalling Minio
+
+If you enabled Minio artifact storage, you can optionally uninstall it:
+
+```bash
+# Uninstall Minio Operator
+helm uninstall minio-operator --namespace minio-operator
+```
+
+Note: Similar to Argo, removing Minio CRDs will delete stored artifacts and data:
+
+```bash
+kubectl get crd -o name | grep min.io | xargs kubectl delete
+```
 
 ## Running Workflows
 
