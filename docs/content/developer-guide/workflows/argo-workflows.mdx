@@ -179,7 +179,7 @@ The `a2a-arithmetic-workflow.yaml` demonstrates combining A2A agents, Ark agents
 Install [mock-llm](https://github.com/dwmkerr/mock-llm) with A2A support - this will create a simple `countdown-agent` that returns an A2A task that counts down from a given input number of seconds:
 
 ```bash
-helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+helm upgrade --install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
   --set ark.a2a.enabled=true
 
 # Check the A2A server is ready
