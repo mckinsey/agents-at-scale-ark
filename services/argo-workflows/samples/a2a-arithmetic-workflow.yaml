@@ -162,7 +162,7 @@ spec:
               value: "{{inputs.parameters.countdown-seconds}}"
           targets:
             - name: mock-llm-countdown
-              type: a2aserver
+              type: agent
           timeout: 2m
           ttl: 1h
         EOF
