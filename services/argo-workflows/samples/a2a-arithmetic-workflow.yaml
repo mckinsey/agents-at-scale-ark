@@ -12,6 +12,8 @@ spec:
   serviceAccountName: argo-workflow
 
   arguments:
+    # Input parameters - 'a' is left hand side, 'b' is right hand side, the two
+    # numbers are multiplied together.
     parameters:
       - name: a
         value: "1"
@@ -22,9 +24,11 @@ spec:
   - name: main
     dag:
       tasks:
+      # This will ensure the required A2A server and agents are available.
       - name: prepare-resources
         template: prepare-resources
 
+      # This will start a countdown.
       - name: countdown-start
         template: a2a-agent-countdown
         dependencies: [prepare-resources]
@@ -35,8 +39,9 @@ spec:
           - name: countdown-seconds
             value: "5"
 
-      - name: add-numbers
-        template: python-add
+      # Multiply the two numbers together.
+      - name: multiply
+        template: python-multiply
         dependencies: [countdown-start]
         arguments:
           parameters:
@@ -45,37 +50,25 @@ spec:
           - name: b
             value: "{{workflow.parameters.b}}"
 
-      - name: multiply-result
-        template: python-multiply
-        dependencies: [add-numbers]
-        arguments:
-          parameters:
-          - name: input-number
-            value: "{{tasks.add-numbers.outputs.parameters.result}}"
-
+      # Use an agent to show facts about the result.
       - name: number-facts
         template: ark-agent-curiosa
-        dependencies: [multiply-result]
+        dependencies: [multiply]
         arguments:
           parameters:
           - name: final-number
-            value: "{{tasks.multiply-result.outputs.parameters.result}}"
+            value: "{{tasks.multiply.outputs.parameters.result}}"
 
   - name: prepare-resources
     script:
       image: alpine/k8s:1.28.13
       command: [sh]
       source: |
-        # Check if mock-llm A2A server exists (required)
-        if ! kubectl get a2aserver mock-llm-countdown >/dev/null 2>&1; then
-          echo "ERROR: A2A server 'mock-llm-countdown' not found"
-          echo "Install with: helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm --version 0.1.8 --set ark.a2a.enabled=true"
-          exit 1
-        fi
+        # Verify A2A server exists (will fail with clear error if missing)
+        kubectl get a2aserver mock-llm-countdown
 
-        # Create number-curiosa agent if it doesn't exist
-        if ! kubectl get agent number-curiosa >/dev/null 2>&1; then
-          cat <<EOF | kubectl apply -f -
+        # Create number-curiosa agent
+        cat <<EOF | kubectl apply -f -
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Agent
         metadata:
@@ -90,9 +83,8 @@ spec:
               type: string
               required: true
         EOF
-        fi
 
-  - name: python-add
+  - name: python-multiply
     inputs:
       parameters:
         - name: a
@@ -103,33 +95,12 @@ spec:
       source: |
         a = int("{{inputs.parameters.a}}")
         b = int("{{inputs.parameters.b}}")
-        result = a + b
+        result = a * b
 
         with open('/tmp/result.txt', 'w') as f:
             f.write(str(result))
 
-        print(f"{a} + {b} = {result}")
-    outputs:
-      parameters:
-      - name: result
-        valueFrom:
-          path: /tmp/result.txt
-
-  - name: python-multiply
-    inputs:
-      parameters:
-        - name: input-number
-    script:
-      image: python:3.12-slim
-      command: [python]
-      source: |
-        num = int("{{inputs.parameters.input-number}}")
-        result = num * 3
-
-        with open('/tmp/result.txt', 'w') as f:
-            f.write(str(result))
-
-        print(f"{num} × 3 = {result}")
+        print(f"{a} × {b} = {result}")
     outputs:
       parameters:
       - name: result
