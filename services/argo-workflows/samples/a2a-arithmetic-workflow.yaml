@@ -164,7 +164,7 @@ spec:
             - name: seconds
               value: "{{inputs.parameters.countdown-seconds}}"
           targets:
-            - name: mock-llm-countdown
+            - name: countdown-agent
               type: agent
           timeout: 2m
           ttl: 1h
