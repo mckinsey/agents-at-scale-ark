@@ -1,52 +1,59 @@
-import { useState } from "react"
-import { Plus, Copy, Check, ArrowUpRightIcon } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { ArrowUpRightIcon, Check, Copy, Plus } from 'lucide-react';
+import { useState } from 'react';
 
-import { PageHeader } from "@/components/common/page-header"
+import { PageHeader } from '@/components/common/page-header';
+import { AddAPIKeyDialog } from '@/components/dialogs/add-api-key-dialog';
+import { APIKeyCreatedDialog } from '@/components/dialogs/api-key-created-dialog';
+import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
+import { Button } from '@/components/ui/button';
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
 import {
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
-  TableRow
-} from "@/components/ui/table"
+  TableRow,
+} from '@/components/ui/table';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
-  TooltipTrigger
-} from "@/components/ui/tooltip"
-import { type APIKey, type APIKeyCreateResponse } from "@/lib/services"
-import { useListAPIKeys, useDeleteAPIKey } from "@/lib/services/api-keys-hooks"
-import { AddAPIKeyDialog } from "@/components/dialogs/add-api-key-dialog"
-import { APIKeyCreatedDialog } from "@/components/dialogs/api-key-created-dialog"
-import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog"
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
-import { DASHBOARD_SECTIONS } from "@/lib/constants"
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import { type APIKey, type APIKeyCreateResponse } from '@/lib/services';
+import { useDeleteAPIKey, useListAPIKeys } from '@/lib/services/api-keys-hooks';
 
 function DataTable({
   data,
   onRevoke,
-  onCreate
+  onCreate,
 }: {
-  data: APIKey[]
-  onRevoke: (apiKey: APIKey) => void
-  onCreate: () => void
+  data: APIKey[];
+  onRevoke: (apiKey: APIKey) => void;
+  onCreate: () => void;
 }) {
-  const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  const Icon = DASHBOARD_SECTIONS["api-keys"].icon
+  const Icon = DASHBOARD_SECTIONS['api-keys'].icon;
 
   const copyToClipboard = async (text: string, keyId: string) => {
     try {
-      await navigator.clipboard.writeText(text)
-      setCopiedKey(keyId)
-      setTimeout(() => setCopiedKey(null), 2000)
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(keyId);
+      setTimeout(() => setCopiedKey(null), 2000);
     } catch (err) {
-      console.error('Failed to copy to clipboard:', err)
+      console.error('Failed to copy to clipboard:', err);
     }
-  }
+  };
   return (
     <div className="overflow-hidden rounded-md border">
       <Table>
@@ -62,7 +69,7 @@ function DataTable({
         </TableHeader>
         <TableBody>
           {data.length ? (
-            data.map((apiKey) => (
+            data.map(apiKey => (
               <TableRow key={apiKey.id}>
                 <TableCell className="font-medium">{apiKey.name}</TableCell>
                 <TableCell className="font-mono text-sm">
@@ -75,33 +82,37 @@ function DataTable({
                             size="sm"
                             variant="ghost"
                             className="h-6 w-6 p-0"
-                            onClick={() => copyToClipboard(apiKey.public_key, apiKey.id)}
-                          >
-                            {copiedKey === apiKey.id ?
-                              <Check className="h-3 w-3" /> :
+                            onClick={() =>
+                              copyToClipboard(apiKey.public_key, apiKey.id)
+                            }>
+                            {copiedKey === apiKey.id ? (
+                              <Check className="h-3 w-3" />
+                            ) : (
                               <Copy className="h-3 w-3" />
-                            }
+                            )}
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          {copiedKey === apiKey.id ? "Copied!" : "Copy public key"}
+                          {copiedKey === apiKey.id
+                            ? 'Copied!'
+                            : 'Copy public key'}
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>
                 </TableCell>
-                <TableCell>{new Date(apiKey.created_at).toLocaleString()}</TableCell>
+                <TableCell>
+                  {new Date(apiKey.created_at).toLocaleString()}
+                </TableCell>
                 <TableCell>
                   {apiKey.last_used_at
                     ? new Date(apiKey.last_used_at).toLocaleString()
-                    : "Never"
-                  }
+                    : 'Never'}
                 </TableCell>
                 <TableCell>
                   {apiKey.expires_at
                     ? new Date(apiKey.expires_at).toLocaleString()
-                    : "Never"
-                  }
+                    : 'Never'}
                 </TableCell>
                 <TableCell>
                   <TooltipProvider>
@@ -110,8 +121,7 @@ function DataTable({
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => onRevoke(apiKey)}
-                        >
+                          onClick={() => onRevoke(apiKey)}>
                           Revoke
                         </Button>
                       </TooltipTrigger>
@@ -133,8 +143,8 @@ function DataTable({
                     </EmptyMedia>
                     <EmptyTitle>No API Keys Yet</EmptyTitle>
                     <EmptyDescription>
-                      You haven&apos;t created any API Keys yet. Get started by creating
-                      your first API Key.
+                      You haven&apos;t created any API Keys yet. Get started by
+                      creating your first API Key.
                     </EmptyDescription>
                   </EmptyHeader>
                   <EmptyContent>
@@ -147,9 +157,10 @@ function DataTable({
                     variant="link"
                     asChild
                     className="text-muted-foreground"
-                    size="sm"
-                  >
-                    <a href="https://mckinsey.github.io/agents-at-scale-ark/" target="_blank">
+                    size="sm">
+                    <a
+                      href="https://mckinsey.github.io/agents-at-scale-ark/"
+                      target="_blank">
                       Learn More <ArrowUpRightIcon />
                     </a>
                   </Button>
@@ -160,72 +171,69 @@ function DataTable({
         </TableBody>
       </Table>
     </div>
-  )
+  );
 }
 
 export function ApiKeysSection() {
-  const [addDialogOpen, setAddDialogOpen] = useState(false)
-  const [createdApiKey, setCreatedApiKey] = useState<APIKeyCreateResponse | null>(null)
-  const [successDialogOpen, setSuccessDialogOpen] = useState(false)
-  const [revokeDialogOpen, setRevokeDialogOpen] = useState(false)
-  const [apiKeyToRevoke, setApiKeyToRevoke] = useState<APIKey | null>(null)
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [createdApiKey, setCreatedApiKey] =
+    useState<APIKeyCreateResponse | null>(null);
+  const [successDialogOpen, setSuccessDialogOpen] = useState(false);
+  const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
+  const [apiKeyToRevoke, setApiKeyToRevoke] = useState<APIKey | null>(null);
 
-  const { data: apiKeysData, isPending: loading, error } = useListAPIKeys()
-  const deleteAPIKeyMutation = useDeleteAPIKey()
+  const { data: apiKeysData, isPending: loading, error } = useListAPIKeys();
+  const deleteAPIKeyMutation = useDeleteAPIKey();
 
-  const apiKeys = apiKeysData?.items || []
+  const apiKeys = apiKeysData?.items || [];
 
   const handleApiKeyCreated = (response: APIKeyCreateResponse) => {
-    setCreatedApiKey(response)
-    setSuccessDialogOpen(true)
-  }
+    setCreatedApiKey(response);
+    setSuccessDialogOpen(true);
+  };
 
   const handleRevoke = (apiKey: APIKey) => {
-    setApiKeyToRevoke(apiKey)
-    setRevokeDialogOpen(true)
-  }
+    setApiKeyToRevoke(apiKey);
+    setRevokeDialogOpen(true);
+  };
 
   const confirmRevoke = async () => {
-    if (!apiKeyToRevoke) return
+    if (!apiKeyToRevoke) return;
 
-    await deleteAPIKeyMutation.mutateAsync(apiKeyToRevoke.public_key)
-    setRevokeDialogOpen(false)
-    setApiKeyToRevoke(null)
-  }
+    await deleteAPIKeyMutation.mutateAsync(apiKeyToRevoke.public_key);
+    setRevokeDialogOpen(false);
+    setApiKeyToRevoke(null);
+  };
 
   if (loading) {
     return (
       <>
-        <PageHeader
-          currentPage="Service API Keys"
-        />
+        <PageHeader currentPage="Service API Keys" />
         <div className="flex flex-1 flex-col">
           <main className="flex-1 overflow-auto p-4">
-            <div className="text-center py-8">
-              Loading API keys...
-            </div>
+            <div className="py-8 text-center">Loading API keys...</div>
           </main>
         </div>
       </>
-    )
+    );
   }
 
   if (error) {
     return (
       <>
-        <PageHeader
-          currentPage="Service API Keys"
-        />
+        <PageHeader currentPage="Service API Keys" />
         <div className="flex flex-1 flex-col">
           <main className="flex-1 overflow-auto p-4">
-            <div className="text-red-600 bg-red-50 border border-red-200 rounded-md p-4">
+            <div className="rounded-md border border-red-200 bg-red-50 p-4 text-red-600">
               <p className="font-medium">Error loading API keys</p>
-              <p className="text-sm mt-1">{error instanceof Error ? error.message : String(error)}</p>
+              <p className="mt-1 text-sm">
+                {error instanceof Error ? error.message : String(error)}
+              </p>
             </div>
           </main>
         </div>
       </>
-    )
+    );
   }
 
   return (
@@ -233,9 +241,7 @@ export function ApiKeysSection() {
       <PageHeader
         currentPage="Service API Keys"
         actions={
-          <Button
-            onClick={() => setAddDialogOpen(true)}
-          >
+          <Button onClick={() => setAddDialogOpen(true)}>
             <Plus className="h-4 w-4" />
             Create API Key
           </Button>
@@ -243,7 +249,11 @@ export function ApiKeysSection() {
       />
       <div className="flex flex-1 flex-col">
         <main className="flex-1 overflow-auto p-4">
-          <DataTable data={apiKeys} onRevoke={handleRevoke} onCreate={() => setAddDialogOpen(true)} />
+          <DataTable
+            data={apiKeys}
+            onRevoke={handleRevoke}
+            onCreate={() => setAddDialogOpen(true)}
+          />
         </main>
       </div>
 
@@ -268,13 +278,13 @@ export function ApiKeysSection() {
         description={
           apiKeyToRevoke
             ? `Revoke API key "${apiKeyToRevoke.name}" (${apiKeyToRevoke.public_key})? This action cannot be undone and will immediately invalidate the key.`
-            : ""
+            : ''
         }
-        confirmText={deleteAPIKeyMutation.isPending ? "Revoking..." : "Revoke"}
+        confirmText={deleteAPIKeyMutation.isPending ? 'Revoking...' : 'Revoke'}
         cancelText="Cancel"
         onConfirm={confirmRevoke}
         variant="destructive"
       />
     </>
-  )
+  );
 }

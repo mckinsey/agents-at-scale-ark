@@ -47,7 +47,7 @@ spec:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
-        timeout: 10m
+        timeout: 5m
         name: test-direct-evaluation
         for:
           jsonPath:

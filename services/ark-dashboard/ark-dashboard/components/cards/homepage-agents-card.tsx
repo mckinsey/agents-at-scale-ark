@@ -1,10 +1,12 @@
-"use client";
+'use client';
 
-import { MetricCard } from "./metric-card";
-import { DASHBOARD_SECTIONS } from "@/lib/constants";
-import { useGetAllAgents } from "@/lib/services/agents-hooks";
-import { useEffect } from "react";
-import { toast } from "sonner";
+import { useEffect } from 'react';
+import { toast } from 'sonner';
+
+import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import { useGetAllAgents } from '@/lib/services/agents-hooks';
+
+import { MetricCard } from './metric-card';
 
 export function HomepageAgentsCard() {
   const { data, isPending, error } = useGetAllAgents();
@@ -16,11 +18,11 @@ export function HomepageAgentsCard() {
 
   useEffect(() => {
     if (error) {
-      toast.error("Failed to get Agents", {
+      toast.error('Failed to get Agents', {
         description:
           error instanceof Error
             ? error.message
-            : "An unexpected error occurred"
+            : 'An unexpected error occurred',
       });
     }
   }, [error]);

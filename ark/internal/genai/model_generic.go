@@ -20,12 +20,13 @@ type ConfigProvider interface {
 }
 
 type Model struct {
-	Model        string
-	Type         string
-	Properties   map[string]string
-	Provider     ChatCompletionProvider
-	OutputSchema *runtime.RawExtension
-	SchemaName   string
+	Model         string
+	Type          string
+	Properties    map[string]string
+	Provider      ChatCompletionProvider
+	OutputSchema  *runtime.RawExtension
+	SchemaName    string
+	ModelRecorder telemetry.ModelRecorder
 }
 
 func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStream EventStreamInterface, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
@@ -33,35 +34,26 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStr
 		return nil, nil
 	}
 
-	// Create telemetry span for all model calls
-	tracer := telemetry.NewTraceContext()
-	spanType := "llm.chat_completion"
-	if eventStream != nil {
-		spanType = "llm.chat_completion_stream"
-	}
-	ctx, span := tracer.StartSpan(ctx, spanType)
+	ctx, span := m.ModelRecorder.StartModelExecution(ctx, m.Model, m.Type)
 	defer span.End()
 
-	// Set input and model details
 	otelMessages := make([]openai.ChatCompletionMessageParamUnion, len(messages))
 	for i, msg := range messages {
 		otelMessages[i] = openai.ChatCompletionMessageParamUnion(msg)
 	}
-	telemetry.SetLLMCompletionInput(span, otelMessages)
-	telemetry.AddModelDetails(span, m.Model, m.Type, telemetry.ExtractProviderFromType(m.Type), m.Properties)
 
-	var response *openai.ChatCompletion
-	var err error
+	m.ModelRecorder.RecordInput(span, otelMessages)
+	m.ModelRecorder.RecordModelDetails(span, m.Model, m.Type)
 
-	// Set output schema if provided
 	if m.OutputSchema != nil {
 		m.Provider.SetOutputSchema(m.OutputSchema, m.SchemaName)
 	}
 
-	// Use streaming if event stream is provided
+	var response *openai.ChatCompletion
+	var err error
+
 	if eventStream != nil {
 		response, err = m.Provider.ChatCompletionStream(ctx, messages, n, func(chunk *openai.ChatCompletionChunk) error {
-			// Wrap chunk with ARK metadata
 			chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, m.Model)
 			return eventStream.StreamChunk(ctx, chunkWithMeta)
 		}, tools...)
@@ -70,21 +62,22 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStr
 	}
 
 	if err != nil {
-		telemetry.RecordError(span, err)
+		m.ModelRecorder.RecordError(span, err)
 		return nil, err
 	}
 
-	// Check for nil response
 	if response == nil {
 		err := fmt.Errorf("model provider returned nil response without error")
-		telemetry.RecordError(span, err)
+		m.ModelRecorder.RecordError(span, err)
 		return nil, err
 	}
 
-	// Set output and token usage
-	telemetry.SetLLMCompletionOutput(span, response)
-	telemetry.AddLLMTokenUsage(span, response.Usage.PromptTokens, response.Usage.CompletionTokens, response.Usage.TotalTokens)
-	telemetry.RecordSuccess(span)
+	if len(response.Choices) > 0 {
+		m.ModelRecorder.RecordOutput(span, response.Choices[0].Message)
+	}
+
+	m.ModelRecorder.RecordTokenUsage(span, response.Usage.PromptTokens, response.Usage.CompletionTokens, response.Usage.TotalTokens)
+	m.ModelRecorder.RecordSuccess(span)
 
 	return response, nil
 }

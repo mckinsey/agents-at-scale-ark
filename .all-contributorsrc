@@ -329,6 +329,59 @@
         "bug",
         "doc"
       ]
+    },
+    {
+      "login": "danielemarostica",
+      "name": "Daniele Marostica",
+      "avatar_url": "https://avatars.githubusercontent.com/u/11430162?v=4",
+      "profile": "https://github.com/danielemarostica",
+      "contributions": [
+        "code",
+        "bug",
+        "test"
+      ]
+    },
+    {
+      "login": "daniele-marostica",
+      "name": "Daniele",
+      "avatar_url": "https://avatars.githubusercontent.com/u/238710818?v=4",
+      "profile": "https://github.com/daniele-marostica",
+      "contributions": [
+        "code",
+        "bug",
+        "test"
+      ]
+    },
+    {
+      "login": "DebanjanBanerjeeQB",
+      "name": "Debanjan Banerjee",
+      "avatar_url": "https://avatars.githubusercontent.com/u/95921104?v=4",
+      "profile": "https://github.com/DebanjanBanerjeeQB",
+      "contributions": [
+        "code",
+        "bug",
+        "test"
+      ]
+    },
+    {
+      "login": "pkg-mck",
+      "name": "Praveen Gandhi",
+      "avatar_url": "https://avatars.githubusercontent.com/u/96068714?v=4",
+      "profile": "https://github.com/pkg-mck",
+      "contributions": [
+        "doc",
+        "bug"
+      ]
+    },
+    {
+      "login": "marcklingen",
+      "name": "Marc Klingen",
+      "avatar_url": "https://avatars.githubusercontent.com/u/2834609?v=4",
+      "profile": "http://marcklingen.com",
+      "contributions": [
+        "doc",
+        "code"
+      ]
     }
   ],
   "contributorsPerLine": 7,

@@ -22,9 +22,9 @@ type ProbeResult struct {
 
 // ProbeModel tests if a model is available
 func ProbeModel(ctx context.Context, model *Model) ProbeResult {
-	// Create probe context with 30s timeout
+	// Create probe context with 30s timeout, inheriting trace context from parent
 	timeout := 30 * time.Second
-	probeCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	probeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	// Simple test message

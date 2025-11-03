@@ -6,10 +6,13 @@ ARK_CLI_OUT := $(OUT)/$(ARK_CLI_SERVICE_NAME)
 
 # Service-specific variables
 ARK_CLI_DIST := $(ARK_CLI_SERVICE_DIR)/dist
+ARK_CLI_IMAGE := agents-at-scale/ark
+ARK_CLI_TAG ?= alpine
 
 # Pre-calculate all stamp paths
 ARK_CLI_STAMP_DEPS := $(ARK_CLI_OUT)/stamp-deps
 ARK_CLI_STAMP_BUILD := $(ARK_CLI_OUT)/stamp-build
+ARK_CLI_STAMP_DOCKER := $(ARK_CLI_OUT)/stamp-docker
 ARK_CLI_STAMP_INSTALL := $(ARK_CLI_OUT)/stamp-install
 ARK_CLI_STAMP_TEST := $(ARK_CLI_OUT)/stamp-test
 
@@ -21,7 +24,7 @@ CLEAN_TARGETS += $(ARK_CLI_SERVICE_DIR)/dist
 CLEAN_TARGETS += $(ARK_CLI_SERVICE_DIR)/coverage
 
 # Define phony targets
-.PHONY: $(ARK_CLI_SERVICE_NAME)-build $(ARK_CLI_SERVICE_NAME)-install $(ARK_CLI_SERVICE_NAME)-dev $(ARK_CLI_SERVICE_NAME)-test $(ARK_CLI_SERVICE_NAME)-uninstall
+.PHONY: $(ARK_CLI_SERVICE_NAME)-build $(ARK_CLI_SERVICE_NAME)-docker $(ARK_CLI_SERVICE_NAME)-install $(ARK_CLI_SERVICE_NAME)-dev $(ARK_CLI_SERVICE_NAME)-test $(ARK_CLI_SERVICE_NAME)-uninstall
 
 # Dependencies
 $(ARK_CLI_SERVICE_NAME)-deps: $(ARK_CLI_STAMP_DEPS)
@@ -30,10 +33,17 @@ $(ARK_CLI_STAMP_DEPS): $(ARK_CLI_SERVICE_DIR)/package.json | $(OUT)
 	cd $(ARK_CLI_SERVICE_DIR) && npm install
 	@touch $@
 
-# Build target
-$(ARK_CLI_SERVICE_NAME)-build: $(ARK_CLI_STAMP_BUILD) # HELP: Build ARK CLI tool Docker image
+# Build target (TypeScript compilation)
+$(ARK_CLI_SERVICE_NAME)-build: $(ARK_CLI_STAMP_BUILD) # HELP: Build ARK CLI tool
 $(ARK_CLI_STAMP_BUILD): $(ARK_CLI_STAMP_DEPS)
 	cd $(ARK_CLI_SERVICE_DIR) && npm run build
+	@touch $@
+
+# Docker build target
+$(ARK_CLI_SERVICE_NAME)-docker: $(ARK_CLI_STAMP_DOCKER) # HELP: Build ARK CLI tool Docker image
+$(ARK_CLI_STAMP_DOCKER): $(ARK_CLI_SERVICE_DIR)/Dockerfile $(ARK_CLI_SERVICE_DIR)/package.json | $(OUT)
+	@mkdir -p $(dir $@)
+	cd $(ARK_CLI_SERVICE_DIR) && docker build -t $(ARK_CLI_IMAGE):$(ARK_CLI_TAG) .
 	@touch $@
 
 # Install target (installs globally on local machine)

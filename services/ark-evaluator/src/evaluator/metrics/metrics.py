@@ -46,24 +46,21 @@ class MetricsCalculator:
             token_score = self._calculate_token_score(metrics)
             cost_score = self._calculate_cost_score(metrics)
             performance_score = self._calculate_performance_score(metrics)
-            quality_score = self._calculate_quality_score(metrics)
-            
+
             # Weight the scores based on parameters or defaults
             weights = self._get_score_weights()
-            
+
             overall_score = (
                 token_score * weights["token"] +
                 cost_score * weights["cost"] +
-                performance_score * weights["performance"] +
-                quality_score * weights["quality"]
+                performance_score * weights["performance"]
             )
-            
+
             # Update metrics with individual scores and violations
             self._update_metrics_with_scores(metrics, {
                 "tokenScore": token_score,
                 "costScore": cost_score,
-                "performanceScore": performance_score,
-                "qualityScore": quality_score
+                "performanceScore": performance_score
             })
             
             logger.info(f"Calculated overall score: {overall_score:.2f}")
@@ -175,47 +172,6 @@ class MetricsCalculator:
             
         except Exception as e:
             logger.warning(f"Failed to calculate performance score: {e}")
-            return 0.5
-    
-    def _calculate_quality_score(self, metrics: Dict[str, Any]) -> float:
-        """Calculate response quality score"""
-        try:
-            score = 1.0
-            
-            # Check response length
-            total_response_length = metrics.get("totalResponseLength", 0)
-            min_length = self._get_threshold("minResponseLength", 50)
-            max_length = self._get_threshold("maxResponseLength", 2000)
-            
-            if total_response_length > 0:
-                if total_response_length < min_length:
-                    metrics.setdefault("threshold_violations", []).append("minResponseLength")
-                    score *= 0.5  # Significant penalty for too short
-                elif total_response_length > max_length:
-                    metrics.setdefault("threshold_violations", []).append("maxResponseLength")
-                    score *= 0.8  # Minor penalty for too long
-                else:
-                    metrics.setdefault("passed_thresholds", []).append("responseLength")
-            
-            # Check response completeness
-            completeness = metrics.get("responseCompleteness", 0)
-            completeness_threshold = self._get_threshold("responseCompletenessThreshold", 0.8)
-            
-            if completeness >= completeness_threshold:
-                score = min(1.0, score + 0.1)  # Bonus for completeness
-                metrics.setdefault("passed_thresholds", []).append("responseCompleteness")
-            
-            # Penalty for errors
-            if metrics.get("hasErrors", False):
-                metrics.setdefault("threshold_violations", []).append("errorRate")
-                score *= 0.3  # Significant penalty for errors
-            else:
-                metrics.setdefault("passed_thresholds", []).append("errorRate")
-            
-            return max(0.0, min(1.0, score))
-            
-        except Exception as e:
-            logger.warning(f"Failed to calculate quality score: {e}")
             return 0.5
     
     def _calculate_query_cost(self, metrics: Dict[str, Any]) -> None:
@@ -346,10 +302,9 @@ class MetricsCalculator:
     def _get_score_weights(self) -> Dict[str, float]:
         """Get scoring weights from parameters or defaults"""
         return {
-            "token": float(self.parameters.get("tokenWeight", 0.3)),
-            "cost": float(self.parameters.get("costWeight", 0.3)),
-            "performance": float(self.parameters.get("performanceWeight", 0.2)),
-            "quality": float(self.parameters.get("qualityWeight", 0.2))
+            "token": float(self.parameters.get("tokenWeight", 0.35)),
+            "cost": float(self.parameters.get("costWeight", 0.35)),
+            "performance": float(self.parameters.get("performanceWeight", 0.30))
         }
     
     def _get_threshold(self, param_name: str, default_value) -> Any:

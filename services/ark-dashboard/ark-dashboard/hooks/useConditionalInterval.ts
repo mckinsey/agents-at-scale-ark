@@ -1,15 +1,15 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef } from 'react';
 
 type UseConditionalIntervalOptions = {
   callback: () => void;
   delay: number;
   condition: boolean;
-}
+};
 
 export function useConditionalInterval({
   callback,
   delay,
-  condition
+  condition,
 }: UseConditionalIntervalOptions) {
   const savedCallback = useRef<(() => void) | null>(null);
 

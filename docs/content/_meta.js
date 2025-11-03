@@ -5,5 +5,6 @@ export default {
   'developer-guide': "Developer Guide",
   'operations-guide': 'Operations Guide',
   reference: 'Reference',
+  marketplace: 'Marketplace',
   disclaimer: 'Disclaimer'
 }

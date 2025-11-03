@@ -1,0 +1,53 @@
+# Phoenix wrapper chart values
+
+# Global annotations
+global:
+  annotations:
+    ark.mckinsey.com/service: phoenix
+
+# HTTPRoute configuration (Gateway API - modern routing method)
+# Disabled by default. Enable this for Gateway API routing with namespace-based access.
+# Example values below show localhost development setup.
+httpRoute:
+  enabled: false
+  annotations: {}
+    # Custom annotations can be added here
+  # Gateway references
+  parentRefs:
+    - name: localhost-gateway
+      namespace: ark-system
+  # Hostnames this route matches
+  hostnames:
+    - "phoenix-svc.phoenix.127.0.0.1.nip.io"
+
+# Service configuration for OTEL
+service:
+  name: phoenix-svc
+  port: 6006
+
+# Namespace configuration
+namespace: phoenix
+
+# OTEL environment variable secrets - creates secrets in specified namespaces
+# To use in deployments, add this to container spec:
+#   envFrom:
+#   - secretRef:
+#       name: otel-environment-variables
+#       optional: true
+#
+# Note: Existing deployments must be restarted to pick up new/updated secrets:
+#   kubectl rollout restart deployment/<name> -n <namespace>
+otelEnvironmentVariableSecrets:
+  enabled: true
+  namespaces:
+    - ark-system
+    - default
+
+# Phoenix helm chart values (passed to dependency)
+phoenix-helm:
+  service:
+    type: ClusterIP
+  auth:
+    enableAuth: false
+  ingress:
+    enabled: false

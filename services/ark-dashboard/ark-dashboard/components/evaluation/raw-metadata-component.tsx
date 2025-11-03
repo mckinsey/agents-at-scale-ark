@@ -1,16 +1,17 @@
-"use client";
+'use client';
 
-import { Button } from "@/components/ui/button";
+import { Code, Copy } from 'lucide-react';
+import { toast } from 'sonner';
+
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle
-} from "@/components/ui/card";
-import { toast } from "sonner";
-import { EnhancedEvaluationMetadata } from "@/lib/services/evaluations";
-import { Code, Copy } from "lucide-react";
+  CardTitle,
+} from '@/components/ui/card';
+import type { EnhancedEvaluationMetadata } from '@/lib/services/evaluations';
 
 interface RawMetadataComponentProps {
   metadata: EnhancedEvaluationMetadata;
@@ -22,26 +23,26 @@ interface RawMetadataComponentProps {
 export function RawMetadataComponent({
   metadata,
   rawMetadata,
-  title = "Raw Metadata",
-  description = "Complete metadata for debugging and analysis"
+  title = 'Raw Metadata',
+  description = 'Complete metadata for debugging and analysis',
 }: RawMetadataComponentProps) {
   // Combine enhanced metadata with raw metadata
   const combinedMetadata = {
     enhanced_metadata: metadata,
-    ...(rawMetadata || {})
+    ...(rawMetadata || {}),
   };
 
   const handleCopyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(
-        JSON.stringify(combinedMetadata, null, 2)
+        JSON.stringify(combinedMetadata, null, 2),
       );
-      toast("Copied to Clipboard", {
-        description: "Metadata has been copied to your clipboard"
+      toast('Copied to Clipboard', {
+        description: 'Metadata has been copied to your clipboard',
       });
     } catch {
-      toast.error("Copy Failed", {
-        description: "Failed to copy metadata to clipboard"
+      toast.error('Copy Failed', {
+        description: 'Failed to copy metadata to clipboard',
       });
     }
   };
@@ -51,9 +52,9 @@ export function RawMetadataComponent({
     Object.keys(combinedMetadata).length > 1 ||
     (Object.keys(combinedMetadata).length === 1 &&
       Object.keys(metadata).some(
-        (key) =>
+        key =>
           metadata[key as keyof EnhancedEvaluationMetadata] !== undefined &&
-          metadata[key as keyof EnhancedEvaluationMetadata] !== null
+          metadata[key as keyof EnhancedEvaluationMetadata] !== null,
       ));
 
   if (!hasMetadata) {
@@ -75,8 +76,7 @@ export function RawMetadataComponent({
             variant="outline"
             size="sm"
             onClick={handleCopyToClipboard}
-            className="flex items-center gap-2"
-          >
+            className="flex items-center gap-2">
             <Copy className="h-3 w-3" />
             Copy
           </Button>
@@ -84,8 +84,8 @@ export function RawMetadataComponent({
       </CardHeader>
 
       <CardContent>
-        <div className="bg-muted/50 p-4 rounded-lg">
-          <pre className="text-sm overflow-x-auto whitespace-pre-wrap font-mono">
+        <div className="bg-muted/50 rounded-lg p-4">
+          <pre className="overflow-x-auto font-mono text-sm whitespace-pre-wrap">
             {JSON.stringify(combinedMetadata, null, 2)}
           </pre>
         </div>

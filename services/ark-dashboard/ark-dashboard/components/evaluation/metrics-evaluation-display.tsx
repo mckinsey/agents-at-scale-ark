@@ -1,20 +1,5 @@
-"use client";
+'use client';
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from "@/components/ui/card";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger
-} from "@/components/ui/collapsible";
-import { Progress } from "@/components/ui/progress";
 import {
   AlertTriangle,
   BarChart3,
@@ -25,9 +10,25 @@ import {
   Lightbulb,
   TrendingUp,
   XCircle,
-  Zap
-} from "lucide-react";
-import { useState } from "react";
+  Zap,
+} from 'lucide-react';
+import { useState } from 'react';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import { Progress } from '@/components/ui/progress';
 
 interface MetricData {
   name: string;
@@ -35,7 +36,7 @@ interface MetricData {
   threshold?: number | string;
   passed: boolean;
   unit?: string;
-  type: "cost" | "performance" | "token" | "quality" | "general";
+  type: 'cost' | 'performance' | 'token' | 'quality' | 'general';
   description?: string;
   recommendation?: string;
 }
@@ -45,7 +46,7 @@ interface ViolationData {
   currentValue: number | string;
   threshold: number | string;
   unit?: string;
-  severity: "high" | "medium" | "low";
+  severity: 'high' | 'medium' | 'low';
   recommendation: string;
 }
 
@@ -59,13 +60,13 @@ interface MetricsEvaluationDisplayProps {
 
 const getMetricIcon = (type: string) => {
   switch (type) {
-    case "cost":
+    case 'cost':
       return DollarSign;
-    case "performance":
+    case 'performance':
       return Zap;
-    case "token":
+    case 'token':
       return BarChart3;
-    case "quality":
+    case 'quality':
       return TrendingUp;
     default:
       return BarChart3;
@@ -73,14 +74,14 @@ const getMetricIcon = (type: string) => {
 };
 
 const formatValue = (value: number | string, unit?: string): string => {
-  if (typeof value === "number") {
-    if (unit === "s" || unit === "seconds") {
+  if (typeof value === 'number') {
+    if (unit === 's' || unit === 'seconds') {
       return `${value.toFixed(2)}s`;
     }
-    if (unit === "$" || unit === "cost") {
+    if (unit === '$' || unit === 'cost') {
       return `$${value.toFixed(4)}`;
     }
-    if (unit === "%" || unit === "percent") {
+    if (unit === '%' || unit === 'percent') {
       return `${(value * 100).toFixed(1)}%`;
     }
     return value.toFixed(2);
@@ -99,48 +100,48 @@ const parseViolationsFromReasoning = (reasoning: string): ViolationData[] => {
 
   if (durationMatch) {
     violations.push({
-      metric: "Duration",
-      currentValue: "Exceeded",
-      threshold: "1s",
-      unit: "s",
-      severity: "high",
-      recommendation: "Optimize query complexity or increase timeout threshold"
+      metric: 'Duration',
+      currentValue: 'Exceeded',
+      threshold: '1s',
+      unit: 's',
+      severity: 'high',
+      recommendation: 'Optimize query complexity or increase timeout threshold',
     });
   }
 
   if (costMatch) {
     violations.push({
-      metric: "Cost",
-      currentValue: "Exceeded",
-      threshold: "$1.00",
-      unit: "$",
-      severity: "medium",
+      metric: 'Cost',
+      currentValue: 'Exceeded',
+      threshold: '$1.00',
+      unit: '$',
+      severity: 'medium',
       recommendation:
-        "Use more cost-efficient models or reduce query complexity"
+        'Use more cost-efficient models or reduce query complexity',
     });
   }
 
   if (tokenMatch) {
     violations.push({
-      metric: "Token Usage",
-      currentValue: "Exceeded",
-      threshold: "10000",
-      unit: "tokens",
-      severity: "medium",
+      metric: 'Token Usage',
+      currentValue: 'Exceeded',
+      threshold: '10000',
+      unit: 'tokens',
+      severity: 'medium',
       recommendation:
-        "Reduce input length or use models with higher token limits"
+        'Reduce input length or use models with higher token limits',
     });
   }
 
   if (responseMatch) {
     violations.push({
-      metric: "Response Length",
-      currentValue: "Exceeded",
-      threshold: "Limit",
-      unit: "chars",
-      severity: "low",
+      metric: 'Response Length',
+      currentValue: 'Exceeded',
+      threshold: 'Limit',
+      unit: 'chars',
+      severity: 'low',
       recommendation:
-        "Request more concise responses or increase length threshold"
+        'Request more concise responses or increase length threshold',
     });
   }
 
@@ -149,7 +150,7 @@ const parseViolationsFromReasoning = (reasoning: string): ViolationData[] => {
 
 const extractMetricsFromMetadata = (
   metadata: Record<string, unknown>,
-  spec: Record<string, unknown>
+  spec: Record<string, unknown>,
 ): MetricData[] => {
   const metrics: MetricData[] = [];
   const evaluator = spec.evaluator as {
@@ -158,33 +159,36 @@ const extractMetricsFromMetadata = (
   const parameters = evaluator?.parameters || [];
 
   // Create parameter lookup for thresholds
-  const paramLookup = parameters.reduce((acc, param) => {
-    acc[param.name] = param.value;
-    return acc;
-  }, {} as Record<string, string>);
+  const paramLookup = parameters.reduce(
+    (acc, param) => {
+      acc[param.name] = param.value;
+      return acc;
+    },
+    {} as Record<string, string>,
+  );
 
   // Cost metrics
   if (metadata.cost !== undefined && metadata.cost_score !== undefined) {
     const cost =
-      typeof metadata.cost === "number"
+      typeof metadata.cost === 'number'
         ? metadata.cost
         : parseFloat(String(metadata.cost));
     const costScore =
-      typeof metadata.cost_score === "number"
+      typeof metadata.cost_score === 'number'
         ? metadata.cost_score
         : parseFloat(String(metadata.cost_score));
 
     if (!isNaN(cost) && !isNaN(costScore)) {
       metrics.push({
-        name: "Cost",
+        name: 'Cost',
         value: cost,
-        threshold: parseFloat(paramLookup.maxCostPerQuery || "1.0"),
+        threshold: parseFloat(paramLookup.maxCostPerQuery || '1.0'),
         passed: costScore >= 0.5,
-        unit: "$",
-        type: "cost",
-        description: "Total cost of query execution",
+        unit: '$',
+        type: 'cost',
+        description: 'Total cost of query execution',
         recommendation:
-          "Use more cost-efficient models or reduce query complexity"
+          'Use more cost-efficient models or reduce query complexity',
       });
     }
   }
@@ -195,29 +199,29 @@ const extractMetricsFromMetadata = (
     metadata.performance_score !== undefined
   ) {
     const executionTime = parseFloat(
-      String(metadata.execution_time).replace("s", "")
+      String(metadata.execution_time).replace('s', ''),
     );
     const maxDuration = parseFloat(
-      paramLookup.maxDuration?.replace("s", "") || "60"
+      paramLookup.maxDuration?.replace('s', '') || '60',
     );
     const performanceScore =
-      typeof metadata.performance_score === "number"
+      typeof metadata.performance_score === 'number'
         ? metadata.performance_score
         : parseFloat(String(metadata.performance_score));
 
     if (!isNaN(executionTime) && !isNaN(performanceScore)) {
       metrics.push({
-        name: "Execution Time",
+        name: 'Execution Time',
         value: executionTime,
         threshold: maxDuration,
         passed:
           performanceScore >=
-          parseFloat(paramLookup.performanceThreshold || "0.5"),
-        unit: "s",
-        type: "performance",
-        description: "Time taken to execute the query",
+          parseFloat(paramLookup.performanceThreshold || '0.5'),
+        unit: 's',
+        type: 'performance',
+        description: 'Time taken to execute the query',
         recommendation:
-          "Optimize query complexity or increase timeout threshold"
+          'Optimize query complexity or increase timeout threshold',
       });
     }
   }
@@ -228,23 +232,23 @@ const extractMetricsFromMetadata = (
     metadata.total_tokens !== undefined
   ) {
     const tokenScore =
-      typeof metadata.token_score === "number"
+      typeof metadata.token_score === 'number'
         ? metadata.token_score
         : parseFloat(String(metadata.token_score));
 
     if (!isNaN(tokenScore)) {
       metrics.push({
-        name: "Token Efficiency",
+        name: 'Token Efficiency',
         value: tokenScore,
-        threshold: parseFloat(paramLookup.tokenEfficiencyThreshold || "0.3"),
+        threshold: parseFloat(paramLookup.tokenEfficiencyThreshold || '0.3'),
         passed:
           tokenScore >=
-          parseFloat(paramLookup.tokenEfficiencyThreshold || "0.3"),
-        unit: "score",
-        type: "token",
-        description: "Efficiency of token usage",
+          parseFloat(paramLookup.tokenEfficiencyThreshold || '0.3'),
+        unit: 'score',
+        type: 'token',
+        description: 'Efficiency of token usage',
         recommendation:
-          "Reduce input length or use models with better token efficiency"
+          'Reduce input length or use models with better token efficiency',
       });
     }
   }
@@ -252,20 +256,20 @@ const extractMetricsFromMetadata = (
   // Quality metrics
   if (metadata.quality_score !== undefined) {
     const qualityScore =
-      typeof metadata.quality_score === "number"
+      typeof metadata.quality_score === 'number'
         ? metadata.quality_score
         : parseFloat(String(metadata.quality_score));
 
     if (!isNaN(qualityScore)) {
       metrics.push({
-        name: "Quality Score",
+        name: 'Quality Score',
         value: qualityScore,
         threshold: 0.7,
         passed: qualityScore >= 0.7,
-        unit: "score",
-        type: "quality",
-        description: "Overall quality of the response",
-        recommendation: "Improve prompt clarity or use higher-quality models"
+        unit: 'score',
+        type: 'quality',
+        description: 'Overall quality of the response',
+        recommendation: 'Improve prompt clarity or use higher-quality models',
       });
     }
   }
@@ -283,31 +287,29 @@ function MetricCard({ metric }: { metric: MetricData }) {
     <Card
       className={`${
         metric.passed
-          ? "border-green-200 bg-green-50/30"
-          : "border-red-200 bg-red-50/30"
-      } dark:bg-transparent`}
-    >
+          ? 'border-green-200 bg-green-50/30'
+          : 'border-red-200 bg-red-50/30'
+      } dark:bg-transparent`}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
-              className={`flex items-center justify-center w-8 h-8 rounded-full ${
+              className={`flex h-8 w-8 items-center justify-center rounded-full ${
                 metric.passed
-                  ? "bg-green-100 dark:bg-green-900/30"
-                  : "bg-red-100 dark:bg-red-900/30"
-              }`}
-            >
+                  ? 'bg-green-100 dark:bg-green-900/30'
+                  : 'bg-red-100 dark:bg-red-900/30'
+              }`}>
               <Icon
                 className={`h-4 w-4 ${
-                  metric.passed ? "text-green-600" : "text-red-600"
+                  metric.passed ? 'text-green-600' : 'text-red-600'
                 }`}
               />
             </div>
-            <span className="font-semibold text-sm">{metric.name}</span>
+            <span className="text-sm font-semibold">{metric.name}</span>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="pt-0 space-y-3">
+      <CardContent className="space-y-3 pt-0">
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Current</span>
           <span className="font-mono font-medium">
@@ -331,9 +333,8 @@ function MetricCard({ metric }: { metric: MetricData }) {
                 </span>
                 <span
                   className={`font-bold ${
-                    metric.passed ? "text-green-600" : "text-red-600"
-                  }`}
-                >
+                    metric.passed ? 'text-green-600' : 'text-red-600'
+                  }`}>
                   {Math.round(progress)}%
                 </span>
               </div>
@@ -341,8 +342,8 @@ function MetricCard({ metric }: { metric: MetricData }) {
                 value={progress}
                 className={`h-3 ${
                   metric.passed
-                    ? "[&>div]:bg-gradient-to-r [&>div]:from-green-500 [&>div]:to-green-600"
-                    : "[&>div]:bg-gradient-to-r [&>div]:from-red-500 [&>div]:to-red-600"
+                    ? '[&>div]:bg-gradient-to-r [&>div]:from-green-500 [&>div]:to-green-600'
+                    : '[&>div]:bg-gradient-to-r [&>div]:from-red-500 [&>div]:to-red-600'
                 }`}
               />
             </div>
@@ -350,7 +351,7 @@ function MetricCard({ metric }: { metric: MetricData }) {
         )}
 
         {metric.description && (
-          <p className="text-xs text-muted-foreground">{metric.description}</p>
+          <p className="text-muted-foreground text-xs">{metric.description}</p>
         )}
       </CardContent>
     </Card>
@@ -377,25 +378,23 @@ function ViolationsAlert({ violations }: { violations: ViolationData[] }) {
         {violations.map((violation, index) => (
           <div
             key={index}
-            className="flex items-start gap-3 p-3 bg-white/50 dark:bg-gray-900/20 rounded-md border"
-          >
-            <XCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+            className="flex items-start gap-3 rounded-md border bg-white/50 p-3 dark:bg-gray-900/20">
+            <XCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />
             <div className="flex-1 space-y-1">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-sm">{violation.metric}</span>
+                <span className="text-sm font-medium">{violation.metric}</span>
                 <Badge
                   variant="outline"
-                  className="text-xs border-red-200 text-red-700"
-                >
+                  className="border-red-200 text-xs text-red-700">
                   {violation.severity}
                 </Badge>
               </div>
-              <div className="text-xs text-muted-foreground">
+              <div className="text-muted-foreground text-xs">
                 Current: {formatValue(violation.currentValue, violation.unit)} •
                 Threshold: {formatValue(violation.threshold, violation.unit)}
               </div>
               <div className="flex items-start gap-2 text-xs">
-                <Lightbulb className="h-3 w-3 text-yellow-500 mt-0.5 flex-shrink-0" />
+                <Lightbulb className="mt-0.5 h-3 w-3 flex-shrink-0 text-yellow-500" />
                 <span className="text-muted-foreground">
                   {violation.recommendation}
                 </span>
@@ -411,21 +410,21 @@ function ViolationsAlert({ violations }: { violations: ViolationData[] }) {
 export function MetricsEvaluationDisplay({
   metadata,
   evaluationSpec,
-  reasoning = "",
+  reasoning = '',
   overallPassed,
-  overallScore
+  overallScore,
 }: MetricsEvaluationDisplayProps) {
   const [showDetails, setShowDetails] = useState(false);
 
   // Debug logging for development
-  if (process.env.NODE_ENV === "development") {
-    console.log("MetricsEvaluationDisplay - metadata:", metadata);
+  if (process.env.NODE_ENV === 'development') {
+    console.log('MetricsEvaluationDisplay - metadata:', metadata);
     console.log(
-      "MetricsEvaluationDisplay - overallScore:",
+      'MetricsEvaluationDisplay - overallScore:',
       overallScore,
-      typeof overallScore
+      typeof overallScore,
     );
-    console.log("MetricsEvaluationDisplay - evaluationSpec:", evaluationSpec);
+    console.log('MetricsEvaluationDisplay - evaluationSpec:', evaluationSpec);
   }
 
   const metrics = extractMetricsFromMetadata(metadata, evaluationSpec);
@@ -437,20 +436,18 @@ export function MetricsEvaluationDisplay({
       <Card
         className={`min-h-[auto] ${
           overallPassed
-            ? "border-green-200 bg-green-50/30"
-            : "border-red-200 bg-red-50/30"
-        } dark:bg-transparent`}
-      >
+            ? 'border-green-200 bg-green-50/30'
+            : 'border-red-200 bg-red-50/30'
+        } dark:bg-transparent`}>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div
-                className={`flex items-center justify-center w-12 h-12 rounded-full ${
+                className={`flex h-12 w-12 items-center justify-center rounded-full ${
                   overallPassed
-                    ? "bg-green-100 dark:bg-green-900/30"
-                    : "bg-red-100 dark:bg-red-900/30"
-                }`}
-              >
+                    ? 'bg-green-100 dark:bg-green-900/30'
+                    : 'bg-red-100 dark:bg-red-900/30'
+                }`}>
                 {overallPassed ? (
                   <CheckCircle className="h-7 w-7 text-green-600" />
                 ) : (
@@ -461,15 +458,14 @@ export function MetricsEvaluationDisplay({
                 <CardTitle
                   className={`text-xl ${
                     overallPassed
-                      ? "text-green-900 dark:text-green-100"
-                      : "text-red-900 dark:text-red-100"
-                  }`}
-                >
-                  Evaluation {overallPassed ? "Passed" : "Failed"}
+                      ? 'text-green-900 dark:text-green-100'
+                      : 'text-red-900 dark:text-red-100'
+                  }`}>
+                  Evaluation {overallPassed ? 'Passed' : 'Failed'}
                 </CardTitle>
                 <CardDescription className="text-base">
                   {overallScore !== undefined &&
-                    typeof overallScore === "number" &&
+                    typeof overallScore === 'number' &&
                     `Overall Score: ${overallScore.toFixed(2)}`}
                 </CardDescription>
               </div>
@@ -486,9 +482,9 @@ export function MetricsEvaluationDisplay({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">Metric Performance</h3>
-            <div className="text-sm text-muted-foreground">
-              {metrics.filter((m) => m.passed).length} of {metrics.length}{" "}
-              metrics passed
+            <div className="text-muted-foreground text-sm">
+              {metrics.filter(m => m.passed).length} of {metrics.length} metrics
+              passed
             </div>
           </div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -505,13 +501,13 @@ export function MetricsEvaluationDisplay({
           <Button variant="outline" className="w-full rounded-xl">
             <span>Detailed Information</span>
             {showDetails ? (
-              <ChevronUp className="h-4 w-4 ml-2" />
+              <ChevronUp className="ml-2 h-4 w-4" />
             ) : (
-              <ChevronDown className="h-4 w-4 ml-2" />
+              <ChevronDown className="ml-2 h-4 w-4" />
             )}
           </Button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="space-y-4 mt-4">
+        <CollapsibleContent className="mt-4 space-y-4">
           {/* Raw Metrics */}
           <Card>
             <CardHeader>
@@ -523,14 +519,14 @@ export function MetricsEvaluationDisplay({
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {Object.entries(metadata)
-                  .filter(([key]) => !key.toLowerCase().includes("reasoning"))
+                  .filter(([key]) => !key.toLowerCase().includes('reasoning'))
                   .map(([key, value]) => (
-                    <div key={key} className=" rounded">
-                      <div className="text-xs font-medium text-muted-foreground capitalize">
-                        {key.replace(/_/g, " ")}
+                    <div key={key} className="rounded">
+                      <div className="text-muted-foreground text-xs font-medium capitalize">
+                        {key.replace(/_/g, ' ')}
                       </div>
-                      <div className="text-sm font-mono">
-                        {typeof value === "object"
+                      <div className="font-mono text-sm">
+                        {typeof value === 'object'
                           ? JSON.stringify(value)
                           : String(value)}
                       </div>
@@ -550,7 +546,7 @@ export function MetricsEvaluationDisplay({
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-1">
-                <div className="text-sm whitespace-pre-wrap font-mono bg-muted/50 p-3 rounded">
+                <div className="bg-muted/50 rounded p-3 font-mono text-sm whitespace-pre-wrap">
                   {reasoning}
                 </div>
               </CardContent>

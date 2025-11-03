@@ -1,0 +1,6 @@
+dependencies:
+- name: phoenix-helm
+  repository: oci://registry-1.docker.io/arizephoenix
+  version: 4.0.5
+digest: sha256:d79cea2ad653db816b2579bdeaabee09989b002b15005af76ee74f5225cd86e2
+generated: "2025-10-27T14:26:56.017682Z"

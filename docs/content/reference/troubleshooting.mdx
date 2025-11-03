@@ -30,7 +30,9 @@ Verify your cluster context:
 kubectl config get-contexts
 ```
 
-### Installing Ark on Windows
+### Common Installation Issues
+
+#### Installing Ark on Windows
 
 Ark requires a Kubernetes cluster to run. There are a number of potential issues that can arise from permissions, organizational policies and so on, particularly around running Hypervisors (which is needed to run services like Docker and local Kubernetes clusters).
 
@@ -118,6 +120,90 @@ Failed downloads, network errors, disconnects and so on for packages or installa
 **Avoiding Kubernetes on Windows**
 
 If Kubernetes or Docker cannot be run in your environment, the best solution would be to run a remote Kubernetes cluster, on AWS/GCP or similar. Check the [Operations Guide](../../operations-guide/deploying-ark) on how to do this.
+
+#### Docker Desktop Issues
+
+If you are using Docker Desktop to launch your kubernetes cluster, you may encounter an issue where pods fail to start. When describing said pods, you may see an error like this.
+
+```logs
+Warning    Failed    pod/ark-controller-xxxxxxxxx-xxxx Error: container has runAsNonRoot and image will run as root
+```
+
+This is due to an the Docker Desktop Kubernetes cluster trying to run containers as root, when they shouldn't be.
+
+To fix this, within your Docker Desktop Kubernetes set up:
+ - Stop the Kubernetes cluster
+ - Start the Kubernetes cluster again, but change the cluster type from Kubeadm to kind
+
+#### Webhook Call Fails on Kind Cluster
+
+See [issue #393](https://github.com/mckinsey/agents-at-scale-ark/issues/393) for tracking this bug.
+
+**Error Message**
+
+When running Ark locally on a Kind cluster, model creation or installation fails with a timeout error when attempting to reach the validating webhook.
+The same setup works without issues on Minikube.
+
+```bash
+ark-api dev:ark-api logs
+HTTP response body: {"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"Internal error occurred: failed calling webhook \"vmodel-v1.kb.io\": failed to call webhook: Post \"https://ark-webhook-service.ark-system.svc:443/validate-ark-mckinsey-com-v1alpha1-model?timeout=10s\": context deadline exceeded","reason":"InternalError","details":{"causes":[{"message":"failed calling webhook \"vmodel-v1.kb.io\": failed to call webhook: Post \"https://ark-webhook-service.ark-system.svc:443/validate-ark-mckinsey-com-v1alpha1-model?timeout=10s\": context deadline exceeded"}]},"code":500}
+```
+
+**Cause**
+
+This failure occurs because the webhook service (ark-webhook-service) cannot be reached within the Kind cluster.
+While the specific root cause is still under investigation, it appears to be related to networking differences between Kind and Minikube.
+
+**Workaround**
+
+Use Minikube as a sanity check and use it for local.
+
+**Verification**
+
+After switching to Minikube, confirm that webhook validation succeeds by creating a model:
+
+```bash
+ark models create default
+✓ Model 'default' created successfully
+```
+
+#### ark-api-a2a Not Installed Automatically
+
+See [issue #392](https://github.com/mckinsey/agents-at-scale-ark/issues/392) for tracking this issue.
+
+**Error or Symptom**
+
+```bash
+ The installation command completes successfully and reports "✓ Installation complete", but the ark-api-a2a component is not actually deployed in the cluster.
+'helm list -A' would not list ark-api-a2a
+```
+
+**Cause**
+
+Investigation in progress
+
+**Workaround**
+
+Until the issue is fixed, run the 'make ark-api-a2a-install' command from agents-at-scale-ark repo root
+
+#### Access Denied When Installing agents-at-scale
+
+**Error Message**
+
+```bash
+Release "agents-at-scale" does not exist. Installing it now.
+Error: GET "https://ghcr.io/v2/mck-private/qb-fm-labs-legacyx/charts/legacyx/tags/list": response status code 403: denied: permission_denied: read_package
+```
+
+**Cause**
+
+The issue occurs when ark install attempts to pull the agents-at-scale Helm chart from the GitHub Container Registry (ghcr.io) under the private mck-private organization.
+If your GitHub token is missing the read:packages scope or is not authorized for SSO access to that organization, the registry request fails with a 403 Permission Denied error.
+
+**Workaround**
+
+Work in progress to fix the issue. Until it is fixed, you can install agents-at-scale manually by following the setup steps in its repository 'agent-at-scale-user'
+This ensures the required charts are locally available for Ark to reference.
 
 ## Agents
 

@@ -1,0 +1,84 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: ark-mcp-discovery
+spec:
+  description: Test MCP discovery from mock-llm MCP resources
+  steps:
+  - name: step-1
+    try:
+    # Install mock-llm with MCP enabled
+    - script:
+        content: |
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.16 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    # Wait for MCP resources to be created (chart creates 1 MCPServer and 1 Tool)
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: MCPServer
+          metadata:
+            name: mock-llm-mcp
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: mock-llm-echo-tool
+            labels:
+              app.kubernetes.io/instance: mock-llm
+              app.kubernetes.io/managed-by: Helm
+    # Wait for MCP resources created from chart to be Ready
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: MCPServer
+          metadata:
+            name: mock-llm-mcp
+          status:
+            (contains(conditions[?type == 'Ready'].status, 'True')): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: mock-llm-echo-tool
+          status:
+            state: Ready
+    # Wait for MCP Tools to be discovered (ARK creates mock-llm-mcp-echo Tool discovering MCPServer tools)
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: MCPServer
+          metadata:
+            name: mock-llm-mcp
+          status:
+            (contains(conditions[?type == 'Discovering'].reason, 'DiscoveryComplete')): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: mock-llm-mcp-echo
+            ownerReferences:
+            - apiVersion: ark.mckinsey.com/v1alpha1
+              kind: MCPServer
+              name: mock-llm-mcp
+    # Wait for discovered Tools to be Ready
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: mock-llm-mcp-echo
+            ownerReferences:
+            - apiVersion: ark.mckinsey.com/v1alpha1
+              kind: MCPServer
+              name: mock-llm-mcp
+          status:
+            state: Ready

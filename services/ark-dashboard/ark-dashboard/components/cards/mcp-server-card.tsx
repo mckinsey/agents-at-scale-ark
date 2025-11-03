@@ -1,17 +1,17 @@
-"use client"
+'use client';
 
-import { useState } from "react";
-import { Server, Trash2, Info, Pencil } from "lucide-react";
-import { BaseCard, type BaseCardAction } from "./base-card";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { getCustomIcon } from "@/lib/utils/icon-resolver";
-import { ARK_ANNOTATIONS } from "@/lib/constants/annotations";
-import {
-  MCPServerConfiguration,
-  type MCPServer
-} from "@/lib/services/mcp-servers";
-import { McpEditor } from "../editors/mcp-editor";
-import { ConfirmationDialog } from "@/components/dialogs/confirmation-dialog";
+import { Info, Pencil, Server, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+
+import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
+import type { MCPServerConfiguration } from '@/lib/services/mcp-servers';
+import { type MCPServer } from '@/lib/services/mcp-servers';
+import { getCustomIcon } from '@/lib/utils/icon-resolver';
+
+import { McpEditor } from '../editors/mcp-editor';
+import { BaseCard, type BaseCardAction } from './base-card';
 
 interface McpServerCardProps {
   mcpServer: MCPServer;
@@ -26,57 +26,63 @@ export function McpServerCard({
   onDelete,
   onInfo,
   onUpdate,
-  namespace
+  namespace,
 }: McpServerCardProps) {
   const actions: BaseCardAction[] = [];
   const [mcpEditorOpen, setMcpEditorOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Get custom icon or default Server icon
-  const annotations = mcpServer.annotations as Record<string, string> | undefined;
-  const IconComponent = getCustomIcon(annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON], Server);
+  const annotations = mcpServer.annotations as
+    | Record<string, string>
+    | undefined;
+  const IconComponent = getCustomIcon(
+    annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
+    Server,
+  );
 
   if (onUpdate) {
     actions.push({
       icon: Pencil,
-      label: "Edit Mcp server details",
-      onClick: () => setMcpEditorOpen(true)
+      label: 'Edit Mcp server details',
+      onClick: () => setMcpEditorOpen(true),
     });
   }
 
   if (onInfo) {
     actions.push({
       icon: Info,
-      label: "View MCP server details",
-      onClick: () => onInfo(mcpServer)
+      label: 'View MCP server details',
+      onClick: () => onInfo(mcpServer),
     });
   }
 
   if (onDelete) {
     actions.push({
       icon: Trash2,
-      label: "Delete MCP server",
-      onClick: () => setDeleteConfirmOpen(true)
+      label: 'Delete MCP server',
+      onClick: () => setDeleteConfirmOpen(true),
     });
   }
 
   // Get the address from either status.lastResolvedAddress or spec.address.value
-  const address = mcpServer.address || "Address not available";
-  const transport = mcpServer.transport || "unknown";
-
-
+  const address = mcpServer.address || 'Address not available';
+  const transport = mcpServer.transport || 'unknown';
 
   return (
     <>
       <BaseCard
-        title={mcpServer.name || "Unnamed Server"}
+        title={mcpServer.name || 'Unnamed Server'}
         icon={<IconComponent className="h-5 w-5" />}
         iconClassName="text-muted-foreground"
         actions={actions}
         footer={
-          <div className="flex text-sm text-muted-foreground flex-col gap-1">
+          <div className="text-muted-foreground flex flex-col gap-1 text-sm">
             <div className="w-fit">
-              <StatusBadge ready={mcpServer.ready} discovering={mcpServer.discovering} />
+              <StatusBadge
+                ready={mcpServer.ready}
+                discovering={mcpServer.discovering}
+              />
             </div>
             <div>
               <span className="font-medium">Address:</span> {address}
@@ -84,11 +90,13 @@ export function McpServerCard({
             <div>
               <span className="font-medium">Transport:</span> {transport}
             </div>
-            {mcpServer.tool_count !== undefined && mcpServer.tool_count !== null && (
-              <div>
-                <span className="font-medium">Tools:</span> {mcpServer.tool_count}
-              </div>
-            )}
+            {mcpServer.tool_count !== undefined &&
+              mcpServer.tool_count !== null && (
+                <div>
+                  <span className="font-medium">Tools:</span>{' '}
+                  {mcpServer.tool_count}
+                </div>
+              )}
             {mcpServer.status_message && (
               <div className="text-xs text-red-600 dark:text-red-400">
                 {mcpServer.status_message}
@@ -101,7 +109,7 @@ export function McpServerCard({
         open={mcpEditorOpen}
         onOpenChange={setMcpEditorOpen}
         mcpServer={mcpServer}
-        onSave={onUpdate || (() => { })}
+        onSave={onUpdate || (() => {})}
         namespace={namespace}
       />
       {onDelete && (

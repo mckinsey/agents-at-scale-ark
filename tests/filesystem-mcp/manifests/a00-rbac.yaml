@@ -1,0 +1,24 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: filesys-isolation-test-role
+rules:
+- apiGroups: ["ark.mckinsey.com"]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: [""]
+  resources: ["secrets", "configmaps", "services"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: filesys-isolation-test-rolebinding
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: ($namespace)
+roleRef:
+  kind: Role
+  name: filesys-isolation-test-role
+  apiGroup: rbac.authorization.k8s.io

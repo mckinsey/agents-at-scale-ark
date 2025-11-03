@@ -11,8 +11,14 @@ from openai.types.completion_usage import CompletionUsage
 logger = logging.getLogger(__name__)
 
 
-def _create_chat_completion_response(query_name: str, model: str, content: str, messages: list) -> ChatCompletion:
-    """Create OpenAI-compatible chat completion response."""
+def _create_chat_completion_response(
+    query_name: str,
+    model: str,
+    content: str,
+    messages: list,
+    annotations: dict = None
+) -> ChatCompletion:
+    """Create OpenAI-compatible chat completion response with optional Ark metadata."""
     # Count tokens from messages array
     prompt_text = " ".join([
         str(msg.get('content', '')) if isinstance(msg, dict) else str(msg)
@@ -20,25 +26,33 @@ def _create_chat_completion_response(query_name: str, model: str, content: str, 
     ])
     prompt_tokens = len(prompt_text.split())
     completion_tokens = len(content.split())
-    
-    return ChatCompletion(
-        id=query_name,
-        object="chat.completion",
-        created=int(time.time()),
-        model=model,
-        choices=[
+
+    response_data = {
+        "id": query_name,
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [
             Choice(
                 index=0,
                 message=ChatCompletionMessage(role="assistant", content=content),
                 finish_reason="stop",
             )
         ],
-        usage=CompletionUsage(
+        "usage": CompletionUsage(
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=prompt_tokens + completion_tokens,
         ),
-    )
+    }
+
+    # Add Ark metadata if annotations present
+    if annotations:
+        response_data["ark"] = {
+            "annotations": annotations
+        }
+
+    return ChatCompletion(**response_data)
 
 
 def _get_error_detail(status: dict) -> dict:
@@ -102,7 +116,9 @@ async def poll_query_completion(ark_client, query_name: str, model: str, message
                 raise HTTPException(status_code=500, detail="No response received")
 
             content = responses[0].get("content", "")
-            return _create_chat_completion_response(query_name, model, content, messages)
+            # Get query annotations
+            annotations = query_dict.get("metadata", {}).get("annotations")
+            return _create_chat_completion_response(query_name, model, content, messages, annotations)
 
         elif phase == "error":
             error_detail = _get_error_detail(status)

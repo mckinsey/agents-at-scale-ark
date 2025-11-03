@@ -89,11 +89,19 @@ jobs:
           - path: services/ark-mcp
             image: ark-mcp
             prebuild: "make ark-mcp-deps && mkdir -p services/ark-mcp/ark-mcp/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-mcp/ark-mcp/out/"
+          - path: mcp/filesystem-mcp
+            image: filesystem-mcp-server
           - path: services/ark-cluster-memory/ark-cluster-memory
             image: ark-cluster-memory
           - path: services/ark-evaluator
             image: ark-evaluator
             prebuild: "make ark-evaluator-deps"
+          - path: tools/ark-cli
+            image: ark-cli
+            prebuild: "make ark-cli-build"
+          - path: images/ark-tools
+            image: ark-tools
+            prebuild: "make ark-cli-build && cp -r tools ark images/ark-tools/"
     steps:
       - name: Validate version tag exists
         run: |
@@ -207,8 +215,10 @@ jobs:
           - ark-api
           - ark-dashboard
           - ark-mcp
+          - mcp-filesystem
           - localhost-gateway
           - ark-tenant
+          - argo-workflows
     steps:
       - name: Validate version tag exists
         run: |

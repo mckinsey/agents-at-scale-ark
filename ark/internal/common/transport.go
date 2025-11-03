@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -18,11 +19,20 @@ type LoggingTransport struct {
 	Context   context.Context
 }
 
-// NewLoggingTransport creates a new LoggingTransport with the given context
+// NewLoggingTransport creates a new LoggingTransport with the given context.
+// The transport is automatically instrumented with OpenTelemetry for HTTP tracing.
 func NewLoggingTransport(ctx context.Context, transport http.RoundTripper) *LoggingTransport {
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
+	// Wrap with OpenTelemetry HTTP instrumentation for automatic HTTP span creation.
+	// The otelhttp.NewTransport will automatically extract the trace context from the
+	// request's context and create child spans for HTTP calls.
+	transport = otelhttp.NewTransport(transport,
+		otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
+			return "HTTP"
+		}),
+	)
 	return &LoggingTransport{
 		Transport: transport,
 		Context:   ctx,

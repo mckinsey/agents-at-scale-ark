@@ -1,0 +1,56 @@
+# DevSpace configuration for Argo Workflows
+version: v2beta1
+
+vars:
+  ENABLE_MINIO:
+    question: "Enable Minio artifact storage (true/false)?"
+    default: "false"
+
+pipelines:
+  deploy: create_deployments argo-workflows
+  dev: |-
+    create_deployments argo-workflows
+    start_dev argo-server
+
+hooks:
+  - name: install-minio-operator
+    events: ["before:deploy"]
+    command: |-
+      if [ "${ENABLE_MINIO}" = "true" ]; then
+        echo "Checking MinIO operator installation..."
+        if ! helm list -n minio-operator | grep -q minio-operator; then
+          echo "Installing MinIO operator..."
+          helm upgrade minio-operator operator \
+            --install \
+            --repo https://operator.min.io \
+            --namespace minio-operator \
+            --create-namespace \
+            --version 7.1.1
+          echo "Waiting for MinIO operator to be ready..."
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=operator -n minio-operator --timeout=120s || true
+        else
+          echo "MinIO operator already installed"
+        fi
+      else
+        echo "Minio disabled, skipping operator installation"
+      fi
+
+deployments:
+  argo-workflows:
+    helm:
+      chart:
+        path: ./chart
+      values:
+        minio:
+          enabled: ${ENABLE_MINIO}
+
+# Development mode - port-forward to Argo UI
+dev:
+  argo-server:
+    labelSelector:
+      app.kubernetes.io/name: argo-workflows-server
+    ports:
+      - port: 2746:2746
+    logs:
+      enabled: true
+      lastLines: 100

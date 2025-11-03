@@ -1,0 +1,12 @@
+dependencies:
+- name: argo-workflows
+  repository: https://argoproj.github.io/argo-helm
+  version: 0.45.26
+- name: ark-tenant
+  repository: oci://ghcr.io/mckinsey/agents-at-scale-ark/charts
+  version: 0.1.40
+- name: tenant
+  repository: https://operator.min.io/
+  version: 7.1.1
+digest: sha256:19b45affbbb7f58241384887818d93c682f16c0f7b051cdb7f82c4aa7b3a61e6
+generated: "2025-10-31T10:55:43.872093Z"

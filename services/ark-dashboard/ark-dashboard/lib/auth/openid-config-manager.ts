@@ -1,9 +1,9 @@
-import { OIDC_CONFIG_URL } from "@/lib/constants/auth";
+import { OIDC_CONFIG_URL } from '@/lib/constants/auth';
 
 type OIDCWellKnownConfig = {
   token_endpoint?: string;
   end_session_endpoint?: string;
-}
+};
 
 class OpenidConfigManager {
   private fetchPromise: Promise<OIDCWellKnownConfig> | null;
@@ -40,10 +40,10 @@ class OpenidConfigManager {
 
     if (!response.ok) {
       console.error(
-        `Failed to fetch OIDC well-known config: ${response.status} ${response.statusText}`
+        `Failed to fetch OIDC well-known config: ${response.status} ${response.statusText}`,
       );
       throw new Error(
-        `Failed to fetch OIDC well-known config: ${response.status} ${response.statusText}`
+        `Failed to fetch OIDC well-known config: ${response.status} ${response.statusText}`,
       );
     }
 
