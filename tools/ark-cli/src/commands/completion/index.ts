@@ -32,7 +32,7 @@ _ark_completion() {
   
   case \${COMP_CWORD} in
     1)
-      opts="agents chat cluster completion config dashboard docs generate install models query routes status targets teams tools uninstall help"
+      opts="agents chat cluster completion config dashboard docs generate install models queries query routes status targets teams tools uninstall help"
       COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
       return 0
       ;;
@@ -105,6 +105,11 @@ _ark_completion() {
           COMPREPLY=( $(compgen -W "\${targets}" -- \${cur}) )
           return 0
           ;;
+        queries)
+          opts="get"
+          COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
+          return 0
+          ;;
       esac
       ;;
   esac
@@ -146,6 +151,7 @@ _ark() {
         'generate[Generate ARK resources]' \\
         'install[Install ARK services]' \\
         'models[List available models]' \\
+        'queries[Manage query resources]' \\
         'query[Execute a single query]' \\
         'routes[List available routes]' \\
         'status[Check system status]' \\
@@ -223,6 +229,10 @@ _ark() {
             targets=('model/default' 'agent/sample-agent')
           fi
           _values 'available targets' \${targets[@]}
+          ;;
+        queries)
+          _values 'queries commands' \\
+            'get[Get a specific query]'
           ;;
       esac
       ;;
