@@ -19,6 +19,7 @@ import {createDocsCommand} from './commands/docs/index.js';
 import {createEvaluationCommand} from './commands/evaluation/index.js';
 import {createGenerateCommand} from './commands/generate/index.js';
 import {createInstallCommand} from './commands/install/index.js';
+import {createMemoryCommand} from './commands/memory/index.js';
 import {createModelsCommand} from './commands/models/index.js';
 import {createQueryCommand} from './commands/query/index.js';
 import {createUninstallCommand} from './commands/uninstall/index.js';
@@ -58,6 +59,7 @@ async function main() {
   program.addCommand(createEvaluationCommand(config));
   program.addCommand(createGenerateCommand(config));
   program.addCommand(createInstallCommand(config));
+  program.addCommand(createMemoryCommand(config));
   program.addCommand(createModelsCommand(config));
   program.addCommand(createQueryCommand(config));
   program.addCommand(createUninstallCommand(config));

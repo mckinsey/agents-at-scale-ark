@@ -1,0 +1,67 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: minio-artifact-demo
+  annotations:
+    workflows.argoproj.io/title: "Minio Artifact Storage Demo"
+    workflows.argoproj.io/description: |
+      Simple demonstration of storing artifacts in Minio.
+      Creates a text file and stores it as an artifact in Minio.
+spec:
+  entrypoint: main
+  serviceAccountName: argo-workflow
+
+  artifactRepositoryRef:
+    configMap: artifact-repositories
+    key: default
+
+  templates:
+  - name: main
+    steps:
+    - - name: generate-artifact
+        template: generate-artifact
+    - - name: consume-artifact
+        template: consume-artifact
+        arguments:
+          artifacts:
+          - name: input-file
+            from: "{{steps.generate-artifact.outputs.artifacts.result}}"
+
+  - name: generate-artifact
+    metadata:
+      annotations:
+        workflows.argoproj.io/description: "Generate a sample file and save as artifact"
+    script:
+      image: alpine:latest
+      command: [sh]
+      source: |
+        set -e
+        echo "Generating sample data at $(date)"
+        echo "Workflow: {{workflow.name}}" > /tmp/result.txt
+        echo "Timestamp: $(date)" >> /tmp/result.txt
+        echo "Random data: $RANDOM" >> /tmp/result.txt
+        cat /tmp/result.txt
+    outputs:
+      artifacts:
+      - name: result
+        path: /tmp/result.txt
+        archive:
+          none: {}
+
+  - name: consume-artifact
+    metadata:
+      annotations:
+        workflows.argoproj.io/description: "Read artifact from Minio and display contents"
+    inputs:
+      artifacts:
+      - name: input-file
+        path: /tmp/input.txt
+    script:
+      image: alpine:latest
+      command: [sh]
+      source: |
+        set -e
+        echo "Reading artifact from Minio..."
+        cat /tmp/input.txt
+        echo ""
+        echo "Artifact successfully retrieved from Minio!"

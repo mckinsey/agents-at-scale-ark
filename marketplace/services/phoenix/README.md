@@ -4,18 +4,32 @@ Phoenix observability for Ark AI agents.
 
 ## Quickstart
 
-```bash
-# Show all available recipes
-make help
+### Using DevSpace
 
-# Install Phoenix to cluster
-make phoenix-install
+```bash
+# Deploy + port-forward dashboard
+devspace dev
+
+# Deploy Phoenix
+devspace deploy
+kubectl port-forward -n phoenix svc/phoenix-svc 6006:6006
 
 # Uninstall Phoenix
-make phoenix-uninstall
+devspace purge
+```
+
+### Using Helm
+
+```bash
+# Install Phoenix to cluster
+helm dependency update chart/
+helm install phoenix ./chart -n phoenix --create-namespace
+
+# Uninstall Phoenix
+helm uninstall phoenix -n phoenix
 
 # Open dashboard (port-forward)
-make phoenix-dashboard
+kubectl port-forward -n phoenix svc/phoenix-svc 6006:6006
 ```
 
 ## Configuration

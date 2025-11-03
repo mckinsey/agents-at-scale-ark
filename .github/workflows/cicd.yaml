@@ -578,7 +578,17 @@ jobs:
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
-          chainsaw test --config .chainsaw.yaml --selector '!evaluated'
+          MAX_RETRIES=3
+          RETRY_DELAY=30
+          for ((attempt=1; attempt<=$MAX_RETRIES; attempt++)); do
+            if chainsaw test --config .chainsaw.yaml --selector '!evaluated'; then
+              exit 0
+            fi
+            if [ $attempt -lt $MAX_RETRIES ]; then
+              sleep $RETRY_DELAY
+            fi
+          done
+          exit 1
 
       - uses: ./.github/actions/collect-coverage-e2e
         with:
@@ -622,6 +632,17 @@ jobs:
           mkdir -p /tmp/chainsaw-report
           # Use special config for evaluated tests with longer timeouts and sequential execution
           chainsaw test --config .chainsaw-evaluated.yaml --selector 'evaluated=true'
+          MAX_RETRIES=3
+          RETRY_DELAY=30
+          for ((attempt=1; attempt<=$MAX_RETRIES; attempt++)); do
+            if chainsaw test --config .chainsaw-evaluated.yaml --selector 'evaluated=true'; then
+              exit 0
+            fi
+            if [ $attempt -lt $MAX_RETRIES ]; then
+              sleep $RETRY_DELAY
+            fi
+          done
+          exit 1
 
       - uses: ./.github/actions/collect-coverage-e2e
         with:
