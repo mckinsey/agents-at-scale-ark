@@ -230,7 +230,10 @@ func waitForServer(t *testing.T, ctx context.Context, url string, timeout time.D
 
 		resp, err := client.Do(req)
 		if err == nil {
-			resp.Body.Close()
+			if err = resp.Body.Close(); err != nil {
+				return fmt.Errorf("failed to close response body: %w", err)
+			}
+
 			t.Logf("server became ready in %v", time.Since(startTime))
 			return nil
 		}
