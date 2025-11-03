@@ -148,15 +148,29 @@ This workflow demonstrates how to run Ark and Argo operations:
 4. Run Ark queries
 5. Fan-in and evalate results (quality, token count, etc)
 
-## Ark tools example
+## Samples
 
-Another sample template, `ark-tools-template.yaml` provides a simple workflow for running Ark CLI commands in containers. The [`ark-tools`](/reference/utility-images#ark-tools) image includes the Ark CLI pre-installed, enabling workflows to query agents and capture results as workflow outputs.
+### Ark Tools
+
+The `ark-tools-template.yaml` provides a workflow for running Ark CLI commands in containers. The [`ark-tools`](/reference/utility-images#ark-tools) image includes the Ark CLI pre-installed, enabling workflows to query agents and capture results as workflow outputs.
 
 ```bash
 kubectl apply -f services/argo-workflows/samples/ark-tools-template.yaml
 ```
 
 Use this template to integrate Ark agent queries into your workflows without building custom containers.
+
+### Minio Artifacts
+
+The `minio-artifact-template.yaml` demonstrates storing and retrieving artifacts using Minio. This workflow creates an artifact in one step and retrieves it in another, showing how to pass data between workflow steps.
+
+```bash
+kubectl apply -f services/argo-workflows/samples/minio-artifact-template.yaml
+```
+
+Screenshot:
+
+![Screenshot of the argo artifacts workflow sample](./images/argo-artifacts-screenshot.png)
 
 ## Troubleshooting
 
