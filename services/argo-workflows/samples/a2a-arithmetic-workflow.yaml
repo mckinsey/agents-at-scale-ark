@@ -64,6 +64,7 @@ spec:
       image: alpine/k8s:1.28.13
       command: [sh]
       source: |
+        set -e
         # Verify A2A server exists (will fail with clear error if missing)
         kubectl get a2aserver mock-llm-countdown
 
@@ -114,6 +115,7 @@ spec:
       image: alpine/k8s:1.28.13
       command: [sh]
       source: |
+        set -e
         cat > /tmp/query.yaml << EOF
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
@@ -150,6 +152,7 @@ spec:
       image: alpine/k8s:1.28.13
       command: [sh]
       source: |
+        set -e
         cat > /tmp/countdown-query.yaml << EOF
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
