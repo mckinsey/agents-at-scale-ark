@@ -37,6 +37,13 @@
   - Architecture guides and API references
   - Built with Next.js and MDX
 
+- **`marketplace/`** - Ark Marketplace (DevSpace-based services)
+  - Services packaged for future marketplace repository separation
+  - `services/phoenix/` - Phoenix observability platform 
+  - `services/langfuse/` - Langfuse observability platform
+  - `docs/` - Marketplace-specific documentation site (Next.js)
+  - Uses DevSpace deployment instead of Make-based builds
+
 ## Supporting Folders
 
 - **`tools/`** - CLI tools
@@ -97,6 +104,18 @@ npm build          # Build site
 
 cd services/vnext-ui/    # UI service
 make build         # Build Docker image
+```
+
+## Marketplace Services (DevSpace)
+All marketplace services use DevSpace for deployment:
+```bash
+cd marketplace/services/{service-name}/
+devspace dev       # Deploy in development mode with hot-reload
+devspace deploy    # Deploy to current Kubernetes context
+devspace purge     # Remove service from cluster
+
+# Alternative using Helm directly
+helm install {service-name} ./chart --namespace {namespace} --create-namespace
 ```
 
 ## CLI Tools

@@ -15,8 +15,6 @@ class AgentInstructions:
     name: str
     description: str
     system_prompt: str
-    scope_hints: List[str]
-
 
 class AgentResolver:
     """Resolves Agent configurations using direct Kubernetes API"""
@@ -31,7 +29,7 @@ class AgentResolver:
         if not self.k8s_client:
             logger.warning("Kubernetes client not available - agent context resolution will be limited")
     
-    async def resolve_agent(self, agent_name: str, namespace: str = "default") -> Optional[AgentInstructions]:
+    async def resolve_agent_instructions(self, agent_name: str, namespace: str = "default") -> Optional[AgentInstructions]:
         """
         Resolve agent configuration from Kubernetes CRD
 
@@ -71,17 +69,13 @@ class AgentResolver:
             description = spec.get("description", "")
             system_prompt = spec.get("prompt", "")
             
-            # Extract scope hints from prompt and description
-            scope_hints = self._extract_scope_hints(system_prompt, description)
-            
             agent_instructions = AgentInstructions(
                 name=name,
                 description=description,
                 system_prompt=system_prompt,
-                scope_hints=scope_hints
             )
 
-            logger.info(f"Agent instructions resolved for {name}: {len(scope_hints)} scope hints found")
+            logger.info(f"Agent instructions resolved for {name}")
             return agent_instructions
             
         except client.exceptions.ApiException as e:
@@ -93,40 +87,3 @@ class AgentResolver:
         except Exception as e:
             logger.error(f"Unexpected error resolving agent {agent_name}: {str(e)}")
             return None
-    
-    def _extract_scope_hints(self, system_prompt: str, description: str) -> List[str]:
-        """
-        Extract scope hints from agent prompt and description
-        
-        This helps identify the agent's intended domain and boundaries
-        """
-        hints = []
-        text = f"{system_prompt} {description}".lower()
-        
-        # Language/technology scope hints
-        if "java" in text:
-            hints.append("java")
-        if "javascript" in text or "js" in text:
-            hints.append("javascript")
-        if "python" in text:
-            hints.append("python")
-        if "modernization" in text or "convert" in text:
-            hints.append("code-conversion")
-        
-        # Behavioral scope hints
-        if "refuse" in text or "reject" in text or "not java" in text:
-            hints.append("should-refuse-non-scope")
-        if "malformed" in text or "incomplete" in text:
-            hints.append("should-refuse-malformed")
-        if "explain why" in text or "cannot be performed" in text:
-            hints.append("should-explain-refusal")
-        
-        # Specialization hints
-        if "java 8" in text:
-            hints.append("java8-specific")
-        if "stream" in text:
-            hints.append("supports-streams")
-        if "completablefuture" in text or "future" in text:
-            hints.append("supports-async")
-        
-        return hints

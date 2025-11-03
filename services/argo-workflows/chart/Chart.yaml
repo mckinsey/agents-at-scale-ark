@@ -15,3 +15,8 @@ dependencies:
     version: 0.1.40
     repository: oci://ghcr.io/mckinsey/agents-at-scale-ark/charts
     condition: ark-tenant.enabled
+  - name: tenant
+    alias: minio
+    version: 7.1.1
+    repository: https://operator.min.io/
+    condition: minio.enabled

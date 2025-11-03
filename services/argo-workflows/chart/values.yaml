@@ -82,3 +82,16 @@ ark-tenant:
     additionalSubjects:
       - kind: ServiceAccount
         name: argo-workflow
+
+# Optionally deploy Minio tenant for artifact storage. When enabled, Argo
+# Workflows will be configured to use Minio as the default artifact repository.
+# Note: This requires the Minio Operator to be installed in the cluster.
+minio:
+  enabled: false
+  tenant:
+    configSecret:
+      name: myminio-env-configuration
+      accessKey: minio
+      secretKey: minio123
+    buckets:
+      - name: argo-artifacts

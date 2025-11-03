@@ -106,14 +106,13 @@ ARK Evaluator consolidates evaluation capabilities from multiple sources:
 
 ### Deterministic Metrics (via `/evaluate-metrics`)
 
-Objective performance assessment across four key dimensions:
+Objective performance assessment across three key dimensions:
 
 | Dimension | Metrics | Use Cases |
 |-----------|---------|-----------|
 | **Token Score** | Efficiency, limits, throughput | Cost optimization, resource planning |
 | **Cost Score** | Per-query cost, efficiency ratios | Budget management, ROI analysis |
 | **Performance Score** | Latency, response time, throughput | SLA compliance, optimization |
-| **Quality Score** | Completeness, length, error rates | Content quality, user satisfaction |
 
 ### LLM-as-a-Judge (via `/evaluate`)
 

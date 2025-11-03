@@ -107,7 +107,7 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 ##@ Build
 
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
+build: validate-chart-crds manifests generate fmt vet ## Build manager binary.
 	go build $(LDFLAGS) -o bin/manager cmd/main.go
 
 .PHONY: run
@@ -144,6 +144,10 @@ chart: manifests
 	@echo "   - dist/chart/values.yaml (add containerRegistry section if missing)"
 	@echo ""
 	@exit 1
+
+.PHONY: validate-chart-crds
+validate-chart-crds: ## Validate that CRDs in Helm chart match source CRDs
+	@./scripts/validate-chart-crds.sh
 
 .PHONY: build-container
 build-container: ## Build the ark-controller
