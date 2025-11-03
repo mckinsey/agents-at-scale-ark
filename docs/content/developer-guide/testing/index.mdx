@@ -1,0 +1,148 @@
+---
+title: Testing Overview
+description: Comprehensive testing guide for ARK applications
+---
+
+# Testing Overview
+
+ARK provides multiple testing approaches to ensure reliability and functionality across different layers of the system.
+
+## Testing Approaches
+
+### UI Testing with Playwright
+
+[Playwright](https://playwright.dev/) with pytest automates browser-based testing of the ARK Dashboard. Tests verify:
+
+- Dashboard navigation and UI components
+- Resource creation through the web interface
+- Form validation and user workflows
+- End-to-end user journeys
+
+**Best for**: Frontend functionality, user experience, visual validation
+
+[Learn more about UI Testing →](/developer-guide/testing/ui-testing)
+
+### Go-based E2E Tests
+
+Native Go tests using Ginkgo for controller and webhook testing:
+
+- Controller deployment and health
+- Webhook configuration and certificates
+- Custom resource processing
+- Metrics endpoints
+
+**Best for**: Controller internals, admission webhooks, performance
+
+```bash
+cd ark/
+make setup-test-e2e
+make test-e2e
+make cleanup-test-e2e
+```
+
+## Quick Start
+
+### Run UI Tests
+
+```bash
+cd tests/pytest
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+playwright install
+pytest ui-tests/ -sv
+```
+
+### Run Go E2E Tests
+
+```bash
+cd ark/
+make test-e2e
+```
+
+## Test Organization
+
+```
+tests/
+└── pytest/                                # Python-based tests
+    ├── test_complete_ark_workflow.py      # ARK CLI setup workflow test
+    ├── ui-tests/                          # Playwright UI tests
+    │   ├── pages/                         # Page objects
+    │   ├── tests/                         # Test files
+    │   └── conftest.py                    # Test configuration
+    ├── conftest.py                        # Shared fixtures
+    └── requirements.txt                   # Python dependencies
+```
+
+### ARK CLI Setup Workflow Test
+
+The `test_complete_ark_workflow.py` validates the complete ARK installation process:
+
+- Virtual environment setup
+- OpenJDK configuration
+- ARK platform and CLI installation
+- Core pod verification (ark-api, ark-dashboard, ark-mcp)
+- Dashboard accessibility testing
+- Automated cleanup
+
+**Run the workflow test:**
+
+```bash
+cd tests/pytest
+pytest -sv test_complete_ark_workflow.py
+```
+
+## Environment Variables
+
+### UI Tests
+
+Create `tests/pytest/ui-tests/.env`:
+
+```env
+OPENAI_API_KEY=your-key
+OPENAI_ENDPOINT=your-endpoint
+AZURE_OPENAI_KEY=your-key
+AZURE_OPENAI_ENDPOINT=your-endpoint
+```
+
+## UI Testing
+
+Browser-based tests for dashboard functionality:
+
+```bash
+cd tests/pytest
+pytest ui-tests/ -sv --headed
+```
+
+### UI Test Debugging
+
+```bash
+# Interactive debugging with Playwright Inspector
+PWDEBUG=1 pytest ui-tests/tests/test_ark_agents.py -sv
+
+# Slow motion execution
+pytest ui-tests/ -sv --headed --slowmo 1000
+
+# Trace recording
+pytest ui-tests/ -sv --tracing on
+```
+
+## Coverage Goals
+
+- **UI Coverage**: All dashboard features have UI tests
+- **Integration Coverage**: All major integration patterns tested
+- **Sample Validation**: Key user workflows tested
+
+## Contributing
+
+When adding new tests:
+
+1. **UI Tests**: Use Page Object Model and add tests to appropriate `test_ark_*.py` file
+2. **Documentation**: Update test documentation with new test coverage
+3. **CI/CD**: Ensure tests run in GitHub Actions workflow
+
+## Next Steps
+
+- [UI Testing Guide](/developer-guide/testing/ui-testing) - Playwright and pytest setup
+- [Local Development](/developer-guide/local-development) - Development environment
+- [CI/CD](/developer-guide/build) - Build and deployment

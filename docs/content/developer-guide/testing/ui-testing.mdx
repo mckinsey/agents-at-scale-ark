@@ -1,0 +1,223 @@
+---
+title: UI Testing with Playwright
+description: Automated browser testing for ARK Dashboard using pytest and Playwright
+---
+
+# UI Testing with Playwright
+
+ARK uses [Playwright](https://playwright.dev/) with pytest to automate browser-based testing of the ARK Dashboard. These tests verify UI functionality, navigation, and end-to-end workflows.
+
+## Prerequisites
+
+Before running UI tests, ensure you have:
+
+- Python 3.8 or higher installed
+- ARK cluster running with dashboard deployed
+- Access to the ARK dashboard (typically via port-forward)
+
+## Installation
+
+### Step 1: Set Up Python Virtual Environment
+
+Create an isolated Python environment for testing:
+
+```bash
+cd tests/pytest
+python3 -m venv venv
+source venv/bin/activate
+```
+
+On Windows:
+```bash
+python -m venv venv
+.\venv\Scripts\activate
+```
+
+### Step 2: Install Python Dependencies
+
+Install pytest, Playwright, and required packages:
+
+```bash
+pip install -r requirements.txt
+```
+
+The `requirements.txt` includes:
+- `pytest` - Testing framework
+- `playwright` - Browser automation
+- `pytest-playwright` - Playwright pytest plugin
+- `kubernetes` - Kubernetes Python client
+- `python-dotenv` - Environment variable management
+- `pytest-dependency` - Test dependency management
+
+### Step 3: Install Playwright Browsers
+
+Playwright requires browser binaries to be installed:
+
+```bash
+playwright install
+```
+
+This downloads Chromium, Firefox, and WebKit browsers. For a specific browser:
+
+```bash
+playwright install chromium
+```
+
+### Step 4: Verify Installation
+
+Test that Playwright is installed correctly:
+
+```bash
+playwright --version
+```
+
+## Configuration
+
+### Environment Setup
+
+Create a `.env` file in `tests/pytest/ui-tests/` with your configuration:
+
+```bash
+cd tests/pytest/ui-tests
+cp env.example .env
+```
+
+Edit `.env` with your credentials:
+
+```env
+OPENAI_API_KEY=your-key
+OPENAI_ENDPOINT=your-endpoint
+OPENAI_MODEL=your-model
+
+AZURE_OPENAI_KEY=your-key
+AZURE_OPENAI_ENDPOINT=your-endpoint
+AZURE_OPENAI_MODEL=your-model
+```
+
+### ARK Dashboard Access
+
+The tests expect the ARK Dashboard to be accessible. Set up port forwarding:
+
+```bash
+kubectl port-forward svc/ark-dashboard 8080:3000 -n default
+```
+
+Or if using DevSpace:
+
+```bash
+devspace dev
+```
+
+The dashboard should be accessible at `http://localhost:8080`.
+
+## Running UI Tests
+
+### Run All UI Tests
+
+Execute all UI tests from the `tests/pytest` directory:
+
+```bash
+cd tests/pytest
+pytest ui-tests/ -sv
+```
+
+Flags:
+- `-s` - Show print statements and logs
+- `-v` - Verbose output with test names
+
+### Run Specific Test Files
+
+Run tests for a specific component:
+
+```bash
+pytest ui-tests/tests/test_ark_dashboard.py -sv
+pytest ui-tests/tests/test_ark_agents.py -sv
+pytest ui-tests/tests/test_ark_models.py -sv
+```
+
+### Run Specific Tests
+
+Run a single test by name:
+
+```bash
+pytest ui-tests/tests/test_ark_dashboard.py::test_dashboard_title_present -sv
+```
+
+### Run Tests in Headed Mode
+
+By default, tests run headless. To see the browser:
+
+```bash
+pytest ui-tests/ -sv --headed
+```
+
+### Run Tests with Specific Browser
+
+Choose a browser (chromium, firefox, webkit):
+
+```bash
+pytest ui-tests/ -sv --browser firefox
+```
+
+### Generate Test Reports
+
+Create an HTML report of test results:
+
+```bash
+pytest ui-tests/ -sv --html=report.html --self-contained-html
+```
+
+## Test Structure
+
+### ARK CLI Setup Workflow Test
+
+The `test_complete_ark_workflow.py` test validates the complete ARK installation and setup process:
+
+**What it tests:**
+1. **Virtual Environment Setup** - Creates isolated Python environment
+2. **OpenJDK Setup** - Checks and configures OpenJDK if needed
+3. **ARK Installation** - Installs ARK platform and CLI
+4. **Pods Verification** - Verifies required ARK pods are running (ark-api, ark-dashboard, ark-mcp)
+5. **Dashboard Verification** - Tests dashboard HTTP accessibility on common ports
+6. **Cleanup** - Removes all resources and virtual environment
+
+**Run the workflow test:**
+
+```bash
+cd tests/pytest
+pytest -sv test_complete_ark_workflow.py
+```
+
+**Clean up test artifacts:**
+
+```bash
+cd tests/pytest
+rm -rf .pytest_cache __pycache__ venv
+```
+
+This test is useful for:
+- Validating ARK CLI installation process
+- Ensuring all core components start correctly
+- Testing dashboard accessibility
+- Verifying end-to-end deployment workflow
+
+### Page Object Model
+
+Tests use the Page Object Model (POM) pattern for maintainability:
+
+```
+ui-tests/
+├── pages/                    # Page object classes
+│   ├── base_page.py         # Base page with common methods
+│   ├── dashboard_page.py    # Dashboard navigation
+│   ├── agents_page.py       # Agent management
+│   ├── models_page.py       # Model management
+│   ├── teams_page.py        # Team management
+│   └── tools_page.py        # Tool management
+└── tests/                   # Test files
+    ├── test_ark_dashboard.py
+    ├── test_ark_agents.py
+    ├── test_ark_models.py
+    └── test_ark_teams.py
+```
+
