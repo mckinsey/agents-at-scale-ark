@@ -1,0 +1,32 @@
+# Mock LLM configuration for token usage test
+# Returns deterministic token counts in usage field
+ark:
+  model:
+    enabled: true
+    name: test-model
+    type: openai
+    model: gpt-4.1-mini
+    pollInterval: 3s
+    apiKey: mock-api-key
+
+config:
+  rules:
+  - path: "/v1/chat/completions"
+    match: "@"
+    response:
+      status: 200
+      content: |
+        {
+          "id": "mock-{{timestamp}}",
+          "object": "chat.completion",
+          "model": "{{jmes request body.model}}",
+          "choices": [{
+            "message": {{jmes request body.messages[-1]}},
+            "finish_reason": "stop"
+          }],
+          "usage": {
+            "prompt_tokens": 50,
+            "completion_tokens": 100,
+            "total_tokens": 150
+          }
+        }

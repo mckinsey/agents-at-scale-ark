@@ -18,7 +18,7 @@ httpRoute:
       namespace: ark-system
   # Hostnames this route matches
   hostnames:
-    - "phoenix.phoenix.127.0.0.1.nip.io"
+    - "phoenix-svc.phoenix.127.0.0.1.nip.io"
 
 # Service configuration for OTEL
 service:

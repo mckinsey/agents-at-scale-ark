@@ -256,7 +256,5 @@ class MetricEvaluator:
             metadata["cost_score"] = f"{metrics['costScore']:.2f}"
         if "performanceScore" in metrics:
             metadata["performance_score"] = f"{metrics['performanceScore']:.2f}"
-        if "qualityScore" in metrics:
-            metadata["quality_score"] = f"{metrics['qualityScore']:.2f}"
-        
+
         return metadata

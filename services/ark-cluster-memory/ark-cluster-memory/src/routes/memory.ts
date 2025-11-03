@@ -175,13 +175,141 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    *         description: Failed to purge memory
    */
   router.delete('/messages', (req, res) => {
-    try {
-      memory.purge();
-      res.json({ status: 'success', message: 'Memory purged' });
-    } catch (error) {
-      console.error('Memory purge failed:', error);
-      res.status(500).json({ error: 'Failed to purge memory' });
+    memory.purge();
+    res.json({ status: 'success', message: 'Memory purged' });
+  });
+
+  /**
+   * @swagger
+   * /sessions/{sessionId}:
+   *   delete:
+   *     summary: Delete a specific session
+   *     description: Removes all messages for a specific session
+   *     tags:
+   *       - Memory
+   *     parameters:
+   *       - in: path
+   *         name: sessionId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Session ID to delete
+   *     responses:
+   *       200:
+   *         description: Session deleted successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 message:
+   *                   type: string
+   *                   example: Session deleted
+   *       400:
+   *         description: Invalid session ID
+   *       500:
+   *         description: Failed to delete session
+   */
+  router.delete('/sessions/:sessionId', (req, res) => {
+    const { sessionId } = req.params;
+    
+    if (!sessionId) {
+      res.status(400).json({ error: 'Session ID is required' });
+      return;
     }
+    
+    memory.clearSession(sessionId);
+    res.json({ status: 'success', message: `Session ${sessionId} deleted` });
+  });
+
+  /**
+   * @swagger
+   * /sessions/{sessionId}/queries/{queryId}/messages:
+   *   delete:
+   *     summary: Delete messages for a specific query
+   *     description: Removes all messages for a specific query within a session
+   *     tags:
+   *       - Memory
+   *     parameters:
+   *       - in: path
+   *         name: sessionId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Session ID
+   *       - in: path
+   *         name: queryId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Query ID to delete messages for
+   *     responses:
+   *       200:
+   *         description: Query messages deleted successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 message:
+   *                   type: string
+   *                   example: Query messages deleted
+   *       400:
+   *         description: Invalid parameters
+   *       500:
+   *         description: Failed to delete query messages
+   */
+  router.delete('/sessions/:sessionId/queries/:queryId/messages', (req, res) => {
+    const { sessionId, queryId } = req.params;
+    
+    if (!sessionId) {
+      res.status(400).json({ error: 'Session ID is required' });
+      return;
+    }
+    
+    if (!queryId) {
+      res.status(400).json({ error: 'Query ID is required' });
+      return;
+    }
+    
+    memory.clearQuery(sessionId, queryId);
+    res.json({ status: 'success', message: `Query ${queryId} messages deleted from session ${sessionId}` });
+  });
+
+  /**
+   * @swagger
+   * /sessions:
+   *   delete:
+   *     summary: Delete all sessions
+   *     description: Removes all sessions and their messages (same as purging memory)
+   *     tags:
+   *       - Memory
+   *     responses:
+   *       200:
+   *         description: All sessions deleted successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 message:
+   *                   type: string
+   *                   example: All sessions deleted
+   *       500:
+   *         description: Failed to delete sessions
+   */
+  router.delete('/sessions', (req, res) => {
+    memory.purge();
+    res.json({ status: 'success', message: 'All sessions deleted' });
   });
 
   return router;

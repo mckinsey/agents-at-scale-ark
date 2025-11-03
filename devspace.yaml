@@ -25,6 +25,14 @@ dependencies:
 #    path: ./services/executor-langchain
 #   postgres-memory:
 #     path: ./services/postgres-memory
+  
+  # Observability services. Uncomment to enable locally. Only phoenix or langfuse is needed
+  # # phoenix service for observability. phoenix has a hook to restart ark-controller to pick up its url
+  # phoenix:
+  #   path: ./marketplace/services/phoenix
+  # # langfuse service for observability. langfuse has a hook to restart ark-controller to pick up its url
+  # langfuse:
+  #   path: ./marketplace/services/langfuse
 
 # Vars - To disable, set environment variables before the devspace commands
 #        For example: ENABLE_CERT_MANAGER=false devspace dev

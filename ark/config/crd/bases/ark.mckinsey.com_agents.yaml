@@ -197,13 +197,24 @@ spec:
                       minLength: 1
                       type: string
                     partial:
+                      description: |-
+                        ToolPartial allows overriding the tool's name and description as exposed to the agent,
+                        and preconfiguring or hiding tool parameters from the agent. Parameters defined here
+                        are injected at runtime and are not visible or editable by the agent itself.
                       properties:
                         description:
+                          description: Description to override the tool's description
+                            as exposed to the agent (optional)
                           type: string
                         name:
+                          description: Name to override the tool's name as exposed
+                            to the agent (optional)
                           minLength: 1
                           type: string
                         parameters:
+                          description: Parameters to preconfigure and hide from the
+                            agent; injected at runtime and not visible/editable by
+                            the agent (optional)
                           items:
                             properties:
                               name:

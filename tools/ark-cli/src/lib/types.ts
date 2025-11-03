@@ -154,3 +154,45 @@ export interface ClusterInfo {
   user?: string;
   namespace?: string;
 }
+
+// ARK Evaluation types - only fields we use
+export interface EvaluationManifest {
+  apiVersion: string;
+  kind: 'Evaluation';
+  metadata: {
+    name: string;
+  };
+  spec: {
+    type: 'direct' | 'query';
+    evaluator: {
+      name: string;
+    };
+    config: {
+      input?: string;
+      output?: string;
+      queryRef?: {
+        name: string;
+      };
+      responseTarget?: {
+        type: string;
+        name: string;
+      };
+    };
+    timeout?: string;
+    ttl?: string;
+  };
+}
+
+export interface EvaluationStatus {
+  phase?: 'pending' | 'running' | 'done' | 'error';
+  score?: string;
+  passed?: boolean;
+  message?: string;
+}
+
+export interface Evaluation {
+  metadata: {
+    name: string;
+  };
+  status?: EvaluationStatus;
+}
