@@ -5,24 +5,7 @@ import {
   executeDirectEvaluation,
   executeQueryEvaluation,
 } from '../../lib/executeEvaluation.js';
-
-async function readStdin(): Promise<string> {
-  return new Promise((resolve) => {
-    if (process.stdin.isTTY) {
-      resolve('');
-      return;
-    }
-
-    let data = '';
-    process.stdin.setEncoding('utf8');
-    process.stdin.on('data', (chunk) => {
-      data += chunk;
-    });
-    process.stdin.on('end', () => {
-      resolve(data.trim());
-    });
-  });
-}
+import {readStdin} from '../../lib/stdin.js';
 
 export function createEvaluationCommand(_: ArkConfig): Command {
   const evaluationCommand = new Command('evaluation');
