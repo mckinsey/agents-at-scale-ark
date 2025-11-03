@@ -4,6 +4,7 @@ import chalk from 'chalk';
 import output from './output.js';
 import {ExitCodes} from './errors.js';
 import {parseDuration} from './duration.js';
+import type {Evaluation, EvaluationManifest} from './types.js';
 
 export interface DirectEvaluationOptions {
   evaluatorName: string;
@@ -19,47 +20,6 @@ export interface QueryEvaluationOptions {
   responseTarget?: string;
   timeout?: string;
   watchTimeout?: string;
-}
-
-interface EvaluationManifest {
-  apiVersion: string;
-  kind: 'Evaluation';
-  metadata: {
-    name: string;
-  };
-  spec: {
-    type: 'direct' | 'query';
-    evaluator: {
-      name: string;
-    };
-    config: {
-      input?: string;
-      output?: string;
-      queryRef?: {
-        name: string;
-      };
-      responseTarget?: {
-        type: string;
-        name: string;
-      };
-    };
-    timeout?: string;
-    ttl?: string;
-  };
-}
-
-interface EvaluationStatus {
-  phase?: 'pending' | 'running' | 'done' | 'error';
-  score?: string;
-  passed?: boolean;
-  message?: string;
-}
-
-interface Evaluation {
-  metadata: {
-    name: string;
-  };
-  status?: EvaluationStatus;
 }
 
 async function waitForEvaluationAndDisplayResults(
