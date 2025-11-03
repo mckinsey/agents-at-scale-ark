@@ -1,0 +1,311 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: simple-math-workflow
+  annotations:
+    workflows.argoproj.io/title: "Simple Math Operations"
+    workflows.argoproj.io/description: |
+      Simple workflow with countdown agent and 3 Python nodes performing arithmetic operations:
+      0. Countdown before starting (using countdown-agent)
+      1. Add a=1 and b=2
+      2. Multiply result by 3
+      3. Subtract 1 and output final answer
+      4. Get interesting facts about the result (using number-curiosa agent)
+spec:
+  entrypoint: main
+  serviceAccountName: argo-workflow
+
+  # Input parameters
+  arguments:
+    parameters:
+      - name: a
+        value: "1"
+      - name: b
+        value: "2"
+
+  templates:
+  - name: main
+    dag:
+      tasks:
+      # Step 0: Countdown before starting calculations
+      - name: countdown-start
+        template: ark-agent-countdown
+        arguments:
+          parameters:
+          - name: countdown-message
+            value: "Starting math workflow calculations in"
+          - name: countdown-seconds
+            value: "5"
+
+      # Step 1: Add two numbers
+      - name: add-numbers
+        template: python-add
+        dependencies: [countdown-start]
+        arguments:
+          parameters:
+          - name: a
+            value: "{{workflow.parameters.a}}"
+          - name: b
+            value: "{{workflow.parameters.b}}"
+
+      # Step 2: Multiply result by 3
+      - name: multiply-by-three
+        template: python-multiply
+        dependencies: [add-numbers]
+        arguments:
+          parameters:
+          - name: input-number
+            value: "{{tasks.add-numbers.outputs.parameters.result}}"
+
+      # Step 3: Subtract 1 from result
+      - name: subtract-one
+        template: python-subtract
+        dependencies: [multiply-by-three]
+        arguments:
+          parameters:
+          - name: input-number
+            value: "{{tasks.multiply-by-three.outputs.parameters.result}}"
+
+      # Step 4: Get interesting facts about the final number
+      - name: number-curiosa
+        template: ark-agent-curiosa
+        dependencies: [subtract-one]
+        arguments:
+          parameters:
+          - name: final-number
+            value: "{{tasks.subtract-one.outputs.parameters.final-result}}"
+
+  # Template 1: Addition
+  - name: python-add
+    inputs:
+      parameters:
+        - name: a
+        - name: b
+    script:
+      image: python:3.12-slim
+      command: [python]
+      source: |
+        # Get input parameters
+        a = int("{{inputs.parameters.a}}")
+        b = int("{{inputs.parameters.b}}")
+        
+        print(f"Adding {a} + {b}")
+        result = a + b
+        print(f"Result: {result}")
+        
+        # Save result for next step
+        with open('/tmp/result.txt', 'w') as f:
+            f.write(str(result))
+        
+        print(f"Addition complete: {a} + {b} = {result}")
+        print(f"RESULT PASSED TO NEXT STEP: {result}")
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/result.txt
+
+  # Template 2: Multiplication
+  - name: python-multiply
+    inputs:
+      parameters:
+        - name: input-number
+    script:
+      image: python:3.12-slim
+      command: [python]
+      source: |
+        # Get input from previous step
+        input_num = int("{{inputs.parameters.input-number}}")
+        multiplier = 3
+        
+        print(f"Multiplying {input_num} × {multiplier}")
+        result = input_num * multiplier
+        print(f"Result: {result}")
+        
+        # Save result for next step
+        with open('/tmp/result.txt', 'w') as f:
+            f.write(str(result))
+        
+        print(f"Multiplication complete: {input_num} × {multiplier} = {result}")
+        print(f"RESULT PASSED TO NEXT STEP: {result}")
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/result.txt
+
+  # Template 3: Subtraction
+  - name: python-subtract
+    inputs:
+      parameters:
+        - name: input-number
+    script:
+      image: python:3.12-slim
+      command: [python]
+      source: |
+        # Get input from previous step
+        input_num = int("{{inputs.parameters.input-number}}")
+        subtract_value = 1
+        
+        print(f"Subtracting {subtract_value} from {input_num}")
+        result = input_num - subtract_value
+        print(f"Final Result: {result}")
+        
+        # Save result for next step
+        with open('/tmp/result.txt', 'w') as f:
+            f.write(str(result))
+        
+        print("="*40)
+        print("FINAL CALCULATION SUMMARY")
+        print("="*40)
+        print(f"Step 1: 1 + 2 = 3")
+        print(f"Step 2: 3 × 3 = 9") 
+        print(f"Step 3: 9 - 1 = {result}")
+        print(f"FINAL ANSWER: {result}")
+        print(f"RESULT PASSED TO AGENT: {result}")
+        print("="*40)
+    outputs:
+      parameters:
+      - name: final-result
+        valueFrom:
+          path: /tmp/result.txt
+
+  # Template 4: ARK Agent - Number Curiosa
+  - name: ark-agent-curiosa
+    inputs:
+      parameters:
+        - name: final-number
+    script:
+      image: alpine/k8s:1.28.13
+      command: [sh]
+      source: |
+        echo "Getting interesting facts about the number: {{inputs.parameters.final-number}}"
+        
+        # Use ARK CLI to query the agent directly with parameters
+        echo "Using ARK CLI to query number-curiosa agent..."
+        
+        # Create a temporary query file with parameters
+        cat > /tmp/query.yaml << EOF
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        metadata:
+          name: curiosa-{{workflow.name}}-{{inputs.parameters.final-number}}
+        spec:
+          input: "Tell me interesting facts about this number"
+          parameters:
+            - name: number
+              value: "{{inputs.parameters.final-number}}"
+          targets:
+            - name: number-curiosa
+              type: agent
+          timeout: 2m
+          ttl: 1h
+        EOF
+        
+        echo "Query YAML:"
+        cat /tmp/query.yaml
+        
+        # Apply the query and wait for result
+        kubectl apply -f /tmp/query.yaml
+        
+        QUERY_NAME="curiosa-{{workflow.name}}-{{inputs.parameters.final-number}}"
+        echo "Waiting for query $QUERY_NAME to complete..."
+        
+        # Wait for completion with timeout
+        kubectl wait --for=condition=Completed --timeout=120s query/$QUERY_NAME
+        
+        # Get the result
+        echo "Getting query result..."
+        kubectl get query $QUERY_NAME -o yaml
+        
+        # Extract response content
+        RESPONSE=$(kubectl get query $QUERY_NAME -o jsonpath='{.status.responses[0].content}' 2>/dev/null || echo "No response found")
+        
+        echo ""
+        echo "="*60
+        echo "INTERESTING FACTS ABOUT THE NUMBER {{inputs.parameters.final-number}}"
+        echo "="*60
+        echo "$RESPONSE"
+        echo ""
+        echo "="*60
+        
+        # Save to output file
+        echo "$RESPONSE" > /tmp/curiosa-facts.txt
+        
+        echo "Response saved to output file"
+    outputs:
+      parameters:
+      - name: curiosa-facts
+        valueFrom:
+          path: /tmp/curiosa-facts.txt
+
+  # Template 5: ARK Agent - Countdown
+  - name: ark-agent-countdown
+    inputs:
+      parameters:
+        - name: countdown-message
+        - name: countdown-seconds
+    script:
+      image: alpine/k8s:1.28.13
+      command: [sh]
+      source: |
+        echo "Initializing countdown agent..."
+        
+        # Use ARK CLI to query the countdown agent
+        echo "Using ARK CLI to query countdown-agent..."
+        
+        # Create a temporary query file with parameters
+        cat > /tmp/countdown-query.yaml << EOF
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        metadata:
+          name: countdown-{{workflow.name}}-start
+        spec:
+          input: "{{inputs.parameters.countdown-message}}"
+          parameters:
+            - name: seconds
+              value: "{{inputs.parameters.countdown-seconds}}"
+          targets:
+            - name: countdown-agent
+              type: agent
+          timeout: 2m
+          ttl: 1h
+        EOF
+        
+        echo "Countdown Query YAML:"
+        cat /tmp/countdown-query.yaml
+        
+        # Apply the query and wait for result
+        kubectl apply -f /tmp/countdown-query.yaml
+        
+        QUERY_NAME="countdown-{{workflow.name}}-start"
+        echo "Waiting for countdown query $QUERY_NAME to complete..."
+        
+        # Wait for completion with timeout
+        kubectl wait --for=condition=Completed --timeout=120s query/$QUERY_NAME
+        
+        # Get the result
+        echo "Getting countdown result..."
+        kubectl get query $QUERY_NAME -o yaml
+        
+        # Extract response content
+        RESPONSE=$(kubectl get query $QUERY_NAME -o jsonpath='{.status.responses[0].content}' 2>/dev/null || echo "Countdown completed")
+        
+        echo ""
+        echo "="*50
+        echo "COUNTDOWN AGENT RESPONSE"
+        echo "="*50
+        echo "$RESPONSE"
+        echo "="*50
+        echo ""
+        echo "Countdown complete - ready to start calculations!"
+        
+        # Save to output file
+        echo "$RESPONSE" > /tmp/countdown-result.txt
+        
+        echo "Countdown response saved to output file"
+    outputs:
+      parameters:
+      - name: countdown-result
+        valueFrom:
+          path: /tmp/countdown-result.txt

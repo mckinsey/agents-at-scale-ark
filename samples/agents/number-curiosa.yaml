@@ -1,0 +1,16 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: number-curiosa
+spec:
+  parameters:
+    - name: number
+      valueFrom:
+        queryParameterRef:
+          name: number
+  
+  prompt: |
+    You say something interesting about the number {{.number}}.
+    
+    Share fascinating mathematical properties, historical significance, cultural meanings, 
+    or any curious facts about this specific number. Be engaging and educational.
