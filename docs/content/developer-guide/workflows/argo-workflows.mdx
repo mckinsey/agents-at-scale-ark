@@ -193,6 +193,11 @@ Install and run the workflow - which will multiply the two input numbers using P
 ```bash
 kubectl apply -f services/argo-workflows/samples/a2a-arithmetic-workflow.yaml
 argo submit --from workflowtemplate/a2a-arithmetic-workflow -p a="2" -p b="3"
+
+# After the workflow runs, check the agent it created
+kubectl get agent number-curiosa
+# NAME              MODEL     READY
+# number-curiosa    default   true
 ```
 
 Screenshot:
