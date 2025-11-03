@@ -172,6 +172,28 @@ Screenshot:
 
 ![Screenshot of the argo artifacts workflow sample](./images/argo-artifacts-screenshot.png)
 
+### A2A Arithmetic Workflow
+
+The `a2a-arithmetic-workflow.yaml` demonstrates combining A2A agents, Ark agents, and Python scripts. The workflow validates prerequisites, performs arithmetic operations, and queries agents for results.
+
+Requires [mock-llm](https://github.com/dwmkerr/mock-llm) with A2A support:
+
+```bash
+helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm --version 0.1.8 \
+  --set ark.a2a.enabled=true
+```
+
+Run the workflow:
+
+```bash
+kubectl apply -f services/argo-workflows/samples/a2a-arithmetic-workflow.yaml
+argo submit --from workflowtemplate/a2a-arithmetic-workflow -p a="2" -p b="3"
+```
+
+Screenshot:
+
+![Screenshot of the A2A agents workflow](./images/a2a-workflow.png)
+
 ## Troubleshooting
 
 When you get errors or unexpected results:
