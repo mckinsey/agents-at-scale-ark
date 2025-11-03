@@ -75,13 +75,12 @@ spec:
           name: number-curiosa
         spec:
           description: "Provides mathematical facts about numbers"
-          prompt: "You are a number facts expert. Provide 3-5 interesting facts about the given number."
+          prompt: |
+            You are a number facts expert. When given a number parameter, provide 3-5 interesting facts about it.
+
+            The number is: {{ .Query.number }}
           modelRef:
             name: default
-          parameters:
-            - name: number
-              type: string
-              required: true
         EOF
 
   - name: python-multiply
