@@ -1,0 +1,16 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: MCPServer
+metadata:
+  name: mock-llm
+  labels:
+    environment: test
+    mcp-query-override-target: "true"
+spec:
+  description: Mock MCP Server for testing
+  address:
+    valueFrom:
+      serviceRef:
+        name: mock-llm
+        port: http
+        path: /
+  transport: http

@@ -51,7 +51,7 @@ func NewMCPClient(ctx context.Context, baseURL string, headers map[string]string
 	maps.Copy(mergedHeaders, headers)
 	maps.Copy(mergedHeaders, mcpSetting.Headers)
 
-	mcpClient, err := createMCPClientWithRetry(ctx, baseURL, headers, transportType, timeout, connectMaxReties)
+	mcpClient, err := createMCPClientWithRetry(ctx, baseURL, mergedHeaders, transportType, timeout, connectMaxReties)
 	if err != nil {
 		return nil, err
 	}
