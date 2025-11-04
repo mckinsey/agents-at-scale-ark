@@ -19,7 +19,7 @@ export interface BaseProviderConfig {
  */
 export interface BaseCollectorOptions {
   /**
-   * @field model Model name (e.g., 'gpt-4o-mini')
+   * Model name (e.g., 'gpt-4o-mini')
    */
   model?: string;
   
