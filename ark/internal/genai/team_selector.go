@@ -81,8 +81,17 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (*Agent, error) {
 	return agent, nil
 }
 
-func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList, previousMember string) (TeamMember, int, error) {
+// selectMemberWithFilter selects a member using the selector agent, working with a filtered list of members.
+// This allows constraining the selector to only legal transitions when graph constraints are provided.
+func (t *Team) selectMemberWithFilter(ctx context.Context, messages []Message, tmpl *template.Template, candidateMembers []TeamMember, candidateIndices []int, previousMember string) (TeamMember, int, error) {
+	if len(candidateMembers) == 0 {
+		return nil, 0, fmt.Errorf("no candidate members available")
+	}
+
 	history := buildHistory(messages)
+	participantsList := buildParticipants(candidateMembers)
+	rolesList := buildRoles(candidateMembers)
+
 	data := SelectorTemplateData{
 		Roles:        rolesList,
 		Participants: participantsList,
@@ -122,27 +131,35 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	rec := NewExecutionRecorder(t.Recorder)
 	rec.SelectorAgentResponse(ctx, t.FullName(), selectorAgent.Name, selectedName, participantsList)
 
-	// Find selected member
-	for i, member := range t.Members {
+	// Find selected member in candidate list
+	for i, member := range candidateMembers {
 		if member.GetName() == selectedName {
 			rec.ParticipantSelected(ctx, t.FullName(), selectedName, "exact_match")
-			return member, i, nil
+			return member, candidateIndices[i], nil
 		}
 	}
 
-	// Fallback to first member if not found
-	if len(t.Members) > 0 {
-		fallback := t.Members[0]
-		rec.ParticipantSelected(ctx, t.FullName(), fallback.GetName(), "fallback_no_match")
+	// Fallback to first candidate member if not found
+	fallback := candidateMembers[0]
+	rec.ParticipantSelected(ctx, t.FullName(), fallback.GetName(), "fallback_no_match")
 
-		// Avoid repeating same member
-		if fallback.GetName() == previousMember && len(t.Members) > 1 {
-			fallback = t.Members[1]
-		}
-		return fallback, 0, nil
+	// Avoid repeating same member
+	if fallback.GetName() == previousMember && len(candidateMembers) > 1 {
+		fallback = candidateMembers[1]
+		return fallback, candidateIndices[1], nil
 	}
 
-	return nil, 0, fmt.Errorf("no members available")
+	return fallback, candidateIndices[0], nil
+}
+
+func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList, previousMember string) (TeamMember, int, error) {
+	// Build indices for all members
+	indices := make([]int, len(t.Members))
+	for i := range t.Members {
+		indices[i] = i
+	}
+
+	return t.selectMemberWithFilter(ctx, messages, tmpl, t.Members, indices, previousMember)
 }
 
 func (t *Team) executeSelector(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
@@ -159,20 +176,102 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 		return newMessages, err
 	}
 
-	participantsList := buildParticipants(t.Members)
-	rolesList := buildRoles(t.Members)
+	// Build legal transitions map if graph constraints are provided
+	legalTransitions := make(map[string][]string)
+	if t.Graph != nil {
+		for _, edge := range t.Graph.Edges {
+			legalTransitions[edge.From] = append(legalTransitions[edge.From], edge.To)
+		}
+	}
+
+	// Build member map for quick lookup
+	memberMap := make(map[string]TeamMember)
+	memberIndexMap := make(map[string]int)
+	for i, member := range t.Members {
+		memberMap[member.GetName()] = member
+		memberIndexMap[member.GetName()] = i
+	}
+
 	previousMember := ""
 
 	for turn := 0; ; turn++ {
 		turnTracker := NewExecutionRecorder(t.Recorder)
 		turnTracker.TeamTurn(ctx, "Start", t.FullName(), t.Strategy, turn)
 
-		nextMember, memberIndex, err := t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember)
-		if err != nil {
-			if IsTerminateTeam(err) {
-				return newMessages, nil
+		var nextMember TeamMember
+		var memberIndex int
+
+		// Determine next member based on graph constraints (if any)
+		if previousMember == "" {
+			// First turn: use first member
+			nextMember = t.Members[0]
+			memberIndex = 0
+		} else if len(legalTransitions) > 0 {
+			// Graph constraints provided: use legal transitions
+			legal := legalTransitions[previousMember]
+
+			if len(legal) == 0 {
+				// No legal transitions - fallback to first member
+				t.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "NoLegalTransitions", BaseEvent{
+					Name: t.FullName(),
+					Metadata: map[string]string{
+						"strategy":       t.Strategy,
+						"previousMember": previousMember,
+						"teamName":       t.FullName(),
+					},
+				})
+				nextMember = t.Members[0]
+				memberIndex = 0
+			} else if len(legal) == 1 {
+				// Only one legal transition - use it directly (skip selector agent for optimization)
+				selectedName := legal[0]
+				member, exists := memberMap[selectedName]
+				if !exists {
+					return newMessages, fmt.Errorf("legal transition target '%s' not found in team members", selectedName)
+				}
+				nextMember = member
+				memberIndex = memberIndexMap[selectedName]
+
+				rec := NewExecutionRecorder(t.Recorder)
+				rec.ParticipantSelected(ctx, t.FullName(), selectedName, "graph_constrained_single")
+			} else {
+				// Multiple legal transitions - filter members and use selector agent
+				candidateMembers := make([]TeamMember, 0, len(legal))
+				candidateIndices := make([]int, 0, len(legal))
+				for _, legalName := range legal {
+					if member, exists := memberMap[legalName]; exists {
+						candidateMembers = append(candidateMembers, member)
+						candidateIndices = append(candidateIndices, memberIndexMap[legalName])
+					}
+				}
+
+				if len(candidateMembers) == 0 {
+					return newMessages, fmt.Errorf("no valid members found for legal transitions from '%s'", previousMember)
+				}
+
+				selectedMember, selectedIdx, err := t.selectMemberWithFilter(ctx, messages, tmpl, candidateMembers, candidateIndices, previousMember)
+				if err != nil {
+					if IsTerminateTeam(err) {
+						return newMessages, nil
+					}
+					return newMessages, err
+				}
+				nextMember = selectedMember
+				memberIndex = selectedIdx
 			}
-			return newMessages, err
+		} else {
+			// No graph constraints: use standard selector (all members available)
+			participantsList := buildParticipants(t.Members)
+			rolesList := buildRoles(t.Members)
+			selectedMember, selectedIdx, err := t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember)
+			if err != nil {
+				if IsTerminateTeam(err) {
+					return newMessages, nil
+				}
+				return newMessages, err
+			}
+			nextMember = selectedMember
+			memberIndex = selectedIdx
 		}
 
 		// Start turn-level telemetry span
