@@ -67,6 +67,7 @@
     "@types/debug": "^4.1.12",
     "@types/inquirer": "^9.0.7",
     "@types/jest": "^30.0.0",
+    "@types/marked-terminal": "^6.1.1",
     "@types/node": "^22.10.2",
     "@types/react": "^19.1.13",
     "@typescript-eslint/eslint-plugin": "^8.20.0",

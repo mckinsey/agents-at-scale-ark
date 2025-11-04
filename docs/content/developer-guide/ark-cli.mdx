@@ -48,7 +48,7 @@ ark completion               # Shell completion
 Resource level commands follow the pattern: `ark <resource> <action> [name] [options]`
 
 ```bash
-# Resources: models, agents, teams, tools
+# Resources: models, agents, teams, tools, evaluation
 # Common verbs: list (default), create, status, query, delete, watch
 
 ark models                          # List models
@@ -67,6 +67,12 @@ ark models query default "What is 2+2?"
 
 # Shorthand verb syntax, more natural for some of the more essential commands.
 ark query model/default "What is 2+2?"
+
+# Sorthand for calling evaluation
+ark evaluation ark-evaluator --input "What is 2+2?" --output "5"
+
+# Chaining query and evaluation example
+ark query model/default "What is 2+2?" -o name | ark evaluation ark-evaluator
 ```
 
 Note that the target format is `<type>/<name>` (e.g., `agent/weather`, `team/my-team`), as per the Ark APIs. Consider supporting `@latest` as a convenience alias for the most recently created resource, similar to `argo logs @latest`. This feature is not yet implemented but will likely be added soon.
@@ -92,7 +98,7 @@ Four main status codes are used:
 | `2` | Operation Error | Backend failure, resource error |
 | `3` | Timeout | Operation exceeded time limit |
 
-This helps scripts distinguish between usage errors, operational failures, and timeouts. Error details are printed by the CLI.
+This helps scripts distinguish between usage errors, operational failures, timeouts, and evaluation failures. Error details are printed by the CLI.
 
 Query operations return exit code `2` when execution fails and `3` on timeout, making error handling in scripts straightforward. This behavior aligns with Argo Workflows' `--wait` flag pattern (see [argoproj/argo-workflows#1008](https://github.com/argoproj/argo-workflows/issues/1008)).
 

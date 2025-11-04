@@ -121,10 +121,11 @@ func TestNewMCPClient(t *testing.T) {
 				}
 			}()
 
-			// Wait for the server to start (in CI env this may take a bit longer)
-			time.Sleep(1000 * time.Millisecond)
-
+			// Wait for the server to start
 			ctx := t.Context()
+			serverURL := fmt.Sprintf("http://%s:%s", tc.mcpServer.connectionOptions.host, tc.mcpServer.connectionOptions.port)
+			require.NoError(t, waitForServer(t, ctx, serverURL, 5*time.Second))
+
 			client, err := NewMCPClient(
 				ctx,
 				fmt.Sprintf("http://%s:%s", tc.mcpClient.connectionOptions.host, tc.mcpClient.connectionOptions.port),
@@ -211,4 +212,39 @@ func (m *mcpServerMock) sayHi(ctx context.Context, req *mcp.CallToolRequest, arg
 			&mcp.TextContent{Text: "Hi " + args.Name},
 		},
 	}, nil, nil
+}
+
+// waitForServer polls the server URL until it responds or timeout is reached
+func waitForServer(t *testing.T, ctx context.Context, url string, timeout time.Duration) error {
+	t.Helper()
+
+	client := &http.Client{Timeout: 100 * time.Millisecond}
+	deadline := time.Now().Add(timeout)
+	startTime := time.Now()
+
+	for time.Now().Before(deadline) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create request: %w", err)
+		}
+
+		resp, err := client.Do(req)
+		if err == nil {
+			if err = resp.Body.Close(); err != nil {
+				return fmt.Errorf("failed to close response body: %w", err)
+			}
+
+			t.Logf("server became ready in %v", time.Since(startTime))
+			return nil
+		}
+
+		// Check if context was cancelled
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	return fmt.Errorf("server at %s did not become ready within %v", url, timeout)
 }

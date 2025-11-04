@@ -58,6 +58,35 @@ describe('createQueryCommand', () => {
       targetType: 'model',
       targetName: 'default',
       message: 'Hello world',
+      outputFormat: undefined,
+    });
+  });
+
+  it('should pass output format option to executeQuery', async () => {
+    mockParseTarget.mockReturnValue({
+      type: 'model',
+      name: 'default',
+    });
+
+    mockExecuteQuery.mockResolvedValue(undefined);
+
+    const command = createQueryCommand({} as any);
+
+    await command.parseAsync([
+      'node',
+      'test',
+      'model/default',
+      'Hello world',
+      '-o',
+      'json',
+    ]);
+
+    expect(mockParseTarget).toHaveBeenCalledWith('model/default');
+    expect(mockExecuteQuery).toHaveBeenCalledWith({
+      targetType: 'model',
+      targetName: 'default',
+      message: 'Hello world',
+      outputFormat: 'json',
     });
   });
 

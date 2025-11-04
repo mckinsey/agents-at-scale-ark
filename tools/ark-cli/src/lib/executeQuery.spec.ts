@@ -83,7 +83,7 @@ describe('executeQuery', () => {
         if (args.includes('apply')) {
           return {stdout: '', stderr: '', exitCode: 0};
         }
-        if (args.includes('get') && args.includes('query')) {
+        if (args.includes('get') && args.includes('queries')) {
           return {
             stdout: JSON.stringify(mockQueryResponse),
             stderr: '',
@@ -116,7 +116,7 @@ describe('executeQuery', () => {
         if (args.includes('apply')) {
           return {stdout: '', stderr: '', exitCode: 0};
         }
-        if (args.includes('get') && args.includes('query')) {
+        if (args.includes('get') && args.includes('queries')) {
           return {
             stdout: JSON.stringify(mockQueryResponse),
             stderr: '',
@@ -155,7 +155,7 @@ describe('executeQuery', () => {
         if (args.includes('apply')) {
           return {stdout: '', stderr: '', exitCode: 0};
         }
-        if (args.includes('get') && args.includes('query')) {
+        if (args.includes('get') && args.includes('queries')) {
           return {
             stdout: JSON.stringify(mockQueryResponse),
             stderr: '',

@@ -1,13 +1,13 @@
-import { Command } from 'commander';
-import type { ArkConfig } from '../../lib/config.js';
+import {Command} from 'commander';
+import type {ArkConfig} from '../../lib/config.js';
 import output from '../../lib/output.js';
-import { ArkApiProxy } from '../../lib/arkApiProxy.js';
+import {ArkApiProxy} from '../../lib/arkApiProxy.js';
 
-export async function listSessions(options: { output?: string }) {
+export async function listSessions(options: {output?: string}) {
   try {
     const proxy = new ArkApiProxy();
     const arkApiClient = await proxy.start();
-    
+
     const sessions = await arkApiClient.getSessions();
 
     if (options.output === 'json') {
@@ -24,7 +24,7 @@ export async function listSessions(options: { output?: string }) {
     sessions.forEach((session: any) => {
       output.info(`  ${session.sessionId} (memory: ${session.memoryName})`);
     });
-    
+
     proxy.stop();
   } catch (error) {
     output.error('Failed to list sessions:', error);
@@ -32,20 +32,23 @@ export async function listSessions(options: { output?: string }) {
   }
 }
 
-export async function deleteSession(sessionId: string, options: { output?: string }) {
+export async function deleteSession(
+  sessionId: string,
+  options: {output?: string}
+) {
   try {
     const proxy = new ArkApiProxy();
     const arkApiClient = await proxy.start();
-    
+
     const response = await arkApiClient.deleteSession(sessionId);
-    
+
     if (options.output === 'json') {
       output.info(JSON.stringify(response, null, 2));
       return;
     }
 
     output.success(`Session ${sessionId} deleted successfully`);
-    
+
     proxy.stop();
   } catch (error) {
     output.error(`Failed to delete session ${sessionId}:`, error);
@@ -53,20 +56,26 @@ export async function deleteSession(sessionId: string, options: { output?: strin
   }
 }
 
-export async function deleteQuery(sessionId: string, queryId: string, options: { output?: string }) {
+export async function deleteQuery(
+  sessionId: string,
+  queryId: string,
+  options: {output?: string}
+) {
   try {
     const proxy = new ArkApiProxy();
     const arkApiClient = await proxy.start();
-    
+
     const response = await arkApiClient.deleteQueryMessages(sessionId, queryId);
-    
+
     if (options.output === 'json') {
       output.info(JSON.stringify(response, null, 2));
       return;
     }
 
-    output.success(`Query ${queryId} messages deleted successfully from session ${sessionId}`);
-    
+    output.success(
+      `Query ${queryId} messages deleted successfully from session ${sessionId}`
+    );
+
     proxy.stop();
   } catch (error) {
     output.error(`Failed to delete query ${queryId} messages:`, error);
@@ -74,20 +83,20 @@ export async function deleteQuery(sessionId: string, queryId: string, options: {
   }
 }
 
-export async function deleteAll(options: { output?: string }) {
+export async function deleteAll(options: {output?: string}) {
   try {
     const proxy = new ArkApiProxy();
     const arkApiClient = await proxy.start();
-    
+
     const response = await arkApiClient.deleteAllSessions();
-    
+
     if (options.output === 'json') {
       output.info(JSON.stringify(response, null, 2));
       return;
     }
 
     output.success('All sessions deleted successfully');
-    
+
     proxy.stop();
   } catch (error) {
     output.error('Failed to delete all sessions:', error);
@@ -98,9 +107,7 @@ export async function deleteAll(options: { output?: string }) {
 export function createMemoryCommand(_: ArkConfig): Command {
   const memoryCommand = new Command('memory');
 
-  memoryCommand
-    .description('Manage memory sessions and queries')
-    .alias('mem');
+  memoryCommand.description('Manage memory sessions and queries').alias('mem');
 
   // List sessions command
   memoryCommand

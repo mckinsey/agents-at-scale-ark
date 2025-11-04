@@ -164,7 +164,7 @@ export class ArkApiClient {
   async deleteSession(sessionId: string): Promise<any> {
     try {
       const response = await fetch(`${this.baseUrl}/v1/sessions/${sessionId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
       });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -179,9 +179,12 @@ export class ArkApiClient {
 
   async deleteQueryMessages(sessionId: string, queryId: string): Promise<any> {
     try {
-      const response = await fetch(`${this.baseUrl}/v1/sessions/${sessionId}/queries/${queryId}/messages`, {
-        method: 'DELETE'
-      });
+      const response = await fetch(
+        `${this.baseUrl}/v1/sessions/${sessionId}/queries/${queryId}/messages`,
+        {
+          method: 'DELETE',
+        }
+      );
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -196,7 +199,7 @@ export class ArkApiClient {
   async deleteAllSessions(): Promise<any> {
     try {
       const response = await fetch(`${this.baseUrl}/v1/sessions`, {
-        method: 'DELETE'
+        method: 'DELETE',
       });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
