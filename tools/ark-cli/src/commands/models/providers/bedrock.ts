@@ -1,5 +1,5 @@
 import inquirer from 'inquirer';
-import {BaseProviderConfig, CommonCollectorOptions, ProviderConfigCollector} from './types.js';
+import {BaseProviderConfig, BaseCollectorOptions, ProviderConfigCollector} from './types.js';
 
 /**
  * Configuration for AWS Bedrock models.
@@ -16,7 +16,7 @@ export interface BedrockConfig extends BaseProviderConfig {
 /**
  * Options specific to Bedrock collector.
  */
-export interface BedrockCollectorOptions extends CommonCollectorOptions {
+export interface BedrockCollectorOptions extends BaseCollectorOptions {
   region?: string;
   accessKeyId?: string;
   secretAccessKey?: string;
@@ -37,7 +37,7 @@ export interface BedrockCollectorOptions extends CommonCollectorOptions {
  * Values can be provided via command-line options or will be prompted interactively.
  */
 export class BedrockConfigCollector implements ProviderConfigCollector {
-  async collectConfig(options: CommonCollectorOptions): Promise<BedrockConfig> {
+  async collectConfig(options: BaseCollectorOptions): Promise<BedrockConfig> {
     const bedrockOptions = options as BedrockCollectorOptions;
     
     let region = bedrockOptions.region;

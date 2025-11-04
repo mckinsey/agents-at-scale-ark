@@ -1,5 +1,5 @@
 import inquirer from 'inquirer';
-import {BaseProviderConfig, CommonCollectorOptions, ProviderConfigCollector} from './types.js';
+import {BaseProviderConfig, BaseCollectorOptions, ProviderConfigCollector} from './types.js';
 
 /**
  * Configuration for OpenAI models.
@@ -13,7 +13,7 @@ export interface OpenAIConfig extends BaseProviderConfig {
 /**
  * Options specific to OpenAI collector.
  */
-export interface OpenAICollectorOptions extends CommonCollectorOptions {
+export interface OpenAICollectorOptions extends BaseCollectorOptions {
   baseUrl?: string;
   apiKey?: string;
 }
@@ -28,7 +28,7 @@ export interface OpenAICollectorOptions extends CommonCollectorOptions {
  * Values can be provided via command-line options or will be prompted interactively.
  */
 export class OpenAIConfigCollector implements ProviderConfigCollector {
-  async collectConfig(options: CommonCollectorOptions): Promise<OpenAIConfig> {
+  async collectConfig(options: BaseCollectorOptions): Promise<OpenAIConfig> {
     const openaiOptions = options as OpenAICollectorOptions;
     
     let baseUrl = openaiOptions.baseUrl;

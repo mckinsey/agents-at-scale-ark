@@ -1,5 +1,5 @@
 import inquirer from 'inquirer';
-import {BaseProviderConfig, CommonCollectorOptions, ProviderConfigCollector} from './types.js';
+import {BaseProviderConfig, BaseCollectorOptions, ProviderConfigCollector} from './types.js';
 
 /**
  * Configuration for Azure OpenAI models.
@@ -14,7 +14,7 @@ export interface AzureConfig extends BaseProviderConfig {
 /**
  * Options specific to Azure collector.
  */
-export interface AzureCollectorOptions extends CommonCollectorOptions {
+export interface AzureCollectorOptions extends BaseCollectorOptions {
   baseUrl?: string;
   apiKey?: string;
   apiVersion?: string;
@@ -31,7 +31,7 @@ export interface AzureCollectorOptions extends CommonCollectorOptions {
  * Values can be provided via command-line options or will be prompted interactively.
  */
 export class AzureConfigCollector implements ProviderConfigCollector {
-  async collectConfig(options: CommonCollectorOptions): Promise<AzureConfig> {
+  async collectConfig(options: BaseCollectorOptions): Promise<AzureConfig> {
     const azureOptions = options as AzureCollectorOptions;
     
     let baseUrl = azureOptions.baseUrl;

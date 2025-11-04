@@ -6,7 +6,7 @@
 
 export {
   BaseProviderConfig,
-  CommonCollectorOptions,
+  BaseCollectorOptions,
   ProviderConfigCollector,
 } from './types.js';
 export {

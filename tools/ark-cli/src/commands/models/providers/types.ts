@@ -10,10 +10,24 @@ export interface BaseProviderConfig {
 }
 
 /**
- * Common options available to all collectors.
+ * Common options available to all providers collectors.
+ * 
+ * Can be extended with provider-specific options to grant more flexibility when configuring models on different providers.
+ * 
+ * @field model - Model name (e.g., 'gpt-4o-mini')
+ * @field type - Model provider type (e.g., 'azure', 'openai', 'bedrock')
  */
-export interface CommonCollectorOptions {
+export interface BaseCollectorOptions {
+  /**
+   * @field {model} Model name (e.g., 'gpt-4o-mini')
+   */
   model?: string;
+  
+  /**
+   * Model provider type (e.g., 'azure', 'openai', 'bedrock')
+   */
+  type?: string;
+
   [key: string]: unknown; // Allow provider-specific options to pass through
 }
 
@@ -38,5 +52,5 @@ export interface ProviderConfigCollector {
    * @returns A promise that resolves to a complete provider configuration with all required fields
    * @throws Error if a required field cannot be obtained or validation fails
    */
-  collectConfig(options: CommonCollectorOptions): Promise<ProviderConfig>;
+  collectConfig(options: BaseCollectorOptions): Promise<ProviderConfig>;
 }
