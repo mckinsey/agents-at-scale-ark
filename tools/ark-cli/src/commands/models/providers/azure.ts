@@ -1,6 +1,5 @@
 import inquirer from 'inquirer';
-import {CreateModelOptions} from '../create.js';
-import {BaseProviderConfig, ProviderConfigCollector} from './types.js';
+import {BaseProviderConfig, CommonCollectorOptions, ProviderConfigCollector} from './types.js';
 
 /**
  * Configuration for Azure OpenAI models.
@@ -10,6 +9,15 @@ export interface AzureConfig extends BaseProviderConfig {
   baseUrl: string;
   apiKey: string;
   apiVersion: string;
+}
+
+/**
+ * Options specific to Azure collector.
+ */
+export interface AzureCollectorOptions extends CommonCollectorOptions {
+  baseUrl?: string;
+  apiKey?: string;
+  apiVersion?: string;
 }
 
 /**
@@ -23,8 +31,10 @@ export interface AzureConfig extends BaseProviderConfig {
  * Values can be provided via command-line options or will be prompted interactively.
  */
 export class AzureConfigCollector implements ProviderConfigCollector {
-  async collectConfig(options: CreateModelOptions): Promise<AzureConfig> {
-    let baseUrl = options.baseUrl;
+  async collectConfig(options: CommonCollectorOptions): Promise<AzureConfig> {
+    const azureOptions = options as AzureCollectorOptions;
+    
+    let baseUrl = azureOptions.baseUrl;
     if (!baseUrl) {
       const answer = await inquirer.prompt([
         {
@@ -50,8 +60,8 @@ export class AzureConfigCollector implements ProviderConfigCollector {
     }
     baseUrl = baseUrl.replace(/\/$/, '');
 
-    let apiVersion = options.apiVersion || '';
-    if (!options.apiVersion) {
+    let apiVersion = azureOptions.apiVersion || '';
+    if (!azureOptions.apiVersion) {
       const answer = await inquirer.prompt([
         {
           type: 'input',
@@ -63,7 +73,7 @@ export class AzureConfigCollector implements ProviderConfigCollector {
       apiVersion = answer.apiVersion;
     }
 
-    let apiKey = options.apiKey;
+    let apiKey = azureOptions.apiKey;
     if (!apiKey) {
       const answer = await inquirer.prompt([
         {

@@ -1,6 +1,5 @@
 import inquirer from 'inquirer';
-import {CreateModelOptions} from '../create.js';
-import {BaseProviderConfig, ProviderConfigCollector} from './types.js';
+import {BaseProviderConfig, CommonCollectorOptions, ProviderConfigCollector} from './types.js';
 
 /**
  * Configuration for AWS Bedrock models.
@@ -10,6 +9,17 @@ export interface BedrockConfig extends BaseProviderConfig {
   region: string;
   accessKeyId: string;
   secretAccessKey: string;
+  sessionToken?: string;
+  modelArn?: string;
+}
+
+/**
+ * Options specific to Bedrock collector.
+ */
+export interface BedrockCollectorOptions extends CommonCollectorOptions {
+  region?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
   sessionToken?: string;
   modelArn?: string;
 }
@@ -27,8 +37,10 @@ export interface BedrockConfig extends BaseProviderConfig {
  * Values can be provided via command-line options or will be prompted interactively.
  */
 export class BedrockConfigCollector implements ProviderConfigCollector {
-  async collectConfig(options: CreateModelOptions): Promise<BedrockConfig> {
-    let region = options.region;
+  async collectConfig(options: CommonCollectorOptions): Promise<BedrockConfig> {
+    const bedrockOptions = options as BedrockCollectorOptions;
+    
+    let region = bedrockOptions.region;
     if (!region) {
       const answer = await inquirer.prompt([
         {
@@ -45,7 +57,7 @@ export class BedrockConfigCollector implements ProviderConfigCollector {
       throw new Error('region is required');
     }
 
-    let accessKeyId = options.accessKeyId;
+    let accessKeyId = bedrockOptions.accessKeyId;
     if (!accessKeyId) {
       const answer = await inquirer.prompt([
         {
@@ -65,7 +77,7 @@ export class BedrockConfigCollector implements ProviderConfigCollector {
       throw new Error('access key ID is required');
     }
 
-    let secretAccessKey = options.secretAccessKey;
+    let secretAccessKey = bedrockOptions.secretAccessKey;
     if (!secretAccessKey) {
       const answer = await inquirer.prompt([
         {
@@ -86,7 +98,7 @@ export class BedrockConfigCollector implements ProviderConfigCollector {
       throw new Error('secret access key is required');
     }
 
-    let sessionToken = options.sessionToken;
+    let sessionToken = bedrockOptions.sessionToken;
     if (!sessionToken) {
       const answer = await inquirer.prompt([
         {
@@ -99,7 +111,7 @@ export class BedrockConfigCollector implements ProviderConfigCollector {
       sessionToken = answer.sessionToken;
     }
 
-    let modelArn = options.modelArn;
+    let modelArn = bedrockOptions.modelArn;
     if (!modelArn) {
       const answer = await inquirer.prompt([
         {

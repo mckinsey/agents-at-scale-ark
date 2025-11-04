@@ -1,4 +1,3 @@
-import {CreateModelOptions} from '../create.js';
 import type {ProviderConfig} from './index.js';
 
 /**
@@ -8,6 +7,14 @@ export interface BaseProviderConfig {
   type: string;
   modelValue: string;
   secretName: string;
+}
+
+/**
+ * Common options available to all collectors.
+ */
+export interface CommonCollectorOptions {
+  model?: string;
+  [key: string]: unknown; // Allow provider-specific options to pass through
 }
 
 /**
@@ -26,9 +33,10 @@ export interface ProviderConfigCollector {
   /**
    * Collects provider-specific configuration by prompting for any missing values.
    *
-   * @param options - The command-line options that may contain some pre-filled values
+   * @param options - Options object that may contain pre-filled values.
+   *                  Each collector extracts only the fields it needs.
    * @returns A promise that resolves to a complete provider configuration with all required fields
    * @throws Error if a required field cannot be obtained or validation fails
    */
-  collectConfig(options: CreateModelOptions): Promise<ProviderConfig>;
+  collectConfig(options: CommonCollectorOptions): Promise<ProviderConfig>;
 }

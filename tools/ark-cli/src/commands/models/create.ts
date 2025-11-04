@@ -5,23 +5,37 @@ import {ProviderConfigCollectorFactory} from './providers/index.js';
 import {KubernetesSecretManager} from './kubernetes/secret-manager.js';
 import {KubernetesModelManifestBuilder} from './kubernetes/manifest-builder.js';
 
-export interface CreateModelOptions {
+/**
+ * Common options for model creation.
+ */
+export interface CommonModelOptions {
   type?: string;
   model?: string;
+  yes?: boolean;
+}
+
+/**
+ * CLI options bag - contains all possible provider-specific options.
+ * This is intentionally loose to accommodate different provider requirements
+ * from the CLI layer. Each collector extracts only what it needs.
+ */
+export interface CreateModelCliOptions extends CommonModelOptions {
+  // OpenAI/Azure options
   baseUrl?: string;
   apiKey?: string;
+  // Azure-specific
   apiVersion?: string;
+  // Bedrock-specific
   region?: string;
   accessKeyId?: string;
   secretAccessKey?: string;
   sessionToken?: string;
   modelArn?: string;
-  yes?: boolean;
 }
 
 export async function createModel(
   modelName?: string,
-  options: CreateModelOptions = {}
+  options: CreateModelCliOptions = {}
 ): Promise<boolean> {
   // Step 1: Get model name if not provided
   if (!modelName) {
