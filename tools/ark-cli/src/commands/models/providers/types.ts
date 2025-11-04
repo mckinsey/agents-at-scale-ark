@@ -1,37 +1,34 @@
 import {CreateModelOptions} from '../create.js';
+import type {ProviderConfig} from './index.js';
 
-// Provider-specific configuration types
+/**
+ * Base configuration shared by all model providers.
+ */
 export interface BaseProviderConfig {
   type: string;
   modelValue: string;
   secretName: string;
 }
 
-export interface OpenAIConfig extends BaseProviderConfig {
-  type: 'openai';
-  baseUrl: string;
-  apiKey: string;
-}
-
-export interface AzureConfig extends BaseProviderConfig {
-  type: 'azure';
-  baseUrl: string;
-  apiKey: string;
-  apiVersion: string;
-}
-
-export interface BedrockConfig extends BaseProviderConfig {
-  type: 'bedrock';
-  region: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  sessionToken?: string;
-  modelArn?: string;
-}
-
-export type ProviderConfig = OpenAIConfig | AzureConfig | BedrockConfig;
-
-// Provider configuration collector interface
+/**
+ * Provider configuration collector interface.
+ *
+ * A collector is responsible for gathering all the necessary configuration
+ * parameters for a specific model provider (OpenAI, Azure, Bedrock, etc.).
+ * It handles the interactive prompting of missing values and validation
+ * of user inputs, ensuring all required fields are collected before
+ * creating the model resource.
+ *
+ * The collector pattern allows each provider to define its own specific
+ * configuration requirements and prompts without affecting other providers.
+ */
 export interface ProviderConfigCollector {
+  /**
+   * Collects provider-specific configuration by prompting for any missing values.
+   *
+   * @param options - The command-line options that may contain some pre-filled values
+   * @returns A promise that resolves to a complete provider configuration with all required fields
+   * @throws Error if a required field cannot be obtained or validation fails
+   */
   collectConfig(options: CreateModelOptions): Promise<ProviderConfig>;
 }

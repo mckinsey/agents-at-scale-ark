@@ -1,7 +1,7 @@
 import {execa} from 'execa';
 import inquirer from 'inquirer';
 import output from '../../lib/output.js';
-import {ProviderConfigCollectorFactory} from './providers/factory.js';
+import {ProviderConfigCollectorFactory} from './providers/index.js';
 import {KubernetesSecretManager} from './kubernetes/secret-manager.js';
 import {KubernetesModelManifestBuilder} from './kubernetes/manifest-builder.js';
 

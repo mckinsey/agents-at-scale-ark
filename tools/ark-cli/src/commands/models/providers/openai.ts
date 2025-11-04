@@ -1,8 +1,25 @@
 import inquirer from 'inquirer';
 import {CreateModelOptions} from '../create.js';
-import {OpenAIConfig, ProviderConfigCollector} from './types.js';
+import {BaseProviderConfig, ProviderConfigCollector} from './types.js';
 
-// OpenAI configuration collector
+/**
+ * Configuration for OpenAI models.
+ */
+export interface OpenAIConfig extends BaseProviderConfig {
+  type: 'openai';
+  baseUrl: string;
+  apiKey: string;
+}
+
+/**
+ * Configuration collector for OpenAI models.
+ *
+ * Collects the necessary configuration to connect to an OpenAI-compatible API:
+ * - baseUrl: The API endpoint URL (e.g., https://api.openai.com/v1)
+ * - apiKey: The authentication key for the API
+ *
+ * Values can be provided via command-line options or will be prompted interactively.
+ */
 export class OpenAIConfigCollector implements ProviderConfigCollector {
   async collectConfig(options: CreateModelOptions): Promise<OpenAIConfig> {
     let baseUrl = options.baseUrl;

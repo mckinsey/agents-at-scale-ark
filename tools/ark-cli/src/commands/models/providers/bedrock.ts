@@ -1,8 +1,31 @@
 import inquirer from 'inquirer';
 import {CreateModelOptions} from '../create.js';
-import {BedrockConfig, ProviderConfigCollector} from './types.js';
+import {BaseProviderConfig, ProviderConfigCollector} from './types.js';
 
-// Bedrock configuration collector
+/**
+ * Configuration for AWS Bedrock models.
+ */
+export interface BedrockConfig extends BaseProviderConfig {
+  type: 'bedrock';
+  region: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  sessionToken?: string;
+  modelArn?: string;
+}
+
+/**
+ * Configuration collector for AWS Bedrock models.
+ *
+ * Collects the necessary configuration to connect to AWS Bedrock:
+ * - region: The AWS region where Bedrock is deployed (e.g., us-east-1)
+ * - accessKeyId: AWS access key ID for authentication
+ * - secretAccessKey: AWS secret access key for authentication
+ * - sessionToken: (Optional) AWS session token for temporary credentials
+ * - modelArn: (Optional) Specific ARN for the model to use
+ *
+ * Values can be provided via command-line options or will be prompted interactively.
+ */
 export class BedrockConfigCollector implements ProviderConfigCollector {
   async collectConfig(options: CreateModelOptions): Promise<BedrockConfig> {
     let region = options.region;

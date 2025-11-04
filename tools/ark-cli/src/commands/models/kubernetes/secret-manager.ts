@@ -1,6 +1,6 @@
 import {execa} from 'execa';
 import output from '../../../lib/output.js';
-import {ProviderConfig} from '../providers/types.js';
+import {ProviderConfig} from '../providers/index.js';
 
 // Secret manager interface
 export interface SecretManager {

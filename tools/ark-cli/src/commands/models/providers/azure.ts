@@ -1,8 +1,27 @@
 import inquirer from 'inquirer';
 import {CreateModelOptions} from '../create.js';
-import {AzureConfig, ProviderConfigCollector} from './types.js';
+import {BaseProviderConfig, ProviderConfigCollector} from './types.js';
 
-// Azure configuration collector
+/**
+ * Configuration for Azure OpenAI models.
+ */
+export interface AzureConfig extends BaseProviderConfig {
+  type: 'azure';
+  baseUrl: string;
+  apiKey: string;
+  apiVersion: string;
+}
+
+/**
+ * Configuration collector for Azure OpenAI models.
+ *
+ * Collects the necessary configuration to connect to Azure OpenAI Service:
+ * - baseUrl: The Azure OpenAI endpoint URL (e.g., https://<resource>.openai.azure.com)
+ * - apiVersion: The API version to use (defaults to 2024-12-01-preview)
+ * - apiKey: The authentication key for the Azure OpenAI resource
+ *
+ * Values can be provided via command-line options or will be prompted interactively.
+ */
 export class AzureConfigCollector implements ProviderConfigCollector {
   async collectConfig(options: CreateModelOptions): Promise<AzureConfig> {
     let baseUrl = options.baseUrl;

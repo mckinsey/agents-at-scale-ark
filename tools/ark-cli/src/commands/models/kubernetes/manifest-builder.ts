@@ -1,4 +1,4 @@
-import {BedrockConfig, ProviderConfig} from '../providers/types.js';
+import {BedrockConfig, ProviderConfig} from '../providers/index.js';
 
 // Model manifest builder interface
 export interface ModelManifestBuilder {
