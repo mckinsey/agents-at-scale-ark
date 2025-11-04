@@ -414,7 +414,7 @@ jobs:
       - uses: ./.github/actions/test-ark-cli
         with:
           azure-openai-key: ${{ secrets.CICD_AZURE_OPENAI_KEY != '' && secrets.CICD_AZURE_OPENAI_KEY || 'xxxxxxxxxxx' }}
-          azure-openai-base-url: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL != '' &&  || 'http://mock-llm.default.svc.cluster.local/v1' }}
+          azure-openai-base-url: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL != '' &&  secrets.CICD_AZURE_OPENAI_BASE_URL || 'http://mock-llm.default.svc.cluster.local/v1' }}
           model-type: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL && 'azure' || 'openai' }}
           model-name: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL && 'gpt-4.1-mini' || 'gpt-4' }}
           model-api-version: 2024-12-01-preview
