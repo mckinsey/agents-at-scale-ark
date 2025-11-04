@@ -9,6 +9,7 @@ import output from './output.js';
 import type {Query, QueryTarget} from './types.js';
 import {ExitCodes} from './errors.js';
 import {parseDuration} from './duration.js';
+import {getResource} from './kubectl.js';
 
 export interface QueryOptions {
   targetType: string; // 'model', 'agent', 'team'
@@ -136,13 +137,7 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
 
     // Fetch final query state
     try {
-      const {stdout} = await execa(
-        'kubectl',
-        ['get', 'query', queryName, '-o', 'json'],
-        {stdio: 'pipe'}
-      );
-
-      const query = JSON.parse(stdout) as Query;
+      const query = await getResource<Query>('queries', queryName);
       const phase = query.status?.phase;
 
       // Check if query completed successfully or with error

@@ -67,6 +67,7 @@ export interface CommandVersionConfig {
 export interface K8sMetadata {
   name: string;
   namespace?: string;
+  creationTimestamp?: string;
 }
 
 export interface K8sCondition {
