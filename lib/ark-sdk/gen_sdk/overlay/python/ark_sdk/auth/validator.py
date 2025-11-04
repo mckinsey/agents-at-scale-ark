@@ -88,27 +88,27 @@ class TokenValidator:
             logger.error(f"Failed to get signing key: {e}")
             raise TokenValidationError(f"Failed to get signing key: {e}")
     
-    def validate_token(self, token: str) -> Dict[str, Any]:
+    async def validate_token(self, token: str) -> Dict[str, Any]:
         """
         Validate a JWT token.
-        
+
         Args:
             token: The JWT token to validate
-            
+        
         Returns:
             The decoded token payload
-            
+
         Raises:
             TokenValidationError: If token validation fails
         """
         try:
             # Get the signing key
             signing_key = self._get_signing_key(token)
-            
+
             # Use issuer and audience from configuration
             audience = self.config.audience
             issuer = self.config.issuer
-            
+
             # Build options for validation
             options = {
                 "verify_signature": True,
@@ -116,7 +116,7 @@ class TokenValidator:
                 "verify_aud": audience is not None,
                 "verify_iss": issuer is not None,
             }
-                
+
             # Decode and validate the token
             payload = jwt.decode(
                 token,
@@ -126,9 +126,9 @@ class TokenValidator:
                 issuer=issuer,
                 options=options
             )
-            
+
             return payload
-            
+
         except ExpiredSignatureError as e:
             logger.warning(f"Token expired: {e}")
             raise ExpiredTokenError("Token has expired")
