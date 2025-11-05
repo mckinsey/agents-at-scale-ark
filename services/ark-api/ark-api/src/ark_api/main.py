@@ -102,7 +102,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="ARK API",
-    description="Agentic Runtime for Kubenetes API",
+    description="Agentic Runtime for Kubernetes API",
     version=VERSION,
     lifespan=lifespan,
     # Auto-detect root path from X-Forwarded-Prefix header  
