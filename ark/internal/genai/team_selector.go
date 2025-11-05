@@ -81,25 +81,28 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (*Agent, error) {
 	return agent, nil
 }
 
-// selectMember selects a member using the selector agent from the given candidate members.
+// selectMember selects a member using the selector agent.
 // If candidateMembers is nil, selects from all team members (no constraints).
 // If candidateMembers is provided, selects only from those members (with constraints).
-func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, candidateMembers []TeamMember, candidateIndices []int) (TeamMember, int, error) {
-	// If no candidates provided, use all members
-	if candidateMembers == nil {
-		candidateMembers = t.Members
-		candidateIndices = make([]int, len(t.Members))
-		for i := range t.Members {
-			candidateIndices[i] = i
-		}
+func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList, previousMember string, candidateMembers []TeamMember, candidateIndices []int) (TeamMember, int, error) {
+	// Determine which members to search in
+	membersToSearch := t.Members
+	indicesToUse := make([]int, len(t.Members))
+	for i := range t.Members {
+		indicesToUse[i] = i
 	}
-	if len(candidateMembers) == 0 {
-		return nil, 0, fmt.Errorf("no candidate members available")
+
+	if candidateMembers != nil {
+		// Use constrained list
+		membersToSearch = candidateMembers
+		indicesToUse = candidateIndices
+	}
+
+	if len(membersToSearch) == 0 {
+		return nil, 0, fmt.Errorf("no members available")
 	}
 
 	history := buildHistory(messages)
-	participantsList := buildParticipants(candidateMembers)
-	rolesList := buildRoles(candidateMembers)
 
 	data := SelectorTemplateData{
 		Roles:        rolesList,
@@ -140,25 +143,25 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	rec := NewExecutionRecorder(t.Recorder)
 	rec.SelectorAgentResponse(ctx, t.FullName(), selectorAgent.Name, selectedName, participantsList)
 
-	// Find selected member in candidate list
-	for i, member := range candidateMembers {
+	// Find selected member
+	for i, member := range membersToSearch {
 		if member.GetName() == selectedName {
 			rec.ParticipantSelected(ctx, t.FullName(), selectedName, "exact_match")
-			return member, candidateIndices[i], nil
+			return member, indicesToUse[i], nil
 		}
 	}
 
-	// Fallback to first candidate member if not found
-	fallback := candidateMembers[0]
+	// Fallback to first member if not found
+	fallback := membersToSearch[0]
 	rec.ParticipantSelected(ctx, t.FullName(), fallback.GetName(), "fallback_no_match")
 
 	// Avoid repeating same member
-	if fallback.GetName() == previousMember && len(candidateMembers) > 1 {
-		fallback = candidateMembers[1]
-		return fallback, candidateIndices[1], nil
+	if fallback.GetName() == previousMember && len(membersToSearch) > 1 {
+		fallback = membersToSearch[1]
+		return fallback, indicesToUse[1], nil
 	}
 
-	return fallback, candidateIndices[0], nil
+	return fallback, indicesToUse[0], nil
 }
 
 // selectNextMember determines the next team member based on graph constraints and previous member.
@@ -169,7 +172,9 @@ func (t *Team) selectNextMember(ctx context.Context, messages []Message, tmpl *t
 		return t.Members[0], 0, nil
 	case len(legalTransitions) == 0:
 		// No graph constraints: use standard selector (all members available)
-		return t.selectMember(ctx, messages, tmpl, previousMember, nil, nil)
+		participantsList := buildParticipants(t.Members)
+		rolesList := buildRoles(t.Members)
+		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil, nil)
 	default:
 		// Graph constraints provided: use legal transitions
 		return t.selectNextMemberWithGraphConstraints(ctx, messages, tmpl, previousMember, legalTransitions, memberMap, memberIndexMap)
@@ -217,7 +222,9 @@ func (t *Team) selectNextMemberWithGraphConstraints(ctx context.Context, message
 			return nil, 0, fmt.Errorf("no valid members found for legal transitions from '%s'", previousMember)
 		}
 
-		return t.selectMember(ctx, messages, tmpl, previousMember, candidateMembers, candidateIndices)
+		participantsList := buildParticipants(candidateMembers)
+		rolesList := buildRoles(candidateMembers)
+		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, candidateMembers, candidateIndices)
 	}
 }
 
