@@ -12,7 +12,7 @@ spec:
     - script:
         content: |
           helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.21 \
+            --version 0.1.22 \
             --namespace $NAMESPACE \
             --values mock-llm-values.yaml \
             --wait --timeout=120s
@@ -31,34 +31,6 @@ spec:
         file: manifests/a01-secret-overrides.yaml
     - apply:
         file: manifests/a02-configmap-overrides.yaml
-    - script:
-        content: |
-          cat <<EOF | kubectl apply -f -
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: test-model-overrides
-            namespace: $NAMESPACE
-            labels:
-              environment: test
-              override-target: "true"
-          spec:
-            type: openai
-            model:
-              value: gpt-5
-            pollInterval: 3s
-            config:
-              openai:
-                baseUrl:
-                  value: http://mock-llm.$NAMESPACE.svc.cluster.local:6556/v1
-                apiKey:
-                  value: mock-api-key
-          EOF
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-    - apply:
-        file: manifests/a04-mcpserver.yaml
 
   - name: wait-for-model-and-mcpserver
     try:
@@ -78,7 +50,7 @@ spec:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: MCPServer
           metadata:
-            name: mock-llm
+            name: mock-llm-mcp
           status:
             (toolCount > `0`): true
 
@@ -89,14 +61,14 @@ spec:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Tool
           metadata:
-            name: mock-llm-echo-headers
+            name: mock-llm-mcp-echo-headers
 
   - name: create-agent-and-query
     try:
     - apply:
-        file: manifests/a06-agent.yaml
+        file: manifests/a04-agent.yaml
     - apply:
-        file: manifests/a07-query.yaml
+        file: manifests/a05-query.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -170,7 +142,7 @@ spec:
   - name: validate-mcp-headers-via-tool
     try:
     - apply:
-        file: manifests/a08-query-tool.yaml
+        file: manifests/a06-query-tool.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

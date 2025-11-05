@@ -1,8 +1,16 @@
 ark:
   model:
-    enabled: false
+    enabled: true
+    name: test-model-overrides
+    labels:
+      environment: test
+      override-target: "true"
   mcp:
-    enabled: false
+    enabled: true
+    name: mock-llm
+    labels:
+      environment: test
+      mcp-override-target: "true"
 
 config:
   rules:
@@ -39,7 +47,7 @@ config:
                 "id": "call_{{timestamp}}",
                 "type": "function",
                 "function": {
-                  "name": "mock-llm-echo-headers",
+                  "name": "mock-llm-mcp-echo-headers",
                   "arguments": "{}"
                 }
               }]

@@ -7,9 +7,9 @@ spec:
   modelRef:
     name: test-model-query-overrides
   tools:
-  - name: mock-llm-echo-headers
+  - name: mock-llm-mcp-echo-headers
     type: custom
-  - name: mock-llm-echo
+  - name: mock-llm-mcp-echo
     type: custom
   overrides:
   - resourceType: model
