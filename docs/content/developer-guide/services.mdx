@@ -52,12 +52,10 @@ Individual services can also be exposed using `kubectl port-forward` (as shown i
 
 ### ARK API Services
 
-**ARK API** includes the A2A Gateway functionality for agent-to-agent communication. The A2A protocol endpoints are available as part of the main ARK API service:
-- **`GET /agents`** - List all available Ark agents
-- **`GET /agent/{agent-name}/.well-known/agent.json`** - Get agent card
-- Dynamic agent routes at `/agent/{name}/*` for A2A protocol communication
-
-See [ARK API](/developer-guide/services/ark-api) for more information.
+**ARK API** includes the A2A Gateway functionality for agent-to-agent communication. See [ARK API](/developer-guide/services/ark-api) for complete documentation including:
+- Native ARK REST APIs
+- OpenAI-compatible endpoints
+- A2A Gateway endpoints for agent-to-agent communication
 
 ### Execution Engines
 - **Langchain Execution Engine** - Framework adapter for Langchain workflows
