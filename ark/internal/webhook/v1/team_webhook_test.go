@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -29,20 +30,58 @@ var _ = Describe("Team Webhook", func() {
 		s := runtime.NewScheme()
 		Expect(arkv1alpha1.AddToScheme(s)).To(Succeed())
 
-		// Create coordinator agent that tests reference
-		coordinatorAgent := &arkv1alpha1.Agent{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "coordinator",
-				Namespace: "default",
+		// Create all agents that are referenced in tests
+		agents := []*arkv1alpha1.Agent{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "coordinator",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					Description: "Coordinator agent for selector",
+					Prompt:      "You are a coordinator",
+				},
 			},
-			Spec: arkv1alpha1.AgentSpec{
-				Description: "Coordinator agent for selector",
-				Prompt:      "You are a coordinator",
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "researcher",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					Description: "Researcher agent",
+					Prompt:      "You are a researcher",
+				},
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "analyst",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					Description: "Analyst agent",
+					Prompt:      "You are an analyst",
+				},
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "writer",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					Description: "Writer agent",
+					Prompt:      "You are a writer",
+				},
 			},
 		}
 
-		// Create fake client with coordinator agent
-		fakeClient := fake.NewClientBuilder().WithScheme(s).WithObjects(coordinatorAgent).Build()
+		// Convert to []client.Object for fake client
+		objects := make([]client.Object, len(agents))
+		for i, agent := range agents {
+			objects[i] = agent
+		}
+
+		// Create fake client with all agents
+		fakeClient := fake.NewClientBuilder().WithScheme(s).WithObjects(objects...).Build()
 
 		// Create validator with fake client
 		validator = &TeamCustomValidator{
