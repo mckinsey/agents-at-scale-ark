@@ -9,7 +9,7 @@ description: Monitor and trace AI agent interactions with Langfuse integration
 
 Langfuse is open source, integrates with popular agent frameworks through OpenTelemetry, offers public APIs for all features, and can be self-hosted.
 
-![Langfuse agent trace showing detailed execution flow, tool calls, and metadata](/langfuse-agent-trace.png)
+![Langfuse agent trace showing detailed execution flow, tool calls, and metadata](./images/langfuse-agent-trace.png)
 
 ## Overview
 
@@ -21,79 +21,50 @@ Langfuse integration with ARK provides:
 - **Session Management** - Group related interactions and conversations
 - **Error Tracking** - Identify and debug issues in agent workflows
 
-## Installation
+## Quick Start
 
-### Quick Start
+### Installation
 
-Deploy Langfuse as part of your ARK installation:
-
+**Using DevSpace (Recommended for Development):**
 ```bash
-# From repository root - install Langfuse with headless initialization
-make langfuse-install
-
-# Show credentials and access instructions
-make langfuse-credentials
+cd marketplace/services/langfuse
+devspace deploy
 ```
 
-### Headless Initialization
+**Note**: DevSpace automatically restarts the ARK controller after deployment to ensure it picks up the new Langfuse configuration.
 
-Langfuse is automatically configured with:
-
-- **Organization**: `ark`
-- **Project**: `ark`
-- **User**: `ark@ark.com` / `password123`
-- **API Keys**: Pre-configured for OpenTelemetry integration
-
-The installation automatically:
-
-1. Deploys Langfuse to the `telemetry` namespace
-2. Creates OTEL environment variable secrets in configured namespaces (default: `ark-system`, `default`)
-
-## Accessing Langfuse Dashboard
-
-### Local Development Access
-
-After installation, you have two options to access Langfuse:
-
-**Option 1: Get credentials only**
-
+**Using Helm:**
 ```bash
-make langfuse-credentials
-# Output:
-# Username: ark@ark.com
-# Password: password123
-#
-# To access the dashboard, run:
-#   make langfuse-dashboard
+cd marketplace/services/langfuse
+helm repo add langfuse https://langfuse.github.io/langfuse-k8s
+helm dependency update chart/
+helm install langfuse ./chart -n telemetry --create-namespace \
+  --set demo.project.publicKey=lf_pk_1234567890 \
+  --set demo.project.secretKey=lf_sk_1234567890
 ```
 
-**Option 2: Start dashboard directly (recommended)**
+### Access Dashboard
 
+**Credentials:**
+- **Username**: `ark@ark.com`
+- **Password**: `password123`
+
+**With DevSpace:**
 ```bash
-make langfuse-dashboard
-# Output:
-# Starting Langfuse dashboard...
-#
-# Username: ark@ark.com
-# Password: password123
-#
-# Dashboard available at: http://localhost:3000
-# Press Ctrl+C to stop
+cd marketplace/services/langfuse
+devspace dev
+# Then port-forward to access dashboard:
+kubectl port-forward -n telemetry svc/langfuse-web 3000:3000
+# Open http://localhost:3000
 ```
 
-The dashboard command automatically:
+**With kubectl:**
+```bash
+kubectl port-forward -n telemetry svc/langfuse-web 3000:3000
+# Open http://localhost:3000
+```
 
-- Finds an available port (starting from 3000)
-- Shows you the exact URL to visit
-- Starts port-forwarding to Langfuse
-- Displays the login credentials
-
-Simply visit the URL shown and login with the credentials displayed.
-
-### Gateway API Access
-
-Langfuse is configured with Gateway API HTTPRoute for namespace-based access:
-
+**With Gateway API:**
 ```bash
 # Access via nip.io DNS pattern
 open http://langfuse.telemetry.127.0.0.1.nip.io:8080
@@ -101,53 +72,66 @@ open http://langfuse.telemetry.127.0.0.1.nip.io:8080
 
 ## Configuration
 
-### OTEL Environment Variables
+### Default Configuration
 
-The installation automatically configures these OpenTelemetry environment variables:
-
-```bash
-# Automatically configured by make langfuse-install
-OTEL_EXPORTER_OTLP_ENDPOINT=http://langfuse-web.telemetry.svc.cluster.local:3000/api/public/otel
-OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic <base64-encoded-credentials>
-```
-
-### Service Configuration
-
-Langfuse is deployed with these default settings:
-
+Langfuse is deployed with these defaults:
 - **Namespace**: `telemetry`
 - **Service Name**: `langfuse-web`
 - **Port**: `3000`
+- **OTEL Endpoint**: `http://langfuse-web.telemetry.svc.cluster.local:3000/api/public/otel`
 - **Public Key**: `lf_pk_1234567890`
 - **Secret Key**: `lf_sk_1234567890`
 
-### Configuring Services for OTEL
+### OTEL Environment Variables
 
-The installation creates `otel-environment-variables` secrets in configured namespaces. To use in your deployments, add this to your container spec:
+Langfuse automatically creates Kubernetes secrets with OTEL environment variables in configured namespaces (default: `ark-system` and `default`).
 
+The secret `otel-environment-variables` contains:
 ```yaml
-containers:
-  - name: my-service
-    envFrom:
-      - secretRef:
-          name: otel-environment-variables
-          optional: true
+OTEL_EXPORTER_OTLP_ENDPOINT: http://langfuse-web.telemetry.svc.cluster.local:3000/api/public/otel
+OTEL_EXPORTER_OTLP_HEADERS: Authorization=Basic <base64-encoded-credentials>
 ```
 
-**Note**: If deployments are already running when Langfuse is installed, restart them to pick up the OTEL configuration:
+### Using OTEL Secrets in Deployments
 
+Add to your deployment's container spec:
+```yaml
+envFrom:
+  - secretRef:
+      name: otel-environment-variables
+      optional: true
+```
+
+**Note**: When using DevSpace, the ARK controller is automatically restarted after Langfuse deployment. For manual deployments, existing deployments must be restarted to pick up new/updated secrets:
 ```bash
-kubectl rollout restart deployment/ark-controller-devspace -n ark-system
+# Only needed for manual deployments (not DevSpace)
+kubectl rollout restart deployment/ark-controller -n ark-system
 ```
 
-To configure which namespaces receive OTEL secrets, set in `services/langfuse/chart/values.yaml`:
+### Custom Configuration
+
+Customize Langfuse by modifying `chart/values.yaml`:
 
 ```yaml
+# Enable HTTPRoute for Gateway API routing
+httpRoute:
+  enabled: true
+  hostnames:
+    - "langfuse.example.com"
+
+# Add OTEL secrets to additional namespaces
 otelEnvironmentVariableSecrets:
   enabled: true
   namespaces:
     - ark-system
     - default
+    - my-custom-namespace
+
+# Configure Langfuse settings
+demo:
+  project:
+    publicKey: lf_pk_custom_key
+    secretKey: lf_sk_custom_key
 ```
 
 ## Using Langfuse Dashboard
@@ -222,17 +206,22 @@ kubectl port-forward service/langfuse-web 5264:3000 -n telemetry
 kubectl get httproute langfuse-telemetry -n telemetry -o yaml
 ```
 
-## Uninstalling
+## Uninstallation
 
-To remove Langfuse and clean up OTEL configuration:
-
+**Using DevSpace:**
 ```bash
-# Uninstall Langfuse and clean up OTEL secrets
-make langfuse-uninstall
+cd marketplace/services/langfuse
+devspace purge
 ```
 
-This will:
+**Using Helm:**
+```bash
+helm uninstall langfuse -n telemetry
+kubectl delete namespace telemetry  # Optional: remove namespace
+```
 
-1. Remove Langfuse from the `telemetry` namespace
-2. Delete OTEL environment variable secrets from `ark-system` namespace
-3. Clean up installation stamps
+## Additional Resources
+
+- [Langfuse Documentation](https://langfuse.com/docs)
+- [Langfuse GitHub Repository](https://github.com/langfuse/langfuse)
+- [OpenTelemetry Documentation](https://opentelemetry.io/docs/)
