@@ -81,6 +81,16 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (*Agent, error) {
 	return agent, nil
 }
 
+func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string) (TeamMember, int, error) {
+	// Build indices for all members
+	indices := make([]int, len(t.Members))
+	for i := range t.Members {
+		indices[i] = i
+	}
+
+	return t.selectMemberWithConstraints(ctx, messages, tmpl, t.Members, indices, previousMember)
+}
+
 // selectMemberWithConstraints selects a member using the selector agent, working with a constrained list of members.
 // This allows constraining the selector to only legal transitions when graph constraints are provided.
 func (t *Team) selectMemberWithConstraints(ctx context.Context, messages []Message, tmpl *template.Template, candidateMembers []TeamMember, candidateIndices []int, previousMember string) (TeamMember, int, error) {
@@ -150,16 +160,6 @@ func (t *Team) selectMemberWithConstraints(ctx context.Context, messages []Messa
 	}
 
 	return fallback, candidateIndices[0], nil
-}
-
-func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string) (TeamMember, int, error) {
-	// Build indices for all members
-	indices := make([]int, len(t.Members))
-	for i := range t.Members {
-		indices[i] = i
-	}
-
-	return t.selectMemberWithConstraints(ctx, messages, tmpl, t.Members, indices, previousMember)
 }
 
 // selectNextMember determines the next team member based on graph constraints and previous member.
