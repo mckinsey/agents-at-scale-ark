@@ -4,3 +4,6 @@ _pagefind/
 
 # The static HTML version of the docs site built with 'npm run build'.
 out/
+
+# Copied marketplace content - these are generated at build time
+content/marketplace/

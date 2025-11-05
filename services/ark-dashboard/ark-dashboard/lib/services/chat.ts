@@ -10,7 +10,7 @@ interface AxiosError extends Error {
   };
 }
 
-export type QueryResponse = components['schemas']['QueryResponse-Output'];
+export type QueryResponse = components['schemas']['QueryResponse'];
 export type QueryDetailResponse = components['schemas']['QueryDetailResponse'];
 export type QueryListResponse = components['schemas']['QueryListResponse'];
 export type QueryCreateRequest = components['schemas']['QueryCreateRequest'];

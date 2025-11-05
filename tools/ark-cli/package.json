@@ -1,6 +1,6 @@
 {
   "name": "@agents-at-scale/ark",
-  "version": "0.1.40",
+  "version": "0.1.41",
   "description": "Ark CLI - Interactive terminal interface for ARK agents",
   "main": "dist/index.js",
   "type": "module",
@@ -67,6 +67,7 @@
     "@types/debug": "^4.1.12",
     "@types/inquirer": "^9.0.7",
     "@types/jest": "^30.0.0",
+    "@types/marked-terminal": "^6.1.1",
     "@types/node": "^22.10.2",
     "@types/react": "^19.1.13",
     "@typescript-eslint/eslint-plugin": "^8.20.0",

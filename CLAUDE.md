@@ -11,7 +11,7 @@
   - Custom Resource Definitions (CRDs) for AI workloads
   - Webhooks for validation and admission control
 
-- **`services/`** - Supporting services for ARK (Go, Python, TypeScript)
+- **`services/`** - Supporting services for Ark (Go, Python, TypeScript)
   - `postgres-memory/` - Memory persistence service (Go)
   - **Execution Engines (Python):**
     - `executor-langchain/` - LangChain agent execution and tool integration engine
@@ -36,6 +36,13 @@
 - **`docs/`** - Documentation site (Next.js)
   - Architecture guides and API references
   - Built with Next.js and MDX
+
+- **`marketplace/`** - Ark Marketplace (DevSpace-based services)
+  - Services packaged for future marketplace repository separation
+  - `services/phoenix/` - Phoenix observability platform 
+  - `services/langfuse/` - Langfuse observability platform
+  - `docs/` - Marketplace-specific documentation site (Next.js)
+  - Uses DevSpace deployment instead of Make-based builds
 
 ## Supporting Folders
 
@@ -99,6 +106,18 @@ cd services/vnext-ui/    # UI service
 make build         # Build Docker image
 ```
 
+## Marketplace Services (DevSpace)
+All marketplace services use DevSpace for deployment:
+```bash
+cd marketplace/services/{service-name}/
+devspace dev       # Deploy in development mode with hot-reload
+devspace deploy    # Deploy to current Kubernetes context
+devspace purge     # Remove service from cluster
+
+# Alternative using Helm directly
+helm install {service-name} ./chart --namespace {namespace} --create-namespace
+```
+
 ## CLI Tools
 ```bash
 cd tools/ark-cli/  # Ark CLI (Node.js)
@@ -120,6 +139,7 @@ make install       # Install to ~/.local/bin
 - **Keep descriptions brief** - 1-2 sentences maximum for each item
 - **Use active voice** - "Creates agent" not "Agent is created"
 - **Avoid extra adjectives**
+- **Ark capitalization** - Always write "Ark" (capital A, lowercase rk), never "ARK" in documentation
 
 ## Makefile Guidelines
 

@@ -1,0 +1,60 @@
+---
+title: Marketplace Documentation
+---
+
+# Agents at Scale Marketplace
+
+Welcome to the Agents at Scale Marketplace documentation. This marketplace provides a collection of services, agents, and tools for the ARK platform.
+
+## What is the Marketplace?
+
+The marketplace is a curated collection of:
+
+- **Services**: Production-ready observability, storage, and infrastructure services
+- **Agents**: Pre-built agents and agent templates
+- **Tools**: Reusable tools and utilities for agent development
+- **Projects**: Complete solution accelerators and reference implementations
+
+## Available Services
+
+Currently available services:
+
+- **[Langfuse](./services/langfuse)** - Open Source LLM Application/Agent observability, evaluation, and prompt management
+- **[Phoenix](./services/phoenix)** - AI/ML observability and evaluation platform with OpenTelemetry integration
+
+## Quick Start
+
+### Deploy a Service
+
+```bash
+# Deploy using Helm from local chart
+cd marketplace/services/phoenix
+helm dependency update chart/
+helm install phoenix ./chart -n phoenix --create-namespace
+```
+
+### Development Mode
+
+```bash
+# Use DevSpace for local development
+cd marketplace/services/phoenix
+devspace dev
+```
+
+## Future Plans
+
+This marketplace is being prepared for migration to a dedicated repository where it will include:
+- Additional observability services
+- Pre-built agents and agent templates
+- Reusable tools and utilities
+- Complete projects and solution accelerators
+
+## Contributing
+
+When adding new services to the marketplace:
+
+1. Create service directory: `marketplace/services/<service-name>/`
+2. Add Helm chart: `marketplace/services/<service-name>/chart/`
+3. Add DevSpace config: `marketplace/services/<service-name>/devspace.yaml`
+4. Add documentation: `marketplace/docs/content/services/<service-name>.mdx`
+5. Update the services index

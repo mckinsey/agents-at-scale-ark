@@ -32,6 +32,62 @@ describe('createModel', () => {
     jest.clearAllMocks();
   });
 
+  it('creates new model for type aws bedrock', async () => {
+    mockExeca.mockRejectedValueOnce(new Error('not found')); // model doesn't exist
+
+    mockInquirer.prompt
+      .mockResolvedValueOnce({modelType: 'bedrock'}) // user selects from list
+      .mockResolvedValueOnce({model: 'anthropic.claude-3-sonnet-20240229-v1:0'})
+      .mockResolvedValueOnce({region: 'us-east-1'})
+      .mockResolvedValueOnce({accessKeyId: 'AKIAIOSFODNN7EXAMPLE'})
+      .mockResolvedValueOnce({secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'})
+      .mockResolvedValueOnce({sessionToken: 'optional-session-token'})
+      .mockResolvedValueOnce({modelArn: 'arn:aws:bedrock:us-east-1:123456789012:model/anthropic.claude-3-sonnet-20240229-v1:0'});
+
+    mockExeca.mockResolvedValue({}); // kubectl ops succeed
+
+    await createModel('test-model');
+
+    // Verify that model type prompt was called
+    expect(mockInquirer.prompt).toHaveBeenCalledWith([
+      expect.objectContaining({
+        type: 'list',
+        name: 'modelType',
+        message: 'select model provider:',
+        choices: expect.arrayContaining([
+          {name: 'Azure OpenAI', value: 'azure'},
+          {name: 'OpenAI', value: 'openai'},
+          {name: 'AWS Bedrock', value: 'bedrock'},
+        ]),
+      }),
+    ]);
+
+    // Verify Bedrock-specific prompts were called
+    expect(mockInquirer.prompt).toHaveBeenCalledWith([
+      expect.objectContaining({
+        name: 'region',
+        message: 'AWS region:',
+      }),
+    ]);
+
+    expect(mockInquirer.prompt).toHaveBeenCalledWith([
+      expect.objectContaining({
+        name: 'accessKeyId',
+        message: 'AWS access key ID:',
+      }),
+    ]);
+
+    expect(mockInquirer.prompt).toHaveBeenCalledWith([
+      expect.objectContaining({
+        name: 'secretAccessKey',
+        message: 'AWS secret access key:',
+        type: 'password',
+      }),
+    ]);
+
+    expect(mockOutput.success).toHaveBeenCalledWith('model test-model created');
+  });
+
   it('creates new model with provided name', async () => {
     // Model doesn't exist
     mockExeca.mockRejectedValueOnce(new Error('not found'));

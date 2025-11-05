@@ -9,6 +9,7 @@ import output from './output.js';
 import type {Query, QueryTarget} from './types.js';
 import {ExitCodes} from './errors.js';
 import {parseDuration} from './duration.js';
+import {getResource} from './kubectl.js';
 
 export interface QueryOptions {
   targetType: string; // 'model', 'agent', 'team'
@@ -17,6 +18,7 @@ export interface QueryOptions {
   timeout?: string; // Query execution timeout (e.g., "30s", "5m", default "5m")
   watchTimeout?: string; // CLI watch timeout (e.g., "6m", default timeout + 1 minute)
   verbose?: boolean;
+  outputFormat?: string; // Output format: 'yaml', 'json', or 'name'
 }
 
 /**
@@ -24,7 +26,9 @@ export interface QueryOptions {
  * This is the shared implementation used by all query commands
  */
 export async function executeQuery(options: QueryOptions): Promise<void> {
-  const spinner = ora('Creating query...').start();
+  const spinner = options.outputFormat
+    ? null
+    : ora('Creating query...').start();
 
   const queryTimeoutMs = options.timeout
     ? parseDuration(options.timeout)
@@ -56,14 +60,14 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
 
   try {
     // Apply the query
-    spinner.text = 'Submitting query...';
+    if (spinner) spinner.text = 'Submitting query...';
     await execa('kubectl', ['apply', '-f', '-'], {
       input: JSON.stringify(queryManifest),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     // Watch for query completion using kubectl wait
-    spinner.text = 'Waiting for query completion...';
+    if (spinner) spinner.text = 'Waiting for query completion...';
 
     try {
       await execa(
@@ -77,7 +81,7 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
         {timeout: watchTimeoutMs}
       );
     } catch (error) {
-      spinner.stop();
+      if (spinner) spinner.stop();
       // Check if it's a timeout or other error
       if (
         error instanceof Error &&
@@ -93,17 +97,47 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
       // For other errors, fetch the query to check status
     }
 
-    spinner.stop();
+    if (spinner) spinner.stop();
+
+    // If output format is specified, output the resource and return
+    if (options.outputFormat) {
+      try {
+        if (options.outputFormat === 'name') {
+          console.log(queryName);
+        } else if (
+          options.outputFormat === 'json' ||
+          options.outputFormat === 'yaml'
+        ) {
+          const {stdout} = await execa(
+            'kubectl',
+            ['get', 'query', queryName, '-o', options.outputFormat],
+            {stdio: 'pipe'}
+          );
+          console.log(stdout);
+        } else {
+          console.error(
+            chalk.red(
+              `Invalid output format: ${options.outputFormat}. Use: yaml, json, or name`
+            )
+          );
+          process.exit(ExitCodes.CliError);
+        }
+        return;
+      } catch (error) {
+        console.error(
+          chalk.red(
+            error instanceof Error
+              ? error.message
+              : 'Failed to fetch query resource'
+          )
+        );
+        process.exit(ExitCodes.CliError);
+      }
+    }
 
     // Fetch final query state
     try {
-      const {stdout} = await execa(
-        'kubectl',
-        ['get', 'query', queryName, '-o', 'json'],
-        {stdio: 'pipe'}
-      );
-
-      const query = JSON.parse(stdout) as Query;
+      const query = await getResource<Query>('queries', queryName);
       const phase = query.status?.phase;
 
       // Check if query completed successfully or with error
@@ -122,7 +156,11 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
         );
         process.exit(ExitCodes.OperationError);
       } else if (phase === 'canceled') {
-        spinner.warn('Query canceled');
+        if (spinner) {
+          spinner.warn('Query canceled');
+        } else {
+          output.warning('Query canceled');
+        }
         if (query.status?.message) {
           output.warning(query.status.message);
         }
@@ -139,7 +177,7 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
       process.exit(ExitCodes.CliError);
     }
   } catch (error) {
-    spinner.stop();
+    if (spinner) spinner.stop();
     console.error(
       chalk.red(error instanceof Error ? error.message : 'Unknown error')
     );
