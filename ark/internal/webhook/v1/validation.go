@@ -322,3 +322,35 @@ func ValidateHeaderValueFrom(valueFrom *arkv1alpha1.HeaderValueSource, contextPr
 
 	return nil
 }
+
+func (v *ResourceValidator) ValidateOverrides(overrides []arkv1alpha1.Override) error {
+	for i, override := range overrides {
+		if err := v.ValidateOverrideEntry(override, i); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v *ResourceValidator) ValidateOverrideEntry(override arkv1alpha1.Override, index int) error {
+	if override.ResourceType != "model" && override.ResourceType != "mcpserver" {
+		return fmt.Errorf("overrides[%d]: resourceType must be either 'model' or 'mcpserver'", index)
+	}
+
+	if len(override.Headers) == 0 {
+		return fmt.Errorf("overrides[%d]: headers list cannot be empty", index)
+	}
+
+	for j, header := range override.Headers {
+		if err := v.ValidateOverrideHeader(header, index, j); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (v *ResourceValidator) ValidateOverrideHeader(header arkv1alpha1.Header, overrideIndex, headerIndex int) error {
+	contextPrefix := fmt.Sprintf("overrides[%d].headers[%d]", overrideIndex, headerIndex)
+	return ValidateHeader(header, contextPrefix)
+}

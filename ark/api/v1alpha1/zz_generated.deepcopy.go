@@ -8,7 +8,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -1496,6 +1496,13 @@ func (in *QuerySpec) DeepCopyInto(out *QuerySpec) {
 		in, out := &in.Timeout, &out.Timeout
 		*out = new(v1.Duration)
 		**out = **in
+	}
+	if in.Overrides != nil {
+		in, out := &in.Overrides, &out.Overrides
+		*out = make([]Override, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 }
 

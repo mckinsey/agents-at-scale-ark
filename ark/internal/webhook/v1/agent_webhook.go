@@ -95,7 +95,7 @@ func (v *AgentCustomValidator) validateAgent(ctx context.Context, agent *arkv1al
 		return warnings, err
 	}
 
-	if err := v.validateOverrides(agent.Spec.Overrides); err != nil {
+	if err := v.ValidateOverrides(agent.Spec.Overrides); err != nil {
 		return warnings, err
 	}
 
@@ -163,40 +163,4 @@ func isValidBuiltInTool(name string) bool {
 		"terminate": true,
 	}
 	return validBuiltInTools[name]
-}
-
-func (v *AgentCustomValidator) validateOverrides(overrides []arkv1alpha1.Override) error {
-	for i, override := range overrides {
-		if err := v.validateOverrideEntry(override, i); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (v *AgentCustomValidator) validateOverrideEntry(override arkv1alpha1.Override, index int) error {
-	if override.ResourceType != "model" && override.ResourceType != "mcpserver" {
-		return fmt.Errorf("overrides[%d]: resourceType must be either 'model' or 'mcpserver'", index)
-	}
-
-	if override.LabelSelector == nil {
-		return fmt.Errorf("overrides[%d]: labelSelector is required", index)
-	}
-
-	if len(override.Headers) == 0 {
-		return fmt.Errorf("overrides[%d]: headers list cannot be empty", index)
-	}
-
-	for j, header := range override.Headers {
-		if err := v.validateHeader(header, index, j); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (v *AgentCustomValidator) validateHeader(header arkv1alpha1.Header, overrideIndex, headerIndex int) error {
-	contextPrefix := fmt.Sprintf("overrides[%d].headers[%d]", overrideIndex, headerIndex)
-	return ValidateHeader(header, contextPrefix)
 }

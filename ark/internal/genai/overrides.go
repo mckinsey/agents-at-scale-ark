@@ -102,18 +102,16 @@ func ResolveHeaderValueV1PreAlpha1(ctx context.Context, k8sClient client.Client,
 }
 
 func listResourcesByLabels(ctx context.Context, k8sClient client.Client, namespace string, overrideType OverrideType, labelSelector *metav1.LabelSelector) ([]client.Object, error) {
-	if labelSelector == nil {
-		return nil, fmt.Errorf("labelSelector is required for overrideType %s", overrideType)
-	}
-
-	selector, err := metav1.LabelSelectorAsSelector(labelSelector)
-	if err != nil {
-		return nil, fmt.Errorf("invalid labelSelector: %w", err)
-	}
-
 	listOpts := &client.ListOptions{
-		Namespace:     namespace,
-		LabelSelector: selector,
+		Namespace: namespace,
+	}
+
+	if labelSelector != nil {
+		selector, err := metav1.LabelSelectorAsSelector(labelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid labelSelector: %w", err)
+		}
+		listOpts.LabelSelector = selector
 	}
 
 	var resources []client.Object
