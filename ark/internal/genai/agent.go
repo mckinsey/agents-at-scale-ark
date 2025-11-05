@@ -266,7 +266,7 @@ func (a *Agent) GetName() string {
 }
 
 func (a *Agent) GetType() string {
-	return "agent"
+	return ToolTypeAgent
 }
 
 func (a *Agent) GetDescription() string {

@@ -103,7 +103,7 @@ var _ = Describe("Team Webhook", func() {
 	Context("Selector strategy with graph constraints", func() {
 		It("Should allow multiple edges from same source for selector strategy", func() {
 			By("creating a selector team with graph that has multiple edges from same source")
-			obj.Spec.Strategy = "selector"
+			obj.Spec.Strategy = StrategySelector
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
 				{Name: "analyst", Type: "agent"},
@@ -121,12 +121,12 @@ var _ = Describe("Team Webhook", func() {
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).To(BeNil(), "selector strategy with graph should allow multiple edges from same source")
+			Expect(err).ToNot(HaveOccurred(), "selector strategy with graph should allow multiple edges from same source")
 		})
 
 		It("Should reject graph edges with invalid member names for selector strategy", func() {
 			By("creating a selector team with graph referencing non-existent members")
-			obj.Spec.Strategy = "selector"
+			obj.Spec.Strategy = StrategySelector
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
 			}
@@ -140,13 +140,13 @@ var _ = Describe("Team Webhook", func() {
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).NotTo(BeNil(), "should reject graph edges with invalid member names")
+			Expect(err).To(HaveOccurred(), "should reject graph edges with invalid member names")
 			Expect(err.Error()).To(ContainSubstring("not found in team members"))
 		})
 
 		It("Should require graph to have at least one edge when provided for selector strategy", func() {
 			By("creating a selector team with empty graph edges")
-			obj.Spec.Strategy = "selector"
+			obj.Spec.Strategy = StrategySelector
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
 			}
@@ -158,13 +158,13 @@ var _ = Describe("Team Webhook", func() {
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).NotTo(BeNil(), "should require at least one edge when graph is provided")
+			Expect(err).To(HaveOccurred(), "should require at least one edge when graph is provided")
 			Expect(err.Error()).To(ContainSubstring("at least one edge"))
 		})
 
 		It("Should allow selector strategy without graph (backward compatibility)", func() {
 			By("creating a selector team without graph")
-			obj.Spec.Strategy = "selector"
+			obj.Spec.Strategy = StrategySelector
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
 			}
@@ -174,7 +174,7 @@ var _ = Describe("Team Webhook", func() {
 			// No graph provided - should work fine
 
 			_, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).To(BeNil(), "selector strategy without graph should be valid")
+			Expect(err).ToNot(HaveOccurred(), "selector strategy without graph should be valid")
 		})
 	})
 
@@ -197,7 +197,7 @@ var _ = Describe("Team Webhook", func() {
 			obj.Spec.MaxTurns = &maxTurns
 
 			_, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).NotTo(BeNil(), "graph strategy should reject multiple edges from same source")
+			Expect(err).To(HaveOccurred(), "graph strategy should reject multiple edges from same source")
 			Expect(err.Error()).To(ContainSubstring("more than one outgoing edge"))
 		})
 	})

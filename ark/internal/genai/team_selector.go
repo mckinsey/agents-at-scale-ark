@@ -81,9 +81,9 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (*Agent, error) {
 	return agent, nil
 }
 
-// selectMemberWithFilter selects a member using the selector agent, working with a filtered list of members.
+// selectMemberWithConstraints selects a member using the selector agent, working with a constrained list of members.
 // This allows constraining the selector to only legal transitions when graph constraints are provided.
-func (t *Team) selectMemberWithFilter(ctx context.Context, messages []Message, tmpl *template.Template, candidateMembers []TeamMember, candidateIndices []int, previousMember string) (TeamMember, int, error) {
+func (t *Team) selectMemberWithConstraints(ctx context.Context, messages []Message, tmpl *template.Template, candidateMembers []TeamMember, candidateIndices []int, previousMember string) (TeamMember, int, error) {
 	if len(candidateMembers) == 0 {
 		return nil, 0, fmt.Errorf("no candidate members available")
 	}
@@ -152,16 +152,77 @@ func (t *Team) selectMemberWithFilter(ctx context.Context, messages []Message, t
 	return fallback, candidateIndices[0], nil
 }
 
-func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList, previousMember string) (TeamMember, int, error) {
+func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string) (TeamMember, int, error) {
 	// Build indices for all members
 	indices := make([]int, len(t.Members))
 	for i := range t.Members {
 		indices[i] = i
 	}
 
-	return t.selectMemberWithFilter(ctx, messages, tmpl, t.Members, indices, previousMember)
+	return t.selectMemberWithConstraints(ctx, messages, tmpl, t.Members, indices, previousMember)
 }
 
+// selectNextMember determines the next team member based on graph constraints and previous member.
+func (t *Team) selectNextMember(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]string, memberMap map[string]TeamMember, memberIndexMap map[string]int) (TeamMember, int, error) {
+	switch {
+	case previousMember == "":
+		// First turn: use first member
+		return t.Members[0], 0, nil
+	case len(legalTransitions) == 0:
+		// No graph constraints: use standard selector (all members available)
+		return t.selectMember(ctx, messages, tmpl, previousMember)
+	default:
+		// Graph constraints provided: use legal transitions
+		return t.selectNextMemberWithGraphConstraints(ctx, messages, tmpl, previousMember, legalTransitions, memberMap, memberIndexMap)
+	}
+}
+
+func (t *Team) selectNextMemberWithGraphConstraints(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]string, memberMap map[string]TeamMember, memberIndexMap map[string]int) (TeamMember, int, error) {
+	legal := legalTransitions[previousMember]
+
+	switch len(legal) {
+	case 0:
+		// No legal transitions - fallback to first member
+		t.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "NoLegalTransitions", BaseEvent{
+			Name: t.FullName(),
+			Metadata: map[string]string{
+				"strategy":       t.Strategy,
+				"previousMember": previousMember,
+				"teamName":       t.FullName(),
+			},
+		})
+		return t.Members[0], 0, nil
+	case 1:
+		// Only one legal transition - use it directly (skip selector agent for optimization)
+		selectedName := legal[0]
+		member, exists := memberMap[selectedName]
+		if !exists {
+			return nil, 0, fmt.Errorf("legal transition target '%s' not found in team members", selectedName)
+		}
+
+		rec := NewExecutionRecorder(t.Recorder)
+		rec.ParticipantSelected(ctx, t.FullName(), selectedName, "graph_constrained_single")
+		return member, memberIndexMap[selectedName], nil
+	default:
+		// Multiple legal transitions - filter members and use selector agent
+		candidateMembers := make([]TeamMember, 0, len(legal))
+		candidateIndices := make([]int, 0, len(legal))
+		for _, legalName := range legal {
+			if member, exists := memberMap[legalName]; exists {
+				candidateMembers = append(candidateMembers, member)
+				candidateIndices = append(candidateIndices, memberIndexMap[legalName])
+			}
+		}
+
+		if len(candidateMembers) == 0 {
+			return nil, 0, fmt.Errorf("no valid members found for legal transitions from '%s'", previousMember)
+		}
+
+		return t.selectMemberWithConstraints(ctx, messages, tmpl, candidateMembers, candidateIndices, previousMember)
+	}
+}
+
+//nolint:gocognit // Complex function orchestrating selector logic with graph constraints, but cohesive responsibilities
 func (t *Team) executeSelector(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
 	messages := append([]Message{}, history...)
 	var newMessages []Message
@@ -198,80 +259,13 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 		turnTracker := NewExecutionRecorder(t.Recorder)
 		turnTracker.TeamTurn(ctx, "Start", t.FullName(), t.Strategy, turn)
 
-		var nextMember TeamMember
-		var memberIndex int
-
 		// Determine next member based on graph constraints (if any)
-		if previousMember == "" {
-			// First turn: use first member
-			nextMember = t.Members[0]
-			memberIndex = 0
-		} else if len(legalTransitions) > 0 {
-			// Graph constraints provided: use legal transitions
-			legal := legalTransitions[previousMember]
-
-			if len(legal) == 0 {
-				// No legal transitions - fallback to first member
-				t.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "NoLegalTransitions", BaseEvent{
-					Name: t.FullName(),
-					Metadata: map[string]string{
-						"strategy":       t.Strategy,
-						"previousMember": previousMember,
-						"teamName":       t.FullName(),
-					},
-				})
-				nextMember = t.Members[0]
-				memberIndex = 0
-			} else if len(legal) == 1 {
-				// Only one legal transition - use it directly (skip selector agent for optimization)
-				selectedName := legal[0]
-				member, exists := memberMap[selectedName]
-				if !exists {
-					return newMessages, fmt.Errorf("legal transition target '%s' not found in team members", selectedName)
-				}
-				nextMember = member
-				memberIndex = memberIndexMap[selectedName]
-
-				rec := NewExecutionRecorder(t.Recorder)
-				rec.ParticipantSelected(ctx, t.FullName(), selectedName, "graph_constrained_single")
-			} else {
-				// Multiple legal transitions - filter members and use selector agent
-				candidateMembers := make([]TeamMember, 0, len(legal))
-				candidateIndices := make([]int, 0, len(legal))
-				for _, legalName := range legal {
-					if member, exists := memberMap[legalName]; exists {
-						candidateMembers = append(candidateMembers, member)
-						candidateIndices = append(candidateIndices, memberIndexMap[legalName])
-					}
-				}
-
-				if len(candidateMembers) == 0 {
-					return newMessages, fmt.Errorf("no valid members found for legal transitions from '%s'", previousMember)
-				}
-
-				selectedMember, selectedIdx, err := t.selectMemberWithFilter(ctx, messages, tmpl, candidateMembers, candidateIndices, previousMember)
-				if err != nil {
-					if IsTerminateTeam(err) {
-						return newMessages, nil
-					}
-					return newMessages, err
-				}
-				nextMember = selectedMember
-				memberIndex = selectedIdx
+		nextMember, memberIndex, err := t.selectNextMember(ctx, messages, tmpl, previousMember, legalTransitions, memberMap, memberIndexMap)
+		if err != nil {
+			if IsTerminateTeam(err) {
+				return newMessages, nil
 			}
-		} else {
-			// No graph constraints: use standard selector (all members available)
-			participantsList := buildParticipants(t.Members)
-			rolesList := buildRoles(t.Members)
-			selectedMember, selectedIdx, err := t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember)
-			if err != nil {
-				if IsTerminateTeam(err) {
-					return newMessages, nil
-				}
-				return newMessages, err
-			}
-			nextMember = selectedMember
-			memberIndex = selectedIdx
+			return newMessages, err
 		}
 
 		// Start turn-level telemetry span

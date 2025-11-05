@@ -19,6 +19,8 @@ import (
 const (
 	MemberTypeAgent = "agent"
 	MemberTypeTeam  = "team"
+
+	StrategySelector = "selector"
 )
 
 func SetupTeamWebhookWithManager(mgr ctrl.Manager) error {
@@ -133,7 +135,7 @@ func (v *TeamCustomValidator) validateStrategy(ctx context.Context, team *arkv1a
 	switch team.Spec.Strategy {
 	case "sequential", "round-robin":
 		return nil
-	case "selector":
+	case StrategySelector:
 		if err := v.validateSelectorAgent(ctx, team); err != nil {
 			return err
 		}

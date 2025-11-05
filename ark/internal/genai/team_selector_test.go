@@ -93,12 +93,12 @@ func TestFilterMembersByLegalTransitions(t *testing.T) {
 	}
 
 	tests := []struct {
-		name            string
-		legal           []string
-		wantMembers     []string
-		wantIndices     []int
-		wantError       bool
-		errorSubstring  string
+		name           string
+		legal          []string
+		wantMembers    []string
+		wantIndices    []int
+		wantError      bool
+		errorSubstring string
 	}{
 		{
 			name:        "single legal transition",
@@ -129,9 +129,9 @@ func TestFilterMembersByLegalTransitions(t *testing.T) {
 		{
 			name:        "empty legal transitions",
 			legal:       []string{},
-			wantMembers:  []string{},
-			wantIndices:  []int{},
-			wantError:    false, // Empty is valid, just returns empty list
+			wantMembers: []string{},
+			wantIndices: []int{},
+			wantError:   false, // Empty is valid, just returns empty list
 		},
 	}
 
@@ -188,4 +188,3 @@ func (m *mockTeamMember) GetType() string {
 func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
 	return nil, nil
 }
-
