@@ -6,9 +6,9 @@ We welcome any and all contributions to ARK, at whatever level you can manage. H
 
 There are quite a few ways to contribute, such as:
 
-* **Report bugs and security vulnerabilities**: We use [GitHub issues](https://github.com/McK-Internal/agents-at-scale/issues) to keep track of known bugs and security vulnerabilities. We keep a close eye on them and update them when we have an internal fix in progress. Before you report a new issue, do your best to ensure your problem hasn't already been reported. If it has, just leave a comment on the existing issue, rather than create a new one.
-* **Propose a new feature**: If you have new ideas for functionality then please open a [GitHub issue](https://github.com/McK-Internal/agents-at-scale/issues) and describe the feature you would like to see, why you need it, and how it should work.
-* **Review pull requests**: See the [repo](https://github.com/McK-Internal) to find open pull requests and contribute a review!
+* **Report bugs and security vulnerabilities**: We use [GitHub issues](https://github.com/mckinsey/agents-at-scale-ark/issues) to keep track of known bugs and security vulnerabilities. We keep a close eye on them and update them when we have an internal fix in progress. Before you report a new issue, do your best to ensure your problem hasn't already been reported. If it has, just leave a comment on the existing issue, rather than create a new one.
+* **Propose a new feature**: If you have new ideas for functionality then please open a [GitHub issue](https://github.com/mckinsey/agents-at-scale-ark/issues) and describe the feature you would like to see, why you need it, and how it should work.
+* **Review pull requests**: See the [repo](https://github.com/mckinsey/agents-at-scale-ark) to find open pull requests and contribute a review!
 * **Contribute a fix or feature**: If you're interested in contributing fixes to code or documentation, first read our guidelines for contributing developers below for an explanation of how to get set up and the process you'll follow. Once you are ready to contribute, feel free to pick one of the issues and create a PR.
 * **Contribute to the documentation**: You can help us improve the [documentation](https://mckinsey.github.io/agents-at-scale-ark/) online. Send us feedback as a GitHub issue or start a documentation discussion on GitHub. You are also welcome to raise a PR with a bug fix or addition to the documentation.
 
