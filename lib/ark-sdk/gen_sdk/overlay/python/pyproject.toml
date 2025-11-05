@@ -33,8 +33,7 @@ dependencies = [
   "build>=1.0.0",
   "fastapi>=0.115.0",
   "httpx>=0.24.0",
-  "pyjwt>=2.10.0",
-  "pyjwt-key-fetcher>=0.3.0",
+  "python-jose[cryptography]==3.5.0",
   "pydantic-settings>=2.0.0",
   "uvicorn[standard]>=0.24.0",
 ]
