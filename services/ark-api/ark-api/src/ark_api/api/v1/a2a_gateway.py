@@ -2,7 +2,7 @@
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 
 from .a2agw.manager import DynamicManager
 from .a2agw.registry import get_registry
