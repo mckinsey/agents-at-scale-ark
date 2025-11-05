@@ -7,6 +7,9 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
@@ -15,15 +18,44 @@ var _ = Describe("Team Webhook", func() {
 	var (
 		obj       *arkv1alpha1.Team
 		oldObj    *arkv1alpha1.Team
-		validator TeamCustomValidator
+		validator *TeamCustomValidator
 		ctx       context.Context
 	)
 
 	BeforeEach(func() {
-		obj = &arkv1alpha1.Team{}
-		oldObj = &arkv1alpha1.Team{}
-		validator = TeamCustomValidator{}
 		ctx = context.Background()
+
+		// Setup scheme
+		s := runtime.NewScheme()
+		Expect(arkv1alpha1.AddToScheme(s)).To(Succeed())
+
+		// Create coordinator agent that tests reference
+		coordinatorAgent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "coordinator",
+				Namespace: "default",
+			},
+			Spec: arkv1alpha1.AgentSpec{
+				Description: "Coordinator agent for selector",
+				Prompt:      "You are a coordinator",
+			},
+		}
+
+		// Create fake client with coordinator agent
+		fakeClient := fake.NewClientBuilder().WithScheme(s).WithObjects(coordinatorAgent).Build()
+
+		// Create validator with fake client
+		validator = &TeamCustomValidator{
+			ResourceValidator: &ResourceValidator{Client: fakeClient},
+		}
+
+		obj = &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-team",
+				Namespace: "default",
+			},
+		}
+		oldObj = &arkv1alpha1.Team{}
 		Expect(validator).NotTo(BeNil(), "Expected validator to be initialized")
 		Expect(oldObj).NotTo(BeNil(), "Expected oldObj to be initialized")
 		Expect(obj).NotTo(BeNil(), "Expected obj to be initialized")
