@@ -81,19 +81,18 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (*Agent, error) {
 	return agent, nil
 }
 
-func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string) (TeamMember, int, error) {
-	// Build indices for all members
-	indices := make([]int, len(t.Members))
-	for i := range t.Members {
-		indices[i] = i
+// selectMember selects a member using the selector agent from the given candidate members.
+// If candidateMembers is nil, selects from all team members (no constraints).
+// If candidateMembers is provided, selects only from those members (with constraints).
+func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, candidateMembers []TeamMember, candidateIndices []int) (TeamMember, int, error) {
+	// If no candidates provided, use all members
+	if candidateMembers == nil {
+		candidateMembers = t.Members
+		candidateIndices = make([]int, len(t.Members))
+		for i := range t.Members {
+			candidateIndices[i] = i
+		}
 	}
-
-	return t.selectMemberWithConstraints(ctx, messages, tmpl, t.Members, indices, previousMember)
-}
-
-// selectMemberWithConstraints selects a member using the selector agent, working with a constrained list of members.
-// This allows constraining the selector to only legal transitions when graph constraints are provided.
-func (t *Team) selectMemberWithConstraints(ctx context.Context, messages []Message, tmpl *template.Template, candidateMembers []TeamMember, candidateIndices []int, previousMember string) (TeamMember, int, error) {
 	if len(candidateMembers) == 0 {
 		return nil, 0, fmt.Errorf("no candidate members available")
 	}
@@ -170,7 +169,7 @@ func (t *Team) selectNextMember(ctx context.Context, messages []Message, tmpl *t
 		return t.Members[0], 0, nil
 	case len(legalTransitions) == 0:
 		// No graph constraints: use standard selector (all members available)
-		return t.selectMember(ctx, messages, tmpl, previousMember)
+		return t.selectMember(ctx, messages, tmpl, previousMember, nil, nil)
 	default:
 		// Graph constraints provided: use legal transitions
 		return t.selectNextMemberWithGraphConstraints(ctx, messages, tmpl, previousMember, legalTransitions, memberMap, memberIndexMap)
@@ -218,7 +217,7 @@ func (t *Team) selectNextMemberWithGraphConstraints(ctx context.Context, message
 			return nil, 0, fmt.Errorf("no valid members found for legal transitions from '%s'", previousMember)
 		}
 
-		return t.selectMemberWithConstraints(ctx, messages, tmpl, candidateMembers, candidateIndices, previousMember)
+		return t.selectMember(ctx, messages, tmpl, previousMember, candidateMembers, candidateIndices)
 	}
 }
 
