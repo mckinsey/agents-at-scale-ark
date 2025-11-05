@@ -4,8 +4,8 @@ from datetime import datetime
 
 from fastapi import APIRouter, Request
 
-from ..v1.a2agw.manager import DynamicManager
-from ..v1.a2agw.registry import get_registry
+from .a2agw.manager import DynamicManager
+from .a2agw.registry import get_registry
 
 logger = logging.getLogger(__name__)
 
