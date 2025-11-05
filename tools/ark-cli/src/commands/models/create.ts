@@ -1,13 +1,14 @@
 import {execa} from 'execa';
 import inquirer from 'inquirer';
 import output from '../../lib/output.js';
+import {BaseCollectorOptions, ProviderConfigCollectorFactory} from './providers/index.js';
+import {KubernetesSecretManager} from './kubernetes/secret-manager.js';
+import {KubernetesModelManifestBuilder} from './kubernetes/manifest-builder.js';
 
-export interface CreateModelOptions {
-  type?: string;
-  model?: string;
-  baseUrl?: string;
-  apiKey?: string;
-  apiVersion?: string;
+/**
+ * Common options for model creation.
+ */
+export interface CreateModelOptions extends BaseCollectorOptions {
   yes?: boolean;
 }
 
@@ -71,6 +72,7 @@ export async function createModel(
         choices: [
           {name: 'Azure OpenAI', value: 'azure'},
           {name: 'OpenAI', value: 'openai'},
+          {name: 'AWS Bedrock', value: 'bedrock'},
         ],
         default: 'azure',
       },
@@ -92,141 +94,26 @@ export async function createModel(
     model = answer.model;
   }
 
-  // Step 4: Get base URL
-  let baseUrl = options.baseUrl;
-  if (!baseUrl) {
-    const answer = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'baseUrl',
-        message: 'base URL:',
-        validate: (input) => {
-          if (!input) return 'base URL is required';
-          try {
-            new URL(input);
-            return true;
-          } catch {
-            return 'please enter a valid URL';
-          }
-        },
-      },
-    ]);
-    baseUrl = answer.baseUrl;
-  }
+  // Step 4: Collect provider-specific configuration
+  const collector = ProviderConfigCollectorFactory.create(modelType!);
+  const config = await collector.collectConfig({...options, model});
+  config.secretName = `${modelName!}-model-secret`;
 
-  // Validate and clean base URL
-  if (!baseUrl) {
-    output.error('base URL is required');
-    return false;
-  }
-  baseUrl = baseUrl.replace(/\/$/, '');
-
-  // Step 5: Get API version (Azure only)
-  let apiVersion = options.apiVersion || '';
-  if (modelType === 'azure' && !options.apiVersion) {
-    const answer = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'apiVersion',
-        message: 'Azure API version:',
-        default: '2024-12-01-preview',
-      },
-    ]);
-    apiVersion = answer.apiVersion;
-  }
-
-  // Step 6: Get API key
-  let apiKey = options.apiKey;
-  if (!apiKey) {
-    const answer = await inquirer.prompt([
-      {
-        type: 'password',
-        name: 'apiKey',
-        message: 'API key:',
-        mask: '*',
-        validate: (input) => {
-          if (!input) return 'API key is required';
-          return true;
-        },
-      },
-    ]);
-    apiKey = answer.apiKey;
-  }
-
-  // Step 6: Create the Kubernetes secret
-  const secretName = `${modelName}-model-api-key`;
-
+  // Step 5: Create the Kubernetes secret
   try {
-    await execa(
-      'kubectl',
-      [
-        'create',
-        'secret',
-        'generic',
-        secretName,
-        `--from-literal=api-key=${apiKey}`,
-      ],
-      {stdio: 'pipe'}
-    );
-
-    output.success(`created secret ${secretName}`);
+    const secretManager = new KubernetesSecretManager();
+    await secretManager.createSecret(config);
   } catch (error) {
     output.error('failed to create secret');
     console.error(error);
     return false;
   }
 
-  // Step 7: Create the Model resource
+  // Step 6: Create the Model resource
   output.info(`creating model ${modelName}...`);
 
-  const modelManifest = {
-    apiVersion: 'ark.mckinsey.com/v1alpha1',
-    kind: 'Model',
-    metadata: {
-      name: modelName,
-    },
-    spec: {
-      type: modelType,
-      model: {
-        value: model,
-      },
-      config: {} as Record<string, unknown>,
-    },
-  };
-
-  // Add provider-specific config
-  if (modelType === 'azure') {
-    modelManifest.spec.config.azure = {
-      apiKey: {
-        valueFrom: {
-          secretKeyRef: {
-            name: secretName,
-            key: 'api-key',
-          },
-        },
-      },
-      baseUrl: {
-        value: baseUrl,
-      },
-      apiVersion: {
-        value: apiVersion,
-      },
-    };
-  } else {
-    modelManifest.spec.config.openai = {
-      apiKey: {
-        valueFrom: {
-          secretKeyRef: {
-            name: secretName,
-            key: 'api-key',
-          },
-        },
-      },
-      baseUrl: {
-        value: baseUrl,
-      },
-    };
-  }
+  const manifestBuilder = new KubernetesModelManifestBuilder(modelName!);
+  const modelManifest = manifestBuilder.build(config);
 
   try {
     // Apply the model manifest using kubectl
