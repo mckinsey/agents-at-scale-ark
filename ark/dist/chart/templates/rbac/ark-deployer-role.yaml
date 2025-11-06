@@ -12,7 +12,7 @@
 #   2. Bind the role to your CI/CD identity using the helper script:
 #      ./scripts/deploy/bind-deployer-role.sh "your-org/your-repo"
 #
-# For more details, see: https://github.com/McK-Internal/agents-at-scale/blob/main/docs/content/deploying-ark/index.mdx
+# For more details, see: https://mckinsey.github.io/agents-at-scale-ark/operations-guide/deploying-ark/
 #
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

@@ -11,7 +11,7 @@ nc='\033[0m'
 # Require repository parameter
 if [ $# -ne 1 ]; then
     echo -e "${red}Usage: $0 <github-repo>${nc}"
-    echo "Example: $0 McK-Internal/agents-at-scale"
+    echo "Example: $0 mckinsey/agents-at-scale-ark"
     exit 1
 fi
 
