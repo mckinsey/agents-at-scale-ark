@@ -609,7 +609,7 @@ jobs:
         with:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "true"
-          install-evaluator: ${{ !needs.setup-container-cache-registry.outputs.is-fork-pr }} # Evaluated tests need ark-evaluator service
+          install-evaluator: "true" # Evaluated tests need ark-evaluator service
           azure-openai-key: ${{ secrets.CICD_AZURE_OPENAI_KEY != '' && secrets.CICD_AZURE_OPENAI_KEY || 'xxxxxxxxxxx' }}
           azure-openai-base-url: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL != '' && secrets.CICD_AZURE_OPENAI_BASE_URL || 'http://mock-llm.default.svc.cluster.local/v1' }}
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
