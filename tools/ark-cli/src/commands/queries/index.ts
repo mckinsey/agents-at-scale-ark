@@ -1,12 +1,12 @@
 import {Command} from 'commander';
 import {marked} from 'marked';
 import TerminalRenderer from 'marked-terminal';
-import chalk from 'chalk';
 import type {ArkConfig} from '../../lib/config.js';
 import output from '../../lib/output.js';
 import type {Query} from '../../lib/types.js';
 import {ExitCodes} from '../../lib/errors.js';
-import {getResource, listResources} from '../../lib/kubectl.js';
+import {getResource} from '../../lib/kubectl.js';
+import {listQueries} from './list.js';
 
 function renderMarkdown(content: string): string {
   if (process.stdout.isTTY) {
@@ -54,61 +54,6 @@ async function getQuery(
   } catch (error) {
     output.error(
       'fetching query:',
-      error instanceof Error ? error.message : error
-    );
-    process.exit(ExitCodes.CliError);
-  }
-}
-
-async function listQueries(options: {output?: string; sortBy?: string}) {
-  try {
-    const queries = await listResources<Query>('queries', {
-      sortBy: options.sortBy,
-    });
-
-    if (options.output === 'json') {
-      // Output the raw items for JSON format
-      console.log(JSON.stringify(queries, null, 2));
-    } else if (options.output && options.output !== 'text') {
-      // Invalid output format
-      output.warning(
-        `unsupported output format: ${options.output}. Supported formats: json, text`
-      );
-      process.exit(ExitCodes.CliError);
-    } else {
-      if (queries.length === 0) {
-        output.warning('no queries available');
-        return;
-      }
-
-      // Calculate max name length for alignment
-      const maxNameLength = Math.max(
-        4, // 'NAME' header length
-        ...queries.map((q) => q.metadata.name.length)
-      );
-
-      // Print table header
-      const header = `${chalk.bold('NAME'.padEnd(maxNameLength + 2))}${chalk.bold('STATUS')}`;
-      console.log(header);
-      console.log(chalk.gray('-'.repeat(maxNameLength + 2 + 20)));
-
-      // Print table rows
-      queries.forEach((query: Query) => {
-        const status = query.status?.phase || 'unknown';
-        const statusColor = 
-          status === 'done' ? chalk.green :
-          status === 'running' ? chalk.blue :
-          status === 'error' ? chalk.red :
-          chalk.yellow;
-        
-        console.log(
-          `${query.metadata.name.padEnd(maxNameLength + 2)}${statusColor(status)}`
-        );
-      });
-    }
-  } catch (error) {
-    output.error(
-      'fetching queries:',
       error instanceof Error ? error.message : error
     );
     process.exit(ExitCodes.CliError);
