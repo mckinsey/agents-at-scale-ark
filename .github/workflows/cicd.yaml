@@ -341,9 +341,6 @@ jobs:
             ghcr.io:
               endpoint:
                 - "https://ghcr.io"
-            ttl.sh
-              endpoint:
-                - ttl.sh
           configs:
             ghcr.io:
               auth:

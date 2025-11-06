@@ -18,7 +18,7 @@ spec:
   model:
     value: "${MODEL_VERSION}"
   config:
-    azure:
+    ${MODEL_TYPE}:
       baseUrl:
         value: "${BASE_URL}"
       apiKey:
