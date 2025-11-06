@@ -1,0 +1,131 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: team-graph-selector
+spec:
+  description: Test selector team strategy with graph constraints
+  # Graph-constrained selector combines AI-driven selection with workflow constraints
+  # Coordinator can choose between researcher/analyzer, then graph enforces flow
+  steps:
+  - name: setup-test-environment
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          set -u
+          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+        outputs:
+        - name: azure
+          value: (json_parse($stdout))
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - apply:
+        file: manifests/*.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-model
+          status:
+            conditions:
+            - type: ModelAvailable
+              status: "True"
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: coordinator
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: researcher
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: analyzer
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: writer
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Team
+          metadata:
+            name: graph-selector-team
+          spec:
+            strategy: selector
+            selector:
+              agent: coordinator
+            graph:
+              edges:
+              - from: coordinator
+                to: researcher
+              - from: coordinator
+                to: analyzer
+              - from: researcher
+                to: analyzer
+              - from: analyzer
+                to: writer
+  - name: wait-for-query-completion
+    try:
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-graph-selector-team
+          status:
+            phase: done
+        timeout: 180s
+  - name: validate-graph-selector-execution
+    try:
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-graph-selector-team
+          status:
+            (length(responses)): 1
+            (responses[0].target.type): team
+            (responses[0].target.name): graph-selector-team
+            (length(responses[0].content) > `500`): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-graph-selector-team
+    - script:
+        content: |
+          echo "Validating graph-constrained selector execution..."
+          events=$(kubectl get events -n $NAMESPACE --field-selector involvedObject.name=test-graph-selector-team,involvedObject.kind=Query -o json)
+          
+          # Check for participant selection events
+          participant_selections=$(echo "$events" | jq '[.items[] | select(.reason == "ParticipantSelected" or .reason == "SelectorAgentResponse")] | length')
+          echo "Found $participant_selections participant selection events"
+          
+          if [ "$participant_selections" -gt 0 ]; then
+              echo "Participant selection events:"
+              echo "$events" | jq -r '.items[] | select(.reason == "ParticipantSelected" or .reason == "SelectorAgentResponse") | "  \(.reason): \(.message // "No message")"'
+          fi
+          
+          # Check for graph-constrained selection events
+          graph_constrained=$(echo "$events" | jq '[.items[] | select(.message // "" | contains("graph_constrained"))] | length')
+          if [ "$graph_constrained" -gt 0 ]; then
+              echo "Found $graph_constrained graph-constrained selection events"
+          fi
+
