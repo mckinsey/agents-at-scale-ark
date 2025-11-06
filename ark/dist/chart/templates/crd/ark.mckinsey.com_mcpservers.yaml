@@ -1,8 +1,14 @@
+{{- if .Values.crd.enable }}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
   annotations:
+    {{- if .Values.crd.keep }}
+    "helm.sh/resource-policy": keep
+    {{- end }}
     controller-gen.kubebuilder.io/version: v0.18.0
   name: mcpservers.ark.mckinsey.com
 spec:
@@ -213,6 +219,10 @@ spec:
                 type: string
               timeout:
                 default: 30s
+                description: |-
+                  Timeout specifies the maximum duration for MCP tool calls to this server.
+                  Use this to support long-running operations (e.g., "5m", "10m", "30m").
+                  Defaults to "30s" if not specified.
                 type: string
               transport:
                 default: http
@@ -299,3 +309,4 @@ spec:
     storage: true
     subresources:
       status: {}
+{{- end -}}

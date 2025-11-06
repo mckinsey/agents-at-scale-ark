@@ -1,8 +1,14 @@
+{{- if .Values.crd.enable }}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
   annotations:
+    {{- if .Values.crd.keep }}
+    "helm.sh/resource-policy": keep
+    {{- end }}
     controller-gen.kubebuilder.io/version: v0.18.0
   name: tools.ark.mckinsey.com
 spec:
@@ -37,20 +43,6 @@ spec:
             type: object
           spec:
             properties:
-              builtin:
-                description: |-
-                  Builtin-specific configuration for builtin tools.
-                  This field is required only if Type = "builtin".
-                properties:
-                  name:
-                    description: |-
-                      Name of the Builtin being referenced.
-                      This must be a non-empty string.
-                    minLength: 1
-                    type: string
-                required:
-                - name
-                type: object
               agent:
                 description: |-
                   Agent-specific configuration for agent tools.
@@ -360,3 +352,4 @@ spec:
     storage: true
     subresources:
       status: {}
+{{- end -}}
