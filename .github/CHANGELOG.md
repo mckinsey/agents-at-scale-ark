@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.1.42](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.41...v0.1.42) (2025-11-06)
+
+
+### Features
+
+* add delete API and CLI command for queries and sessions ([#281](https://github.com/mckinsey/agents-at-scale-ark/issues/281)) ([d7ee0b9](https://github.com/mckinsey/agents-at-scale-ark/commit/d7ee0b92285acb821606f600d4f6dc67e2e05277))
+* add queries get command with [@latest](https://github.com/latest) support ([#402](https://github.com/mckinsey/agents-at-scale-ark/issues/402)) ([3a050b4](https://github.com/mckinsey/agents-at-scale-ark/commit/3a050b48fdc5f56bb195bb42611b747d92566f51))
+* Alternative to PyJWT in the event of cve-2025-45768 ([#388](https://github.com/mckinsey/agents-at-scale-ark/issues/388)) ([06593c6](https://github.com/mckinsey/agents-at-scale-ark/commit/06593c6040127647f72c4f37f60a6b34c09f45bf))
+* argo workflows minio plugin ([#399](https://github.com/mckinsey/agents-at-scale-ark/issues/399)) ([95cc907](https://github.com/mckinsey/agents-at-scale-ark/commit/95cc907f87e1da962b3d5bd24874f8c3abaa62eb))
+* ark cli evaluations ([#370](https://github.com/mckinsey/agents-at-scale-ark/issues/370)) ([36b3610](https://github.com/mckinsey/agents-at-scale-ark/commit/36b36100093d18d9e7e15d38c1416ae26edf627f))
+* move observability services to marketplace ([#390](https://github.com/mckinsey/agents-at-scale-ark/issues/390)) ([2900630](https://github.com/mckinsey/agents-at-scale-ark/commit/29006308543787a5baa2edbe83f4aac21c96f0cd))
+* support aws bedrock models on ark cli `ark create model` command ([#408](https://github.com/mckinsey/agents-at-scale-ark/issues/408)) ([731a402](https://github.com/mckinsey/agents-at-scale-ark/commit/731a4024677e904f018a51da11e022fbef6486c7))
+
+
+### Bug Fixes
+
+* Add retry to e2e standard & evaluated ([#396](https://github.com/mckinsey/agents-at-scale-ark/issues/396)) ([930b988](https://github.com/mckinsey/agents-at-scale-ark/commit/930b9881d8e264433504e0759dc4d588359ac837))
+* enable a2a query timeout configuration ([#326](https://github.com/mckinsey/agents-at-scale-ark/issues/326)) ([616451b](https://github.com/mckinsey/agents-at-scale-ark/commit/616451bf348d2d32de8d929804ca6d60187d445e))
+* sse support for golang mcp client ([#385](https://github.com/mckinsey/agents-at-scale-ark/issues/385)) ([5d93c8b](https://github.com/mckinsey/agents-at-scale-ark/commit/5d93c8b2dc31e027978ee0840543fc84e495c564))
+* sse transport test failing on ci ([#404](https://github.com/mckinsey/agents-at-scale-ark/issues/404)) ([670435d](https://github.com/mckinsey/agents-at-scale-ark/commit/670435d45cca68c592d81c86679eaff792d582fa))
+* **tests:** deterministic query token usage ([#386](https://github.com/mckinsey/agents-at-scale-ark/issues/386)) ([85f510c](https://github.com/mckinsey/agents-at-scale-ark/commit/85f510c288e0e55b85f11c199acc20f1dd62c9f2))
+* update repository reference in code and docs ([#411](https://github.com/mckinsey/agents-at-scale-ark/issues/411)) ([b067261](https://github.com/mckinsey/agents-at-scale-ark/commit/b067261a42e6dcdbba4434c80bd5af348c902cf2))
+
 ## [0.1.41](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.40...v0.1.41) (2025-10-30)
 
 
