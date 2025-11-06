@@ -5,7 +5,7 @@ import type {ArkConfig} from '../../lib/config.js';
 import output from '../../lib/output.js';
 import type {Query} from '../../lib/types.js';
 import {ExitCodes} from '../../lib/errors.js';
-import {getResource} from '../../lib/kubectl.js';
+import {getResource, listResources} from '../../lib/kubectl.js';
 
 function renderMarkdown(content: string): string {
   if (process.stdout.isTTY) {
@@ -59,6 +59,39 @@ async function getQuery(
   }
 }
 
+async function listQueries(options: {output?: string}) {
+  try {
+    const queries = await listResources<Query>('queries');
+
+    if (options.output === 'json') {
+      // Output the raw items for JSON format
+      console.log(JSON.stringify(queries, null, 2));
+    } else if (options.output && options.output !== 'text') {
+      // Invalid output format
+      output.warning(
+        `unsupported output format: ${options.output}. Supported formats: json, text`
+      );
+      process.exit(ExitCodes.CliError);
+    } else {
+      if (queries.length === 0) {
+        output.warning('no queries available');
+        return;
+      }
+
+      // Simple list output - just query names
+      queries.forEach((query: Query) => {
+        console.log(query.metadata.name);
+      });
+    }
+  } catch (error) {
+    output.error(
+      'fetching queries:',
+      error instanceof Error ? error.message : error
+    );
+    process.exit(ExitCodes.CliError);
+  }
+}
+
 export function createQueriesCommand(_: ArkConfig): Command {
   const queriesCommand = new Command('queries');
 
@@ -75,6 +108,17 @@ export function createQueriesCommand(_: ArkConfig): Command {
     });
 
   queriesCommand.addCommand(getCommand);
+
+  const listCommand = new Command('list');
+  listCommand
+    .alias('ls')
+    .description('List all queries')
+    .option('-o, --output <format>', 'output format (json or text)', 'text')
+    .action(async (options) => {
+      await listQueries(options);
+    });
+
+  queriesCommand.addCommand(listCommand);
 
   return queriesCommand;
 }
