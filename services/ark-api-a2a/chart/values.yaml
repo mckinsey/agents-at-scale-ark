@@ -6,6 +6,8 @@ app:
   image:
     repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-api-a2a
     pullPolicy: IfNotPresent
+  # Default timeout for A2A agent execution in seconds (default: 300 = 5 minutes)
+  defaultTimeout: 300
 
 # Global annotations added to HTTPRoute resources
 global:

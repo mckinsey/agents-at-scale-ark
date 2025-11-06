@@ -127,7 +127,7 @@ class TestARKAgentExecutor(unittest.IsolatedAsyncioTestCase):
         
         self.assertEqual(result, "Query result")
         mock_post_query.assert_called_once_with(
-            "test-namespace", "agent", "test-agent", "Test query"
+            "test-namespace", "agent", "test-agent", "Test query", timeout=300
         )
     
     @patch('src.a2agw.execution.post_query_and_wait')
@@ -215,7 +215,7 @@ class TestARKAgentExecutor(unittest.IsolatedAsyncioTestCase):
         # Create a coroutine that we can control
         completion_event = asyncio.Event()
         
-        async def controlled_query(*args):
+        async def controlled_query(*args, **kwargs):
             await completion_event.wait()
             return "Controlled result"
         
