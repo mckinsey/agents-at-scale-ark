@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -24,27 +25,15 @@ func setupTestClient(objects []client.Object) client.Client {
 		Build()
 }
 
-func assertHeadersMatch(t *testing.T, got, want map[string]string) {
-	t.Helper()
-	if len(got) != len(want) {
-		t.Errorf("ResolveHeaders() length = %v, want %v", len(got), len(want))
-		return
-	}
-	for key, wantVal := range want {
-		if gotVal, ok := got[key]; !ok || gotVal != wantVal {
-			t.Errorf("ResolveHeaders()[%s] = %v, want %v", key, gotVal, wantVal)
-		}
-	}
-}
-
 func TestResolveHeaders(t *testing.T) {
 	tests := []struct {
-		name      string
-		headers   []arkv1alpha1.Header
-		objects   []client.Object
-		namespace string
-		want      map[string]string
-		wantErr   bool
+		name           string
+		headers        []arkv1alpha1.Header
+		objects        []client.Object
+		namespace      string
+		want           map[string]string
+		wantErr        bool
+		wantErrContain string
 	}{
 		{
 			name: "direct header values",
@@ -135,8 +124,111 @@ func TestResolveHeaders(t *testing.T) {
 					},
 				},
 			},
+			namespace:      "default",
+			wantErr:        true,
+			wantErrContain: "secrets \"missing\" not found",
+		},
+		{
+			name: "missing configmap",
+			headers: []arkv1alpha1.Header{
+				{
+					Name: "X-API-Key",
+					Value: arkv1alpha1.HeaderValue{
+						ValueFrom: &arkv1alpha1.HeaderValueSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "missing-cm"},
+								Key:                  "key",
+							},
+						},
+					},
+				},
+			},
+			namespace:      "default",
+			wantErr:        true,
+			wantErrContain: "configmaps \"missing-cm\" not found",
+		},
+		{
+			name: "missing key in secret",
+			headers: []arkv1alpha1.Header{
+				{
+					Name: "Authorization",
+					Value: arkv1alpha1.HeaderValue{
+						ValueFrom: &arkv1alpha1.HeaderValueSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "api-secret"},
+								Key:                  "missing-key",
+							},
+						},
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: "api-secret", Namespace: "default"},
+					Data:       map[string][]byte{"token": []byte("secret-token")},
+				},
+			},
+			namespace:      "default",
+			wantErr:        true,
+			wantErrContain: "key missing-key not found",
+		},
+		{
+			name: "missing key in configmap",
+			headers: []arkv1alpha1.Header{
+				{
+					Name: "X-API-Key",
+					Value: arkv1alpha1.HeaderValue{
+						ValueFrom: &arkv1alpha1.HeaderValueSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "api-config"},
+								Key:                  "missing-key",
+							},
+						},
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "api-config", Namespace: "default"},
+					Data:       map[string]string{"apikey": "config-key"},
+				},
+			},
+			namespace:      "default",
+			wantErr:        true,
+			wantErrContain: "key missing-key not found",
+		},
+		{
+			name: "mixed direct and reference values",
+			headers: []arkv1alpha1.Header{
+				{
+					Name: "X-Direct",
+					Value: arkv1alpha1.HeaderValue{
+						Value: "direct-value",
+					},
+				},
+				{
+					Name: "X-From-Secret",
+					Value: arkv1alpha1.HeaderValue{
+						ValueFrom: &arkv1alpha1.HeaderValueSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "api-secret"},
+								Key:                  "token",
+							},
+						},
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: "api-secret", Namespace: "default"},
+					Data:       map[string][]byte{"token": []byte("secret-value")},
+				},
+			},
 			namespace: "default",
-			wantErr:   true,
+			want: map[string]string{
+				"X-Direct":      "direct-value",
+				"X-From-Secret": "secret-value",
+			},
 		},
 	}
 
@@ -146,14 +238,16 @@ func TestResolveHeaders(t *testing.T) {
 			ctx := context.Background()
 			got, err := ResolveHeaders(ctx, fakeClient, tt.headers, tt.namespace)
 
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ResolveHeaders() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.wantErrContain != "" {
+					require.ErrorContains(t, err, tt.wantErrContain)
+				}
 				return
 			}
 
-			if !tt.wantErr {
-				assertHeadersMatch(t, got, tt.want)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -268,51 +362,27 @@ func TestListResourcesByLabels(t *testing.T) {
 			ctx := context.Background()
 			got, err := listResourcesByLabels(ctx, fakeClient, tt.namespace, tt.overrideType, tt.labelSelector)
 
-			if (err != nil) != tt.wantErr {
-				t.Errorf("listResourcesByLabels() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				require.Error(t, err)
 				return
 			}
 
-			if len(got) != tt.wantCount {
-				t.Errorf("listResourcesByLabels() count = %v, want %v", len(got), tt.wantCount)
-			}
+			require.NoError(t, err)
+			require.Len(t, got, tt.wantCount)
 		})
-	}
-}
-
-func assertResourceHeadersMatch(t *testing.T, got, want map[string]map[string]string) {
-	t.Helper()
-	if len(got) != len(want) {
-		t.Errorf("ResolveHeadersFromOverrides() resource count = %v, want %v", len(got), len(want))
-		return
-	}
-	for resource, wantHeaders := range want {
-		gotHeaders, ok := got[resource]
-		if !ok {
-			t.Errorf("ResolveHeadersFromOverrides() missing resource %s", resource)
-			continue
-		}
-		if len(gotHeaders) != len(wantHeaders) {
-			t.Errorf("ResolveHeadersFromOverrides()[%s] header count = %v, want %v", resource, len(gotHeaders), len(wantHeaders))
-			continue
-		}
-		for key, wantVal := range wantHeaders {
-			if gotVal, ok := gotHeaders[key]; !ok || gotVal != wantVal {
-				t.Errorf("ResolveHeadersFromOverrides()[%s][%s] = %v, want %v", resource, key, gotVal, wantVal)
-			}
-		}
 	}
 }
 
 func TestResolveHeadersFromOverrides(t *testing.T) {
 	tests := []struct {
-		name         string
-		overrides    []arkv1alpha1.Override
-		overrideType OverrideType
-		objects      []client.Object
-		namespace    string
-		want         map[string]map[string]string
-		wantErr      bool
+		name           string
+		overrides      []arkv1alpha1.Override
+		overrideType   OverrideType
+		objects        []client.Object
+		namespace      string
+		want           map[string]map[string]string
+		wantErr        bool
+		wantErrContain string
 	}{
 		{
 			name: "override with nil labelSelector applies to all models",
@@ -496,6 +566,70 @@ func TestResolveHeadersFromOverrides(t *testing.T) {
 				"model1": {"Authorization": "Bearer secret123"},
 			},
 		},
+		{
+			name: "override with missing secret fails",
+			overrides: []arkv1alpha1.Override{
+				{
+					ResourceType: "model",
+					Headers: []arkv1alpha1.Header{
+						{
+							Name: "Authorization",
+							Value: arkv1alpha1.HeaderValue{
+								ValueFrom: &arkv1alpha1.HeaderValueSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: "missing-secret"},
+										Key:                  "token",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			overrideType: OverrideTypeModel,
+			objects: []client.Object{
+				&arkv1alpha1.Model{
+					ObjectMeta: metav1.ObjectMeta{Name: "model1", Namespace: "default"},
+				},
+			},
+			namespace:      "default",
+			wantErr:        true,
+			wantErrContain: "secrets \"missing-secret\" not found",
+		},
+		{
+			name: "invalid label selector",
+			overrides: []arkv1alpha1.Override{
+				{
+					ResourceType: "model",
+					LabelSelector: &metav1.LabelSelector{
+						MatchExpressions: []metav1.LabelSelectorRequirement{
+							{
+								Key:      "invalid",
+								Operator: "InvalidOperator",
+								Values:   []string{"value"},
+							},
+						},
+					},
+					Headers: []arkv1alpha1.Header{
+						{
+							Name: "X-Header",
+							Value: arkv1alpha1.HeaderValue{
+								Value: "value",
+							},
+						},
+					},
+				},
+			},
+			overrideType: OverrideTypeModel,
+			objects: []client.Object{
+				&arkv1alpha1.Model{
+					ObjectMeta: metav1.ObjectMeta{Name: "model1", Namespace: "default"},
+				},
+			},
+			namespace:      "default",
+			wantErr:        true,
+			wantErrContain: "not a valid label selector operator",
+		},
 	}
 
 	for _, tt := range tests {
@@ -504,14 +638,16 @@ func TestResolveHeadersFromOverrides(t *testing.T) {
 			ctx := context.Background()
 			got, err := ResolveHeadersFromOverrides(ctx, fakeClient, tt.overrides, tt.namespace, tt.overrideType)
 
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ResolveHeadersFromOverrides() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.wantErrContain != "" {
+					require.ErrorContains(t, err, tt.wantErrContain)
+				}
 				return
 			}
 
-			if !tt.wantErr {
-				assertResourceHeadersMatch(t, got, tt.want)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
