@@ -1,6 +1,7 @@
 import {Command} from 'commander';
 import {marked} from 'marked';
 import TerminalRenderer from 'marked-terminal';
+import chalk from 'chalk';
 import type {ArkConfig} from '../../lib/config.js';
 import output from '../../lib/output.js';
 import type {Query} from '../../lib/types.js';
@@ -59,9 +60,11 @@ async function getQuery(
   }
 }
 
-async function listQueries(options: {output?: string}) {
+async function listQueries(options: {output?: string; sortBy?: string}) {
   try {
-    const queries = await listResources<Query>('queries');
+    const queries = await listResources<Query>('queries', {
+      sortBy: options.sortBy,
+    });
 
     if (options.output === 'json') {
       // Output the raw items for JSON format
@@ -78,9 +81,29 @@ async function listQueries(options: {output?: string}) {
         return;
       }
 
-      // Simple list output - just query names
+      // Calculate max name length for alignment
+      const maxNameLength = Math.max(
+        4, // 'NAME' header length
+        ...queries.map((q) => q.metadata.name.length)
+      );
+
+      // Print table header
+      const header = `${chalk.bold('NAME'.padEnd(maxNameLength + 2))}${chalk.bold('STATUS')}`;
+      console.log(header);
+      console.log(chalk.gray('-'.repeat(maxNameLength + 2 + 20)));
+
+      // Print table rows
       queries.forEach((query: Query) => {
-        console.log(query.metadata.name);
+        const status = query.status?.phase || 'unknown';
+        const statusColor = 
+          status === 'done' ? chalk.green :
+          status === 'running' ? chalk.blue :
+          status === 'error' ? chalk.red :
+          chalk.yellow;
+        
+        console.log(
+          `${query.metadata.name.padEnd(maxNameLength + 2)}${statusColor(status)}`
+        );
       });
     }
   } catch (error) {
@@ -114,6 +137,7 @@ export function createQueriesCommand(_: ArkConfig): Command {
     .alias('ls')
     .description('List all queries')
     .option('-o, --output <format>', 'output format (json or text)', 'text')
+    .option('--sort-by <field>', 'sort by kubernetes field (e.g., .metadata.name)')
     .action(async (options) => {
       await listQueries(options);
     });

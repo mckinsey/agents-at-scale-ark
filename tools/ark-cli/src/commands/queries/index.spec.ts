@@ -25,11 +25,17 @@ describe('queries command', () => {
             name: 'query-1',
             creationTimestamp: '2024-01-01T00:00:00Z',
           },
+          status: {
+            phase: 'done',
+          },
         },
         {
           metadata: {
             name: 'query-2',
             creationTimestamp: '2024-01-02T00:00:00Z',
+          },
+          status: {
+            phase: 'running',
           },
         },
       ];
@@ -41,8 +47,21 @@ describe('queries command', () => {
       const command = createQueriesCommand({});
       await command.parseAsync(['node', 'test', 'list']);
 
-      expect(console.log).toHaveBeenCalledWith('query-1');
-      expect(console.log).toHaveBeenCalledWith('query-2');
+      // Check for header
+      expect(console.log).toHaveBeenCalledWith(
+        expect.stringMatching(/NAME.*STATUS/)
+      );
+      // Check for separator line
+      expect(console.log).toHaveBeenCalledWith(
+        expect.stringMatching(/^-+$/)
+      );
+      // Check for data rows
+      expect(console.log).toHaveBeenCalledWith(
+        expect.stringMatching(/query-1/)
+      );
+      expect(console.log).toHaveBeenCalledWith(
+        expect.stringMatching(/query-2/)
+      );
       expect(mockExeca).toHaveBeenCalledWith(
         'kubectl',
         ['get', 'queries', '-o', 'json'],
@@ -90,11 +109,17 @@ describe('queries command', () => {
             name: 'query-1',
             creationTimestamp: '2024-01-01T00:00:00Z',
           },
+          status: {
+            phase: 'done',
+          },
         },
         {
           metadata: {
             name: 'query-2',
             creationTimestamp: '2024-01-02T00:00:00Z',
+          },
+          status: {
+            phase: 'running',
           },
         },
       ];
@@ -112,8 +137,21 @@ describe('queries command', () => {
         '.metadata.creationTimestamp',
       ]);
 
-      expect(console.log).toHaveBeenCalledWith('query-1');
-      expect(console.log).toHaveBeenCalledWith('query-2');
+      // Check for header
+      expect(console.log).toHaveBeenCalledWith(
+        expect.stringMatching(/NAME.*STATUS/)
+      );
+      // Check for separator line
+      expect(console.log).toHaveBeenCalledWith(
+        expect.stringMatching(/^-+$/)
+      );
+      // Check for data rows
+      expect(console.log).toHaveBeenCalledWith(
+        expect.stringMatching(/query-1/)
+      );
+      expect(console.log).toHaveBeenCalledWith(
+        expect.stringMatching(/query-2/)
+      );
       expect(mockExeca).toHaveBeenCalledWith(
         'kubectl',
         [
@@ -160,6 +198,9 @@ describe('queries command', () => {
             name: 'query-1',
             creationTimestamp: '2024-01-01T00:00:00Z',
           },
+          status: {
+            phase: 'done',
+          },
         },
       ];
 
@@ -175,7 +216,9 @@ describe('queries command', () => {
         'unsupported output format: xml. Supported formats: json, text'
       );
       expect(process.exit).toHaveBeenCalled();
-      expect(console.log).not.toHaveBeenCalledWith('query-1');
+      expect(console.log).not.toHaveBeenCalledWith(
+        expect.stringMatching(/query-1/)
+      );
     });
 
     it('should list many queries without truncation', async () => {
@@ -189,6 +232,9 @@ describe('queries command', () => {
             i + 1
           ).toISOString(),
         },
+        status: {
+          phase: i % 3 === 0 ? 'done' : i % 2 === 0 ? 'running' : 'initializing',
+        },
       }));
 
       mockExeca.mockResolvedValue({
@@ -198,13 +244,23 @@ describe('queries command', () => {
       const command = createQueriesCommand({});
       await command.parseAsync(['node', 'test', 'list']);
 
+      // Check for header and separator
+      expect(console.log).toHaveBeenCalledWith(
+        expect.stringMatching(/NAME.*STATUS/)
+      );
+      expect(console.log).toHaveBeenCalledWith(
+        expect.stringMatching(/^-+$/)
+      );
+
       // Verify all queries are logged
       for (let i = 1; i <= 100; i++) {
-        expect(console.log).toHaveBeenCalledWith(`query-${i}`);
+        expect(console.log).toHaveBeenCalledWith(
+          expect.stringMatching(new RegExp(`query-${i}`))
+        );
       }
 
-      // Verify console.log was called exactly 100 times (once per query)
-      expect(console.log).toHaveBeenCalledTimes(100);
+      // Verify console.log was called: header + separator + 100 queries
+      expect(console.log).toHaveBeenCalledTimes(102);
     });
   });
 });
