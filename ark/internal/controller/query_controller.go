@@ -651,7 +651,6 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 	if query.Spec.Timeout != nil {
 		timeout = query.Spec.Timeout.Duration
 	}
-	
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 

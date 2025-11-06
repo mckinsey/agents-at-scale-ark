@@ -84,4 +84,3 @@ func GetExecutionMetadata(ctx context.Context) map[string]interface{} {
 
 	return metadata
 }
-
