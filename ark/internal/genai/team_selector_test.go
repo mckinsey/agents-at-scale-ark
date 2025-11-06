@@ -4,8 +4,8 @@ package genai
 
 import (
 	"context"
-	"text/template"
 	"testing"
+	"text/template"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -190,32 +190,6 @@ func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history
 	return nil, nil
 }
 
-// mockSelectorAgent implements a mock agent for selector testing
-type mockSelectorAgent struct {
-	name            string
-	executeResponse []Message
-	executeError    error
-}
-
-func (m *mockSelectorAgent) GetName() string {
-	return m.name
-}
-
-func (m *mockSelectorAgent) GetDescription() string {
-	return "Mock selector agent"
-}
-
-func (m *mockSelectorAgent) GetType() string {
-	return "agent"
-}
-
-func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
-	if m.executeError != nil {
-		return nil, m.executeError
-	}
-	return m.executeResponse, nil
-}
-
 func TestSelectNextMember(t *testing.T) {
 	members := []TeamMember{
 		&mockTeamMember{name: "researcher"},
@@ -239,18 +213,18 @@ func TestSelectNextMember(t *testing.T) {
 		wantError        bool
 	}{
 		{
-			name:           "first turn returns first member",
-			previousMember: "",
+			name:             "first turn returns first member",
+			previousMember:   "",
 			legalTransitions: map[string][]string{},
-			wantMember:     "researcher",
-			wantIndex:      0,
+			wantMember:       "researcher",
+			wantIndex:        0,
 		},
 		{
-			name:           "no graph constraints uses all members",
-			previousMember: "researcher",
+			name:             "no graph constraints uses all members",
+			previousMember:   "researcher",
 			legalTransitions: map[string][]string{},
-			wantMember:     "researcher", // Will be selected by selector (mocked)
-			wantIndex:      0,
+			wantMember:       "researcher", // Will be selected by selector (mocked)
+			wantIndex:        0,
 		},
 		{
 			name:           "single legal transition",
@@ -428,8 +402,8 @@ func TestBuildHistory(t *testing.T) {
 	}{
 		{
 			name:     "empty messages",
-			messages:  []Message{},
-			want:      "",
+			messages: []Message{},
+			want:     "",
 		},
 		{
 			name: "user message",
@@ -478,9 +452,9 @@ func TestBuildParticipants(t *testing.T) {
 
 func TestBuildRoles(t *testing.T) {
 	tests := []struct {
-		name     string
-		members  []TeamMember
-		want     string
+		name    string
+		members []TeamMember
+		want    string
 	}{
 		{
 			name: "members without descriptions",
@@ -519,4 +493,5 @@ func TestBuildRoles(t *testing.T) {
 // mockEventRecorder implements EventEmitter for testing
 type mockEventRecorder struct{}
 
-func (m *mockEventRecorder) EmitEvent(ctx context.Context, eventType, reason string, data EventData) {}
+func (m *mockEventRecorder) EmitEvent(ctx context.Context, eventType, reason string, data EventData) {
+}
