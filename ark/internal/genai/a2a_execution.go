@@ -61,6 +61,19 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		return nil, fmt.Errorf("unable to get A2AServer %v: %w", serverKey, err)
 	}
 
+	// Check if A2AServer has a timeout configured
+	if a2aServer.Spec.Timeout != "" {
+		timeout, err := time.ParseDuration(a2aServer.Spec.Timeout)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse A2AServer timeout %q: %w", a2aServer.Spec.Timeout, err)
+		}
+		// Create sub-context with A2AServer timeout
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	// Otherwise, use existing context deadline from query
+
 	// Extract content from the userInput message
 	content := ""
 	if userInput.OfUser != nil && userInput.OfUser.Content.OfString.Value != "" {

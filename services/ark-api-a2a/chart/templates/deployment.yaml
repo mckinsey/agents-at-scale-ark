@@ -35,5 +35,7 @@ spec:
           value: "http"
         - name: ARK_A2A_LISTEN_PATH
           value: "/a2a"
+        - name: A2A_DEFAULT_TIMEOUT
+          value: "{{ .Values.app.defaultTimeout }}"
         resources:
           {{- toYaml .Values.resources | nindent 10 }}

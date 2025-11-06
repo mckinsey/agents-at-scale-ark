@@ -22,6 +22,11 @@ type A2AServerSpec struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default="1m"
 	PollInterval *metav1.Duration `json:"pollInterval,omitempty"`
+
+	// Timeout for A2A agent execution (e.g., "30s", "5m", "1h")
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="5m"
+	Timeout string `json:"timeout,omitempty"`
 }
 
 type A2AServerStatus struct {

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from datetime import UTC, datetime
 
 from a2a.server.agent_execution import AgentExecutor
@@ -12,11 +13,14 @@ from .query import post_query_and_wait
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_TIMEOUT = int(os.getenv('A2A_DEFAULT_TIMEOUT', '300'))
+
 class ARKAgentExecutor(AgentExecutor):
-    def __init__(self, target_name, namespace):
+    def __init__(self, target_name, namespace, timeout=None):
         super().__init__()
         self.target_name = target_name
         self.namespace = namespace
+        self.timeout = timeout if timeout is not None else DEFAULT_TIMEOUT
         self.tasks_lock = asyncio.Lock()
         self.active_coroutines = {}  # task_id -> coroutine mapping
 
@@ -96,7 +100,7 @@ class ARKAgentExecutor(AgentExecutor):
         Returns:
             The query result
         """
-        return await post_query_and_wait(self.namespace, 'agent', self.target_name, user_message)
+        return await post_query_and_wait(self.namespace, 'agent', self.target_name, user_message, timeout=self.timeout)
     
     async def execute(
             self, context: RequestContext, event_queue: EventQueue
@@ -115,6 +119,7 @@ class ARKAgentExecutor(AgentExecutor):
             # Extract and log the message
             user_message = self._extract_message_text(context.message)
             logger.info(f"Task {task_id} Context {context_id} - Processing query: {user_message}")
+            logger.info(f"Task {task_id} - Using timeout: {self.timeout} seconds")
             
             # Send starting status
             await self._send_task_update(event_queue, context_id, task_id, TaskState.working, final=False)
@@ -128,8 +133,8 @@ class ARKAgentExecutor(AgentExecutor):
                     self.active_coroutines[task_id] = result_co
                 
                 try:
-                    # Wait up to 60 seconds for result
-                    result = await asyncio.wait_for(result_co, timeout=60.0)
+                    # Wait up to configured timeout for result
+                    result = await asyncio.wait_for(result_co, timeout=self.timeout)
                     
                     # Send the result
                     result_msg = new_agent_text_message(result, context_id=context_id, task_id=task_id)
@@ -141,7 +146,7 @@ class ARKAgentExecutor(AgentExecutor):
                     logger.info(f"Task {task_id} - Query completed successfully")
                     
                 except TimeoutError:
-                    logger.error(f"Task {task_id} - Query timed out after 60 seconds")
+                    logger.error(f"Task {task_id} - Query timed out after {self.timeout} seconds")
                     
                     # Cancel the coroutine if still running
                     if isinstance(result_co, asyncio.Task):
@@ -149,7 +154,7 @@ class ARKAgentExecutor(AgentExecutor):
                     
                     # Send timeout error
                     timeout_msg = new_agent_text_message(
-                        "Query timed out after 60 seconds",
+                        f"Query timed out after {self.timeout} seconds",
                         context_id=context_id,
                         task_id=task_id
                     )
@@ -158,7 +163,7 @@ class ARKAgentExecutor(AgentExecutor):
                     # Send failure status
                     failure_event = self._create_status_event(
                         context_id, task_id, TaskState.failed,
-                        final=True, error_msg="Query timeout"
+                        final=True, error_msg=f"Query timeout after {self.timeout}s"
                     )
                     await event_queue.enqueue_event(failure_event)
                     

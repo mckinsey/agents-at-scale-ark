@@ -2,8 +2,8 @@ apiVersion: v2
 name: ark-api-a2a
 description: ARK API A2A Gateway service for agent-to-agent communication
 type: application
-version: 0.1.41
-appVersion: 0.1.41
+version: 0.1.42
+appVersion: 0.1.42
 annotations:
   category: API
   licenses: Apache-2.0

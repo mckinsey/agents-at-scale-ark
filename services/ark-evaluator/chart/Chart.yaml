@@ -4,7 +4,7 @@ description: >-
   Holistic Evaluator for Ark - AI-powered query evaluation service inc.
   LLM-as-a-Judge
 type: application
-version: 0.1.41
+version: 0.1.42
 appVersion: 0.1.36
 keywords:
   - evaluator
@@ -15,7 +15,7 @@ keywords:
 maintainers:
   - name: Ark Team
 sources:
-  - https://github.com/McK-Internal/agents-at-scale
+  - https://github.com/mckinsey/agents-at-scale-ark
 annotations:
   ark.mckinsey.com/service: ark-evaluator
   ark.mckinsey.com/resources: service

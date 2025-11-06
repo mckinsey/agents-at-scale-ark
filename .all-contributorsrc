@@ -382,6 +382,17 @@
         "doc",
         "code"
       ]
+    },
+    {
+      "login": "MariusM",
+      "name": "Marius Mateescu",
+      "avatar_url": "https://avatars.githubusercontent.com/u/409931?v=4",
+      "profile": "https://github.com/MariusM",
+      "contributions": [
+        "code",
+        "doc",
+        "bug"
+      ]
     }
   ],
   "contributorsPerLine": 7,

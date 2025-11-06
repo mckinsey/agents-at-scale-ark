@@ -28,8 +28,8 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/McK-Internal/qbaf"
-Documentation = "https://github.com/McK-Internal/qbaf/tree/main/services/executor-langchain"
+Repository = "https://github.com/mckinsey/agents-at-scale-ark"
+Documentation = "https://mckinsey.github.io/agents-at-scale-ark/developer-guide/langchain-execution-engine/"
 
 [build-system]
 requires = ["hatchling"]
