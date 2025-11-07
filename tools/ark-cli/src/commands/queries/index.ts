@@ -63,20 +63,14 @@ async function getQuery(
 
 export function createQueriesCommand(_: ArkConfig): Command {
   const queriesCommand = new Command('queries');
-
-  queriesCommand.description('Manage query resources');
-
-  const getCommand = new Command('get');
-  getCommand
-    .description('Get a specific query (@latest for most recent)')
-    .argument('<name>', 'Query name or @latest')
-    .option('-o, --output <format>', 'output format (json, markdown)', 'json')
-    .option('-r, --response', 'show only the response content', false)
-    .action(async (name: string, options) => {
-      await getQuery(name, options);
+  queriesCommand
+    .description('List all queries')
+    .option('-o, --output <format>', 'output format (json or text)', 'text')
+    .option('--sort-by <field>', 'sort by kubernetes field (e.g., .metadata.name)')
+    .action(async (options) => {
+      await listQueries(options);
     });
-
-  queriesCommand.addCommand(getCommand);
+  queriesCommand.description('Manage query resources');
 
   const listCommand = new Command('list');
   listCommand
@@ -89,6 +83,18 @@ export function createQueriesCommand(_: ArkConfig): Command {
     });
 
   queriesCommand.addCommand(listCommand);
+
+  const getCommand = new Command('get');
+  getCommand
+    .description('Get a specific query (@latest for most recent)')
+    .argument('<name>', 'Query name or @latest')
+    .option('-o, --output <format>', 'output format (json, markdown)', 'json')
+    .option('-r, --response', 'show only the response content', false)
+    .action(async (name: string, options) => {
+      await getQuery(name, options);
+    });
+
+  queriesCommand.addCommand(getCommand);
 
   const deleteCommand = new Command('delete');
   deleteCommand
