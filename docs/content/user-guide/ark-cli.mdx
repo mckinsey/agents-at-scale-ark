@@ -62,3 +62,51 @@ npm run dev # Or run with live reload
 ```
 
 Changes to the source code will instantly reflect when you run `ark` commands.
+
+## Queries Management
+
+### Query a Model/Agent
+
+To query a model/agent from ARK CLI is as simple as running:
+
+- `ark query model/model-name "What's the weather today?"`
+- `ark query agent/agent-name "What can you do?"`
+
+### Inspecting Queries
+
+With `ark queries list` or `ark queries ls` it is possible to retrieve all the queries made.  
+
+This command supports sorting results by internal properties.
+
+E.g.:
+```sh
+# sort queries by creation time
+ark queries list --sort-by metadata.creationTimestamp
+
+# sort queries by creation time
+ark queries list --sort-by metadata.name
+
+# sort queries by creation status
+ark queries list --sort-by status.phase
+```
+
+By specifying the `json` output format, user can retrieve the list of raw queries.
+
+E.g.:
+```sh
+# get the raw queries output
+ark queries list -o json
+```
+
+### Deleting Queries
+
+ARK CLI can delete queries by name or deleting all queries if `--all` flag is specified.
+
+E.g.:
+```sh
+# delete query by name
+ark queries delete cli-query-1762513858659
+
+# delete all queries
+ark queries delete --all
+```
