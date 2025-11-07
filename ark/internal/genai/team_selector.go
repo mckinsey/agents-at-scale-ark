@@ -162,8 +162,8 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	return nil, 0, fmt.Errorf("no members available")
 }
 
-// selectNextMember determines the next team member based on graph constraints and previous member.
-func (t *Team) selectNextMember(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, int, error) {
+// determineNextMember routes to the appropriate selection logic based on whether graph constraints exist.
+func (t *Team) determineNextMember(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, int, error) {
 	switch {
 	case previousMember == "":
 		// First turn: use first member
@@ -175,12 +175,12 @@ func (t *Team) selectNextMember(ctx context.Context, messages []Message, tmpl *t
 		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil)
 	default:
 		// Graph constraints provided: use legal transitions
-		return t.selectNextMemberWithGraphConstraints(ctx, messages, tmpl, previousMember, legalTransitions)
+		return t.selectFromGraphConstraints(ctx, messages, tmpl, previousMember, legalTransitions)
 	}
 }
 
-// selectNextMemberWithGraphConstraints selects a member when graph constraints are provided.
-func (t *Team) selectNextMemberWithGraphConstraints(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, int, error) {
+// selectFromGraphConstraints selects a member from the graph-constrained legal transitions.
+func (t *Team) selectFromGraphConstraints(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, int, error) {
 	// Find previous member to get legal transitions
 	var previousMemberObj TeamMember
 	for _, member := range t.Members {
@@ -277,7 +277,7 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 		turnTracker.TeamTurn(ctx, "Start", t.FullName(), t.Strategy, turn)
 
 		// Determine next member based on graph constraints (if any)
-		nextMember, memberIndex, err := t.selectNextMember(ctx, messages, tmpl, previousMember, legalTransitions)
+		nextMember, memberIndex, err := t.determineNextMember(ctx, messages, tmpl, previousMember, legalTransitions)
 		if err != nil {
 			if IsTerminateTeam(err) {
 				return newMessages, nil
