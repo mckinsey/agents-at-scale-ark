@@ -273,6 +273,11 @@ func (a *Agent) GetDescription() string {
 	return a.Description
 }
 
+func (a *Agent) GetIndex() int {
+	// Agent doesn't track its own index - returns -1 when not wrapped in indexedTeamMember
+	return -1
+}
+
 // ValidateExecutionEngine checks if the specified ExecutionEngine resource exists
 func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, executionEngine *arkv1alpha1.ExecutionEngineRef, defaultNamespace string) error {
 	// Resolve execution engine name and namespace

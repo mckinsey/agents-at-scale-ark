@@ -123,12 +123,6 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	rec := NewExecutionRecorder(t.Recorder)
 	rec.SelectorAgentResponse(ctx, t.FullName(), selectorAgent.Name, selectedName, participantsList)
 
-	// Build name-to-index lookup map once
-	memberIndexMap := make(map[string]int, len(t.Members))
-	for i, m := range t.Members {
-		memberIndexMap[m.GetName()] = i
-	}
-
 	// Use candidateMembers if provided, otherwise use all team members
 	membersToSearch := t.Members
 	if candidateMembers != nil {
@@ -139,10 +133,8 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	for _, member := range membersToSearch {
 		if member.GetName() == selectedName {
 			rec.ParticipantSelected(ctx, t.FullName(), selectedName, "exact_match")
-			// Look up index using map
-			if index, exists := memberIndexMap[selectedName]; exists {
-				return member, index, nil
-			}
+			// Get index directly from member
+			return member, member.GetIndex(), nil
 		}
 	}
 
@@ -155,10 +147,8 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		if fallback.GetName() == previousMember && len(membersToSearch) > 1 {
 			fallback = membersToSearch[1]
 		}
-		// Look up index using map
-		if index, exists := memberIndexMap[fallback.GetName()]; exists {
-			return fallback, index, nil
-		}
+		// Get index directly from member
+		return fallback, fallback.GetIndex(), nil
 	}
 
 	return nil, 0, fmt.Errorf("no members available")
@@ -183,12 +173,10 @@ func (t *Team) determineNextMember(ctx context.Context, messages []Message, tmpl
 
 // selectFromGraphConstraints selects a member from the graph-constrained legal transitions.
 func (t *Team) selectFromGraphConstraints(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, int, error) {
-	// Build name-to-member and name-to-index lookup maps once
+	// Build name-to-member lookup map once
 	memberLookup := make(map[string]TeamMember, len(t.Members))
-	memberIndexMap := make(map[string]int, len(t.Members))
-	for i, member := range t.Members {
+	for _, member := range t.Members {
 		memberLookup[member.GetName()] = member
-		memberIndexMap[member.GetName()] = i
 	}
 
 	// Find previous member to get legal transitions
@@ -204,7 +192,7 @@ func (t *Team) selectFromGraphConstraints(ctx context.Context, messages []Messag
 				"teamName":       t.FullName(),
 			},
 		})
-		return t.Members[0], 0, nil
+		return t.Members[0], t.Members[0].GetIndex(), nil
 	}
 
 	legal := legalTransitions[previousMember]
@@ -220,17 +208,14 @@ func (t *Team) selectFromGraphConstraints(ctx context.Context, messages []Messag
 				"teamName":       t.FullName(),
 			},
 		})
-		return t.Members[0], 0, nil
+		return t.Members[0], t.Members[0].GetIndex(), nil
 	case 1:
 		// Only one legal transition - use it directly (skip selector agent for optimization)
 		selectedMember := legal[0]
 		rec := NewExecutionRecorder(t.Recorder)
 		rec.ParticipantSelected(ctx, t.FullName(), selectedMember.GetName(), "graph_constrained_single")
-		// Look up index using map
-		if index, exists := memberIndexMap[selectedMember.GetName()]; exists {
-			return selectedMember, index, nil
-		}
-		return selectedMember, 0, nil
+		// Get index directly from member
+		return selectedMember, selectedMember.GetIndex(), nil
 	default:
 		// Multiple legal transitions - use selector agent to choose from candidates
 		participantsList := buildParticipants(legal)

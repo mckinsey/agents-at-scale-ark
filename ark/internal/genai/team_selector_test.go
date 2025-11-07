@@ -80,10 +80,10 @@ func TestBuildLegalTransitions(t *testing.T) {
 func TestFilterMembersByLegalTransitions(t *testing.T) {
 	// Create mock team members
 	members := []TeamMember{
-		&mockTeamMember{name: "researcher"},
-		&mockTeamMember{name: "analyst"},
-		&mockTeamMember{name: "writer"},
-		&mockTeamMember{name: "reviewer"},
+		&mockTeamMember{name: "researcher", index: 0},
+		&mockTeamMember{name: "analyst", index: 1},
+		&mockTeamMember{name: "writer", index: 2},
+		&mockTeamMember{name: "reviewer", index: 3},
 	}
 
 	memberMap := make(map[string]TeamMember)
@@ -166,6 +166,7 @@ type mockTeamMember struct {
 	name        string
 	description string
 	memberType  string
+	index       int
 }
 
 func (m *mockTeamMember) GetName() string {
@@ -186,15 +187,19 @@ func (m *mockTeamMember) GetType() string {
 	return m.memberType
 }
 
+func (m *mockTeamMember) GetIndex() int {
+	return m.index
+}
+
 func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
 	return nil, nil
 }
 
 func TestDetermineNextMember(t *testing.T) {
 	members := []TeamMember{
-		&mockTeamMember{name: "researcher"},
-		&mockTeamMember{name: "analyst"},
-		&mockTeamMember{name: "writer"},
+		&mockTeamMember{name: "researcher", index: 0},
+		&mockTeamMember{name: "analyst", index: 1},
+		&mockTeamMember{name: "writer", index: 2},
 	}
 
 	tests := []struct {
@@ -290,9 +295,9 @@ func TestDetermineNextMember(t *testing.T) {
 
 func TestSelectFromGraphConstraints(t *testing.T) {
 	members := []TeamMember{
-		&mockTeamMember{name: "researcher"},
-		&mockTeamMember{name: "analyst"},
-		&mockTeamMember{name: "writer"},
+		&mockTeamMember{name: "researcher", index: 0},
+		&mockTeamMember{name: "analyst", index: 1},
+		&mockTeamMember{name: "writer", index: 2},
 	}
 
 	tests := []struct {
@@ -426,9 +431,9 @@ func TestBuildHistory(t *testing.T) {
 
 func TestBuildParticipants(t *testing.T) {
 	members := []TeamMember{
-		&mockTeamMember{name: "researcher"},
-		&mockTeamMember{name: "analyst"},
-		&mockTeamMember{name: "writer"},
+		&mockTeamMember{name: "researcher", index: 0},
+		&mockTeamMember{name: "analyst", index: 1},
+		&mockTeamMember{name: "writer", index: 2},
 	}
 
 	got := buildParticipants(members)
@@ -445,24 +450,24 @@ func TestBuildRoles(t *testing.T) {
 		{
 			name: "members without descriptions",
 			members: []TeamMember{
-				&mockTeamMember{name: "researcher"},
-				&mockTeamMember{name: "analyst"},
+				&mockTeamMember{name: "researcher", index: 0},
+				&mockTeamMember{name: "analyst", index: 1},
 			},
 			want: "researcher, analyst",
 		},
 		{
 			name: "members with descriptions",
 			members: []TeamMember{
-				&mockTeamMember{name: "researcher", description: "Research specialist"},
-				&mockTeamMember{name: "analyst", description: "Data analyst"},
+				&mockTeamMember{name: "researcher", description: "Research specialist", index: 0},
+				&mockTeamMember{name: "analyst", description: "Data analyst", index: 1},
 			},
 			want: "researcher: Research specialist, analyst: Data analyst",
 		},
 		{
 			name: "mixed descriptions",
 			members: []TeamMember{
-				&mockTeamMember{name: "researcher", description: "Research specialist"},
-				&mockTeamMember{name: "analyst"},
+				&mockTeamMember{name: "researcher", description: "Research specialist", index: 0},
+				&mockTeamMember{name: "analyst", index: 1},
 			},
 			want: "researcher: Research specialist, analyst",
 		},

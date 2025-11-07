@@ -36,6 +36,7 @@ type TeamMember interface {
 	GetName() string
 	GetType() string
 	GetDescription() string
+	GetIndex() int
 }
 
 type ToolResult struct {
