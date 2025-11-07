@@ -174,16 +174,20 @@ func (t *Team) findMemberIndex(member TeamMember) int {
 }
 
 // selectNextMember determines the next team member based on graph constraints and previous member.
-func (t *Team) selectNextMember(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, error) {
+func (t *Team) selectNextMember(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, int, error) {
 	switch {
 	case previousMember == "":
 		// First turn: use first member
-		return t.Members[0], nil
+		return t.Members[0], 0, nil
 	case len(legalTransitions) == 0:
 		// No graph constraints: use standard selector (all members available)
 		participantsList := buildParticipants(t.Members)
 		rolesList := buildRoles(t.Members)
-		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil)
+		member, err := t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil)
+		if err != nil {
+			return nil, 0, err
+		}
+		return member, t.findMemberIndex(member), nil
 	default:
 		// Graph constraints provided: use legal transitions
 		return t.selectNextMemberWithGraphConstraints(ctx, messages, tmpl, previousMember, legalTransitions)
@@ -191,7 +195,7 @@ func (t *Team) selectNextMember(ctx context.Context, messages []Message, tmpl *t
 }
 
 // selectNextMemberWithGraphConstraints selects a member when graph constraints are provided.
-func (t *Team) selectNextMemberWithGraphConstraints(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, error) {
+func (t *Team) selectNextMemberWithGraphConstraints(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, int, error) {
 	// Find previous member to get legal transitions
 	var previousMemberObj TeamMember
 	for _, member := range t.Members {
@@ -211,7 +215,7 @@ func (t *Team) selectNextMemberWithGraphConstraints(ctx context.Context, message
 				"teamName":       t.FullName(),
 			},
 		})
-		return t.Members[0], nil
+		return t.Members[0], 0, nil
 	}
 
 	legal := legalTransitions[previousMember]
@@ -227,18 +231,22 @@ func (t *Team) selectNextMemberWithGraphConstraints(ctx context.Context, message
 				"teamName":       t.FullName(),
 			},
 		})
-		return t.Members[0], nil
+		return t.Members[0], 0, nil
 	case 1:
 		// Only one legal transition - use it directly (skip selector agent for optimization)
 		selectedMember := legal[0]
 		rec := NewExecutionRecorder(t.Recorder)
 		rec.ParticipantSelected(ctx, t.FullName(), selectedMember.GetName(), "graph_constrained_single")
-		return selectedMember, nil
+		return selectedMember, t.findMemberIndex(selectedMember), nil
 	default:
 		// Multiple legal transitions - use selector agent to choose from candidates
 		participantsList := buildParticipants(legal)
 		rolesList := buildRoles(legal)
-		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, legal)
+		member, err := t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, legal)
+		if err != nil {
+			return nil, 0, err
+		}
+		return member, t.findMemberIndex(member), nil
 	}
 }
 
@@ -282,16 +290,13 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 		turnTracker.TeamTurn(ctx, "Start", t.FullName(), t.Strategy, turn)
 
 		// Determine next member based on graph constraints (if any)
-		nextMember, err := t.selectNextMember(ctx, messages, tmpl, previousMember, legalTransitions)
+		nextMember, memberIndex, err := t.selectNextMember(ctx, messages, tmpl, previousMember, legalTransitions)
 		if err != nil {
 			if IsTerminateTeam(err) {
 				return newMessages, nil
 			}
 			return newMessages, err
 		}
-
-		// Find member index for telemetry
-		memberIndex := t.findMemberIndex(nextMember)
 
 		// Start turn-level telemetry span
 		turnCtx, turnSpan := t.TeamRecorder.StartTurn(ctx, turn, nextMember.GetName(), nextMember.GetType())

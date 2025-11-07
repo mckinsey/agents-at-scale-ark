@@ -273,8 +273,7 @@ func TestSelectNextMember(t *testing.T) {
 				return
 			}
 
-			member, err := team.selectNextMember(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions)
-			index := team.findMemberIndex(member)
+			member, index, err := team.selectNextMember(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions)
 
 			if tt.wantError {
 				require.Error(t, err)
@@ -363,8 +362,7 @@ func TestSelectNextMemberWithGraphConstraints(t *testing.T) {
 				return
 			}
 
-			member, err := team.selectNextMemberWithGraphConstraints(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions)
-			index := team.findMemberIndex(member)
+			member, index, err := team.selectNextMemberWithGraphConstraints(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions)
 
 			if tt.wantError {
 				require.Error(t, err)
