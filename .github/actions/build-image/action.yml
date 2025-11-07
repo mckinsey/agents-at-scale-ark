@@ -55,6 +55,6 @@ runs:
           GIT_COMMIT=${{ github.sha }}
           ${{ inputs.build-args }}
         cache-from: |
-          type=gha
+          type=gha,scope=${{ inputs.image }}
         cache-to: |
-          type=gha,mode=min
+          type=gha,mode=min,scope=${{ inputs.image }}

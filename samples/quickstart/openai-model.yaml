@@ -27,5 +27,3 @@ spec:
             # This secret is created by following the setup instructions in the README
             name: azure-openai-secret
             key: token
-      apiVersion:
-        value: "${API_VERSION}" 

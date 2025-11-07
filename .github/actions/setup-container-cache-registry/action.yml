@@ -47,10 +47,11 @@ runs:
         # Check if this is a PR from a fork
         if [[ "${{ github.event_name }}" == "pull_request" ]] && \
            [[ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
-          # EXTERNAL PR: Use the fork's registry
+          # EXTERNAL PR: Use a temp registry
           # The fork owner's GITHUB_TOKEN has write access to their own namespace
-          # Example: ghcr.io/forked-owner/forked-repo-name
-          REGISTRY="ghcr.io/${{ github.event.pull_request.head.repo.full_name }}"
+          # Example: ttl.sh/forked-owner/forked-repo-name
+        
+          REGISTRY="ttl.sh/${{ github.event.pull_request.head.repo.full_name }}"
           IS_FORK_PR="true"
           echo "External PR detected - using fork's registry: $REGISTRY"
         else
