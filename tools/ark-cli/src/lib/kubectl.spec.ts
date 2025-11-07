@@ -5,7 +5,10 @@ jest.unstable_mockModule('execa', () => ({
   execa: mockExeca,
 }));
 
-const {getResource} = await import('./kubectl.js');
+const {
+  getResource,
+  deleteResource,
+} = await import('./kubectl.js');
 
 interface TestResource {
   metadata: {
@@ -126,6 +129,36 @@ describe('kubectl', () => {
       expect(mockExeca).toHaveBeenCalledWith(
         'kubectl',
         ['get', 'agents', 'test-agent', '-o', 'json'],
+        {stdio: 'pipe'}
+      );
+    });
+  });
+
+  describe('deleteResource', () => {
+    it('should delete a resource by name', async () => {
+      mockExeca.mockResolvedValue({
+        stdout: '',
+      });
+
+      await deleteResource('queries', 'test-query');
+
+      expect(mockExeca).toHaveBeenCalledWith(
+        'kubectl',
+        ['delete', 'queries', 'test-query'],
+        {stdio: 'pipe'}
+      );
+    });
+
+    it('should delete all resources of a type when all option is true', async () => {
+      mockExeca.mockResolvedValue({
+        stdout: '',
+      });
+
+      await deleteResource('queries', undefined, {all: true});
+
+      expect(mockExeca).toHaveBeenCalledWith(
+        'kubectl',
+        ['delete', 'queries', '--all'],
         {stdio: 'pipe'}
       );
     });

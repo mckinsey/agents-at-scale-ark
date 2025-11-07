@@ -43,3 +43,21 @@ export async function getResource<T extends K8sResource>(
 
   return JSON.parse(result.stdout) as T;
 }
+
+export async function deleteResource(
+  resourceType: string,
+  name?: string,
+  options?: {
+    all?: boolean;
+  }
+): Promise<void> {
+  const args: string[] = ['delete', resourceType];
+
+  if (options?.all) {
+    args.push('--all');
+  } else if (name) {
+    args.push(name);
+  }
+
+  await execa('kubectl', args, {stdio: 'pipe'});
+}
