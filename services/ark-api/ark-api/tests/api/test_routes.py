@@ -2040,7 +2040,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         self.assertEqual(data["name"], "graph-team")
         self.assertEqual(data["strategy"], "graph")
         self.assertEqual(len(data["graph"]["edges"]), 2)
-        self.assertEqual(data["graph"]["edges"][0]["from_"], "planner")
+        self.assertEqual(data["graph"]["edges"][0]["from"], "planner")
         self.assertEqual(data["graph"]["edges"][0]["to"], "executor")
     
     @patch('ark_api.api.v1.teams.with_ark_client')
@@ -2158,7 +2158,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         self.assertEqual(data["strategy"], "selector")
         self.assertEqual(data["selector"]["agent"], "coordinator")
         self.assertEqual(len(data["graph"]["edges"]), 2)
-        self.assertEqual(data["graph"]["edges"][0]["from_"], "researcher")
+        self.assertEqual(data["graph"]["edges"][0]["from"], "researcher")
         self.assertEqual(data["graph"]["edges"][0]["to"], "analyzer")
         self.assertEqual(data["maxTurns"], 10)
     
