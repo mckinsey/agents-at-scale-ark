@@ -81,9 +81,9 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (*Agent, error) {
 	return agent, nil
 }
 
-// selectMemberWithSelectorAgent selects a member using the selector agent from the given candidate members.
+// selectMember selects a member using the selector agent from the given candidate members.
 // If candidateMembers is nil, selects from all team members (no constraints).
-func (t *Team) selectMemberWithSelectorAgent(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, candidateMembers []TeamMember) (TeamMember, error) {
+func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList, previousMember string, candidateMembers []TeamMember) (TeamMember, error) {
 	// Determine which members to search in
 	membersToSearch := t.Members
 	if candidateMembers != nil {
@@ -94,8 +94,13 @@ func (t *Team) selectMemberWithSelectorAgent(ctx context.Context, messages []Mes
 		return nil, fmt.Errorf("no members available")
 	}
 
-	participantsList := buildParticipants(membersToSearch)
-	rolesList := buildRoles(membersToSearch)
+	// Use provided lists if available, otherwise build from membersToSearch
+	if participantsList == "" {
+		participantsList = buildParticipants(membersToSearch)
+	}
+	if rolesList == "" {
+		rolesList = buildRoles(membersToSearch)
+	}
 	history := buildHistory(messages)
 
 	data := SelectorTemplateData{
@@ -168,23 +173,25 @@ func (t *Team) findMemberIndex(member TeamMember) int {
 	return 0 // Fallback to 0 if not found
 }
 
-// determineNextMember determines the next team member based on graph constraints and previous member.
-func (t *Team) determineNextMember(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, error) {
+// selectNextMember determines the next team member based on graph constraints and previous member.
+func (t *Team) selectNextMember(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, error) {
 	switch {
 	case previousMember == "":
 		// First turn: use first member
 		return t.Members[0], nil
 	case len(legalTransitions) == 0:
 		// No graph constraints: use standard selector (all members available)
-		return t.selectMemberWithSelectorAgent(ctx, messages, tmpl, previousMember, nil)
+		participantsList := buildParticipants(t.Members)
+		rolesList := buildRoles(t.Members)
+		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil)
 	default:
 		// Graph constraints provided: use legal transitions
-		return t.selectMemberWithGraphConstraints(ctx, messages, tmpl, previousMember, legalTransitions)
+		return t.selectNextMemberWithGraphConstraints(ctx, messages, tmpl, previousMember, legalTransitions)
 	}
 }
 
-// selectMemberWithGraphConstraints selects a member when graph constraints are provided.
-func (t *Team) selectMemberWithGraphConstraints(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, error) {
+// selectNextMemberWithGraphConstraints selects a member when graph constraints are provided.
+func (t *Team) selectNextMemberWithGraphConstraints(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, error) {
 	// Find previous member to get legal transitions
 	var previousMemberObj TeamMember
 	for _, member := range t.Members {
@@ -229,7 +236,9 @@ func (t *Team) selectMemberWithGraphConstraints(ctx context.Context, messages []
 		return selectedMember, nil
 	default:
 		// Multiple legal transitions - use selector agent to choose from candidates
-		return t.selectMemberWithSelectorAgent(ctx, messages, tmpl, previousMember, legal)
+		participantsList := buildParticipants(legal)
+		rolesList := buildRoles(legal)
+		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, legal)
 	}
 }
 
@@ -273,7 +282,7 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 		turnTracker.TeamTurn(ctx, "Start", t.FullName(), t.Strategy, turn)
 
 		// Determine next member based on graph constraints (if any)
-		nextMember, err := t.determineNextMember(ctx, messages, tmpl, previousMember, legalTransitions)
+		nextMember, err := t.selectNextMember(ctx, messages, tmpl, previousMember, legalTransitions)
 		if err != nil {
 			if IsTerminateTeam(err) {
 				return newMessages, nil

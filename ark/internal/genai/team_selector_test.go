@@ -190,7 +190,7 @@ func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history
 	return nil, nil
 }
 
-func TestDetermineNextMember(t *testing.T) {
+func TestSelectNextMember(t *testing.T) {
 	members := []TeamMember{
 		&mockTeamMember{name: "researcher"},
 		&mockTeamMember{name: "analyst"},
@@ -273,7 +273,7 @@ func TestDetermineNextMember(t *testing.T) {
 				return
 			}
 
-			member, err := team.determineNextMember(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions)
+			member, err := team.selectNextMember(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions)
 			index := team.findMemberIndex(member)
 
 			if tt.wantError {
@@ -289,7 +289,7 @@ func TestDetermineNextMember(t *testing.T) {
 	}
 }
 
-func TestSelectMemberWithGraphConstraints(t *testing.T) {
+func TestSelectNextMemberWithGraphConstraints(t *testing.T) {
 	members := []TeamMember{
 		&mockTeamMember{name: "researcher"},
 		&mockTeamMember{name: "analyst"},
@@ -363,7 +363,7 @@ func TestSelectMemberWithGraphConstraints(t *testing.T) {
 				return
 			}
 
-			member, err := team.selectMemberWithGraphConstraints(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions)
+			member, err := team.selectNextMemberWithGraphConstraints(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions)
 			index := team.findMemberIndex(member)
 
 			if tt.wantError {
