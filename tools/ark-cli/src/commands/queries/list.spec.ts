@@ -1,12 +1,14 @@
 import {jest} from '@jest/globals';
 
+import { UNSUPPORTED_OUTPUT_FORMAT_MESSAGE } from './validation.js';
+import output from '../../lib/output.js';
+
 const mockExeca = jest.fn() as any;
 jest.unstable_mockModule('execa', () => ({
   execa: mockExeca,
 }));
 
 const {createQueriesCommand} = await import('./index.js');
-import output from '../../lib/output.js';
 
 describe('queries list command', () => {
   beforeEach(() => {
@@ -201,15 +203,15 @@ describe('queries list command', () => {
     const command = createQueriesCommand({});
     await command.parseAsync(['node', 'test', '--output', 'xml']);
 
-    // Should warn about invalid format and exit
-    expect(output.warning).toHaveBeenCalledWith(
-      'unsupported output format: xml. Supported formats: json, text'
-    );
-    expect(process.exit).toHaveBeenCalled();
+    expect(output.error).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringMatching(UNSUPPORTED_OUTPUT_FORMAT_MESSAGE));
+
     expect(mockExeca).not.toHaveBeenCalled();
     expect(console.log).not.toHaveBeenCalledWith(
       expect.stringMatching(/query-1/)
     );
+      expect(process.exit).toHaveBeenCalled();
   });
 
   it('should list many queries without truncation', async () => {

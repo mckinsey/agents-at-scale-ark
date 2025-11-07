@@ -1,13 +1,14 @@
 import {jest} from '@jest/globals';
 
+import output from '../../lib/output.js';
+
 const mockExeca = jest.fn() as any;
 jest.unstable_mockModule('execa', () => ({
   execa: mockExeca,
 }));
 
 const {createQueriesCommand} = await import('./index.js');
-const {deleteQuery} = await import('./delete.js');
-import output from '../../lib/output.js';
+const {deleteQuery, BOTH_NAME_AND_ALL_ERROR, MISSING_NAME_OR_ALL_ERROR} = await import('./delete.js');
 
 describe('queries delete command', () => {
   beforeEach(() => {
@@ -60,12 +61,21 @@ describe('deleteQuery function', () => {
     jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
   });
 
-  it('should error when neither name nor all flag is provided', async () => {
+  it('should throw error when neither name nor --all flag is provided', async () => {
     await deleteQuery(undefined, {});
 
     expect(output.error).toHaveBeenCalledWith(
-      'Either provide a query name or use --all flag'
-    );
+      expect.anything(),
+      expect.stringMatching(MISSING_NAME_OR_ALL_ERROR));
+    expect(process.exit).toHaveBeenCalledWith(1);
+  });
+
+  it('should throw error when both name and --all flag are provided', async () => {
+    await deleteQuery('my-query', {all: true});
+
+    expect(output.error).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringMatching(BOTH_NAME_AND_ALL_ERROR));
     expect(process.exit).toHaveBeenCalledWith(1);
   });
 

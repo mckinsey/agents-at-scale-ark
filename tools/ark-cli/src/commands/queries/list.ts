@@ -3,7 +3,7 @@ import type {Query} from '../../lib/types.js';
 import output from '../../lib/output.js';
 import {ExitCodes} from '../../lib/errors.js';
 import {listResources} from '../../lib/kubectl.js';
-import {assertSupportedOutputFormat, UnsupportedOutputFormatError} from './validation.js';
+import {assertSupportedOutputFormat} from './validation.js';
 
 // Output format constants
 const OUTPUT_FORMAT_JSON = 'json';
@@ -85,17 +85,10 @@ export async function listQueries(options: ListQueriesOptions): Promise<void> {
 
     printResult(queries, options);
   } catch (error) {
-    switch (true) {
-      case error instanceof UnsupportedOutputFormatError:
-        output.warning(error.message);
-        process.exit(ExitCodes.CliError);
-        break;
-      default:
-        output.error(
-          'fetching queries:',
-          error instanceof Error ? error.message : error
-        );
-        process.exit(ExitCodes.CliError);
-    }
+    output.error(
+      'fetching queries:',
+      error instanceof Error ? error.message : error
+    );
+    process.exit(ExitCodes.CliError);
   }
 }

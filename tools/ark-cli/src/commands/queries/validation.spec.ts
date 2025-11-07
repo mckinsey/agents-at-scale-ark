@@ -1,8 +1,10 @@
-import {jest} from '@jest/globals';
+import { jest } from '@jest/globals';
+import { InvalidArgumentError } from 'commander';
+
+import { assertSupportedOutputFormat, UNSUPPORTED_OUTPUT_FORMAT_MESSAGE } from './validation.js';
 
 jest.spyOn(console, 'error').mockImplementation(() => {});
 
-import {assertSupportedOutputFormat, UnsupportedOutputFormatError} from './validation.js';
 
 describe('queries validation', () => {
   describe('assertSupportedOutputFormat', () => {
@@ -15,15 +17,15 @@ describe('queries validation', () => {
       expect(() => assertSupportedOutputFormat(undefined)).not.toThrow();
     });
 
-    it('should throw UnsupportedOutputFormatError for unsupported format', () => {
+    it('should throw InvalidArgumentError for unsupported format', () => {
       expect(() => assertSupportedOutputFormat('xml')).toThrow(
-        UnsupportedOutputFormatError
+        InvalidArgumentError
       );
     });
 
     it('should include format and supported formats in error message', () => {
       expect(() => assertSupportedOutputFormat('xml')).toThrow(
-        'unsupported output format: xml. Supported formats: json, text'
+        UNSUPPORTED_OUTPUT_FORMAT_MESSAGE
       );
     });
 
@@ -32,7 +34,7 @@ describe('queries validation', () => {
 
       for (const format of invalidFormats) {
         expect(() => assertSupportedOutputFormat(format)).toThrow(
-          UnsupportedOutputFormatError
+          InvalidArgumentError
         );
       }
     });
