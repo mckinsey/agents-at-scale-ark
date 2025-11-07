@@ -38,7 +38,7 @@ function getStatusColor(status: string): (text: string) => string {
 
 function printTableHeader(maxNameLength: number): void {
   const paddedHeaderLength = maxNameLength + COLUMN_PADDING;
-  const header = `${chalk.bold('NAME'.padEnd(paddedHeaderLength))}${chalk.bold('STATUS')}`;
+  const header = `${'NAME'.padEnd(paddedHeaderLength)}${'STATUS'}`;
   console.log(header);
 }
 
