@@ -411,11 +411,11 @@ export function TeamEditor({
           </div>
           {strategy === 'selector' && (
             <>
-              <div className="rounded-md border bg-muted/50 p-3">
-                <p className="text-muted-foreground text-xs mb-3">
-                  Selector strategy uses an AI agent to choose the next team member.
-                  You can optionally add graph constraints below to limit selection to
-                  valid transitions.
+              <div className="bg-muted/50 rounded-md border p-3">
+                <p className="text-muted-foreground mb-3 text-xs">
+                  Selector strategy uses an AI agent to choose the next team
+                  member. You can optionally add graph constraints below to
+                  limit selection to valid transitions.
                 </p>
               </div>
               <div className="grid gap-2">
@@ -522,14 +522,15 @@ export function TeamEditor({
               <p className="text-muted-foreground text-xs">
                 {strategy === 'graph' ? (
                   <>
-                    Define the flow between agents. &quot;From&quot; is optional and
-                    defaults to any agent.
+                    Define the flow between agents. &quot;From&quot; is optional
+                    and defaults to any agent.
                   </>
                 ) : (
                   <>
-                    Optional: Define graph constraints to limit AI selection to valid
-                    transitions. When provided, the selector agent will only choose from
-                    members that are legal according to the graph edges.
+                    Optional: Define graph constraints to limit AI selection to
+                    valid transitions. When provided, the selector agent will
+                    only choose from members that are legal according to the
+                    graph edges.
                   </>
                 )}
               </p>
