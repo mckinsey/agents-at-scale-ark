@@ -190,11 +190,6 @@ func (t *Team) GetDescription() string {
 	return t.Description
 }
 
-func (t *Team) GetIndex() int {
-	// Team doesn't track its own index - returns -1 when not wrapped in indexedTeamMember
-	return -1
-}
-
 func MakeTeam(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Team, recorder EventEmitter, telemetryProvider telemetry.Provider) (*Team, error) {
 	members, err := loadTeamMembers(ctx, k8sClient, crd, recorder, telemetryProvider)
 	if err != nil {
@@ -220,42 +215,15 @@ func MakeTeam(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Tea
 func loadTeamMembers(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Team, recorder EventEmitter, telemetryProvider telemetry.Provider) ([]TeamMember, error) {
 	members := make([]TeamMember, 0, len(crd.Spec.Members))
 
-	for i, memberSpec := range crd.Spec.Members {
+	for _, memberSpec := range crd.Spec.Members {
 		member, err := loadTeamMember(ctx, k8sClient, memberSpec, crd.Namespace, crd.Name, recorder, telemetryProvider)
 		if err != nil {
 			return nil, err
 		}
-		// Wrap member with its index
-		members = append(members, &indexedTeamMember{member: member, index: i})
+		members = append(members, member)
 	}
 
 	return members, nil
-}
-
-// indexedTeamMember wraps a TeamMember with its index in the team
-type indexedTeamMember struct {
-	member TeamMember
-	index  int
-}
-
-func (i *indexedTeamMember) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
-	return i.member.Execute(ctx, userInput, history, memory, eventStream)
-}
-
-func (i *indexedTeamMember) GetName() string {
-	return i.member.GetName()
-}
-
-func (i *indexedTeamMember) GetType() string {
-	return i.member.GetType()
-}
-
-func (i *indexedTeamMember) GetDescription() string {
-	return i.member.GetDescription()
-}
-
-func (i *indexedTeamMember) GetIndex() int {
-	return i.index
 }
 
 func (t *Team) executeWithTracking(tracker *OperationTracker, execFunc func(context.Context, Message, []Message) ([]Message, error), ctx context.Context, userInput Message, history []Message) ([]Message, error) {

@@ -80,10 +80,10 @@ func TestBuildLegalTransitions(t *testing.T) {
 func TestFilterMembersByLegalTransitions(t *testing.T) {
 	// Create mock team members
 	members := []TeamMember{
-		&mockTeamMember{name: "researcher", index: 0},
-		&mockTeamMember{name: "analyst", index: 1},
-		&mockTeamMember{name: "writer", index: 2},
-		&mockTeamMember{name: "reviewer", index: 3},
+		&mockTeamMember{name: "researcher"},
+		&mockTeamMember{name: "analyst"},
+		&mockTeamMember{name: "writer"},
+		&mockTeamMember{name: "reviewer"},
 	}
 
 	memberMap := make(map[string]TeamMember)
@@ -166,7 +166,6 @@ type mockTeamMember struct {
 	name        string
 	description string
 	memberType  string
-	index       int
 }
 
 func (m *mockTeamMember) GetName() string {
@@ -187,19 +186,15 @@ func (m *mockTeamMember) GetType() string {
 	return m.memberType
 }
 
-func (m *mockTeamMember) GetIndex() int {
-	return m.index
-}
-
 func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
 	return nil, nil
 }
 
 func TestDetermineNextMember(t *testing.T) {
 	members := []TeamMember{
-		&mockTeamMember{name: "researcher", index: 0},
-		&mockTeamMember{name: "analyst", index: 1},
-		&mockTeamMember{name: "writer", index: 2},
+		&mockTeamMember{name: "researcher"},
+		&mockTeamMember{name: "analyst"},
+		&mockTeamMember{name: "writer"},
 	}
 
 	tests := []struct {
@@ -207,7 +202,6 @@ func TestDetermineNextMember(t *testing.T) {
 		previousMember   string
 		legalTransitions map[string][]TeamMember
 		wantMember       string
-		wantIndex        int
 		wantError        bool
 	}{
 		{
@@ -215,14 +209,12 @@ func TestDetermineNextMember(t *testing.T) {
 			previousMember:   "",
 			legalTransitions: map[string][]TeamMember{},
 			wantMember:       "researcher",
-			wantIndex:        0,
 		},
 		{
 			name:             "no graph constraints uses all members",
 			previousMember:   "researcher",
 			legalTransitions: map[string][]TeamMember{},
 			wantMember:       "researcher", // Will be selected by selector (mocked)
-			wantIndex:        0,
 		},
 		{
 			name:           "single legal transition",
@@ -231,7 +223,6 @@ func TestDetermineNextMember(t *testing.T) {
 				"researcher": {members[1]},
 			},
 			wantMember: "analyst",
-			wantIndex:  1,
 		},
 		{
 			name:           "multiple legal transitions",
@@ -240,7 +231,6 @@ func TestDetermineNextMember(t *testing.T) {
 				"researcher": {members[1], members[2]},
 			},
 			wantMember: "analyst", // Will be selected by selector (mocked)
-			wantIndex:  1,
 		},
 		{
 			name:           "no legal transitions falls back to first",
@@ -249,7 +239,6 @@ func TestDetermineNextMember(t *testing.T) {
 				"researcher": {members[1]},
 			},
 			wantMember: "researcher",
-			wantIndex:  0,
 		},
 	}
 
@@ -278,7 +267,7 @@ func TestDetermineNextMember(t *testing.T) {
 				return
 			}
 
-			member, index, err := team.determineNextMember(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions)
+			member, err := team.determineNextMember(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions)
 
 			if tt.wantError {
 				require.Error(t, err)
@@ -288,16 +277,16 @@ func TestDetermineNextMember(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, member)
 			assert.Equal(t, tt.wantMember, member.GetName())
-			assert.Equal(t, tt.wantIndex, index)
+			// Index is no longer returned, verify member name matches expected
 		})
 	}
 }
 
 func TestSelectFromGraphConstraints(t *testing.T) {
 	members := []TeamMember{
-		&mockTeamMember{name: "researcher", index: 0},
-		&mockTeamMember{name: "analyst", index: 1},
-		&mockTeamMember{name: "writer", index: 2},
+		&mockTeamMember{name: "researcher"},
+		&mockTeamMember{name: "analyst"},
+		&mockTeamMember{name: "writer"},
 	}
 
 	tests := []struct {
@@ -305,7 +294,6 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 		previousMember   string
 		legalTransitions map[string][]TeamMember
 		wantMember       string
-		wantIndex        int
 		wantError        bool
 		errorSubstring   string
 	}{
@@ -316,7 +304,6 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 				"researcher": {members[1]},
 			},
 			wantMember: "researcher", // Falls back to first
-			wantIndex:  0,
 		},
 		{
 			name:           "single legal transition",
@@ -325,7 +312,6 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 				"researcher": {members[1]},
 			},
 			wantMember: "analyst",
-			wantIndex:  1,
 		},
 		{
 			name:           "multiple legal transitions",
@@ -334,7 +320,6 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 				"researcher": {members[1], members[2]},
 			},
 			wantMember: "analyst", // Will be selected by selector
-			wantIndex:  1,
 		},
 		{
 			name:           "previous member not found falls back to first",
@@ -343,7 +328,6 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 				"researcher": {members[1]},
 			},
 			wantMember: "researcher", // Falls back to first when previous member not found
-			wantIndex:  0,
 		},
 	}
 
@@ -367,7 +351,7 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 				return
 			}
 
-			member, index, err := team.selectFromGraphConstraints(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions)
+			member, err := team.selectFromGraphConstraints(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions)
 
 			if tt.wantError {
 				require.Error(t, err)
@@ -380,7 +364,7 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, member)
 			assert.Equal(t, tt.wantMember, member.GetName())
-			assert.Equal(t, tt.wantIndex, index)
+			// Index is no longer returned, verify member name matches expected
 		})
 	}
 }
@@ -431,9 +415,9 @@ func TestBuildHistory(t *testing.T) {
 
 func TestBuildParticipants(t *testing.T) {
 	members := []TeamMember{
-		&mockTeamMember{name: "researcher", index: 0},
-		&mockTeamMember{name: "analyst", index: 1},
-		&mockTeamMember{name: "writer", index: 2},
+		&mockTeamMember{name: "researcher"},
+		&mockTeamMember{name: "analyst"},
+		&mockTeamMember{name: "writer"},
 	}
 
 	got := buildParticipants(members)
@@ -450,24 +434,24 @@ func TestBuildRoles(t *testing.T) {
 		{
 			name: "members without descriptions",
 			members: []TeamMember{
-				&mockTeamMember{name: "researcher", index: 0},
-				&mockTeamMember{name: "analyst", index: 1},
+				&mockTeamMember{name: "researcher"},
+				&mockTeamMember{name: "analyst"},
 			},
 			want: "researcher, analyst",
 		},
 		{
 			name: "members with descriptions",
 			members: []TeamMember{
-				&mockTeamMember{name: "researcher", description: "Research specialist", index: 0},
-				&mockTeamMember{name: "analyst", description: "Data analyst", index: 1},
+				&mockTeamMember{name: "researcher", description: "Research specialist"},
+				&mockTeamMember{name: "analyst", description: "Data analyst"},
 			},
 			want: "researcher: Research specialist, analyst: Data analyst",
 		},
 		{
 			name: "mixed descriptions",
 			members: []TeamMember{
-				&mockTeamMember{name: "researcher", description: "Research specialist", index: 0},
-				&mockTeamMember{name: "analyst", index: 1},
+				&mockTeamMember{name: "researcher", description: "Research specialist"},
+				&mockTeamMember{name: "analyst"},
 			},
 			want: "researcher: Research specialist, analyst",
 		},
