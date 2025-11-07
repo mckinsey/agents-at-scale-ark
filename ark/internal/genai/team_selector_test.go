@@ -190,24 +190,17 @@ func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history
 	return nil, nil
 }
 
-func TestSelectNextMember(t *testing.T) {
+func TestDetermineNextMember(t *testing.T) {
 	members := []TeamMember{
 		&mockTeamMember{name: "researcher"},
 		&mockTeamMember{name: "analyst"},
 		&mockTeamMember{name: "writer"},
 	}
 
-	memberMap := make(map[string]TeamMember)
-	memberIndexMap := make(map[string]int)
-	for i, member := range members {
-		memberMap[member.GetName()] = member
-		memberIndexMap[member.GetName()] = i
-	}
-
 	tests := []struct {
 		name             string
 		previousMember   string
-		legalTransitions map[string][]string
+		legalTransitions map[string][]TeamMember
 		wantMember       string
 		wantIndex        int
 		wantError        bool
@@ -215,22 +208,22 @@ func TestSelectNextMember(t *testing.T) {
 		{
 			name:             "first turn returns first member",
 			previousMember:   "",
-			legalTransitions: map[string][]string{},
+			legalTransitions: map[string][]TeamMember{},
 			wantMember:       "researcher",
 			wantIndex:        0,
 		},
 		{
 			name:             "no graph constraints uses all members",
 			previousMember:   "researcher",
-			legalTransitions: map[string][]string{},
+			legalTransitions: map[string][]TeamMember{},
 			wantMember:       "researcher", // Will be selected by selector (mocked)
 			wantIndex:        0,
 		},
 		{
 			name:           "single legal transition",
 			previousMember: "researcher",
-			legalTransitions: map[string][]string{
-				"researcher": {"analyst"},
+			legalTransitions: map[string][]TeamMember{
+				"researcher": {members[1]},
 			},
 			wantMember: "analyst",
 			wantIndex:  1,
@@ -238,8 +231,8 @@ func TestSelectNextMember(t *testing.T) {
 		{
 			name:           "multiple legal transitions",
 			previousMember: "researcher",
-			legalTransitions: map[string][]string{
-				"researcher": {"analyst", "writer"},
+			legalTransitions: map[string][]TeamMember{
+				"researcher": {members[1], members[2]},
 			},
 			wantMember: "analyst", // Will be selected by selector (mocked)
 			wantIndex:  1,
@@ -247,8 +240,8 @@ func TestSelectNextMember(t *testing.T) {
 		{
 			name:           "no legal transitions falls back to first",
 			previousMember: "writer",
-			legalTransitions: map[string][]string{
-				"researcher": {"analyst"},
+			legalTransitions: map[string][]TeamMember{
+				"researcher": {members[1]},
 			},
 			wantMember: "researcher",
 			wantIndex:  0,
@@ -280,7 +273,8 @@ func TestSelectNextMember(t *testing.T) {
 				return
 			}
 
-			member, index, err := team.selectNextMember(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions, memberMap, memberIndexMap)
+			member, err := team.determineNextMember(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions)
+			index := team.findMemberIndex(member)
 
 			if tt.wantError {
 				require.Error(t, err)
@@ -295,24 +289,17 @@ func TestSelectNextMember(t *testing.T) {
 	}
 }
 
-func TestSelectNextMemberWithGraphConstraints(t *testing.T) {
+func TestSelectMemberWithGraphConstraints(t *testing.T) {
 	members := []TeamMember{
 		&mockTeamMember{name: "researcher"},
 		&mockTeamMember{name: "analyst"},
 		&mockTeamMember{name: "writer"},
 	}
 
-	memberMap := make(map[string]TeamMember)
-	memberIndexMap := make(map[string]int)
-	for i, member := range members {
-		memberMap[member.GetName()] = member
-		memberIndexMap[member.GetName()] = i
-	}
-
 	tests := []struct {
 		name             string
 		previousMember   string
-		legalTransitions map[string][]string
+		legalTransitions map[string][]TeamMember
 		wantMember       string
 		wantIndex        int
 		wantError        bool
@@ -321,8 +308,8 @@ func TestSelectNextMemberWithGraphConstraints(t *testing.T) {
 		{
 			name:           "no legal transitions",
 			previousMember: "writer",
-			legalTransitions: map[string][]string{
-				"researcher": {"analyst"},
+			legalTransitions: map[string][]TeamMember{
+				"researcher": {members[1]},
 			},
 			wantMember: "researcher", // Falls back to first
 			wantIndex:  0,
@@ -330,8 +317,8 @@ func TestSelectNextMemberWithGraphConstraints(t *testing.T) {
 		{
 			name:           "single legal transition",
 			previousMember: "researcher",
-			legalTransitions: map[string][]string{
-				"researcher": {"analyst"},
+			legalTransitions: map[string][]TeamMember{
+				"researcher": {members[1]},
 			},
 			wantMember: "analyst",
 			wantIndex:  1,
@@ -339,20 +326,20 @@ func TestSelectNextMemberWithGraphConstraints(t *testing.T) {
 		{
 			name:           "multiple legal transitions",
 			previousMember: "researcher",
-			legalTransitions: map[string][]string{
-				"researcher": {"analyst", "writer"},
+			legalTransitions: map[string][]TeamMember{
+				"researcher": {members[1], members[2]},
 			},
 			wantMember: "analyst", // Will be selected by selector
 			wantIndex:  1,
 		},
 		{
-			name:           "invalid member name",
-			previousMember: "researcher",
-			legalTransitions: map[string][]string{
-				"researcher": {"nonexistent"},
+			name:           "previous member not found falls back to first",
+			previousMember: "nonexistent",
+			legalTransitions: map[string][]TeamMember{
+				"researcher": {members[1]},
 			},
-			wantError:      true,
-			errorSubstring: "not found in team members",
+			wantMember: "researcher", // Falls back to first when previous member not found
+			wantIndex:  0,
 		},
 	}
 
@@ -376,7 +363,8 @@ func TestSelectNextMemberWithGraphConstraints(t *testing.T) {
 				return
 			}
 
-			member, index, err := team.selectNextMemberWithGraphConstraints(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions, memberMap, memberIndexMap)
+			member, err := team.selectMemberWithGraphConstraints(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions)
+			index := team.findMemberIndex(member)
 
 			if tt.wantError {
 				require.Error(t, err)
