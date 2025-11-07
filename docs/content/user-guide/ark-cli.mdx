@@ -69,8 +69,13 @@ Changes to the source code will instantly reflect when you run `ark` commands.
 
 To query a model/agent from ARK CLI is as simple as running:
 
-- `ark query model/model-name "What's the weather today?"`
-- `ark query agent/agent-name "What can you do?"`
+```bash
+# query a Model
+ark query model/model-name "What's the weather today?"
+
+# query an Agent
+ark query agent/agent-name "What can you do?"
+```
 
 ### Inspecting Queries
 
@@ -79,6 +84,7 @@ With `ark queries list` or `ark queries ls` it is possible to retrieve all the q
 This command supports sorting results by internal properties.
 
 E.g.:
+
 ```sh
 # sort queries by creation time
 ark queries list --sort-by metadata.creationTimestamp
@@ -93,6 +99,7 @@ ark queries list --sort-by status.phase
 By specifying the `json` output format, user can retrieve the list of raw queries.
 
 E.g.:
+
 ```sh
 # get the raw queries output
 ark queries list -o json
@@ -103,6 +110,7 @@ ark queries list -o json
 ARK CLI can delete queries by name or deleting all queries if `--all` flag is specified.
 
 E.g.:
+
 ```sh
 # delete query by name
 ark queries delete cli-query-1762513858659
