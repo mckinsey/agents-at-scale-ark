@@ -17,9 +17,8 @@ import (
 )
 
 const (
-	MemberTypeAgent = "agent"
-	MemberTypeTeam  = "team"
-
+	MemberTypeAgent  = "agent"
+	MemberTypeTeam   = "team"
 	StrategySelector = "selector"
 )
 

@@ -81,42 +81,9 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (*Agent, error) {
 	return agent, nil
 }
 
-// prepareMemberSearchData prepares the members and indices to search, and builds participant/role lists if needed.
-func (t *Team) prepareMemberSearchData(candidateMembers []TeamMember, participantsList, rolesList string) ([]TeamMember, []int, string, string, error) {
-	membersToSearch := t.Members
-	indicesToUse := make([]int, len(t.Members))
-	for i := range t.Members {
-		indicesToUse[i] = i
-	}
-
-	if candidateMembers != nil {
-		membersToSearch = candidateMembers
-		// Calculate indices for candidate members
-		indicesToUse = make([]int, len(candidateMembers))
-		for i, candidate := range candidateMembers {
-			indicesToUse[i] = t.findMemberIndex(candidate)
-		}
-	}
-
-	if len(membersToSearch) == 0 {
-		return nil, nil, "", "", fmt.Errorf("no members available")
-	}
-
-	// Use provided lists if available, otherwise build from membersToSearch
-	if participantsList == "" {
-		participantsList = buildParticipants(membersToSearch)
-	}
-	if rolesList == "" {
-		rolesList = buildRoles(membersToSearch)
-	}
-
-	return membersToSearch, indicesToUse, participantsList, rolesList, nil
-}
-
-// executeSelectorAgent calls the selector agent and returns the selected name and agent name.
-func (t *Team) executeSelectorAgent(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList string) (string, string, error) {
+//nolint:gocognit // Complex function handling selector agent logic, but cohesive responsibilities
+func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList, previousMember string, candidateMembers []TeamMember) (TeamMember, int, error) {
 	history := buildHistory(messages)
-
 	data := SelectorTemplateData{
 		Roles:        rolesList,
 		Participants: participantsList,
@@ -125,85 +92,74 @@ func (t *Team) executeSelectorAgent(ctx context.Context, messages []Message, tmp
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", "", err
+		return nil, 0, err
 	}
 
 	selectorAgent, err := t.loadSelectorAgent(ctx)
 	if err != nil {
-		return "", "", err
+		return nil, 0, err
 	}
 
 	response, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(buf.String())}, nil, nil)
 	if err != nil {
 		if IsTerminateTeam(err) {
-			return "", "", err
+			return nil, 0, err
 		}
-		return "", "", fmt.Errorf("selector agent call failed: %w", err)
+		return nil, 0, fmt.Errorf("selector agent call failed: %w", err)
 	}
 
 	if len(response) == 0 {
-		return "", "", fmt.Errorf("selector agent returned no messages")
+		return nil, 0, fmt.Errorf("selector agent returned no messages")
 	}
 
+	var selectedName string
 	lastMsg := response[len(response)-1]
 	if lastMsg.OfAssistant != nil && lastMsg.OfAssistant.Content.OfString.Value != "" {
-		return strings.TrimSpace(lastMsg.OfAssistant.Content.OfString.Value), selectorAgent.Name, nil
+		selectedName = strings.TrimSpace(lastMsg.OfAssistant.Content.OfString.Value)
+	} else {
+		return nil, 0, fmt.Errorf("selector agent returned invalid response")
 	}
 
-	return "", "", fmt.Errorf("selector agent returned invalid response")
-}
-
-// findSelectedMember finds the member by name in the search list, with fallback logic.
-func (t *Team) findSelectedMember(ctx context.Context, selectedName, selectorAgentName, previousMember string, membersToSearch []TeamMember, indicesToUse []int, participantsList string) (TeamMember, int) {
 	rec := NewExecutionRecorder(t.Recorder)
-	rec.SelectorAgentResponse(ctx, t.FullName(), selectorAgentName, selectedName, participantsList)
+	rec.SelectorAgentResponse(ctx, t.FullName(), selectorAgent.Name, selectedName, participantsList)
+
+	// Use candidateMembers if provided, otherwise use all team members
+	membersToSearch := t.Members
+	if candidateMembers != nil {
+		membersToSearch = candidateMembers
+	}
 
 	// Find selected member
-	for i, member := range membersToSearch {
+	for _, member := range membersToSearch {
 		if member.GetName() == selectedName {
 			rec.ParticipantSelected(ctx, t.FullName(), selectedName, "exact_match")
-			return member, indicesToUse[i]
+			// Find index in t.Members
+			for j, m := range t.Members {
+				if m.GetName() == selectedName {
+					return member, j, nil
+				}
+			}
 		}
 	}
 
 	// Fallback to first member if not found
-	fallback := membersToSearch[0]
-	rec.ParticipantSelected(ctx, t.FullName(), fallback.GetName(), "fallback_no_match")
+	if len(membersToSearch) > 0 {
+		fallback := membersToSearch[0]
+		rec.ParticipantSelected(ctx, t.FullName(), fallback.GetName(), "fallback_no_match")
 
-	// Avoid repeating same member
-	if fallback.GetName() == previousMember && len(membersToSearch) > 1 {
-		fallback = membersToSearch[1]
-		return fallback, indicesToUse[1]
-	}
-
-	return fallback, indicesToUse[0]
-}
-
-// selectMember selects a member using the selector agent from the given candidate members.
-// If candidateMembers is nil, selects from all team members (no constraints).
-func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList, previousMember string, candidateMembers []TeamMember) (TeamMember, int, error) {
-	membersToSearch, indicesToUse, participantsList, rolesList, err := t.prepareMemberSearchData(candidateMembers, participantsList, rolesList)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	selectedName, selectorAgentName, err := t.executeSelectorAgent(ctx, messages, tmpl, participantsList, rolesList)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	member, index := t.findSelectedMember(ctx, selectedName, selectorAgentName, previousMember, membersToSearch, indicesToUse, participantsList)
-	return member, index, nil
-}
-
-// findMemberIndex finds the index of a member in t.Members.
-func (t *Team) findMemberIndex(member TeamMember) int {
-	for i, m := range t.Members {
-		if m.GetName() == member.GetName() {
-			return i
+		// Avoid repeating same member
+		if fallback.GetName() == previousMember && len(membersToSearch) > 1 {
+			fallback = membersToSearch[1]
+		}
+		// Find index in t.Members
+		for j, m := range t.Members {
+			if m.GetName() == fallback.GetName() {
+				return fallback, j, nil
+			}
 		}
 	}
-	return 0 // Fallback to 0 if not found
+
+	return nil, 0, fmt.Errorf("no members available")
 }
 
 // selectNextMember determines the next team member based on graph constraints and previous member.
@@ -266,7 +222,13 @@ func (t *Team) selectNextMemberWithGraphConstraints(ctx context.Context, message
 		selectedMember := legal[0]
 		rec := NewExecutionRecorder(t.Recorder)
 		rec.ParticipantSelected(ctx, t.FullName(), selectedMember.GetName(), "graph_constrained_single")
-		return selectedMember, t.findMemberIndex(selectedMember), nil
+		// Find index in t.Members
+		for i, m := range t.Members {
+			if m.GetName() == selectedMember.GetName() {
+				return selectedMember, i, nil
+			}
+		}
+		return selectedMember, 0, nil
 	default:
 		// Multiple legal transitions - use selector agent to choose from candidates
 		participantsList := buildParticipants(legal)

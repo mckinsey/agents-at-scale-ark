@@ -181,7 +181,7 @@ func (m *mockTeamMember) GetDescription() string {
 
 func (m *mockTeamMember) GetType() string {
 	if m.memberType == "" {
-		return "agent"
+		return MemberTypeAgent
 	}
 	return m.memberType
 }
