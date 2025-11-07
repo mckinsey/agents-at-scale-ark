@@ -95,15 +95,10 @@ func loadModelCRD(ctx context.Context, k8sClient client.Client, name, namespace 
 	return &modelCRD, nil
 }
 
-func resolveModelHeaders(ctx context.Context, k8sClient client.Client, headers []arkv1alpha1.Header, modelName, namespace, providerName string) (map[string]string, error) {
+func resolveModelHeaders(ctx context.Context, k8sClient client.Client, headers []arkv1alpha1.Header, namespace string) (map[string]string, error) {
 	resolvedHeaders, err := ResolveHeaders(ctx, k8sClient, headers, namespace)
 	if err != nil {
 		return nil, err
-	}
-
-	if len(resolvedHeaders) > 0 {
-		log := logf.FromContext(ctx)
-		log.Info("resolved custom headers for model", "provider", providerName, "model", modelName, "namespace", namespace, "header_count", len(resolvedHeaders))
 	}
 
 	return resolvedHeaders, nil

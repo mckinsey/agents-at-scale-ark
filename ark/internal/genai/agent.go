@@ -298,8 +298,6 @@ func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, execu
 }
 
 func resolveModelHeadersForAgent(ctx context.Context, k8sClient client.Client, agentCRD *arkv1alpha1.Agent, queryCRD *arkv1alpha1.Query) (map[string]string, error) {
-	log := logf.FromContext(ctx)
-
 	agentHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, agentCRD.Spec.Overrides, agentCRD.Namespace, OverrideTypeModel)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve model headers for agent %s/%s: %w", agentCRD.Namespace, agentCRD.Name, err)
@@ -322,18 +320,12 @@ func resolveModelHeadersForAgent(ctx context.Context, k8sClient client.Client, a
 		for k, v := range queryHeaders {
 			modelHeaders[k] = v
 		}
-
-		if len(modelHeaders) > 0 {
-			log.Info("resolved model headers from overrides", "agent", agentCRD.Name, "model", agentCRD.Spec.ModelRef.Name, "header_count", len(modelHeaders))
-		}
 	}
 
 	return modelHeaders, nil
 }
 
 func resolveMCPSettingsForAgent(ctx context.Context, k8sClient client.Client, agentCRD *arkv1alpha1.Agent, queryCRD *arkv1alpha1.Query, queryMCPSettings map[string]MCPSettings) (map[string]MCPSettings, error) {
-	log := logf.FromContext(ctx)
-
 	agentHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, agentCRD.Spec.Overrides, agentCRD.Namespace, OverrideTypeMCPServer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve MCP headers for agent %s/%s: %w", agentCRD.Namespace, agentCRD.Name, err)
@@ -342,10 +334,6 @@ func resolveMCPSettingsForAgent(ctx context.Context, k8sClient client.Client, ag
 	queryHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, queryCRD.Spec.Overrides, queryCRD.Namespace, OverrideTypeMCPServer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve MCP headers from query %s/%s: %w", queryCRD.Namespace, queryCRD.Name, err)
-	}
-
-	if len(agentHeadersMap) > 0 || len(queryHeadersMap) > 0 {
-		log.Info("resolved MCP server headers from overrides", "agent", agentCRD.Name, "agentMCPServers", len(agentHeadersMap), "queryMCPServers", len(queryHeadersMap))
 	}
 
 	mcpSettings := queryMCPSettings
@@ -358,7 +346,6 @@ func resolveMCPSettingsForAgent(ctx context.Context, k8sClient client.Client, ag
 		setting := mcpSettings[key]
 		setting.Headers = headers
 		mcpSettings[key] = setting
-		log.V(1).Info("configured MCP headers from agent", "mcpServer", key, "header_count", len(headers))
 	}
 
 	for mcpKey, headers := range queryHeadersMap {
@@ -373,7 +360,6 @@ func resolveMCPSettingsForAgent(ctx context.Context, k8sClient client.Client, ag
 		}
 		setting.Headers = mergedHeaders
 		mcpSettings[key] = setting
-		log.V(1).Info("configured MCP headers from query", "mcpServer", key, "header_count", len(headers))
 	}
 
 	return mcpSettings, nil

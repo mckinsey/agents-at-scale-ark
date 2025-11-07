@@ -9,7 +9,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
@@ -143,7 +142,6 @@ func listResourcesByLabels(ctx context.Context, k8sClient client.Client, namespa
 }
 
 func ResolveHeadersFromOverrides(ctx context.Context, k8sClient client.Client, overrides []arkv1alpha1.Override, namespace string, overrideType OverrideType) (map[string]map[string]string, error) {
-	log := logf.FromContext(ctx)
 	resourceHeaders := make(map[string]map[string]string)
 
 	for _, override := range overrides {
@@ -171,7 +169,6 @@ func ResolveHeadersFromOverrides(ctx context.Context, k8sClient client.Client, o
 				resourceHeaders[resourceName] = make(map[string]string)
 			}
 			maps.Copy(resourceHeaders[resourceName], resolvedHeaders)
-			log.V(1).Info("resolved headers for resource", "overrideType", overrideType, "resource", resourceName, "namespace", namespace, "header_count", len(resolvedHeaders))
 		}
 	}
 

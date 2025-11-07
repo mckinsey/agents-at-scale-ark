@@ -23,7 +23,7 @@ func loadOpenAIConfig(ctx context.Context, resolver *common.ValueSourceResolver,
 		return fmt.Errorf("failed to resolve OpenAI apiKey: %w", err)
 	}
 
-	headers, err := resolveModelHeaders(ctx, resolver.Client, config.Headers, model.Model, namespace, "OpenAI")
+	headers, err := resolveModelHeaders(ctx, resolver.Client, config.Headers, namespace)
 	if err != nil {
 		return err
 	}

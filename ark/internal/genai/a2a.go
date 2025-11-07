@@ -102,7 +102,7 @@ func createA2AClientForExecution(ctx context.Context, k8sClient client.Client, r
 	if deadline, ok := ctx.Deadline(); ok {
 		timeout = time.Until(deadline)
 	}
-	
+
 	var clientOptions []a2aclient.Option
 	if len(headers) > 0 {
 		resolvedHeaders, err := resolveA2AHeaders(ctx, k8sClient, headers, namespace)

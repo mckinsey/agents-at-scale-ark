@@ -222,9 +222,6 @@ func (r *MCPServerReconciler) resolveHeaders(ctx context.Context, mcpServer *ark
 	if err != nil {
 		return nil, err
 	}
-	if len(headers) > 0 {
-		logf.FromContext(ctx).Info("mcp headers resolved", "server", mcpServer.Name, "namespace", mcpServer.Namespace, "headers_count", len(headers))
-	}
 	return headers, nil
 }
 

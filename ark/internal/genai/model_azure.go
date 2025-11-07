@@ -31,7 +31,7 @@ func loadAzureConfig(ctx context.Context, resolver *common.ValueSourceResolver, 
 		}
 	}
 
-	headers, err := resolveModelHeaders(ctx, resolver.Client, config.Headers, model.Model, namespace, "Azure")
+	headers, err := resolveModelHeaders(ctx, resolver.Client, config.Headers, namespace)
 	if err != nil {
 		return err
 	}
