@@ -348,7 +348,9 @@ export function TeamEditor({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="round-robin">Round Robin</SelectItem>
-                <SelectItem value="selector">Selector</SelectItem>
+                <SelectItem value="selector">
+                  Selector (can add graph constraints)
+                </SelectItem>
                 <SelectItem value="graph">Graph</SelectItem>
                 <SelectItem value="sequential">Sequential</SelectItem>
               </SelectContent>
@@ -409,6 +411,13 @@ export function TeamEditor({
           </div>
           {strategy === 'selector' && (
             <>
+              <div className="rounded-md border bg-muted/50 p-3">
+                <p className="text-muted-foreground text-xs mb-3">
+                  Selector strategy uses an AI agent to choose the next team member.
+                  You can optionally add graph constraints below to limit selection to
+                  valid transitions.
+                </p>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="selector-agent">Selector Agent</Label>
                 <Select value={selectorAgent} onValueChange={setSelectorAgent}>
