@@ -63,3 +63,21 @@ export async function listResources<T extends K8sResource>(
   const data = JSON.parse(result.stdout) as K8sListResource<T>;
   return data.items || [];
 }
+
+export async function deleteResource(
+  resourceType: string,
+  name?: string,
+  options?: {
+    all?: boolean;
+  }
+): Promise<void> {
+  const args: string[] = ['delete', resourceType];
+
+  if (options?.all) {
+    args.push('--all');
+  } else if (name) {
+    args.push(name);
+  }
+
+  await execa('kubectl', args, {stdio: 'pipe'});
+}

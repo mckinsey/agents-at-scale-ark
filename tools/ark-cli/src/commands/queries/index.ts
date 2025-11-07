@@ -7,6 +7,7 @@ import type {Query} from '../../lib/types.js';
 import {ExitCodes} from '../../lib/errors.js';
 import {getResource} from '../../lib/kubectl.js';
 import {listQueries} from './list.js';
+import {deleteQuery} from './delete.js';
 
 function renderMarkdown(content: string): string {
   if (process.stdout.isTTY) {
@@ -88,6 +89,17 @@ export function createQueriesCommand(_: ArkConfig): Command {
     });
 
   queriesCommand.addCommand(listCommand);
+
+  const deleteCommand = new Command('delete');
+  deleteCommand
+    .description('Delete a query')
+    .argument('[name]', 'Query name')
+    .option('--all', 'delete all queries', false)
+    .action(async (name: string | undefined, options) => {
+      await deleteQuery(name, options);
+    });
+
+  queriesCommand.addCommand(deleteCommand);
 
   return queriesCommand;
 }
