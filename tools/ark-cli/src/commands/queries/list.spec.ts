@@ -215,6 +215,7 @@ describe('queries list command', () => {
       'unsupported output format: xml. Supported formats: json, text'
     );
     expect(process.exit).toHaveBeenCalled();
+    expect(mockExeca).not.toHaveBeenCalled();
     expect(console.log).not.toHaveBeenCalledWith(
       expect.stringMatching(/query-1/)
     );

@@ -3,11 +3,10 @@ import type {Query} from '../../lib/types.js';
 import output from '../../lib/output.js';
 import {ExitCodes} from '../../lib/errors.js';
 import {listResources} from '../../lib/kubectl.js';
+import {assertSupportedOutputFormat, UnsupportedOutputFormatError} from './validation.js';
 
 // Output format constants
 const OUTPUT_FORMAT_JSON = 'json';
-const OUTPUT_FORMAT_TEXT = 'text';
-const SUPPORTED_FORMATS = [OUTPUT_FORMAT_JSON, OUTPUT_FORMAT_TEXT];
 
 // Query phase constants
 const PHASE_DONE = 'done';
@@ -56,45 +55,50 @@ function printTableRow(query: Query, maxNameLength: number): void {
   );
 }
 
+function printResult(queries: Query[], options: ListQueriesOptions): void {
+  if (options.output === OUTPUT_FORMAT_JSON) {
+    console.log(JSON.stringify(queries, null, 2));
+    return
+  }
+
+  if (queries.length === 0) {
+    output.warning('no queries available');
+    return;
+  }
+
+  const maxNameLength = Math.max(
+    MIN_NAME_LENGTH,
+    ...queries.map((q) => q.metadata.name.length)
+  );
+
+  printTableHeader(maxNameLength);
+
+  queries.forEach((query: Query) => {
+    printTableRow(query, maxNameLength);
+  });
+}
+
 export async function listQueries(options: ListQueriesOptions): Promise<void> {
   try {
+    assertSupportedOutputFormat(options.output);
+
     const queries = await listResources<Query>('queries', {
       sortBy: options.sortBy,
     });
 
-    if (options.output === OUTPUT_FORMAT_JSON) {
-      console.log(JSON.stringify(queries, null, 2));
-    } else if (
-      options.output &&
-      !SUPPORTED_FORMATS.includes(options.output)
-    ) {
-      const supportedFormats = SUPPORTED_FORMATS.join(', ');
-      output.warning(
-        `unsupported output format: ${options.output}. Supported formats: ${supportedFormats}`
-      );
-      process.exit(ExitCodes.CliError);
-    } else {
-      if (queries.length === 0) {
-        output.warning('no queries available');
-        return;
-      }
-
-      const maxNameLength = Math.max(
-        MIN_NAME_LENGTH,
-        ...queries.map((q) => q.metadata.name.length)
-      );
-
-      printTableHeader(maxNameLength);
-
-      queries.forEach((query: Query) => {
-        printTableRow(query, maxNameLength);
-      });
-    }
+    printResult(queries, options);
   } catch (error) {
-    output.error(
-      'fetching queries:',
-      error instanceof Error ? error.message : error
-    );
-    process.exit(ExitCodes.CliError);
+    switch (true) {
+      case error instanceof UnsupportedOutputFormatError:
+        output.warning(error.message);
+        process.exit(ExitCodes.CliError);
+        break;
+      default:
+        output.error(
+          'fetching queries:',
+          error instanceof Error ? error.message : error
+        );
+        process.exit(ExitCodes.CliError);
+    }
   }
 }
