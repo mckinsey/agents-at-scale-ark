@@ -81,17 +81,25 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (*Agent, error) {
 	return agent, nil
 }
 
-// selectMember selects a member using the selector agent from the given candidate members.
-// If candidateMembers is nil, selects from all team members (no constraints).
-func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList, previousMember string, candidateMembers []TeamMember) (TeamMember, error) {
-	// Determine which members to search in
+// prepareMemberSearchData prepares the members and indices to search, and builds participant/role lists if needed.
+func (t *Team) prepareMemberSearchData(candidateMembers []TeamMember, participantsList, rolesList string) ([]TeamMember, []int, string, string, error) {
 	membersToSearch := t.Members
+	indicesToUse := make([]int, len(t.Members))
+	for i := range t.Members {
+		indicesToUse[i] = i
+	}
+
 	if candidateMembers != nil {
 		membersToSearch = candidateMembers
+		// Calculate indices for candidate members
+		indicesToUse = make([]int, len(candidateMembers))
+		for i, candidate := range candidateMembers {
+			indicesToUse[i] = t.findMemberIndex(candidate)
+		}
 	}
 
 	if len(membersToSearch) == 0 {
-		return nil, fmt.Errorf("no members available")
+		return nil, nil, "", "", fmt.Errorf("no members available")
 	}
 
 	// Use provided lists if available, otherwise build from membersToSearch
@@ -101,6 +109,12 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	if rolesList == "" {
 		rolesList = buildRoles(membersToSearch)
 	}
+
+	return membersToSearch, indicesToUse, participantsList, rolesList, nil
+}
+
+// executeSelectorAgent calls the selector agent and returns the selected name and agent name.
+func (t *Team) executeSelectorAgent(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList string) (string, string, error) {
 	history := buildHistory(messages)
 
 	data := SelectorTemplateData{
@@ -111,42 +125,44 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return nil, err
+		return "", "", err
 	}
 
 	selectorAgent, err := t.loadSelectorAgent(ctx)
 	if err != nil {
-		return nil, err
+		return "", "", err
 	}
 
 	response, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(buf.String())}, nil, nil)
 	if err != nil {
 		if IsTerminateTeam(err) {
-			return nil, err
+			return "", "", err
 		}
-		return nil, fmt.Errorf("selector agent call failed: %w", err)
+		return "", "", fmt.Errorf("selector agent call failed: %w", err)
 	}
 
 	if len(response) == 0 {
-		return nil, fmt.Errorf("selector agent returned no messages")
+		return "", "", fmt.Errorf("selector agent returned no messages")
 	}
 
-	var selectedName string
 	lastMsg := response[len(response)-1]
 	if lastMsg.OfAssistant != nil && lastMsg.OfAssistant.Content.OfString.Value != "" {
-		selectedName = strings.TrimSpace(lastMsg.OfAssistant.Content.OfString.Value)
-	} else {
-		return nil, fmt.Errorf("selector agent returned invalid response")
+		return strings.TrimSpace(lastMsg.OfAssistant.Content.OfString.Value), selectorAgent.Name, nil
 	}
 
+	return "", "", fmt.Errorf("selector agent returned invalid response")
+}
+
+// findSelectedMember finds the member by name in the search list, with fallback logic.
+func (t *Team) findSelectedMember(ctx context.Context, selectedName, selectorAgentName, previousMember string, membersToSearch []TeamMember, indicesToUse []int, participantsList string) (TeamMember, int) {
 	rec := NewExecutionRecorder(t.Recorder)
-	rec.SelectorAgentResponse(ctx, t.FullName(), selectorAgent.Name, selectedName, participantsList)
+	rec.SelectorAgentResponse(ctx, t.FullName(), selectorAgentName, selectedName, participantsList)
 
 	// Find selected member
-	for _, member := range membersToSearch {
+	for i, member := range membersToSearch {
 		if member.GetName() == selectedName {
 			rec.ParticipantSelected(ctx, t.FullName(), selectedName, "exact_match")
-			return member, nil
+			return member, indicesToUse[i]
 		}
 	}
 
@@ -157,10 +173,27 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	// Avoid repeating same member
 	if fallback.GetName() == previousMember && len(membersToSearch) > 1 {
 		fallback = membersToSearch[1]
-		return fallback, nil
+		return fallback, indicesToUse[1]
 	}
 
-	return fallback, nil
+	return fallback, indicesToUse[0]
+}
+
+// selectMember selects a member using the selector agent from the given candidate members.
+// If candidateMembers is nil, selects from all team members (no constraints).
+func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList, previousMember string, candidateMembers []TeamMember) (TeamMember, int, error) {
+	membersToSearch, indicesToUse, participantsList, rolesList, err := t.prepareMemberSearchData(candidateMembers, participantsList, rolesList)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	selectedName, selectorAgentName, err := t.executeSelectorAgent(ctx, messages, tmpl, participantsList, rolesList)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	member, index := t.findSelectedMember(ctx, selectedName, selectorAgentName, previousMember, membersToSearch, indicesToUse, participantsList)
+	return member, index, nil
 }
 
 // findMemberIndex finds the index of a member in t.Members.
@@ -183,11 +216,7 @@ func (t *Team) selectNextMember(ctx context.Context, messages []Message, tmpl *t
 		// No graph constraints: use standard selector (all members available)
 		participantsList := buildParticipants(t.Members)
 		rolesList := buildRoles(t.Members)
-		member, err := t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil)
-		if err != nil {
-			return nil, 0, err
-		}
-		return member, t.findMemberIndex(member), nil
+		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil)
 	default:
 		// Graph constraints provided: use legal transitions
 		return t.selectNextMemberWithGraphConstraints(ctx, messages, tmpl, previousMember, legalTransitions)
@@ -242,11 +271,7 @@ func (t *Team) selectNextMemberWithGraphConstraints(ctx context.Context, message
 		// Multiple legal transitions - use selector agent to choose from candidates
 		participantsList := buildParticipants(legal)
 		rolesList := buildRoles(legal)
-		member, err := t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, legal)
-		if err != nil {
-			return nil, 0, err
-		}
-		return member, t.findMemberIndex(member), nil
+		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, legal)
 	}
 }
 
