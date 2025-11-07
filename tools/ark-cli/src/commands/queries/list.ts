@@ -40,9 +40,6 @@ function printTableHeader(maxNameLength: number): void {
   const paddedHeaderLength = maxNameLength + COLUMN_PADDING;
   const header = `${chalk.bold('NAME'.padEnd(paddedHeaderLength))}${chalk.bold('STATUS')}`;
   console.log(header);
-
-  const separatorLength = paddedHeaderLength + 20;
-  console.log(chalk.gray('-'.repeat(separatorLength)));
 }
 
 function printTableRow(query: Query, maxNameLength: number): void {

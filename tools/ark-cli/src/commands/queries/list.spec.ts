@@ -46,21 +46,17 @@ describe('queries list command', () => {
     const command = createQueriesCommand({});
     await command.parseAsync(['node', 'test', 'list']);
 
-    // Check for header
     expect(console.log).toHaveBeenCalledWith(
       expect.stringMatching(/NAME.*STATUS/)
     );
-    // Check for separator line
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringMatching(/^-+$/)
-    );
-    // Check for data rows
+
     expect(console.log).toHaveBeenCalledWith(
       expect.stringMatching(/query-1/)
     );
     expect(console.log).toHaveBeenCalledWith(
       expect.stringMatching(/query-2/)
     );
+
     expect(mockExeca).toHaveBeenCalledWith(
       'kubectl',
       ['get', 'queries', '-o', 'json'],
@@ -89,7 +85,7 @@ describe('queries list command', () => {
     });
 
     const command = createQueriesCommand({});
-    await command.parseAsync(['node', 'test', 'list', '--output', 'json']);
+    await command.parseAsync(['node', 'test', '--output', 'json']);
 
     expect(console.log).toHaveBeenCalledWith(
       JSON.stringify(mockQueries, null, 2)
@@ -131,26 +127,21 @@ describe('queries list command', () => {
     await command.parseAsync([
       'node',
       'test',
-      'list',
       '--sort-by',
       '.metadata.creationTimestamp',
     ]);
 
-    // Check for header
     expect(console.log).toHaveBeenCalledWith(
       expect.stringMatching(/NAME.*STATUS/)
     );
-    // Check for separator line
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringMatching(/^-+$/)
-    );
-    // Check for data rows
+
     expect(console.log).toHaveBeenCalledWith(
       expect.stringMatching(/query-1/)
     );
     expect(console.log).toHaveBeenCalledWith(
       expect.stringMatching(/query-2/)
     );
+
     expect(mockExeca).toHaveBeenCalledWith(
       'kubectl',
       [
@@ -208,7 +199,7 @@ describe('queries list command', () => {
     });
 
     const command = createQueriesCommand({});
-    await command.parseAsync(['node', 'test', 'list', '--output', 'xml']);
+    await command.parseAsync(['node', 'test', '--output', 'xml']);
 
     // Should warn about invalid format and exit
     expect(output.warning).toHaveBeenCalledWith(
@@ -248,9 +239,6 @@ describe('queries list command', () => {
     expect(console.log).toHaveBeenCalledWith(
       expect.stringMatching(/NAME.*STATUS/)
     );
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringMatching(/^-+$/)
-    );
 
     // Verify all queries are logged
     for (let i = 1; i <= 100; i++) {
@@ -259,7 +247,7 @@ describe('queries list command', () => {
       );
     }
 
-    // Verify console.log was called: header + separator + 100 queries
-    expect(console.log).toHaveBeenCalledTimes(102);
+    // Verify console.log was called: header + 100 queries
+    expect(console.log).toHaveBeenCalledTimes(101);
   });
 });

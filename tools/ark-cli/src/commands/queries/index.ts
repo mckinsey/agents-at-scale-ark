@@ -70,19 +70,6 @@ export function createQueriesCommand(_: ArkConfig): Command {
     .action(async (options) => {
       await listQueries(options);
     });
-  queriesCommand.description('Manage query resources');
-
-  const listCommand = new Command('list');
-  listCommand
-    .alias('ls')
-    .description('List all queries')
-    .option('-o, --output <format>', 'output format (json or text)', 'text')
-    .option('--sort-by <field>', 'sort by kubernetes field (e.g., .metadata.name)')
-    .action(async (options) => {
-      await listQueries(options);
-    });
-
-  queriesCommand.addCommand(listCommand);
 
   const getCommand = new Command('get');
   getCommand
