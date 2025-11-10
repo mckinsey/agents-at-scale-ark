@@ -297,19 +297,96 @@ func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, execu
 	return nil
 }
 
+func resolveModelHeadersForAgent(ctx context.Context, k8sClient client.Client, agentCRD *arkv1alpha1.Agent, queryCRD *arkv1alpha1.Query) (map[string]string, error) {
+	agentHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, agentCRD.Spec.Overrides, agentCRD.Namespace, OverrideTypeModel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve model headers for agent %s/%s: %w", agentCRD.Namespace, agentCRD.Name, err)
+	}
+
+	queryHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, queryCRD.Spec.Overrides, queryCRD.Namespace, OverrideTypeModel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve model headers from query %s/%s: %w", queryCRD.Namespace, queryCRD.Name, err)
+	}
+
+	var modelHeaders map[string]string
+	if agentCRD.Spec.ModelRef != nil {
+		agentHeaders := agentHeadersMap[agentCRD.Spec.ModelRef.Name]
+		queryHeaders := queryHeadersMap[agentCRD.Spec.ModelRef.Name]
+
+		modelHeaders = make(map[string]string)
+		for k, v := range agentHeaders {
+			modelHeaders[k] = v
+		}
+		for k, v := range queryHeaders {
+			modelHeaders[k] = v
+		}
+	}
+
+	return modelHeaders, nil
+}
+
+func resolveMCPSettingsForAgent(ctx context.Context, k8sClient client.Client, agentCRD *arkv1alpha1.Agent, queryCRD *arkv1alpha1.Query, queryMCPSettings map[string]MCPSettings) (map[string]MCPSettings, error) {
+	agentHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, agentCRD.Spec.Overrides, agentCRD.Namespace, OverrideTypeMCPServer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve MCP headers for agent %s/%s: %w", agentCRD.Namespace, agentCRD.Name, err)
+	}
+
+	queryHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, queryCRD.Spec.Overrides, queryCRD.Namespace, OverrideTypeMCPServer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve MCP headers from query %s/%s: %w", queryCRD.Namespace, queryCRD.Name, err)
+	}
+
+	mcpSettings := queryMCPSettings
+	if mcpSettings == nil {
+		mcpSettings = make(map[string]MCPSettings)
+	}
+
+	for mcpKey, headers := range agentHeadersMap {
+		key := fmt.Sprintf("%s/%s", agentCRD.Namespace, mcpKey)
+		setting := mcpSettings[key]
+		setting.Headers = headers
+		mcpSettings[key] = setting
+	}
+
+	for mcpKey, headers := range queryHeadersMap {
+		key := fmt.Sprintf("%s/%s", queryCRD.Namespace, mcpKey)
+		setting := mcpSettings[key]
+		mergedHeaders := make(map[string]string)
+		for k, v := range setting.Headers {
+			mergedHeaders[k] = v
+		}
+		for k, v := range headers {
+			mergedHeaders[k] = v
+		}
+		setting.Headers = mergedHeaders
+		mcpSettings[key] = setting
+	}
+
+	return mcpSettings, nil
+}
+
 func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Agent, eventRecorder EventEmitter, telemetryProvider telemetry.Provider) (*Agent, error) {
+	queryCrd, ok := ctx.Value(QueryContextKey).(*arkv1alpha1.Query)
+	if !ok {
+		return nil, fmt.Errorf("missing query context for agent %s/%s", crd.Namespace, crd.Name)
+	}
+
+	modelHeaders, err := resolveModelHeadersForAgent(ctx, k8sClient, crd, queryCrd)
+	if err != nil {
+		return nil, err
+	}
+
 	var resolvedModel *Model
 
 	// A2A agents don't need models - they delegate to external A2A servers
 	if crd.Spec.ExecutionEngine == nil || crd.Spec.ExecutionEngine.Name != ExecutionEngineA2A {
 		var err error
-		resolvedModel, err = LoadModel(ctx, k8sClient, crd.Spec.ModelRef, crd.Namespace, telemetryProvider.ModelRecorder())
+		resolvedModel, err = LoadModel(ctx, k8sClient, crd.Spec.ModelRef, crd.Namespace, modelHeaders, telemetryProvider.ModelRecorder())
 		if err != nil {
 			return nil, fmt.Errorf("failed to load model for agent %s/%s: %w", crd.Namespace, crd.Name, err)
 		}
 	}
 
-	// Validate ExecutionEngine if specified
 	if crd.Spec.ExecutionEngine != nil {
 		err := ValidateExecutionEngine(ctx, k8sClient, crd.Spec.ExecutionEngine, crd.Namespace)
 		if err != nil {
@@ -318,15 +395,17 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		}
 	}
 
-	queryCrd, ok := ctx.Value(QueryContextKey).(*arkv1alpha1.Query)
-	if !ok {
-		return nil, fmt.Errorf("missing query context for agent %s/%s", crd.Namespace, crd.Name)
-	}
 	query, err := MakeQuery(queryCrd)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make query from context for agent %s/%s: %w", crd.Namespace, crd.Name, err)
 	}
-	tools := NewToolRegistry(query.McpSettings, telemetryProvider.ToolRecorder())
+
+	mcpSettings, err := resolveMCPSettingsForAgent(ctx, k8sClient, crd, queryCrd, query.McpSettings)
+	if err != nil {
+		return nil, err
+	}
+
+	tools := NewToolRegistry(mcpSettings, telemetryProvider.ToolRecorder())
 
 	if err := tools.registerTools(ctx, k8sClient, crd, telemetryProvider); err != nil {
 		return nil, err

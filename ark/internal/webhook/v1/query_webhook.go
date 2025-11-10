@@ -84,6 +84,10 @@ func (v *QueryCustomValidator) validateQuery(ctx context.Context, query *arkv1al
 		return warnings, err
 	}
 
+	if err := v.ValidateOverrides(query.Spec.Overrides); err != nil {
+		return warnings, err
+	}
+
 	return warnings, nil
 }
 

@@ -218,15 +218,10 @@ func (r *MCPServerReconciler) createMCPClient(ctx context.Context, mcpServer *ar
 }
 
 func (r *MCPServerReconciler) resolveHeaders(ctx context.Context, mcpServer *arkv1alpha1.MCPServer) (map[string]string, error) {
-	headers := make(map[string]string)
-	for _, header := range mcpServer.Spec.Headers {
-		headerValue, err := genai.ResolveHeaderValue(ctx, r.Client, header, mcpServer.Namespace)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve header %s: %v", header.Name, err)
-		}
-		headers[header.Name] = headerValue
+	headers, err := genai.ResolveHeaders(ctx, r.Client, mcpServer.Spec.Headers, mcpServer.Namespace)
+	if err != nil {
+		return nil, err
 	}
-	logf.FromContext(ctx).Info("mcp headers resolved", "server", mcpServer.Name, "namespace", mcpServer.Namespace, "headers_count", len(headers))
 	return headers, nil
 }
 

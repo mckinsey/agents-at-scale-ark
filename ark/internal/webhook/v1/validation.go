@@ -273,3 +273,84 @@ func ValidatePollInterval(pollInterval time.Duration) error {
 	}
 	return nil
 }
+
+func ValidateHeader(header arkv1alpha1.Header, contextPrefix string) error {
+	if header.Name == "" {
+		return fmt.Errorf("%s: name is required", contextPrefix)
+	}
+
+	if err := ValidateHeaderValue(header.Value, contextPrefix); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ValidateHeaderValue(headerValue arkv1alpha1.HeaderValue, contextPrefix string) error {
+	if headerValue.Value == "" && headerValue.ValueFrom == nil {
+		return fmt.Errorf("%s: must specify either value or valueFrom", contextPrefix)
+	}
+
+	if headerValue.Value != "" && headerValue.ValueFrom != nil {
+		return fmt.Errorf("%s: cannot specify both value and valueFrom", contextPrefix)
+	}
+
+	if headerValue.ValueFrom != nil {
+		if err := ValidateHeaderValueFrom(headerValue.ValueFrom, contextPrefix); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func ValidateHeaderValueFrom(valueFrom *arkv1alpha1.HeaderValueSource, contextPrefix string) error {
+	if valueFrom == nil {
+		return nil
+	}
+
+	hasSecret := valueFrom.SecretKeyRef != nil
+	hasConfigMap := valueFrom.ConfigMapKeyRef != nil
+
+	if !hasSecret && !hasConfigMap {
+		return fmt.Errorf("%s: valueFrom must specify either secretKeyRef or configMapKeyRef", contextPrefix)
+	}
+
+	if hasSecret && hasConfigMap {
+		return fmt.Errorf("%s: valueFrom cannot specify both secretKeyRef and configMapKeyRef", contextPrefix)
+	}
+
+	return nil
+}
+
+func (v *ResourceValidator) ValidateOverrides(overrides []arkv1alpha1.Override) error {
+	for i, override := range overrides {
+		if err := v.ValidateOverrideEntry(override, i); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v *ResourceValidator) ValidateOverrideEntry(override arkv1alpha1.Override, index int) error {
+	if override.ResourceType != "model" && override.ResourceType != "mcpserver" {
+		return fmt.Errorf("overrides[%d]: resourceType must be either 'model' or 'mcpserver'", index)
+	}
+
+	if len(override.Headers) == 0 {
+		return fmt.Errorf("overrides[%d]: headers list cannot be empty", index)
+	}
+
+	for j, header := range override.Headers {
+		if err := v.ValidateOverrideHeader(header, index, j); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (v *ResourceValidator) ValidateOverrideHeader(header arkv1alpha1.Header, overrideIndex, headerIndex int) error {
+	contextPrefix := fmt.Sprintf("overrides[%d].headers[%d]", overrideIndex, headerIndex)
+	return ValidateHeader(header, contextPrefix)
+}

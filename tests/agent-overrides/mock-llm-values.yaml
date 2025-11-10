@@ -1,0 +1,74 @@
+ark:
+  model:
+    enabled: true
+    name: test-model-overrides
+    labels:
+      environment: test
+      override-target: "true"
+  mcp:
+    enabled: true
+    name: mock-llm
+    labels:
+      environment: test
+      mcp-override-target: "true"
+
+config:
+  rules:
+  - path: "/v1/chat/completions"
+    match: "@"
+    response:
+      status: 200
+      content: |
+        {
+          "id": "mock-{{timestamp}}",
+          "object": "chat.completion",
+          "model": "{{jmes request body.model}}",
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "content": {{jmes request headers}}
+            },
+            "finish_reason": "stop"
+          }]
+        }
+  - path: "/v1/chat/completions"
+    match: "body.messages[-1].content == 'echo-headers'"
+    response:
+      status: 200
+      content: |
+        {
+          "id": "mock-{{timestamp}}",
+          "object": "chat.completion",
+          "model": "{{jmes request body.model}}",
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "tool_calls": [{
+                "id": "call_{{timestamp}}",
+                "type": "function",
+                "function": {
+                  "name": "mock-llm-mcp-echo-headers",
+                  "arguments": "{}"
+                }
+              }]
+            },
+            "finish_reason": "tool_calls"
+          }]
+        }
+  - path: "/v1/chat/completions"
+    match: "body.messages[-1].role == 'tool'"
+    response:
+      status: 200
+      content: |
+        {
+          "id": "mock-{{timestamp}}",
+          "object": "chat.completion",
+          "model": "{{jmes request body.model}}",
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "content": {{jmes request body.messages[-1].content}}
+            },
+            "finish_reason": "stop"
+          }]
+        }

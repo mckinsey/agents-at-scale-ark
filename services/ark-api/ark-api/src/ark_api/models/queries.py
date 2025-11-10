@@ -5,6 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel
 from enum import Enum
 from openai.types.chat import ChatCompletionMessageParam
+from .agents import Override, HeaderValue, Header
 
 
 class InputType(str, Enum):
@@ -103,6 +104,7 @@ class QueryCreateRequest(BaseModel):
     timeout: Optional[str] = None
     ttl: Optional[str] = None
     cancel: Optional[bool] = None
+    overrides: Optional[List[Override]] = None
     evaluators: Optional[List[Memory]] = None
     evaluatorSelector: Optional[LabelSelector] = None
     metadata: Optional[Dict[str, Any]] = None
@@ -121,6 +123,7 @@ class QueryUpdateRequest(BaseModel):
     timeout: Optional[str] = None
     ttl: Optional[str] = None
     cancel: Optional[bool] = None
+    overrides: Optional[List[Override]] = None
 
 
 class QueryDetailResponse(BaseModel):
@@ -138,6 +141,7 @@ class QueryDetailResponse(BaseModel):
     timeout: Optional[str] = None
     ttl: Optional[str] = None
     cancel: Optional[bool] = None
+    overrides: Optional[List[Override]] = None
     metadata: Optional[Dict[str, Any]] = None
     status: Optional[Dict[str, Any]] = None
 

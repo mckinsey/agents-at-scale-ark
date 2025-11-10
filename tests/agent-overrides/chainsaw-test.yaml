@@ -1,0 +1,191 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: agent-overrides
+spec:
+  description: Test agent spec overrides for model and MCPServer headers using label selectors
+  timeouts:
+    exec: 300s
+  steps:
+  - name: deploy-mock-llm-and-setup
+    try:
+    - script:
+        content: |
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.22 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - apply:
+        file: manifests/a01-secret-overrides.yaml
+    - apply:
+        file: manifests/a02-configmap-overrides.yaml
+
+  - name: wait-for-model-and-mcpserver
+    try:
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-model-overrides
+          status:
+            conditions:
+            - type: ModelAvailable
+              status: "True"
+    - assert:
+        timeout: 2m
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: MCPServer
+          metadata:
+            name: mock-llm-mcp
+          status:
+            (toolCount > `0`): true
+
+  - name: wait-for-tools-discovery
+    try:
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: mock-llm-mcp-echo-headers
+
+  - name: create-agent-and-query
+    try:
+    - apply:
+        file: manifests/a04-agent.yaml
+    - apply:
+        file: manifests/a05-query.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: overrides-test-agent
+
+  - name: wait-for-query-completion
+    try:
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: overrides-test-query
+          status:
+            phase: done
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: overrides-test-query
+
+  - name: validate-model-headers-in-response
+    try:
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: overrides-test-query
+          status:
+            (length(responses)): 1
+            (contains(responses[*].target.name, 'overrides-test-agent')): true
+    - script:
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          RESPONSE=$(kubectl -n $NAMESPACE get query overrides-test-query -o jsonpath='{.status.responses[0].content}')
+
+          echo "=== Query Response Content ==="
+          echo "$RESPONSE"
+          echo "=========================="
+
+          if echo "$RESPONSE" | grep -qi "x-agent-override-model-static"; then
+            echo "✓ Response contains x-agent-override-model-static header"
+          else
+            echo "✗ Response missing x-agent-override-model-static header"
+            exit 1
+          fi
+
+          if echo "$RESPONSE" | grep -qi "agent-model-override-secret-value"; then
+            echo "✓ Response contains x-agent-override-model-secret header value"
+          else
+            echo "✗ Response missing x-agent-override-model-secret header value"
+            exit 1
+          fi
+
+          if echo "$RESPONSE" | grep -qi "agent-model-override-configmap"; then
+            echo "✓ Response contains x-agent-override-model-configmap header value"
+          else
+            echo "✗ Response missing x-agent-override-model-configmap header value"
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ All agent model override headers verified in response"
+
+  - name: validate-mcp-headers-via-tool
+    try:
+    - apply:
+        file: manifests/a06-query-tool.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: overrides-test-query-tool
+          status:
+            phase: done
+    - script:
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          RESPONSE=$(kubectl -n $NAMESPACE get query overrides-test-query-tool -o jsonpath='{.status.responses[0].content}')
+
+          echo "=== Query Tool Response Content ==="
+          echo "$RESPONSE"
+          echo "=========================="
+
+          if echo "$RESPONSE" | grep -qi "x-agent-override-mcp-static"; then
+            echo "✓ Tool response contains x-agent-override-mcp-static header"
+          else
+            echo "✗ Tool response missing x-agent-override-mcp-static header"
+            exit 1
+          fi
+
+          if echo "$RESPONSE" | grep -qi "agent-mcp-override-secret-value"; then
+            echo "✓ Tool response contains x-agent-override-mcp-secret header value"
+          else
+            echo "✗ Tool response missing x-agent-override-mcp-secret header value"
+            exit 1
+          fi
+
+          if echo "$RESPONSE" | grep -qi "agent-mcp-override-configmap"; then
+            echo "✓ Tool response contains x-agent-override-mcp-configmap header value"
+          else
+            echo "✗ Tool response missing x-agent-override-mcp-configmap header value"
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ All agent MCP override headers verified via tool"
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: overrides-test-query-tool

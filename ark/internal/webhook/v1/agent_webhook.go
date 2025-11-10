@@ -95,6 +95,10 @@ func (v *AgentCustomValidator) validateAgent(ctx context.Context, agent *arkv1al
 		return warnings, err
 	}
 
+	if err := v.ValidateOverrides(agent.Spec.Overrides); err != nil {
+		return warnings, err
+	}
+
 	for i, tool := range agent.Spec.Tools {
 		toolWarnings, err := v.validateTool(i, tool)
 		if err != nil {

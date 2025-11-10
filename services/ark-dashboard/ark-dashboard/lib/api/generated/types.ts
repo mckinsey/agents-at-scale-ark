@@ -1385,6 +1385,8 @@ export interface components {
             prompt?: string | null;
             /** Tools */
             tools?: components["schemas"]["Tool-Input"][] | null;
+            /** Overrides */
+            overrides?: components["schemas"]["Override-Input"][] | null;
         };
         /**
          * AgentDetailResponse
@@ -1405,6 +1407,8 @@ export interface components {
             prompt?: string | null;
             /** Tools */
             tools?: components["schemas"]["Tool-Output"][] | null;
+            /** Overrides */
+            overrides?: components["schemas"]["Override-Output"][] | null;
             /** Skills */
             skills?: components["schemas"]["Skill"][] | null;
             /**
@@ -1468,6 +1472,8 @@ export interface components {
             prompt?: string | null;
             /** Tools */
             tools?: components["schemas"]["Tool-Input"][] | null;
+            /** Overrides */
+            overrides?: components["schemas"]["Override-Input"][] | null;
         };
         /** Annotation */
         Annotation: {
@@ -1564,6 +1570,8 @@ export interface components {
             baseUrl: string | components["schemas"]["ark_api__models__models__ValueSource"];
             /** Apiversion */
             apiVersion?: string | components["schemas"]["ark_api__models__models__ValueSource"] | null;
+            /** Headers */
+            headers?: components["schemas"]["Header-Input"][] | null;
         };
         /**
          * BaselineEvaluationMetadata
@@ -2542,6 +2550,42 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * Header
+         * @description HTTP header configuration.
+         */
+        "Header-Input": {
+            /** Name */
+            name: string;
+            value: components["schemas"]["HeaderValue-Input"];
+        };
+        /**
+         * Header
+         * @description HTTP header configuration.
+         */
+        "Header-Output": {
+            /** Name */
+            name: string;
+            value: components["schemas"]["HeaderValue-Output"];
+        };
+        /**
+         * HeaderValue
+         * @description Value configuration for a header.
+         */
+        "HeaderValue-Input": {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["ark_api__models__agents__ValueFrom"] | null;
+        };
+        /**
+         * HeaderValue
+         * @description Value configuration for a header.
+         */
+        "HeaderValue-Output": {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["ark_api__models__agents__ValueFrom"] | null;
+        };
+        /**
          * HealthResponse
          * @description Health check response model.
          */
@@ -2800,7 +2844,7 @@ export interface components {
                 [key: string]: {
                     [key: string]: string | {
                         [key: string]: unknown;
-                    };
+                    } | unknown[];
                 };
             };
             available?: components["schemas"]["AvailabilityStatus"] | null;
@@ -2897,6 +2941,30 @@ export interface components {
             apiKey: string | components["schemas"]["ark_api__models__models__ValueSource"];
             /** Baseurl */
             baseUrl: string | components["schemas"]["ark_api__models__models__ValueSource"];
+            /** Headers */
+            headers?: components["schemas"]["Header-Input"][] | null;
+        };
+        /**
+         * Override
+         * @description Header override configuration for models and MCP servers.
+         */
+        "Override-Input": {
+            /** Headers */
+            headers: components["schemas"]["Header-Input"][];
+            /** Resourcetype */
+            resourceType: string;
+            labelSelector?: components["schemas"]["ark_api__models__agents__LabelSelector"] | null;
+        };
+        /**
+         * Override
+         * @description Header override configuration for models and MCP servers.
+         */
+        "Override-Output": {
+            /** Headers */
+            headers: components["schemas"]["Header-Output"][];
+            /** Resourcetype */
+            resourceType: string;
+            labelSelector?: components["schemas"]["ark_api__models__agents__LabelSelector"] | null;
         };
         /** PromptTokensDetails */
         PromptTokensDetails: {
@@ -2934,6 +3002,8 @@ export interface components {
             ttl?: string | null;
             /** Cancel */
             cancel?: boolean | null;
+            /** Overrides */
+            overrides?: components["schemas"]["Override-Input"][] | null;
             /** Evaluators */
             evaluators?: components["schemas"]["Memory"][] | null;
             evaluatorSelector?: components["schemas"]["ark_api__models__queries__LabelSelector"] | null;
@@ -2971,6 +3041,8 @@ export interface components {
             ttl?: string | null;
             /** Cancel */
             cancel?: boolean | null;
+            /** Overrides */
+            overrides?: components["schemas"]["Override-Output"][] | null;
             /** Metadata */
             metadata?: {
                 [key: string]: unknown;
@@ -3069,6 +3141,8 @@ export interface components {
             ttl?: string | null;
             /** Cancel */
             cancel?: boolean | null;
+            /** Overrides */
+            overrides?: components["schemas"]["Override-Input"][] | null;
         };
         /**
          * ReadinessResponse

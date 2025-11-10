@@ -1,0 +1,54 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: overrides-test-agent
+spec:
+  prompt: You are a test assistant. Respond concisely to all queries.
+  modelRef:
+    name: test-model-overrides
+  tools:
+  - name: mock-llm-mcp-echo-headers
+    type: custom
+  - name: mock-llm-mcp-echo
+    type: custom
+  overrides:
+  - resourceType: model
+    labelSelector:
+      matchLabels:
+        override-target: "true"
+    headers:
+    - name: X-Agent-Override-Model-Static
+      value:
+        value: "agent-static-value"
+    - name: X-Agent-Override-Model-Secret
+      value:
+        valueFrom:
+          secretKeyRef:
+            name: agent-override-headers
+            key: model-auth-token
+    - name: X-Agent-Override-Model-Configmap
+      value:
+        valueFrom:
+          configMapKeyRef:
+            name: agent-override-headers
+            key: model-consumer-group
+  - resourceType: mcpserver
+    labelSelector:
+      matchLabels:
+        mcp-override-target: "true"
+    headers:
+    - name: X-Agent-Override-MCP-Static
+      value:
+        value: "agent-mcp-static-value"
+    - name: X-Agent-Override-MCP-Secret
+      value:
+        valueFrom:
+          secretKeyRef:
+            name: agent-override-headers
+            key: mcp-auth-token
+    - name: X-Agent-Override-MCP-Configmap
+      value:
+        valueFrom:
+          configMapKeyRef:
+            name: agent-override-headers
+            key: mcp-consumer-group

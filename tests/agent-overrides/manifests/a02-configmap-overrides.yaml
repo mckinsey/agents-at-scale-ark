@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-override-headers
+data:
+  model-consumer-group: "agent-model-override-configmap"
+  mcp-consumer-group: "agent-mcp-override-configmap"
