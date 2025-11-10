@@ -9,3 +9,6 @@ dependencies = [
     "kubernetes",
     "pydantic"
 ]
+
+[tool.setuptools]
+py-modules = []

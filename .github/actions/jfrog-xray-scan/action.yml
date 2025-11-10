@@ -1,6 +1,9 @@
 name: 'JFrog Xray Build Scan'
 description: 'Scans builds using JFrog Xray with specified watch'
 inputs:
+  github_repo:
+    description: 'GitHub repository (owner/repo) to report scan results to'
+    required: true
   build_name:
     description: 'Name of the build to scan'
     required: true
@@ -29,31 +32,98 @@ runs:
         JF_USER: ${{ inputs.jfrog_user }}
         JF_PASSWORD: ${{ inputs.jfrog_password }}
         JF_URL: ${{ inputs.jfrog_url }}
-    
+
+    - name: Get last main vulnarability report
+      shell: bash
+      run: |
+        GITHUB_REPOSITORY="${{ inputs.github_repo }}"
+        LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&per_page=50" | jq -c '.workflow_runs[] | select(.name == "CI/CD") | .id' | head -n 1)
+        
+        echo "Downloading artifacts from run ID: $LAST_RUN_ID"
+        gh run download "$LAST_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern "xray-scan-results-agents-at-scale-*" --dir ./artifacts
+        cp ./artifacts/**/xray-scan-agents-at-scale-*.json ./last-main-scan.json
+        
     - name: Run Xray scan
       shell: bash
       run: |
         # Set variables
-        BUILD_NAME="${{ inputs.build_name }}"
-        BUILD_NUMBER="${{ inputs.build_number }}"
         WATCH_NAME="${{ inputs.watch_name }}"
-        SCAN_JSON="xray-scan-$BUILD_NAME-$BUILD_NUMBER.json"
 
-        echo "Xray build scan with watch: $WATCH_NAME"
-        jf xray scan --build "$BUILD_NAME/$BUILD_NUMBER" --watches "$WATCH_NAME" --format json > "$SCAN_JSON"
+        echo "Scan output will be saved to: $SCAN_JSON"
 
-        # Show JFrog UI links
-        echo "View build scan: ${{ inputs.jfrog_url }}/ui/builds/$BUILD_NAME/$BUILD_NUMBER/published?activeTab=XrayData"
+        echo "Xray build audit with watch: $WATCH_NAME"
         echo "View watch violations: ${{ inputs.jfrog_url }}/ui/watchesNew/edit/$WATCH_NAME?activeTab=violations"
+        
+        jf audit --watches "$WATCH_NAME" --format json > "$SCAN_JSON" 
+      
+    - name: Parse scan results
+      id: parse-scan
+      if: always()
+      shell: bash
+      run: |
+        cat $SCAN_JSON
+        
+        VIOLATIONS_COUNT=$(jq '[.[] | select(.violations != null) | .violations | length] | add // 0' "$SCAN_JSON")
 
-        # Fail build on any violation; your policy enforces High/Critical fail action
-        VIOLATIONS=$(jq -r '.summary.total_violations // 0' "$SCAN_JSON")
+        echo "Total violations found: $VIOLATIONS_COUNT"
+        echo "violations_count=$VIOLATIONS_COUNT" >> $GITHUB_OUTPUT
+        
+        TABLE=$(jq -r '
+          .[] 
+          | select(.violations != null) | .violations[]? 
+          | [
+              (.issue_id // "N/A"),
+              (
+                if (.impacted_artifacts and (.impacted_artifacts | length > 0)) 
+                then .impacted_artifacts[0].name 
+                else "N/A" 
+                end
+              ),
+              (.severity // "N/A"),
+              (
+                if (.cves and (.cves | type == "array" and length > 0))
+                then (.cves | map(.cve) | join(","))
+                else "N/A"
+                end
+              ),
+              (
+                if (.references and (.references | length > 0)) 
+                then (.references | join(",")) 
+                else "N/A" 
+                end
+              )
+            ]
+          | @tsv
+        ' "$SCAN_JSON" | sort -u -t$'\t' -k1,1)
+        
+        echo "| ID | Affected Component | Criticality | CVEs | Links |" > summary-table.md
+        echo "|----|-------------------|-------------|------|-------|" >> summary-table.md
 
-        if [[ "$VIOLATIONS" =~ ^[0-9]+$ ]] && [ "$VIOLATIONS" -gt 0 ]; then
-          echo "Xray violations found: $VIOLATIONS (see $SCAN_JSON)" >&2
+        if [ -n "$TABLE" ]; then
+          echo "$TABLE" | awk '{print "| " $1 " | " $2 " | " $3 " | " $4 " | " $5 " |"}' >> summary-table.md
+        else
+          echo "| No violations found | - | - | - | - |" >> summary-table.md
+        fi
+
+        cat summary-table.md >> $GITHUB_STEP_SUMMARY
+    - name: Detect new violations
+      if: always()
+      shell: bash
+      run: |
+        echo "Comparing with last scan file: ./last-main-scan.json"
+
+        echo "New violations since last scan:"
+        jq -r '.[].violations[]?.issue_id' "./last-main-scan.json" > old.txt
+        jq -r '.[].violations[]?.issue_id' "$SCAN_JSON" > new.txt
+
+        NEW_VIOLATIONS=$(comm -13 <(sort old.txt) <(sort new.txt))
+
+        if [ -n "$NEW_VIOLATIONS" ]; then
+          echo "New violations found:"
+          echo "$NEW_VIOLATIONS"
           exit 1
         else
-          echo "No Xray violations (see $SCAN_JSON)"
+          echo "No new violations found."
         fi
 
     - name: Upload scan results
@@ -61,5 +131,6 @@ runs:
       uses: actions/upload-artifact@v4
       with:
         name: xray-scan-results-${{ inputs.build_name }}-${{ inputs.build_number }}
-        path: xray-scan-*.json
+        path: "xray-scan-${{ inputs.build_name }}-${{ inputs.build_number }}.json"
         retention-days: 30
+    
