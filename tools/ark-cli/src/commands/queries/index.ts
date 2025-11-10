@@ -1,5 +1,6 @@
 import {Command} from 'commander';
 import {marked} from 'marked';
+// @ts-ignore - no types available
 import TerminalRenderer from 'marked-terminal';
 import type {ArkConfig} from '../../lib/config.js';
 import output from '../../lib/output.js';
@@ -11,11 +12,11 @@ import {deleteQuery} from './delete.js';
 function renderMarkdown(content: string): string {
   if (process.stdout.isTTY) {
     marked.setOptions({
-      // @ts-expect-error - TerminalRenderer types are incomplete
+      // @ts-ignore - TerminalRenderer types are incomplete
       renderer: new TerminalRenderer({
         showSectionPrefix: false,
         reflowText: true,
-        // @ts-expect-error - preserveNewlines exists but not in types
+        // @ts-ignore - preserveNewlines exists but not in types
         preserveNewlines: true,
       }),
     });
