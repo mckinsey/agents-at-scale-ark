@@ -636,7 +636,6 @@ jobs:
           cd tests
           mkdir -p /tmp/chainsaw-report
           # Use special config for evaluated tests with longer timeouts and sequential execution
-          chainsaw test --config .chainsaw-evaluated.yaml --selector 'evaluated=true'
           MAX_RETRIES=3
           RETRY_DELAY=30
           for ((attempt=1; attempt<=$MAX_RETRIES; attempt++)); do

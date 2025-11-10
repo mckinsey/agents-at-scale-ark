@@ -6,6 +6,7 @@ import output from '../../lib/output.js';
 import type {Query} from '../../lib/types.js';
 import {ExitCodes} from '../../lib/errors.js';
 import {getResource} from '../../lib/kubectl.js';
+import {listQueries} from './list.js';
 import {deleteQuery} from './delete.js';
 
 function renderMarkdown(content: string): string {
@@ -62,8 +63,13 @@ async function getQuery(
 
 export function createQueriesCommand(_: ArkConfig): Command {
   const queriesCommand = new Command('queries');
-
-  queriesCommand.description('Manage query resources');
+  queriesCommand
+    .description('List all queries')
+    .option('-o, --output <format>', 'output format (json or text)', 'text')
+    .option('--sort-by <field>', 'sort by kubernetes field (e.g., .metadata.name)')
+    .action(async (options) => {
+      await listQueries(options);
+    });
 
   const getCommand = new Command('get');
   getCommand
