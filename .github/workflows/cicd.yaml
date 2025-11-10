@@ -34,6 +34,7 @@ concurrency:
 jobs:
   # Setup job to determine container cache registry
   setup-container-cache-registry:
+    needs: [jfrog-xray-scan]
     runs-on: ubuntu-24.04
     outputs:
       ci-cache-registry: ${{ steps.setup-registry.outputs.ci-cache-registry }}
@@ -85,7 +86,7 @@ jobs:
 
   # Security scan with JFrog Xray
   jfrog-xray-scan:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     env:
       XRAY_WATCH_NAME: 'ark-20863-security-watch'
     steps:
@@ -93,15 +94,19 @@ jobs:
       
       - name: Run JFrog Xray scan
         id: xray-scan
-        uses: ./.github/actions/jfrog-xray-scan
         continue-on-error: true
+        uses: ./.github/actions/jfrog-xray-scan
         with:
+          github_repo: ${{ github.repository }}
           build_name: 'agents-at-scale'
           build_number: ${{ github.run_number }}
           watch_name: ${{ env.XRAY_WATCH_NAME }}
-          jfrog_user: ${{ secrets.JFROG_DOCKER_USERNAME }}
-          jfrog_password: ${{ secrets.JFROG_DOCKER_TOKEN }}
+          jfrog_user: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME }}
+          jfrog_password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD }}
           jfrog_url: ${{ vars.JFROG_PLATFORM_URL }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCAN_JSON: "xray-scan-agents-at-scale-${{ github.run_number }}.json"
 
       - name: Report scan status
         if: always()
