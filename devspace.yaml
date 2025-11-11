@@ -13,6 +13,8 @@ dependencies:
     path: ./services/ark-api
   ark-dashboard:
     path: ./services/ark-dashboard
+#  argo-workflows:
+#    path: ./services/argo-workflows
 #  ark-api-a2a:
 #    path: ./services/ark-api-a2a
 #  ark-mcp:
