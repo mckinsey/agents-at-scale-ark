@@ -1,0 +1,17 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: coordinator
+spec:
+  modelRef:
+    name: test-model
+  prompt: |
+    You are a team coordinator. Your job is to select the best next team member 
+    to respond based on the conversation context.
+    
+    Available participants: {{.Participants}}
+    Roles: {{.Roles}}
+    Conversation history: {{.History}}
+    
+    Respond with ONLY the name of the member you want to select next.
+

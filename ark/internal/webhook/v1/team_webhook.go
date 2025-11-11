@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	MemberTypeAgent = "agent"
-	MemberTypeTeam  = "team"
+	MemberTypeAgent  = "agent"
+	MemberTypeTeam   = "team"
+	StrategySelector = "selector"
 )
 
 func SetupTeamWebhookWithManager(mgr ctrl.Manager) error {
@@ -133,8 +134,15 @@ func (v *TeamCustomValidator) validateStrategy(ctx context.Context, team *arkv1a
 	switch team.Spec.Strategy {
 	case "sequential", "round-robin":
 		return nil
-	case "selector":
-		return v.validateSelectorAgent(ctx, team)
+	case StrategySelector:
+		if err := v.validateSelectorAgent(ctx, team); err != nil {
+			return err
+		}
+		// If graph is provided, validate it (allows multiple edges from same source for selector)
+		if team.Spec.Graph != nil {
+			return v.validateGraphForSelector(team)
+		}
+		return nil
 	case "graph":
 		return v.validateGraphStrategy(team)
 	default:
@@ -188,6 +196,38 @@ func (v *TeamCustomValidator) validateGraphStrategy(team *arkv1alpha1.Team) erro
 	if team.Spec.MaxTurns == nil {
 		return fmt.Errorf("graph strategy requires maxTurns to prevent infinite execution")
 	}
+
+	return nil
+}
+
+func (v *TeamCustomValidator) validateGraphForSelector(team *arkv1alpha1.Team) error {
+	if team.Spec.Graph == nil {
+		return fmt.Errorf("graph constraint requires graph configuration")
+	}
+
+	if len(team.Spec.Graph.Edges) == 0 {
+		return fmt.Errorf("graph constraint requires at least one edge")
+	}
+
+	memberNames := make(map[string]bool)
+	for _, member := range team.Spec.Members {
+		memberNames[member.Name] = true
+	}
+
+	// Validate edges reference valid members
+	// Note: Unlike validateGraphStrategy, we allow multiple edges with same 'from'
+	// because the selector agent will choose from multiple options
+	for i, edge := range team.Spec.Graph.Edges {
+		if !memberNames[edge.From] {
+			return fmt.Errorf("graph edge %d: 'from' member '%s' not found in team members", i, edge.From)
+		}
+		if !memberNames[edge.To] {
+			return fmt.Errorf("graph edge %d: 'to' member '%s' not found in team members", i, edge.To)
+		}
+	}
+
+	// Note: maxTurns is optional for selector strategy (it handles termination differently)
+	// But if provided, it's still validated by the team spec validation
 
 	return nil
 }

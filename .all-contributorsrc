@@ -393,6 +393,17 @@
         "doc",
         "bug"
       ]
+    },
+    {
+      "login": "lucaromagnoli",
+      "name": "Luca Romagnoli",
+      "avatar_url": "https://avatars.githubusercontent.com/u/38782977?v=4",
+      "profile": "https://github.com/lucaromagnoli",
+      "contributions": [
+        "code",
+        "test",
+        "doc"
+      ]
     }
   ],
   "contributorsPerLine": 7,

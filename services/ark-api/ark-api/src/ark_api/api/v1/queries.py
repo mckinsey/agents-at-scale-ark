@@ -55,11 +55,11 @@ def query_to_detail_response(query: dict) -> QueryDetailResponse:
     """Convert a Kubernetes query object to detailed response model."""
     spec = query["spec"]
     metadata = query["metadata"]
-    
+
     # Get query type and determine input field
     query_type = spec.get('type', 'user')
     input_value = spec.get("input", "" if query_type == 'user' else [])
-    
+
     return QueryDetailResponse(
         name=metadata["name"],
         namespace=metadata["namespace"],
@@ -74,6 +74,7 @@ def query_to_detail_response(query: dict) -> QueryDetailResponse:
         timeout=spec.get("timeout"),
         ttl=spec.get("ttl"),
         cancel=spec.get("cancel"),
+        overrides=spec.get("overrides"),
         metadata=metadata,
         status=query.get("status")
     )
@@ -133,7 +134,9 @@ async def create_query(
             spec["ttl"] = query.ttl
         if query.cancel is not None:
             spec["cancel"] = query.cancel
-        
+        if query.overrides:
+            spec["overrides"] = [o.model_dump() for o in query.overrides]
+
         # Create the QueryV1alpha1 object
         metadata = {
             "name": query.name,
@@ -197,7 +200,9 @@ async def update_query(
             spec["ttl"] = query.ttl
         if query.cancel is not None:
             spec["cancel"] = query.cancel
-        
+        if query.overrides is not None:
+            spec["overrides"] = [o.model_dump() for o in query.overrides]
+
         # Update the resource - need to update the entire resource object
         current_dict = current.to_dict()
         current_dict["spec"] = spec

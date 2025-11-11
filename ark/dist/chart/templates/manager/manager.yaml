@@ -41,6 +41,10 @@ spec:
           # HTTP timeout in seconds for connecting to memory services.
           - name: ARK_MEMORY_HTTP_TIMEOUT_SECONDS
             value: "30"
+          {{- if .Values.customCACert.enabled }}
+          - name: SSL_CERT_FILE
+            value: "/etc/ssl/certs/custom-ca/{{ .Values.customCACert.key }}"
+          {{- end }}
           {{- if .Values.controllerManager.container.env }}
             {{- range $key, $value := .Values.controllerManager.container.env }}
           - name: {{ $key }}
@@ -68,7 +72,7 @@ spec:
             {{- toYaml .Values.controllerManager.container.resources | nindent 12 }}
           securityContext:
             {{- toYaml .Values.controllerManager.container.securityContext | nindent 12 }}
-          {{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable) }}
+          {{- if or (and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable)) .Values.customCACert.enabled }}
           volumeMounts:
             {{- if and .Values.webhook.enable .Values.certmanager.enable }}
             - name: webhook-cert
@@ -80,12 +84,17 @@ spec:
               mountPath: /tmp/k8s-metrics-server/metrics-certs
               readOnly: true
             {{- end }}
+            {{- if .Values.customCACert.enabled }}
+            - name: custom-ca-cert
+              mountPath: /etc/ssl/certs/custom-ca
+              readOnly: true
+            {{- end }}
           {{- end }}
       securityContext:
         {{- toYaml .Values.controllerManager.securityContext | nindent 8 }}
       serviceAccountName: {{ .Values.controllerManager.serviceAccountName }}
       terminationGracePeriodSeconds: {{ .Values.controllerManager.terminationGracePeriodSeconds }}
-      {{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable) }}
+      {{- if or (and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable)) .Values.customCACert.enabled }}
       volumes:
         {{- if and .Values.webhook.enable .Values.certmanager.enable }}
         - name: webhook-cert
@@ -96,5 +105,13 @@ spec:
         - name: metrics-certs
           secret:
             secretName: metrics-server-cert
+        {{- end }}
+        {{- if .Values.customCACert.enabled }}
+        - name: custom-ca-cert
+          secret:
+            secretName: {{ .Values.customCACert.secretName }}
+            items:
+              - key: {{ .Values.customCACert.key }}
+                path: {{ .Values.customCACert.key }}
         {{- end }}
       {{- end }}

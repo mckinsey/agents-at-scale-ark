@@ -25,6 +25,15 @@ graph TD
         SEL_AGENT --> SEL_B[Select Agent B]
         SEL_AGENT --> SEL_C[Select Agent C]
     end
+
+    subgraph "Graph-Constrained Selector Strategy"
+        GCS_INPUT[Input] --> GCS_AGENT[Selector Agent]
+        GCS_AGENT --> GCS_CHECK{Graph<br/>Constraints?}
+        GCS_CHECK -->|Single Transition| GCS_DIRECT[Direct Selection]
+        GCS_CHECK -->|Multiple Transitions| GCS_FILTER[Filter Candidates]
+        GCS_FILTER --> GCS_AGENT
+        GCS_DIRECT --> GCS_RESULT[Selected Agent]
+    end
 ```
 
 ## Sequential Strategy
@@ -146,6 +155,101 @@ spec:
 - Execution stops when no outgoing edge exists or team termination
 - Requires `maxTurns` to prevent infinite cycles
 - Use terminate tool to end execution early
+
+## Graph-Constrained Selector Strategy
+
+Combines AI-driven selection with workflow constraints. The selector agent chooses the next participant, but only from members allowed by the graph edges.
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: graph-selector-team
+spec:
+  strategy: selector
+  maxTurns: 10
+  selector:
+    agent: coordinator
+  members:
+    - name: researcher
+      type: agent
+    - name: analyzer
+      type: agent
+    - name: writer
+      type: agent
+  graph:
+    edges:
+      - from: researcher
+        to: analyzer
+      - from: researcher
+        to: writer
+      - from: analyzer
+        to: writer
+```
+
+**Implementation**: `runtime/internal/genai/team_selector.go:237`
+- Uses selector agent to choose next participant
+- Graph constraints limit available candidates
+- Single legal transition: skips selector agent (optimization)
+- Multiple legal transitions: selector agent chooses from candidates
+- No legal transitions: falls back to first member
+- Combines flexibility of AI selection with structure of graph workflows
+
+### How It Works
+
+1. **Graph Constraint Lookup**: After each member executes, system looks up legal transitions from that member
+2. **Candidate Filtering**: If multiple transitions exist, selector agent chooses from only those candidates
+3. **Optimization**: If only one legal transition exists, system uses it directly without calling selector agent
+4. **AI Selection**: Selector agent analyzes conversation and chooses best candidate from filtered list
+5. **Execution**: Selected member processes messages and adds response
+
+### Use Cases
+
+- **Workflow with Flexibility**: Define required workflow structure but allow AI to choose between valid options
+- **Branching Workflows**: Multiple valid paths where AI selects the best route
+- **Quality Gates**: Ensure certain steps happen in order while allowing flexibility elsewhere
+
+### Example: Research Workflow
+
+```yaml
+spec:
+  strategy: selector
+  selector:
+    agent: coordinator
+  members:
+    - name: researcher
+      type: agent
+    - name: analyzer
+      type: agent
+    - name: reviewer
+      type: agent
+    - name: writer
+      type: agent
+  graph:
+    edges:
+      # Coordinator can start with researcher or analyzer
+      - from: coordinator
+        to: researcher
+      - from: coordinator
+        to: analyzer
+      # Researcher must go to analyzer
+      - from: researcher
+        to: analyzer
+      # Analyzer can go to reviewer or writer
+      - from: analyzer
+        to: reviewer
+      - from: analyzer
+        to: writer
+      # Reviewer must go to writer
+      - from: reviewer
+        to: writer
+```
+
+In this example:
+- Coordinator AI chooses initial path (researcher or analyzer)
+- Researcher always flows to analyzer (required step)
+- Analyzer AI chooses between reviewer or writer (flexibility)
+- Reviewer always flows to writer (required step)
 
 ## Team Composition
 

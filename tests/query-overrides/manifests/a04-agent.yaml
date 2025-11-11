@@ -1,0 +1,30 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: query-overrides-test-agent
+spec:
+  prompt: You are a test assistant. Respond concisely to all queries.
+  modelRef:
+    name: test-model-query-overrides
+  tools:
+  - name: mock-llm-mcp-echo-headers
+    type: custom
+  - name: mock-llm-mcp-echo
+    type: custom
+  overrides:
+  - resourceType: model
+    labelSelector:
+      matchLabels:
+        query-override-target: "true"
+    headers:
+    - name: X-Agent-Base-Header
+      value:
+        value: "agent-base-value"
+  - resourceType: mcpserver
+    labelSelector:
+      matchLabels:
+        mcp-query-override-target: "true"
+    headers:
+    - name: X-Agent-MCP-Base
+      value:
+        value: "agent-mcp-base-value"

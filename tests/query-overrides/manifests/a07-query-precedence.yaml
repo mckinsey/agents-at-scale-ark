@@ -1,0 +1,21 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: query-overrides-precedence-test
+spec:
+  input: What is 3+3? Answer briefly.
+  targets:
+  - type: agent
+    name: query-overrides-test-agent
+  overrides:
+  - resourceType: model
+    labelSelector:
+      matchLabels:
+        query-override-target: "true"
+    headers:
+    - name: X-Precedence-Test
+      value:
+        valueFrom:
+          secretKeyRef:
+            name: query-override-headers
+            key: precedence-token

@@ -77,6 +77,8 @@ type QuerySpec struct {
 	// +kubebuilder:validation:Optional
 	// When true, indicates intent to cancel the query
 	Cancel bool `json:"cancel,omitempty"`
+	// +kubebuilder:validation:Optional
+	Overrides []Override `json:"overrides,omitempty"`
 }
 
 // Response defines a response from a query target.

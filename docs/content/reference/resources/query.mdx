@@ -57,6 +57,14 @@ spec:
   # Optional: timeout for query execution
   timeout: 5m
 
+  # Optional: header overrides for models and MCP servers
+  overrides:
+    - headers:
+        - name: X-Trace-ID
+          value:
+            value: "trace-xyz789"
+      resourceType: model
+
 status:
   # Execution state: pending, running, done, error
   phase: done
@@ -377,6 +385,39 @@ spec:
     - type: team
       name: qa-team
 ```
+
+### Query with Overrides
+
+Add custom headers for model or MCP server requests:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: tracked-query
+spec:
+  input: "Analyze this data"
+  targets:
+    - type: agent
+      name: data-analyst
+  overrides:
+    - headers:
+        - name: X-Request-ID
+          value:
+            value: "req-12345"
+        - name: X-User-Context
+          value:
+            valueFrom:
+              configMapKeyRef:
+                name: user-config
+                key: context
+      resourceType: model
+      labelSelector:
+        matchLabels:
+          tier: production
+```
+
+See [Overrides](/user-guide/overrides) for detailed documentation.
 
 ## Status and Phases
 

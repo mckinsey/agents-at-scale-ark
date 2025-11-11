@@ -96,7 +96,7 @@ func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Mode
 	resolvedModel, err := genai.LoadModel(ctx, r.Client, &arkv1alpha1.AgentModelRef{
 		Name:      model.Name,
 		Namespace: model.Namespace,
-	}, model.Namespace, r.Telemetry.ModelRecorder())
+	}, model.Namespace, nil, r.Telemetry.ModelRecorder())
 	if err != nil {
 		r.Telemetry.ModelRecorder().RecordError(span, err)
 		return genai.ProbeResult{

@@ -44,6 +44,26 @@ export async function getResource<T extends K8sResource>(
   return JSON.parse(result.stdout) as T;
 }
 
+export async function listResources<T extends K8sResource>(
+  resourceType: string,
+  options?: {
+    sortBy?: string;
+  }
+): Promise<T[]> {
+  const args: string[] = ['get', resourceType];
+
+  if (options?.sortBy) {
+    args.push(`--sort-by=${options.sortBy}`);
+  }
+
+  args.push('-o', 'json');
+
+  const result = await execa('kubectl', args, {stdio: 'pipe'});
+
+  const data = JSON.parse(result.stdout) as K8sListResource<T>;
+  return data.items || [];
+}
+
 export async function deleteResource(
   resourceType: string,
   name?: string,
