@@ -57,35 +57,7 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	ctx, span := a.AgentRecorder.StartAgentExecution(ctx, a.Name, a.Namespace)
 	defer span.End()
 
-	var result *ExecutionResult
-	var err error
-
-	if a.ExecutionEngine != nil {
-		// Check if this is the reserved 'a2a' execution engine
-		if a.ExecutionEngine.Name == ExecutionEngineA2A {
-			result, err = a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
-		} else {
-			var messages []Message
-			messages, err = a.executeWithExecutionEngine(ctx, userInput, history)
-			if err == nil {
-				result = &ExecutionResult{Messages: messages}
-			}
-		}
-	} else {
-		// Regular agents require a model
-		if a.Model == nil {
-			err = fmt.Errorf("agent %s has no model configured", a.FullName())
-			a.AgentRecorder.RecordError(span, err)
-			return nil, err
-		}
-
-		var messages []Message
-		messages, err = a.executeLocally(ctx, userInput, history, memory, eventStream)
-		if err == nil {
-			result = &ExecutionResult{Messages: messages}
-		}
-	}
-
+	result, err := a.executeAgent(ctx, userInput, history, memory, eventStream)
 	if err != nil {
 		a.AgentRecorder.RecordError(span, err)
 		return nil, err
@@ -93,6 +65,34 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 
 	a.AgentRecorder.RecordSuccess(span)
 	return result, nil
+}
+
+func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	if a.ExecutionEngine != nil {
+		return a.executeWithExecutionEngineRouter(ctx, userInput, history, eventStream)
+	}
+
+	if a.Model == nil {
+		return nil, fmt.Errorf("agent %s has no model configured", a.FullName())
+	}
+
+	messages, err := a.executeLocally(ctx, userInput, history, memory, eventStream)
+	if err != nil {
+		return nil, err
+	}
+	return &ExecutionResult{Messages: messages}, nil
+}
+
+func (a *Agent) executeWithExecutionEngineRouter(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	if a.ExecutionEngine.Name == ExecutionEngineA2A {
+		return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
+	}
+
+	messages, err := a.executeWithExecutionEngine(ctx, userInput, history)
+	if err != nil {
+		return nil, err
+	}
+	return &ExecutionResult{Messages: messages}, nil
 }
 
 func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
