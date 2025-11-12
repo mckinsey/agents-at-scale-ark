@@ -75,7 +75,9 @@ export async function installArk(
       const service = getMarketplaceService(marketplaceServiceName);
 
       if (!service) {
-        output.error(`marketplace service '${marketplaceServiceName}' not found`);
+        output.error(
+          `marketplace service '${marketplaceServiceName}' not found`
+        );
         output.info('available marketplace services:');
         const marketplaceServices = getAllMarketplaceServices();
         for (const serviceName of Object.keys(marketplaceServices)) {

@@ -4,12 +4,10 @@
  * Charts are installed from the public OCI registry
  */
 
-import type {
-  ArkService,
-  ServiceCollection,
-} from './types/arkService.js';
+import type {ArkService, ServiceCollection} from './types/arkService.js';
 
-const MARKETPLACE_REGISTRY = 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts';
+const MARKETPLACE_REGISTRY =
+  'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts';
 
 /**
  * Available marketplace services
@@ -19,7 +17,8 @@ export const marketplaceServices: ServiceCollection = {
   phoenix: {
     name: 'phoenix',
     helmReleaseName: 'phoenix',
-    description: 'AI/ML observability and evaluation platform with OpenTelemetry integration',
+    description:
+      'AI/ML observability and evaluation platform with OpenTelemetry integration',
     enabled: true,
     category: 'marketplace',
     namespace: 'phoenix',
@@ -32,7 +31,8 @@ export const marketplaceServices: ServiceCollection = {
   langfuse: {
     name: 'langfuse',
     helmReleaseName: 'langfuse',
-    description: 'Open-source LLM observability and analytics platform with session tracking',
+    description:
+      'Open-source LLM observability and analytics platform with session tracking',
     enabled: true,
     category: 'marketplace',
     namespace: 'langfuse',

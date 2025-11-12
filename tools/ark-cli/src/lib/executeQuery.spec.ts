@@ -204,11 +204,9 @@ describe('executeQuery', () => {
             arkMetadata?: any
           ) => void
         ) => {
-          callback(
-            '',
-            [{id: 1, function: {name: 'get_weather'}}],
-            {agent: 'weather-agent'}
-          );
+          callback('', [{id: 1, function: {name: 'get_weather'}}], {
+            agent: 'weather-agent',
+          });
           callback('The weather is sunny', undefined, {
             agent: 'weather-agent',
           });
