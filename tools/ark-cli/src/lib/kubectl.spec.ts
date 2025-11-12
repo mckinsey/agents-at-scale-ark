@@ -5,11 +5,9 @@ jest.unstable_mockModule('execa', () => ({
   execa: mockExeca,
 }));
 
-const {
-  getResource,
-  listResources,
-  deleteResource,
-} = await import('./kubectl.js');
+const {getResource, listResources, deleteResource} = await import(
+  './kubectl.js'
+);
 
 interface TestResource {
   metadata: {
@@ -228,9 +226,9 @@ describe('kubectl', () => {
     it('should handle kubectl errors when listing resources', async () => {
       mockExeca.mockRejectedValue(new Error('kubectl connection error'));
 
-      await expect(
-        listResources<TestResource>('queries')
-      ).rejects.toThrow('kubectl connection error');
+      await expect(listResources<TestResource>('queries')).rejects.toThrow(
+        'kubectl connection error'
+      );
     });
   });
 

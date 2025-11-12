@@ -40,9 +40,14 @@ describe('createModel', () => {
       .mockResolvedValueOnce({model: 'anthropic.claude-3-sonnet-20240229-v1:0'})
       .mockResolvedValueOnce({region: 'us-east-1'})
       .mockResolvedValueOnce({accessKeyId: 'AKIAIOSFODNN7EXAMPLE'})
-      .mockResolvedValueOnce({secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'})
+      .mockResolvedValueOnce({
+        secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+      })
       .mockResolvedValueOnce({sessionToken: 'optional-session-token'})
-      .mockResolvedValueOnce({modelArn: 'arn:aws:bedrock:us-east-1:123456789012:model/anthropic.claude-3-sonnet-20240229-v1:0'});
+      .mockResolvedValueOnce({
+        modelArn:
+          'arn:aws:bedrock:us-east-1:123456789012:model/anthropic.claude-3-sonnet-20240229-v1:0',
+      });
 
     mockExeca.mockResolvedValue({}); // kubectl ops succeed
 

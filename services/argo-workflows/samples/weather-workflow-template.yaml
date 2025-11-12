@@ -1,0 +1,113 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: weather-workflow-
+  annotations:
+    workflows.argoproj.io/description: "Fetch weather and city details for a location using the default agent"
+spec:
+  entrypoint: main
+  serviceAccountName: argo-workflow
+  arguments:
+    parameters:
+      - name: location
+        value: "London"
+  templates:
+    - name: main
+      steps:
+        - - name: get-weather
+            template: query-default-agent
+            arguments:
+              parameters:
+                - name: prompt
+                  value: |
+                    Provide the current weather conditions for {{workflow.parameters.location}}. Include temperature, precipitation, and any notable alerts or advisories.
+        - - name: describe-city
+            template: query-default-agent
+            arguments:
+              parameters:
+                - name: prompt
+                  value: |
+                    Share a concise description of {{workflow.parameters.location}} that covers key attractions, cultural highlights, and useful travel tips.
+        - - name: write-results
+            template: write-results
+            arguments:
+              parameters:
+                - name: weather-result
+                  value: "{{steps.get-weather.outputs.parameters.response}}"
+                - name: city-description
+                  value: "{{steps.describe-city.outputs.parameters.response}}"
+
+    - name: query-default-agent
+      inputs:
+        parameters:
+          - name: prompt
+      script:
+        image: alpine/k8s:1.28.13
+        command: [sh]
+        source: |
+          set -eux
+
+          QUERY_NAME="weather-{{workflow.name}}-$(date +%s%N)"
+
+          cat <<EOF2 | kubectl apply -f -
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: $QUERY_NAME
+            labels:
+              workflow: "{{workflow.name}}"
+          spec:
+            input: "{{inputs.parameters.prompt}}"
+            targets:
+            - name: "default"
+              type: model
+            timeout: 3m
+            ttl: 1h
+          EOF2
+
+          kubectl wait --for=condition=Completed --timeout=3m query/$QUERY_NAME || true
+
+          kubectl get query $QUERY_NAME -o json > /tmp/query.json
+          PHASE=$(jq -r '.status.phase' /tmp/query.json)
+
+          if [ "$PHASE" = "error" ]; then
+            ERROR_MESSAGE=$(jq -r '.status.responses[0].content // .status.error // "Unknown error"' /tmp/query.json)
+            echo "$ERROR_MESSAGE"
+            exit 1
+          fi
+
+          jq -r '.status.responses[0].content // ""' /tmp/query.json | tee /tmp/response.txt
+      outputs:
+        parameters:
+          - name: response
+            valueFrom:
+              path: /tmp/response.txt
+
+    - name: write-results
+      inputs:
+        parameters:
+          - name: weather-result
+          - name: city-description
+      script:
+        image: alpine:3.19
+        command: [sh]
+        source: |
+          set -e
+
+          cat <<EOF2 > /tmp/results.txt
+          Weather Information:
+          {{inputs.parameters.weather-result}}
+
+          City Description:
+          {{inputs.parameters.city-description}}
+          EOF2
+
+          echo "Stored combined result at /tmp/results.txt"
+          
+          cat /tmp/results.txt
+
+      outputs:
+        parameters:
+          - name: results
+            valueFrom:
+              path: /tmp/results.txt

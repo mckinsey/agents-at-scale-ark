@@ -81,3 +81,14 @@ export async function deleteResource(
 
   await execa('kubectl', args, {stdio: 'pipe'});
 }
+
+export async function replaceResource<T extends K8sResource>(
+  resource: T
+): Promise<T> {
+  const result = await execa('kubectl', ['replace', '-f', '-', '-o', 'json'], {
+    input: JSON.stringify(resource),
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+
+  return JSON.parse(result.stdout) as T;
+}

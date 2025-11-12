@@ -6,7 +6,7 @@ import type {ArkConfig} from '../../lib/config.js';
 import output from '../../lib/output.js';
 import type {Query} from '../../lib/types.js';
 import {ExitCodes} from '../../lib/errors.js';
-import {getResource} from '../../lib/kubectl.js';
+import {getResource, replaceResource} from '../../lib/kubectl.js';
 import {listQueries} from './list.js';
 import {deleteQuery} from './delete.js';
 
@@ -67,7 +67,10 @@ export function createQueriesCommand(_: ArkConfig): Command {
   queriesCommand
     .description('List all queries')
     .option('-o, --output <format>', 'output format (json or text)', 'text')
-    .option('--sort-by <field>', 'sort by kubernetes field (e.g., .metadata.name)')
+    .option(
+      '--sort-by <field>',
+      'sort by kubernetes field (e.g., .metadata.name)'
+    )
     .action(async (options) => {
       await listQueries(options);
     });
@@ -94,6 +97,35 @@ export function createQueriesCommand(_: ArkConfig): Command {
     });
 
   queriesCommand.addCommand(deleteCommand);
+
+  const resubmitCommand = new Command('resubmit');
+  resubmitCommand
+    .description(
+      'Resubmit a query by clearing its status (@latest for most recent)'
+    )
+    .argument('<name>', 'Query name or @latest')
+    .action(async (name: string) => {
+      try {
+        const query = await getResource<Query>('queries', name);
+
+        const queryWithoutStatus: Query = {
+          ...query,
+          status: undefined,
+        };
+
+        await replaceResource(queryWithoutStatus);
+
+        output.success(`Query '${query.metadata.name}' resubmitted`);
+      } catch (error) {
+        output.error(
+          'resubmitting query:',
+          error instanceof Error ? error.message : error
+        );
+        process.exit(ExitCodes.CliError);
+      }
+    });
+
+  queriesCommand.addCommand(resubmitCommand);
 
   return queriesCommand;
 }

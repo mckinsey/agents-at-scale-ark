@@ -13,7 +13,10 @@ export function createEvaluationCommand(_: ArkConfig): Command {
   evaluationCommand
     .description('Execute evaluations against evaluators')
     .argument('<evaluator-name>', 'Name of the evaluator to use')
-    .argument('[query-name]', 'Name of the query to evaluate (for query-based evaluation)')
+    .argument(
+      '[query-name]',
+      'Name of the query to evaluate (for query-based evaluation)'
+    )
     .option('--input <input>', 'Input text for direct evaluation')
     .option('--output <output>', 'Output text for direct evaluation')
     .option(
@@ -67,7 +70,9 @@ export function createEvaluationCommand(_: ArkConfig): Command {
             console.error('  - <query-name> for query-based evaluation');
             console.error('  - Pipe query name from stdin');
             console.error('\nExamples:');
-            console.error('  ark evaluation my-evaluator --input "test" --output "result"');
+            console.error(
+              '  ark evaluation my-evaluator --input "test" --output "result"'
+            );
             console.error('  ark evaluation my-evaluator my-query');
             console.error('  echo "my-query" | ark evaluation my-evaluator');
             process.exit(1);
