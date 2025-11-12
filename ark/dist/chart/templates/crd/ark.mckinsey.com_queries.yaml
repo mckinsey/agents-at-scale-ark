@@ -392,16 +392,23 @@ spec:
             properties:
               a2a:
                 description: A2A contains A2A protocol-specific metadata including
-                  context and task identifiers
+                  references to created tasks
                 properties:
-                  contextId:
-                    description: ContextID is the A2A protocol context identifier
-                      for grouping related interactions
-                    type: string
-                  taskId:
-                    description: TaskID is the A2A protocol task identifier if this
-                      query created an A2ATask
-                    type: string
+                  tasks:
+                    description: Tasks contains references to A2ATask resources created
+                      during query execution
+                    items:
+                      properties:
+                        contextId:
+                          description: ContextID from the A2A protocol
+                          type: string
+                        taskId:
+                          description: TaskID from the A2A protocol
+                          type: string
+                      required:
+                      - taskId
+                      type: object
+                    type: array
                 type: object
               conditions:
                 description: Conditions represent the latest available observations
