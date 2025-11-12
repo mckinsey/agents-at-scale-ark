@@ -11,8 +11,8 @@ router = APIRouter()
 # Include health endpoints (non-versioned)
 router.include_router(health_router)
 
-# Include A2A Gateway endpoints (at root level, not under /api/v1)
-router.include_router(a2a_gateway_router)
+# Include A2A Gateway endpoints under /a2a prefix
+router.include_router(a2a_gateway_router, prefix="/a2a")
 
 # Include versioned routers
 router.include_router(v1_router)

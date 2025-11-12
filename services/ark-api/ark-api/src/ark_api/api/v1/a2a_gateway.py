@@ -33,7 +33,7 @@ async def list_agents():
             "description": agent.description,
             "capabilities": [skill.name for skill in agent.skills],
             "host": "localhost",
-            "agent-card": f"/agent/{agent.name}/.well-known/agent.json",
+            "agent-card": f"/a2a/agent/{agent.name}/.well-known/agent.json",
             "created_at": datetime.utcnow().isoformat(),
             "metadata": {"type": "analytical", "version": agent.version},
         }

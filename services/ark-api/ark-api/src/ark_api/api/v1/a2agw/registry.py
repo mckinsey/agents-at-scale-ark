@@ -20,7 +20,7 @@ def _get_agent_card_url_components():
 
 def get_external(agent_name):
     scheme, host, port, path = _get_agent_card_url_components()
-    return f"{scheme}://{host}:{port}{path}/agent/{agent_name}/"
+    return f"{scheme}://{host}:{port}{path}/a2a/agent/{agent_name}/"
 
 def ark_to_agent_card(ark_agent) -> AgentCard:
     metadata = ark_agent.metadata

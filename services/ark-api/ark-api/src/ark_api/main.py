@@ -88,11 +88,11 @@ async def lifespan(app: FastAPI):
     await init_k8s()
     logger.info("Kubernetes clients initialized")
     
-    # Initialize A2A manager and mount dynamic agent routes
+    # Initialize A2A manager and mount dynamic agent routes under /a2a
     a2a_manager = get_a2a_manager()
     await a2a_manager.initialize()
-    app.mount("/agent", a2a_manager.app)
-    logger.info("A2A Gateway initialized")
+    app.mount("/a2a/agent", a2a_manager.app)
+    logger.info("A2A Gateway initialized at /a2a")
     
     yield
     # Shutdown
