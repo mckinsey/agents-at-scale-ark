@@ -30,11 +30,17 @@ export function EventMetricsDisplay({
 }: EventMetricsDisplayProps) {
   // Ensure we have valid data with fallbacks
   const {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     passed_rules = 0,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     failed_rules = 0,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     rule_results = [],
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     weighted_score,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     min_score_threshold,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     events_analyzed = 0,
     query_name: metadataQueryName,
     session_id: metadataSessionId,

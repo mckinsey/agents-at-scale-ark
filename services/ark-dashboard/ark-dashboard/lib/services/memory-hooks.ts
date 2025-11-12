@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 
-import { MemoryMessagesFilters, memoryService } from './memory';
+import type { MemoryMessagesFilters } from './memory';
+import { memoryService } from './memory';
 
 export const GET_MEMORY_RESOURCES_QUERY_KEY = 'get-memory-resources';
 export const GET_SESSIONS_QUERY_KEY = 'get-sessions';

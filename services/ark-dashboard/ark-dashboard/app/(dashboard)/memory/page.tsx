@@ -1,4 +1,5 @@
-import { BreadcrumbElement, PageHeader } from '@/components/common/page-header';
+import type { BreadcrumbElement } from '@/components/common/page-header';
+import { PageHeader } from '@/components/common/page-header';
 import { MemorySection } from '@/components/sections';
 
 const breadcrumbs: BreadcrumbElement[] = [

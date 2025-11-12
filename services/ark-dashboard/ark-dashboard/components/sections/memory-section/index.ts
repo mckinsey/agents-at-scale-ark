@@ -1,1 +1,1 @@
-export * from './memory-section'
+export * from './memory-section';
