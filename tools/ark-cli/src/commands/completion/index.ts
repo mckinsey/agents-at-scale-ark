@@ -106,7 +106,7 @@ _ark_completion() {
           return 0
           ;;
         queries)
-          opts="get"
+          opts="get delete resubmit"
           COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
           return 0
           ;;
@@ -232,7 +232,9 @@ _ark() {
           ;;
         queries)
           _values 'queries commands' \\
-            'get[Get a specific query]'
+            'get[Get a specific query]' \\
+            'delete[Delete a query]' \\
+            'resubmit[Resubmit a query by clearing its status]'
           ;;
       esac
       ;;
