@@ -115,7 +115,7 @@ export default function FloatingChat({
         sessionId,
       )) {
         // Extract content from the chunk (OpenAI format)
-        const typedChunk = chunk as ChatCompletionChunk;
+        const typedChunk = chunk as unknown as ChatCompletionChunk;
         const delta = typedChunk?.choices?.[0]?.delta;
         if (delta?.content) {
           accumulatedContent += delta.content;
