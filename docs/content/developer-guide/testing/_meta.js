@@ -1,4 +1,4 @@
 export default {
-  'index': 'Testing Overview',
-  'ui-testing': 'UI Testing (Playwright)'
+  'index': 'End-to-End Testing with Chainsaw',
+  'ui-testing': 'UI Testing with Playwright'
 }
