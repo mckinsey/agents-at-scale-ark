@@ -38,10 +38,10 @@ Key environment variables:
 | `PORT` | Server port | 8000 |
 | `AUTH_MODE` | Authentication mode (`open`, `basic`, `sso`, `hybrid`) | `open` |
 | `CORS_ORIGINS` | Allowed CORS origins (comma-separated) | `http://localhost:3000` |
-| `ARK_A2A_LISTEN_PORT` | Port for A2A agent card URLs | Uses `PORT` (8000) |
-| `ARK_A2A_LISTEN_HOST` | Host for A2A agent card URLs | `localhost` |
-| `ARK_A2A_LISTEN_PROTOCOL` | Protocol scheme for A2A URLs | `http` |
-| `ARK_A2A_LISTEN_PATH` | Optional path prefix for A2A URLs | Empty (root path) |
+| `ARK_A2A_AGENT_CARD_PORT` | Port advertised in agent cards | Uses `PORT` (8000) |
+| `ARK_A2A_AGENT_CARD_HOST` | Host advertised in agent cards | `localhost` |
+| `ARK_A2A_AGENT_CARD_PROTOCOL` | Protocol advertised in agent cards | `http` |
+| `ARK_A2A_AGENT_CARD_PATH` | Optional path prefix for agent card URLs | Empty (root path) |
 
 See the [Helm chart values](https://github.com/mckinsey/agents-at-scale-ark/tree/main/services/ark-api/chart) for complete configuration options.
 
