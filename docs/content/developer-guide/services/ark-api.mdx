@@ -1,0 +1,101 @@
+---
+title: Ark API
+description: REST API service for managing ARK resources with integrated A2A Gateway
+---
+
+# Ark API
+
+REST API service for managing ARK resources. Provides native ARK endpoints, OpenAI-compatible endpoints, and includes the A2A Gateway for agent-to-agent communication.
+
+## Installation
+
+Install via `helm`:
+
+```bash
+helm install ark-api \
+    ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api \
+    --namespace default \
+    --create-namespace
+```
+
+For local development:
+
+```bash
+# From project root
+make ark-api-dev
+
+# Or from service directory
+cd services/ark-api
+devspace dev
+```
+
+## Configuration
+
+Key environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | Server port | 8000 |
+| `AUTH_MODE` | Authentication mode (`open`, `basic`, `sso`, `hybrid`) | `open` |
+| `CORS_ORIGINS` | Allowed CORS origins (comma-separated) | `http://localhost:3000` |
+| `ARK_A2A_AGENT_CARD_PORT` | Port advertised in agent cards | Uses `PORT` (8000) |
+| `ARK_A2A_AGENT_CARD_HOST` | Host advertised in agent cards | `localhost` |
+| `ARK_A2A_AGENT_CARD_PROTOCOL` | Protocol advertised in agent cards | `http` |
+| `ARK_A2A_AGENT_CARD_PATH` | Optional path prefix for agent card URLs | Empty (root path) |
+
+See the [Helm chart values](https://github.com/mckinsey/agents-at-scale-ark/tree/main/services/ark-api/chart) for complete configuration options.
+
+## API Endpoints
+
+### Native ARK APIs
+
+- **Agents**: `/v1/namespaces/{namespace}/agents`
+- **Teams**: `/v1/namespaces/{namespace}/teams`
+- **Queries**: `/v1/namespaces/{namespace}/queries`
+- **Models**: `/v1/namespaces/{namespace}/models`
+- **Evaluators**: `/v1/namespaces/{namespace}/evaluators`
+- **Evaluations**: `/v1/namespaces/{namespace}/evaluations`
+- **Secrets**: `/v1/namespaces/{namespace}/secrets`
+- **API Keys**: `/v1/api-keys`
+
+See [ARK APIs Reference](/reference/ark-apis) for complete API documentation.
+
+### OpenAI-Compatible APIs
+
+- **Models**: `/openai/v1/models`
+- **Chat Completions**: `/openai/v1/chat/completions`
+
+### A2A Gateway
+
+The A2A Gateway exposes ARK agents via the [A2A Protocol](https://github.com/a2a-integration/a2a-spec) for standardized agent-to-agent communication. All ARK agents in Kubernetes are automatically discovered and exposed.
+
+**Endpoints:**
+- `GET /agents` - List all available agents
+- `GET /agent/{agent-name}/.well-known/agent.json` - Get agent card
+- `GET /agent/{agent-name}/*` - Dynamic A2A protocol routes
+
+**Example:**
+```bash
+# List agents
+curl http://localhost:8000/agents
+
+# Get agent card
+curl http://localhost:8000/agent/<agent-name>/.well-known/agent.json
+```
+
+## Authentication
+
+ARK API supports multiple authentication modes:
+
+- **`open`**: No authentication (development only)
+- **`basic`**: API key authentication only
+- **`sso`**: OIDC/JWT authentication only
+- **`hybrid`**: Both OIDC and API key authentication (recommended for production)
+
+See [Authentication Guide](/developer-guide/authentication) for complete configuration details.
+
+## Related Documentation
+
+- [ARK APIs Reference](/reference/ark-apis) - Complete API documentation
+- [Authentication Guide](/developer-guide/authentication) - Authentication configuration
+- [A2A Protocol Specification](https://github.com/a2a-integration/a2a-spec) - A2A protocol details

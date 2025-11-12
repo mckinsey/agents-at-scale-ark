@@ -19,7 +19,6 @@ fi
 CONTAINERS=(
     "ark-controller"
     "ark-api"
-    "ark-api-a2a"
     "ark-dashboard"
     "executor-langchain"
     "ark-evaluator"

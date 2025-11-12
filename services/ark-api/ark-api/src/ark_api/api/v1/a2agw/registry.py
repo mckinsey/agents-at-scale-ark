@@ -9,17 +9,18 @@ from ark_sdk.k8s import get_namespace
 logger = logging.getLogger(__name__)
 
 @functools.lru_cache(maxsize=1)
-def _get_external_info():
-    port = os.getenv('ARK_A2A_LISTEN_PORT', '7184')
-    host = os.getenv('ARK_A2A_LISTEN_HOST', 'localhost')
-    scheme = os.getenv('ARK_A2A_LISTEN_PROTOCOL', 'http')
-    path = os.getenv('ARK_A2A_LISTEN_PATH', '')
-    logger.info(f"Using {scheme}://{host}:{port}{path} to listen for agent cards")
+def _get_agent_card_url_components():
+    # Use PORT env var (8000 for ark-api) as default, or ARK_A2A_AGENT_CARD_PORT if set
+    port = os.getenv('ARK_A2A_AGENT_CARD_PORT', os.getenv('PORT', '8000'))
+    host = os.getenv('ARK_A2A_AGENT_CARD_HOST', 'localhost')
+    scheme = os.getenv('ARK_A2A_AGENT_CARD_PROTOCOL', 'http')
+    path = os.getenv('ARK_A2A_AGENT_CARD_PATH', '')
+    logger.info(f"Agent cards will advertise URL: {scheme}://{host}:{port}{path}")
     return scheme, host, port, path
 
 def get_external(agent_name):
-    scheme, host, port, path = _get_external_info()
-    return f"{scheme}://{host}:{port}{path}/agent/{agent_name}/"
+    scheme, host, port, path = _get_agent_card_url_components()
+    return f"{scheme}://{host}:{port}{path}/a2a/agent/{agent_name}/"
 
 def ark_to_agent_card(ark_agent) -> AgentCard:
     metadata = ark_agent.metadata

@@ -21,11 +21,17 @@ export function RuleResultsComponent({
   eventMetadata,
 }: RuleResultsComponentProps) {
   const {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     total_rules,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     passed_rules,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     failed_rules,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     rule_results,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     weighted_score,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     total_weight,
   } = eventMetadata;
 

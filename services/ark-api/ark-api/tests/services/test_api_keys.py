@@ -1,10 +1,9 @@
 """Test cases for API key service."""
 
 import unittest
-from unittest.mock import Mock, patch, AsyncMock, MagicMock
+from unittest.mock import Mock, patch, AsyncMock
 from datetime import datetime, timezone, timedelta
 import base64
-import bcrypt
 import json
 
 from ark_api.services.api_keys import APIKeyService, API_KEY_TYPE, API_KEY_ANNOTATION

@@ -95,3 +95,23 @@ minio:
       secretKey: minio123
     buckets:
       - name: argo-artifacts
+
+# HTTPRoute configuration for external access via Gateway API
+httpRoute:
+  argo:
+    enabled: false
+    parentRefs:
+      - name: localhost-gateway
+        namespace: ark-system
+    hostnames:
+      - "argo.127.0.0.1.nip.io"
+      - "argo.default.127.0.0.1.nip.io"
+
+  minio:
+    enabled: false
+    parentRefs:
+      - name: localhost-gateway
+        namespace: ark-system
+    hostnames:
+      - "minio.127.0.0.1.nip.io"
+      - "minio.default.127.0.0.1.nip.io"

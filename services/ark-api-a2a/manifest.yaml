@@ -1,9 +1,0 @@
-name: ark-api-a2a
-description: A2A gateway for ARK agents
-supports:
-  - dev
-  - install
-  - uninstall
-  - build-test
-post-install-instructions: |
-  You need to execute: kubectl port-forward service/ark-api-a2a 7184:80

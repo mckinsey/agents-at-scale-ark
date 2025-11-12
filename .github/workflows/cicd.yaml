@@ -196,12 +196,6 @@ jobs:
           artifact-folder: ark-api/unit-tests
           artifact-suffix: ark-api-unit
 
-      - uses: ./.github/actions/collect-coverage
-        with:
-          source-path: services/ark-api-a2a/coverage/
-          artifact-folder: ark-api-a2a/unit-tests
-          artifact-suffix: ark-api-a2a-unit
-
   build-containers:
     needs: [setup-container-cache-registry, build-libs]
     runs-on: ubuntu-24.04
@@ -211,9 +205,6 @@ jobs:
         include:
           - path: ark
             image: ark-controller
-          - path: services/ark-api-a2a
-            image: ark-api-a2a
-            prebuild: "make ark-api-a2a-deps && mkdir -p services/ark-api-a2a/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api-a2a/out/"
           - path: services/ark-api
             image: ark-api
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
@@ -462,18 +453,6 @@ jobs:
             --wait \
             --timeout=5m
 
-      - name: Deploy ark-api-a2a
-        run: |
-          echo "=== Deploying ark-api-a2a ==="
-          helm upgrade --install ark-api-a2a services/ark-api-a2a/chart \
-            --namespace default \
-            --create-namespace \
-            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-api-a2a" \
-            --set app.image.tag="${{ github.sha }}" \
-            --set app.image.pullPolicy="Always" \
-            --wait \
-            --timeout=5m
-
       - name: Deploy ark-dashboard
         run: |
           echo "=== Deploying dashboard ==="
@@ -493,20 +472,18 @@ jobs:
           kubectl get pods -n ark-system -l control-plane=ark-controller || echo "Controller not found, showing all ark-system pods:" && kubectl get pods -n ark-system
           echo "ARK Services:"
           kubectl get pods -n default -l app=ark-api
-          kubectl get pods -n default -l app=ark-api-a2a
           kubectl get pods -n default -l app=ark-dashboard
           echo "Service endpoints:"
-          kubectl get svc -n default ark-api ark-api-a2a ark-dashboard
+          kubectl get svc -n default ark-api ark-dashboard
 
       - name: Test endpoints
         run: |
           # Wait for services to be ready
           echo "Waiting for services to be ready..."
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
-          kubectl wait --for=condition=ready pod -l app=ark-api-a2a -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
 
-          # Test ark-api service
+          # Test ark-api service (including A2A Gateway endpoints)
           echo
           echo "=== Testing ark-api service ==="
           kubectl port-forward -n default service/ark-api 8082:80 &
@@ -518,19 +495,10 @@ jobs:
           curl -f http://127.0.0.1:8082/ready || (echo "API ready check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
           echo "Testing OpenAI models endpoint..."
           curl -f http://127.0.0.1:8082/openai/v1/models || (echo "OpenAI models endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
+          echo "Testing A2A Gateway /agents endpoint..."
+          curl -f http://127.0.0.1:8082/a2a/agents || (echo "A2A /agents endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
           # Clean up API port-forward
           kill $API_PID || true
-
-          # Test ark-api-a2a service
-          echo
-          echo "=== Testing ark-api-a2a service ==="
-          kubectl port-forward -n default service/ark-api-a2a 8083:80 &
-          A2A_PID=$!
-          sleep 15
-          echo "Testing A2A health endpoint..."
-          curl -f http://127.0.0.1:8083/health || (echo "A2A health check failed" && kubectl logs -l app=ark-api-a2a -n default --tail=20 && exit 1)
-          # Clean up A2A port-forward
-          kill $A2A_PID || true
 
           # Test ark-dashboard service
           echo
