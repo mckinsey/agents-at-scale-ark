@@ -41,8 +41,21 @@ type ChunkWithMetadata struct {
 	Ark *StreamMetadata `json:"ark,omitempty"`
 }
 
-// WrapChunkWithMetadata adds ARK metadata to a streaming chunk
-func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChunk, modelName string) interface{} {
+// StreamingError represents an OpenAI-compatible error format for streaming
+type StreamingError struct {
+	Error struct {
+		Message string `json:"message"`
+		Type    string `json:"type"`
+		Code    string `json:"code,omitempty"`
+	} `json:"error"`
+}
+
+type ErrorWithMetadata struct {
+	*StreamingError
+	Ark *StreamMetadata `json:"ark,omitempty"`
+}
+
+func buildMetadata(ctx context.Context, modelName string) *StreamMetadata {
 	// Build metadata from context
 	metadata := &StreamMetadata{}
 
@@ -77,6 +90,38 @@ func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChun
 			metadata.Annotations = query.Annotations
 		}
 	}
+
+	return metadata
+}
+
+func WrapErrorWithMetadata(ctx context.Context, streamingError *StreamingError, modelName string) interface{} {
+	metadata := buildMetadata(ctx, modelName)
+
+	return ErrorWithMetadata{
+		StreamingError: streamingError,
+		Ark:            metadata,
+	}
+}
+
+// StreamError streams an error to the event stream if available.
+// This is a helper function to avoid code duplication when streaming errors.
+func StreamError(ctx context.Context, eventStream EventStreamInterface, err error, errorCode, modelName string) {
+	if eventStream == nil {
+		return
+	}
+	errorChunk := StreamingError{}
+	errorChunk.Error.Message = err.Error()
+	errorChunk.Error.Type = "server_error"
+	errorChunk.Error.Code = errorCode
+	errorChunkWithMeta := WrapErrorWithMetadata(ctx, &errorChunk, modelName)
+	if streamErr := eventStream.StreamChunk(ctx, errorChunkWithMeta); streamErr != nil {
+		logf.FromContext(ctx).Error(streamErr, "failed to send error chunk to event stream")
+	}
+}
+
+// WrapChunkWithMetadata adds ARK metadata to a streaming chunk
+func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChunk, modelName string) interface{} {
+	metadata := buildMetadata(ctx, modelName)
 
 	return ChunkWithMetadata{
 		ChatCompletionChunk: chunk,
