@@ -1,6 +1,7 @@
 import os
 import time
 from contextlib import asynccontextmanager
+from importlib.metadata import version, PackageNotFoundError
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -28,7 +29,11 @@ load_dotenv()
 # Initialize logging
 logger = setup_logging()
 
-VERSION = "1.0.0"
+# Get version from package metadata (pyproject.toml)
+try:
+    VERSION = version("ark-api")
+except PackageNotFoundError:
+    VERSION = "0.0.0-dev"  # Fallback for development
 
 
 def setup_telemetry():
