@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 
 @functools.lru_cache(maxsize=1)
 def _get_external_info():
-    port = os.getenv('ARK_A2A_LISTEN_PORT', '7184')
+    # Use PORT env var (8000 for ark-api) as default, or ARK_A2A_LISTEN_PORT if set
+    port = os.getenv('ARK_A2A_LISTEN_PORT', os.getenv('PORT', '8000'))
     host = os.getenv('ARK_A2A_LISTEN_HOST', 'localhost')
     scheme = os.getenv('ARK_A2A_LISTEN_PROTOCOL', 'http')
     path = os.getenv('ARK_A2A_LISTEN_PATH', '')

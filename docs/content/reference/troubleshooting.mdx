@@ -167,24 +167,28 @@ ark models create default
 ✓ Model 'default' created successfully
 ```
 
-#### ark-api-a2a Not Installed Automatically
+#### A2A Gateway Not Available (Deprecated - Now Part of ark-api)
 
-See [issue #392](https://github.com/mckinsey/agents-at-scale-ark/issues/392) for tracking this issue.
+> **Note:** The A2A Gateway functionality has been integrated into `ark-api`. This section is kept for historical reference.
 
 **Error or Symptom**
 
 ```bash
- The installation command completes successfully and reports "✓ Installation complete", but the ark-api-a2a component is not actually deployed in the cluster.
-'helm list -A' would not list ark-api-a2a
+# Old issue: ark-api-a2a not installed
+# New: A2A Gateway is now part of ark-api
 ```
 
-**Cause**
+**Solution**
 
-Investigation in progress
+A2A Gateway is now part of `ark-api`. Install `ark-api` and the A2A endpoints will be available at:
+- `GET /agents` - List agents
+- `GET /agent/{name}/.well-known/agent.json` - Agent cards
+- `GET /agent/{name}/*` - A2A protocol routes
 
-**Workaround**
-
-Until the issue is fixed, run the 'make ark-api-a2a-install' command from agents-at-scale-ark repo root
+If A2A endpoints are not working, verify:
+1. `ark-api` is installed and running
+2. Check logs: `kubectl logs -n default deployment/ark-api | grep "A2A Gateway"`
+3. Verify environment variables are set in `ark-api` deployment
 
 #### Access Denied When Installing agents-at-scale
 

@@ -39,6 +39,20 @@ app:
     # - "open": No authentication (development only)
     - name: AUTH_MODE
       value: "open"
+    # A2A Gateway environment variables
+    # ARK_A2A_LISTEN_PORT defaults to PORT env var (8000), or can be overridden
+    - name: ARK_A2A_LISTEN_PORT
+      value: "8000"
+    # ARK_A2A_LISTEN_HOST should match the external hostname (HTTPRoute hostname)
+    # For localhost-gateway, this will be like ark-api.127.0.0.1.nip.io
+    # Can be overridden per environment
+    - name: ARK_A2A_LISTEN_HOST
+      value: "ark-api.127.0.0.1.nip.io"
+    - name: ARK_A2A_LISTEN_PROTOCOL
+      value: "http"
+    # ARK_A2A_LISTEN_PATH is optional - leave empty for root path
+    # - name: ARK_A2A_LISTEN_PATH
+    #   value: ""
   # Optional: Import entire secrets/configmaps as env vars
   # envFrom:
   #   - secretRef:
