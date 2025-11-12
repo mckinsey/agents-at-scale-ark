@@ -230,6 +230,16 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		TotalTokens:      tokenSummary.TotalTokens,
 	}
 
+	// Query for A2ATask resources created by this query
+	a2aTasks, err := r.getA2ATasksForQuery(opCtx, obj.Name, obj.Namespace)
+	if err != nil {
+		log.Error(err, "failed to query A2ATask resources for query")
+	} else if len(a2aTasks) > 0 {
+		obj.Status.A2A = &arkv1alpha1.A2AMetadata{
+			Tasks: a2aTasks,
+		}
+	}
+
 	// Record token usage in telemetry span
 	r.Telemetry.QueryRecorder().RecordTokenUsage(span, tokenSummary.PromptTokens, tokenSummary.CompletionTokens, tokenSummary.TotalTokens)
 
@@ -1027,6 +1037,28 @@ func (r *QueryReconciler) executeModelWithStreaming(ctx context.Context, model *
 	responseMessages := []genai.Message{assistantMessage}
 
 	return responseMessages, nil
+}
+
+func (r *QueryReconciler) getA2ATasksForQuery(ctx context.Context, queryName, queryNamespace string) ([]arkv1alpha1.A2ATaskReference, error) {
+	var a2aTaskList arkv1alpha1.A2ATaskList
+	if err := r.List(ctx, &a2aTaskList, &client.ListOptions{
+		Namespace: queryNamespace,
+	}); err != nil {
+		return nil, fmt.Errorf("failed to list A2ATasks: %w", err)
+	}
+
+	var taskRefs []arkv1alpha1.A2ATaskReference
+	for _, task := range a2aTaskList.Items {
+		if task.Spec.QueryRef.Name == queryName &&
+			(task.Spec.QueryRef.Namespace == "" || task.Spec.QueryRef.Namespace == queryNamespace) {
+			taskRefs = append(taskRefs, arkv1alpha1.A2ATaskReference{
+				TaskID:    task.Spec.TaskID,
+				ContextID: task.Spec.ContextID,
+			})
+		}
+	}
+
+	return taskRefs, nil
 }
 
 func (r *QueryReconciler) SetupWithManager(mgr ctrl.Manager) error {
