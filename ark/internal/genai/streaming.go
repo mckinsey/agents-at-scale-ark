@@ -59,10 +59,23 @@ func NewContentChunk(id, model, content string) *openai.ChatCompletionChunk {
 	}
 }
 
-// WrapChunkWithMetadata adds ARK metadata to a streaming chunk
-// If query is provided, includes complete query status in metadata (for final chunk only)
-func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChunk, modelName string, query *arkv1alpha1.Query) interface{} {
-	// Build metadata from context
+// StreamingError represents an OpenAI-compatible error format for streaming
+type StreamingError struct {
+	Error struct {
+		Message string `json:"message"`
+		Type    string `json:"type"`
+		Code    string `json:"code,omitempty"`
+	} `json:"error"`
+}
+
+// ErrorWithMetadata wraps a streaming error with ARK metadata
+type ErrorWithMetadata struct {
+	*StreamingError
+	Ark *StreamMetadata `json:"ark,omitempty"`
+}
+
+// buildMetadata builds StreamMetadata from context
+func buildMetadata(ctx context.Context, modelName string) *StreamMetadata {
 	metadata := &StreamMetadata{}
 
 	// Get execution metadata from context
@@ -82,13 +95,54 @@ func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChun
 		metadata.Model = modelName
 	}
 
-	// Add query and session IDs from context
+	// Add query and session IDs
 	if queryID := getQueryID(ctx); queryID != "" {
 		metadata.Query = queryID
 	}
 	if sessionID := getSessionID(ctx); sessionID != "" {
 		metadata.Session = sessionID
 	}
+
+	// Add query annotations if present in context
+	if queryVal := ctx.Value(QueryContextKey); queryVal != nil {
+		if query, ok := queryVal.(*arkv1alpha1.Query); ok && len(query.Annotations) > 0 {
+			metadata.Annotations = query.Annotations
+		}
+	}
+
+	return metadata
+}
+
+// WrapErrorWithMetadata wraps a streaming error with ARK metadata
+func WrapErrorWithMetadata(ctx context.Context, streamingError *StreamingError, modelName string) interface{} {
+	metadata := buildMetadata(ctx, modelName)
+
+	return ErrorWithMetadata{
+		StreamingError: streamingError,
+		Ark:            metadata,
+	}
+}
+
+// StreamError streams an error to the event stream if available.
+// This is a helper function to avoid code duplication when streaming errors.
+func StreamError(ctx context.Context, eventStream EventStreamInterface, err error, errorCode, modelName string) {
+	if eventStream == nil {
+		return
+	}
+	errorChunk := StreamingError{}
+	errorChunk.Error.Message = err.Error()
+	errorChunk.Error.Type = "server_error"
+	errorChunk.Error.Code = errorCode
+	errorChunkWithMeta := WrapErrorWithMetadata(ctx, &errorChunk, modelName)
+	if streamErr := eventStream.StreamChunk(ctx, errorChunkWithMeta); streamErr != nil {
+		logf.FromContext(ctx).Error(streamErr, "failed to send error chunk to event stream")
+	}
+}
+
+// WrapChunkWithMetadata adds ARK metadata to a streaming chunk
+// If query is provided, includes complete query status in metadata (for final chunk only)
+func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChunk, modelName string, query *arkv1alpha1.Query) interface{} {
+	metadata := buildMetadata(ctx, modelName)
 
 	// If query is provided, include complete status (final chunk only)
 	if query != nil {
@@ -100,11 +154,8 @@ func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChun
 		if query.Spec.SessionId != "" {
 			metadata.Session = query.Spec.SessionId
 		}
-	}
-
-	// Add query annotations if present in context
-	if queryVal := ctx.Value(QueryContextKey); queryVal != nil {
-		if query, ok := queryVal.(*arkv1alpha1.Query); ok && len(query.Annotations) > 0 {
+		// Also include annotations from query if not already set
+		if len(query.Annotations) > 0 && metadata.Annotations == nil {
 			metadata.Annotations = query.Annotations
 		}
 	}

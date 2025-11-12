@@ -8,7 +8,8 @@ jest.unstable_mockModule('execa', () => ({
 }));
 
 const {createQueriesCommand} = await import('./index.js');
-const {deleteQuery, BOTH_NAME_AND_ALL_ERROR, MISSING_NAME_OR_ALL_ERROR} = await import('./delete.js');
+const {deleteQuery, BOTH_NAME_AND_ALL_ERROR, MISSING_NAME_OR_ALL_ERROR} =
+  await import('./delete.js');
 
 describe('queries delete command', () => {
   beforeEach(() => {
@@ -66,7 +67,8 @@ describe('deleteQuery function', () => {
 
     expect(output.error).toHaveBeenCalledWith(
       expect.anything(),
-      expect.stringMatching(MISSING_NAME_OR_ALL_ERROR));
+      expect.stringMatching(MISSING_NAME_OR_ALL_ERROR)
+    );
     expect(process.exit).toHaveBeenCalledWith(1);
   });
 
@@ -75,7 +77,8 @@ describe('deleteQuery function', () => {
 
     expect(output.error).toHaveBeenCalledWith(
       expect.anything(),
-      expect.stringMatching(BOTH_NAME_AND_ALL_ERROR));
+      expect.stringMatching(BOTH_NAME_AND_ALL_ERROR)
+    );
     expect(process.exit).toHaveBeenCalledWith(1);
   });
 

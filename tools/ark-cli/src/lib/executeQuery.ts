@@ -5,38 +5,134 @@
 import {execa} from 'execa';
 import ora from 'ora';
 import chalk from 'chalk';
-import output from './output.js';
 import type {Query, QueryTarget} from './types.js';
 import {ExitCodes} from './errors.js';
-import {parseDuration} from './duration.js';
-import {getResource} from './kubectl.js';
+import {ArkApiProxy} from './arkApiProxy.js';
+import {ChatClient, ToolCall, ArkMetadata} from './chatClient.js';
 
 export interface QueryOptions {
-  targetType: string; // 'model', 'agent', 'team'
-  targetName: string; // 'default', 'weather-agent', etc.
+  targetType: string;
+  targetName: string;
   message: string;
-  timeout?: string; // Query execution timeout (e.g., "30s", "5m", default "5m")
-  watchTimeout?: string; // CLI watch timeout (e.g., "6m", default timeout + 1 minute)
+  timeout?: string;
+  watchTimeout?: string;
   verbose?: boolean;
-  outputFormat?: string; // Output format: 'yaml', 'json', or 'name'
+  outputFormat?: string;
 }
 
-/**
- * Execute a query against any ARK target (model, agent, team)
- * This is the shared implementation used by all query commands
- */
+interface StreamState {
+  currentAgent?: string;
+  toolCalls: Map<number, ToolCall>;
+  content: string;
+}
+
 export async function executeQuery(options: QueryOptions): Promise<void> {
-  const spinner = options.outputFormat
-    ? null
-    : ora('Creating query...').start();
+  if (options.outputFormat) {
+    return executeQueryWithFormat(options);
+  }
 
-  const queryTimeoutMs = options.timeout
-    ? parseDuration(options.timeout)
-    : parseDuration('5m');
-  const watchTimeoutMs = options.watchTimeout
-    ? parseDuration(options.watchTimeout)
-    : queryTimeoutMs + 60000;
+  let arkApiProxy: ArkApiProxy | undefined;
+  const spinner = ora('Connecting to Ark API...').start();
 
+  try {
+    arkApiProxy = new ArkApiProxy();
+    const arkApiClient = await arkApiProxy.start();
+    const chatClient = new ChatClient(arkApiClient);
+
+    spinner.text = 'Executing query...';
+
+    const targetId = `${options.targetType}/${options.targetName}`;
+    const messages = [{role: 'user' as const, content: options.message}];
+
+    const state: StreamState = {
+      toolCalls: new Map(),
+      content: '',
+    };
+
+    let lastAgentName: string | undefined;
+    let headerShown = false;
+    let firstOutput = true;
+
+    await chatClient.sendMessage(
+      targetId,
+      messages,
+      {streamingEnabled: true},
+      (chunk: string, toolCalls?: ToolCall[], arkMetadata?: ArkMetadata) => {
+        if (firstOutput) {
+          spinner.stop();
+          firstOutput = false;
+        }
+
+        const agentName = arkMetadata?.agent || arkMetadata?.team;
+
+        if (agentName && agentName !== lastAgentName) {
+          if (lastAgentName) {
+            if (state.content) {
+              process.stdout.write('\n');
+            }
+            process.stdout.write('\n');
+          }
+
+          const prefix = arkMetadata?.team ? '◆' : '●';
+          const color = arkMetadata?.team ? 'green' : 'cyan';
+          process.stdout.write(chalk[color](`${prefix} ${agentName}\n`));
+          lastAgentName = agentName;
+          state.content = '';
+          state.toolCalls.clear();
+          headerShown = true;
+        }
+
+        if (toolCalls && toolCalls.length > 0) {
+          for (const toolCall of toolCalls) {
+            if (!state.toolCalls.has(toolCall.id as any)) {
+              state.toolCalls.set(toolCall.id as any, toolCall);
+              if (state.content) {
+                process.stdout.write('\n');
+              }
+              process.stdout.write(
+                chalk.magenta(`🔧 ${toolCall.function.name}\n`)
+              );
+            }
+          }
+        }
+
+        if (chunk) {
+          if (state.toolCalls.size > 0 && !state.content) {
+            process.stdout.write('\n');
+          }
+          process.stdout.write(chunk);
+          state.content += chunk;
+        }
+      }
+    );
+
+    if (spinner.isSpinning) {
+      spinner.stop();
+    }
+
+    if ((state.content || state.toolCalls.size > 0) && headerShown) {
+      process.stdout.write('\n');
+    }
+
+    if (arkApiProxy) {
+      arkApiProxy.stop();
+    }
+  } catch (error) {
+    if (spinner.isSpinning) {
+      spinner.stop();
+    }
+    if (arkApiProxy) {
+      arkApiProxy.stop();
+    }
+
+    console.error(
+      chalk.red(error instanceof Error ? error.message : 'Unknown error')
+    );
+    process.exit(ExitCodes.CliError);
+  }
+}
+
+async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
   const timestamp = Date.now();
   const queryName = `cli-query-${timestamp}`;
 
@@ -59,125 +155,44 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
   };
 
   try {
-    // Apply the query
-    if (spinner) spinner.text = 'Submitting query...';
     await execa('kubectl', ['apply', '-f', '-'], {
       input: JSON.stringify(queryManifest),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    // Watch for query completion using kubectl wait
-    if (spinner) spinner.text = 'Waiting for query completion...';
+    const timeoutSeconds = 300;
+    await execa(
+      'kubectl',
+      [
+        'wait',
+        '--for=condition=Completed',
+        `query/${queryName}`,
+        `--timeout=${timeoutSeconds}s`,
+      ],
+      {timeout: timeoutSeconds * 1000}
+    );
 
-    try {
-      await execa(
+    if (options.outputFormat === 'name') {
+      console.log(queryName);
+    } else if (
+      options.outputFormat === 'json' ||
+      options.outputFormat === 'yaml'
+    ) {
+      const {stdout} = await execa(
         'kubectl',
-        [
-          'wait',
-          '--for=condition=Completed',
-          `query/${queryName}`,
-          `--timeout=${Math.floor(watchTimeoutMs / 1000)}s`,
-        ],
-        {timeout: watchTimeoutMs}
+        ['get', 'query', queryName, '-o', options.outputFormat],
+        {stdio: 'pipe'}
       );
-    } catch (error) {
-      if (spinner) spinner.stop();
-      // Check if it's a timeout or other error
-      if (
-        error instanceof Error &&
-        error.message.includes('timed out waiting')
-      ) {
-        console.error(
-          chalk.red(
-            `Query did not complete within ${options.watchTimeout ?? `${Math.floor(watchTimeoutMs / 1000)}s`}`
-          )
-        );
-        process.exit(ExitCodes.Timeout);
-      }
-      // For other errors, fetch the query to check status
-    }
-
-    if (spinner) spinner.stop();
-
-    // If output format is specified, output the resource and return
-    if (options.outputFormat) {
-      try {
-        if (options.outputFormat === 'name') {
-          console.log(queryName);
-        } else if (
-          options.outputFormat === 'json' ||
-          options.outputFormat === 'yaml'
-        ) {
-          const {stdout} = await execa(
-            'kubectl',
-            ['get', 'query', queryName, '-o', options.outputFormat],
-            {stdio: 'pipe'}
-          );
-          console.log(stdout);
-        } else {
-          console.error(
-            chalk.red(
-              `Invalid output format: ${options.outputFormat}. Use: yaml, json, or name`
-            )
-          );
-          process.exit(ExitCodes.CliError);
-        }
-        return;
-      } catch (error) {
-        console.error(
-          chalk.red(
-            error instanceof Error
-              ? error.message
-              : 'Failed to fetch query resource'
-          )
-        );
-        process.exit(ExitCodes.CliError);
-      }
-    }
-
-    // Fetch final query state
-    try {
-      const query = await getResource<Query>('queries', queryName);
-      const phase = query.status?.phase;
-
-      // Check if query completed successfully or with error
-      if (phase === 'done') {
-        // Extract and display the response from responses array
-        if (query.status?.responses && query.status.responses.length > 0) {
-          const response = query.status.responses[0];
-          console.log(response.content || response);
-        } else {
-          output.warning('No response received');
-        }
-      } else if (phase === 'error') {
-        const response = query.status?.responses?.[0];
-        console.error(
-          chalk.red(response?.content || 'Query failed with unknown error')
-        );
-        process.exit(ExitCodes.OperationError);
-      } else if (phase === 'canceled') {
-        if (spinner) {
-          spinner.warn('Query canceled');
-        } else {
-          output.warning('Query canceled');
-        }
-        if (query.status?.message) {
-          output.warning(query.status.message);
-        }
-        process.exit(ExitCodes.OperationError);
-      }
-    } catch (error) {
+      console.log(stdout);
+    } else {
       console.error(
         chalk.red(
-          error instanceof Error
-            ? error.message
-            : 'Failed to fetch query result'
+          `Invalid output format: ${options.outputFormat}. Use: yaml, json, or name`
         )
       );
       process.exit(ExitCodes.CliError);
     }
   } catch (error) {
-    if (spinner) spinner.stop();
     console.error(
       chalk.red(error instanceof Error ? error.message : 'Unknown error')
     );

@@ -406,6 +406,9 @@ func TestConvertHistoryFromProtocol(t *testing.T) {
 	}
 }
 
+// High complexity due to comprehensive test case coverage
+//
+//nolint:gocognit
 func TestConvertStatusMessageFromProtocol(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -567,8 +570,8 @@ func TestPopulateA2ATaskStatusFromProtocol(t *testing.T) {
 				if status.ProtocolState != "working" {
 					t.Errorf("ProtocolState = %q, want %q", status.ProtocolState, "working")
 				}
-				if status.SessionID != "ctx-456" {
-					t.Errorf("SessionID = %q, want %q", status.SessionID, "ctx-456")
+				if status.ContextID != "ctx-456" {
+					t.Errorf("ContextID = %q, want %q", status.ContextID, "ctx-456")
 				}
 				if len(status.History) != 2 {
 					t.Errorf("History length = %d, want 2 (original + status message)", len(status.History))
@@ -598,6 +601,9 @@ func TestPopulateA2ATaskStatusFromProtocol(t *testing.T) {
 	}
 }
 
+// High complexity due to comprehensive test case coverage
+//
+//nolint:gocognit
 func TestMergeArtifacts(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -680,6 +686,9 @@ func TestMergeArtifacts(t *testing.T) {
 	}
 }
 
+// High complexity due to comprehensive test case coverage
+//
+//nolint:gocognit
 func TestMergeHistory(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -916,8 +925,8 @@ func TestUpdateA2ATaskStatus(t *testing.T) {
 		if status.Phase != PhaseRunning {
 			t.Errorf("Phase = %q, want %q", status.Phase, PhaseRunning)
 		}
-		if status.SessionID != "ctx-456" {
-			t.Errorf("SessionID = %q, want %q", status.SessionID, "ctx-456")
+		if status.ContextID != "ctx-456" {
+			t.Errorf("ContextID = %q, want %q", status.ContextID, "ctx-456")
 		}
 		if len(status.History) == 0 {
 			t.Error("History should not be empty")

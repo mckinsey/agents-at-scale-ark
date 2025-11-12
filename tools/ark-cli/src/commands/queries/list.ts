@@ -55,7 +55,7 @@ function printTableRow(query: Query, maxNameLength: number): void {
 function printResult(queries: Query[], options: ListQueriesOptions): void {
   if (options.output === OUTPUT_FORMAT_JSON) {
     console.log(JSON.stringify(queries, null, 2));
-    return
+    return;
   }
 
   if (queries.length === 0) {

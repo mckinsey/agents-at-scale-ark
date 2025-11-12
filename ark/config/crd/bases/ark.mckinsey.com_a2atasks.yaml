@@ -284,6 +284,10 @@ spec:
                   - type
                   type: object
                 type: array
+              contextId:
+                description: ContextID links this task to a specific A2A conversation
+                  context.
+                type: string
               error:
                 description: Error contains the error message if the task failed.
                 type: string
@@ -469,10 +473,6 @@ spec:
                 - rejected
                 - auth-required
                 - unknown
-                type: string
-              sessionId:
-                description: SessionID links this task to a specific A2A conversation
-                  session.
                 type: string
               startTime:
                 description: StartTime records when task execution began.

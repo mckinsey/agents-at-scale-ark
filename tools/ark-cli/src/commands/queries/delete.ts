@@ -1,14 +1,16 @@
 import output from '../../lib/output.js';
 import {ExitCodes} from '../../lib/errors.js';
 import {deleteResource} from '../../lib/kubectl.js';
-import { InvalidArgumentError } from 'commander';
+import {InvalidArgumentError} from 'commander';
 
 interface DeleteQueryOptions {
   all?: boolean;
 }
 
-export const MISSING_NAME_OR_ALL_ERROR = 'either provide a query name or use --all flag';
-export const BOTH_NAME_AND_ALL_ERROR = 'cannot use query name and --all flag together';
+export const MISSING_NAME_OR_ALL_ERROR =
+  'either provide a query name or use --all flag';
+export const BOTH_NAME_AND_ALL_ERROR =
+  'cannot use query name and --all flag together';
 function assertDeleteOptionsValid(
   name: string | undefined,
   options: DeleteQueryOptions
@@ -21,7 +23,6 @@ function assertDeleteOptionsValid(
     throw new InvalidArgumentError(BOTH_NAME_AND_ALL_ERROR);
   }
 }
-
 
 export async function deleteQuery(
   name: string | undefined,

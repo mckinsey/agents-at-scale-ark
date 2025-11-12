@@ -81,16 +81,16 @@ describe('OpenAIConfigCollector', () => {
       // Get the validate function from the prompt call
       mockInquirer.prompt.mockImplementationOnce(async (questions: any) => {
         const validate = questions[0].validate;
-        
+
         // Test invalid URL
         expect(validate('not-a-url')).toBe('please enter a valid URL');
-        
+
         // Test empty string
         expect(validate('')).toBe('base URL is required');
-        
+
         // Test valid URL
         expect(validate('https://api.openai.com')).toBe(true);
-        
+
         return {baseUrl: 'https://api.openai.com'};
       });
 
@@ -155,13 +155,13 @@ describe('OpenAIConfigCollector', () => {
       // Get the validate function from the prompt call
       mockInquirer.prompt.mockImplementationOnce(async (questions: any) => {
         const validate = questions[0].validate;
-        
+
         // Test empty string
         expect(validate('')).toBe('API key is required');
-        
+
         // Test valid key
         expect(validate('sk-valid-key')).toBe(true);
-        
+
         return {apiKey: 'sk-valid-key'};
       });
 

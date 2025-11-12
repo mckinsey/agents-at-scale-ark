@@ -21,7 +21,9 @@ describe('createEvaluationCommand', () => {
 
     expect(command).toBeInstanceOf(Command);
     expect(command.name()).toBe('evaluation');
-    expect(command.description()).toBe('Execute evaluations against evaluators');
+    expect(command.description()).toBe(
+      'Execute evaluations against evaluators'
+    );
   });
 
   describe('direct evaluation', () => {
@@ -84,12 +86,7 @@ describe('createEvaluationCommand', () => {
 
       const command = createEvaluationCommand({} as any);
 
-      await command.parseAsync([
-        'node',
-        'test',
-        'my-evaluator',
-        'test-query',
-      ]);
+      await command.parseAsync(['node', 'test', 'my-evaluator', 'test-query']);
 
       expect(mockExecuteQueryEvaluation).toHaveBeenCalledWith({
         evaluatorName: 'my-evaluator',

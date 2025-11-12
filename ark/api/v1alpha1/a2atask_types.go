@@ -179,9 +179,9 @@ type A2ATaskStatus struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Enum=submitted;working;input-required;completed;canceled;failed;rejected;auth-required;unknown
 	ProtocolState string `json:"protocolState,omitempty"`
-	// SessionID links this task to a specific A2A conversation session.
+	// ContextID links this task to a specific A2A conversation context.
 	// +kubebuilder:validation:Optional
-	SessionID string `json:"sessionId,omitempty"`
+	ContextID string `json:"contextId,omitempty"`
 	// Artifacts contains outputs produced by the A2A task execution.
 	// +kubebuilder:validation:Optional
 	Artifacts []A2ATaskArtifact `json:"artifacts,omitempty"`

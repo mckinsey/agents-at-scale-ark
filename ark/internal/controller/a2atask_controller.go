@@ -43,6 +43,19 @@ func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// TTL cleanup: delete task if it has exceeded its time-to-live since creation
+	if a2aTask.Spec.TTL != nil {
+		expiry := a2aTask.CreationTimestamp.Add(a2aTask.Spec.TTL.Duration)
+		if time.Now().After(expiry) {
+			if err := r.Delete(ctx, &a2aTask); err != nil {
+				log.Error(err, "unable to delete A2ATask after TTL expiry")
+				return ctrl.Result{}, err
+			}
+			log.Info("deleted A2ATask after TTL expiry", "ttl", a2aTask.Spec.TTL.Duration)
+			return ctrl.Result{}, nil
+		}
+	}
+
 	// Initialize phase if not set
 	if a2aTask.Status.Phase == "" {
 		a2aTask.Status.Phase = genai.PhasePending

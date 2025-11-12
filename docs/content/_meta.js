@@ -5,6 +5,9 @@ export default {
   'developer-guide': "Developer Guide",
   'operations-guide': 'Operations Guide',
   reference: 'Reference',
-  marketplace: 'Marketplace',
+  marketplace: {
+    title: 'Marketplace',
+    href: 'https://mckinsey.github.io/agents-at-scale-marketplace'
+  },
   disclaimer: 'Disclaimer'
 }

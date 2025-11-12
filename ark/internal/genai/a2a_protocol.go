@@ -188,7 +188,7 @@ func PopulateA2ATaskStatusFromProtocol(status *arkv1alpha1.A2ATaskStatus, task *
 	}
 
 	status.ProtocolState = string(task.Status.State)
-	status.SessionID = task.ContextID
+	status.ContextID = task.ContextID
 	status.Artifacts = artifacts
 	status.History = history
 	status.ProtocolMetadata = taskMetadata
@@ -252,7 +252,7 @@ func UpdateA2ATaskStatus(a2aTaskStatus *arkv1alpha1.A2ATaskStatus, task *protoco
 
 	a2aTaskStatus.ProtocolState = newTaskData.ProtocolState
 	a2aTaskStatus.ProtocolMetadata = newTaskData.ProtocolMetadata
-	a2aTaskStatus.SessionID = newTaskData.SessionID
+	a2aTaskStatus.ContextID = newTaskData.ContextID
 	a2aTaskStatus.LastStatusMessage = newTaskData.LastStatusMessage
 	a2aTaskStatus.LastStatusTimestamp = newTaskData.LastStatusTimestamp
 

@@ -32,7 +32,7 @@ _ark_completion() {
   
   case \${COMP_CWORD} in
     1)
-      opts="agents chat cluster completion config dashboard docs generate install models queries query routes status targets teams tools uninstall help"
+      opts="agents chat cluster completion config dashboard docs generate install marketplace models queries query routes status targets teams tools uninstall help"
       COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
       return 0
       ;;
@@ -83,6 +83,23 @@ _ark_completion() {
           COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
           return 0
           ;;
+        marketplace)
+          opts="list ls"
+          COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
+          return 0
+          ;;
+        install)
+          # Suggest marketplace services with marketplace/ prefix
+          opts="marketplace/phoenix marketplace/langfuse"
+          COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
+          return 0
+          ;;
+        uninstall)
+          # Suggest marketplace services with marketplace/ prefix
+          opts="marketplace/phoenix marketplace/langfuse"
+          COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
+          return 0
+          ;;
         chat)
           # Dynamically fetch available targets using ark targets list
           local targets
@@ -106,7 +123,7 @@ _ark_completion() {
           return 0
           ;;
         queries)
-          opts="get"
+          opts="get delete resubmit"
           COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
           return 0
           ;;
@@ -150,6 +167,7 @@ _ark() {
         'docs[Open ARK documentation]' \\
         'generate[Generate ARK resources]' \\
         'install[Install ARK services]' \\
+        'marketplace[Manage marketplace services]' \\
         'models[List available models]' \\
         'queries[Manage query resources]' \\
         'query[Execute a single query]' \\
@@ -212,6 +230,21 @@ _ark() {
             'query[Generate a query]' \\
             'team[Generate a team]'
           ;;
+        marketplace)
+          _values 'marketplace commands' \\
+            'list[List available marketplace services]' \\
+            'ls[List available marketplace services]'
+          ;;
+        install)
+          _values 'services to install' \\
+            'marketplace/phoenix[Phoenix observability platform]' \\
+            'marketplace/langfuse[Langfuse LLM analytics]'
+          ;;
+        uninstall)
+          _values 'services to uninstall' \\
+            'marketplace/phoenix[Phoenix observability platform]' \\
+            'marketplace/langfuse[Langfuse LLM analytics]'
+          ;;
         chat)
           # Get available targets dynamically
           local -a targets
@@ -232,7 +265,9 @@ _ark() {
           ;;
         queries)
           _values 'queries commands' \\
-            'get[Get a specific query]'
+            'get[Get a specific query]' \\
+            'delete[Delete a query]' \\
+            'resubmit[Resubmit a query by clearing its status]'
           ;;
       esac
       ;;
