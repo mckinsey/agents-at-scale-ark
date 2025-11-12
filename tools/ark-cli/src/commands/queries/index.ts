@@ -12,13 +12,11 @@ import {deleteQuery} from './delete.js';
 function renderMarkdown(content: string): string {
   if (process.stdout.isTTY) {
     marked.setOptions({
-      // @ts-expect-error - TerminalRenderer types are incomplete
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       renderer: new TerminalRenderer({
         showSectionPrefix: false,
         reflowText: true,
-        // @ts-expect-error - preserveNewlines exists but not in types
-        preserveNewlines: true,
-      }),
+      }) as any,
     });
     return marked(content) as string;
   }
@@ -66,7 +64,10 @@ export function createQueriesCommand(_: ArkConfig): Command {
   queriesCommand
     .description('List all queries')
     .option('-o, --output <format>', 'output format (json or text)', 'text')
-    .option('--sort-by <field>', 'sort by kubernetes field (e.g., .metadata.name)')
+    .option(
+      '--sort-by <field>',
+      'sort by kubernetes field (e.g., .metadata.name)'
+    )
     .action(async (options) => {
       await listQueries(options);
     });

@@ -1,6 +1,6 @@
 import {jest} from '@jest/globals';
 
-import { UNSUPPORTED_OUTPUT_FORMAT_MESSAGE } from './validation.js';
+import {UNSUPPORTED_OUTPUT_FORMAT_MESSAGE} from './validation.js';
 import output from '../../lib/output.js';
 
 const mockExeca = jest.fn() as any;
@@ -52,12 +52,8 @@ describe('queries list command', () => {
       expect.stringMatching(/NAME.*STATUS/)
     );
 
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringMatching(/query-1/)
-    );
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringMatching(/query-2/)
-    );
+    expect(console.log).toHaveBeenCalledWith(expect.stringMatching(/query-1/));
+    expect(console.log).toHaveBeenCalledWith(expect.stringMatching(/query-2/));
 
     expect(mockExeca).toHaveBeenCalledWith(
       'kubectl',
@@ -137,22 +133,12 @@ describe('queries list command', () => {
       expect.stringMatching(/NAME.*STATUS/)
     );
 
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringMatching(/query-1/)
-    );
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringMatching(/query-2/)
-    );
+    expect(console.log).toHaveBeenCalledWith(expect.stringMatching(/query-1/));
+    expect(console.log).toHaveBeenCalledWith(expect.stringMatching(/query-2/));
 
     expect(mockExeca).toHaveBeenCalledWith(
       'kubectl',
-      [
-        'get',
-        'queries',
-        '--sort-by=.metadata.creationTimestamp',
-        '-o',
-        'json',
-      ],
+      ['get', 'queries', '--sort-by=.metadata.creationTimestamp', '-o', 'json'],
       {stdio: 'pipe'}
     );
   });
@@ -205,13 +191,14 @@ describe('queries list command', () => {
 
     expect(output.error).toHaveBeenCalledWith(
       expect.anything(),
-      expect.stringMatching(UNSUPPORTED_OUTPUT_FORMAT_MESSAGE));
+      expect.stringMatching(UNSUPPORTED_OUTPUT_FORMAT_MESSAGE)
+    );
 
     expect(mockExeca).not.toHaveBeenCalled();
     expect(console.log).not.toHaveBeenCalledWith(
       expect.stringMatching(/query-1/)
     );
-      expect(process.exit).toHaveBeenCalled();
+    expect(process.exit).toHaveBeenCalled();
   });
 
   it('should list many queries without truncation', async () => {
@@ -219,11 +206,7 @@ describe('queries list command', () => {
     const mockQueries = Array.from({length: 100}, (_, i) => ({
       metadata: {
         name: `query-${i + 1}`,
-        creationTimestamp: new Date(
-          2024,
-          0,
-          i + 1
-        ).toISOString(),
+        creationTimestamp: new Date(2024, 0, i + 1).toISOString(),
       },
       status: {
         phase: i % 3 === 0 ? 'done' : i % 2 === 0 ? 'running' : 'initializing',

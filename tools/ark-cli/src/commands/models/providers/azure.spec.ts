@@ -107,20 +107,22 @@ describe('AzureConfigCollector', () => {
       // Get the validate function from the prompt call
       mockInquirer.prompt.mockImplementationOnce(async (questions: any) => {
         const validate = questions[0].validate;
-        
+
         // Test invalid URL
         expect(validate('not-a-url')).toBe('please enter a valid URL');
-        
+
         // Test empty string
         expect(validate('')).toBe('base URL is required');
-        
+
         // Test valid URL
         expect(validate('https://test.openai.azure.com')).toBe(true);
-        
+
         return {baseUrl: 'https://test.openai.azure.com'};
       });
 
-      mockInquirer.prompt.mockResolvedValueOnce({apiVersion: '2024-12-01-preview'});
+      mockInquirer.prompt.mockResolvedValueOnce({
+        apiVersion: '2024-12-01-preview',
+      });
       mockInquirer.prompt.mockResolvedValueOnce({apiKey: 'azure-key'});
 
       await collector.collectConfig(options);
@@ -188,13 +190,13 @@ describe('AzureConfigCollector', () => {
       // Get the validate function from the prompt call
       mockInquirer.prompt.mockImplementationOnce(async (questions: any) => {
         const validate = questions[0].validate;
-        
+
         // Test empty string
         expect(validate('')).toBe('API key is required');
-        
+
         // Test valid key
         expect(validate('valid-azure-key')).toBe(true);
-        
+
         return {apiKey: 'valid-azure-key'};
       });
 

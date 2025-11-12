@@ -1,4 +1,4 @@
-import { InvalidArgumentError } from "commander";
+import {InvalidArgumentError} from 'commander';
 
 const SUPPORTED_OUTPUT_FORMATS = ['json', 'text'];
 
@@ -7,6 +7,6 @@ const VALID_OUTPUT_FORMATS_MESSAGE = `valid formats are: ${SUPPORTED_OUTPUT_FORM
 export function assertSupportedOutputFormat(format: string | undefined): void {
   if (format && !SUPPORTED_OUTPUT_FORMATS.includes(format)) {
     const message = `${UNSUPPORTED_OUTPUT_FORMAT_MESSAGE}: "${format}". ${VALID_OUTPUT_FORMATS_MESSAGE}`;
-    throw new InvalidArgumentError(message)
+    throw new InvalidArgumentError(message);
   }
 }

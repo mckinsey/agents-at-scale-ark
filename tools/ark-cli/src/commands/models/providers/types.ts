@@ -11,9 +11,9 @@ export interface BaseProviderConfig {
 
 /**
  * Common options available to all providers collectors.
- * 
+ *
  * Can be extended with provider-specific options to grant more flexibility when configuring models on different providers.
- * 
+ *
  * @field model - Model name (e.g., 'gpt-4o-mini')
  * @field type - Model provider type (e.g., 'azure', 'openai', 'bedrock')
  */
@@ -22,7 +22,7 @@ export interface BaseCollectorOptions {
    * Model name (e.g., 'gpt-4o-mini')
    */
   model?: string;
-  
+
   /**
    * Model provider type (e.g., 'azure', 'openai', 'bedrock')
    */

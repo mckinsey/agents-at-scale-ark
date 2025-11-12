@@ -1,5 +1,9 @@
 import inquirer from 'inquirer';
-import {BaseProviderConfig, BaseCollectorOptions, ProviderConfigCollector} from './types.js';
+import {
+  BaseProviderConfig,
+  BaseCollectorOptions,
+  ProviderConfigCollector,
+} from './types.js';
 
 /**
  * Configuration for AWS Bedrock models.
@@ -39,7 +43,7 @@ export interface BedrockCollectorOptions extends BaseCollectorOptions {
 export class BedrockConfigCollector implements ProviderConfigCollector {
   async collectConfig(options: BaseCollectorOptions): Promise<BedrockConfig> {
     const bedrockOptions = options as BedrockCollectorOptions;
-    
+
     let region = bedrockOptions.region;
     if (!region) {
       const answer = await inquirer.prompt([

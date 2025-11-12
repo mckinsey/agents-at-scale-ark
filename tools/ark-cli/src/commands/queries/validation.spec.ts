@@ -1,10 +1,12 @@
-import { jest } from '@jest/globals';
-import { InvalidArgumentError } from 'commander';
+import {jest} from '@jest/globals';
+import {InvalidArgumentError} from 'commander';
 
-import { assertSupportedOutputFormat, UNSUPPORTED_OUTPUT_FORMAT_MESSAGE } from './validation.js';
+import {
+  assertSupportedOutputFormat,
+  UNSUPPORTED_OUTPUT_FORMAT_MESSAGE,
+} from './validation.js';
 
 jest.spyOn(console, 'error').mockImplementation(() => {});
-
 
 describe('queries validation', () => {
   describe('assertSupportedOutputFormat', () => {

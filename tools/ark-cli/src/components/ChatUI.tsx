@@ -92,14 +92,12 @@ const generateMessageId = (): string => {
 // Configure marked with terminal renderer for markdown output
 const configureMarkdown = () => {
   marked.setOptions({
-    // @ts-expect-error - TerminalRenderer types are incomplete
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     renderer: new TerminalRenderer({
       showSectionPrefix: false,
       width: 80,
       reflowText: true,
-      // @ts-expect-error - preserveNewlines exists but not in types
-      preserveNewlines: true,
-    }),
+    }) as any,
   });
 };
 
