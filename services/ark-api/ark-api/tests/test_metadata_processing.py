@@ -1,7 +1,6 @@
 """Tests for Ark metadata processing in OpenAI completions."""
 
 import json
-import pytest
 from fastapi.responses import JSONResponse
 
 from ark_api.api.v1.openai import process_request_metadata

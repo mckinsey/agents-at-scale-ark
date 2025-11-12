@@ -20,7 +20,7 @@ from ark_sdk.client import with_ark_client
 from ...models.queries import ArkOpenAICompletionsMetadata
 from ...utils.query_targets import parse_model_to_query_target
 from ...utils.query_polling import poll_query_completion
-from ...utils.streaming import create_single_chunk_sse_response
+from ...utils.streaming import create_single_chunk_sse_response, StreamingErrorResponse
 from ...constants.annotations import STREAMING_ENABLED_ANNOTATION
 
 router = APIRouter(prefix="/openai/v1", tags=["OpenAI"])
