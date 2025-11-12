@@ -27,7 +27,8 @@ import {
   memoryService,
 } from '@/lib/services/memory';
 
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from '../ui/empty';
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from '../../ui/empty';
+import { DeleteMemoryDropdownMenu } from './delete-memory';
 
 interface MemorySectionProps {
   readonly initialFilters?: Partial<MemoryFilters>;
@@ -500,6 +501,11 @@ export function MemorySection({ initialFilters }: MemorySectionProps) {
           }>
           Clear Filters
         </Button>
+        <DeleteMemoryDropdownMenu
+          className="ml-auto"
+          selectedQuery={searchParams.get('queryId')}
+          selectedSession={searchParams.get('sessionId')}
+        />
       </div>
 
       {/* Messages Table */}
