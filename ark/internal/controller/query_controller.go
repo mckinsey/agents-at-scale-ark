@@ -230,19 +230,6 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		TotalTokens:      tokenSummary.TotalTokens,
 	}
 
-	if contextID := tokenCollector.GetA2AContextID(); contextID != "" {
-		if obj.Status.A2A == nil {
-			obj.Status.A2A = &arkv1alpha1.A2AMetadata{}
-		}
-		obj.Status.A2A.ContextID = contextID
-	}
-	if taskID := tokenCollector.GetA2ATaskID(); taskID != "" {
-		if obj.Status.A2A == nil {
-			obj.Status.A2A = &arkv1alpha1.A2AMetadata{}
-		}
-		obj.Status.A2A.TaskID = taskID
-	}
-
 	// Record token usage in telemetry span
 	r.Telemetry.QueryRecorder().RecordTokenUsage(span, tokenSummary.PromptTokens, tokenSummary.CompletionTokens, tokenSummary.TotalTokens)
 

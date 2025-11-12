@@ -77,8 +77,8 @@ func DiscoverA2AAgentsWithRecorder(ctx context.Context, k8sClient client.Client,
 		AgentCardPathVersion3, AgentCardPathVersion2, lastErr)
 }
 
-// ExecuteA2AAgent executes a task on an A2A agent with optional K8s event recording, query context, and token collection
-func ExecuteA2AAgent(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace, input, agentName, queryName, contextID string, recorder record.EventRecorder, obj client.Object, tokenCollector *TokenUsageCollector) (string, error) {
+// ExecuteA2AAgent executes a task on an A2A agent with optional K8s event recording and query context
+func ExecuteA2AAgent(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace, input, agentName, queryName, contextID string, recorder record.EventRecorder, obj client.Object) (string, error) {
 	rpcURL := strings.TrimSuffix(address, "/")
 
 	// Create and configure A2A client
@@ -88,7 +88,7 @@ func ExecuteA2AAgent(ctx context.Context, k8sClient client.Client, address strin
 	}
 
 	// Execute agent and get response
-	return executeA2AAgentMessage(ctx, k8sClient, a2aClient, input, agentName, rpcURL, namespace, queryName, contextID, recorder, obj, tokenCollector)
+	return executeA2AAgentMessage(ctx, k8sClient, a2aClient, input, agentName, rpcURL, namespace, queryName, contextID, recorder, obj)
 }
 
 // CreateA2AClient creates and configures A2A client with header resolution and injection
@@ -126,7 +126,7 @@ func CreateA2AClient(ctx context.Context, k8sClient client.Client, rpcURL string
 }
 
 // executeA2AAgentMessage sends message to A2A agent and processes response
-func executeA2AAgentMessage(ctx context.Context, k8sClient client.Client, a2aClient *a2aclient.A2AClient, input, agentName, rpcURL, namespace, queryName, contextID string, recorder record.EventRecorder, obj client.Object, tokenCollector *TokenUsageCollector) (string, error) {
+func executeA2AAgentMessage(ctx context.Context, k8sClient client.Client, a2aClient *a2aclient.A2AClient, input, agentName, rpcURL, namespace, queryName, contextID string, recorder record.EventRecorder, obj client.Object) (string, error) {
 	log := logf.FromContext(ctx)
 	var message protocol.Message
 	if contextID != "" {
@@ -161,7 +161,7 @@ func executeA2AAgentMessage(ctx context.Context, k8sClient client.Client, a2aCli
 		return "", fmt.Errorf("A2A server call failed: %w", err)
 	}
 
-	response, err := extractResponseFromMessageResult(ctx, k8sClient, result, agentName, namespace, queryName, recorder, obj, tokenCollector)
+	response, err := extractResponseFromMessageResult(ctx, k8sClient, result, agentName, namespace, queryName, recorder, obj)
 	if err != nil {
 		if recorder != nil && obj != nil {
 			recorder.Event(obj, corev1.EventTypeWarning, "A2AResponseParseError", fmt.Sprintf("Failed to parse response from agent %s: %v", agentName, err))
@@ -200,7 +200,7 @@ func (h *customA2ARequestHandler) Handle(ctx context.Context, httpClient *http.C
 }
 
 // extractResponseFromMessageResult extracts response from MessageResult and handles both messages and tasks
-func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Client, result *protocol.MessageResult, agentName, namespace, queryName string, recorder record.EventRecorder, obj client.Object, tokenCollector *TokenUsageCollector) (string, error) {
+func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Client, result *protocol.MessageResult, agentName, namespace, queryName string, recorder record.EventRecorder, obj client.Object) (string, error) {
 	log := logf.FromContext(ctx)
 	if result == nil {
 		return "", fmt.Errorf("result is nil")
@@ -208,21 +208,9 @@ func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Clie
 
 	switch r := result.Result.(type) {
 	case *protocol.Message:
-		if tokenCollector != nil && r.ContextID != nil && *r.ContextID != "" {
-			tokenCollector.SetA2AContextID(*r.ContextID)
-		}
 		text := extractTextFromParts(r.Parts)
 		return text, nil
 	case *protocol.Task:
-		if tokenCollector != nil {
-			if r.ContextID != "" {
-				tokenCollector.SetA2AContextID(r.ContextID)
-			}
-			if r.ID != "" {
-				tokenCollector.SetA2ATaskID(r.ID)
-			}
-		}
-
 		text, err := extractTextFromTask(r)
 		if err != nil {
 			log.Error(err, "failed to extract text from task", "taskId", r.ID, "state", r.Status.State)

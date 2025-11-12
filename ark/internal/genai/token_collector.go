@@ -11,10 +11,6 @@ type TokenUsageCollector struct {
 	recorder    EventEmitter
 	mu          sync.RWMutex
 	tokenUsages []TokenUsage
-	// A2A metadata collected deep in the query execution flow (similar to token usage).
-	// This will be extracted into a generalized query state collector at a later date.
-	a2aContextID string
-	a2aTaskID    string
 }
 
 func NewTokenUsageCollector(recorder EventEmitter) *TokenUsageCollector {
@@ -51,31 +47,5 @@ func (c *TokenUsageCollector) GetTokenSummary() TokenUsage {
 func (c *TokenUsageCollector) Reset() {
 	c.mu.Lock()
 	c.tokenUsages = make([]TokenUsage, 0)
-	c.a2aContextID = ""
-	c.a2aTaskID = ""
 	c.mu.Unlock()
-}
-
-func (c *TokenUsageCollector) SetA2AContextID(contextID string) {
-	c.mu.Lock()
-	c.a2aContextID = contextID
-	c.mu.Unlock()
-}
-
-func (c *TokenUsageCollector) GetA2AContextID() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.a2aContextID
-}
-
-func (c *TokenUsageCollector) SetA2ATaskID(taskID string) {
-	c.mu.Lock()
-	c.a2aTaskID = taskID
-	c.mu.Unlock()
-}
-
-func (c *TokenUsageCollector) GetA2ATaskID() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.a2aTaskID
 }

@@ -110,15 +110,6 @@ type TokenUsage struct {
 	TotalTokens      int64 `json:"totalTokens,omitempty"`
 }
 
-type A2AMetadata struct {
-	// ContextID is the A2A protocol context identifier for grouping related interactions
-	// +kubebuilder:validation:Optional
-	ContextID string `json:"contextId,omitempty"`
-	// TaskID is the A2A protocol task identifier if this query created an A2ATask
-	// +kubebuilder:validation:Optional
-	TaskID string `json:"taskId,omitempty"`
-}
-
 type QueryStatus struct {
 	// +kubebuilder:default="pending"
 	// +kubebuilder:validation:Enum=pending;running;error;done;canceled
@@ -130,9 +121,6 @@ type QueryStatus struct {
 	TokenUsage TokenUsage         `json:"tokenUsage,omitempty"`
 	// +kubebuilder:validation:Optional
 	Duration *metav1.Duration `json:"duration,omitempty"`
-	// A2A contains A2A protocol-specific metadata including context and task identifiers
-	// +kubebuilder:validation:Optional
-	A2A *A2AMetadata `json:"a2a,omitempty"`
 }
 
 // +kubebuilder:object:root=true

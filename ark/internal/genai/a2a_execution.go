@@ -86,8 +86,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 
 	// Execute A2A agent with event recording
 	queryName := getQueryName(ctx)
-	tokenCollector, _ := e.recorder.(*TokenUsageCollector)
-	response, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, nil, &a2aServer, tokenCollector)
+	response, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, nil, &a2aServer)
 	if err != nil {
 		a2aTracker.Fail(err)
 		e.recorder.EmitEvent(ctx, "Warning", "A2AExecutionFailed", BaseEvent{
