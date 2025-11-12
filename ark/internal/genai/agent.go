@@ -39,7 +39,7 @@ func (a *Agent) FullName() string {
 }
 
 // Execute executes the agent with optional event emission for tool calls
-func (a *Agent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
+func (a *Agent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	modelName := ""
 	if a.Model != nil {
 		modelName = a.Model.Model
@@ -57,15 +57,19 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	ctx, span := a.AgentRecorder.StartAgentExecution(ctx, a.Name, a.Namespace)
 	defer span.End()
 
-	var messages []Message
+	var result *ExecutionResult
 	var err error
 
 	if a.ExecutionEngine != nil {
 		// Check if this is the reserved 'a2a' execution engine
 		if a.ExecutionEngine.Name == ExecutionEngineA2A {
-			messages, err = a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
+			result, err = a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
 		} else {
+			var messages []Message
 			messages, err = a.executeWithExecutionEngine(ctx, userInput, history)
+			if err == nil {
+				result = &ExecutionResult{Messages: messages}
+			}
 		}
 	} else {
 		// Regular agents require a model
@@ -75,16 +79,20 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 			return nil, err
 		}
 
+		var messages []Message
 		messages, err = a.executeLocally(ctx, userInput, history, memory, eventStream)
+		if err == nil {
+			result = &ExecutionResult{Messages: messages}
+		}
 	}
 
 	if err != nil {
 		a.AgentRecorder.RecordError(span, err)
-		return messages, err
+		return nil, err
 	}
 
 	a.AgentRecorder.RecordSuccess(span)
-	return messages, nil
+	return result, nil
 }
 
 func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
@@ -106,7 +114,7 @@ func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Messag
 	return engineClient.Execute(ctx, a.ExecutionEngine, agentConfig, userInput, history, toolDefinitions, a.Recorder)
 }
 
-func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, eventStream EventStreamInterface) ([]Message, error) {
+func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	a2aEngine := NewA2AExecutionEngine(a.client, a.Recorder)
 	contextID := GetA2AContextID(ctx)
 	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, contextID, userInput, eventStream)

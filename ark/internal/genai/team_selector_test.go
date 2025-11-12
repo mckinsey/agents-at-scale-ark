@@ -186,8 +186,8 @@ func (m *mockTeamMember) GetType() string {
 	return m.memberType
 }
 
-func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
-	return nil, nil
+func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	return &ExecutionResult{}, nil
 }
 
 func TestDetermineNextMember(t *testing.T) {

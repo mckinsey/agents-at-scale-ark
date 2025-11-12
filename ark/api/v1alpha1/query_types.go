@@ -81,12 +81,25 @@ type QuerySpec struct {
 	Overrides []Override `json:"overrides,omitempty"`
 }
 
+// A2AMetadata contains optional A2A protocol metadata
+type A2AMetadata struct {
+	// +kubebuilder:validation:Optional
+	// ContextID from the A2A protocol when the target is an A2A agent
+	ContextID string `json:"contextId,omitempty"`
+	// +kubebuilder:validation:Optional
+	// TaskID from the A2A protocol when the target is an A2A agent and a task was created
+	TaskID string `json:"taskId,omitempty"`
+}
+
 // Response defines a response from a query target.
 type Response struct {
 	Target  QueryTarget `json:"target,omitempty"`
 	Content string      `json:"content,omitempty"`
 	Raw     string      `json:"raw,omitempty"`
 	Phase   string      `json:"phase,omitempty"`
+	// +kubebuilder:validation:Optional
+	// A2A contains optional A2A protocol metadata (contextId, taskId)
+	A2A *A2AMetadata `json:"a2a,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -110,21 +123,6 @@ type TokenUsage struct {
 	TotalTokens      int64 `json:"totalTokens,omitempty"`
 }
 
-type A2ATaskReference struct {
-	// TaskID from the A2A protocol
-	// +kubebuilder:validation:Required
-	TaskID string `json:"taskId"`
-	// ContextID from the A2A protocol
-	// +kubebuilder:validation:Optional
-	ContextID string `json:"contextId,omitempty"`
-}
-
-type A2AMetadata struct {
-	// Tasks contains references to A2ATask resources created during query execution
-	// +kubebuilder:validation:Optional
-	Tasks []A2ATaskReference `json:"tasks,omitempty"`
-}
-
 type QueryStatus struct {
 	// +kubebuilder:default="pending"
 	// +kubebuilder:validation:Enum=pending;running;error;done;canceled
@@ -136,9 +134,6 @@ type QueryStatus struct {
 	TokenUsage TokenUsage         `json:"tokenUsage,omitempty"`
 	// +kubebuilder:validation:Optional
 	Duration *metav1.Duration `json:"duration,omitempty"`
-	// A2A contains A2A protocol-specific metadata including references to created tasks
-	// +kubebuilder:validation:Optional
-	A2A *A2AMetadata `json:"a2a,omitempty"`
 }
 
 // +kubebuilder:object:root=true

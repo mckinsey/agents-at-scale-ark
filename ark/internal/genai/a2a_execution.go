@@ -30,7 +30,7 @@ func NewA2AExecutionEngine(k8sClient client.Client, recorder EventEmitter) *A2AE
 }
 
 // Execute executes a query against an A2A agent
-func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace string, agentAnnotations map[string]string, contextID string, userInput Message, eventStream EventStreamInterface) ([]Message, error) {
+func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace string, agentAnnotations map[string]string, contextID string, userInput Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	log := logf.FromContext(ctx)
 	log.Info("executing A2A agent", "agent", agentName)
 
@@ -86,7 +86,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 
 	// Execute A2A agent with event recording
 	queryName := getQueryName(ctx)
-	response, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, nil, &a2aServer)
+	a2aResponse, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, nil, &a2aServer)
 	if err != nil {
 		a2aTracker.Fail(err)
 		e.recorder.EmitEvent(ctx, "Warning", "A2AExecutionFailed", BaseEvent{
@@ -102,7 +102,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		return nil, err
 	}
 
-	log.Info("A2A agent execution completed", "agent", agentName, "response_length", len(response))
+	log.Info("A2A agent execution completed", "agent", agentName, "response_length", len(a2aResponse.Content))
 
 	// Emit success event
 	e.recorder.EmitEvent(ctx, "Normal", "A2AExecutionSuccess", BaseEvent{
@@ -110,21 +110,21 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		Metadata: map[string]string{
 			"agent":          agentName,
 			"namespace":      namespace,
-			"responseLength": fmt.Sprintf("%d", len(response)),
+			"responseLength": fmt.Sprintf("%d", len(a2aResponse.Content)),
 			"a2aServer":      a2aServerName,
 			"address":        a2aAddress,
 			"hasError":       "false",
 		},
 	})
 
-	a2aTracker.CompleteWithMetadata(response, map[string]string{
-		"responseLength": fmt.Sprintf("%d", len(response)),
+	a2aTracker.CompleteWithMetadata(a2aResponse.Content, map[string]string{
+		"responseLength": fmt.Sprintf("%d", len(a2aResponse.Content)),
 		"hasError":       "false",
 		"messageCount":   "1",
 	})
 
 	// Convert response to genai.Message format
-	responseMessage := NewAssistantMessage(response)
+	responseMessage := NewAssistantMessage(a2aResponse.Content)
 
 	// The A2A execution engine does not yet support streaming responses - if streaming
 	// was requested then the final response must be sent as a single chunk, as per the spec.
@@ -143,7 +143,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 				{
 					Index: 0,
 					Delta: openai.ChatCompletionChunkChoiceDelta{
-						Content: response,
+						Content: a2aResponse.Content,
 						Role:    "assistant",
 					},
 					FinishReason: "stop",
@@ -157,5 +157,8 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		}
 	}
 
-	return []Message{responseMessage}, nil
+	return &ExecutionResult{
+		Messages:    []Message{responseMessage},
+		A2AResponse: a2aResponse,
+	}, nil
 }

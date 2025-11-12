@@ -35,7 +35,7 @@ func (t *Team) FullName() string {
 	return t.Namespace + "/" + t.Name
 }
 
-func (t *Team) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
+func (t *Team) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	if len(t.Members) == 0 {
 		return nil, fmt.Errorf("team %s has no members configured", t.FullName())
 	}
@@ -68,7 +68,8 @@ func (t *Team) Execute(ctx context.Context, userInput Message, history []Message
 		return nil, err
 	}
 
-	return t.executeWithTracking(teamTracker, execFunc, ctx, userInput, history)
+	messages, err := t.executeWithTracking(teamTracker, execFunc, ctx, userInput, history)
+	return &ExecutionResult{Messages: messages}, err
 }
 
 func (t *Team) executeSequential(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
@@ -300,7 +301,7 @@ func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember
 		"strategy":   t.Strategy,
 	})
 
-	memberNewMessages, err := member.Execute(ctx, userInput, *messages, t.memory, t.eventStream)
+	result, err := member.Execute(ctx, userInput, *messages, t.memory, t.eventStream)
 	if err != nil {
 		if IsTerminateTeam(err) {
 			memberTracker.CompleteWithTermination(err.Error())
@@ -308,14 +309,14 @@ func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember
 			memberTracker.Fail(err)
 		}
 		// Still accumulate messages even on error
-		*messages = append(*messages, memberNewMessages...)
-		*newMessages = append(*newMessages, memberNewMessages...)
+		*messages = append(*messages, result.Messages...)
+		*newMessages = append(*newMessages, result.Messages...)
 		return err
 	}
 
 	memberTracker.Complete("")
-	*messages = append(*messages, memberNewMessages...)
-	*newMessages = append(*newMessages, memberNewMessages...)
+	*messages = append(*messages, result.Messages...)
+	*newMessages = append(*newMessages, result.Messages...)
 	return nil
 }
 
