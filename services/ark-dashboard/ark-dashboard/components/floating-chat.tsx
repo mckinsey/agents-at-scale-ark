@@ -8,7 +8,10 @@ import {
   Shrink,
   X,
 } from 'lucide-react';
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import type {
+  ChatCompletionChunk,
+  ChatCompletionMessageParam,
+} from 'openai/resources/chat/completions';
 import { useEffect, useRef, useState } from 'react';
 
 import { ChatMessage } from '@/components/chat/chat-message';
@@ -112,8 +115,8 @@ export default function FloatingChat({
         sessionId,
       )) {
         // Extract content from the chunk (OpenAI format)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const delta = (chunk as any)?.choices?.[0]?.delta;
+        const typedChunk = chunk as ChatCompletionChunk;
+        const delta = typedChunk?.choices?.[0]?.delta;
         if (delta?.content) {
           accumulatedContent += delta.content;
 
