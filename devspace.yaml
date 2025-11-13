@@ -32,12 +32,12 @@ dependencies:
   # phoenix service for observability. phoenix has a hook to restart ark-controller to pick up its url
   # phoenix:
   #   git: https://github.com/mckinsey/agents-at-scale-marketplace
-  #   tag: phoenix-v0.1.3
+  #   tag: phoenix-v0.1.5
   #   subPath: services/phoenix
   # langfuse service for observability. langfuse has a hook to restart ark-controller to pick up its url
   # langfuse:
   #   git: https://github.com/mckinsey/agents-at-scale-marketplace
-  #   tag: langfuse-v0.1.2
+  #   tag: langfuse-v0.1.4
   #   subPath: services/langfuse
 
 # Vars - To disable, set environment variables before the devspace commands
