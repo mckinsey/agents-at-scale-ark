@@ -274,12 +274,18 @@ export function TeamEditor({
     (graphEdges.length > 0 &&
       graphEdges.every(edge => edge.to) &&
       maxTurns.trim() !== '');
+  // Graph edges are optional for selector strategy, but if provided must be valid
+  const isGraphEdgesValid =
+    strategy !== 'selector' ||
+    graphEdges.length === 0 ||
+    graphEdges.every(edge => edge.to);
   const isSelectorValid =
     strategy !== 'selector' || (selectorAgent && selectorAgent !== '__none__');
   const isValid =
     name.trim() &&
     selectedMembers.length > 0 &&
     isGraphValid &&
+    isGraphEdgesValid &&
     isSelectorValid &&
     !nameError;
 
@@ -342,7 +348,9 @@ export function TeamEditor({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="round-robin">Round Robin</SelectItem>
-                <SelectItem value="selector">Selector</SelectItem>
+                <SelectItem value="selector">
+                  Selector (can add graph constraints)
+                </SelectItem>
                 <SelectItem value="graph">Graph</SelectItem>
                 <SelectItem value="sequential">Sequential</SelectItem>
               </SelectContent>
@@ -403,6 +411,13 @@ export function TeamEditor({
           </div>
           {strategy === 'selector' && (
             <>
+              <div className="bg-muted/50 rounded-md border p-3">
+                <p className="text-muted-foreground mb-3 text-xs">
+                  Selector strategy uses an AI agent to choose the next team
+                  member. You can optionally add graph constraints below to
+                  limit selection to valid transitions.
+                </p>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="selector-agent">Selector Agent</Label>
                 <Select value={selectorAgent} onValueChange={setSelectorAgent}>
@@ -435,7 +450,7 @@ export function TeamEditor({
               </div>
             </>
           )}
-          {strategy === 'graph' && (
+          {(strategy === 'graph' || strategy === 'selector') && (
             <div className="grid gap-2">
               <div className="flex items-center justify-between">
                 <Label>Graph Edges</Label>
@@ -505,8 +520,19 @@ export function TeamEditor({
                 )}
               </div>
               <p className="text-muted-foreground text-xs">
-                Define the flow between agents. &quot;From&quot; is optional and
-                defaults to any agent.
+                {strategy === 'graph' ? (
+                  <>
+                    Define the flow between agents. &quot;From&quot; is optional
+                    and defaults to any agent.
+                  </>
+                ) : (
+                  <>
+                    Optional: Define graph constraints to limit AI selection to
+                    valid transitions. When provided, the selector agent will
+                    only choose from members that are legal according to the
+                    graph edges.
+                  </>
+                )}
               </p>
             </div>
           )}

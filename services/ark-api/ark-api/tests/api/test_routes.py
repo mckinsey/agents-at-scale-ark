@@ -2040,7 +2040,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         self.assertEqual(data["name"], "graph-team")
         self.assertEqual(data["strategy"], "graph")
         self.assertEqual(len(data["graph"]["edges"]), 2)
-        self.assertEqual(data["graph"]["edges"][0]["from_"], "planner")
+        self.assertEqual(data["graph"]["edges"][0]["from"], "planner")
         self.assertEqual(data["graph"]["edges"][0]["to"], "executor")
     
     @patch('ark_api.api.v1.teams.with_ark_client')
@@ -2090,6 +2090,77 @@ class TestTeamsEndpoint(unittest.TestCase):
         self.assertEqual(data["maxTurns"], 10)
         self.assertEqual(data["selector"]["agent"], "selector-agent")
         self.assertEqual(data["selector"]["selectorPrompt"], "Choose the best agent for the task")
+    
+    @patch('ark_api.api.v1.teams.with_ark_client')
+    def test_create_team_with_selector_and_graph(self, mock_ark_client):
+        """Test creating a team with selector strategy and graph constraints."""
+        # Setup async context manager mock
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        # Mock the created team response
+        mock_team = Mock()
+        mock_team.to_dict.return_value = {
+            "metadata": {"name": "graph-selector-team", "namespace": "default"},
+            "spec": {
+                "description": "Team with selector and graph constraints",
+                "members": [
+                    {"name": "researcher", "type": "agent"},
+                    {"name": "analyzer", "type": "agent"},
+                    {"name": "writer", "type": "agent"}
+                ],
+                "strategy": "selector",
+                "selector": {
+                    "agent": "coordinator",
+                    "selectorPrompt": "Choose the next team member"
+                },
+                "graph": {
+                    "edges": [
+                        {"from": "researcher", "to": "analyzer"},
+                        {"from": "analyzer", "to": "writer"}
+                    ]
+                },
+                "maxTurns": 10
+            },
+            "status": {"phase": "pending"}
+        }
+        
+        mock_client.teams.a_create = AsyncMock(return_value=mock_team)
+        
+        # Make the request
+        request_data = {
+            "name": "graph-selector-team",
+            "description": "Team with selector and graph constraints",
+            "members": [
+                {"name": "researcher", "type": "agent"},
+                {"name": "analyzer", "type": "agent"},
+                {"name": "writer", "type": "agent"}
+            ],
+            "strategy": "selector",
+            "selector": {
+                "agent": "coordinator",
+                "selectorPrompt": "Choose the next team member"
+            },
+            "graph": {
+                "edges": [
+                    {"from": "researcher", "to": "analyzer"},
+                    {"from": "analyzer", "to": "writer"}
+                ]
+            },
+            "maxTurns": 10
+        }
+        response = self.client.post("/v1/teams?namespace=default", json=request_data)
+        
+        # Assert response
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["name"], "graph-selector-team")
+        self.assertEqual(data["strategy"], "selector")
+        self.assertEqual(data["selector"]["agent"], "coordinator")
+        self.assertEqual(len(data["graph"]["edges"]), 2)
+        self.assertEqual(data["graph"]["edges"][0]["from"], "researcher")
+        self.assertEqual(data["graph"]["edges"][0]["to"], "analyzer")
+        self.assertEqual(data["maxTurns"], 10)
     
     @patch('ark_api.api.v1.teams.with_ark_client')
     def test_get_team_success(self, mock_ark_client):

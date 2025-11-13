@@ -143,7 +143,10 @@ class TeamGenerator {
           {name: 'Sequential - Agents execute in order', value: 'sequential'},
           {name: 'Round Robin - Agents take turns', value: 'round-robin'},
           {name: 'Graph - Custom workflow with dependencies', value: 'graph'},
-          {name: 'Selector - AI chooses the next agent', value: 'selector'},
+          {
+            name: 'Selector - AI chooses the next agent (can add graph constraints)',
+            value: 'selector',
+          },
         ],
         default: 'sequential',
       },

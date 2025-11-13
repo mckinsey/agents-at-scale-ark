@@ -34,6 +34,11 @@ const (
 	ToolTypeBuiltin = "builtin"
 )
 
+// Team member type constants
+const (
+	MemberTypeAgent = "agent"
+)
+
 // Built-in tool name constants
 const (
 	BuiltinToolNoop      = "noop"

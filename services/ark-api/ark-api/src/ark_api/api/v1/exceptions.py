@@ -109,9 +109,7 @@ def handle_k8s_errors(
             except Exception as e:
                 logger.error(f"Unexpected error during {operation} {resource_type}: {e}")
                 logger.exception("Full traceback:")
-                
-                error_message = str(e)
-                
+
                 original_exception = e.__cause__ or e.__context__
                 if isinstance(original_exception, (ApiException, SyncApiException)):
                     if original_exception.status == 422:

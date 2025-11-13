@@ -35,6 +35,15 @@ spec:
     agent: planner  # Agent to use for selection (required)
     selectorPrompt: "Choose the best agent for: {{.Input}}"  # Optional
 
+  # Graph constraints (optional) - can be combined with selector strategy
+  # When combined with selector, limits AI selection to valid graph transitions
+  graph:
+    edges:
+      - from: researcher
+        to: analyst
+      - from: analyst
+        to: writer
+
   # # Round-robin configuration - for strategy: round-robin
   # strategy: round-robin
   # # No additional configuration needed
@@ -43,7 +52,7 @@ spec:
   # strategy: sequential
   # # No additional configuration needed
 
-  # # Graph configuration - for strategy: graph
+  # # Graph-only configuration - for strategy: graph
   # strategy: graph
   # graph:
   #   edges:
@@ -59,8 +68,9 @@ Execution strategies define how team members are chosen during query execution.
 
 - **sequential** - Agents process input one after another
 - **round-robin** - Agents take turns processing inputs
-- **selector** Dynamic agent selection based on criteria, LLM choses the next agent for the job
-- **graph** Custom execution flows with edges, supports more complex workflows
+- **selector** - Dynamic agent selection based on criteria, LLM chooses the next agent for the job
+- **graph** - Custom execution flows with edges, supports more complex workflows
+- **selector + graph** - Combines AI-driven selection with workflow constraints (selector agent chooses from graph-defined valid transitions)
 
 ## Turn Limiting
 

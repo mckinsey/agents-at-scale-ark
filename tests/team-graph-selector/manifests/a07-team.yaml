@@ -1,0 +1,33 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: graph-selector-team
+spec:
+  strategy: selector
+  description: "Team with selector strategy and graph constraints"
+  maxTurns: 10
+  members:
+    - type: agent
+      name: coordinator
+    - type: agent
+      name: researcher
+    - type: agent
+      name: analyzer
+    - type: agent
+      name: writer
+  selector:
+    agent: coordinator
+  graph:
+    edges:
+      # Coordinator can choose researcher or analyzer
+      - from: coordinator
+        to: researcher
+      - from: coordinator
+        to: analyzer
+      # Researcher must go to analyzer
+      - from: researcher
+        to: analyzer
+      # Analyzer must go to writer
+      - from: analyzer
+        to: writer
+

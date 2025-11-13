@@ -49,6 +49,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/a2a/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Agents
+         * @description List all available agents for A2A communication.
+         */
+        get: operations["list_agents_a2a_agents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/namespaces": {
         parameters: {
             query?: never;
@@ -352,6 +372,12 @@ export interface paths {
         /**
          * Create Team
          * @description Create a new Team CR.
+         *
+         *     Supports various execution strategies:
+         *     - sequential: Members execute in order
+         *     - round-robin: Members take turns
+         *     - graph: Custom workflow defined by graph edges
+         *     - selector: AI-powered member selection (can be combined with graph constraints)
          *
          *     Args:
          *         namespace: The namespace to create the team in
@@ -3851,6 +3877,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReadinessResponse"];
+                };
+            };
+        };
+    };
+    list_agents_a2a_agents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
                 };
             };
         };

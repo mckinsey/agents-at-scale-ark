@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: analyzer
+spec:
+  modelRef:
+    name: test-model
+  prompt: "You are a data analyst. Analyze the research findings and identify key patterns and insights."
+

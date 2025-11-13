@@ -13,6 +13,8 @@ dependencies:
     path: ./services/ark-api
   ark-dashboard:
     path: ./services/ark-dashboard
+  argo-workflows:
+    path: ./services/argo-workflows
 #  ark-api-a2a:
 #    path: ./services/ark-api-a2a
 #  ark-mcp:
@@ -27,12 +29,16 @@ dependencies:
 #     path: ./services/postgres-memory
   
   # Observability services. Uncomment to enable locally. Only phoenix or langfuse is needed
-  # # phoenix service for observability. phoenix has a hook to restart ark-controller to pick up its url
+  # phoenix service for observability. phoenix has a hook to restart ark-controller to pick up its url
   # phoenix:
-  #   path: ./marketplace/services/phoenix
-  # # langfuse service for observability. langfuse has a hook to restart ark-controller to pick up its url
+  #   git: https://github.com/mckinsey/agents-at-scale-marketplace
+  #   tag: phoenix-v0.1.3
+  #   subPath: services/phoenix
+  # langfuse service for observability. langfuse has a hook to restart ark-controller to pick up its url
   # langfuse:
-  #   path: ./marketplace/services/langfuse
+  #   git: https://github.com/mckinsey/agents-at-scale-marketplace
+  #   tag: langfuse-v0.1.2
+  #   subPath: services/langfuse
 
 # Vars - To disable, set environment variables before the devspace commands
 #        For example: ENABLE_CERT_MANAGER=false devspace dev

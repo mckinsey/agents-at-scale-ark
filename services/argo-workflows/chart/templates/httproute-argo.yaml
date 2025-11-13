@@ -1,0 +1,26 @@
+{{- if .Values.httpRoute.argo.enabled -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: argo-workflows
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: argo-workflows
+spec:
+  {{- with .Values.httpRoute.argo.parentRefs }}
+  parentRefs:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.httpRoute.argo.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: argo-workflows-server
+          port: 2746
+{{- end }}

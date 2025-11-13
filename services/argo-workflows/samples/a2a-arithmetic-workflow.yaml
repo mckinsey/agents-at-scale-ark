@@ -1,0 +1,180 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: a2a-arithmetic-workflow
+  annotations:
+    workflows.argoproj.io/title: "A2A Arithmetic Workflow"
+    workflows.argoproj.io/description: |
+      Demonstrates A2A agents, Ark agents, and Python scripts performing arithmetic operations.
+      Shows how to pass data between different execution environments.
+spec:
+  entrypoint: main
+  serviceAccountName: argo-workflow
+
+  arguments:
+    # Input parameters - 'a' is left hand side, 'b' is right hand side, the two
+    # numbers are multiplied together.
+    parameters:
+      - name: a
+        value: "1"
+      - name: b
+        value: "2"
+
+  templates:
+  - name: main
+    dag:
+      tasks:
+      # This will ensure the required A2A server and agents are available.
+      - name: prepare-resources
+        template: prepare-resources
+
+      # This will start a countdown.
+      - name: countdown-start
+        template: a2a-agent-countdown
+        dependencies: [prepare-resources]
+        arguments:
+          parameters:
+          - name: countdown-message
+            value: "Starting calculations in"
+          - name: countdown-seconds
+            value: "5"
+
+      # Multiply the two numbers together.
+      - name: multiply
+        template: python-multiply
+        dependencies: [countdown-start]
+        arguments:
+          parameters:
+          - name: a
+            value: "{{workflow.parameters.a}}"
+          - name: b
+            value: "{{workflow.parameters.b}}"
+
+      # Use an agent to show facts about the result.
+      - name: number-facts
+        template: ark-agent-curiosa
+        dependencies: [multiply]
+        arguments:
+          parameters:
+          - name: final-number
+            value: "{{tasks.multiply.outputs.parameters.result}}"
+
+  - name: prepare-resources
+    script:
+      image: alpine/k8s:1.28.13
+      command: [sh]
+      source: |
+        set -e
+        # Verify A2A server exists (will fail with clear error if missing)
+        kubectl get a2aserver mock-llm-countdown
+
+        # Create number-curiosa agent
+        cat <<EOF | kubectl apply -f -
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+        metadata:
+          name: number-curiosa
+        spec:
+          description: "Provides mathematical facts about numbers"
+          prompt: |
+            You are a number facts expert. When given a number parameter, provide 3-5 interesting facts about it.
+
+            The number is: {{ .Query.number }}
+          modelRef:
+            name: default
+        EOF
+
+  - name: python-multiply
+    inputs:
+      parameters:
+        - name: a
+        - name: b
+    script:
+      image: python:3.12-slim
+      command: [python]
+      source: |
+        a = int("{{inputs.parameters.a}}")
+        b = int("{{inputs.parameters.b}}")
+        result = a * b
+
+        with open('/tmp/result.txt', 'w') as f:
+            f.write(str(result))
+
+        print(f"{a} × {b} = {result}")
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/result.txt
+
+  - name: ark-agent-curiosa
+    inputs:
+      parameters:
+        - name: final-number
+    script:
+      image: alpine/k8s:1.28.13
+      command: [sh]
+      source: |
+        set -e
+        cat > /tmp/query.yaml << EOF
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        metadata:
+          name: curiosa-{{workflow.name}}-{{inputs.parameters.final-number}}
+        spec:
+          input: "Tell me interesting facts about this number"
+          parameters:
+            - name: number
+              value: "{{inputs.parameters.final-number}}"
+          targets:
+            - name: number-curiosa
+              type: agent
+          timeout: 2m
+          ttl: 1h
+        EOF
+
+        kubectl apply -f /tmp/query.yaml
+        kubectl wait --for=condition=Completed --timeout=120s query/curiosa-{{workflow.name}}-{{inputs.parameters.final-number}}
+        kubectl get query curiosa-{{workflow.name}}-{{inputs.parameters.final-number}} -o jsonpath='{.status.responses[0].content}' > /tmp/curiosa-facts.txt
+        cat /tmp/curiosa-facts.txt
+    outputs:
+      parameters:
+      - name: curiosa-facts
+        valueFrom:
+          path: /tmp/curiosa-facts.txt
+
+  - name: a2a-agent-countdown
+    inputs:
+      parameters:
+        - name: countdown-message
+        - name: countdown-seconds
+    script:
+      image: alpine/k8s:1.28.13
+      command: [sh]
+      source: |
+        set -e
+        cat > /tmp/countdown-query.yaml << EOF
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        metadata:
+          name: countdown-{{workflow.name}}-start
+        spec:
+          input: "{{inputs.parameters.countdown-message}}"
+          parameters:
+            - name: seconds
+              value: "{{inputs.parameters.countdown-seconds}}"
+          targets:
+            - name: countdown-agent
+              type: agent
+          timeout: 2m
+          ttl: 1h
+        EOF
+
+        kubectl apply -f /tmp/countdown-query.yaml
+        kubectl wait --for=condition=Completed --timeout=120s query/countdown-{{workflow.name}}-start
+        kubectl get query countdown-{{workflow.name}}-start -o jsonpath='{.status.responses[0].content}' | tee /tmp/countdown-result.txt
+    outputs:
+      parameters:
+      - name: countdown-result
+        valueFrom:
+          path: /tmp/countdown-result.txt

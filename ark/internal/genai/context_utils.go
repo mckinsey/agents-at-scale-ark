@@ -56,7 +56,7 @@ func WithExecutionMetadata(ctx context.Context, metadata map[string]interface{})
 			tmpCtx = context.WithValue(tmpCtx, targetKey, value) //nolint:fatcontext // accumulating context values
 		case "team":
 			tmpCtx = context.WithValue(tmpCtx, teamKey, value)
-		case "agent":
+		case MemberTypeAgent:
 			tmpCtx = context.WithValue(tmpCtx, agentKey, value)
 		case "model":
 			tmpCtx = context.WithValue(tmpCtx, modelKey, value)

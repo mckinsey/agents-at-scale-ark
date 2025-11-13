@@ -29,9 +29,7 @@ export class KubernetesModelManifestBuilder implements ModelManifestBuilder {
     return manifest;
   }
 
-  private buildProviderConfig(
-    config: ProviderConfig
-  ): Record<string, unknown> {
+  private buildProviderConfig(config: ProviderConfig): Record<string, unknown> {
     if (config.type === 'azure') {
       return {
         azure: {
