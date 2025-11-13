@@ -43,6 +43,11 @@ deployments:
       values:
         minio:
           enabled: ${ENABLE_MINIO}
+        httpRoute:
+          argo:
+            enabled: true
+          minio:
+            enabled: ${ENABLE_MINIO}
 
 # Development mode - port-forward to Argo UI
 dev:

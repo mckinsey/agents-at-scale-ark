@@ -1,6 +1,9 @@
 name: 'JFrog Xray Build Scan'
 description: 'Scans builds using JFrog Xray with specified watch'
 inputs:
+  github_repo:
+    description: 'GitHub repository (owner/repo) to report scan results to'
+    required: true
   build_name:
     description: 'Name of the build to scan'
     required: true

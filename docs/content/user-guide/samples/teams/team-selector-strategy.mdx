@@ -85,6 +85,42 @@ spec:
       Return only the participant name.
 ```
 
+## Graph-Constrained Selector
+
+You can combine the selector strategy with graph constraints to create workflows that have both structure and flexibility:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: constrained-research-team
+spec:
+  strategy: selector
+  selector:
+    agent: coordinator
+  members:
+    - name: researcher
+      type: agent
+    - name: analyzer
+      type: agent
+    - name: writer
+      type: agent
+  graph:
+    edges:
+      - from: researcher
+        to: analyzer
+      - from: analyzer
+        to: writer
+```
+
+**How it works:**
+- The selector agent chooses the next participant, but only from members allowed by the graph edges
+- If only one legal transition exists, the system uses it directly (optimization)
+- If multiple legal transitions exist, the selector agent chooses from those candidates
+- This combines the flexibility of AI selection with the structure of graph workflows
+
+See [Team Strategies](/user-guide/samples/teams/team-strategies#graph-constrained-selector-strategy) for more details.
+
 ## Configuration Examples
 
 ### Research Team

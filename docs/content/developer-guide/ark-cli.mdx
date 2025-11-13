@@ -110,6 +110,44 @@ if ! ark agents query weather "What's the weather?"; then
 fi
 ```
 
+## Output Conventions
+
+### Tables
+
+Text format output (`-o text`) uses tables with the following structure:
+
+- Column headers in uppercase
+- Data rows below the header
+- Columns separated by 2 blank spaces
+
+Status values use color coding to convey state information:
+
+- <span style={{color:'green'}}>Green</span> indicates successful completion
+- <span style={{color:'blue'}}>Blue</span> indicates in-progress operations
+- <span style={{color:'red'}}>Red</span> indicates errors or failures
+- <span style={{color:'yellow'}}>Yellow</span> indicates pending or undefined states
+
+Example table output:
+
+<pre>
+<code>
+NAME     DESCRIPTION          STATUS
+entry-1  entry description 1  <span style={{color:'green'}}>success</span>
+entry-2  entry description 2  <span style={{color:'blue'}}>running</span>
+entry-3  entry description 3  <span style={{color:'red'}}>fail</span>
+entry-4  entry description 4  <span style={{color:'yellow'}}>initializing</span>
+</code>
+</pre>
+
+Empty tables are highlighted with a warning message:
+
+<pre>
+<code>
+<span style={{color:'yellow'}}>! warning:</span> no entries found
+</code>
+</pre>
+
+
 ## Interactive Conventions
 
 Colors and progress indicators are enabled by default in interactive terminals and automatically disabled when output is piped, `NO_COLOR` is set, or running in non-TTY environments. Default output is human-readable text. Use `-o json` for machine-readable output.

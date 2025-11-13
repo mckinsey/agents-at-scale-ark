@@ -2,8 +2,8 @@ apiVersion: v2
 name: ark-api
 description: ARK API service with Gateway API HTTPRoute integration
 type: application
-version: 0.1.42
-appVersion: 0.1.42
+version: 0.1.43
+appVersion: 0.1.43
 annotations:
   ark.mckinsey.com/service: ark-api
   ark.mckinsey.com/resources: service

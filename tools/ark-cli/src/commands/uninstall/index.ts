@@ -6,6 +6,12 @@ import type {ArkConfig} from '../../lib/config.js';
 import {showNoClusterError} from '../../lib/startup.js';
 import output from '../../lib/output.js';
 import {getInstallableServices, type ArkService} from '../../arkServices.js';
+import {
+  isMarketplaceService,
+  extractMarketplaceServiceName,
+  getMarketplaceService,
+  getAllMarketplaceServices,
+} from '../../marketplaceServices.js';
 
 async function uninstallService(service: ArkService, verbose: boolean = false) {
   const helmArgs = ['uninstall', service.helmReleaseName, '--ignore-not-found'];
@@ -37,6 +43,36 @@ async function uninstallArk(
 
   // If a specific service is requested, uninstall only that service
   if (serviceName) {
+    // Check if it's a marketplace service
+    if (isMarketplaceService(serviceName)) {
+      const marketplaceServiceName = extractMarketplaceServiceName(serviceName);
+      const service = getMarketplaceService(marketplaceServiceName);
+
+      if (!service) {
+        output.error(
+          `marketplace service '${marketplaceServiceName}' not found`
+        );
+        output.info('available marketplace services:');
+        const marketplaceServices = getAllMarketplaceServices();
+        for (const serviceName of Object.keys(marketplaceServices)) {
+          output.info(`  marketplace/services/${serviceName}`);
+        }
+        process.exit(1);
+      }
+
+      output.info(`uninstalling marketplace service ${service.name}...`);
+      try {
+        await uninstallService(service, options.verbose);
+        output.success(`${service.name} uninstalled successfully`);
+      } catch (error) {
+        output.error(`failed to uninstall ${service.name}`);
+        console.error(error);
+        process.exit(1);
+      }
+      return;
+    }
+
+    // Core ARK service
     const services = getInstallableServices();
     const service = Object.values(services).find((s) => s.name === serviceName);
 

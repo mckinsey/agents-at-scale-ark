@@ -1,11 +1,11 @@
 name: "Deploy ARK Services"
-description: "Deploy ark-api, ark-api-a2a and ark-dashboard Helm charts, verify deployment and apply ingress. Caller must provide kube credentials and helm installed."
+description: "Deploy ark-api and ark-dashboard Helm charts, verify deployment and apply ingress. Caller must provide kube credentials and helm installed."
 inputs:
   clean_version:
     description: "Clean version used as image tag (e.g. 0.1.2)"
     required: true
   image_registry:
-    description: "Image registry prefix (e.g. ghcr.io/org/repo). Action will append /ark-api, /ark-api-a2a, /ark-dashboard"
+    description: "Image registry prefix (e.g. ghcr.io/org/repo). Action will append /ark-api, /ark-dashboard"
     required: false
     default: ""
   install_loadbalancer:
@@ -25,9 +25,9 @@ inputs:
     required: false
     default: "IfNotPresent"
   services_list:
-    description: "Space-separated list of services to deploy (default: ark-api ark-api-a2a ark-dashboard)"
+    description: "Space-separated list of services to deploy (default: ark-api ark-dashboard)"
     required: false
-    default: "ark-api ark-api-a2a ark-dashboard"
+    default: "ark-api ark-dashboard"
   timeout:
     description: "Helm timeout for each release (e.g. 5m)"
     required: false

@@ -67,7 +67,7 @@ A number of languages are used in the project, due to specific goals and pattern
 **Python**
 
 - Used for higher-order Ark services, where logic changes regularly, such as the `ark-api` service
-- Used for higher-order Ark services, which are exposed externally, where engineers are likely to examine the code for learning purposes, such as `ark-api-a2a`
+- Used for higher-order Ark services, which are exposed externally, where engineers are likely to examine the code for learning purposes, such as `ark-api` (which includes A2A Gateway functionality)
 - Specifically chosen where we want and expect contributions from a wider group in the community
 - Specifically chosen when engineers who are using their own Python code to run services may want to inspect the code, such as the Langchain A2A server
 - Strengths: popular and commonly understood, expressive for business logic, many examples online such Python when showing how to build AI applications

@@ -47,9 +47,15 @@ Individual services can also be exposed using `kubectl port-forward` (as shown i
 
 ### Core Services
 
-- [A2A Gateway](/developer-guide/services/ark-a2a-api) - Agent-to-Agent Gateway implementing A2A protocol
 - [ARK Cluster Memory](/developer-guide/services/ark-cluster-memory) - In-memory storage with SSE streaming support
 - [Execution Engine](/developer-guide/langchain-execution-engine) - Framework adapter for Langchain and other AI frameworks
+
+### ARK API Services
+
+**ARK API** includes the A2A Gateway functionality for agent-to-agent communication. See [ARK API](/developer-guide/services/ark-api) for complete documentation including:
+- Native ARK REST APIs
+- OpenAI-compatible endpoints
+- A2A Gateway endpoints for agent-to-agent communication
 
 ### Execution Engines
 - **Langchain Execution Engine** - Framework adapter for Langchain workflows

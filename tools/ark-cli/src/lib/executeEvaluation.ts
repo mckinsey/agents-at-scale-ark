@@ -44,9 +44,7 @@ async function waitForEvaluationAndDisplayResults(
     spinner.stop();
     if (error instanceof Error && error.message.includes('timed out waiting')) {
       console.error(
-        chalk.red(
-          `Evaluation did not complete within ${watchTimeoutDisplay}`
-        )
+        chalk.red(`Evaluation did not complete within ${watchTimeoutDisplay}`)
       );
       process.exit(ExitCodes.Timeout);
     }

@@ -125,7 +125,6 @@ func TestNewMCPClient(t *testing.T) {
 			ctx := t.Context()
 			serverURL := fmt.Sprintf("http://%s:%s", tc.mcpServer.connectionOptions.host, tc.mcpServer.connectionOptions.port)
 			require.NoError(t, waitForServer(t, ctx, serverURL, 5*time.Second))
-
 			client, err := NewMCPClient(
 				ctx,
 				fmt.Sprintf("http://%s:%s", tc.mcpClient.connectionOptions.host, tc.mcpClient.connectionOptions.port),

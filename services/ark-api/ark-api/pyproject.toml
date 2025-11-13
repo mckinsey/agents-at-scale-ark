@@ -1,6 +1,6 @@
 [project]
 name = "ark-api"
-version = "0.1.42"
+version = "0.1.43"
 description = ""
 requires-python = ">=3.11"
 dependencies = [
@@ -17,6 +17,13 @@ dependencies = [
     "pyhelm3>=0.4.0",
     "coverage>=7.10.4",
     "pytest>=8.4.2",
+    "a2a-sdk>=0.2.12",
+    "a2a-sdk[http-server]",
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-instrumentation-fastapi>=0.41b0",
+    "opentelemetry-instrumentation-httpx>=0.41b0",
+    "opentelemetry-exporter-otlp>=1.20.0",
     "ark-sdk",
 ]
 
@@ -24,7 +31,7 @@ dependencies = [
 package = true
 
 [tool.uv.sources]
-ark-sdk = { path = "out/ark_sdk-0.1.40-py3-none-any.whl" }
+ark-sdk = { path = "out/ark_sdk-0.1.42-py3-none-any.whl" }
 
 [tool.coverage.run]
 data_file = "coverage/.coverage"

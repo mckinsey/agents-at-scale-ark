@@ -7,7 +7,7 @@
 # Dashboard: av3n93rz primary, dwmkerr/Nab-0 secondary for releases
 
 # Root - tech lead or PM for all changes.
-* @dwmkerr @cm94242 @Nab-0
+* @dwmkerr @cm94242 @Nab-0 @CeliaPrieto @david-gombos
 
 # Significant changes to K8S CRDs.
 /ark/config/crd/ @dwmkerr @cm94242

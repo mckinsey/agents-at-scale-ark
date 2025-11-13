@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { StreamStore } from '../stream-store.js';
-import { StreamResponse } from '../types.js';
+import { StreamResponse, StreamError } from '../types.js';
 
 // Helper function to parse timeout parameter
 const parseTimeout = (timeoutStr: string | undefined, defaultTimeout: number): number => {
@@ -8,8 +8,6 @@ const parseTimeout = (timeoutStr: string | undefined, defaultTimeout: number): n
   const timeout = parseInt(timeoutStr);
   return isNaN(timeout) ? defaultTimeout : Math.max(1000, Math.min(timeout * 1000, 300000));
 };
-
-
 
 // Helper function to write SSE event
 const writeSSEEvent = (res: Response, data: StreamResponse): boolean => {
@@ -21,6 +19,7 @@ const writeSSEEvent = (res: Response, data: StreamResponse): boolean => {
     return false;
   }
 };
+
 
 export function createStreamRouter(stream: StreamStore): Router {
   const router = Router();
@@ -155,6 +154,35 @@ export function createStreamRouter(stream: StreamStore): Router {
           clearTimeout(timeoutHandle);
           timeoutHandle = undefined;
         }
+
+        // Check for errors and send as SSE event (not JSON response)
+        if(chunk?.error) {
+          // Validate error structure - chunk.error should be a StreamError
+          const streamError = chunk.error as StreamError;
+          if (typeof streamError.message !== "string" || typeof streamError.type !== "string") {
+            console.error(`[STREAM-OUT] Query ${query_name}: Invalid error chunk structure`, chunk);
+            res.status(500).json({ error: "Invalid error chunk structure" });
+            unsubscribeChunks();
+            unsubscribeComplete();
+            return;
+          }
+
+          // Error chunks should be sent as SSE events, not JSON responses
+          // This allows OpenAI SDK and other clients to properly handle errors
+          if (!writeSSEEvent(res, chunk)) {
+            console.log(`[STREAM-OUT] Query ${query_name}: Failed to write error chunk, client may have disconnected`);
+            unsubscribeChunks();
+            unsubscribeComplete();
+            return;
+          }
+          // After sending error, close the stream gracefully
+          res.write('data: [DONE]\n\n');
+          res.end();
+          unsubscribeChunks();
+          unsubscribeComplete();
+          return;
+        }
+
         // Chunks are already in OpenAI format, just forward them (including finish_reason chunks)
         if (!writeSSEEvent(res, chunk)) {
           console.log(`[STREAM-OUT] Query ${query_name}: Client disconnected (write failed)`);
@@ -208,6 +236,7 @@ export function createStreamRouter(stream: StreamStore): Router {
         timeoutHandle = setTimeout(() => {
           if (!hasReceivedChunks) {
             console.log(`[STREAM] Query ${query_name}: Timeout after ${timeout}ms waiting for chunks (no chunks received)`);
+            res.status(408); //HTTP status code for request timeout
             res.end();
             unsubscribeChunks();
             unsubscribeComplete();

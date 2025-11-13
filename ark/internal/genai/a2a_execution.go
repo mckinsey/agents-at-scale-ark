@@ -94,6 +94,10 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 				"address":   a2aAddress,
 			},
 		})
+
+		modelID := fmt.Sprintf("agent/%s", agentName)
+		StreamError(ctx, eventStream, err, "a2a_execution_failed", modelID)
+
 		return nil, err
 	}
 

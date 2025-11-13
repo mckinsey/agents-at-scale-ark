@@ -3,7 +3,7 @@ import {readStdin} from './stdin.js';
 import {Readable} from 'stream';
 
 describe('readStdin', () => {
-  let originalStdin: NodeJS.ReadStream;
+  let originalStdin: typeof process.stdin;
   let mockStdin: Readable;
 
   beforeEach(() => {
