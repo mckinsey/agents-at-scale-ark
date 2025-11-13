@@ -308,9 +308,11 @@ func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember
 		} else {
 			memberTracker.Fail(err)
 		}
-		// Still accumulate messages even on error
-		*messages = append(*messages, result.Messages...)
-		*newMessages = append(*newMessages, result.Messages...)
+		// Still accumulate messages even on error if result is not nil
+		if result != nil {
+			*messages = append(*messages, result.Messages...)
+			*newMessages = append(*newMessages, result.Messages...)
+		}
 		return err
 	}
 

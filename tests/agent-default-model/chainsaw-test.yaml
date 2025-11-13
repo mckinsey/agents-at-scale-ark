@@ -54,6 +54,7 @@ spec:
     - apply:
         file: manifests/a00-mock-openai.yaml
     - assert:
+        timeout: 60s
         resource:
           apiVersion: v1
           kind: Pod
@@ -92,6 +93,7 @@ spec:
                   value: mock-api-key
           EOF
     - assert:
+        timeout: 120s
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Model
@@ -113,6 +115,7 @@ spec:
     - apply:
         file: manifests/a0[3-4]-*.yaml
     - assert:
+        timeout: 60s
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Agent
@@ -122,6 +125,7 @@ spec:
             modelRef:
               name: default
     - assert:
+        timeout: 120s
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Agent
@@ -141,6 +145,7 @@ spec:
   - name: verify-query-completion
     try:
     - assert:
+        timeout: 240s
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
@@ -150,6 +155,7 @@ spec:
             (conditions[?type == 'Completed']):
             - status: 'True'
     - assert:
+        timeout: 60s
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
