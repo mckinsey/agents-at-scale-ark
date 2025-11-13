@@ -170,12 +170,10 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
     # Parse queryAnnotations if provided
     if request.metadata and "queryAnnotations" in request.metadata:
         try:
-            logger.info(f"Parsing queryAnnotations: {request.metadata['queryAnnotations']}")
             query_annotations = json.loads(request.metadata["queryAnnotations"])
             if "annotations" not in metadata:
                 metadata["annotations"] = {}
             metadata["annotations"].update(query_annotations)
-            logger.info(f"Applied annotations: {query_annotations}")
         except (json.JSONDecodeError, TypeError) as e:
             logger.warning(f"Failed to parse queryAnnotations: {e}")
 
