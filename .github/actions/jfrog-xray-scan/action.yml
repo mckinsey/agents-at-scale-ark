@@ -61,8 +61,6 @@ runs:
       if: always()
       shell: bash
       run: |
-        cat $SCAN_JSON
-        
         VIOLATIONS_COUNT=$(jq '[.[] | select(.violations != null) | .violations | length] | add // 0' "$SCAN_JSON")
 
         echo "Total violations found: $VIOLATIONS_COUNT"
@@ -74,8 +72,8 @@ runs:
           | [
               (.issue_id // "N/A"),
               (
-                if (.impacted_artifacts and (.impacted_artifacts | length > 0)) 
-                then .impacted_artifacts[0].name 
+                if (.components and (.components | length > 0)) 
+                then (.components | to_entries | map( .value.impact_paths[]? | .[].component_id ) | flatten | unique | join(",")) 
                 else "N/A" 
                 end
               ),
@@ -125,7 +123,6 @@ runs:
         else
           echo "No new violations found."
         fi
-
     - name: Upload scan results
       if: always()
       uses: actions/upload-artifact@v4

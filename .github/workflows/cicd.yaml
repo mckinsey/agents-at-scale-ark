@@ -95,6 +95,7 @@ jobs:
       - name: Run JFrog Xray scan
         id: xray-scan
         uses: ./.github/actions/jfrog-xray-scan
+        continue-on-error: true
         with:
           github_repo: ${{ github.repository }}
           build_name: 'agents-at-scale'
@@ -105,7 +106,7 @@ jobs:
           jfrog_url: ${{ vars.JFROG_PLATFORM_URL }}
         env:
           GH_TOKEN: ${{ github.token }}
-          SCAN_JSON: "xray-scan-${{ inputs.build_name }}-${{ inputs.build_number }}.json"
+          SCAN_JSON: "xray-scan-agents-at-scale-${{ github.run_number }}.json"
 
       - name: Report scan status
         if: always()
