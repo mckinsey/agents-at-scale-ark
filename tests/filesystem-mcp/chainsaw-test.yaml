@@ -156,6 +156,7 @@ spec:
             - type: agent
               name: filesystem-agent-a
     - assert:
+        timeout: 240s
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
@@ -164,6 +165,7 @@ spec:
           status:
             phase: done
     - assert:
+        timeout: 60s
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
@@ -208,6 +210,7 @@ spec:
             - type: agent
               name: filesystem-agent-b
     - assert:
+        timeout: 240s
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
@@ -216,6 +219,7 @@ spec:
           status:
             phase: done
     - assert:
+        timeout: 60s
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
@@ -320,6 +324,7 @@ spec:
             - type: agent
               name: filesystem-agent-a
     - assert:
+        timeout: 240s
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
@@ -328,6 +333,7 @@ spec:
           status:
             phase: done
     - assert:
+        timeout: 60s
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
@@ -371,6 +377,7 @@ spec:
             - type: agent
               name: filesystem-agent-b
     - assert:
+        timeout: 240s
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
@@ -379,6 +386,7 @@ spec:
           status:
             phase: done
     - assert:
+        timeout: 60s
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
