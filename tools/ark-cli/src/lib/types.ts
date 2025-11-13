@@ -124,6 +124,9 @@ export interface QueryTarget {
 
 export interface QueryResponse {
   content?: string;
+  a2a?: {
+    contextId?: string;
+  };
 }
 
 export interface QueryStatus {

@@ -617,10 +617,13 @@ const ChatUI: React.FC<ChatUIProps> = ({
         apiMessages,
         {...chatConfig, a2aContextId: a2aContextIdRef.current},
         (chunk: string, toolCalls?: ToolCall[], arkMetadata?: ArkMetadata) => {
-          // Extract A2A context ID from metadata if present
-          if (arkMetadata?.completedQuery?.status?.a2a?.contextId) {
+          // Extract A2A context ID from first response
+          // Chat TUI always queries a single target, so contextId is in responses[0]
+          if (
+            arkMetadata?.completedQuery?.status?.responses?.[0]?.a2a?.contextId
+          ) {
             a2aContextIdRef.current =
-              arkMetadata.completedQuery.status.a2a.contextId;
+              arkMetadata.completedQuery.status.responses[0].a2a.contextId;
           }
 
           // Update message progressively as chunks arrive
