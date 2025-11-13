@@ -19,7 +19,7 @@ metadata:
 spec:
   containers:
   - name: mock-llm
-    image: ghcr.io/dwmkerr/mock-llm:0.1.8
+    image: ghcr.io/dwmkerr/mock-llm:0.1.22
     ports:
     - containerPort: 8080
     readinessProbe:

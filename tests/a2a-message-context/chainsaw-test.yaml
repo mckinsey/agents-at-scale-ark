@@ -11,7 +11,7 @@ spec:
     - script:
         content: |
           helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.15 \
+            --version 0.1.22 \
             --namespace $NAMESPACE \
             --values mock-llm-values.yaml
         env:
@@ -44,7 +44,8 @@ spec:
           metadata:
             name: message-counter-first
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     # Verify first response shows 1 message
     - assert:
         resource:
@@ -92,7 +93,8 @@ spec:
           metadata:
             name: message-counter-second
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     # Verify second response shows 2 messages
     - assert:
         resource:
