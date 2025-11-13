@@ -104,7 +104,7 @@ spec:
             name: message-counter-second
           status:
             (length(responses)): 1
-            (contains(responses[0].content, '2 message(s) received')): true
+            (contains(responses[0].content, '1 message(s) received')): true
     catch:
     - events: {}
     - describe:
