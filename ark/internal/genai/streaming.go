@@ -144,17 +144,18 @@ func StreamError(ctx context.Context, eventStream EventStreamInterface, err erro
 func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChunk, modelName string, query *arkv1alpha1.Query) interface{} {
 	metadata := buildMetadata(ctx, modelName)
 
-	// If query is provided, include complete status (final chunk only)
+	// If query is provided, override context-derived values with query object values
+	// Context contains UID for tracking, but final chunk should use human-readable Name
+	// NOTE: it may be more straightforward to simply include the entire query object,
+	// rather than just the status and select fields.
 	if query != nil {
 		metadata.QueryStatus = &query.Status
-		// Override query name and session from query object if present
 		if query.Name != "" {
 			metadata.Query = query.Name
 		}
 		if query.Spec.SessionId != "" {
 			metadata.Session = query.Spec.SessionId
 		}
-		// Also include annotations from query if not already set
 		if len(query.Annotations) > 0 && metadata.Annotations == nil {
 			metadata.Annotations = query.Annotations
 		}

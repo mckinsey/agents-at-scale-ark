@@ -63,16 +63,12 @@ export class ChatClient {
     };
 
     // Add A2A context ID if present
-    log('sendMessage called', {a2aContextId: config.a2aContextId});
     if (config.a2aContextId) {
-      log('Adding metadata with contextId', config.a2aContextId);
       params.metadata = {
         queryAnnotations: JSON.stringify({
           'ark.mckinsey.com/a2a-context-id': config.a2aContextId,
         }),
       };
-    } else {
-      log('No a2aContextId in config');
     }
 
     if (shouldStream) {
@@ -89,14 +85,6 @@ export class ChatClient {
         const delta = chunk.choices?.[0]?.delta;
         // Extract ARK metadata if present
         const arkMetadata = (chunk as any).ark as ArkMetadata | undefined;
-
-        if (arkMetadata?.queryStatus?.a2a?.contextId) {
-          log('Chunk received with A2A context', {
-            contextId: arkMetadata.queryStatus.a2a.contextId,
-            hasContent: !!delta?.content,
-            hasDelta: !!delta,
-          });
-        }
 
         const content = delta?.content || '';
         if (content) {
@@ -143,12 +131,6 @@ export class ChatClient {
       const message = response.choices[0]?.message;
       const content = message?.content || '';
       const arkMetadata = (response as any).ark as ArkMetadata | undefined;
-
-      if (arkMetadata?.queryStatus?.a2a?.contextId) {
-        log('Non-streaming response received with A2A context', {
-          contextId: arkMetadata.queryStatus.a2a.contextId,
-        });
-      }
 
       // Handle tool calls in non-streaming mode
       if (message?.tool_calls && message.tool_calls.length > 0) {

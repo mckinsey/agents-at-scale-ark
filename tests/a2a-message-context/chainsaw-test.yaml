@@ -67,18 +67,13 @@ spec:
         kind: Query
         name: message-counter-first
 
-  - name: extract-context-id
+  - name: test-second-query-with-context
     try:
     - script:
         content: |
-          echo "=== Query Response Structure ==="
-          kubectl get query message-counter-first -n $NAMESPACE -o jsonpath='{.status.responses[0]}' | jq .
-          echo ""
-
           CONTEXT_ID=$(kubectl get query message-counter-first -n $NAMESPACE -o jsonpath='{.status.responses[0].a2a.contextId}')
           if [ -z "$CONTEXT_ID" ]; then
-            echo "ERROR: contextId not set in response a2a metadata"
-            echo "This means the A2A agent (mock-llm) did not return a contextId in its response"
+            echo "ERROR: contextId not set in response a2a metadata" >&2
             exit 1
           fi
           printf '%s' "$CONTEXT_ID"
@@ -88,15 +83,6 @@ spec:
         outputs:
         - name: contextId
           value: ($stdout)
-    catch:
-    - events: {}
-    - describe:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Query
-        name: message-counter-first
-
-  - name: test-second-query-with-context
-    try:
     - apply:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -119,25 +105,6 @@ spec:
           status:
             (conditions[?type == 'Completed']):
             - status: 'True'
-    - script:
-        content: |
-          echo "=== Second Query Response ==="
-          kubectl get query message-counter-second -n $NAMESPACE -o jsonpath='{.status.responses[0].content}'
-          echo ""
-          echo "=== Second Query Context ID ==="
-          kubectl get query message-counter-second -n $NAMESPACE -o jsonpath='{.metadata.annotations.ark\.mckinsey\.com/a2a-context-id}'
-          echo ""
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-    - assert:
-        timeout: 1s
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: message-counter-second
-          status:
             (length(responses)): 1
             (contains(responses[0].content, '2 message(s) received')): true
     catch:

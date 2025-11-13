@@ -26,8 +26,6 @@ from ...constants.annotations import STREAMING_ENABLED_ANNOTATION
 router = APIRouter(prefix="/openai/v1", tags=["OpenAI"])
 logger = logging.getLogger(__name__)
 
-logger.info("OpenAI API module loaded - queryAnnotations support enabled")
-
 # Constants
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -159,9 +157,6 @@ async def proxy_streaming_response(streaming_url: str):
 async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
     model = request.model
     messages = request.messages
-
-    logger.info(f"Received chat completion request for model: {model}")
-    logger.info(f"Request metadata: {request.metadata}")
 
     target = parse_model_to_query_target(model)
     query_name = f"openai-query-{uuid.uuid4().hex[:8]}"
