@@ -1,6 +1,5 @@
 import {ArkApiClient, QueryTarget} from './arkApiClient.js';
-import type {QueryStatus} from './types.js';
-import {log} from './debug.js';
+import type {Query} from './types.js';
 
 // Re-export QueryTarget for compatibility
 export {QueryTarget};
@@ -26,7 +25,7 @@ export interface ArkMetadata {
   model?: string;
   query?: string;
   target?: string;
-  queryStatus?: QueryStatus;
+  completedQuery?: Query;
 }
 
 export class ChatClient {

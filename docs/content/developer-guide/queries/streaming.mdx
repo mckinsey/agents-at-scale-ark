@@ -118,25 +118,37 @@ All chunks include `ark` metadata:
 }
 ```
 
-The final chunk also includes complete query status:
+The final chunk also includes the complete query object:
 
 ```json
 {
   "ark": {
     "query": "789",
-    "queryStatus": {                 // Complete Query status (final chunk only)
-      "phase": "done",
-      "tokenUsage": {...},
-      "a2a": {                       // A2A protocol metadata
-        "contextId": "ctx-abc123",
-        "taskId": "task-xyz789"
+    "completedQuery": {              // Complete Query object (final chunk only)
+      "metadata": {
+        "name": "my-query",
+        "annotations": {
+          "ark.mckinsey.com/a2a-context-id": "ctx-abc123"
+        }
+      },
+      "spec": {
+        "input": "...",
+        "sessionId": "sess-123"
+      },
+      "status": {
+        "phase": "done",
+        "tokenUsage": {...},
+        "a2a": {                     // A2A protocol metadata
+          "contextId": "ctx-abc123",
+          "taskId": "task-xyz789"
+        }
       }
     }
   }
 }
 ```
 
-The `queryStatus` field contains the complete [Query status](/reference/resources/query#status) including token usage and A2A metadata. This is only present in the final chunk.
+The `completedQuery` field contains the complete [Query object](/reference/resources/query) including metadata, spec, and status. This provides access to annotations, labels, token usage, and A2A metadata. This field is only present in the final chunk.
 
 Clients aware of this field can display rich multi-agent interactions and tool calls. The `ark` CLI demonstrates this with the `chat` function, which shows team member responses and intermediate tool calls.
 

@@ -13,7 +13,6 @@ import {
   ToolCall,
   ArkMetadata,
 } from '../lib/chatClient.js';
-import {log} from '../lib/debug.js';
 import {ArkApiClient} from '../lib/arkApiClient.js';
 import {ArkApiProxy} from '../lib/arkApiProxy.js';
 import {TargetSelector} from '../ui/TargetSelector.js';
@@ -155,10 +154,7 @@ const ChatUI: React.FC<ChatUIProps> = ({
     currentTarget: undefined,
   });
 
-  // Track A2A context ID for conversation continuity
-  const [a2aContextId, setA2aContextId] = React.useState<string | undefined>(
-    undefined
-  );
+  // Track A2A context ID for conversation continuity using ref
   const a2aContextIdRef = React.useRef<string | undefined>(undefined);
 
   React.useEffect(() => {
@@ -466,7 +462,6 @@ const ChatUI: React.FC<ChatUIProps> = ({
       setMessages([]);
 
       // Clear A2A context ID
-      setA2aContextId(undefined);
       a2aContextIdRef.current = undefined;
 
       // Add system message to show the reset
@@ -623,10 +618,9 @@ const ChatUI: React.FC<ChatUIProps> = ({
         {...chatConfig, a2aContextId: a2aContextIdRef.current},
         (chunk: string, toolCalls?: ToolCall[], arkMetadata?: ArkMetadata) => {
           // Extract A2A context ID from metadata if present
-          if (arkMetadata?.queryStatus?.a2a?.contextId) {
-            const contextId = arkMetadata.queryStatus.a2a.contextId;
-            setA2aContextId(contextId);
-            a2aContextIdRef.current = contextId;
+          if (arkMetadata?.completedQuery?.status?.a2a?.contextId) {
+            a2aContextIdRef.current =
+              arkMetadata.completedQuery.status.a2a.contextId;
           }
 
           // Update message progressively as chunks arrive

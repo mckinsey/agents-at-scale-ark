@@ -139,7 +139,7 @@ Responses include an `ark` field with query metadata including status, token usa
 
     print(response.choices[0].message.content)
     # Access A2A context ID for multi-turn conversations
-    context_id = response.ark['queryStatus']['a2a']['contextId']
+    context_id = response.ark['completedQuery']['status']['a2a']['contextId']
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -155,9 +155,9 @@ Responses include an `ark` field with query metadata including status, token usa
         content = chunk.choices[0].delta.content or ''
         full_message += content
 
-        # Final chunk contains query metadata
-        if hasattr(chunk, 'ark') and chunk.ark.get('queryStatus'):
-            context_id = chunk.ark['queryStatus']['a2a']['contextId']
+        # Final chunk contains complete query object
+        if hasattr(chunk, 'ark') and chunk.ark.get('completedQuery'):
+            context_id = chunk.ark['completedQuery']['status']['a2a']['contextId']
     ```
   </Tabs.Tab>
 </Tabs>

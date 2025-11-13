@@ -26,14 +26,13 @@ import (
 
 // StreamMetadata contains ARK-specific metadata for streaming chunks
 type StreamMetadata struct {
-	Query       string                   `json:"query,omitempty"`
-	Session     string                   `json:"session,omitempty"`
-	Target      string                   `json:"target,omitempty"`
-	Team        string                   `json:"team,omitempty"`
-	Agent       string                   `json:"agent,omitempty"`
-	Model       string                   `json:"model,omitempty"`
-	Annotations map[string]string        `json:"annotations,omitempty"`
-	QueryStatus *arkv1alpha1.QueryStatus `json:"queryStatus,omitempty"`
+	Query          string             `json:"query,omitempty"`
+	Session        string             `json:"session,omitempty"`
+	Target         string             `json:"target,omitempty"`
+	Team           string             `json:"team,omitempty"`
+	Agent          string             `json:"agent,omitempty"`
+	Model          string             `json:"model,omitempty"`
+	CompletedQuery *arkv1alpha1.Query `json:"completedQuery,omitempty"`
 }
 
 // ChunkWithMetadata wraps an OpenAI chunk with ARK metadata
@@ -103,13 +102,6 @@ func buildMetadata(ctx context.Context, modelName string) *StreamMetadata {
 		metadata.Session = sessionID
 	}
 
-	// Add query annotations if present in context
-	if queryVal := ctx.Value(QueryContextKey); queryVal != nil {
-		if query, ok := queryVal.(*arkv1alpha1.Query); ok && len(query.Annotations) > 0 {
-			metadata.Annotations = query.Annotations
-		}
-	}
-
 	return metadata
 }
 
@@ -140,25 +132,12 @@ func StreamError(ctx context.Context, eventStream EventStreamInterface, err erro
 }
 
 // WrapChunkWithMetadata adds ARK metadata to a streaming chunk
-// If query is provided, includes complete query status in metadata (for final chunk only)
+// If query is provided, includes complete query object in metadata (for final chunk only)
 func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChunk, modelName string, query *arkv1alpha1.Query) interface{} {
 	metadata := buildMetadata(ctx, modelName)
 
-	// If query is provided, override context-derived values with query object values
-	// Context contains UID for tracking, but final chunk should use human-readable Name
-	// NOTE: it may be more straightforward to simply include the entire query object,
-	// rather than just the status and select fields.
 	if query != nil {
-		metadata.QueryStatus = &query.Status
-		if query.Name != "" {
-			metadata.Query = query.Name
-		}
-		if query.Spec.SessionId != "" {
-			metadata.Session = query.Spec.SessionId
-		}
-		if len(query.Annotations) > 0 && metadata.Annotations == nil {
-			metadata.Annotations = query.Annotations
-		}
+		metadata.CompletedQuery = query
 	}
 
 	return ChunkWithMetadata{
