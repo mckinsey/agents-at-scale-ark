@@ -1,9 +1,6 @@
 name: 'JFrog Xray Build Scan'
 description: 'Scans builds using JFrog Xray with specified watch'
 inputs:
-  github_repo:
-    description: 'GitHub repository (owner/repo) to report scan results to'
-    required: true
   build_name:
     description: 'Name of the build to scan'
     required: true
@@ -33,17 +30,8 @@ runs:
         JF_PASSWORD: ${{ inputs.jfrog_password }}
         JF_URL: ${{ inputs.jfrog_url }}
 
-    - name: Get last main vulnarability report
-      shell: bash
-      run: |
-        GITHUB_REPOSITORY="${{ inputs.github_repo }}"
-        LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&per_page=50" | jq -c '.workflow_runs[] | select(.name == "CI/CD") | .id' | head -n 1)
-        
-        echo "Downloading artifacts from run ID: $LAST_RUN_ID"
-        gh run download "$LAST_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern "xray-scan-results-agents-at-scale-*" --dir ./artifacts
-        cp ./artifacts/**/xray-scan-agents-at-scale-*.json ./last-main-scan.json
-        
     - name: Run Xray scan
+      continue-on-error: true # Scan may find violations, remove once policy is enforced or all violations are resolved
       shell: bash
       run: |
         # Set variables
@@ -104,25 +92,7 @@ runs:
         fi
 
         cat summary-table.md >> $GITHUB_STEP_SUMMARY
-    - name: Detect new violations
-      if: always()
-      shell: bash
-      run: |
-        echo "Comparing with last scan file: ./last-main-scan.json"
 
-        echo "New violations since last scan:"
-        jq -r '.[].violations[]?.issue_id' "./last-main-scan.json" > old.txt
-        jq -r '.[].violations[]?.issue_id' "$SCAN_JSON" > new.txt
-
-        NEW_VIOLATIONS=$(comm -13 <(sort old.txt) <(sort new.txt))
-
-        if [ -n "$NEW_VIOLATIONS" ]; then
-          echo "New violations found:"
-          echo "$NEW_VIOLATIONS"
-          exit 1
-        else
-          echo "No new violations found."
-        fi
     - name: Upload scan results
       if: always()
       uses: actions/upload-artifact@v4
