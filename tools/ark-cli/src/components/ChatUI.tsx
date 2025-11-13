@@ -618,10 +618,6 @@ const ChatUI: React.FC<ChatUIProps> = ({
 
       // Send message and get response with abort signal
       // Use ref to get the latest context ID, not the stale state from closure
-      log('ChatUI: About to send message', {
-        refValue: a2aContextIdRef.current,
-        stateValue: a2aContextId,
-      });
       const fullResponse = await chatClientRef.current.sendMessage(
         target.id,
         apiMessages,
@@ -630,10 +626,8 @@ const ChatUI: React.FC<ChatUIProps> = ({
           // Extract A2A context ID from metadata if present
           if (arkMetadata?.queryStatus?.a2a?.contextId) {
             const contextId = arkMetadata.queryStatus.a2a.contextId;
-            log('ChatUI: Setting A2A context ID', contextId);
             setA2aContextId(contextId);
             a2aContextIdRef.current = contextId;
-            log('ChatUI: Ref updated', a2aContextIdRef.current);
           }
 
           // Update message progressively as chunks arrive

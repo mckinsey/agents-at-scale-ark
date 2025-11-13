@@ -442,12 +442,7 @@ func handleA2ATaskResponse(ctx context.Context, k8sClient client.Client, task *p
 			TaskID:    task.ID,
 			ContextID: task.ContextID,
 			QueryRef: arkv1alpha1.QueryRef{
-				Name: func() string {
-					if queryName != "" {
-						return queryName
-					}
-					return "auto-generated-query" // Fallback for backwards compatibility
-				}(),
+				Name:      queryName,
 				Namespace: namespace,
 			},
 			A2AServerRef: arkv1alpha1.A2AServerRef{
