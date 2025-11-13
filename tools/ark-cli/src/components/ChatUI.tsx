@@ -617,7 +617,6 @@ const ChatUI: React.FC<ChatUIProps> = ({
       }
 
       // Send message and get response with abort signal
-      // Use ref to get the latest context ID, not the stale state from closure
       const fullResponse = await chatClientRef.current.sendMessage(
         target.id,
         apiMessages,
