@@ -124,6 +124,26 @@ export interface QueryTarget {
 
 export interface QueryResponse {
   content?: string;
+  a2a?: {
+    contextId?: string;
+  };
+}
+
+export interface QueryStatus {
+  phase?: 'initializing' | 'running' | 'done' | 'error' | 'canceled';
+  conditions?: K8sCondition[];
+  responses?: QueryResponse[];
+  message?: string;
+  error?: string;
+  tokenUsage?: {
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+  };
+  a2a?: {
+    contextId?: string;
+    taskId?: string;
+  };
 }
 
 export interface Query {
@@ -134,13 +154,7 @@ export interface Query {
     input: string;
     targets: QueryTarget[];
   };
-  status?: {
-    phase?: 'initializing' | 'running' | 'done' | 'error' | 'canceled';
-    conditions?: K8sCondition[];
-    responses?: QueryResponse[];
-    message?: string;
-    error?: string;
-  };
+  status?: QueryStatus;
 }
 
 // ARK Tool types - only fields we use

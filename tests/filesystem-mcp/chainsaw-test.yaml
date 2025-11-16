@@ -2,6 +2,8 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: filesystem-mcp-workspace-isolation
+  labels:
+    requires-images: "true"
 spec:
   timeouts:
     exec: 300s
@@ -162,7 +164,8 @@ spec:
           metadata:
             name: filesystem-write-a
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -214,7 +217,8 @@ spec:
           metadata:
             name: filesystem-write-b
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -326,7 +330,8 @@ spec:
           metadata:
             name: filesystem-read-a
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -377,7 +382,8 @@ spec:
           metadata:
             name: filesystem-read-b
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

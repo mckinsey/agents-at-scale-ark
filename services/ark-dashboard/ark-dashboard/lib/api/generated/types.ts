@@ -1939,7 +1939,7 @@ export interface components {
             stream: boolean;
             /** Metadata */
             metadata?: {
-                [key: string]: string;
+                [key: string]: unknown;
             } | null;
         };
         /** ChatCompletionSystemMessageParam */

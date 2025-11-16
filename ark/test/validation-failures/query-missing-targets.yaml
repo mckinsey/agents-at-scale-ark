@@ -1,8 +1,0 @@
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: test-query-missing-targets
-  namespace: default
-spec:
-  input: "Hello world"
-  # Missing required targets field

@@ -81,7 +81,7 @@ export async function installArk(
         output.info('available marketplace services:');
         const marketplaceServices = getAllMarketplaceServices();
         for (const serviceName of Object.keys(marketplaceServices)) {
-          output.info(`  marketplace/${serviceName}`);
+          output.info(`  marketplace/services/${serviceName}`);
         }
         process.exit(1);
       }

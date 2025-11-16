@@ -21,9 +21,9 @@ Registry: ${chalk.cyan('ghcr.io/mckinsey/agents-at-scale-marketplace/charts')}
       'after',
       `
 ${chalk.cyan('Examples:')}
-  ${chalk.yellow('ark marketplace list')}              # List available services
-  ${chalk.yellow('ark install marketplace/phoenix')}   # Install Phoenix
-  ${chalk.yellow('ark uninstall marketplace/phoenix')} # Uninstall Phoenix
+  ${chalk.yellow('ark marketplace list')}                        # List available services
+  ${chalk.yellow('ark install marketplace/services/phoenix')}    # Install Phoenix
+  ${chalk.yellow('ark uninstall marketplace/services/phoenix')}  # Uninstall Phoenix
   
 ${chalk.cyan('Available Services:')}
   • phoenix  - AI/ML observability and evaluation platform
@@ -41,12 +41,14 @@ ${chalk.cyan('Available Services:')}
 
       console.log(chalk.blue('\n🏪 ARK Marketplace Services\n'));
       console.log(
-        chalk.gray('Install with: ark install marketplace/<service-name>\n')
+        chalk.gray(
+          'Install with: ark install marketplace/services/<service-name>\n'
+        )
       );
 
       for (const [key, service] of Object.entries(services)) {
         const icon = '📦';
-        const serviceName = `marketplace/${key.padEnd(12)}`;
+        const serviceName = `marketplace/services/${key.padEnd(12)}`;
         const serviceDesc = service.description;
         console.log(
           `${icon} ${chalk.green(serviceName)} ${chalk.gray(serviceDesc)}`

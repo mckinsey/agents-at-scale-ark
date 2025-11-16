@@ -1,0 +1,115 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: a2a-message-context
+spec:
+  description: Test A2A contextId annotation for stateful conversations
+  steps:
+  - name: setup-mock-llm
+    try:
+    - script:
+        content: |
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.22 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1prealpha1
+          kind: A2AServer
+          metadata:
+            name: mock-llm-message-counter
+          status:
+            (contains(conditions[?type == 'Ready'].status, 'True')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1prealpha1
+        kind: A2AServer
+        name: mock-llm-message-counter
+
+  - name: test-first-query
+    try:
+    - apply:
+        file: manifests/a01-query-first.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: message-counter-first
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: message-counter-first
+          status:
+            (length(responses)): 1
+            (contains(responses[0].content, '1 message(s) received')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: message-counter-first
+
+  - name: test-second-query-with-context
+    try:
+    - script:
+        content: |
+          CONTEXT_ID=$(kubectl get query message-counter-first -n $NAMESPACE -o jsonpath='{.status.responses[0].a2a.contextId}')
+          if [ -z "$CONTEXT_ID" ]; then
+            echo "ERROR: contextId not set in response a2a metadata" >&2
+            exit 1
+          fi
+          printf '%s' "$CONTEXT_ID"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        outputs:
+        - name: contextId
+          value: ($stdout)
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: message-counter-second
+            annotations:
+              ark.mckinsey.com/a2a-context-id: ($contextId)
+          spec:
+            input: Second message
+            targets:
+              - type: agent
+                name: message-counter-agent
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: message-counter-second
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+            (length(responses)): 1
+            (contains(responses[0].content, '2 message(s) received')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: message-counter-second

@@ -35,7 +35,7 @@ export const marketplaceServices: ServiceCollection = {
       'Open-source LLM observability and analytics platform with session tracking',
     enabled: true,
     category: 'marketplace',
-    namespace: 'langfuse',
+    namespace: 'telemetry',
     chartPath: `${MARKETPLACE_REGISTRY}/langfuse`,
     installArgs: ['--create-namespace'],
     k8sServiceName: 'langfuse',
@@ -53,9 +53,10 @@ export function getAllMarketplaceServices(): ServiceCollection {
 }
 
 export function isMarketplaceService(name: string): boolean {
-  return name.startsWith('marketplace/');
+  return name.startsWith('marketplace/services/');
 }
 
 export function extractMarketplaceServiceName(path: string): string {
-  return path.replace(/^marketplace\//, '');
+  // Extract service name from marketplace/services/phoenix
+  return path.replace(/^marketplace\/services\//, '');
 }

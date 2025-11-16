@@ -1,6 +1,6 @@
 [project]
 name = "ark-sdk-builder"
-version = "0.1.42"
+version = "0.1.43"
 requires-python = ">= 3.12"
 dependencies = [
     "build",
@@ -9,3 +9,6 @@ dependencies = [
     "kubernetes",
     "pydantic"
 ]
+
+[tool.setuptools]
+py-modules = []

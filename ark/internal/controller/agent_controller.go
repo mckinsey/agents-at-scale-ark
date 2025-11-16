@@ -314,7 +314,6 @@ func (r *AgentReconciler) findAgentsForDependency(ctx context.Context, resourceN
 					Namespace: agent.Namespace,
 				},
 			})
-			log.Info("Triggering reconciliation for agent dependent on resource", "agent", agent.Name, "resourceType", resourceType)
 		}
 	}
 

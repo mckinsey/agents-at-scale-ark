@@ -11,7 +11,7 @@ spec:
     - script:
         content: |
           helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.12 \
+            --version 0.1.22 \
             --namespace $NAMESPACE \
             --values mock-llm-values.yaml
         env:
@@ -49,7 +49,8 @@ spec:
           metadata:
             name: custom-headers-query
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     # Verify headers were received correctly
     # Mock-llm echoes back the headers object as JSON in the response content
     - assert:

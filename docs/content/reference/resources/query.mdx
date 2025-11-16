@@ -75,6 +75,11 @@ status:
         type: agent
         name: weather-agent
       content: "It's 72°F and sunny in New York"
+
+  # A2A protocol metadata (when targeting A2A agents)
+  a2a:
+    contextId: "ctx-abc123"
+    taskId: "task-xyz789"
 ```
 
 ## Input Types
@@ -447,4 +452,27 @@ status:
   # Execution timing
   startTime: "2025-10-02T10:00:00Z"
   completionTime: "2025-10-02T10:00:05Z"
+
+  # A2A protocol metadata (populated when targeting A2A agents)
+  a2a:
+    contextId: "ctx-abc123"
+    taskId: "task-xyz789"
+```
+
+### A2A Protocol Metadata
+
+When queries target agents hosted on A2A servers, the `status.a2a` field contains A2A protocol-specific metadata:
+
+```yaml
+status:
+  a2a:
+    # Context identifier for grouping related interactions
+    contextId: "ctx-abc123"
+
+    # Task identifier if an A2ATask was created
+    taskId: "task-xyz789"
+```
+
+- **contextId**: Groups related queries in a conversation thread. Set via `ark.mckinsey.com/a2a-context-id` annotation on query creation.
+- **taskId**: References the A2ATask resource created for this query. See [A2ATask](/reference/resources/a2atask) for details.
 ```

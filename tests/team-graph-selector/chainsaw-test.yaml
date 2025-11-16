@@ -88,7 +88,8 @@ spec:
           metadata:
             name: test-graph-selector-team
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
         timeout: 180s
   - name: validate-graph-selector-execution
     try:

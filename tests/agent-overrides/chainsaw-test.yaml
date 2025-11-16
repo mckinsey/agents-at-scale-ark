@@ -83,7 +83,8 @@ spec:
           metadata:
             name: overrides-test-query
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     catch:
     - events: {}
     - describe:
@@ -148,7 +149,8 @@ spec:
           metadata:
             name: overrides-test-query-tool
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     - script:
         env:
         - name: NAMESPACE

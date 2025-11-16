@@ -457,6 +457,19 @@ spec:
                 items:
                   description: Response defines a response from a query target.
                   properties:
+                    a2a:
+                      description: A2A contains optional A2A protocol metadata (contextId,
+                        taskId)
+                      properties:
+                        contextId:
+                          description: ContextID from the A2A protocol when the target
+                            is an A2A agent
+                          type: string
+                        taskId:
+                          description: TaskID from the A2A protocol when the target
+                            is an A2A agent and a task was created
+                          type: string
+                      type: object
                     content:
                       type: string
                     phase:
