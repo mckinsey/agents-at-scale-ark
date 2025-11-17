@@ -1,7 +1,22 @@
 """Streaming utilities for converting responses to SSE format."""
 
+from typing import TypedDict
+
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from openai.types.chat.chat_completion_chunk import Choice as ChunkChoice, ChoiceDelta
+
+
+class StreamingErrorDetail(TypedDict, total=False):
+    """Error detail structure for streaming error responses."""
+    status: int
+    message: str
+    type: str
+    code: str
+
+
+class StreamingErrorResponse(TypedDict):
+    """OpenAI-compatible error response format for streaming."""
+    error: StreamingErrorDetail
 
 
 def create_single_chunk_sse_response(completion: ChatCompletion) -> list[str]:

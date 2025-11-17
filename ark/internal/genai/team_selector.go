@@ -81,7 +81,8 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (*Agent, error) {
 	return agent, nil
 }
 
-func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList, previousMember string) (TeamMember, int, error) {
+//nolint:gocognit // Complex function handling selector agent logic, but cohesive responsibilities
+func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList, previousMember string, candidateMembers []TeamMember) (TeamMember, error) {
 	history := buildHistory(messages)
 	data := SelectorTemplateData{
 		Roles:        rolesList,
@@ -91,60 +92,136 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	selectorAgent, err := t.loadSelectorAgent(ctx)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
-	response, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(buf.String())}, nil, nil)
+	result, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(buf.String())}, nil, nil)
 	if err != nil {
 		if IsTerminateTeam(err) {
-			return nil, 0, err
+			return nil, err
 		}
-		return nil, 0, fmt.Errorf("selector agent call failed: %w", err)
+		return nil, fmt.Errorf("selector agent call failed: %w", err)
 	}
 
-	if len(response) == 0 {
-		return nil, 0, fmt.Errorf("selector agent returned no messages")
+	if len(result.Messages) == 0 {
+		return nil, fmt.Errorf("selector agent returned no messages")
 	}
 
 	var selectedName string
-	lastMsg := response[len(response)-1]
+	lastMsg := result.Messages[len(result.Messages)-1]
 	if lastMsg.OfAssistant != nil && lastMsg.OfAssistant.Content.OfString.Value != "" {
 		selectedName = strings.TrimSpace(lastMsg.OfAssistant.Content.OfString.Value)
 	} else {
-		return nil, 0, fmt.Errorf("selector agent returned invalid response")
+		return nil, fmt.Errorf("selector agent returned invalid response")
 	}
 
 	rec := NewExecutionRecorder(t.Recorder)
 	rec.SelectorAgentResponse(ctx, t.FullName(), selectorAgent.Name, selectedName, participantsList)
 
+	// Use candidateMembers if provided, otherwise use all team members
+	membersToSearch := t.Members
+	if candidateMembers != nil {
+		membersToSearch = candidateMembers
+	}
+
 	// Find selected member
-	for i, member := range t.Members {
+	for _, member := range membersToSearch {
 		if member.GetName() == selectedName {
 			rec.ParticipantSelected(ctx, t.FullName(), selectedName, "exact_match")
-			return member, i, nil
+			return member, nil
 		}
 	}
 
 	// Fallback to first member if not found
-	if len(t.Members) > 0 {
-		fallback := t.Members[0]
+	if len(membersToSearch) > 0 {
+		fallback := membersToSearch[0]
 		rec.ParticipantSelected(ctx, t.FullName(), fallback.GetName(), "fallback_no_match")
 
 		// Avoid repeating same member
-		if fallback.GetName() == previousMember && len(t.Members) > 1 {
-			fallback = t.Members[1]
+		if fallback.GetName() == previousMember && len(membersToSearch) > 1 {
+			fallback = membersToSearch[1]
 		}
-		return fallback, 0, nil
+		return fallback, nil
 	}
 
-	return nil, 0, fmt.Errorf("no members available")
+	return nil, fmt.Errorf("no members available")
 }
 
+// determineNextMember routes to the appropriate selection logic based on whether graph constraints exist.
+func (t *Team) determineNextMember(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, error) {
+	switch {
+	case previousMember == "":
+		// First turn: use first member
+		return t.Members[0], nil
+	case len(legalTransitions) == 0:
+		// No graph constraints: use standard selector (all members available)
+		participantsList := buildParticipants(t.Members)
+		rolesList := buildRoles(t.Members)
+		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil)
+	default:
+		// Graph constraints provided: use legal transitions
+		return t.selectFromGraphConstraints(ctx, messages, tmpl, previousMember, legalTransitions)
+	}
+}
+
+// selectFromGraphConstraints selects a member from the graph-constrained legal transitions.
+func (t *Team) selectFromGraphConstraints(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, error) {
+	// Build name-to-member lookup map once
+	memberLookup := make(map[string]TeamMember, len(t.Members))
+	for _, member := range t.Members {
+		memberLookup[member.GetName()] = member
+	}
+
+	// Find previous member to get legal transitions
+	previousMemberObj := memberLookup[previousMember]
+
+	if previousMemberObj == nil {
+		// Previous member not found, fallback to first member
+		t.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "PreviousMemberNotFound", BaseEvent{
+			Name: t.FullName(),
+			Metadata: map[string]string{
+				"strategy":       t.Strategy,
+				"previousMember": previousMember,
+				"teamName":       t.FullName(),
+			},
+		})
+		return t.Members[0], nil
+	}
+
+	legal := legalTransitions[previousMember]
+
+	switch len(legal) {
+	case 0:
+		// No legal transitions - fallback to first member
+		t.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "NoLegalTransitions", BaseEvent{
+			Name: t.FullName(),
+			Metadata: map[string]string{
+				"strategy":       t.Strategy,
+				"previousMember": previousMember,
+				"teamName":       t.FullName(),
+			},
+		})
+		return t.Members[0], nil
+	case 1:
+		// Only one legal transition - use it directly (skip selector agent for optimization)
+		selectedMember := legal[0]
+		rec := NewExecutionRecorder(t.Recorder)
+		rec.ParticipantSelected(ctx, t.FullName(), selectedMember.GetName(), "graph_constrained_single")
+		return selectedMember, nil
+	default:
+		// Multiple legal transitions - use selector agent to choose from candidates
+		participantsList := buildParticipants(legal)
+		rolesList := buildRoles(legal)
+		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, legal)
+	}
+}
+
+//nolint:gocognit // Complex function orchestrating selector logic with graph constraints, but cohesive responsibilities
 func (t *Team) executeSelector(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
 	messages := append([]Message{}, history...)
 	var newMessages []Message
@@ -159,15 +236,32 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 		return newMessages, err
 	}
 
-	participantsList := buildParticipants(t.Members)
-	rolesList := buildRoles(t.Members)
+	// Build legal transitions map if graph constraints are provided
+	// Map from member name to list of TeamMember objects (not strings)
+	legalTransitions := make(map[string][]TeamMember)
+	if t.Graph != nil {
+		// Build member lookup map for converting names to TeamMember objects
+		memberLookup := make(map[string]TeamMember)
+		for _, member := range t.Members {
+			memberLookup[member.GetName()] = member
+		}
+
+		for _, edge := range t.Graph.Edges {
+			// Convert edge.To (string) to TeamMember object
+			if member, exists := memberLookup[edge.To]; exists {
+				legalTransitions[edge.From] = append(legalTransitions[edge.From], member)
+			}
+		}
+	}
+
 	previousMember := ""
 
 	for turn := 0; ; turn++ {
 		turnTracker := NewExecutionRecorder(t.Recorder)
 		turnTracker.TeamTurn(ctx, "Start", t.FullName(), t.Strategy, turn)
 
-		nextMember, memberIndex, err := t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember)
+		// Determine next member based on graph constraints (if any)
+		nextMember, err := t.determineNextMember(ctx, messages, tmpl, previousMember, legalTransitions)
 		if err != nil {
 			if IsTerminateTeam(err) {
 				return newMessages, nil
@@ -179,7 +273,7 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 		turnCtx, turnSpan := t.TeamRecorder.StartTurn(ctx, turn, nextMember.GetName(), nextMember.GetType())
 		defer turnSpan.End()
 
-		err = t.executeMemberAndAccumulate(turnCtx, nextMember, userInput, &messages, &newMessages, memberIndex)
+		err = t.executeMemberAndAccumulate(turnCtx, nextMember, userInput, &messages, &newMessages, turn)
 
 		// Record turn output
 		if len(newMessages) > 0 {

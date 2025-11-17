@@ -103,12 +103,3 @@ make test          # Run all tests
 go test ./internal/controller/... -v
 go test ./internal/webhook/... -v
 ```
-
-### E2E Tests
-```bash
-# Requires running K8s cluster
-go test ./test/e2e/... -v
-```
-
-### Validation Tests
-Sample invalid configurations in `/test/validation-failures/` for webhook testing.

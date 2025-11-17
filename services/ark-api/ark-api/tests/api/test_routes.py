@@ -48,7 +48,697 @@ class TestNamespacesEndpoint(unittest.TestCase):
         self.assertEqual(len(data["items"]), 2)
         self.assertEqual(data["items"][0]["name"], "default")
         self.assertEqual(data["items"][1]["name"], "kube-system")
+
+
+class TestDeleteEndpoints(unittest.TestCase):
+    """Test cases for delete endpoints."""
     
+    def setUp(self):
+        """Set up test client."""
+        from ark_api.main import app
+        self.client = TestClient(app)
+    
+    @patch('ark_api.api.v1.agents.with_ark_client')
+    def test_delete_agent_success(self, mock_with_ark_client):
+        """Test successful agent deletion."""
+        # Setup mock
+        mock_client = AsyncMock()
+        mock_client.agents.a_delete = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        # Make the request
+        response = self.client.delete("/v1/agents/test-agent")
+        
+        # Assert response
+        self.assertEqual(response.status_code, 204)
+        mock_client.agents.a_delete.assert_called_once_with("test-agent")
+    
+    @patch('ark_api.api.v1.agents.with_ark_client')
+    def test_delete_agent_not_found(self, mock_with_ark_client):
+        """Test agent deletion when agent doesn't exist."""
+        # Setup mock to raise exception
+        mock_client = AsyncMock()
+        mock_client.agents.a_delete = AsyncMock(side_effect=Exception("Agent not found"))
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        # Make the request
+        response = self.client.delete("/v1/agents/nonexistent-agent")
+        
+        # Assert response
+        self.assertEqual(response.status_code, 500)
+    
+    @patch('ark_api.api.v1.models.with_ark_client')
+    def test_delete_model_success(self, mock_with_ark_client):
+        """Test successful model deletion."""
+        # Setup mock
+        mock_client = AsyncMock()
+        mock_client.models.a_delete = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        # Make the request
+        response = self.client.delete("/v1/models/test-model")
+        
+        # Assert response
+        self.assertEqual(response.status_code, 204)
+        mock_client.models.a_delete.assert_called_once_with("test-model")
+    
+    @patch('ark_api.api.v1.tools.with_ark_client')
+    def test_delete_tool_success(self, mock_with_ark_client):
+        """Test successful tool deletion."""
+        # Setup mock
+        mock_client = AsyncMock()
+        mock_client.tools.a_delete = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        # Make the request
+        response = self.client.delete("/v1/tools/test-tool")
+        
+        # Assert response
+        self.assertEqual(response.status_code, 204)
+        mock_client.tools.a_delete.assert_called_once_with("test-tool")
+    
+    @patch('ark_api.api.v1.teams.with_ark_client')
+    def test_delete_team_success(self, mock_with_ark_client):
+        """Test successful team deletion."""
+        # Setup mock
+        mock_client = AsyncMock()
+        mock_client.teams.a_delete = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        # Make the request
+        response = self.client.delete("/v1/teams/test-team")
+        
+        # Assert response
+        self.assertEqual(response.status_code, 204)
+        mock_client.teams.a_delete.assert_called_once_with("test-team")
+    
+    @patch('ark_api.api.v1.queries.with_ark_client')
+    def test_delete_query_success(self, mock_with_ark_client):
+        """Test successful query deletion."""
+        # Setup mock
+        mock_client = AsyncMock()
+        mock_client.queries.a_delete = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        # Make the request
+        response = self.client.delete("/v1/queries/test-query")
+        
+        # Assert response
+        self.assertEqual(response.status_code, 204)
+        mock_client.queries.a_delete.assert_called_once_with("test-query")
+
+
+class TestAPIKeyEndpoints(unittest.TestCase):
+    """Test cases for API key management endpoints."""
+    
+    def setUp(self):
+        """Set up test client."""
+        from ark_api.main import app
+        self.client = TestClient(app)
+    
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_create_api_key_success(self, mock_api_key_service):
+        """Test successful API key creation."""
+        from datetime import datetime, timezone
+        from ark_api.models.auth import APIKeyCreateResponse
+        
+        # Setup mock
+        mock_service_instance = AsyncMock()
+        mock_response = APIKeyCreateResponse(
+            id="test-id",
+            name="test-key",
+            public_key="pk_test_123",
+            secret_key="sk_test_456",
+            created_at=datetime.now(timezone.utc),
+            expires_at=None
+        )
+        mock_service_instance.create_api_key.return_value = mock_response
+        mock_api_key_service.return_value = mock_service_instance
+        
+        # Make the request
+        response = self.client.post(
+            "/v1/api-keys",
+            json={"name": "test-key", "description": "Test API key"}
+        )
+        
+        # Assert response
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(data["public_key"], "pk_test_123")
+        self.assertEqual(data["secret_key"], "sk_test_456")
+        self.assertEqual(data["name"], "test-key")
+    
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_list_api_keys_success(self, mock_api_key_service):
+        """Test successful API key listing."""
+        from datetime import datetime, timezone
+        
+        # Setup mock
+        mock_service_instance = AsyncMock()
+        mock_result = Mock()
+        mock_result.count = 2
+        mock_result.items = [
+            {
+                "id": "test-id-1",
+                "public_key": "pk_test_123", 
+                "name": "test-key-1", 
+                "is_active": True,
+                "created_at": datetime.now(timezone.utc),
+                "last_used_at": None,
+                "expires_at": None
+            },
+            {
+                "id": "test-id-2",
+                "public_key": "pk_test_456", 
+                "name": "test-key-2", 
+                "is_active": False,
+                "created_at": datetime.now(timezone.utc),
+                "last_used_at": None,
+                "expires_at": None
+            }
+        ]
+        mock_service_instance.list_api_keys.return_value = mock_result
+        mock_api_key_service.return_value = mock_service_instance
+        
+        # Make the request
+        response = self.client.get("/v1/api-keys")
+        
+        # Assert response
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data["items"]), 2)
+        self.assertEqual(data["items"][0]["name"], "test-key-1")
+        self.assertEqual(data["items"][1]["name"], "test-key-2")
+    
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_delete_api_key_success(self, mock_api_key_service):
+        """Test successful API key deletion."""
+        # Setup mock
+        mock_service_instance = AsyncMock()
+        mock_service_instance.delete_api_key.return_value = True
+        mock_api_key_service.return_value = mock_service_instance
+        
+        # Make the request
+        response = self.client.delete("/v1/api-keys/pk_test_123")
+        
+        # Assert response
+        self.assertEqual(response.status_code, 204)
+        mock_service_instance.delete_api_key.assert_called_once_with("pk_test_123")
+    
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_delete_api_key_not_found(self, mock_api_key_service):
+        """Test API key deletion when key doesn't exist."""
+        # Setup mock
+        mock_service_instance = AsyncMock()
+        mock_service_instance.delete_api_key.return_value = False
+        mock_api_key_service.return_value = mock_service_instance
+        
+        # Make the request
+        response = self.client.delete("/v1/api-keys/nonexistent_key")
+        
+        # Assert response
+        self.assertEqual(response.status_code, 404)
+        data = response.json()
+        self.assertIn("not found", data["detail"])
+
+
+class TestSessionEndpoints(unittest.TestCase):
+    """Test cases for session management endpoints."""
+    
+    def setUp(self):
+        """Set up test client."""
+        from ark_api.main import app
+        self.client = TestClient(app)
+    
+    @patch('ark_api.api.v1.sessions.with_ark_client')
+    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
+    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    def test_delete_session_success(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
+        """Test successful session deletion."""
+        # Setup mocks
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        mock_get_memory_resources.return_value = [
+            {
+                "metadata": {"name": "test-memory"}, 
+                "spec": {"service": {"name": "memory-service"}},
+                "status": {"lastResolvedAddress": "http://memory-service:8080"}
+            }
+        ]
+        
+        mock_http_response = Mock()
+        mock_http_response.status_code = 200
+        mock_http_response.is_success = True
+        mock_http_client_instance = AsyncMock()
+        mock_http_client_instance.delete = AsyncMock(return_value=mock_http_response)
+        mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
+        
+        # Make the request
+        response = self.client.delete("/v1/sessions/test-session")
+        
+        # Assert response
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("deleted successfully from", data["message"])
+        self.assertIn("memory service(s)", data["message"])
+    
+    @patch('ark_api.api.v1.sessions.with_ark_client')
+    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
+    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    def test_delete_all_sessions_success(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
+        """Test successful deletion of all sessions."""
+        # Setup mocks
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        mock_get_memory_resources.return_value = [
+            {
+                "metadata": {"name": "test-memory"}, 
+                "spec": {"service": {"name": "memory-service"}},
+                "status": {"lastResolvedAddress": "http://memory-service:8080"}
+            }
+        ]
+        
+        mock_http_response = Mock()
+        mock_http_response.status_code = 200
+        mock_http_response.is_success = True
+        mock_http_client_instance = AsyncMock()
+        mock_http_client_instance.delete.return_value = mock_http_response
+        mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
+        
+        # Make the request
+        response = self.client.delete("/v1/sessions")
+        
+        # Assert response
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("All sessions deleted successfully from", data["message"])
+        self.assertIn("memory service(s)", data["message"])
+    
+    @patch('ark_api.api.v1.sessions.with_ark_client')
+    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
+    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    def test_delete_query_messages_success(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
+        """Test successful query message deletion."""
+        # Setup mocks
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        mock_get_memory_resources.return_value = [
+            {
+                "metadata": {"name": "test-memory"}, 
+                "spec": {"service": {"name": "memory-service"}},
+                "status": {"lastResolvedAddress": "http://memory-service:8080"}
+            }
+        ]
+        
+        mock_http_response = Mock()
+        mock_http_response.status_code = 200
+        mock_http_response.is_success = True
+        mock_http_client_instance = AsyncMock()
+        mock_http_client_instance.delete.return_value = mock_http_response
+        mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
+        
+        # Make the request
+        response = self.client.delete("/v1/sessions/test-session/queries/test-query/messages")
+        
+        # Assert response
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("messages deleted successfully", data["message"])
+    
+    @patch('ark_api.api.v1.sessions.with_ark_client')
+    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
+    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    def test_delete_session_all_services_unreachable(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
+        """Test session deletion when all memory services are unreachable (503)."""
+        # Setup mocks
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        mock_get_memory_resources.return_value = [
+            {
+                "metadata": {"name": "test-memory"}, 
+                "spec": {"service": {"name": "memory-service"}},
+                "status": {"lastResolvedAddress": "http://memory-service:8080"}
+            }
+        ]
+        
+        # Simulate network error
+        mock_http_client_instance = AsyncMock()
+        mock_http_client_instance.delete.side_effect = Exception("Connection refused")
+        mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
+        
+        # Make the request
+        response = self.client.delete("/v1/sessions/test-session")
+        
+        # Assert response
+        self.assertEqual(response.status_code, 503)
+        data = response.json()
+        self.assertIn("Could not reach any memory services", data["detail"])
+    
+    @patch('ark_api.api.v1.sessions.with_ark_client')
+    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
+    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    def test_delete_session_multiple_services(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
+        """Test session deletion across multiple memory services."""
+        # Setup mocks
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        mock_get_memory_resources.return_value = [
+            {
+                "metadata": {"name": "test-memory-1"}, 
+                "spec": {"service": {"name": "memory-service-1"}},
+                "status": {"lastResolvedAddress": "http://memory-service-1:8080"}
+            },
+            {
+                "metadata": {"name": "test-memory-2"}, 
+                "spec": {"service": {"name": "memory-service-2"}},
+                "status": {"lastResolvedAddress": "http://memory-service-2:8080"}
+            }
+        ]
+        
+        # Both services return 200
+        mock_http_response = Mock()
+        mock_http_response.status_code = 200
+        mock_http_response.is_success = True
+        mock_http_client_instance = AsyncMock()
+        mock_http_client_instance.delete.return_value = mock_http_response
+        mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
+        
+        # Make the request
+        response = self.client.delete("/v1/sessions/test-session")
+        
+        # Assert response
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("deleted successfully from 2 memory service(s)", data["message"])
+    
+    @patch('ark_api.api.v1.sessions.with_ark_client')
+    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
+    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    def test_delete_session_database_error_500(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
+        """Test session deletion when database returns 500 error."""
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        mock_get_memory_resources.return_value = [
+            {
+                "metadata": {"name": "test-memory"}, 
+                "spec": {"service": {"name": "memory-service"}},
+                "status": {"lastResolvedAddress": "http://memory-service:8080"}
+            }
+        ]
+        
+        mock_http_response = Mock()
+        mock_http_response.status_code = 500
+        mock_http_response.is_success = False
+        mock_http_client_instance = AsyncMock()
+        mock_http_client_instance.delete.return_value = mock_http_response
+        mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
+        
+        response = self.client.delete("/v1/sessions/test-session")
+        
+        self.assertEqual(response.status_code, 500)
+        data = response.json()
+        self.assertIn("Failed to delete session", data["detail"])
+        self.assertIn("database", data["detail"])
+    
+    @patch('ark_api.api.v1.sessions.with_ark_client')
+    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
+    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    def test_delete_session_idempotent_404(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
+        """Test session deletion when session is not found (404) - should succeed as idempotent."""
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        mock_get_memory_resources.return_value = [
+            {
+                "metadata": {"name": "test-memory"}, 
+                "spec": {"service": {"name": "memory-service"}},
+                "status": {"lastResolvedAddress": "http://memory-service:8080"}
+            }
+        ]
+        
+        mock_http_response = Mock()
+        mock_http_response.status_code = 404
+        mock_http_response.is_success = False
+        mock_http_client_instance = AsyncMock()
+        mock_http_client_instance.delete.return_value = mock_http_response
+        mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
+        
+        response = self.client.delete("/v1/sessions/test-session")
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("deleted successfully", data["message"])
+    
+    @patch('ark_api.api.v1.sessions.with_ark_client')
+    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
+    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    def test_delete_session_partial_failure(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
+        """Test session deletion when some services succeed and some fail."""
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        mock_get_memory_resources.return_value = [
+            {
+                "metadata": {"name": "test-memory-1"}, 
+                "spec": {"service": {"name": "memory-service-1"}},
+                "status": {"lastResolvedAddress": "http://memory-service-1:8080"}
+            },
+            {
+                "metadata": {"name": "test-memory-2"}, 
+                "spec": {"service": {"name": "memory-service-2"}},
+                "status": {"lastResolvedAddress": "http://memory-service-2:8080"}
+            }
+        ]
+        
+        call_count = [0]
+        def side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                response = Mock()
+                response.status_code = 200
+                response.is_success = True
+                return response
+            else:
+                raise Exception("Connection refused")
+        
+        mock_http_client_instance = AsyncMock()
+        mock_http_client_instance.delete.side_effect = side_effect
+        mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
+        
+        response = self.client.delete("/v1/sessions/test-session")
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("deleted successfully from 1 memory service(s)", data["message"])
+    
+    @patch('ark_api.api.v1.sessions.with_ark_client')
+    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
+    def test_delete_session_no_memory_services(self, mock_get_memory_resources, mock_with_ark_client):
+        """Test session deletion when no memory services are configured."""
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        mock_get_memory_resources.return_value = []
+        
+        response = self.client.delete("/v1/sessions/test-session")
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("deleted successfully", data["message"])
+        self.assertIn("0 memory service(s)", data["message"])
+    
+    @patch('ark_api.api.v1.sessions.with_ark_client')
+    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
+    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    def test_delete_all_sessions_database_error_500(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
+        """Test delete all sessions when database returns 500 error."""
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        mock_get_memory_resources.return_value = [
+            {
+                "metadata": {"name": "test-memory"}, 
+                "spec": {"service": {"name": "memory-service"}},
+                "status": {"lastResolvedAddress": "http://memory-service:8080"}
+            }
+        ]
+        
+        mock_http_response = Mock()
+        mock_http_response.status_code = 500
+        mock_http_response.is_success = False
+        mock_http_client_instance = AsyncMock()
+        mock_http_client_instance.delete.return_value = mock_http_response
+        mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
+        
+        response = self.client.delete("/v1/sessions")
+        
+        self.assertEqual(response.status_code, 500)
+        data = response.json()
+        self.assertIn("Failed to delete all sessions from database", data["detail"])
+    
+    @patch('ark_api.api.v1.sessions.with_ark_client')
+    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
+    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    def test_delete_all_sessions_all_unreachable(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
+        """Test delete all sessions when all memory services are unreachable."""
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        mock_get_memory_resources.return_value = [
+            {
+                "metadata": {"name": "test-memory-1"}, 
+                "spec": {"service": {"name": "memory-service-1"}},
+                "status": {"lastResolvedAddress": "http://memory-service-1:8080"}
+            },
+            {
+                "metadata": {"name": "test-memory-2"}, 
+                "spec": {"service": {"name": "memory-service-2"}},
+                "status": {"lastResolvedAddress": "http://memory-service-2:8080"}
+            }
+        ]
+        
+        mock_http_client_instance = AsyncMock()
+        mock_http_client_instance.delete.side_effect = Exception("Connection refused")
+        mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
+        
+        response = self.client.delete("/v1/sessions")
+        
+        self.assertEqual(response.status_code, 503)
+        data = response.json()
+        self.assertIn("Could not reach any memory services", data["detail"])
+        self.assertIn("test-memory-1", data["detail"])
+        self.assertIn("test-memory-2", data["detail"])
+    
+    @patch('ark_api.api.v1.sessions.with_ark_client')
+    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
+    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    def test_delete_all_sessions_multiple_services(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
+        """Test delete all sessions across multiple memory services."""
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        mock_get_memory_resources.return_value = [
+            {
+                "metadata": {"name": "test-memory-1"}, 
+                "spec": {"service": {"name": "memory-service-1"}},
+                "status": {"lastResolvedAddress": "http://memory-service-1:8080"}
+            },
+            {
+                "metadata": {"name": "test-memory-2"}, 
+                "spec": {"service": {"name": "memory-service-2"}},
+                "status": {"lastResolvedAddress": "http://memory-service-2:8080"}
+            }
+        ]
+        
+        mock_http_response = Mock()
+        mock_http_response.status_code = 200
+        mock_http_response.is_success = True
+        mock_http_client_instance = AsyncMock()
+        mock_http_client_instance.delete.return_value = mock_http_response
+        mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
+        
+        response = self.client.delete("/v1/sessions")
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("deleted successfully from 2 memory service(s)", data["message"])
+    
+    @patch('ark_api.api.v1.sessions.with_ark_client')
+    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
+    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    def test_delete_query_messages_database_error_500(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
+        """Test query messages deletion when database returns 500 error."""
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        mock_get_memory_resources.return_value = [
+            {
+                "metadata": {"name": "test-memory"}, 
+                "spec": {"service": {"name": "memory-service"}},
+                "status": {"lastResolvedAddress": "http://memory-service:8080"}
+            }
+        ]
+        
+        mock_http_response = Mock()
+        mock_http_response.status_code = 500
+        mock_http_response.is_success = False
+        mock_http_client_instance = AsyncMock()
+        mock_http_client_instance.delete.return_value = mock_http_response
+        mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
+        
+        response = self.client.delete("/v1/sessions/test-session/queries/test-query/messages")
+        
+        self.assertEqual(response.status_code, 500)
+        data = response.json()
+        self.assertIn("Failed to delete query", data["detail"])
+        self.assertIn("database", data["detail"])
+    
+    @patch('ark_api.api.v1.sessions.with_ark_client')
+    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
+    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    def test_delete_query_messages_all_unreachable(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
+        """Test query messages deletion when all memory services are unreachable."""
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        mock_get_memory_resources.return_value = [
+            {
+                "metadata": {"name": "test-memory"}, 
+                "spec": {"service": {"name": "memory-service"}},
+                "status": {"lastResolvedAddress": "http://memory-service:8080"}
+            }
+        ]
+        
+        mock_http_client_instance = AsyncMock()
+        mock_http_client_instance.delete.side_effect = Exception("Connection refused")
+        mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
+        
+        response = self.client.delete("/v1/sessions/test-session/queries/test-query/messages")
+        
+        self.assertEqual(response.status_code, 503)
+        data = response.json()
+        self.assertIn("Could not reach any memory services", data["detail"])
+    
+    @patch('ark_api.api.v1.sessions.with_ark_client')
+    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
+    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    def test_delete_query_messages_multiple_services(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
+        """Test query messages deletion across multiple memory services."""
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        mock_get_memory_resources.return_value = [
+            {
+                "metadata": {"name": "test-memory-1"}, 
+                "spec": {"service": {"name": "memory-service-1"}},
+                "status": {"lastResolvedAddress": "http://memory-service-1:8080"}
+            },
+            {
+                "metadata": {"name": "test-memory-2"}, 
+                "spec": {"service": {"name": "memory-service-2"}},
+                "status": {"lastResolvedAddress": "http://memory-service-2:8080"}
+            }
+        ]
+        
+        mock_http_response = Mock()
+        mock_http_response.status_code = 200
+        mock_http_response.is_success = True
+        mock_http_client_instance = AsyncMock()
+        mock_http_client_instance.delete.return_value = mock_http_response
+        mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
+        
+        response = self.client.delete("/v1/sessions/test-session/queries/test-query/messages")
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("deleted successfully from 2 memory service(s)", data["message"])
+
 
 class TestAgentsEndpoint(unittest.TestCase):
     """Test cases for the /namespaces/{namespace}/agents endpoint."""
@@ -1350,7 +2040,7 @@ class TestTeamsEndpoint(unittest.TestCase):
         self.assertEqual(data["name"], "graph-team")
         self.assertEqual(data["strategy"], "graph")
         self.assertEqual(len(data["graph"]["edges"]), 2)
-        self.assertEqual(data["graph"]["edges"][0]["from_"], "planner")
+        self.assertEqual(data["graph"]["edges"][0]["from"], "planner")
         self.assertEqual(data["graph"]["edges"][0]["to"], "executor")
     
     @patch('ark_api.api.v1.teams.with_ark_client')
@@ -1400,6 +2090,77 @@ class TestTeamsEndpoint(unittest.TestCase):
         self.assertEqual(data["maxTurns"], 10)
         self.assertEqual(data["selector"]["agent"], "selector-agent")
         self.assertEqual(data["selector"]["selectorPrompt"], "Choose the best agent for the task")
+    
+    @patch('ark_api.api.v1.teams.with_ark_client')
+    def test_create_team_with_selector_and_graph(self, mock_ark_client):
+        """Test creating a team with selector strategy and graph constraints."""
+        # Setup async context manager mock
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+        
+        # Mock the created team response
+        mock_team = Mock()
+        mock_team.to_dict.return_value = {
+            "metadata": {"name": "graph-selector-team", "namespace": "default"},
+            "spec": {
+                "description": "Team with selector and graph constraints",
+                "members": [
+                    {"name": "researcher", "type": "agent"},
+                    {"name": "analyzer", "type": "agent"},
+                    {"name": "writer", "type": "agent"}
+                ],
+                "strategy": "selector",
+                "selector": {
+                    "agent": "coordinator",
+                    "selectorPrompt": "Choose the next team member"
+                },
+                "graph": {
+                    "edges": [
+                        {"from": "researcher", "to": "analyzer"},
+                        {"from": "analyzer", "to": "writer"}
+                    ]
+                },
+                "maxTurns": 10
+            },
+            "status": {"phase": "pending"}
+        }
+        
+        mock_client.teams.a_create = AsyncMock(return_value=mock_team)
+        
+        # Make the request
+        request_data = {
+            "name": "graph-selector-team",
+            "description": "Team with selector and graph constraints",
+            "members": [
+                {"name": "researcher", "type": "agent"},
+                {"name": "analyzer", "type": "agent"},
+                {"name": "writer", "type": "agent"}
+            ],
+            "strategy": "selector",
+            "selector": {
+                "agent": "coordinator",
+                "selectorPrompt": "Choose the next team member"
+            },
+            "graph": {
+                "edges": [
+                    {"from": "researcher", "to": "analyzer"},
+                    {"from": "analyzer", "to": "writer"}
+                ]
+            },
+            "maxTurns": 10
+        }
+        response = self.client.post("/v1/teams?namespace=default", json=request_data)
+        
+        # Assert response
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["name"], "graph-selector-team")
+        self.assertEqual(data["strategy"], "selector")
+        self.assertEqual(data["selector"]["agent"], "coordinator")
+        self.assertEqual(len(data["graph"]["edges"]), 2)
+        self.assertEqual(data["graph"]["edges"][0]["from"], "researcher")
+        self.assertEqual(data["graph"]["edges"][0]["to"], "analyzer")
+        self.assertEqual(data["maxTurns"], 10)
     
     @patch('ark_api.api.v1.teams.with_ark_client')
     def test_get_team_success(self, mock_ark_client):

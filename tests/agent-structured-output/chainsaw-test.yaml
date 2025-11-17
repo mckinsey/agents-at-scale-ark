@@ -63,7 +63,8 @@ spec:
             name: structured-output-test-query
             namespace: ($namespace)
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     catch:
     - events: {}
     - describe:
@@ -82,7 +83,8 @@ spec:
             name: structured-output-test-query
             namespace: ($namespace)
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
             (contains(['positive', 'negative', 'neutral'], json_parse(responses[0].content).sentiment)): true
             (json_parse(responses[0].content).confidence >= `0`): true
             (json_parse(responses[0].content).confidence <= `1`): true

@@ -21,8 +21,8 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/McK-Internal/qbaf"
-Documentation = "https://github.com/McK-Internal/qbaf/tree/main/services/ark-mcp"
+Repository = "https://github.com/mckinsey/agents-at-scale-ark"
+Documentation = "https://mckinsey.github.io/agents-at-scale-ark/user-guide/samples/mcp-servers/"
 
 [build-system]
 requires = ["hatchling"]

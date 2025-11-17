@@ -57,6 +57,14 @@ spec:
   # Optional: timeout for query execution
   timeout: 5m
 
+  # Optional: header overrides for models and MCP servers
+  overrides:
+    - headers:
+        - name: X-Trace-ID
+          value:
+            value: "trace-xyz789"
+      resourceType: model
+
 status:
   # Execution state: pending, running, done, error
   phase: done
@@ -67,6 +75,11 @@ status:
         type: agent
         name: weather-agent
       content: "It's 72°F and sunny in New York"
+
+  # A2A protocol metadata (when targeting A2A agents)
+  a2a:
+    contextId: "ctx-abc123"
+    taskId: "task-xyz789"
 ```
 
 ## Input Types
@@ -267,6 +280,40 @@ spec:
 
 The agent will remember "Alice" from the first query when processing the second.
 
+## Timeout Configuration
+
+Control how long ARK waits for query execution before timing out:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: long-running-query
+spec:
+  input: "Perform deep analysis"
+  targets:
+    - type: agent
+      name: research-agent
+  timeout: 30m  # Wait up to 30 minutes (default: 5m)
+```
+
+**Timeout format**: Duration string (e.g., `30s`, `5m`, `1h`, `30m`)  
+**Default**: 5 minutes if not specified
+
+### Timeout Behavior
+
+- If execution completes within timeout → Query phase: `done`
+- If execution exceeds timeout → Query phase: `error` with timeout error message
+- Applies to all targets in the query
+
+### For A2A Agents
+
+A2A execution automatically respects the query timeout. The A2A execution uses Go's context deadline, so remaining time is automatically tracked as the query progresses.
+
+Individual A2A servers can also have their own timeout configured via `A2AServer.spec.timeout` to further limit specific server calls.
+
+See the [Building A2A Servers guide](/developer-guide/building-a2a-servers#timeout-configuration) for detailed timeout configuration for A2A agents.
+
 ## Examples
 
 ### Simple Query
@@ -344,6 +391,39 @@ spec:
       name: qa-team
 ```
 
+### Query with Overrides
+
+Add custom headers for model or MCP server requests:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: tracked-query
+spec:
+  input: "Analyze this data"
+  targets:
+    - type: agent
+      name: data-analyst
+  overrides:
+    - headers:
+        - name: X-Request-ID
+          value:
+            value: "req-12345"
+        - name: X-User-Context
+          value:
+            valueFrom:
+              configMapKeyRef:
+                name: user-config
+                key: context
+      resourceType: model
+      labelSelector:
+        matchLabels:
+          tier: production
+```
+
+See [Overrides](/user-guide/overrides) for detailed documentation.
+
 ## Status and Phases
 
 ### Phases
@@ -372,4 +452,27 @@ status:
   # Execution timing
   startTime: "2025-10-02T10:00:00Z"
   completionTime: "2025-10-02T10:00:05Z"
+
+  # A2A protocol metadata (populated when targeting A2A agents)
+  a2a:
+    contextId: "ctx-abc123"
+    taskId: "task-xyz789"
+```
+
+### A2A Protocol Metadata
+
+When queries target agents hosted on A2A servers, the `status.a2a` field contains A2A protocol-specific metadata:
+
+```yaml
+status:
+  a2a:
+    # Context identifier for grouping related interactions
+    contextId: "ctx-abc123"
+
+    # Task identifier if an A2ATask was created
+    taskId: "task-xyz789"
+```
+
+- **contextId**: Groups related queries in a conversation thread. Set via `ark.mckinsey.com/a2a-context-id` annotation on query creation.
+- **taskId**: References the A2ATask resource created for this query. See [A2ATask](/reference/resources/a2atask) for details.
 ```

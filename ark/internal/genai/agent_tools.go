@@ -288,7 +288,7 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall, recorder
 	// Call the agent's Execute function
 	// Pass nil for memory and eventStream (agents-as-tools don't use memory or streaming)
 	// See ARKQB-137 for discussion on streaming support for agents as tools
-	responseMessages, err := agent.Execute(ctx, userInput, history, nil, nil)
+	result, err := agent.Execute(ctx, userInput, history, nil, nil)
 	if err != nil {
 		log.Info("agent execution error", "agent", a.AgentName, "error", err)
 		return ToolResult{
@@ -298,7 +298,7 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall, recorder
 		}, err
 	}
 
-	lastMessage := responseMessages[len(responseMessages)-1]
+	lastMessage := result.Messages[len(result.Messages)-1]
 
 	log.Info("agent direct call response", "agent", a.AgentName, "response", lastMessage.OfAssistant.Content.OfString.Value)
 

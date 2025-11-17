@@ -172,6 +172,38 @@ Screenshot:
 
 ![Screenshot of the argo artifacts workflow sample](./images/argo-artifacts-screenshot.png)
 
+### A2A Arithmetic Workflow
+
+The `a2a-arithmetic-workflow.yaml` demonstrates combining A2A agents, Ark agents, and Python scripts. The workflow validates prerequisites, performs arithmetic operations, and queries agents for results.
+
+Install [mock-llm](https://github.com/dwmkerr/mock-llm) with A2A support - this will create a simple `countdown-agent` that returns an A2A task that counts down from a given input number of seconds:
+
+```bash
+helm upgrade --install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+  --set ark.a2a.enabled=true
+
+# Check the A2A server is ready
+kubectl get a2aserver mock-llm-countdown
+# NAME                   ADDRESS                                                 READY
+# mock-llm-countdown     http://mock-llm:6556/a2a/agents/countdown-agent         true
+```
+
+Install and run the workflow:
+
+```bash
+kubectl apply -f services/argo-workflows/samples/a2a-arithmetic-workflow.yaml
+argo submit --from workflowtemplate/a2a-arithmetic-workflow -p a="2" -p b="3"
+
+# After the workflow runs, check the agent it created
+kubectl get agent number-curiosa
+# NAME              MODEL     READY
+# number-curiosa    default   true
+```
+
+Screenshot:
+
+![Screenshot of the A2A agents workflow](./images/a2a-workflow.png)
+
 ## Troubleshooting
 
 When you get errors or unexpected results:

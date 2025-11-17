@@ -1,4 +1,4 @@
 export default {
-  'ark-a2a-api': 'Ark A2A Gateway',
+  'ark-api': 'Ark API',
   'ark-cluster-memory': 'Ark Cluster Memory'
 }

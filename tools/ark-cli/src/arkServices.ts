@@ -131,16 +131,6 @@ const defaultArkServices: ServiceCollection = {
     k8sPortForwardLocalPort: 3274,
   },
 
-  'ark-api-a2a': {
-    name: 'ark-api-a2a',
-    helmReleaseName: 'ark-api-a2a',
-    description: 'Ark API agent-to-agent communication service',
-    enabled: false, // Disabled - not currently used
-    category: 'service',
-    // namespace: undefined - uses current context namespace
-    // Note: This service might be installed as part of ark-api or separately
-  },
-
   'ark-mcp': {
     name: 'ark-mcp',
     helmReleaseName: 'ark-mcp',

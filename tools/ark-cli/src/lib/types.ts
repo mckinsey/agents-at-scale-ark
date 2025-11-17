@@ -67,6 +67,7 @@ export interface CommandVersionConfig {
 export interface K8sMetadata {
   name: string;
   namespace?: string;
+  creationTimestamp?: string;
 }
 
 export interface K8sCondition {
@@ -123,6 +124,26 @@ export interface QueryTarget {
 
 export interface QueryResponse {
   content?: string;
+  a2a?: {
+    contextId?: string;
+  };
+}
+
+export interface QueryStatus {
+  phase?: 'initializing' | 'running' | 'done' | 'error' | 'canceled';
+  conditions?: K8sCondition[];
+  responses?: QueryResponse[];
+  message?: string;
+  error?: string;
+  tokenUsage?: {
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+  };
+  a2a?: {
+    contextId?: string;
+    taskId?: string;
+  };
 }
 
 export interface Query {
@@ -133,13 +154,7 @@ export interface Query {
     input: string;
     targets: QueryTarget[];
   };
-  status?: {
-    phase?: 'initializing' | 'running' | 'done' | 'error' | 'canceled';
-    conditions?: K8sCondition[];
-    responses?: QueryResponse[];
-    message?: string;
-    error?: string;
-  };
+  status?: QueryStatus;
 }
 
 // ARK Tool types - only fields we use
@@ -153,4 +168,46 @@ export interface ClusterInfo {
   cluster?: string;
   user?: string;
   namespace?: string;
+}
+
+// ARK Evaluation types - only fields we use
+export interface EvaluationManifest {
+  apiVersion: string;
+  kind: 'Evaluation';
+  metadata: {
+    name: string;
+  };
+  spec: {
+    type: 'direct' | 'query';
+    evaluator: {
+      name: string;
+    };
+    config: {
+      input?: string;
+      output?: string;
+      queryRef?: {
+        name: string;
+      };
+      responseTarget?: {
+        type: string;
+        name: string;
+      };
+    };
+    timeout?: string;
+    ttl?: string;
+  };
+}
+
+export interface EvaluationStatus {
+  phase?: 'pending' | 'running' | 'done' | 'error';
+  score?: string;
+  passed?: boolean;
+  message?: string;
+}
+
+export interface Evaluation {
+  metadata: {
+    name: string;
+  };
+  status?: EvaluationStatus;
 }

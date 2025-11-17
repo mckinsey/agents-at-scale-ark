@@ -1,5 +1,52 @@
 # Changelog
 
+## [0.1.43](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.42...v0.1.43) (2025-11-13)
+
+
+### Features
+
+* add A2A arithmetic workflow sample ([#401](https://github.com/mckinsey/agents-at-scale-ark/issues/401)) ([7a89b0c](https://github.com/mckinsey/agents-at-scale-ark/commit/7a89b0c039d88b893a39e32e25eeb9a49ba3e1a1))
+* Add sample workflow ([#431](https://github.com/mckinsey/agents-at-scale-ark/issues/431)) ([bdedfa5](https://github.com/mckinsey/agents-at-scale-ark/commit/bdedfa526d3357c2b88f60f61fa7fd1ce282d959))
+* added cli command `ark queries delete` ([#419](https://github.com/mckinsey/agents-at-scale-ark/issues/419)) ([488c30d](https://github.com/mckinsey/agents-at-scale-ark/commit/488c30d97bf8cd0b9817a146b19b15188250948b))
+* ark cli queries list ([#416](https://github.com/mckinsey/agents-at-scale-ark/issues/416)) ([440254b](https://github.com/mckinsey/agents-at-scale-ark/commit/440254b275b20116baad097ead30ae6838d51298))
+* completion streaming output for ark cli query ([#424](https://github.com/mckinsey/agents-at-scale-ark/issues/424)) ([8ecb940](https://github.com/mckinsey/agents-at-scale-ark/commit/8ecb9402a1dc23beaaba89cb25ed5b95a43b2600))
+* enable helm chart users to attach custom cacert for controller connections ([#421](https://github.com/mckinsey/agents-at-scale-ark/issues/421)) ([2094d23](https://github.com/mckinsey/agents-at-scale-ark/commit/2094d234aae342a49601041fc130cc09877e360d))
+* header overrides ([#311](https://github.com/mckinsey/agents-at-scale-ark/issues/311)) ([e7fba56](https://github.com/mckinsey/agents-at-scale-ark/commit/e7fba567af3ac3b3c15995d74640a88580dbe34d))
+* Migrate Marketplace to External Marketplace Repository ([#428](https://github.com/mckinsey/agents-at-scale-ark/issues/428)) ([210da1e](https://github.com/mckinsey/agents-at-scale-ark/commit/210da1e327e81167a5b66293591e1b41797e5032))
+* selector with graph [ARKQB-458]  ([#410](https://github.com/mckinsey/agents-at-scale-ark/issues/410)) ([c19c1df](https://github.com/mckinsey/agents-at-scale-ark/commit/c19c1df04fb083b73e9e7f66caaf57f619bf64ec))
+* streaming integration - dashboard, error handling, A2A, HTTPRoutes ([#435](https://github.com/mckinsey/agents-at-scale-ark/issues/435)) ([8d4e47a](https://github.com/mckinsey/agents-at-scale-ark/commit/8d4e47a6e11653f24930353a93f552620df23780))
+* update marketplace service paths to include 'services/' prefix ([#442](https://github.com/mckinsey/agents-at-scale-ark/issues/442)) ([61066db](https://github.com/mckinsey/agents-at-scale-ark/commit/61066db141a0b305250f339875429326681d420c))
+
+
+### Bug Fixes
+
+* always install evaluator for evaluated E2E tests ([#417](https://github.com/mckinsey/agents-at-scale-ark/issues/417)) ([60cec9f](https://github.com/mckinsey/agents-at-scale-ark/commit/60cec9f83dbb29935460c6a2d58283989e102bc6))
+* Change to xray audit command ([#439](https://github.com/mckinsey/agents-at-scale-ark/issues/439)) ([58700c1](https://github.com/mckinsey/agents-at-scale-ark/commit/58700c1be6d7b407426d5190e0387394c9298248))
+* Use public registry for forked prs ([#354](https://github.com/mckinsey/agents-at-scale-ark/issues/354)) ([a601443](https://github.com/mckinsey/agents-at-scale-ark/commit/a601443bd91c430136c2089e32e295452791ee4f))
+
+## [0.1.42](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.41...v0.1.42) (2025-11-06)
+
+
+### Features
+
+* add delete API and CLI command for queries and sessions ([#281](https://github.com/mckinsey/agents-at-scale-ark/issues/281)) ([d7ee0b9](https://github.com/mckinsey/agents-at-scale-ark/commit/d7ee0b92285acb821606f600d4f6dc67e2e05277))
+* add queries get command with [@latest](https://github.com/latest) support ([#402](https://github.com/mckinsey/agents-at-scale-ark/issues/402)) ([3a050b4](https://github.com/mckinsey/agents-at-scale-ark/commit/3a050b48fdc5f56bb195bb42611b747d92566f51))
+* Alternative to PyJWT in the event of cve-2025-45768 ([#388](https://github.com/mckinsey/agents-at-scale-ark/issues/388)) ([06593c6](https://github.com/mckinsey/agents-at-scale-ark/commit/06593c6040127647f72c4f37f60a6b34c09f45bf))
+* argo workflows minio plugin ([#399](https://github.com/mckinsey/agents-at-scale-ark/issues/399)) ([95cc907](https://github.com/mckinsey/agents-at-scale-ark/commit/95cc907f87e1da962b3d5bd24874f8c3abaa62eb))
+* ark cli evaluations ([#370](https://github.com/mckinsey/agents-at-scale-ark/issues/370)) ([36b3610](https://github.com/mckinsey/agents-at-scale-ark/commit/36b36100093d18d9e7e15d38c1416ae26edf627f))
+* move observability services to marketplace ([#390](https://github.com/mckinsey/agents-at-scale-ark/issues/390)) ([2900630](https://github.com/mckinsey/agents-at-scale-ark/commit/29006308543787a5baa2edbe83f4aac21c96f0cd))
+* support aws bedrock models on ark cli `ark create model` command ([#408](https://github.com/mckinsey/agents-at-scale-ark/issues/408)) ([731a402](https://github.com/mckinsey/agents-at-scale-ark/commit/731a4024677e904f018a51da11e022fbef6486c7))
+
+
+### Bug Fixes
+
+* Add retry to e2e standard & evaluated ([#396](https://github.com/mckinsey/agents-at-scale-ark/issues/396)) ([930b988](https://github.com/mckinsey/agents-at-scale-ark/commit/930b9881d8e264433504e0759dc4d588359ac837))
+* enable a2a query timeout configuration ([#326](https://github.com/mckinsey/agents-at-scale-ark/issues/326)) ([616451b](https://github.com/mckinsey/agents-at-scale-ark/commit/616451bf348d2d32de8d929804ca6d60187d445e))
+* sse support for golang mcp client ([#385](https://github.com/mckinsey/agents-at-scale-ark/issues/385)) ([5d93c8b](https://github.com/mckinsey/agents-at-scale-ark/commit/5d93c8b2dc31e027978ee0840543fc84e495c564))
+* sse transport test failing on ci ([#404](https://github.com/mckinsey/agents-at-scale-ark/issues/404)) ([670435d](https://github.com/mckinsey/agents-at-scale-ark/commit/670435d45cca68c592d81c86679eaff792d582fa))
+* **tests:** deterministic query token usage ([#386](https://github.com/mckinsey/agents-at-scale-ark/issues/386)) ([85f510c](https://github.com/mckinsey/agents-at-scale-ark/commit/85f510c288e0e55b85f11c199acc20f1dd62c9f2))
+* update repository reference in code and docs ([#411](https://github.com/mckinsey/agents-at-scale-ark/issues/411)) ([b067261](https://github.com/mckinsey/agents-at-scale-ark/commit/b067261a42e6dcdbba4434c80bd5af348c902cf2))
+
 ## [0.1.41](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.40...v0.1.41) (2025-10-30)
 
 

@@ -1,0 +1,29 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: azure-openai-secret
+type: Opaque
+data:
+  # This uses the base64-encoded API key from the quickstart script
+  # The quickstart.sh script will substitute ${API_KEY} with the base64-encoded value
+  token: ${API_KEY}
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: default
+spec:
+  type: "${MODEL_TYPE}"
+  model:
+    value: "${MODEL_VERSION}"
+  config:
+    ${MODEL_TYPE}:
+      baseUrl:
+        value: "${BASE_URL}"
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            # This secret is created by following the setup instructions in the README
+            name: azure-openai-secret
+            key: token

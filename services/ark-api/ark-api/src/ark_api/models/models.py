@@ -4,6 +4,7 @@ from typing import List, Dict, Optional, Literal, Union, Any
 from pydantic import BaseModel, Field
 
 from .common import AvailabilityStatus
+from .agents import Header
 
 
 class ValueSource(BaseModel):
@@ -16,6 +17,7 @@ class OpenAIConfig(BaseModel):
     """OpenAI model configuration."""
     api_key: Union[str, ValueSource] = Field(..., alias="apiKey")
     base_url: Union[str, ValueSource] = Field(..., alias="baseUrl")
+    headers: Optional[List[Header]] = None
 
 
 class AzureConfig(BaseModel):
@@ -23,6 +25,7 @@ class AzureConfig(BaseModel):
     api_key: Union[str, ValueSource] = Field(..., alias="apiKey")
     base_url: Union[str, ValueSource] = Field(..., alias="baseUrl")
     api_version: Optional[Union[str, ValueSource]] = Field(None, alias="apiVersion")
+    headers: Optional[List[Header]] = None
 
 
 class BedrockConfig(BaseModel):
@@ -79,7 +82,7 @@ class ModelDetailResponse(BaseModel):
     namespace: str
     type: Literal["openai", "azure", "bedrock"]
     model: str
-    config: Dict[str, Dict[str, Union[str, Dict[str, Any]]]]
+    config: Dict[str, Dict[str, Union[str, Dict[str, Any], List[Any]]]]
     available: Optional[AvailabilityStatus] = None
     resolved_address: Optional[str] = None
     annotations: Optional[Dict[str, str]] = None

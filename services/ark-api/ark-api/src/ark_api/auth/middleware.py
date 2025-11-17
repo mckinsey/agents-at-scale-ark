@@ -24,7 +24,6 @@ from .constants import AuthMode, AuthHeader
 # Import from ark_sdk
 from ark_sdk.auth.exceptions import TokenValidationError
 from ark_sdk.auth.validator import TokenValidator
-from ark_sdk.auth.config import AuthConfig
 from ark_sdk.auth.basic import BasicAuthValidator
 
 # Import API key service

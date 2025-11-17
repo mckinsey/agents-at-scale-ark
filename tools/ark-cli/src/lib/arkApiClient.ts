@@ -146,6 +146,72 @@ export class ArkApiClient {
     }
   }
 
+  async getSessions(): Promise<any[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/v1/sessions`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = (await response.json()) as {items?: any[]};
+      return data.items || [];
+    } catch (error) {
+      throw new Error(
+        `Failed to get sessions: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  async deleteSession(sessionId: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/v1/sessions/${sessionId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      throw new Error(
+        `Failed to delete session: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  async deleteQueryMessages(sessionId: string, queryId: string): Promise<any> {
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/v1/sessions/${sessionId}/queries/${queryId}/messages`,
+        {
+          method: 'DELETE',
+        }
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      throw new Error(
+        `Failed to delete query messages: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  async deleteAllSessions(): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/v1/sessions`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      throw new Error(
+        `Failed to delete all sessions: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
   async createChatCompletion(
     params: OpenAI.Chat.Completions.ChatCompletionCreateParams
   ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
@@ -158,6 +224,8 @@ export class ArkApiClient {
   async *createChatCompletionStream(
     params: OpenAI.Chat.Completions.ChatCompletionCreateParams
   ): AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk> {
+    // Errors from OpenAI SDK will automatically propagate with proper error messages
+    // and kill the CLI, so no try/catch needed here
     const stream = await this.openai.chat.completions.create({
       ...params,
       stream: true,

@@ -56,7 +56,8 @@ spec:
           metadata:
             name: test-query-jq-filtered
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     catch:
     - events: {}
     - describe:
@@ -73,7 +74,8 @@ spec:
           metadata:
             name: test-query-unfiltered
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     catch:
     - events: {}
     - describe:

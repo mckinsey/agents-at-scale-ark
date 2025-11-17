@@ -39,6 +39,18 @@ app:
     # - "open": No authentication (development only)
     - name: AUTH_MODE
       value: "open"
+    # A2A Gateway environment variables
+    # These configure the external URLs advertised in agent cards (.well-known/agent.json)
+    # Must match your external routing configuration (HTTPRoute/Ingress)
+    - name: ARK_A2A_AGENT_CARD_PORT
+      value: "8000"
+    - name: ARK_A2A_AGENT_CARD_HOST
+      value: "ark-api.127.0.0.1.nip.io"
+    - name: ARK_A2A_AGENT_CARD_PROTOCOL
+      value: "http"
+    # ARK_A2A_AGENT_CARD_PATH is optional - leave empty for root path
+    # - name: ARK_A2A_AGENT_CARD_PATH
+    #   value: ""
   # Optional: Import entire secrets/configmaps as env vars
   # envFrom:
   #   - secretRef:

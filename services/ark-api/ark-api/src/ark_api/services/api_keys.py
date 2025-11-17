@@ -7,7 +7,7 @@ import json
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Optional, List, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict, Any
 from kubernetes_asyncio import client
 from kubernetes_asyncio.client.api_client import ApiClient
 

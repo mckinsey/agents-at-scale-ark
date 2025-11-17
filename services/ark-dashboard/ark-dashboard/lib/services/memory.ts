@@ -51,6 +51,12 @@ interface MemoryListResponse {
   total?: number;
 }
 
+export type MemoryMessagesFilters = {
+  memory?: string;
+  session?: string;
+  query?: string;
+};
+
 export const memoryService = {
   // Get all memory resources in a namespace
   async getMemoryResources(): Promise<MemoryResource[]> {
@@ -108,11 +114,7 @@ export const memoryService = {
   },
 
   // Get all memory messages using the new consolidated endpoint
-  async getAllMemoryMessages(filters?: {
-    memory?: string;
-    session?: string;
-    query?: string;
-  }): Promise<
+  async getAllMemoryMessages(filters?: MemoryMessagesFilters): Promise<
     {
       timestamp: string;
       memoryName: string;
@@ -148,5 +150,25 @@ export const memoryService = {
       console.error('Failed to fetch memory messages:', error);
       return [];
     }
+  },
+
+  async deleteSession(sessionId: string) {
+    apiClient.delete(`/api/v1/sessions/${sessionId}`);
+  },
+
+  async deleteQuery({
+    sessionId,
+    queryId,
+  }: {
+    sessionId: string;
+    queryId: string;
+  }) {
+    apiClient.delete(
+      `/api/v1/sessions/${sessionId}/queries/${queryId}/messages`,
+    );
+  },
+
+  async resetMemory() {
+    apiClient.delete('/api/v1/sessions');
   },
 };

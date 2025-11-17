@@ -1,0 +1,48 @@
+# Deployment runs the mock llm
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-llm
+  labels:
+    app: mock-llm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-llm
+  template:
+    metadata:
+      labels:
+        app: mock-llm
+    spec:
+      containers:
+      - name: mock-llm
+        image: ghcr.io/dwmkerr/mock-llm:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 6556
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+# Service exposes the mock-llm on port 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-llm
+  labels:
+    app: mock-llm
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 6556
+    protocol: TCP
+    name: http
+  selector:
+    app: mock-llm

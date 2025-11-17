@@ -34,6 +34,7 @@ concurrency:
 jobs:
   # Setup job to determine container cache registry
   setup-container-cache-registry:
+    needs: [jfrog-xray-scan]
     runs-on: ubuntu-24.04
     outputs:
       ci-cache-registry: ${{ steps.setup-registry.outputs.ci-cache-registry }}
@@ -85,7 +86,7 @@ jobs:
 
   # Security scan with JFrog Xray
   jfrog-xray-scan:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     env:
       XRAY_WATCH_NAME: 'ark-20863-security-watch'
     steps:
@@ -93,15 +94,19 @@ jobs:
       
       - name: Run JFrog Xray scan
         id: xray-scan
-        uses: ./.github/actions/jfrog-xray-scan
         continue-on-error: true
+        uses: ./.github/actions/jfrog-xray-scan
         with:
+          github_repo: ${{ github.repository }}
           build_name: 'agents-at-scale'
           build_number: ${{ github.run_number }}
           watch_name: ${{ env.XRAY_WATCH_NAME }}
-          jfrog_user: ${{ secrets.JFROG_DOCKER_USERNAME }}
-          jfrog_password: ${{ secrets.JFROG_DOCKER_TOKEN }}
+          jfrog_user: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME }}
+          jfrog_password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD }}
           jfrog_url: ${{ vars.JFROG_PLATFORM_URL }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCAN_JSON: "xray-scan-agents-at-scale-${{ github.run_number }}.json"
 
       - name: Report scan status
         if: always()
@@ -196,12 +201,6 @@ jobs:
           artifact-folder: ark-api/unit-tests
           artifact-suffix: ark-api-unit
 
-      - uses: ./.github/actions/collect-coverage
-        with:
-          source-path: services/ark-api-a2a/coverage/
-          artifact-folder: ark-api-a2a/unit-tests
-          artifact-suffix: ark-api-a2a-unit
-
   build-containers:
     needs: [setup-container-cache-registry, build-libs]
     runs-on: ubuntu-24.04
@@ -211,9 +210,6 @@ jobs:
         include:
           - path: ark
             image: ark-controller
-          - path: services/ark-api-a2a
-            image: ark-api-a2a
-            prebuild: "make ark-api-a2a-deps && mkdir -p services/ark-api-a2a/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api-a2a/out/"
           - path: services/ark-api
             image: ark-api
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
@@ -255,6 +251,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
 
       - name: Login to Docker Registry
+        if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
         uses: docker/login-action@v3
         with:
           registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry-hostname }}
@@ -332,6 +329,7 @@ jobs:
           cache-dependency-path: "ark/go.sum"
 
       - name: Configure K3s registry authentication
+        if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
         run: |
           sudo mkdir -p /etc/rancher/k3s
           cat <<EOF | sudo tee /etc/rancher/k3s/registries.yaml
@@ -367,6 +365,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Registry
+        if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
         uses: docker/login-action@v3
         with:
           registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}
@@ -376,14 +375,14 @@ jobs:
       - name: Run quickstart
         env:
           ARK_QUICKSTART_PROMPT_YES: 1
-          ARK_QUICKSTART_MODEL_TYPE: azure
-          ARK_QUICKSTART_MODEL_VERSION: "gpt-4.1-mini"
-          ARK_QUICKSTART_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
+          ARK_QUICKSTART_MODEL_TYPE: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL && 'azure' || 'openai' }}
+          ARK_QUICKSTART_MODEL_VERSION: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL && 'gpt-4.1-mini' || 'gpt-4' }}
+          ARK_QUICKSTART_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL != '' &&  secrets.CICD_AZURE_OPENAI_BASE_URL || 'http://mock-llm.default.svc.cluster.local/v1' }}
           ARK_QUICKSTART_API_VERSION: 2024-12-01-preview
-          ARK_QUICKSTART_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
-          ARK_QUICKSTART_CONTROLLER_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller
+          ARK_QUICKSTART_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY != '' && secrets.CICD_AZURE_OPENAI_KEY || 'xxxxxxxxxxx' }}
+          ARK_QUICKSTART_CONTROLLER_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller
           ARK_QUICKSTART_CONTROLLER_TAG: ${{ github.sha }}
-          CACHE_ARGS: --cache-from type=registry,ref=${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache --cache-to type=registry,ref=${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache,mode=max
+          CACHE_ARGS: --cache-from type=registry,ref=${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache --cache-to type=registry,ref=${{ needs.setup-container-cache-registry.outputs.ci-cache-registry|| format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache,mode=max
         run: |
           echo "Environment variables set:"
           echo "ARK_QUICKSTART_PROMPT_YES=$ARK_QUICKSTART_PROMPT_YES"
@@ -408,10 +407,10 @@ jobs:
 
       - uses: ./.github/actions/test-ark-cli
         with:
-          azure-openai-key: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
-          azure-openai-base-url: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
-          model-type: azure
-          model-name: gpt-4.1-mini
+          azure-openai-key: ${{ secrets.CICD_AZURE_OPENAI_KEY != '' && secrets.CICD_AZURE_OPENAI_KEY || 'xxxxxxxxxxx' }}
+          azure-openai-base-url: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL != '' &&  secrets.CICD_AZURE_OPENAI_BASE_URL || 'http://mock-llm.default.svc.cluster.local/v1' }}
+          model-type: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL && 'azure' || 'openai' }}
+          model-name: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL && 'gpt-4.1-mini' || 'gpt-4' }}
           model-api-version: 2024-12-01-preview
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
@@ -453,19 +452,7 @@ jobs:
           helm upgrade --install ark-api services/ark-api/chart \
             --namespace default \
             --create-namespace \
-            --set app.image.repository="${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-api" \
-            --set app.image.tag="${{ github.sha }}" \
-            --set app.image.pullPolicy="Always" \
-            --wait \
-            --timeout=5m
-
-      - name: Deploy ark-api-a2a
-        run: |
-          echo "=== Deploying ark-api-a2a ==="
-          helm upgrade --install ark-api-a2a services/ark-api-a2a/chart \
-            --namespace default \
-            --create-namespace \
-            --set app.image.repository="${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-api-a2a" \
+            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-api" \
             --set app.image.tag="${{ github.sha }}" \
             --set app.image.pullPolicy="Always" \
             --wait \
@@ -477,7 +464,7 @@ jobs:
           helm upgrade --install ark-dashboard services/ark-dashboard/chart \
             --namespace default \
             --create-namespace \
-            --set app.image.repository="${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-dashboard" \
+            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-dashboard" \
             --set app.image.tag="${{ github.sha }}" \
             --set app.image.pullPolicy="Always" \
             --wait \
@@ -490,20 +477,18 @@ jobs:
           kubectl get pods -n ark-system -l control-plane=ark-controller || echo "Controller not found, showing all ark-system pods:" && kubectl get pods -n ark-system
           echo "ARK Services:"
           kubectl get pods -n default -l app=ark-api
-          kubectl get pods -n default -l app=ark-api-a2a
           kubectl get pods -n default -l app=ark-dashboard
           echo "Service endpoints:"
-          kubectl get svc -n default ark-api ark-api-a2a ark-dashboard
+          kubectl get svc -n default ark-api ark-dashboard
 
       - name: Test endpoints
         run: |
           # Wait for services to be ready
           echo "Waiting for services to be ready..."
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
-          kubectl wait --for=condition=ready pod -l app=ark-api-a2a -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
 
-          # Test ark-api service
+          # Test ark-api service (including A2A Gateway endpoints)
           echo
           echo "=== Testing ark-api service ==="
           kubectl port-forward -n default service/ark-api 8082:80 &
@@ -515,19 +500,10 @@ jobs:
           curl -f http://127.0.0.1:8082/ready || (echo "API ready check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
           echo "Testing OpenAI models endpoint..."
           curl -f http://127.0.0.1:8082/openai/v1/models || (echo "OpenAI models endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
+          echo "Testing A2A Gateway /agents endpoint..."
+          curl -f http://127.0.0.1:8082/a2a/agents || (echo "A2A /agents endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
           # Clean up API port-forward
           kill $API_PID || true
-
-          # Test ark-api-a2a service
-          echo
-          echo "=== Testing ark-api-a2a service ==="
-          kubectl port-forward -n default service/ark-api-a2a 8083:80 &
-          A2A_PID=$!
-          sleep 15
-          echo "Testing A2A health endpoint..."
-          curl -f http://127.0.0.1:8083/health || (echo "A2A health check failed" && kubectl logs -l app=ark-api-a2a -n default --tail=20 && exit 1)
-          # Clean up A2A port-forward
-          kill $A2A_PID || true
 
           # Test ark-dashboard service
           echo
@@ -545,6 +521,7 @@ jobs:
 
   e2e-tests-standard:
     needs: [setup-container-cache-registry, build-containers]
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }} # Remove skipping these tests once chainsaw can be run with mock-llm
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -567,8 +544,8 @@ jobs:
 
       - name: Run standard E2E tests
         env:
-          E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
-          E2E_TEST_AZURE_OPENAI_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
+          E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY != '' && secrets.CICD_AZURE_OPENAI_KEY || 'xxxxxxxxxxx' }}
+          E2E_TEST_AZURE_OPENAI_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL != '' &&  secrets.CICD_AZURE_OPENAI_BASE_URL || 'http://mock-llm.default.svc.cluster.local/v1' }}
           FILESYS_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/filesystem-mcp-server
           FILESYS_IMAGE_TAG: ${{ github.sha }}
           LANGCHAIN_WEATHER_AGENT_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/langchain-weather-agent
@@ -578,17 +555,7 @@ jobs:
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
-          MAX_RETRIES=3
-          RETRY_DELAY=30
-          for ((attempt=1; attempt<=$MAX_RETRIES; attempt++)); do
-            if chainsaw test --config .chainsaw.yaml --selector '!evaluated'; then
-              exit 0
-            fi
-            if [ $attempt -lt $MAX_RETRIES ]; then
-              sleep $RETRY_DELAY
-            fi
-          done
-          exit 1
+          chainsaw test --config .chainsaw.yaml --selector '!evaluated'
 
       - uses: ./.github/actions/collect-coverage-e2e
         with:
@@ -597,6 +564,7 @@ jobs:
   e2e-tests-evaluated:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }} # Remove skipping these tests once chainsaw can be run with mock-llm
     steps:
       - uses: actions/checkout@v4
 
@@ -605,8 +573,8 @@ jobs:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "true"
           install-evaluator: "true" # Evaluated tests need ark-evaluator service
-          azure-openai-key: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
-          azure-openai-base-url: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
+          azure-openai-key: ${{ secrets.CICD_AZURE_OPENAI_KEY != '' && secrets.CICD_AZURE_OPENAI_KEY || 'xxxxxxxxxxx' }}
+          azure-openai-base-url: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL != '' && secrets.CICD_AZURE_OPENAI_BASE_URL || 'http://mock-llm.default.svc.cluster.local/v1' }}
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
@@ -619,8 +587,8 @@ jobs:
           sudo chmod +x /usr/local/bin/chainsaw
       - name: Run evaluated E2E tests
         env:
-          E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
-          E2E_TEST_AZURE_OPENAI_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
+          E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY != '' && secrets.CICD_AZURE_OPENAI_KEY || 'xxxxxxxxxxx' }}
+          E2E_TEST_AZURE_OPENAI_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL != '' &&  secrets.CICD_AZURE_OPENAI_BASE_URL || 'http://mock-llm.default.svc.cluster.local/v1' }}
           FILESYS_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/filesystem-mcp-server
           FILESYS_IMAGE_TAG: ${{ github.sha }}
           LANGCHAIN_WEATHER_AGENT_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/langchain-weather-agent
@@ -631,7 +599,6 @@ jobs:
           cd tests
           mkdir -p /tmp/chainsaw-report
           # Use special config for evaluated tests with longer timeouts and sequential execution
-          chainsaw test --config .chainsaw-evaluated.yaml --selector 'evaluated=true'
           MAX_RETRIES=3
           RETRY_DELAY=30
           for ((attempt=1; attempt<=$MAX_RETRIES; attempt++)); do

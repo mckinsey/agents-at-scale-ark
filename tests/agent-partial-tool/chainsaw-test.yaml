@@ -33,4 +33,5 @@ spec:
             metadata:
               name: partial-tool-query
             status:
-              phase: done
+              (conditions[?type == 'Completed']):
+              - status: 'True'

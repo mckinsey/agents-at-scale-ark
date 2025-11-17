@@ -37,13 +37,6 @@
   - Architecture guides and API references
   - Built with Next.js and MDX
 
-- **`marketplace/`** - Ark Marketplace (DevSpace-based services)
-  - Services packaged for future marketplace repository separation
-  - `services/phoenix/` - Phoenix observability platform 
-  - `services/langfuse/` - Langfuse observability platform
-  - `docs/` - Marketplace-specific documentation site (Next.js)
-  - Uses DevSpace deployment instead of Make-based builds
-
 ## Supporting Folders
 
 - **`tools/`** - CLI tools
@@ -106,16 +99,21 @@ cd services/vnext-ui/    # UI service
 make build         # Build Docker image
 ```
 
-## Marketplace Services (DevSpace)
-All marketplace services use DevSpace for deployment:
-```bash
-cd marketplace/services/{service-name}/
-devspace dev       # Deploy in development mode with hot-reload
-devspace deploy    # Deploy to current Kubernetes context
-devspace purge     # Remove service from cluster
+# Marketplace
 
-# Alternative using Helm directly
-helm install {service-name} ./chart --namespace {namespace} --create-namespace
+Ark has a separate marketplace repository for community-contributed services and components:
+
+**Repository**: https://github.com/mckinsey/agents-at-scale-marketplace
+
+The marketplace includes observability platforms (Phoenix, Langfuse) and other optional services. Services can be deployed using DevSpace or Helm as dependencies of your Ark installation.
+
+Example usage in `devspace.yaml`:
+```yaml
+dependencies:
+  phoenix:
+    git: https://github.com/mckinsey/agents-at-scale-marketplace
+    tag: v0.1.1
+    subPath: services/phoenix
 ```
 
 ## CLI Tools

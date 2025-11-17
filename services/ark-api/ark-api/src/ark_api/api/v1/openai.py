@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 import uuid
@@ -19,7 +20,7 @@ from ark_sdk.client import with_ark_client
 from ...models.queries import ArkOpenAICompletionsMetadata
 from ...utils.query_targets import parse_model_to_query_target
 from ...utils.query_polling import poll_query_completion
-from ...utils.streaming import create_single_chunk_sse_response
+from ...utils.streaming import StreamingErrorResponse, create_single_chunk_sse_response
 from ...constants.annotations import STREAMING_ENABLED_ANNOTATION
 
 router = APIRouter(prefix="/openai/v1", tags=["OpenAI"])
@@ -55,13 +56,11 @@ class ChatCompletionRequest(BaseModel):
     temperature: float = 1.0
     max_tokens: Optional[int] = None
     stream: bool = False
-    # Optional per OpenAI spec
-    metadata: Optional[Dict[str, str]] = None
+    metadata: Optional[dict] = None  # Supports queryAnnotations: JSON string of K8s annotations
 
 
 def process_request_metadata(
-    request_metadata: Optional[Dict[str, str]],
-    base_metadata: Dict[str, any]
+    request_metadata: Optional[Dict[str, str]], base_metadata: Dict[str, any]
 ) -> Optional[JSONResponse]:
     """Process request metadata and merge Ark annotations into base metadata.
 
@@ -87,22 +86,66 @@ def process_request_metadata(
                     "error": {
                         "message": f"Invalid Ark metadata: {str(e)}",
                         "type": "invalid_request_error",
-                        "code": "invalid_ark_metadata"
+                        "code": "invalid_ark_metadata",
                     }
-                }
+                },
             )
     # Ignore other metadata keys per OpenAI SDK pattern
     return None
 
 
+# See https://github.com/mckinsey/agents-at-scale-ark/issues/415 for potential improvement:
+# Start streaming first, wait for the first chunk/response, and use the status code of that to respond with
 async def proxy_streaming_response(streaming_url: str):
     """Proxy streaming chunks from memory service."""
     timeout = httpx.Timeout(10.0, read=None)  # 10s connect, infinite read
     async with httpx.AsyncClient(timeout=timeout) as client:
         async with client.stream("GET", streaming_url) as response:
             if response.status_code != 200:
+                # Read error response with expected structure
+                # We control the error format, so read it directly and fail if invalid
+                try:
+                    response_text = await response.aread()
+                    response_json = json.loads(response_text.decode("utf-8"))
+                    
+                    # Expected structure: {"error": {"message": "...", "type": "...", "code": "..."}}
+                    if not isinstance(response_json, dict) or "error" not in response_json:
+                        raise ValueError("Response missing 'error' field")
+                    
+                    error_obj = response_json["error"]
+                    if not isinstance(error_obj, dict):
+                        raise ValueError("'error' field must be an object")
+                    
+                    if "message" not in error_obj or not isinstance(error_obj["message"], str):
+                        raise ValueError("'error.message' field missing or invalid")
+                    
+                    if "type" not in error_obj or not isinstance(error_obj["type"], str):
+                        raise ValueError("'error.type' field missing or invalid")
+                    
+                    # Use the error structure from response, with status code added
+                    error_data: StreamingErrorResponse = {
+                        "error": {
+                            "status": response.status_code,
+                            "message": error_obj["message"],
+                            "type": error_obj["type"],
+                            "code": error_obj.get("code", "server_error"),
+                        }
+                    }
+                except (json.JSONDecodeError, ValueError, KeyError) as e:
+                    # If we can't parse the expected structure, create a default error
+                    logger.warning(f"Failed to parse error response structure: {e}, using default error format")
+                    error_data: StreamingErrorResponse = {
+                        "error": {
+                            "status": response.status_code,
+                            "message": f"{response.status_code} {response.reason_phrase}",
+                            "type": "server_error",
+                            "code": "server_error",
+                        }
+                    }
+
+                # Forward the error response as an SSE error event
+                yield f"data: {json.dumps(error_data)}\n\n"
                 return  # Streaming failed, exit generator
-            
             # Use aiter_lines() for line-by-line streaming without buffering
             async for line in response.aiter_lines():
                 if line.strip():  # Skip empty lines
@@ -115,23 +158,27 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
     model = request.model
     messages = request.messages
 
-    logger.info(f"Received chat completion request for model: {model}")
-
     target = parse_model_to_query_target(model)
     query_name = f"openai-query-{uuid.uuid4().hex[:8]}"
 
     # Get the current namespace
     namespace = get_namespace()
 
-    # Build query metadata
+    # Build metadata for the query resource
     metadata = {"name": query_name, "namespace": namespace}
 
-    # Process request metadata (Ark annotations)
-    error_response = process_request_metadata(request.metadata, metadata)
-    if error_response:
-        return error_response
+    # Parse queryAnnotations if provided
+    if request.metadata and "queryAnnotations" in request.metadata:
+        try:
+            query_annotations = json.loads(request.metadata["queryAnnotations"])
+            if "annotations" not in metadata:
+                metadata["annotations"] = {}
+            metadata["annotations"].update(query_annotations)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning(f"Failed to parse queryAnnotations: {e}")
 
-    # Enable streaming annotation if requested
+    # If the user has requested a streaming response as per the OpenAI completions spec,
+    # enable streaming on the query by adding the streaming annotation
     if request.stream:
         if "annotations" not in metadata:
             metadata["annotations"] = {}
@@ -177,9 +224,7 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
                 )
                 sse_lines = create_single_chunk_sse_response(completion)
                 return StreamingResponse(
-                    iter(sse_lines),
-                    media_type="text/event-stream",
-                    headers=sse_headers
+                    iter(sse_lines), media_type="text/event-stream", headers=sse_headers
                 )
 
             # Streaming is enabled - get the base URL and construct full URL
@@ -187,14 +232,16 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             # Construct streaming URL with query parameters:
             # - from-beginning=true: Start streaming from the first chunk (don't skip any data)
             # - wait-for-query=30s: Wait up to 30 seconds for the query to start producing output
-            streaming_url = f"{base_url}/stream/{query_name}?from-beginning=true&wait-for-query=30s"
+            streaming_url = (
+                f"{base_url}/stream/{query_name}?from-beginning=true&wait-for-query=30s"
+            )
 
             # Proxy to the streaming endpoint
             logger.info(f"Streaming available for query: {query_name}")
             return StreamingResponse(
                 proxy_streaming_response(streaming_url),
                 media_type="text/event-stream",
-                headers=sse_headers
+                headers=sse_headers,
             )
 
     except ValidationError as e:
@@ -205,9 +252,9 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
                 "error": {
                     "message": str(e),
                     "type": "invalid_request_error",
-                    "code": "invalid_value"
+                    "code": "invalid_value",
                 }
-            }
+            },
         )
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
@@ -218,9 +265,9 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
                 "error": {
                     "message": str(e),
                     "type": "server_error",
-                    "code": "internal_error"
+                    "code": "internal_error",
                 }
-            }
+            },
         )
 
 

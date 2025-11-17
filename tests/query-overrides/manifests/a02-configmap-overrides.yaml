@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: query-override-headers
+data:
+  model-consumer-group: "query-model-override-configmap"
+  mcp-consumer-group: "query-mcp-override-configmap"

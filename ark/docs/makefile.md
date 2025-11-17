@@ -7,7 +7,6 @@
 
 ## Test
 - `make test` - Run unit tests
-- `make test-e2e` - Run end-to-end tests
 - `make lint` - Run linter
 - `make lint-fix` - Fix linting issues
 
@@ -32,10 +31,6 @@
 ## Development Environment
 - `make deploy-dev` - Deploy without cert-manager
 - `make admission-dev` - Run with webhooks in dev mode
-
-## Testing
-- `make setup-test-e2e` - Create Kind cluster
-- `make cleanup-test-e2e` - Delete Kind cluster
 
 ## Tools
 All tools are downloaded to `bin/` directory:

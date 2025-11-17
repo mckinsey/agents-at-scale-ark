@@ -210,6 +210,10 @@ spec:
               pollInterval:
                 default: 1m
                 type: string
+              timeout:
+                default: 5m
+                description: Timeout for A2A agent execution (e.g., "30s", "5m", "1h")
+                type: string
             required:
             - address
             type: object
