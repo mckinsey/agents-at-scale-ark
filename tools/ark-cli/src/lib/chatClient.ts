@@ -8,6 +8,7 @@ export interface ChatConfig {
   streamingEnabled: boolean;
   currentTarget?: QueryTarget;
   a2aContextId?: string;
+  sessionId?: string;
 }
 
 export interface ToolCall {
@@ -61,12 +62,17 @@ export class ChatClient {
       signal: signal,
     };
 
-    // Add A2A context ID if present
+    // Add metadata for A2A context ID and/or session ID
+    const queryAnnotations: Record<string, string> = {};
     if (config.a2aContextId) {
+      queryAnnotations['ark.mckinsey.com/a2a-context-id'] = config.a2aContextId;
+    }
+    if (config.sessionId) {
+      queryAnnotations['sessionId'] = config.sessionId;
+    }
+    if (Object.keys(queryAnnotations).length > 0) {
       params.metadata = {
-        queryAnnotations: JSON.stringify({
-          'ark.mckinsey.com/a2a-context-id': config.a2aContextId,
-        }),
+        queryAnnotations: JSON.stringify(queryAnnotations),
       };
     }
 
