@@ -61,7 +61,8 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         mock_client.queries.a_create.assert_called_once()
         query_resource = mock_client.queries.a_create.call_args[0][0]
         # Access spec directly - QueryV1alpha1Spec has sessionId as an attribute
-        self.assertEqual(query_resource.spec.sessionId, "test-session-123")
+        session_id = getattr(query_resource.spec, 'sessionId', None)
+        self.assertEqual(session_id, "test-session-123")
     
     @patch('ark_api.api.v1.openai.with_ark_client')
     @patch('ark_api.api.v1.openai.get_namespace')
@@ -152,7 +153,8 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         mock_client.queries.a_create.assert_called_once()
         query_resource = mock_client.queries.a_create.call_args[0][0]
         # Access spec directly - QueryV1alpha1Spec has sessionId as an attribute
-        self.assertEqual(query_resource.spec.sessionId, "test-session-123")
+        session_id = getattr(query_resource.spec, 'sessionId', None)
+        self.assertEqual(session_id, "test-session-123")
         # Verify that A2A context ID is in metadata annotations (not in spec)
         # Metadata is a dict, so access it directly
         self.assertIn("annotations", query_resource.metadata)
