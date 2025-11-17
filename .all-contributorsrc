@@ -411,7 +411,8 @@
       "avatar_url": "https://avatars.githubusercontent.com/u/42617188?v=4",
       "profile": "http://linkedin.com/in/iliassjabali/",
       "contributions": [
-        "code"
+        "code",
+        "test"
       ]
     }
   ],
