@@ -5,6 +5,9 @@ import unittest.mock
 from unittest.mock import Mock, patch, AsyncMock
 from fastapi.testclient import TestClient
 import json
+from openai.types.chat import ChatCompletion, ChatCompletionMessage
+from openai.types.chat.chat_completion import Choice
+from openai.types.completion_usage import CompletionUsage
 
 # Set environment variable to skip authentication before importing the app
 os.environ["AUTH_MODE"] = "open"
@@ -32,16 +35,25 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         mock_with_ark_client.return_value.__aenter__.return_value = mock_client
         mock_client.queries.a_create = AsyncMock()
         
-        mock_completion = Mock()
-        mock_completion.id = "chatcmpl-test"
-        mock_completion.object = "chat.completion"
-        mock_completion.created = 1234567890
-        mock_completion.model = "test-agent"
-        mock_completion.choices = [Mock()]
-        mock_completion.choices[0].message = Mock()
-        mock_completion.choices[0].message.role = "assistant"
-        mock_completion.choices[0].message.content = "Hello!"
-        mock_completion.choices[0].finish_reason = "stop"
+        # Create a proper ChatCompletion object
+        mock_completion = ChatCompletion(
+            id="chatcmpl-test",
+            object="chat.completion",
+            created=1234567890,
+            model="test-agent",
+            choices=[
+                Choice(
+                    index=0,
+                    message=ChatCompletionMessage(role="assistant", content="Hello!"),
+                    finish_reason="stop",
+                )
+            ],
+            usage=CompletionUsage(
+                prompt_tokens=10,
+                completion_tokens=5,
+                total_tokens=15,
+            ),
+        )
         mock_poll.return_value = mock_completion
         
         # Make the request with session ID in queryAnnotations
@@ -60,8 +72,9 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         # Verify that a_create was called with a query that has sessionId in spec
         mock_client.queries.a_create.assert_called_once()
         query_resource = mock_client.queries.a_create.call_args[0][0]
-        # Access spec directly - QueryV1alpha1Spec has sessionId as an attribute
-        session_id = getattr(query_resource.spec, 'sessionId', None)
+        # Access spec - check both attribute access and dictionary representation
+        spec_dict = query_resource.spec.to_dict() if hasattr(query_resource.spec, 'to_dict') else query_resource.spec.__dict__
+        session_id = spec_dict.get('sessionId') or spec_dict.get('session_id') or getattr(query_resource.spec, 'session_id', None) or getattr(query_resource.spec, 'sessionId', None)
         self.assertEqual(session_id, "test-session-123")
     
     @patch('ark_api.api.v1.openai.with_ark_client')
@@ -78,16 +91,25 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         mock_with_ark_client.return_value.__aenter__.return_value = mock_client
         mock_client.queries.a_create = AsyncMock()
         
-        mock_completion = Mock()
-        mock_completion.id = "chatcmpl-test"
-        mock_completion.object = "chat.completion"
-        mock_completion.created = 1234567890
-        mock_completion.model = "test-agent"
-        mock_completion.choices = [Mock()]
-        mock_completion.choices[0].message = Mock()
-        mock_completion.choices[0].message.role = "assistant"
-        mock_completion.choices[0].message.content = "Hello!"
-        mock_completion.choices[0].finish_reason = "stop"
+        # Create a proper ChatCompletion object
+        mock_completion = ChatCompletion(
+            id="chatcmpl-test",
+            object="chat.completion",
+            created=1234567890,
+            model="test-agent",
+            choices=[
+                Choice(
+                    index=0,
+                    message=ChatCompletionMessage(role="assistant", content="Hello!"),
+                    finish_reason="stop",
+                )
+            ],
+            usage=CompletionUsage(
+                prompt_tokens=10,
+                completion_tokens=5,
+                total_tokens=15,
+            ),
+        )
         mock_poll.return_value = mock_completion
         
         # Make the request without session ID
@@ -121,16 +143,25 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         mock_with_ark_client.return_value.__aenter__.return_value = mock_client
         mock_client.queries.a_create = AsyncMock()
         
-        mock_completion = Mock()
-        mock_completion.id = "chatcmpl-test"
-        mock_completion.object = "chat.completion"
-        mock_completion.created = 1234567890
-        mock_completion.model = "test-agent"
-        mock_completion.choices = [Mock()]
-        mock_completion.choices[0].message = Mock()
-        mock_completion.choices[0].message.role = "assistant"
-        mock_completion.choices[0].message.content = "Hello!"
-        mock_completion.choices[0].finish_reason = "stop"
+        # Create a proper ChatCompletion object
+        mock_completion = ChatCompletion(
+            id="chatcmpl-test",
+            object="chat.completion",
+            created=1234567890,
+            model="test-agent",
+            choices=[
+                Choice(
+                    index=0,
+                    message=ChatCompletionMessage(role="assistant", content="Hello!"),
+                    finish_reason="stop",
+                )
+            ],
+            usage=CompletionUsage(
+                prompt_tokens=10,
+                completion_tokens=5,
+                total_tokens=15,
+            ),
+        )
         mock_poll.return_value = mock_completion
         
         # Make the request with session ID and A2A context ID
@@ -152,8 +183,9 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         # Verify that a_create was called with a query that has sessionId in spec
         mock_client.queries.a_create.assert_called_once()
         query_resource = mock_client.queries.a_create.call_args[0][0]
-        # Access spec directly - QueryV1alpha1Spec has sessionId as an attribute
-        session_id = getattr(query_resource.spec, 'sessionId', None)
+        # Access spec - check both attribute access and dictionary representation
+        spec_dict = query_resource.spec.to_dict() if hasattr(query_resource.spec, 'to_dict') else query_resource.spec.__dict__
+        session_id = spec_dict.get('sessionId') or spec_dict.get('session_id') or getattr(query_resource.spec, 'session_id', None) or getattr(query_resource.spec, 'sessionId', None)
         self.assertEqual(session_id, "test-session-123")
         # Verify that A2A context ID is in metadata annotations (not in spec)
         # Metadata is a dict, so access it directly
@@ -174,16 +206,25 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         mock_with_ark_client.return_value.__aenter__.return_value = mock_client
         mock_client.queries.a_create = AsyncMock()
         
-        mock_completion = Mock()
-        mock_completion.id = "chatcmpl-test"
-        mock_completion.object = "chat.completion"
-        mock_completion.created = 1234567890
-        mock_completion.model = "test-agent"
-        mock_completion.choices = [Mock()]
-        mock_completion.choices[0].message = Mock()
-        mock_completion.choices[0].message.role = "assistant"
-        mock_completion.choices[0].message.content = "Hello!"
-        mock_completion.choices[0].finish_reason = "stop"
+        # Create a proper ChatCompletion object
+        mock_completion = ChatCompletion(
+            id="chatcmpl-test",
+            object="chat.completion",
+            created=1234567890,
+            model="test-agent",
+            choices=[
+                Choice(
+                    index=0,
+                    message=ChatCompletionMessage(role="assistant", content="Hello!"),
+                    finish_reason="stop",
+                )
+            ],
+            usage=CompletionUsage(
+                prompt_tokens=10,
+                completion_tokens=5,
+                total_tokens=15,
+            ),
+        )
         mock_poll.return_value = mock_completion
         
         # Make the request with invalid JSON in queryAnnotations
