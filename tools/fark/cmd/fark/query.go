@@ -36,6 +36,9 @@ func createQuery(input string, targets []arkv1alpha1.QueryTarget, namespace stri
 		Name:       queryName,
 		Namespace:  namespace,
 		Finalizers: []string{"ark.mckinsey.com/finalizer"},
+		Annotations: map[string]string{
+			"ark.mckinsey.com/fark-created": "true",
+		},
 	}
 
 	return &arkv1alpha1.Query{
@@ -54,29 +57,11 @@ func submitQuery(config *Config, query *arkv1alpha1.Query) error {
 		return fmt.Errorf("failed to convert query: %v", err)
 	}
 
-	// Create the query first
-	createdQuery, err := config.DynamicClient.Resource(GetGVR(ResourceQuery)).Namespace(query.Namespace).Create(
+	// Create the query with finalizer and annotation already set
+	_, err = config.DynamicClient.Resource(GetGVR(ResourceQuery)).Namespace(query.Namespace).Create(
 		context.TODO(),
 		unstructuredQuery,
 		metav1.CreateOptions{},
-	)
-	if err != nil {
-		return err
-	}
-
-	// Force an update to get Generation: 2 (like persistent queries)
-	// Add a dummy annotation to trigger the update
-	annotations := createdQuery.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
-	annotations["ark.mckinsey.com/fark-created"] = "true"
-	createdQuery.SetAnnotations(annotations)
-
-	_, err = config.DynamicClient.Resource(GetGVR(ResourceQuery)).Namespace(query.Namespace).Update(
-		context.TODO(),
-		createdQuery,
-		metav1.UpdateOptions{},
 	)
 	return err
 }
