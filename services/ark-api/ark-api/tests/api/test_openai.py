@@ -60,10 +60,8 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         # Verify that a_create was called with a query that has sessionId in spec
         mock_client.queries.a_create.assert_called_once()
         query_resource = mock_client.queries.a_create.call_args[0][0]
-        # QueryV1alpha1 has a to_dict() method that returns the full structure
-        query_dict = query_resource.to_dict()
-        spec = query_dict.get('spec', {})
-        self.assertEqual(spec.get("sessionId"), "test-session-123")
+        # Access spec directly - QueryV1alpha1Spec has sessionId as an attribute
+        self.assertEqual(query_resource.spec.sessionId, "test-session-123")
     
     @patch('ark_api.api.v1.openai.with_ark_client')
     @patch('ark_api.api.v1.openai.get_namespace')
@@ -104,11 +102,8 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         # Verify that a_create was called with a query that doesn't have sessionId in spec
         mock_client.queries.a_create.assert_called_once()
         query_resource = mock_client.queries.a_create.call_args[0][0]
-        # QueryV1alpha1 has a to_dict() method that returns the full structure
-        query_dict = query_resource.to_dict()
-        spec = query_dict.get('spec', {})
-        # sessionId should not be present or be None/empty
-        session_id = spec.get("sessionId")
+        # Access spec directly - sessionId should be None or not set
+        session_id = getattr(query_resource.spec, 'sessionId', None)
         self.assertTrue(session_id is None or session_id == "")
     
     @patch('ark_api.api.v1.openai.with_ark_client')
@@ -156,14 +151,12 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         # Verify that a_create was called with a query that has sessionId in spec
         mock_client.queries.a_create.assert_called_once()
         query_resource = mock_client.queries.a_create.call_args[0][0]
-        # QueryV1alpha1 has a to_dict() method that returns the full structure
-        query_dict = query_resource.to_dict()
-        spec = query_dict.get('spec', {})
-        self.assertEqual(spec.get("sessionId"), "test-session-123")
+        # Access spec directly - QueryV1alpha1Spec has sessionId as an attribute
+        self.assertEqual(query_resource.spec.sessionId, "test-session-123")
         # Verify that A2A context ID is in metadata annotations (not in spec)
-        metadata = query_dict.get('metadata', {})
-        self.assertIn("annotations", metadata)
-        self.assertEqual(metadata["annotations"]["ark.mckinsey.com/a2a-context-id"], "a2a-context-456")
+        # Metadata is a dict, so access it directly
+        self.assertIn("annotations", query_resource.metadata)
+        self.assertEqual(query_resource.metadata["annotations"]["ark.mckinsey.com/a2a-context-id"], "a2a-context-456")
     
     @patch('ark_api.api.v1.openai.with_ark_client')
     @patch('ark_api.api.v1.openai.get_namespace')
@@ -207,10 +200,7 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         # Verify that a_create was called with a query that doesn't have sessionId
         mock_client.queries.a_create.assert_called_once()
         query_resource = mock_client.queries.a_create.call_args[0][0]
-        # QueryV1alpha1 has a to_dict() method that returns the full structure
-        query_dict = query_resource.to_dict()
-        spec = query_dict.get('spec', {})
-        # sessionId should not be present or be None/empty
-        session_id = spec.get("sessionId")
+        # Access spec directly - sessionId should be None or not set
+        session_id = getattr(query_resource.spec, 'sessionId', None)
         self.assertTrue(session_id is None or session_id == "")
 
