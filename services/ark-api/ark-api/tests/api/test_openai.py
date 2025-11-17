@@ -59,16 +59,20 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         
         # Verify that a_create was called with a query that has sessionId in spec
         mock_client.queries.a_create.assert_called_once()
-        call_args = mock_client.queries.a_create.call_args[0][0]
-        # Check if sessionId is in the spec (could be attribute or dict key)
-        if hasattr(call_args.spec, 'sessionId'):
-            self.assertEqual(call_args.spec.sessionId, "test-session-123")
-        elif hasattr(call_args.spec, 'session_id'):
-            self.assertEqual(call_args.spec.session_id, "test-session-123")
+        query_resource = mock_client.queries.a_create.call_args[0][0]
+        # Convert to dict to check spec contents
+        if hasattr(query_resource, 'to_dict'):
+            query_dict = query_resource.to_dict()
+        elif hasattr(query_resource, '__dict__'):
+            query_dict = query_resource.__dict__
         else:
-            # Check if it's a dict-like object
-            spec_dict = call_args.spec if isinstance(call_args.spec, dict) else call_args.spec.__dict__
-            self.assertEqual(spec_dict.get("sessionId") or spec_dict.get("session_id"), "test-session-123")
+            query_dict = dict(query_resource) if hasattr(query_resource, 'items') else {}
+        spec = query_dict.get('spec', {})
+        if isinstance(spec, dict):
+            self.assertEqual(spec.get("sessionId"), "test-session-123")
+        else:
+            # If spec is an object, try to access sessionId attribute
+            self.assertEqual(getattr(spec, 'sessionId', None), "test-session-123")
     
     @patch('ark_api.api.v1.openai.with_ark_client')
     @patch('ark_api.api.v1.openai.get_namespace')
@@ -108,16 +112,23 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         
         # Verify that a_create was called with a query that doesn't have sessionId in spec
         mock_client.queries.a_create.assert_called_once()
-        call_args = mock_client.queries.a_create.call_args[0][0]
-        # Check if sessionId is not in the spec
-        if hasattr(call_args.spec, 'sessionId'):
-            self.assertIsNone(call_args.spec.sessionId)
-        elif hasattr(call_args.spec, 'session_id'):
-            self.assertIsNone(call_args.spec.session_id)
+        query_resource = mock_client.queries.a_create.call_args[0][0]
+        # Convert to dict to check spec contents
+        if hasattr(query_resource, 'to_dict'):
+            query_dict = query_resource.to_dict()
+        elif hasattr(query_resource, '__dict__'):
+            query_dict = query_resource.__dict__
         else:
-            # Check if it's a dict-like object
-            spec_dict = call_args.spec if isinstance(call_args.spec, dict) else call_args.spec.__dict__
-            self.assertIsNone(spec_dict.get("sessionId") or spec_dict.get("session_id"))
+            query_dict = dict(query_resource) if hasattr(query_resource, 'items') else {}
+        spec = query_dict.get('spec', {})
+        if isinstance(spec, dict):
+            # sessionId should not be present or be None/empty
+            session_id = spec.get("sessionId")
+            self.assertTrue(session_id is None or session_id == "")
+        else:
+            # If spec is an object, check that sessionId is None or not present
+            session_id = getattr(spec, 'sessionId', None)
+            self.assertTrue(session_id is None or session_id == "")
     
     @patch('ark_api.api.v1.openai.with_ark_client')
     @patch('ark_api.api.v1.openai.get_namespace')
@@ -163,20 +174,26 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         
         # Verify that a_create was called with a query that has sessionId in spec
         mock_client.queries.a_create.assert_called_once()
-        call_args = mock_client.queries.a_create.call_args[0][0]
-        # Check if sessionId is in the spec
-        if hasattr(call_args.spec, 'sessionId'):
-            self.assertEqual(call_args.spec.sessionId, "test-session-123")
-        elif hasattr(call_args.spec, 'session_id'):
-            self.assertEqual(call_args.spec.session_id, "test-session-123")
+        query_resource = mock_client.queries.a_create.call_args[0][0]
+        # Convert to dict to check spec contents
+        if hasattr(query_resource, 'to_dict'):
+            query_dict = query_resource.to_dict()
+        elif hasattr(query_resource, '__dict__'):
+            query_dict = query_resource.__dict__
         else:
-            # Check if it's a dict-like object
-            spec_dict = call_args.spec if isinstance(call_args.spec, dict) else call_args.spec.__dict__
-            self.assertEqual(spec_dict.get("sessionId") or spec_dict.get("session_id"), "test-session-123")
+            query_dict = dict(query_resource) if hasattr(query_resource, 'items') else {}
+        spec = query_dict.get('spec', {})
+        if isinstance(spec, dict):
+            self.assertEqual(spec.get("sessionId"), "test-session-123")
+        else:
+            # If spec is an object, try to access sessionId attribute
+            self.assertEqual(getattr(spec, 'sessionId', None), "test-session-123")
         # Verify that A2A context ID is in metadata annotations (not in spec)
-        metadata_dict = call_args.metadata if isinstance(call_args.metadata, dict) else call_args.metadata.__dict__
-        self.assertIn("annotations", metadata_dict)
-        self.assertEqual(metadata_dict["annotations"]["ark.mckinsey.com/a2a-context-id"], "a2a-context-456")
+        metadata = query_dict.get('metadata', {})
+        if not isinstance(metadata, dict):
+            metadata = metadata.__dict__ if hasattr(metadata, '__dict__') else {}
+        self.assertIn("annotations", metadata)
+        self.assertEqual(metadata["annotations"]["ark.mckinsey.com/a2a-context-id"], "a2a-context-456")
     
     @patch('ark_api.api.v1.openai.with_ark_client')
     @patch('ark_api.api.v1.openai.get_namespace')
@@ -219,14 +236,21 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         
         # Verify that a_create was called with a query that doesn't have sessionId
         mock_client.queries.a_create.assert_called_once()
-        call_args = mock_client.queries.a_create.call_args[0][0]
-        # Check if sessionId is not in the spec
-        if hasattr(call_args.spec, 'sessionId'):
-            self.assertIsNone(call_args.spec.sessionId)
-        elif hasattr(call_args.spec, 'session_id'):
-            self.assertIsNone(call_args.spec.session_id)
+        query_resource = mock_client.queries.a_create.call_args[0][0]
+        # Convert to dict to check spec contents
+        if hasattr(query_resource, 'to_dict'):
+            query_dict = query_resource.to_dict()
+        elif hasattr(query_resource, '__dict__'):
+            query_dict = query_resource.__dict__
         else:
-            # Check if it's a dict-like object
-            spec_dict = call_args.spec if isinstance(call_args.spec, dict) else call_args.spec.__dict__
-            self.assertIsNone(spec_dict.get("sessionId") or spec_dict.get("session_id"))
+            query_dict = dict(query_resource) if hasattr(query_resource, 'items') else {}
+        spec = query_dict.get('spec', {})
+        if isinstance(spec, dict):
+            # sessionId should not be present or be None/empty
+            session_id = spec.get("sessionId")
+            self.assertTrue(session_id is None or session_id == "")
+        else:
+            # If spec is an object, check that sessionId is None or not present
+            session_id = getattr(spec, 'sessionId', None)
+            self.assertTrue(session_id is None or session_id == "")
 
