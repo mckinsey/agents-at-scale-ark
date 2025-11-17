@@ -163,6 +163,8 @@ func printQueryResults(query *arkv1alpha1.Query, outputMode string) {
 	}
 
 	// Display responses
+	fmt.Println("Query response:")
+	fmt.Println()
 	for _, response := range query.Status.Responses {
 		fmt.Printf("%s\n", response.Content)
 	}
@@ -250,7 +252,7 @@ func displayEvent(logger *zap.Logger, obj any, opts *OutputOptions) {
 	details := parseEventDetails(message)
 	colorCode := getEventColorCode(eventType)
 
-	fmt.Fprintf(os.Stderr, "%s %s%s\n", timestamp, colorize(reason, colorCode), details)
+	fmt.Fprintf(os.Stderr, "%s %s%s\n\n", timestamp, colorize(reason, colorCode), details)
 }
 
 func colorize(text, colorCode string) string {
