@@ -56,14 +56,6 @@ spec:
             metadata:
               name: test-query-with-params
             status:
-              phase: done
-      - assert:
-          resource:
-            apiVersion: ark.mckinsey.com/v1alpha1
-            kind: Query
-            metadata:
-              name: test-query-with-params
-            status:
               (conditions[?type == 'Completed']):
               - status: 'True'
       - assert:

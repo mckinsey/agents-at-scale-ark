@@ -251,6 +251,7 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 		{"ExecutionEngine", &controller.ExecutionEngineReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("executionengine-controller")}},
 		{"Evaluator", &controller.EvaluatorReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
 		{"Evaluation", &controller.EvaluationReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("evaluation-controller")}},
+		{"A2ATask", &controller.A2ATaskReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("a2atask-controller")}},
 	}
 
 	for _, reconciler := range controllers {

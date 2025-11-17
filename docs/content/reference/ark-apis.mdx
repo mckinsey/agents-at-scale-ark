@@ -200,6 +200,65 @@ Example response:
 }
 ```
 
+#### Custom Metadata
+
+ARK extends the OpenAI API with a `metadata` field to pass Kubernetes annotations to the underlying Query resource.
+
+Use the `queryAnnotations` field with a JSON string containing annotation key-value pairs:
+
+```bash
+curl -X POST http://localhost:8000/openai/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "agent/my-agent",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "metadata": {
+      "queryAnnotations": "{\"ark.mckinsey.com/a2a-context-id\": \"ctx-abc123\"}"
+    }
+  }'
+```
+
+The `queryAnnotations` value is parsed as JSON and applied as annotations to the Query resource. This format works with standard OpenAI SDKs since metadata fields accept string values.
+
+See [Streaming Responses](/developer-guide/queries/streaming#the-ark-metadata-field) for how metadata is returned in responses.
+
+#### Response Metadata
+
+Responses include an `ark` field with query metadata including status, token usage, and A2A context IDs:
+
+<Tabs items={['Non-streaming', 'Streaming']}>
+  <Tabs.Tab>
+    ```python
+    response = client.chat.completions.create(
+        model='agent/my-agent',
+        messages=[{'role': 'user', 'content': 'Hello'}],
+    )
+
+    print(response.choices[0].message.content)
+    # Access A2A context ID for multi-turn conversations
+    context_id = response.ark['completedQuery']['status']['a2a']['contextId']
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    stream = client.chat.completions.create(
+        model='agent/my-agent',
+        messages=[{'role': 'user', 'content': 'Hello'}],
+        stream=True,
+    )
+
+    full_message = ''
+    for chunk in stream:
+        content = chunk.choices[0].delta.content or ''
+        full_message += content
+
+        # Final chunk contains complete query object
+        if hasattr(chunk, 'ark') and chunk.ark.get('completedQuery'):
+            context_id = chunk.ark['completedQuery']['status']['a2a']['contextId']
+    ```
+  </Tabs.Tab>
+</Tabs>
+
 ### Ark Metadata Extensions
 
 Ark extends the OpenAI API with optional metadata for passing annotations and retrieving query information:

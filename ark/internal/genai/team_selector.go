@@ -100,7 +100,7 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		return nil, err
 	}
 
-	response, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(buf.String())}, nil, nil)
+	result, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(buf.String())}, nil, nil)
 	if err != nil {
 		if IsTerminateTeam(err) {
 			return nil, err
@@ -108,12 +108,12 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		return nil, fmt.Errorf("selector agent call failed: %w", err)
 	}
 
-	if len(response) == 0 {
+	if len(result.Messages) == 0 {
 		return nil, fmt.Errorf("selector agent returned no messages")
 	}
 
 	var selectedName string
-	lastMsg := response[len(response)-1]
+	lastMsg := result.Messages[len(result.Messages)-1]
 	if lastMsg.OfAssistant != nil && lastMsg.OfAssistant.Content.OfString.Value != "" {
 		selectedName = strings.TrimSpace(lastMsg.OfAssistant.Content.OfString.Value)
 	} else {

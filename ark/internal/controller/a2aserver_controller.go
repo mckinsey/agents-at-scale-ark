@@ -85,7 +85,6 @@ func (r *A2AServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	a2aServer.Status.LastResolvedAddress = resolvedAddress
 
-	log.Info("A2AServer process server", "server", a2aServer.Name)
 	return r.processServer(ctx, a2aServer)
 }
 
@@ -98,7 +97,6 @@ func (r *A2AServerReconciler) getResolver() *common.ValueSourceResolverV1PreAlph
 
 func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1prealpha1.A2AServer) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
-	log.Info("a2a agent discover started", "server", a2aServer.Name, "namespace", a2aServer.Namespace)
 
 	// Set discovering condition
 	r.setCondition(&a2aServer, A2AServerDiscovering, metav1.ConditionTrue, "DiscoveringAgents", "Discovering agents from A2A server")
@@ -282,7 +280,6 @@ func (r *A2AServerReconciler) createOrUpdateAgent(ctx context.Context, agent *ar
 func (r *A2AServerReconciler) finalizeA2AServerProcessing(ctx context.Context, a2aServer arkv1prealpha1.A2AServer) (ctrl.Result, error) {
 	readyCondition := meta.FindStatusCondition(a2aServer.Status.Conditions, A2AServerReady)
 	if readyCondition != nil && readyCondition.Status == metav1.ConditionTrue && readyCondition.Reason == "AgentDiscovered" {
-		logf.FromContext(ctx).Info("A2AServer already in final state, skipping processing", "server", a2aServer.Name)
 		return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
 	}
 

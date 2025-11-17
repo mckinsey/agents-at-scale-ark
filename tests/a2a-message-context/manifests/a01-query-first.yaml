@@ -1,9 +1,9 @@
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: test-empty-input
+  name: message-counter-first
 spec:
-  input: ""
+  input: First message
   targets:
     - type: agent
-      name: claude-enthusiast
+      name: message-counter-agent

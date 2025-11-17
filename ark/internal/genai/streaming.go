@@ -26,19 +26,36 @@ import (
 
 // StreamMetadata contains ARK-specific metadata for streaming chunks
 type StreamMetadata struct {
-	Query       string            `json:"query,omitempty"`
-	Session     string            `json:"session,omitempty"`
-	Target      string            `json:"target,omitempty"`
-	Team        string            `json:"team,omitempty"`
-	Agent       string            `json:"agent,omitempty"`
-	Model       string            `json:"model,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
+	Query          string             `json:"query,omitempty"`
+	Session        string             `json:"session,omitempty"`
+	Target         string             `json:"target,omitempty"`
+	Team           string             `json:"team,omitempty"`
+	Agent          string             `json:"agent,omitempty"`
+	Model          string             `json:"model,omitempty"`
+	CompletedQuery *arkv1alpha1.Query `json:"completedQuery,omitempty"`
 }
 
 // ChunkWithMetadata wraps an OpenAI chunk with ARK metadata
 type ChunkWithMetadata struct {
 	*openai.ChatCompletionChunk
 	Ark *StreamMetadata `json:"ark,omitempty"`
+}
+
+func NewContentChunk(id, model, content string) *openai.ChatCompletionChunk {
+	return &openai.ChatCompletionChunk{
+		ID:      id,
+		Object:  "chat.completion.chunk",
+		Created: time.Now().Unix(),
+		Model:   model,
+		Choices: []openai.ChatCompletionChunkChoice{
+			{
+				Index: 0,
+				Delta: openai.ChatCompletionChunkChoiceDelta{
+					Content: content,
+				},
+			},
+		},
+	}
 }
 
 // StreamingError represents an OpenAI-compatible error format for streaming
@@ -50,13 +67,14 @@ type StreamingError struct {
 	} `json:"error"`
 }
 
+// ErrorWithMetadata wraps a streaming error with ARK metadata
 type ErrorWithMetadata struct {
 	*StreamingError
 	Ark *StreamMetadata `json:"ark,omitempty"`
 }
 
+// buildMetadata builds StreamMetadata from context
 func buildMetadata(ctx context.Context, modelName string) *StreamMetadata {
-	// Build metadata from context
 	metadata := &StreamMetadata{}
 
 	// Get execution metadata from context
@@ -84,16 +102,10 @@ func buildMetadata(ctx context.Context, modelName string) *StreamMetadata {
 		metadata.Session = sessionID
 	}
 
-	// Add query annotations if present in context
-	if queryVal := ctx.Value(QueryContextKey); queryVal != nil {
-		if query, ok := queryVal.(*arkv1alpha1.Query); ok && len(query.Annotations) > 0 {
-			metadata.Annotations = query.Annotations
-		}
-	}
-
 	return metadata
 }
 
+// WrapErrorWithMetadata wraps a streaming error with ARK metadata
 func WrapErrorWithMetadata(ctx context.Context, streamingError *StreamingError, modelName string) interface{} {
 	metadata := buildMetadata(ctx, modelName)
 
@@ -120,8 +132,13 @@ func StreamError(ctx context.Context, eventStream EventStreamInterface, err erro
 }
 
 // WrapChunkWithMetadata adds ARK metadata to a streaming chunk
-func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChunk, modelName string) interface{} {
+// If query is provided, includes complete query object in metadata (for final chunk only)
+func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChunk, modelName string, query *arkv1alpha1.Query) interface{} {
 	metadata := buildMetadata(ctx, modelName)
+
+	if query != nil {
+		metadata.CompletedQuery = query
+	}
 
 	return ChunkWithMetadata{
 		ChatCompletionChunk: chunk,

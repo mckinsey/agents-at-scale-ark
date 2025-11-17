@@ -20,7 +20,7 @@ from ark_sdk.client import with_ark_client
 from ...models.queries import ArkOpenAICompletionsMetadata
 from ...utils.query_targets import parse_model_to_query_target
 from ...utils.query_polling import poll_query_completion
-from ...utils.streaming import create_single_chunk_sse_response, StreamingErrorResponse
+from ...utils.streaming import StreamingErrorResponse, create_single_chunk_sse_response
 from ...constants.annotations import STREAMING_ENABLED_ANNOTATION
 
 router = APIRouter(prefix="/openai/v1", tags=["OpenAI"])
@@ -56,8 +56,7 @@ class ChatCompletionRequest(BaseModel):
     temperature: float = 1.0
     max_tokens: Optional[int] = None
     stream: bool = False
-    # Optional per OpenAI spec
-    metadata: Optional[Dict[str, str]] = None
+    metadata: Optional[dict] = None  # Supports queryAnnotations: JSON string of K8s annotations
 
 
 def process_request_metadata(
@@ -159,23 +158,27 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
     model = request.model
     messages = request.messages
 
-    logger.info(f"Received chat completion request for model: {model}")
-
     target = parse_model_to_query_target(model)
     query_name = f"openai-query-{uuid.uuid4().hex[:8]}"
 
     # Get the current namespace
     namespace = get_namespace()
 
-    # Build query metadata
+    # Build metadata for the query resource
     metadata = {"name": query_name, "namespace": namespace}
 
-    # Process request metadata (Ark annotations)
-    error_response = process_request_metadata(request.metadata, metadata)
-    if error_response:
-        return error_response
+    # Parse queryAnnotations if provided
+    if request.metadata and "queryAnnotations" in request.metadata:
+        try:
+            query_annotations = json.loads(request.metadata["queryAnnotations"])
+            if "annotations" not in metadata:
+                metadata["annotations"] = {}
+            metadata["annotations"].update(query_annotations)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning(f"Failed to parse queryAnnotations: {e}")
 
-    # Enable streaming annotation if requested
+    # If the user has requested a streaming response as per the OpenAI completions spec,
+    # enable streaming on the query by adding the streaming annotation
     if request.stream:
         if "annotations" not in metadata:
             metadata["annotations"] = {}

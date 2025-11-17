@@ -1,9 +1,0 @@
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Agent
-metadata:
-  name: test-agent-parameter-no-source
-spec:
-  prompt: "You are a helpful assistant. {{.invalid_param}}"
-  parameters:
-    - name: invalid_param
-  tools: []

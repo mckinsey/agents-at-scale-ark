@@ -1,4 +1,5 @@
 import {ArkApiClient, QueryTarget} from './arkApiClient.js';
+import type {Query} from './types.js';
 
 // Re-export QueryTarget for compatibility
 export {QueryTarget};
@@ -6,6 +7,7 @@ export {QueryTarget};
 export interface ChatConfig {
   streamingEnabled: boolean;
   currentTarget?: QueryTarget;
+  a2aContextId?: string;
 }
 
 export interface ToolCall {
@@ -23,6 +25,7 @@ export interface ArkMetadata {
   model?: string;
   query?: string;
   target?: string;
+  completedQuery?: Query;
 }
 
 export class ChatClient {
@@ -52,11 +55,20 @@ export class ChatClient {
   ): Promise<string> {
     const shouldStream = config.streamingEnabled && !!onChunk;
 
-    const params = {
+    const params: any = {
       model: targetId,
       messages: messages,
       signal: signal,
     };
+
+    // Add A2A context ID if present
+    if (config.a2aContextId) {
+      params.metadata = {
+        queryAnnotations: JSON.stringify({
+          'ark.mckinsey.com/a2a-context-id': config.a2aContextId,
+        }),
+      };
+    }
 
     if (shouldStream) {
       let fullResponse = '';
@@ -69,17 +81,16 @@ export class ChatClient {
           break;
         }
 
-        const delta = chunk.choices[0]?.delta;
+        const delta = chunk.choices?.[0]?.delta;
         // Extract ARK metadata if present
         const arkMetadata = (chunk as any).ark as ArkMetadata | undefined;
 
-        // Handle regular content
         const content = delta?.content || '';
         if (content) {
           fullResponse += content;
-          if (onChunk) {
-            onChunk(content, undefined, arkMetadata);
-          }
+        }
+        if (onChunk) {
+          onChunk(content, undefined, arkMetadata);
         }
 
         // Handle tool calls
@@ -118,6 +129,7 @@ export class ChatClient {
       const response = await this.arkApiClient.createChatCompletion(params);
       const message = response.choices[0]?.message;
       const content = message?.content || '';
+      const arkMetadata = (response as any).ark as ArkMetadata | undefined;
 
       // Handle tool calls in non-streaming mode
       if (message?.tool_calls && message.tool_calls.length > 0) {
@@ -132,13 +144,13 @@ export class ChatClient {
 
         // Send tool calls first
         if (onChunk) {
-          onChunk('', toolCalls);
+          onChunk('', toolCalls, arkMetadata);
         }
       }
 
       // Send content after tool calls
       if (content && onChunk) {
-        onChunk(content);
+        onChunk(content, undefined, arkMetadata);
       }
 
       return content;

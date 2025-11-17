@@ -25,8 +25,6 @@ dependencies:
 #    path: ./services/ark-evaluator
 #  executor-langchain:
 #    path: ./services/executor-langchain
-#   postgres-memory:
-#     path: ./services/postgres-memory
   
   # Observability services. Uncomment to enable locally. Only phoenix or langfuse is needed
   # phoenix service for observability. phoenix has a hook to restart ark-controller to pick up its url
