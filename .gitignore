@@ -156,3 +156,6 @@ services/ark-dashboard/ark-dashboard/lib/api/generated/openapi.json
 
 # Helm chart dependencies
 **/charts/*.tgz
+
+# Personal/local artifacts and experimental files
+vibe_artifacts/
