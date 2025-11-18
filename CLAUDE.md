@@ -49,7 +49,8 @@
 # Build Instructions
 
 ## Root Commands
-- `make quickstart` - Get everything up and running
+- `ark install` - Deploy ARK to your cluster (recommended)
+- `devspace dev` - Local development with hot-reload
 - `make docs` - Run documentation site with live-reload
 - `make services` - Install and configure additional service capabilities
 

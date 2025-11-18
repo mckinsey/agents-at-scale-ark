@@ -7,7 +7,7 @@ stringData:
   # IMPORTANT: Environment variables must be substituted before applying
   # Use one of these methods:
   #   1. make models-apply (recommended)
-  #   2. make quickstart (full deployment)
+  #   2. devspace dev (full deployment)
   #   3. make fix-models (if you have broken queries)
   # Manual: export AZURE_API_KEY="key" && envsubst < models/{{ .Values.modelName }}.yaml | kubectl apply -f -
   token: ${AZURE_API_KEY}
