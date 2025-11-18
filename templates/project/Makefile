@@ -29,8 +29,7 @@ DOCKER_BUILD_DIR := $(OUT_DIR)/docker
 .PHONY: help
 help: ## Show this help message
 	@echo "🚀 Quick Commands:"
-	@echo "  ark install         # Deploy ARK to cluster (recommended)"
-	@echo "  devspace dev        # Local development with hot-reload"
+	@echo "  devspace dev        # Deploy ARK to cluster"
 	@echo "  make resources-apply # Apply all custom resources in correct order"
 	@echo "  make fix-models     # Fix broken models (if you have query errors)"
 	@echo ""

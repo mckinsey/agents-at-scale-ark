@@ -49,8 +49,7 @@
 # Build Instructions
 
 ## Root Commands
-- `ark install` - Deploy ARK to your cluster (recommended)
-- `devspace dev` - Local development with hot-reload
+- `devspace dev` - Deploy ARK to your cluster 
 - `make docs` - Run documentation site with live-reload
 - `make services` - Install and configure additional service capabilities
 
