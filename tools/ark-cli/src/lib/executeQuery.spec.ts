@@ -367,7 +367,7 @@ describe('executeQuery', () => {
       });
 
       // Check that the manifest includes sessionId in spec
-      const applyCall = mockExeca.mock.calls.find((call) =>
+      const applyCall = mockExeca.mock.calls.find((call: any[]) =>
         call[1]?.includes('apply')
       );
       expect(applyCall).toBeDefined();
