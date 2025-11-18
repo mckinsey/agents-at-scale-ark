@@ -3,7 +3,7 @@
 argo-workflows:
   # Single namespace mode. Suitable for development and does not require
   # cluster roles.
-  singleNamespace: true
+  singleNamespace: false
 
   # Controller configuration
   controller:
