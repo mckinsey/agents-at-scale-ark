@@ -87,17 +87,16 @@ describe('ChatClient', () => {
         }
       );
 
-      expect(mockCreateChatCompletion).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: 'agent/test-agent',
-          messages: [{role: 'user', content: 'Hello'}],
-          metadata: {
-            queryAnnotations: JSON.stringify({
-              sessionId: 'test-session-123',
-              'ark.mckinsey.com/a2a-context-id': 'a2a-context-456',
-            }),
-          },
-        })
+      expect(mockCreateChatCompletion).toHaveBeenCalled();
+      const callArgs = mockCreateChatCompletion.mock.calls[0][0];
+      expect(callArgs.model).toBe('agent/test-agent');
+      expect(callArgs.messages).toEqual([{role: 'user', content: 'Hello'}]);
+      expect(callArgs.metadata).toBeDefined();
+      expect(callArgs.metadata.queryAnnotations).toBeDefined();
+      const queryAnnotations = JSON.parse(callArgs.metadata.queryAnnotations);
+      expect(queryAnnotations.sessionId).toBe('test-session-123');
+      expect(queryAnnotations['ark.mckinsey.com/a2a-context-id']).toBe(
+        'a2a-context-456'
       );
     });
 
