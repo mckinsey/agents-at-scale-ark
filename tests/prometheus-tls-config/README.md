@@ -12,6 +12,7 @@ This test validates that the Prometheus ServiceMonitor uses secure TLS configura
   - TLS certificate reference from `metrics-server-cert` secret
   - Private key reference from `metrics-server-cert` secret
 - All certificate references point to the correct secret and keys
+- Certificate DNS names match the ServiceMonitor serverName (`ark.ark-system.svc`)
 
 ## Prerequisites
 
@@ -27,15 +28,22 @@ chainsaw test tests/prometheus-tls-config
 ## Test Structure
 
 1. **verify-cert-manager-installed**: Ensures cert-manager is available
-2. **setup-cert-manager-resources**: Creates Issuer and Certificate resources
+2. **setup-cert-manager-resources**: Creates Issuer and Certificate resources in `ark-system` namespace
 3. **verify-metrics-cert-secret-exists**: Validates the secret is created by cert-manager
 4. **apply-service-monitor**: Applies the ServiceMonitor with secure TLS config
 5. **verify-secure-tls-config**: Validates the TLS configuration is secure
 
 ## Expected Results
 
-- All certificate resources are created and ready
+- All certificate resources are created and ready in `ark-system` namespace
 - ServiceMonitor has `insecureSkipVerify: false`
 - All certificate references are correctly configured
+- Certificate DNS names match the serverName in ServiceMonitor
 - No security vulnerabilities in TLS configuration
+
+## Configuration
+
+The test uses the `ark-system` namespace to match the production Kustomize configuration. The certificate is issued for:
+- `ark.ark-system.svc`
+- `ark.ark-system.svc.cluster.local`
 

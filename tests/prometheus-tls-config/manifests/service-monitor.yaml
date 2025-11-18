@@ -6,7 +6,7 @@ metadata:
     app.kubernetes.io/name: ark
     app.kubernetes.io/managed-by: kustomize
   name: ark-controller-metrics-monitor
-  namespace: system
+  namespace: ark-system
 spec:
   endpoints:
     - path: /metrics
@@ -14,7 +14,7 @@ spec:
       scheme: https
       bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
       tlsConfig:
-        serverName: ark.system.svc
+        serverName: ark.ark-system.svc
         insecureSkipVerify: false
         ca:
           secret:

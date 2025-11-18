@@ -34,7 +34,7 @@ spec:
               kind: Issuer
               metadata:
                 name: selfsigned-issuer
-                namespace: system
+                namespace: ark-system
               status:
                 conditions:
                   - type: Ready
@@ -46,7 +46,7 @@ spec:
               kind: Certificate
               metadata:
                 name: metrics-certs
-                namespace: system
+                namespace: ark-system
               status:
                 conditions:
                   - type: Ready
@@ -61,7 +61,7 @@ spec:
               kind: Secret
               metadata:
                 name: metrics-server-cert
-                namespace: system
+                namespace: ark-system
               data:
                 ca.crt: ~
                 tls.crt: ~
@@ -77,7 +77,7 @@ spec:
               kind: ServiceMonitor
               metadata:
                 name: ark-controller-metrics-monitor
-                namespace: system
+                namespace: ark-system
               spec:
                 endpoints:
                   - path: /metrics
@@ -102,7 +102,7 @@ spec:
         - script:
             content: |
               # Verify ServiceMonitor has secure TLS configuration
-              sm=$(kubectl get servicemonitor ark-controller-metrics-monitor -n system -o json)
+              sm=$(kubectl get servicemonitor ark-controller-metrics-monitor -n ark-system -o json)
               
               # Check insecureSkipVerify is false
               insecure=$(echo "$sm" | jq -r '.spec.endpoints[0].tlsConfig.insecureSkipVerify')
