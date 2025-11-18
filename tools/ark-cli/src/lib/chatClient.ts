@@ -63,18 +63,22 @@ export class ChatClient {
       signal: signal,
     };
 
-    // Add metadata for A2A context ID and/or session ID
-    const queryAnnotations: Record<string, string> = {};
-    if (config.a2aContextId) {
-      queryAnnotations[QUERY_ANNOTATIONS.A2A_CONTEXT_ID] = config.a2aContextId;
-    }
-    if (config.sessionId) {
-      queryAnnotations[QUERY_ANNOTATIONS.SESSION_ID] = config.sessionId;
-    }
-    if (Object.keys(queryAnnotations).length > 0) {
-      params.metadata = {
-        queryAnnotations: JSON.stringify(queryAnnotations),
-      };
+    // Build metadata object - only add if we have something to include
+    if (config.sessionId || config.a2aContextId) {
+      params.metadata = {};
+      
+      // Add sessionId directly to metadata (goes to spec, not annotations)
+      if (config.sessionId) {
+        params.metadata.sessionId = config.sessionId;
+      }
+      
+      // Add A2A context ID to queryAnnotations (goes to annotations)
+      if (config.a2aContextId) {
+        const queryAnnotations: Record<string, string> = {
+          [QUERY_ANNOTATIONS.A2A_CONTEXT_ID]: config.a2aContextId,
+        };
+        params.metadata.queryAnnotations = JSON.stringify(queryAnnotations);
+      }
     }
 
     if (shouldStream) {

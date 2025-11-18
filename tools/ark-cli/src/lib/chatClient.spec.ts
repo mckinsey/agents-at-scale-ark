@@ -17,7 +17,7 @@ describe('ChatClient', () => {
   });
 
   describe('sendMessage', () => {
-    it('should include sessionId in queryAnnotations when provided', async () => {
+    it('should include sessionId directly in metadata when provided', async () => {
       const client = new ChatClient(mockArkApiClient);
       mockCreateChatCompletion.mockResolvedValue({
         id: 'test-id',
@@ -49,15 +49,13 @@ describe('ChatClient', () => {
           model: 'agent/test-agent',
           messages: [{role: 'user', content: 'Hello'}],
           metadata: {
-            queryAnnotations: JSON.stringify({
-              [QUERY_ANNOTATIONS.SESSION_ID]: 'test-session-123',
-            }),
+            sessionId: 'test-session-123',
           },
         })
       );
     });
 
-    it('should include both sessionId and a2aContextId in queryAnnotations when both provided', async () => {
+    it('should include both sessionId in metadata and a2aContextId in queryAnnotations when both provided', async () => {
       const client = new ChatClient(mockArkApiClient);
       mockCreateChatCompletion.mockResolvedValue({
         id: 'test-id',
@@ -93,9 +91,9 @@ describe('ChatClient', () => {
       expect(callArgs.model).toBe('agent/test-agent');
       expect(callArgs.messages).toEqual([{role: 'user', content: 'Hello'}]);
       expect(callArgs.metadata).toBeDefined();
+      expect(callArgs.metadata.sessionId).toBe('test-session-123');
       expect(callArgs.metadata.queryAnnotations).toBeDefined();
       const queryAnnotations = JSON.parse(callArgs.metadata.queryAnnotations);
-      expect(queryAnnotations[QUERY_ANNOTATIONS.SESSION_ID]).toBe('test-session-123');
       expect(queryAnnotations[QUERY_ANNOTATIONS.A2A_CONTEXT_ID]).toBe(
         'a2a-context-456'
       );

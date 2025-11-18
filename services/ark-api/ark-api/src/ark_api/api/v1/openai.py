@@ -166,17 +166,17 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
     # Build metadata for the query resource
     metadata = {"name": query_name, "namespace": namespace}
 
-    # Parse queryAnnotations if provided
     session_id = None
+    if request.metadata and "sessionId" in request.metadata:
+        session_id = request.metadata["sessionId"]
+
+    # Parse queryAnnotations if provided (for annotations like A2A context ID)
     if request.metadata and "queryAnnotations" in request.metadata:
         try:
             query_annotations = json.loads(request.metadata["queryAnnotations"])
             if "annotations" not in metadata:
                 metadata["annotations"] = {}
-            # Extract sessionId if present (remove from annotations, add to spec)
-            if "sessionId" in query_annotations:
-                session_id = query_annotations.pop("sessionId")
-            # Add remaining annotations to metadata (e.g., A2A context ID)
+            # Add annotations to metadata (e.g., A2A context ID)
             metadata["annotations"].update(query_annotations)
         except (json.JSONDecodeError, TypeError) as e:
             logger.warning(f"Failed to parse queryAnnotations: {e}")

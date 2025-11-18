@@ -56,12 +56,12 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         )
         mock_poll.return_value = mock_completion
         
-        # Make the request with session ID in queryAnnotations
+        # Make the request with session ID directly in metadata
         request_data = {
             "model": "agent/test-agent",
             "messages": [{"role": "user", "content": "Hello"}],
             "metadata": {
-                "queryAnnotations": json.dumps({"sessionId": "test-session-123"})
+                "sessionId": "test-session-123"
             }
         }
         response = self.client.post("/openai/v1/chat/completions", json=request_data)
@@ -164,13 +164,13 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         )
         mock_poll.return_value = mock_completion
         
-        # Make the request with session ID and A2A context ID
+        # Make the request with session ID directly in metadata and A2A context ID in queryAnnotations
         request_data = {
             "model": "agent/test-agent",
             "messages": [{"role": "user", "content": "Hello"}],
             "metadata": {
+                "sessionId": "test-session-123",
                 "queryAnnotations": json.dumps({
-                    "sessionId": "test-session-123",
                     "ark.mckinsey.com/a2a-context-id": "a2a-context-456"
                 })
             }
