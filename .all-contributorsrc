@@ -412,7 +412,9 @@
       "profile": "http://linkedin.com/in/iliassjabali/",
       "contributions": [
         "code",
-        "test"
+        "test",
+        "doc",
+        "bug"
       ]
     }
   ],
