@@ -1,0 +1,59 @@
+{
+  "version": "1.0.0",
+  "marketplace": "ARK Marketplace",
+  "items": [
+    {
+      "name": "phoenix",
+      "displayName": "Phoenix",
+      "description": "AI/ML observability and evaluation platform with OpenTelemetry integration",
+      "version": "0.1.5",
+      "author": "ARK Marketplace",
+      "homepage": "https://github.com/mckinsey/agents-at-scale-marketplace",
+      "repository": "https://github.com/mckinsey/agents-at-scale-marketplace",
+      "license": "Apache-2.0",
+      "tags": ["observability", "evaluation", "telemetry", "monitoring"],
+      "category": "observability",
+      "icon": "https://example.com/phoenix-icon.png",
+      "documentation": "https://mckinsey.github.io/agents-at-scale-marketplace/services/phoenix/",
+      "support": {
+        "url": "https://github.com/mckinsey/agents-at-scale-marketplace/issues"
+      },
+      "ark": {
+        "chartPath": "oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/phoenix",
+        "namespace": "phoenix",
+        "helmReleaseName": "phoenix",
+        "installArgs": ["--create-namespace"],
+        "k8sServiceName": "phoenix",
+        "k8sServicePort": 6006,
+        "k8sDeploymentName": "phoenix"
+      }
+    },
+    {
+      "name": "langfuse",
+      "displayName": "Langfuse",
+      "description": "Open-source LLM observability and analytics platform with session tracking",
+      "version": "0.1.4",
+      "author": "ARK Marketplace",
+      "homepage": "https://github.com/mckinsey/agents-at-scale-marketplace",
+      "repository": "https://github.com/mckinsey/agents-at-scale-marketplace",
+      "license": "Apache-2.0",
+      "tags": ["observability", "analytics", "llm", "tracking"],
+      "category": "observability",
+      "icon": "https://example.com/langfuse-icon.png",
+      "documentation": "https://mckinsey.github.io/agents-at-scale-marketplace/services/langfuse/",
+      "support": {
+        "url": "https://github.com/mckinsey/agents-at-scale-marketplace/issues"
+      },
+      "ark": {
+        "chartPath": "oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/langfuse",
+        "namespace": "telemetry",
+        "helmReleaseName": "langfuse",
+        "installArgs": ["--create-namespace"],
+        "k8sServiceName": "langfuse",
+        "k8sServicePort": 3000,
+        "k8sDeploymentName": "langfuse-web"
+      }
+    }
+  ]
+}
+
