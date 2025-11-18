@@ -625,6 +625,7 @@ jobs:
           - { name: ark-api, path: services/ark-api/chart }
           - { name: ark-dashboard, path: services/ark-dashboard/chart }
           - { name: ark-mcp, path: services/ark-mcp/chart }
+          - { name: ark-cluster-memory, path: services/ark-cluster-memory/chart }
           - { name: mcp-filesystem, path: mcp/filesystem-mcp/chart }
           - { name: localhost-gateway, path: services/localhost-gateway/chart }
           - { name: ark-tenant, path: charts/ark-tenant }
@@ -898,6 +899,7 @@ jobs:
           - ark-api
           - ark-dashboard
           - ark-mcp
+          - ark-cluster-memory
           - mcp-filesystem
           - localhost-gateway
           - ark-tenant
