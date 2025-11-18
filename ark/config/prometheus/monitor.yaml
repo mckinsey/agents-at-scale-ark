@@ -19,7 +19,7 @@ spec:
         # The metrics-server-cert secret is created by cert-manager when certmanager resources are enabled.
         # The serverName must match one of the DNS names in the metrics certificate (certificate-metrics.yaml).
         # Note: If certificate DNS names use SERVICE_NAME replacement, ensure serverName matches the actual service name.
-        serverName: ark.system.svc
+        serverName: ark.ark-system.svc
         insecureSkipVerify: false
         ca:
           secret:

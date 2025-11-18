@@ -29,7 +29,7 @@ spec:
       scheme: https
       bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
       tlsConfig:
-        serverName: ark.system.svc
+        serverName: ark.ark-system.svc
         insecureSkipVerify: false
         ca:
           secret:
@@ -58,7 +58,7 @@ spec:
 				
 				tlsConfig := endpoint["tlsConfig"].(map[string]interface{})
 				require.NotNil(t, tlsConfig, "TLS config should be present")
-				assert.Equal(t, "ark.system.svc", tlsConfig["serverName"], "serverName should match certificate DNS")
+				assert.Equal(t, "ark.ark-system.svc", tlsConfig["serverName"], "serverName should match certificate DNS")
 				assert.False(t, tlsConfig["insecureSkipVerify"].(bool), "insecureSkipVerify must be false for security")
 				
 				ca := tlsConfig["ca"].(map[string]interface{})
@@ -213,7 +213,7 @@ spec:
       scheme: https
       bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
       tlsConfig:
-        serverName: ark.system.svc
+        serverName: ark.ark-system.svc
         insecureSkipVerify: false
         ca:
           secret:
@@ -249,11 +249,11 @@ spec:
 
 func TestServiceMonitorTLSConfigMatchesCertificate(t *testing.T) {
 	t.Run("serverName matches certificate DNS pattern", func(t *testing.T) {
-		serverName := "ark.system.svc"
+		serverName := "ark.ark-system.svc"
 		
 		validDNSPatterns := []string{
-			"ark.system.svc",
-			"ark.system.svc.cluster.local",
+			"ark.ark-system.svc",
+			"ark.ark-system.svc.cluster.local",
 		}
 		
 		matches := false

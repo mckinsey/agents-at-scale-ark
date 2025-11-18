@@ -6,7 +6,7 @@
   value:
     # serverName must match one of the DNS names in the metrics certificate
     # Update this if your certificate uses a different service name
-    serverName: ark.system.svc
+    serverName: ark.ark-system.svc
     insecureSkipVerify: false
     ca:
       secret:
