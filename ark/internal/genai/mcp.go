@@ -174,8 +174,6 @@ func attemptMCPConnection(ctx context.Context, mcpClient *mcp.Client, baseURL st
 }
 
 func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[string]string, transportType string, httpTimeout time.Duration, maxRetries int) (*MCPClient, error) {
-	log := logf.FromContext(ctx)
-
 	mcpClient := createHTTPClient()
 
 	// Create a context with timeout ONLY for the retry loop
@@ -197,7 +195,6 @@ func createMCPClientWithRetry(ctx context.Context, baseURL string, headers map[s
 		// For HTTP: This context is used per-request
 		session, err := attemptMCPConnection(ctx, mcpClient, baseURL, headers, httpTimeout, transportType)
 		if err == nil {
-			log.Info("MCP client connected successfully", "server", baseURL, "attempts", attempt+1)
 			return &MCPClient{
 				baseURL: baseURL,
 				headers: headers,

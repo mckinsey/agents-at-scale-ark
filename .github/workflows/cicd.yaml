@@ -294,6 +294,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Free up some disk space for ARK installation
+      - name: Clean up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          sudo docker builder prune --all --force
+
       - name: Install ruff
         uses: astral-sh/ruff-action@v3
         with:
@@ -350,6 +357,7 @@ jobs:
           metrics-enabled: false
           traefik-enabled: false
           k3s-channel: latest
+          mock-llm-enabled: false
 
       - name: Install fark, ark CLI and configure kubectl
         run: |
@@ -625,6 +633,7 @@ jobs:
           - { name: ark-api, path: services/ark-api/chart }
           - { name: ark-dashboard, path: services/ark-dashboard/chart }
           - { name: ark-mcp, path: services/ark-mcp/chart }
+          - { name: ark-cluster-memory, path: services/ark-cluster-memory/chart }
           - { name: mcp-filesystem, path: mcp/filesystem-mcp/chart }
           - { name: localhost-gateway, path: services/localhost-gateway/chart }
           - { name: ark-tenant, path: charts/ark-tenant }
@@ -898,6 +907,7 @@ jobs:
           - ark-api
           - ark-dashboard
           - ark-mcp
+          - ark-cluster-memory
           - mcp-filesystem
           - localhost-gateway
           - ark-tenant

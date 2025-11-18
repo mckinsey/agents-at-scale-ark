@@ -64,9 +64,7 @@ func (r *A2AServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	if len(a2aServer.Status.Conditions) == 0 {
-		r.setCondition(&a2aServer, A2AServerReady, metav1.ConditionFalse, "Initializing", "A2AServer is being initialized")
-		r.setCondition(&a2aServer, A2AServerDiscovering, metav1.ConditionTrue, "StartingDiscovery", "Starting agent discovery process")
-		if err := r.updateStatusWithConditions(ctx, &a2aServer); err != nil {
+		if err := r.reconcileConditionsInitializing(ctx, &a2aServer); err != nil {
 			return ctrl.Result{}, err
 		}
 		// Return early to avoid double reconciliation, let the status update trigger next reconcile
@@ -76,9 +74,7 @@ func (r *A2AServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	resolver := r.getResolver()
 	resolvedAddress, err := resolver.ResolveValueSource(ctx, a2aServer.Spec.Address, a2aServer.Namespace)
 	if err != nil {
-		r.setCondition(&a2aServer, A2AServerDiscovering, metav1.ConditionFalse, "AddressResolutionFailed", "Cannot attempt discovery due to address resolution failure")
-		r.setCondition(&a2aServer, A2AServerReady, metav1.ConditionFalse, "AddressResolutionFailed", "Server not ready due to address resolution failure")
-		if err := r.updateStatusWithConditions(ctx, &a2aServer); err != nil {
+		if err := r.reconcileConditionsAddressResolutionFailed(ctx, &a2aServer); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
@@ -96,49 +92,107 @@ func (r *A2AServerReconciler) getResolver() *common.ValueSourceResolverV1PreAlph
 }
 
 func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1prealpha1.A2AServer) (ctrl.Result, error) {
-	log := logf.FromContext(ctx)
-
 	// Set discovering condition
-	r.setCondition(&a2aServer, A2AServerDiscovering, metav1.ConditionTrue, "DiscoveringAgents", "Discovering agents from A2A server")
+	r.reconcileCondition(&a2aServer, A2AServerDiscovering, metav1.ConditionTrue, "DiscoveringAgents", "Discovering agents from A2A server")
 
 	// Use the already resolved address from status
 	resolvedAddress := a2aServer.Status.LastResolvedAddress
-	agentCard, err := genai.DiscoverA2AAgentsWithRecorder(ctx, r.Client, resolvedAddress, a2aServer.Spec.Headers, a2aServer.Namespace, r.Recorder, &a2aServer)
+	// Don't pass recorder - we handle events at controller level based on actual changes
+	agentCard, err := genai.DiscoverA2AAgents(ctx, r.Client, resolvedAddress, a2aServer.Spec.Headers, a2aServer.Namespace)
 	if err != nil {
-		log.Error(err, "A2A agent discovery failed", "server", a2aServer.Name, "address", resolvedAddress)
-		r.Recorder.Event(&a2aServer, corev1.EventTypeWarning, "AgentDiscoveryFailed", fmt.Sprintf("Failed to discover agents from A2A server %s: %v", resolvedAddress, err))
-		// Don't delete agents - just mark A2AServer as not ready
-		// The agent controller will detect this and set agent phase to Pending
-		r.setCondition(&a2aServer, A2AServerReady, metav1.ConditionFalse, "DiscoveryFailed", fmt.Sprintf("Server not ready due to discovery failure: %v", err))
-		if err := r.updateStatusWithConditions(ctx, &a2aServer); err != nil {
+		if err := r.reconcileConditionsDiscoveryFailed(ctx, &a2aServer, err, resolvedAddress); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
 	}
 
-	// Set connected condition after successful discovery
-	if err := r.createAgentWithSkills(ctx, &a2aServer, agentCard); err != nil {
-		log.Error(err, "A2A agent creation failed", "server", a2aServer.Name, "agent", agentCard.Name)
-		r.Recorder.Event(&a2aServer, corev1.EventTypeWarning, "AgentCreationFailed", fmt.Sprintf("Failed to create agent %s: %v", agentCard.Name, err))
-		r.setCondition(&a2aServer, A2AServerReady, metav1.ConditionFalse, "AgentCreationFailed", fmt.Sprintf("Failed to create agent: %v", err))
-		if err := r.updateStatusWithConditions(ctx, &a2aServer); err != nil {
+	// Create/update agents and check if anything actually changed
+	agentsChanged, err := r.createAgentWithSkills(ctx, &a2aServer, agentCard)
+	if err != nil {
+		if err := r.reconcileConditionsAgentCreationFailed(ctx, &a2aServer, err, agentCard.Name); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
 	}
 
-	return r.finalizeA2AServerProcessing(ctx, a2aServer)
+	return r.finalizeA2AServerProcessing(ctx, a2aServer, agentsChanged)
 }
 
-// setCondition sets a condition on the A2AServer
-func (r *A2AServerReconciler) setCondition(a2aServer *arkv1prealpha1.A2AServer, conditionType string, status metav1.ConditionStatus, reason, message string) {
-	meta.SetStatusCondition(&a2aServer.Status.Conditions, metav1.Condition{
+// reconcileCondition updates a condition on the A2AServer and returns true if it changed
+func (r *A2AServerReconciler) reconcileCondition(a2aServer *arkv1prealpha1.A2AServer, conditionType string, status metav1.ConditionStatus, reason, message string) bool {
+	return meta.SetStatusCondition(&a2aServer.Status.Conditions, metav1.Condition{
 		Type:               conditionType,
 		Status:             status,
 		Reason:             reason,
 		Message:            message,
 		ObservedGeneration: a2aServer.Generation,
 	})
+}
+
+// reconcileConditionsInitializing sets initial conditions for a new A2AServer
+func (r *A2AServerReconciler) reconcileConditionsInitializing(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer) error {
+	changed1 := r.reconcileCondition(a2aServer, A2AServerReady, metav1.ConditionFalse, "Initializing", "A2AServer is being initialized")
+	changed2 := r.reconcileCondition(a2aServer, A2AServerDiscovering, metav1.ConditionTrue, "StartingDiscovery", "Starting agent discovery process")
+	if changed1 || changed2 {
+		return r.updateStatusWithConditions(ctx, a2aServer)
+	}
+	return nil
+}
+
+// reconcileConditionsAddressResolutionFailed updates conditions when address resolution fails
+func (r *A2AServerReconciler) reconcileConditionsAddressResolutionFailed(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer) error {
+	changed1 := r.reconcileCondition(a2aServer, A2AServerDiscovering, metav1.ConditionFalse, "AddressResolutionFailed", "Cannot attempt discovery due to address resolution failure")
+	changed2 := r.reconcileCondition(a2aServer, A2AServerReady, metav1.ConditionFalse, "AddressResolutionFailed", "Server not ready due to address resolution failure")
+	if changed1 || changed2 {
+		return r.updateStatusWithConditions(ctx, a2aServer)
+	}
+	return nil
+}
+
+// reconcileConditionsDiscoveryFailed updates conditions and emits events when discovery fails
+func (r *A2AServerReconciler) reconcileConditionsDiscoveryFailed(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, err error, resolvedAddress string) error {
+	log := logf.FromContext(ctx)
+	changed := r.reconcileCondition(a2aServer, A2AServerReady, metav1.ConditionFalse, "DiscoveryFailed", fmt.Sprintf("Server not ready due to discovery failure: %v", err))
+	if changed {
+		log.Error(err, "A2A agent discovery failed", "server", a2aServer.Name, "address", resolvedAddress)
+		r.Recorder.Event(a2aServer, corev1.EventTypeWarning, "AgentDiscoveryFailed", fmt.Sprintf("Failed to discover agents from A2A server %s: %v", resolvedAddress, err))
+		return r.updateStatusWithConditions(ctx, a2aServer)
+	}
+	return nil
+}
+
+// reconcileConditionsAgentCreationFailed updates conditions and emits events when agent creation fails
+func (r *A2AServerReconciler) reconcileConditionsAgentCreationFailed(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, err error, agentName string) error {
+	log := logf.FromContext(ctx)
+	changed := r.reconcileCondition(a2aServer, A2AServerReady, metav1.ConditionFalse, "AgentCreationFailed", fmt.Sprintf("Failed to create agent: %v", err))
+	if changed {
+		log.Error(err, "A2A agent creation failed", "server", a2aServer.Name, "agent", agentName)
+		r.Recorder.Event(a2aServer, corev1.EventTypeWarning, "AgentCreationFailed", fmt.Sprintf("Failed to create agent %s: %v", agentName, err))
+		return r.updateStatusWithConditions(ctx, a2aServer)
+	}
+	return nil
+}
+
+// reconcileConditionsReady updates conditions and emits events when A2AServer becomes ready
+// Only emits events if agents actually changed or if conditions changed
+func (r *A2AServerReconciler) reconcileConditionsReady(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, agentsChanged bool) error {
+	log := logf.FromContext(ctx)
+	changed1 := r.reconcileCondition(a2aServer, A2AServerDiscovering, metav1.ConditionFalse, "DiscoveryComplete", "Agent discovery completed")
+	changed2 := r.reconcileCondition(a2aServer, A2AServerReady, metav1.ConditionTrue, "AgentDiscovered", "Successfully discovered agent")
+
+	// Only emit events if conditions changed OR if agents changed
+	if changed1 || changed2 || agentsChanged {
+		if changed1 || changed2 {
+			if err := r.updateStatusWithConditions(ctx, a2aServer); err != nil {
+				return err
+			}
+		}
+		if agentsChanged {
+			r.Recorder.Event(a2aServer, corev1.EventTypeNormal, "AgentDiscovery", "agent discovered")
+			log.Info("a2a agent discovered", "server", a2aServer.Name, "namespace", a2aServer.Namespace)
+		}
+	}
+	return nil
 }
 
 // updateStatusWithConditions updates the A2AServer status
@@ -153,13 +207,14 @@ func (r *A2AServerReconciler) updateStatusWithConditions(ctx context.Context, a2
 	return err
 }
 
-func (r *A2AServerReconciler) createAgentWithSkills(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, agentCard *genai.A2AAgentCard) error {
+func (r *A2AServerReconciler) createAgentWithSkills(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, agentCard *genai.A2AAgentCard) (bool, error) {
 	log := logf.FromContext(ctx)
+	anyChange := false
 
 	// Get existing agents for mark-and-sweep
 	existingAgents, err := r.listAgentByA2AServer(ctx, a2aServer.Namespace, a2aServer.Name)
 	if err != nil {
-		return fmt.Errorf("failed to list agents for A2AServer %s: %w", a2aServer.Name, err)
+		return false, fmt.Errorf("failed to list agents for A2AServer %s: %w", a2aServer.Name, err)
 	}
 
 	// Mark all existing agents for deletion
@@ -176,7 +231,12 @@ func (r *A2AServerReconciler) createAgentWithSkills(ctx context.Context, a2aServ
 	created, err := r.createOrUpdateAgent(ctx, agent, agentName, a2aServer.Name)
 	if err != nil {
 		log.Error(err, "Failed to create agent", "agent", agentName, "a2aServer", a2aServer.Name, "namespace", a2aServer.Namespace)
-		return err
+		return false, err
+	}
+
+	if created {
+		anyChange = true
+		r.Recorder.Event(a2aServer, corev1.EventTypeNormal, "AgentCreated", fmt.Sprintf("Agent created: %s with %d skills", agentName, len(agentCard.Skills)))
 	}
 
 	// Delete unmarked agents
@@ -190,18 +250,15 @@ func (r *A2AServerReconciler) createAgentWithSkills(ctx context.Context, a2aServ
 			}); err != nil {
 				log.Error(err, "Failed to delete agent", "agent", agentName, "a2aServer", a2aServer.Name, "namespace", a2aServer.Namespace)
 				r.Recorder.Event(a2aServer, corev1.EventTypeWarning, "AgentDeletionFailed", fmt.Sprintf("Failed to delete obsolete agent %s: %v", agentName, err))
-				return err
+				return false, err
 			}
 			log.Info("agent deleted", "agent", agentName, "a2aServer", a2aServer.Name, "namespace", a2aServer.Namespace)
 			r.Recorder.Event(a2aServer, corev1.EventTypeNormal, "AgentDeleted", fmt.Sprintf("Deleted obsolete agent: %s", agentName))
+			anyChange = true
 		}
 	}
 
-	if created {
-		r.Recorder.Event(a2aServer, corev1.EventTypeNormal, "AgentCreated", fmt.Sprintf("Agent created: %s with %d skills", agentName, len(agentCard.Skills)))
-	}
-
-	return nil
+	return anyChange, nil
 }
 
 func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2AServer, agentCard *genai.A2AAgentCard, agentName string) *arkv1alpha1.Agent {
@@ -244,23 +301,23 @@ func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2A
 	return agent
 }
 
-func (r *A2AServerReconciler) createOrUpdateAgent(ctx context.Context, agent *arkv1alpha1.Agent, agentName, a2aServerName string) (bool, error) {
+func (r *A2AServerReconciler) createOrUpdateAgent(ctx context.Context, agent *arkv1alpha1.Agent, agentName, a2aServerName string) (changed bool, err error) {
 	log := logf.FromContext(ctx)
 	existingAgent := &arkv1alpha1.Agent{}
-	err := r.Get(ctx, client.ObjectKey{Name: agentName, Namespace: agent.Namespace}, existingAgent)
+	getErr := r.Get(ctx, client.ObjectKey{Name: agentName, Namespace: agent.Namespace}, existingAgent)
 
-	if errors.IsNotFound(err) {
+	if errors.IsNotFound(getErr) {
 		if err := r.Create(ctx, agent); err != nil {
 			log.Error(err, "Failed to create A2A agent", "agent", agentName, "a2aServer", a2aServerName)
 			return false, fmt.Errorf("failed to create agent %s: %w", agentName, err)
 		}
 		log.Info("a2a agent created", "agent", agentName, "a2aServer", a2aServerName, "namespace", agent.Namespace)
-		return true, nil // Agent was created
+		return true, nil
 	}
 
-	if err != nil {
-		log.Error(err, "Failed to get existing A2A agent", "agent", agentName, "a2aServer", a2aServerName)
-		return false, fmt.Errorf("failed to get agent %s: %w", agentName, err)
+	if getErr != nil {
+		log.Error(getErr, "Failed to get existing A2A agent", "agent", agentName, "a2aServer", a2aServerName)
+		return false, fmt.Errorf("failed to get agent %s: %w", agentName, getErr)
 	}
 
 	// Only update if skills annotation has changed
@@ -272,26 +329,22 @@ func (r *A2AServerReconciler) createOrUpdateAgent(ctx context.Context, agent *ar
 			return false, fmt.Errorf("failed to update agent %s: %w", agentName, err)
 		}
 		log.Info("a2a agent updated", "agent", agentName, "a2aServer", a2aServerName, "namespace", existingAgent.Namespace)
+		return true, nil
 	}
 
-	return false, nil // Agent was updated or unchanged
+	return false, nil
 }
 
-func (r *A2AServerReconciler) finalizeA2AServerProcessing(ctx context.Context, a2aServer arkv1prealpha1.A2AServer) (ctrl.Result, error) {
+func (r *A2AServerReconciler) finalizeA2AServerProcessing(ctx context.Context, a2aServer arkv1prealpha1.A2AServer, agentsChanged bool) (ctrl.Result, error) {
 	readyCondition := meta.FindStatusCondition(a2aServer.Status.Conditions, A2AServerReady)
-	if readyCondition != nil && readyCondition.Status == metav1.ConditionTrue && readyCondition.Reason == "AgentDiscovered" {
+	if readyCondition != nil && readyCondition.Status == metav1.ConditionTrue && readyCondition.Reason == "AgentDiscovered" && !agentsChanged {
+		// Already ready and no changes - skip event emission
 		return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
 	}
 
-	r.setCondition(&a2aServer, A2AServerDiscovering, metav1.ConditionFalse, "DiscoveryComplete", "Agent discovery completed")
-	r.setCondition(&a2aServer, A2AServerReady, metav1.ConditionTrue, "AgentDiscovered", "Successfully discovered agent")
-
-	if err := r.updateStatusWithConditions(ctx, &a2aServer); err != nil {
+	if err := r.reconcileConditionsReady(ctx, &a2aServer, agentsChanged); err != nil {
 		return ctrl.Result{}, err
 	}
-
-	r.Recorder.Event(&a2aServer, corev1.EventTypeNormal, "AgentDiscovery", "agent discovered")
-	logf.FromContext(ctx).Info("a2a agent discovered", "server", a2aServer.Name, "namespace", a2aServer.Namespace)
 
 	return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
 }
