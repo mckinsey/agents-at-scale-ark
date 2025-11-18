@@ -289,7 +289,7 @@ jobs:
 
   e2e-quickstart:
     needs: [setup-container-cache-registry, build-containers]
-    runs-on: ubuntu-24.04
+    runs-on: gh-larger-linux-mini
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
