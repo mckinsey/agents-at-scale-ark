@@ -2,7 +2,7 @@ name: 'Deploy - AWS'
 
 on:
   workflow_run:
-    workflows: ["CI/CD"]
+    workflows: [CI/CD]
     types:
       - completed
   workflow_dispatch:
