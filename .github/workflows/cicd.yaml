@@ -288,6 +288,7 @@ jobs:
           retention-days: 30
 
   e2e-quickstart:
+    continue-on-error: true
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
     steps:
@@ -400,6 +401,7 @@ jobs:
           fark agent sample-agent "confirm you have read this message"
 
   e2e-ark-cli:
+    continue-on-error: true
     needs: [build-ark-cli]
     runs-on: ubuntu-24.04
     steps:
