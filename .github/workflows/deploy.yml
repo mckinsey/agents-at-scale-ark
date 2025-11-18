@@ -77,9 +77,6 @@ jobs:
         include:
           - path: ark
             image: ark-controller
-          - path: services/ark-api-a2a
-            image: ark-api-a2a
-            prebuild: "make ark-api-a2a-deps && mkdir -p services/ark-api-a2a/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api-a2a/out/"
           - path: services/ark-api
             image: ark-api
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
@@ -215,6 +212,7 @@ jobs:
           - ark-api
           - ark-dashboard
           - ark-mcp
+          - ark-cluster-memory
           - mcp-filesystem
           - localhost-gateway
           - ark-tenant

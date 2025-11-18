@@ -167,25 +167,6 @@ ark models create default
 ✓ Model 'default' created successfully
 ```
 
-#### ark-api-a2a Not Installed Automatically
-
-See [issue #392](https://github.com/mckinsey/agents-at-scale-ark/issues/392) for tracking this issue.
-
-**Error or Symptom**
-
-```bash
- The installation command completes successfully and reports "✓ Installation complete", but the ark-api-a2a component is not actually deployed in the cluster.
-'helm list -A' would not list ark-api-a2a
-```
-
-**Cause**
-
-Investigation in progress
-
-**Workaround**
-
-Until the issue is fixed, run the 'make ark-api-a2a-install' command from agents-at-scale-ark repo root
-
 #### Access Denied When Installing agents-at-scale
 
 **Error Message**

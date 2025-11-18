@@ -81,12 +81,25 @@ type QuerySpec struct {
 	Overrides []Override `json:"overrides,omitempty"`
 }
 
+// A2AMetadata contains optional A2A protocol metadata
+type A2AMetadata struct {
+	// +kubebuilder:validation:Optional
+	// ContextID from the A2A protocol when the target is an A2A agent
+	ContextID string `json:"contextId,omitempty"`
+	// +kubebuilder:validation:Optional
+	// TaskID from the A2A protocol when the target is an A2A agent and a task was created
+	TaskID string `json:"taskId,omitempty"`
+}
+
 // Response defines a response from a query target.
 type Response struct {
 	Target  QueryTarget `json:"target,omitempty"`
 	Content string      `json:"content,omitempty"`
 	Raw     string      `json:"raw,omitempty"`
 	Phase   string      `json:"phase,omitempty"`
+	// +kubebuilder:validation:Optional
+	// A2A contains optional A2A protocol metadata (contextId, taskId)
+	A2A *A2AMetadata `json:"a2a,omitempty"`
 }
 
 // +kubebuilder:object:root=true

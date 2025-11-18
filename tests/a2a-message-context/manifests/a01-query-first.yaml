@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: message-counter-first
+spec:
+  input: First message
+  targets:
+    - type: agent
+      name: message-counter-agent

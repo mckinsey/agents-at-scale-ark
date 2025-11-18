@@ -103,6 +103,8 @@ This means that OpenAI compability is not possible when querying teams with stre
 
 The `ark` metadata field identifies which agent is currently contributing, as well as other parameters for the query. This is essential when trying to process responses from targets such as teams, which will contain stream chunks for multiple agents and tools.
 
+All chunks include `ark` metadata:
+
 ```json
 {
   "ark": {
@@ -115,6 +117,38 @@ The `ark` metadata field identifies which agent is currently contributing, as we
   }
 }
 ```
+
+The final chunk also includes the complete query object:
+
+```json
+{
+  "ark": {
+    "query": "789",
+    "completedQuery": {              // Complete Query object (final chunk only)
+      "metadata": {
+        "name": "my-query",
+        "annotations": {
+          "ark.mckinsey.com/a2a-context-id": "ctx-abc123"
+        }
+      },
+      "spec": {
+        "input": "...",
+        "sessionId": "sess-123"
+      },
+      "status": {
+        "phase": "done",
+        "tokenUsage": {...},
+        "a2a": {                     // A2A protocol metadata
+          "contextId": "ctx-abc123",
+          "taskId": "task-xyz789"
+        }
+      }
+    }
+  }
+}
+```
+
+The `completedQuery` field contains the complete [Query object](/reference/resources/query) including metadata, spec, and status. This provides access to annotations, labels, token usage, and A2A metadata. This field is only present in the final chunk.
 
 Clients aware of this field can display rich multi-agent interactions and tool calls. The `ark` CLI demonstrates this with the `chat` function, which shows team member responses and intermediate tool calls.
 

@@ -1,9 +1,0 @@
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: test-empty-input
-spec:
-  input: ""
-  targets:
-    - type: agent
-      name: claude-enthusiast

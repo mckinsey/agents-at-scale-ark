@@ -2,6 +2,7 @@ import type { ChatCompletionMessageParam } from 'openai/resources/chat/completio
 
 import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
+import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { generateUUID } from '@/lib/utils/uuid';
 
 interface AxiosError extends Error {
@@ -149,8 +150,9 @@ export const chatService = {
     targetType: string,
     targetName: string,
     sessionId?: string,
+    enableStreaming?: boolean,
   ): Promise<QueryDetailResponse> {
-    const queryRequest = {
+    const queryRequest: QueryCreateRequest = {
       name: `chat-query-${generateUUID()}`,
       type: 'messages',
       // Use OpenAI ChatCompletionMessageParam which supports multimodal content
@@ -162,7 +164,16 @@ export const chatService = {
         },
       ],
       sessionId,
-    } as unknown as QueryCreateRequest;
+    };
+
+    // Add streaming annotation if enabled
+    if (enableStreaming) {
+      queryRequest.metadata = {
+        annotations: {
+          [ARK_ANNOTATIONS.STREAMING_ENABLED]: 'true',
+        },
+      };
+    }
 
     return await this.createQuery(queryRequest);
   },
@@ -273,5 +284,102 @@ export const chatService = {
     return () => {
       stopped = true;
     };
+  },
+
+  /**
+   * Parse a Server-Sent Events (SSE) chunk line
+   * @param line - SSE line in format "data: {json}" or "data: [DONE]"
+   * @returns Parsed JSON object or null for [DONE] marker, empty lines, or invalid data
+   */
+  parseSSEChunk(line: string): Record<string, unknown> | null {
+    const trimmedLine = line.trim();
+
+    if (!trimmedLine) {
+      return null;
+    }
+
+    if (!trimmedLine.startsWith('data:')) {
+      return null;
+    }
+
+    const data = trimmedLine.substring(5).trim();
+    if (data === '[DONE]') {
+      return null;
+    }
+
+    try {
+      return JSON.parse(data) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Stream chat response using Server-Sent Events
+   * @param messages - Chat messages to send
+   * @param targetType - Type of target (agent, model, team)
+   * @param targetName - Name of the target
+   * @param sessionId - Optional session ID
+   * @yields Parsed SSE chunks containing response data
+   */
+  async *streamChatResponse(
+    messages: ChatCompletionMessageParam[],
+    targetType: string,
+    targetName: string,
+    sessionId?: string,
+  ): AsyncGenerator<Record<string, unknown>, void, unknown> {
+    const model = `${targetType}/${targetName}`;
+    const response = await fetch('/api/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        stream: true,
+        metadata: sessionId ? { sessionId } : undefined,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to connect to stream: ${response.statusText}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('No response body available for streaming');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        // Decode the chunk and add to buffer
+        buffer += decoder.decode(value, { stream: true });
+
+        // Split by double newline (SSE event separator)
+        const lines = buffer.split('\n\n');
+
+        // Keep the last incomplete line in the buffer
+        buffer = lines.pop() || '';
+
+        // Process complete lines
+        for (const line of lines) {
+          const chunk = this.parseSSEChunk(line);
+          if (chunk) {
+            yield chunk;
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
   },
 };

@@ -54,7 +54,7 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStr
 
 	if eventStream != nil {
 		response, err = m.Provider.ChatCompletionStream(ctx, messages, n, func(chunk *openai.ChatCompletionChunk) error {
-			chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, m.Model)
+			chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, m.Model, nil)
 			return eventStream.StreamChunk(ctx, chunkWithMeta)
 		}, tools...)
 	} else {

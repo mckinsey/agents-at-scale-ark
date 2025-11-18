@@ -1,0 +1,138 @@
+# A2A Queries
+
+ARK translates Query resources into A2A protocol messages when targeting agents hosted on A2A servers.
+
+When a Query targets an A2A-hosted agent, ARK automatically creates an [A2ATask](/reference/resources/a2atask) resource to track the A2A protocol interaction. For message-based queries that return immediately, the A2ATask completes synchronously with phase `completed`. For long-running tasks, the A2ATask tracks execution progress with polling.
+
+## Messages
+
+A2A messages are suitable for interactions that don't require long-running processing or complex state management. When A2A servers return a message, the contents are translated into the query response. Client-side accumulation of conversation context is not needed, and conversation context is ignored if sent to the server. Ark history can be used to track messages, but conversation history is not hydrated.
+
+As a demonstration of A2A messages, you can install the [`mock-llm`](https://github.com/dwmkerr/mock-llm) service, which provides an 'echo' agent that echos input messages:
+
+```bash
+# Install mock-llm with A2A agents enabled.
+helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+  --set ark.a2a.enabled=true
+
+# Wait for the A2A agents to become available.
+kubectl get agents
+# NAME                    MODEL   AVAILABLE   AGE
+# echo-agent                      True        10s
+# countdown-agent                 True        10s
+# message-counter-agent           True        10s
+```
+
+Query the `echo-agent`:
+
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: echo-example
+spec:
+  targets:
+  - name: echo-agent
+    type: agent
+  input: "Testing incoming messages"
+
+  # When sending an openai messages array, only the final user message is sent
+  # to the A2A server.
+  # type: messages
+  # input:
+  #   - role: user
+  #     content: "First message"
+  #   - role: assistant
+  #     content: "First response"
+  #   - role: user
+  #     content: "Follow up question"
+```
+
+Response:
+
+```yaml
+status:
+  phase: done
+  responses:
+    - content: "Testing incoming messages"
+      target:
+        name: echo-agent
+        type: agent
+```
+
+View the A2ATask that was created for this query:
+
+```bash
+# List A2ATasks for the query
+kubectl get a2atasks -l ark.mckinsey.com/query-name=echo-example
+
+# View the completed A2ATask details
+kubectl describe a2atask $(kubectl get a2atasks -l ark.mckinsey.com/query-name=echo-example -o name)
+```
+
+The A2ATask will show phase `completed` with the message history and artifacts from the A2A protocol interaction.
+
+## Stateful Messages
+
+A2A servers respond to messages with a `contextId`. ARK stores this ID in the query's `status.a2a.contextId` field. To provide continuity across a set of interactions, set the `ark.mckinsey.com/a2a-context-id` annotation when creating queries, as per the [A2A Protocol - Group Related Interactions documentation](https://a2a-protocol.org/latest/topics/life-of-a-task/#group-related-interactions).
+
+The pattern:
+- **Input**: Set `ark.mckinsey.com/a2a-context-id` annotation when creating a query
+- **Output**: Read context ID from `status.a2a.contextId` after query completes
+
+The `message-counter-agent` can be used to test this functionality. Send an initial message:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: count-messages
+spec:
+  targets:
+  - name: message-counter-agent
+    type: agent
+  input: "First message"
+```
+
+Track the context ID generated when the query completes:
+
+```bash
+# Wait for query to complete
+kubectl wait --for=condition=Completed query/count-messages --timeout=30s
+
+# View the response
+kubectl get query count-messages -o jsonpath='{.status.responses[0].content}'
+# 1 message(s) recieved
+
+# Extract the context ID from status
+CONTEXT_ID=$(kubectl get query count-messages -o jsonpath='{.status.a2a.contextId}')
+echo "Context ID: ${CONTEXT_ID}"
+```
+
+Messages sent with this context ID are associated with a single conversation via the A2A server:
+
+```bash
+# Send 10 messages with the same context ID
+for i in {1..10}; do
+  kubectl apply -f - <<EOF
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: count-messages-${i}
+  annotations:
+    ark.mckinsey.com/a2a-context-id: "${CONTEXT_ID}"
+spec:
+  targets:
+  - name: message-counter-agent
+    type: agent
+  input: "Message ${i}"
+EOF
+  kubectl wait --for=condition=Completed query/count-messages-${i} --timeout=30s
+done
+
+# Check the final count
+kubectl get query count-messages-10 -o jsonpath='{.status.responses[0].content}'
+# 11 message(s) recieved
+```
+

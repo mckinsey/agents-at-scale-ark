@@ -89,14 +89,14 @@ _ark_completion() {
           return 0
           ;;
         install)
-          # Suggest marketplace services with marketplace/ prefix
-          opts="marketplace/phoenix marketplace/langfuse"
+          # Suggest marketplace services with marketplace/services/ prefix
+          opts="marketplace/services/phoenix marketplace/services/langfuse"
           COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
           return 0
           ;;
         uninstall)
-          # Suggest marketplace services with marketplace/ prefix
-          opts="marketplace/phoenix marketplace/langfuse"
+          # Suggest marketplace services with marketplace/services/ prefix
+          opts="marketplace/services/phoenix marketplace/services/langfuse"
           COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
           return 0
           ;;
@@ -237,13 +237,13 @@ _ark() {
           ;;
         install)
           _values 'services to install' \\
-            'marketplace/phoenix[Phoenix observability platform]' \\
-            'marketplace/langfuse[Langfuse LLM analytics]'
+            'marketplace/services/phoenix[Phoenix observability platform]' \\
+            'marketplace/services/langfuse[Langfuse LLM analytics]'
           ;;
         uninstall)
           _values 'services to uninstall' \\
-            'marketplace/phoenix[Phoenix observability platform]' \\
-            'marketplace/langfuse[Langfuse LLM analytics]'
+            'marketplace/services/phoenix[Phoenix observability platform]' \\
+            'marketplace/services/langfuse[Langfuse LLM analytics]'
           ;;
         chat)
           # Get available targets dynamically

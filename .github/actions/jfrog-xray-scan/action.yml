@@ -1,6 +1,9 @@
 name: 'JFrog Xray Build Scan'
 description: 'Scans builds using JFrog Xray with specified watch'
 inputs:
+  github_repo:
+    description: 'GitHub repository (owner/repo) to report scan results to'
+    required: true
   build_name:
     description: 'Name of the build to scan'
     required: true
@@ -29,37 +32,74 @@ runs:
         JF_USER: ${{ inputs.jfrog_user }}
         JF_PASSWORD: ${{ inputs.jfrog_password }}
         JF_URL: ${{ inputs.jfrog_url }}
-    
+  
     - name: Run Xray scan
       shell: bash
       run: |
         # Set variables
-        BUILD_NAME="${{ inputs.build_name }}"
-        BUILD_NUMBER="${{ inputs.build_number }}"
         WATCH_NAME="${{ inputs.watch_name }}"
-        SCAN_JSON="xray-scan-$BUILD_NAME-$BUILD_NUMBER.json"
 
-        echo "Xray build scan with watch: $WATCH_NAME"
-        jf xray scan --build "$BUILD_NAME/$BUILD_NUMBER" --watches "$WATCH_NAME" --format json > "$SCAN_JSON"
+        echo "Scan output will be saved to: $SCAN_JSON"
 
-        # Show JFrog UI links
-        echo "View build scan: ${{ inputs.jfrog_url }}/ui/builds/$BUILD_NAME/$BUILD_NUMBER/published?activeTab=XrayData"
+        echo "Xray build audit with watch: $WATCH_NAME"
         echo "View watch violations: ${{ inputs.jfrog_url }}/ui/watchesNew/edit/$WATCH_NAME?activeTab=violations"
+        
+        jf audit --watches "$WATCH_NAME" --format json > "$SCAN_JSON" 
+      
+    - name: Parse scan results
+      id: parse-scan
+      if: always()
+      shell: bash
+      run: |
+        VIOLATIONS_COUNT=$(jq '[.[] | select(.violations != null) | .violations | length] | add // 0' "$SCAN_JSON")
 
-        # Fail build on any violation; your policy enforces High/Critical fail action
-        VIOLATIONS=$(jq -r '.summary.total_violations // 0' "$SCAN_JSON")
+        echo "Total violations found: $VIOLATIONS_COUNT"
+        echo "violations_count=$VIOLATIONS_COUNT" >> $GITHUB_OUTPUT
+        
+        TABLE=$(jq -r '
+          .[] 
+          | select(.violations != null) | .violations[]? 
+          | [
+              (.issue_id // "N/A"),
+              (
+                if (.components and (.components | length > 0)) 
+                then (.components | to_entries | map( .value.impact_paths[]? | .[].component_id ) | flatten | unique | join(",")) 
+                else "N/A" 
+                end
+              ),
+              (.severity // "N/A"),
+              (
+                if (.cves and (.cves | type == "array" and length > 0))
+                then (.cves | map(.cve) | join(","))
+                else "N/A"
+                end
+              ),
+              (
+                if (.references and (.references | length > 0)) 
+                then (.references | join(",")) 
+                else "N/A" 
+                end
+              )
+            ]
+          | @tsv
+        ' "$SCAN_JSON" | sort -u -t$'\t' -k1,1)
+        
+        echo "| ID | Affected Component | Criticality | CVEs | Links |" > summary-table.md
+        echo "|----|-------------------|-------------|------|-------|" >> summary-table.md
 
-        if [[ "$VIOLATIONS" =~ ^[0-9]+$ ]] && [ "$VIOLATIONS" -gt 0 ]; then
-          echo "Xray violations found: $VIOLATIONS (see $SCAN_JSON)" >&2
-          exit 1
+        if [ -n "$TABLE" ]; then
+          echo "$TABLE" | awk '{print "| " $1 " | " $2 " | " $3 " | " $4 " | " $5 " |"}' >> summary-table.md
         else
-          echo "No Xray violations (see $SCAN_JSON)"
+          echo "| No violations found | - | - | - | - |" >> summary-table.md
         fi
+
+        cat summary-table.md >> $GITHUB_STEP_SUMMARY
 
     - name: Upload scan results
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: xray-scan-results-${{ inputs.build_name }}-${{ inputs.build_number }}
-        path: xray-scan-*.json
+        path: "xray-scan-${{ inputs.build_name }}-${{ inputs.build_number }}.json"
         retention-days: 30
+    

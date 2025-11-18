@@ -30,13 +30,13 @@ func NewA2AExecutionEngine(k8sClient client.Client, recorder EventEmitter) *A2AE
 }
 
 // Execute executes a query against an A2A agent
-func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace string, annotations map[string]string, userInput Message, eventStream EventStreamInterface) ([]Message, error) {
+func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace string, agentAnnotations map[string]string, contextID string, userInput Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	log := logf.FromContext(ctx)
 	log.Info("executing A2A agent", "agent", agentName)
 
 	a2aTracker := NewOperationTracker(e.recorder, ctx, "A2ACall", agentName, map[string]string{
-		"a2aServer":  annotations[arkann.A2AServerName],
-		"serverAddr": annotations[arkann.A2AServerAddress],
+		"a2aServer":  agentAnnotations[arkann.A2AServerName],
+		"serverAddr": agentAnnotations[arkann.A2AServerAddress],
 		"queryId":    getQueryID(ctx),
 		"sessionId":  getSessionID(ctx),
 		"protocol":   "a2a-jsonrpc",
@@ -44,13 +44,13 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 	})
 
 	// Get the A2A server address from annotations
-	a2aAddress, hasAddress := annotations[arkann.A2AServerAddress]
+	a2aAddress, hasAddress := agentAnnotations[arkann.A2AServerAddress]
 	if !hasAddress {
 		return nil, fmt.Errorf("A2A agent missing %s annotation", arkann.A2AServerAddress)
 	}
 
 	// Get the A2AServer name from annotations
-	a2aServerName, hasServerName := annotations[arkann.A2AServerName]
+	a2aServerName, hasServerName := agentAnnotations[arkann.A2AServerName]
 	if !hasServerName {
 		return nil, fmt.Errorf("A2A agent missing %s annotation", arkann.A2AServerName)
 	}
@@ -81,7 +81,8 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 	}
 
 	// Execute A2A agent with event recording
-	response, err := ExecuteA2AAgentWithRecorder(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, nil, &a2aServer)
+	queryName := getQueryName(ctx)
+	a2aResponse, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, nil, &a2aServer)
 	if err != nil {
 		a2aTracker.Fail(err)
 		e.recorder.EmitEvent(ctx, "Warning", "A2AExecutionFailed", BaseEvent{
@@ -94,10 +95,12 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 				"address":   a2aAddress,
 			},
 		})
+
+		modelID := fmt.Sprintf("agent/%s", agentName)
+		StreamError(ctx, eventStream, err, "a2a_execution_failed", modelID)
+
 		return nil, err
 	}
-
-	log.Info("A2A agent execution completed", "agent", agentName, "response_length", len(response))
 
 	// Emit success event
 	e.recorder.EmitEvent(ctx, "Normal", "A2AExecutionSuccess", BaseEvent{
@@ -105,21 +108,21 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		Metadata: map[string]string{
 			"agent":          agentName,
 			"namespace":      namespace,
-			"responseLength": fmt.Sprintf("%d", len(response)),
+			"responseLength": fmt.Sprintf("%d", len(a2aResponse.Content)),
 			"a2aServer":      a2aServerName,
 			"address":        a2aAddress,
 			"hasError":       "false",
 		},
 	})
 
-	a2aTracker.CompleteWithMetadata(response, map[string]string{
-		"responseLength": fmt.Sprintf("%d", len(response)),
+	a2aTracker.CompleteWithMetadata(a2aResponse.Content, map[string]string{
+		"responseLength": fmt.Sprintf("%d", len(a2aResponse.Content)),
 		"hasError":       "false",
 		"messageCount":   "1",
 	})
 
 	// Convert response to genai.Message format
-	responseMessage := NewAssistantMessage(response)
+	responseMessage := NewAssistantMessage(a2aResponse.Content)
 
 	// The A2A execution engine does not yet support streaming responses - if streaming
 	// was requested then the final response must be sent as a single chunk, as per the spec.
@@ -138,7 +141,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 				{
 					Index: 0,
 					Delta: openai.ChatCompletionChunkChoiceDelta{
-						Content: response,
+						Content: a2aResponse.Content,
 						Role:    "assistant",
 					},
 					FinishReason: "stop",
@@ -146,11 +149,14 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 			},
 		}
 
-		chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, modelID)
+		chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, modelID, nil)
 		if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
 			log.Error(err, "failed to send A2A response chunk to event stream")
 		}
 	}
 
-	return []Message{responseMessage}, nil
+	return &ExecutionResult{
+		Messages:    []Message{responseMessage},
+		A2AResponse: a2aResponse,
+	}, nil
 }

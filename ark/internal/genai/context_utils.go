@@ -7,9 +7,10 @@ import (
 type contextKey string
 
 const (
-	queryIDKey   contextKey = "queryId"
-	sessionIDKey contextKey = "sessionId"
-	queryNameKey contextKey = "queryName"
+	queryIDKey      contextKey = "queryId"
+	sessionIDKey    contextKey = "sessionId"
+	queryNameKey    contextKey = "queryName"
+	a2aContextIDKey contextKey = "a2aContextId"
 	// QueryContextKey is used to pass the Query resource through context to agents
 	QueryContextKey contextKey = "queryContext"
 	// Execution metadata keys for streaming
@@ -41,6 +42,15 @@ func getSessionID(ctx context.Context) string {
 	if val := ctx.Value(sessionIDKey); val != nil {
 		if sessionID, ok := val.(string); ok {
 			return sessionID
+		}
+	}
+	return ""
+}
+
+func getQueryName(ctx context.Context) string {
+	if val := ctx.Value(queryNameKey); val != nil {
+		if queryName, ok := val.(string); ok {
+			return queryName
 		}
 	}
 	return ""
@@ -83,4 +93,17 @@ func GetExecutionMetadata(ctx context.Context) map[string]interface{} {
 	}
 
 	return metadata
+}
+
+func WithA2AContextID(ctx context.Context, contextID string) context.Context {
+	return context.WithValue(ctx, a2aContextIDKey, contextID)
+}
+
+func GetA2AContextID(ctx context.Context) string {
+	if val := ctx.Value(a2aContextIDKey); val != nil {
+		if contextID, ok := val.(string); ok {
+			return contextID
+		}
+	}
+	return ""
 }

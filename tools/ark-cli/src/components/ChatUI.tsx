@@ -154,6 +154,9 @@ const ChatUI: React.FC<ChatUIProps> = ({
     currentTarget: undefined,
   });
 
+  // Track A2A context ID for conversation continuity using ref
+  const a2aContextIdRef = React.useRef<string | undefined>(undefined);
+
   React.useEffect(() => {
     if (showAgentSelector && agents.length === 0) {
       setSelectorLoading(true);
@@ -458,11 +461,14 @@ const ChatUI: React.FC<ChatUIProps> = ({
       // Clear all messages
       setMessages([]);
 
+      // Clear A2A context ID
+      a2aContextIdRef.current = undefined;
+
       // Add system message to show the reset
       const systemMessage: SystemMessage = {
         id: generateMessageId(),
         type: 'system',
-        content: 'Message history cleared',
+        content: 'Message history and A2A context cleared',
         timestamp: new Date(),
         command: '/reset',
       };
@@ -609,8 +615,17 @@ const ChatUI: React.FC<ChatUIProps> = ({
       const fullResponse = await chatClientRef.current.sendMessage(
         target.id,
         apiMessages,
-        chatConfig,
+        {...chatConfig, a2aContextId: a2aContextIdRef.current},
         (chunk: string, toolCalls?: ToolCall[], arkMetadata?: ArkMetadata) => {
+          // Extract A2A context ID from first response
+          // Chat TUI always queries a single target, so contextId is in responses[0]
+          if (
+            arkMetadata?.completedQuery?.status?.responses?.[0]?.a2a?.contextId
+          ) {
+            a2aContextIdRef.current =
+              arkMetadata.completedQuery.status.responses[0].a2a.contextId;
+          }
+
           // Update message progressively as chunks arrive
           setMessages((prev) => {
             const newMessages = [...prev];

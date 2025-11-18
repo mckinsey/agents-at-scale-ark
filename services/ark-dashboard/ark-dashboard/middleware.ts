@@ -50,12 +50,20 @@ async function middleware(request: NextRequest) {
       backendHeaders.set('Authorization', `Bearer ${token.access_token}`);
     }
 
-    // Rewrite to backend with auth headers on REQUEST (not response)
-    // This ensures OIDC tokens are never exposed to the frontend
-    return NextResponse.rewrite(targetUrl, {
-      request: {
-        headers: backendHeaders,
-      },
+    const fetchOptions: RequestInit = {
+      method: request.method,
+      headers: backendHeaders,
+    };
+
+    if (request.body) {
+      fetchOptions.body = request.body;
+    }
+    const backendResponse = await fetch(targetUrl, fetchOptions);
+
+    return new Response(backendResponse.body, {
+      status: backendResponse.status,
+      statusText: backendResponse.statusText,
+      headers: backendResponse.headers,
     });
   }
 

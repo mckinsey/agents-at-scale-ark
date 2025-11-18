@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.1.43](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.42...v0.1.43) (2025-11-13)
+
+
+### Features
+
+* add A2A arithmetic workflow sample ([#401](https://github.com/mckinsey/agents-at-scale-ark/issues/401)) ([7a89b0c](https://github.com/mckinsey/agents-at-scale-ark/commit/7a89b0c039d88b893a39e32e25eeb9a49ba3e1a1))
+* Add sample workflow ([#431](https://github.com/mckinsey/agents-at-scale-ark/issues/431)) ([bdedfa5](https://github.com/mckinsey/agents-at-scale-ark/commit/bdedfa526d3357c2b88f60f61fa7fd1ce282d959))
+* added cli command `ark queries delete` ([#419](https://github.com/mckinsey/agents-at-scale-ark/issues/419)) ([488c30d](https://github.com/mckinsey/agents-at-scale-ark/commit/488c30d97bf8cd0b9817a146b19b15188250948b))
+* ark cli queries list ([#416](https://github.com/mckinsey/agents-at-scale-ark/issues/416)) ([440254b](https://github.com/mckinsey/agents-at-scale-ark/commit/440254b275b20116baad097ead30ae6838d51298))
+* completion streaming output for ark cli query ([#424](https://github.com/mckinsey/agents-at-scale-ark/issues/424)) ([8ecb940](https://github.com/mckinsey/agents-at-scale-ark/commit/8ecb9402a1dc23beaaba89cb25ed5b95a43b2600))
+* enable helm chart users to attach custom cacert for controller connections ([#421](https://github.com/mckinsey/agents-at-scale-ark/issues/421)) ([2094d23](https://github.com/mckinsey/agents-at-scale-ark/commit/2094d234aae342a49601041fc130cc09877e360d))
+* header overrides ([#311](https://github.com/mckinsey/agents-at-scale-ark/issues/311)) ([e7fba56](https://github.com/mckinsey/agents-at-scale-ark/commit/e7fba567af3ac3b3c15995d74640a88580dbe34d))
+* Migrate Marketplace to External Marketplace Repository ([#428](https://github.com/mckinsey/agents-at-scale-ark/issues/428)) ([210da1e](https://github.com/mckinsey/agents-at-scale-ark/commit/210da1e327e81167a5b66293591e1b41797e5032))
+* selector with graph [ARKQB-458]  ([#410](https://github.com/mckinsey/agents-at-scale-ark/issues/410)) ([c19c1df](https://github.com/mckinsey/agents-at-scale-ark/commit/c19c1df04fb083b73e9e7f66caaf57f619bf64ec))
+* streaming integration - dashboard, error handling, A2A, HTTPRoutes ([#435](https://github.com/mckinsey/agents-at-scale-ark/issues/435)) ([8d4e47a](https://github.com/mckinsey/agents-at-scale-ark/commit/8d4e47a6e11653f24930353a93f552620df23780))
+* update marketplace service paths to include 'services/' prefix ([#442](https://github.com/mckinsey/agents-at-scale-ark/issues/442)) ([61066db](https://github.com/mckinsey/agents-at-scale-ark/commit/61066db141a0b305250f339875429326681d420c))
+
+
+### Bug Fixes
+
+* always install evaluator for evaluated E2E tests ([#417](https://github.com/mckinsey/agents-at-scale-ark/issues/417)) ([60cec9f](https://github.com/mckinsey/agents-at-scale-ark/commit/60cec9f83dbb29935460c6a2d58283989e102bc6))
+* Change to xray audit command ([#439](https://github.com/mckinsey/agents-at-scale-ark/issues/439)) ([58700c1](https://github.com/mckinsey/agents-at-scale-ark/commit/58700c1be6d7b407426d5190e0387394c9298248))
+* Use public registry for forked prs ([#354](https://github.com/mckinsey/agents-at-scale-ark/issues/354)) ([a601443](https://github.com/mckinsey/agents-at-scale-ark/commit/a601443bd91c430136c2089e32e295452791ee4f))
+
 ## [0.1.42](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.41...v0.1.42) (2025-11-06)
 
 

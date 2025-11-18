@@ -224,6 +224,8 @@ export class ArkApiClient {
   async *createChatCompletionStream(
     params: OpenAI.Chat.Completions.ChatCompletionCreateParams
   ): AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk> {
+    // Errors from OpenAI SDK will automatically propagate with proper error messages
+    // and kill the CLI, so no try/catch needed here
     const stream = await this.openai.chat.completions.create({
       ...params,
       stream: true,

@@ -11,12 +11,14 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	a2aclient "trpc.group/trpc-go/trpc-a2a-go/client"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -27,6 +29,12 @@ const (
 	// AgentCardPathVersion3 is the A2A protocol 0.3.x agent card path
 	AgentCardPathVersion3 = "/.well-known/agent-card.json"
 )
+
+type A2AResponse struct {
+	Content   string
+	ContextID string
+	TaskID    string
+}
 
 // DiscoverA2AAgents discovers agents from an A2A server using simplified HTTP approach
 func DiscoverA2AAgents(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace string) (*A2AAgentCard, error) {
@@ -68,35 +76,28 @@ func DiscoverA2AAgentsWithRecorder(ctx context.Context, k8sClient client.Client,
 		}
 
 		lastErr = err
-		logf.FromContext(ctx).Info("Failed to discover agent using endpoint, trying next", "url", endpoint.url, "version", endpoint.version, "error", err)
 	}
 
 	return nil, fmt.Errorf("failed to discover agent from all endpoints (%s, %s): %w",
 		AgentCardPathVersion3, AgentCardPathVersion2, lastErr)
 }
 
-// ExecuteA2AAgent executes a task on an A2A agent using the official library client
-func ExecuteA2AAgent(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace, input, agentName string) (string, error) {
-	return ExecuteA2AAgentWithRecorder(ctx, k8sClient, address, headers, namespace, input, agentName, nil, nil)
-}
-
-// ExecuteA2AAgentWithRecorder executes a task on an A2A agent with optional K8s event recording
-func ExecuteA2AAgentWithRecorder(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace, input, agentName string, recorder record.EventRecorder, obj client.Object) (string, error) {
+// ExecuteA2AAgent executes a task on an A2A agent with optional K8s event recording and query context
+func ExecuteA2AAgent(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace, input, agentName, queryName, contextID string, recorder record.EventRecorder, obj client.Object) (*A2AResponse, error) {
 	rpcURL := strings.TrimSuffix(address, "/")
-	logf.FromContext(ctx).Info("calling A2A server", "url", rpcURL)
 
 	// Create and configure A2A client
-	a2aClient, err := createA2AClientForExecution(ctx, k8sClient, rpcURL, headers, namespace, agentName, recorder, obj)
+	a2aClient, err := CreateA2AClient(ctx, k8sClient, rpcURL, headers, namespace, agentName, recorder, obj)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// Execute agent and get response
-	return executeA2AAgentMessage(ctx, a2aClient, input, agentName, rpcURL, recorder, obj)
+	return executeA2AAgentMessage(ctx, k8sClient, a2aClient, input, agentName, rpcURL, namespace, queryName, contextID, recorder, obj)
 }
 
-// createA2AClientForExecution creates and configures A2A client for agent execution
-func createA2AClientForExecution(ctx context.Context, k8sClient client.Client, rpcURL string, headers []arkv1prealpha1.Header, namespace, agentName string, recorder record.EventRecorder, obj client.Object) (*a2aclient.A2AClient, error) {
+// CreateA2AClient creates and configures A2A client with header resolution and injection
+func CreateA2AClient(ctx context.Context, k8sClient client.Client, rpcURL string, headers []arkv1prealpha1.Header, namespace, agentName string, recorder record.EventRecorder, obj client.Object) (*a2aclient.A2AClient, error) {
 	// Use context deadline if available, otherwise default
 	timeout := 5 * time.Minute
 	if deadline, ok := ctx.Deadline(); ok {
@@ -107,9 +108,7 @@ func createA2AClientForExecution(ctx context.Context, k8sClient client.Client, r
 	if len(headers) > 0 {
 		resolvedHeaders, err := resolveA2AHeaders(ctx, k8sClient, headers, namespace)
 		if err != nil {
-			if recorder != nil && obj != nil {
-				recorder.Event(obj, corev1.EventTypeWarning, "A2AHeaderResolutionFailed", fmt.Sprintf("Failed to resolve headers for agent %s: %v", agentName, err))
-			}
+			recorder.Event(obj, corev1.EventTypeWarning, "A2AHeaderResolutionFailed", fmt.Sprintf("Failed to resolve headers for agent %s: %v", agentName, err))
 			return nil, err
 		}
 
@@ -125,19 +124,24 @@ func createA2AClientForExecution(ctx context.Context, k8sClient client.Client, r
 
 	a2aClient, err := a2aclient.NewA2AClient(rpcURL, clientOptions...)
 	if err != nil {
-		if recorder != nil && obj != nil {
-			recorder.Event(obj, corev1.EventTypeWarning, "A2AClientCreateFailed", fmt.Sprintf("Failed to create A2A client for agent %s at %s: %v", agentName, rpcURL, err))
-		}
+		recorder.Event(obj, corev1.EventTypeWarning, "A2AClientCreateFailed", fmt.Sprintf("Failed to create A2A client for agent %s at %s: %v", agentName, rpcURL, err))
 		return nil, fmt.Errorf("failed to create A2A client: %w", err)
 	}
 	return a2aClient, nil
 }
 
 // executeA2AAgentMessage sends message to A2A agent and processes response
-func executeA2AAgentMessage(ctx context.Context, a2aClient *a2aclient.A2AClient, input, agentName, rpcURL string, recorder record.EventRecorder, obj client.Object) (string, error) {
-	message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-		protocol.NewTextPart(input),
-	})
+func executeA2AAgentMessage(ctx context.Context, k8sClient client.Client, a2aClient *a2aclient.A2AClient, input, agentName, rpcURL, namespace, queryName, contextID string, recorder record.EventRecorder, obj client.Object) (*A2AResponse, error) {
+	var message protocol.Message
+	if contextID != "" {
+		message = protocol.NewMessageWithContext(protocol.MessageRoleUser, []protocol.Part{
+			protocol.NewTextPart(input),
+		}, nil, &contextID)
+	} else {
+		message = protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+			protocol.NewTextPart(input),
+		})
+	}
 
 	blocking := true
 	params := protocol.SendMessageParams{
@@ -157,19 +161,19 @@ func executeA2AAgentMessage(ctx context.Context, a2aClient *a2aclient.A2AClient,
 		if recorder != nil && obj != nil {
 			recorder.Event(obj, corev1.EventTypeWarning, "A2AExecutionFailed", fmt.Sprintf("A2A agent %s execution failed at %s: %v", agentName, rpcURL, err))
 		}
-		return "", fmt.Errorf("A2A server call failed: %w", err)
+		return nil, fmt.Errorf("A2A server call failed: %w", err)
 	}
 
-	response, err := extractTextFromMessageResult(result)
+	response, err := extractResponseFromMessageResult(ctx, k8sClient, result, agentName, namespace, queryName, recorder, obj)
 	if err != nil {
 		if recorder != nil && obj != nil {
 			recorder.Event(obj, corev1.EventTypeWarning, "A2AResponseParseError", fmt.Sprintf("Failed to parse response from agent %s: %v", agentName, err))
 		}
-		return "", err
+		return nil, err
 	}
 
 	if recorder != nil && obj != nil {
-		recorder.Event(obj, corev1.EventTypeNormal, "A2AExecutionSuccess", fmt.Sprintf("Successfully executed agent %s, response length: %d characters", agentName, len(response)))
+		recorder.Event(obj, corev1.EventTypeNormal, "A2AExecutionSuccess", fmt.Sprintf("Successfully executed agent %s, response length: %d characters", agentName, len(response.Content)))
 	}
 
 	return response, nil
@@ -198,19 +202,45 @@ func (h *customA2ARequestHandler) Handle(ctx context.Context, httpClient *http.C
 	return httpClient.Do(req)
 }
 
-// extractTextFromMessageResult extracts text from MessageResult using type-safe methods
-func extractTextFromMessageResult(result *protocol.MessageResult) (string, error) {
+// extractResponseFromMessageResult extracts response from MessageResult and handles both messages and tasks
+func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Client, result *protocol.MessageResult, agentName, namespace, queryName string, recorder record.EventRecorder, obj client.Object) (*A2AResponse, error) {
+	log := logf.FromContext(ctx)
 	if result == nil {
-		return "", fmt.Errorf("result is nil")
+		return nil, fmt.Errorf("result is nil")
 	}
 
 	switch r := result.Result.(type) {
 	case *protocol.Message:
-		return extractTextFromParts(r.Parts), nil
+		text := extractTextFromParts(r.Parts)
+		response := &A2AResponse{
+			Content: text,
+		}
+		if r.ContextID != nil && *r.ContextID != "" {
+			response.ContextID = *r.ContextID
+		}
+		return response, nil
 	case *protocol.Task:
-		return extractTextFromTask(r)
+		text, err := extractTextFromTask(r)
+		if err != nil {
+			log.Error(err, "failed to extract text from task", "taskId", r.ID, "state", r.Status.State)
+			return nil, err
+		}
+
+		err = handleA2ATaskResponse(ctx, k8sClient, r, agentName, namespace, queryName, recorder, obj)
+		if err != nil {
+			log.Error(err, "failed to create A2ATask resource", "taskId", r.ID, "agent", agentName)
+			return nil, fmt.Errorf("failed to handle A2A task response: %w", err)
+		}
+
+		response := &A2AResponse{
+			Content:   text,
+			ContextID: r.ContextID,
+			TaskID:    r.ID,
+		}
+		return response, nil
 	default:
-		return "", fmt.Errorf("unexpected result type: %T", result.Result)
+		log.Error(nil, "unexpected A2A result type", "type", fmt.Sprintf("%T", result.Result), "agent", agentName)
+		return nil, fmt.Errorf("unexpected result type: %T", result.Result)
 	}
 }
 
@@ -373,4 +403,66 @@ func resolveA2AHeaders(ctx context.Context, k8sClient client.Client, headers []a
 	}
 	logf.FromContext(ctx).Info("a2a headers resolved", "headers_count", len(resolvedHeaders))
 	return resolvedHeaders, nil
+}
+
+// handleA2ATaskResponse handles A2A task responses by creating A2ATask resources
+func handleA2ATaskResponse(ctx context.Context, k8sClient client.Client, task *protocol.Task, agentName, namespace, queryName string, recorder record.EventRecorder, obj client.Object) error {
+	log := logf.FromContext(ctx)
+
+	if queryName == "" {
+		return fmt.Errorf("unable to determine A2A Task originating query")
+	}
+
+	var a2aServerName string
+	if a2aServer, ok := obj.(*arkv1prealpha1.A2AServer); ok {
+		a2aServerName = a2aServer.Name
+	}
+
+	a2aTask := &arkv1alpha1.A2ATask{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("a2a-task-%s", task.ID),
+			Namespace: namespace,
+		},
+		Spec: arkv1alpha1.A2ATaskSpec{
+			TaskID:    task.ID,
+			ContextID: task.ContextID,
+			QueryRef: arkv1alpha1.QueryRef{
+				Name:      queryName,
+				Namespace: namespace,
+			},
+			A2AServerRef: arkv1alpha1.A2AServerRef{
+				Name:      a2aServerName,
+				Namespace: namespace,
+			},
+			AgentRef: arkv1alpha1.AgentRef{
+				Name:      agentName,
+				Namespace: namespace,
+			},
+		},
+		Status: arkv1alpha1.A2ATaskStatus{
+			Phase: ConvertA2AStateToPhase(string(task.Status.State)),
+		},
+	}
+
+	// Populate A2A protocol fields into status
+	PopulateA2ATaskStatusFromProtocol(&a2aTask.Status, task)
+
+	// Set start time
+	now := metav1.NewTime(time.Now())
+	a2aTask.Status.StartTime = &now
+
+	// Create the resource
+	if err := k8sClient.Create(ctx, a2aTask); err != nil {
+		log.Error(err, "failed to create A2ATask resource", "taskId", task.ID)
+		if recorder != nil && obj != nil {
+			recorder.Event(obj, corev1.EventTypeWarning, "A2ATaskCreationFailed", fmt.Sprintf("Failed to create A2ATask resource for task %s: %v", task.ID, err))
+		}
+		return fmt.Errorf("failed to create A2ATask resource: %w", err)
+	}
+
+	if recorder != nil && obj != nil {
+		recorder.Event(obj, corev1.EventTypeNormal, "A2ATaskCreated", fmt.Sprintf("Created A2ATask resource %s for task %s", a2aTask.Name, task.ID))
+	}
+
+	return nil
 }

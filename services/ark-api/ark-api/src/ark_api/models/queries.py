@@ -5,7 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel
 from enum import Enum
 from openai.types.chat import ChatCompletionMessageParam
-from .agents import Override, HeaderValue, Header
+from .agents import Override
 
 
 class InputType(str, Enum):
