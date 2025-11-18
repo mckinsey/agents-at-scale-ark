@@ -414,7 +414,8 @@
         "code",
         "test",
         "doc",
-        "bug"
+        "bug",
+        "ideas"
       ]
     }
   ],
