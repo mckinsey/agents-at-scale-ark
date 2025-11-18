@@ -1,6 +1,9 @@
+import logging
 from playwright.sync_api import Page
 from .base_page import BasePage
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 class ToolsPage(BasePage):
@@ -82,12 +85,12 @@ class ToolsPage(BasePage):
         
         popup_visible = self._check_success_popup()
         
-        print(f"Navigating back to tools list...")
+        logger.info(f"Navigating back to tools list...")
         self.navigate_to_tools_tab()
         self.wait_for_timeout(2000)
         
         in_table = self.is_tool_in_table(tool_name)
-        print(f"Tool in table after creation: {in_table}")
+        logger.info(f"Tool in table after creation: {in_table}")
         
         return {
             "name": tool_name,
@@ -96,7 +99,7 @@ class ToolsPage(BasePage):
         }
     
     def delete_tool_with_verification(self, tool_name: str) -> dict:
-        print(f"Deleting tool: {tool_name}")
+        logger.info(f"Deleting tool: {tool_name}")
         
         try:
             name_element = self.page.get_by_text(tool_name, exact=True).first
@@ -167,7 +170,6 @@ class ToolsPage(BasePage):
             url=tool_data["url"]
         )
         
-        print(f"Tool created successfully: {result['name']}")
+        logger.info(f"Tool created successfully: {result['name']}")
         
         return result
-

@@ -1,6 +1,9 @@
+import logging
 from playwright.sync_api import Page
 from .base_page import BasePage
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 class TeamsPage(BasePage):
@@ -48,7 +51,7 @@ class TeamsPage(BasePage):
             return False
     
     def create_team_with_verification(self, team_name: str, description: str, strategy: str, max_turns: str, member_name: str) -> dict:
-        print(f"Creating team: {team_name}")
+        logger.info(f"Creating team: {team_name}")
         
         self.page.locator(self.ADD_TEAM_BUTTON).first.click()
         self.wait_for_load_state("networkidle")
@@ -70,7 +73,7 @@ class TeamsPage(BasePage):
         if max_turns_fields.count() > 0:
             max_turns_fields.first.fill(max_turns)
         
-        print(f"Selecting member: {member_name}")
+        logger.info(f"Selecting member: {member_name}")
         self.wait_for_timeout(1000)
         member_checkboxes = self.page.locator("input[type='checkbox']")
         if member_checkboxes.count() > 0:

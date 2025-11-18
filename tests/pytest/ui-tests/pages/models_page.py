@@ -1,6 +1,9 @@
+import logging
 from playwright.sync_api import Page
 from .base_page import BasePage
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 class ModelsPage(BasePage):
@@ -56,13 +59,13 @@ class ModelsPage(BasePage):
             
             if "true" in row_text or "available" in row_text:
                 return True
-            print(f"Model {model_name} is not yet available")
+            logger.info(f"Model {model_name} is not yet available")
             return False
         except Exception as e:
             return False
     
     def create_model_with_verification(self, model_name: str, model_type: str, model: str, secret_name: str, base_url: str) -> dict:
-        print(f"Creating {model_type} model: {model_name}")
+        logger.info(f"Creating {model_type} model: {model_name}")
         
         self.page.locator(self.ADD_MODEL_BUTTON).click()
         self.page.locator(self.MODEL_NAME_INPUT).wait_for(state="visible")
@@ -83,7 +86,7 @@ class ModelsPage(BasePage):
         except:
             popup_visible = False
         
-        print(f"Navigating back to models list...")
+        logger.info(f"Navigating back to models list...")
         self.navigate_to_models_tab()
         self.wait_for_timeout(2000)
         
@@ -92,15 +95,15 @@ class ModelsPage(BasePage):
         try:
             self.page.get_by_text(model_name, exact=True).first.wait_for(state="visible", timeout=10000)
         except:
-            print(f"Model {model_name} not found with exact match, checking if it exists in table...")
+            logger.info(f"Model {model_name} not found with exact match, checking if it exists in table...")
             if not self.is_model_in_table(model_name):
-                print(f"WARNING: Model {model_name} not found in table after creation")
+                logger.info(f"WARNING: Model {model_name} not found in table after creation")
         
         is_available = self.is_model_available(model_name)
         for retry in range(2):
             if is_available:
                 break
-            print(f"Model not yet available, retry {retry + 1}/2...")
+            logger.info(f"Model not yet available, retry {retry + 1}/2...")
             self.wait_for_timeout(5000)
             self.reload()
             self.wait_for_load_state("networkidle")
@@ -188,7 +191,7 @@ class ModelsPage(BasePage):
             base_url=base_url
         )
         
-        print(f"Model created and available: {result['name']}")
+        logger.info(f"Model created and available: {result['name']}")
         
         return result
 

@@ -1,9 +1,12 @@
+import logging
 from playwright.sync_api import Page
 from .base_page import BasePage
 from datetime import datetime
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 
 class SecretsPage(BasePage):
@@ -145,6 +148,6 @@ class SecretsPage(BasePage):
             pytest.skip("Add Secret button not available")
         
         result = self.create_secret_with_verification(prefix, env_key)
-        print(f"Secret created: {result['name']}")
+        logger.info(f"Secret created: {result['name']}")
         
         return result
