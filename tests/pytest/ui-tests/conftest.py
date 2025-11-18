@@ -1,9 +1,14 @@
 import json
+import logging
+import os
 import pytest
 import subprocess
 import time
 import urllib.request
+from pathlib import Path
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
+
+logger = logging.getLogger(__name__)
 
 
 def pytest_addoption(parser):
@@ -35,28 +40,28 @@ def is_ark_running():
 
 
 def install_ark():
-    print("Installing ARK...")
+    logger.info("Installing ARK...")
     result = subprocess.run(['ark', 'install', '-y'], capture_output=True, text=True, timeout=600)
     if result.returncode != 0:
         pytest.exit(f"ARK installation failed: {result.stderr}", returncode=1)
-    print("ARK installation successful")
+    logger.info("ARK installation successful")
 
 
 def wait_for_pods_ready():
-    print("Waiting for ARK pods to be ready...")
+    logger.info("Waiting for ARK pods to be ready...")
     for attempt in range(60):
         pods = get_ark_pods()
         if pods and all(p['status'] == 'Running' for p in pods):
             pod_statuses = [f"{p['name']}: {p['status']}" for p in pods]
-            print(f"Attempt {attempt + 1}/60: {', '.join(pod_statuses)}")
-            print("All ARK pods are running")
+            logger.info(f"Attempt {attempt + 1}/60: {', '.join(pod_statuses)}")
+            logger.info("All ARK pods are running")
             return
         time.sleep(5)
     pytest.exit("ARK pods not ready", returncode=1)
 
 
 def wait_for_dashboard():
-    print("Waiting for dashboard to be accessible...")
+    logger.info("Waiting for dashboard to be accessible...")
     for attempt in range(12):
         try:
             urllib.request.urlopen('http://localhost:3274', timeout=2)
@@ -66,9 +71,15 @@ def wait_for_dashboard():
 
 
 def cleanup_port_forwarding():
-    subprocess.run(['bash', '-c', 'lsof -ti :3274 | xargs kill -9 2>/dev/null || true'], 
+    """Clean up port forwarding with graceful shutdown first"""
+    # Try graceful shutdown first (SIGTERM)
+    subprocess.run(['bash', '-c', 'lsof -ti :3274 | xargs kill -15 2>/dev/null || true'], 
                   capture_output=True)
     time.sleep(2)
+    # Force kill if still running (SIGKILL)
+    subprocess.run(['bash', '-c', 'lsof -ti :3274 | xargs kill -9 2>/dev/null || true'], 
+                  capture_output=True)
+    time.sleep(1)
 
 
 @pytest.fixture(scope="session")
@@ -155,7 +166,12 @@ def pytest_runtest_makereport(item, call):
         page = item.funcargs.get("page")
         if page:
             try:
-                page.screenshot(path=f"screenshots/{item.name}.png")
-                print(f"Screenshot saved: screenshots/{item.name}.png")
-            except Exception:
-                pass
+                # Ensure screenshots directory exists
+                screenshots_dir = Path("screenshots")
+                screenshots_dir.mkdir(exist_ok=True)
+                
+                screenshot_path = screenshots_dir / f"{item.name}.png"
+                page.screenshot(path=str(screenshot_path))
+                logger.info(f"Screenshot saved: {screenshot_path}")
+            except Exception as e:
+                logger.error(f"Failed to save screenshot: {e}")

@@ -149,7 +149,10 @@ class ARKWorkflowTest:
         print("Verifying ARK pods...")
         
         try:
-            sys.path.insert(0, str(self.venv_path / "lib" / "python3.13" / "site-packages"))
+            # Dynamically find site-packages directory
+            python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+            site_packages = self.venv_path / "lib" / python_version / "site-packages"
+            sys.path.insert(0, str(site_packages))
             from kubernetes import config, client
             
             config.load_kube_config()
@@ -200,7 +203,10 @@ class ARKWorkflowTest:
                 stderr=subprocess.DEVNULL
             )
             
-            sys.path.insert(0, str(self.venv_path / "lib" / "python3.13" / "site-packages"))
+            # Dynamically find site-packages directory
+            python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+            site_packages = self.venv_path / "lib" / python_version / "site-packages"
+            sys.path.insert(0, str(site_packages))
             import requests
             import webbrowser
             
@@ -327,7 +333,10 @@ def test_ark_pods_verification(ark_workflow):
     
     # Then print detailed pod information
     try:
-        sys.path.insert(0, str(ark_workflow.venv_path / "lib" / "python3.13" / "site-packages"))
+        # Dynamically find site-packages directory
+        python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+        site_packages = ark_workflow.venv_path / "lib" / python_version / "site-packages"
+        sys.path.insert(0, str(site_packages))
         from kubernetes import config, client
         
         config.load_kube_config()
@@ -360,7 +369,10 @@ def test_ark_pytest_execution(ark_workflow):
     """Test pytest execution"""
     print("Testing pytest execution...")
     try:
-        sys.path.insert(0, str(ark_workflow.venv_path / "lib" / "python3.13" / "site-packages"))
+        # Dynamically find site-packages directory
+        python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+        site_packages = ark_workflow.venv_path / "lib" / python_version / "site-packages"
+        sys.path.insert(0, str(site_packages))
         from kubernetes import config, client
         
         config.load_kube_config()

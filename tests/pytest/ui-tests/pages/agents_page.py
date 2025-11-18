@@ -1,6 +1,9 @@
+import logging
 from playwright.sync_api import Page
 from .base_page import BasePage
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 class AgentsPage(BasePage):
@@ -50,7 +53,7 @@ class AgentsPage(BasePage):
     
     def check_for_error_banner(self) -> dict:
         """Check for error banners (500 or other errors) after agent creation"""
-        print("Checking for error banners...")
+        logger.info("Checking for error banners...")
         
         result = {
             "has_error": False,
@@ -81,16 +84,16 @@ class AgentsPage(BasePage):
                             if any(keyword in error_text.lower() for keyword in ['error', '500', 'internal server error', 'failed']):
                                 result["has_error"] = True
                                 result["message"] = error_text
-                                print(f"Found error banner: {error_text}")
+                                logger.error(f"Found error banner: {error_text}")
                                 return result
             except:
                 continue
         
-        print("No error banners found")
+        logger.info("No error banners found")
         return result
     
     def verify_agent_in_table_row(self, agent_name: str, description: str, model_name: str) -> dict:
-        print(f"Verifying agent {agent_name} in table row...")
+        logger.info(f"Verifying agent {agent_name} in table row...")
         
         result = {
             "name_visible": False,
@@ -101,7 +104,7 @@ class AgentsPage(BasePage):
         
         try:
             if not self.is_agent_in_table(agent_name):
-                print(f"Agent {agent_name} not found in table")
+                logger.info(f"Agent {agent_name} not found in table")
                 return result
             
             result["row_found"] = True
@@ -109,31 +112,31 @@ class AgentsPage(BasePage):
             name_element = self.page.get_by_text(agent_name, exact=True).first
             if name_element.is_visible():
                 result["name_visible"] = True
-                print(f"Agent name '{agent_name}' is visible")
+                logger.info(f"Agent name '{agent_name}' is visible")
             
             if description:
                 desc_element = self.page.get_by_text(description, exact=False)
                 if desc_element.count() > 0 and desc_element.first.is_visible():
                     result["description_visible"] = True
-                    print(f"Description '{description}' is visible")
+                    logger.info(f"Description '{description}' is visible")
                 else:
-                    print(f"Description '{description}' not found or not visible")
-                    print(f"Note: Description may be truncated in table view, marking as visible if row exists")
+                    logger.info(f"Description '{description}' not found or not visible")
+                    logger.info(f"Note: Description may be truncated in table view, marking as visible if row exists")
                     result["description_visible"] = result["row_found"]
             
             model_text = f"Model: {model_name}"
             model_element = self.page.get_by_text(model_text, exact=False).first
             if model_element.is_visible():
                 result["model_visible"] = True
-                print(f"Model '{model_name}' is visible in row")
+                logger.info(f"Model '{model_name}' is visible in row")
             else:
-                print(f"Model text '{model_text}' not found, checking alternative...")
+                logger.info(f"Model text '{model_text}' not found, checking alternative...")
                 if self.page.get_by_text(model_name, exact=False).count() > 0:
                     result["model_visible"] = True
-                    print(f"Model name '{model_name}' found (alternative)")
+                    logger.info(f"Model name '{model_name}' found (alternative)")
             
         except Exception as e:
-            print(f"Error verifying agent row: {str(e)}")
+            logger.info(f"Error verifying agent row: {str(e)}")
         
         return result
     
@@ -165,20 +168,20 @@ class AgentsPage(BasePage):
         
         model_option = self.page.get_by_role("option", name=model_name, exact=True)
         if model_option.count() > 0:
-            print(f"Found exact match for model: {model_name}")
+            logger.info(f"Found exact match for model: {model_name}")
             model_option.click()
         else:
-            print(f"Trying alternative selector for model: {model_name}")
+            logger.info(f"Trying alternative selector for model: {model_name}")
             model_option_alt = self.page.locator(f"[role='option']:has-text('{model_name}')").first
             if model_option_alt.is_visible():
                 model_option_alt.click()
             else:
-                print(f"WARNING: Could not find model option for: {model_name}")
+                logger.info(f"WARNING: Could not find model option for: {model_name}")
         
-        print(f"Model {model_name} selected")
+        logger.info(f"Model {model_name} selected")
         
         if tools:
-            print(f"Selecting tools: {tools}")
+            logger.info(f"Selecting tools: {tools}")
             self.wait_for_timeout(1000)
             for tool_name in tools:
                 self._select_tool(tool_name)
@@ -198,7 +201,7 @@ class AgentsPage(BasePage):
         
         error_banner = self.check_for_error_banner()
         if error_banner["has_error"]:
-            print(f"ERROR: {error_banner['message']}")
+            logger.info(f"ERROR: {error_banner['message']}")
             raise Exception(f"Agent creation failed: {error_banner['message']}")
         
         try:
@@ -273,24 +276,24 @@ class AgentsPage(BasePage):
     
     def _select_tool(self, tool_name: str) -> None:
         try:
-            print(f"Looking for tool: {tool_name}")
+            logger.info(f"Looking for tool: {tool_name}")
             tool_label = self.page.locator(f"label:has-text('{tool_name}')").first
             if tool_label.is_visible():
                 checkbox_id = tool_label.get_attribute("for")
                 if checkbox_id:
                     checkbox = self.page.locator(f"#{checkbox_id}")
                     if not checkbox.is_checked():
-                        print(f"Selecting tool: {tool_name}")
+                        logger.info(f"Selecting tool: {tool_name}")
                         checkbox.check()
                     else:
-                        print(f"Tool {tool_name} already selected")
+                        logger.info(f"Tool {tool_name} already selected")
                 else:
                     tool_label.click()
-                    print(f"Selected tool: {tool_name}")
+                    logger.info(f"Selected tool: {tool_name}")
             else:
-                print(f"Tool {tool_name} not found in tools list")
+                logger.info(f"Tool {tool_name} not found in tools list")
         except Exception as e:
-            print(f"Error selecting tool {tool_name}: {str(e)}")
+            logger.info(f"Error selecting tool {tool_name}: {str(e)}")
     
     def create_agent_for_test(self, prefix: str, model_name: str, test_data_key: str = "default", tools: list = None):
         """Complete flow to create an agent for testing - navigate, check, and create"""
@@ -304,7 +307,7 @@ class AgentsPage(BasePage):
             pytest.skip("Add Agent button not available")
         
         agent_name = self.generate_agent_name(prefix)
-        print(f"Generated agent name: {agent_name}")
+        logger.info(f"Generated agent name: {agent_name}")
         
         result = self.create_agent_with_verification(
             agent_name=agent_name,
@@ -313,7 +316,7 @@ class AgentsPage(BasePage):
             tools=tools
         )
         
-        print(f"Agent created successfully: {result['name']}")
+        logger.info(f"Agent created successfully: {result['name']}")
         
         return result
 
