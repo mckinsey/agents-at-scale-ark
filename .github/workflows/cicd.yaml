@@ -294,6 +294,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Free up some disk space for ARK installation
+      - name: Clean up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          sudo docker builder prune --all --force
+
       - name: Install ruff
         uses: astral-sh/ruff-action@v3
         with:
@@ -350,6 +357,7 @@ jobs:
           metrics-enabled: false
           traefik-enabled: false
           k3s-channel: latest
+          mock-llm-enabled: false
 
       - name: Install fark, ark CLI and configure kubectl
         run: |
