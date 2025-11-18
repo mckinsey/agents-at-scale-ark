@@ -104,7 +104,7 @@ class AgentsPage(BasePage):
         
         try:
             if not self.is_agent_in_table(agent_name):
-                logger.info(f"Agent {agent_name} not found in table")
+                logger.warning(f"Agent {agent_name} not found in table")
                 return result
             
             result["row_found"] = True
@@ -120,7 +120,7 @@ class AgentsPage(BasePage):
                     result["description_visible"] = True
                     logger.info(f"Description '{description}' is visible")
                 else:
-                    logger.info(f"Description '{description}' not found or not visible")
+                    logger.warning(f"Description '{description}' not found or not visible")
                     logger.info(f"Note: Description may be truncated in table view, marking as visible if row exists")
                     result["description_visible"] = result["row_found"]
             
@@ -136,7 +136,7 @@ class AgentsPage(BasePage):
                     logger.info(f"Model name '{model_name}' found (alternative)")
             
         except Exception as e:
-            logger.info(f"Error verifying agent row: {str(e)}")
+            logger.error(f"Error verifying agent row: {str(e)}")
         
         return result
     
@@ -176,7 +176,7 @@ class AgentsPage(BasePage):
             if model_option_alt.is_visible():
                 model_option_alt.click()
             else:
-                logger.info(f"WARNING: Could not find model option for: {model_name}")
+                logger.warning(f"Could not find model option for: {model_name}")
         
         logger.info(f"Model {model_name} selected")
         
@@ -201,7 +201,7 @@ class AgentsPage(BasePage):
         
         error_banner = self.check_for_error_banner()
         if error_banner["has_error"]:
-            logger.info(f"ERROR: {error_banner['message']}")
+            logger.error(f"{error_banner['message']}")
             raise Exception(f"Agent creation failed: {error_banner['message']}")
         
         try:
@@ -291,9 +291,9 @@ class AgentsPage(BasePage):
                     tool_label.click()
                     logger.info(f"Selected tool: {tool_name}")
             else:
-                logger.info(f"Tool {tool_name} not found in tools list")
+                logger.warning(f"Tool {tool_name} not found in tools list")
         except Exception as e:
-            logger.info(f"Error selecting tool {tool_name}: {str(e)}")
+            logger.error(f"Error selecting tool {tool_name}: {str(e)}")
     
     def create_agent_for_test(self, prefix: str, model_name: str, test_data_key: str = "default", tools: list = None):
         """Complete flow to create an agent for testing - navigate, check, and create"""

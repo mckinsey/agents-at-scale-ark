@@ -59,7 +59,7 @@ class ModelsPage(BasePage):
             
             if "true" in row_text or "available" in row_text:
                 return True
-            logger.info(f"Model {model_name} is not yet available")
+            logger.warning(f"Model {model_name} is not yet available")
             return False
         except Exception as e:
             return False
@@ -97,13 +97,13 @@ class ModelsPage(BasePage):
         except:
             logger.info(f"Model {model_name} not found with exact match, checking if it exists in table...")
             if not self.is_model_in_table(model_name):
-                logger.info(f"WARNING: Model {model_name} not found in table after creation")
+                logger.warning(f"Model {model_name} not found in table after creation")
         
         is_available = self.is_model_available(model_name)
         for retry in range(2):
             if is_available:
                 break
-            logger.info(f"Model not yet available, retry {retry + 1}/2...")
+            logger.warning(f"Model not yet available, retry {retry + 1}/2...")
             self.wait_for_timeout(5000)
             self.reload()
             self.wait_for_load_state("networkidle")
