@@ -462,7 +462,7 @@ ${chalk.cyan('Use Cases:')}
       console.log(chalk.cyan('\n📖 Quick Start:'));
       console.log(chalk.gray('  1. ark generate project my-first-project'));
       console.log(chalk.gray('  2. cd my-first-project && source .env'));
-      console.log(chalk.gray('  3. ark install'));
+      console.log(chalk.gray('  3. devspace dev'));
 
       console.log(chalk.cyan('\n🔧 Usage:'));
       console.log(chalk.gray('  ark generate <type> [name] [options]'));
