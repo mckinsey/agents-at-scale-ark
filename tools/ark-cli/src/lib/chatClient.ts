@@ -1,5 +1,6 @@
 import {ArkApiClient, QueryTarget} from './arkApiClient.js';
 import type {Query} from './types.js';
+import {QUERY_ANNOTATIONS} from './constants.js';
 
 // Re-export QueryTarget for compatibility
 export {QueryTarget};
@@ -65,10 +66,10 @@ export class ChatClient {
     // Add metadata for A2A context ID and/or session ID
     const queryAnnotations: Record<string, string> = {};
     if (config.a2aContextId) {
-      queryAnnotations['ark.mckinsey.com/a2a-context-id'] = config.a2aContextId;
+      queryAnnotations[QUERY_ANNOTATIONS.A2A_CONTEXT_ID] = config.a2aContextId;
     }
     if (config.sessionId) {
-      queryAnnotations['sessionId'] = config.sessionId;
+      queryAnnotations[QUERY_ANNOTATIONS.SESSION_ID] = config.sessionId;
     }
     if (Object.keys(queryAnnotations).length > 0) {
       params.metadata = {

@@ -1,4 +1,5 @@
 import {jest} from '@jest/globals';
+import {QUERY_ANNOTATIONS} from './constants.js';
 
 const mockCreateChatCompletion = jest.fn() as any;
 
@@ -49,7 +50,7 @@ describe('ChatClient', () => {
           messages: [{role: 'user', content: 'Hello'}],
           metadata: {
             queryAnnotations: JSON.stringify({
-              sessionId: 'test-session-123',
+              [QUERY_ANNOTATIONS.SESSION_ID]: 'test-session-123',
             }),
           },
         })
@@ -94,8 +95,8 @@ describe('ChatClient', () => {
       expect(callArgs.metadata).toBeDefined();
       expect(callArgs.metadata.queryAnnotations).toBeDefined();
       const queryAnnotations = JSON.parse(callArgs.metadata.queryAnnotations);
-      expect(queryAnnotations.sessionId).toBe('test-session-123');
-      expect(queryAnnotations['ark.mckinsey.com/a2a-context-id']).toBe(
+      expect(queryAnnotations[QUERY_ANNOTATIONS.SESSION_ID]).toBe('test-session-123');
+      expect(queryAnnotations[QUERY_ANNOTATIONS.A2A_CONTEXT_ID]).toBe(
         'a2a-context-456'
       );
     });
