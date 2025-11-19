@@ -90,6 +90,35 @@ describe('createQueryCommand', () => {
     });
   });
 
+  it('should pass session-id option to executeQuery', async () => {
+    mockParseTarget.mockReturnValue({
+      type: 'agent',
+      name: 'test-agent',
+    });
+
+    mockExecuteQuery.mockResolvedValue(undefined);
+
+    const command = createQueryCommand({} as any);
+
+    await command.parseAsync([
+      'node',
+      'test',
+      'agent/test-agent',
+      'Hello world',
+      '--session-id',
+      'my-session-123',
+    ]);
+
+    expect(mockParseTarget).toHaveBeenCalledWith('agent/test-agent');
+    expect(mockExecuteQuery).toHaveBeenCalledWith({
+      targetType: 'agent',
+      targetName: 'test-agent',
+      message: 'Hello world',
+      outputFormat: undefined,
+      sessionId: 'my-session-123',
+    });
+  });
+
   it('should error on invalid target format', async () => {
     mockParseTarget.mockReturnValue(null);
 

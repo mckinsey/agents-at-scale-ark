@@ -2,7 +2,6 @@ import json
 import logging
 import time
 import uuid
-from typing import Dict, List, Optional
 
 from ark_sdk import QueryV1alpha1Spec
 from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
@@ -52,16 +51,16 @@ def _create_model_entry(resource_id: str, metadata: dict) -> Model:
 
 class ChatCompletionRequest(BaseModel):
     model: str
-    messages: List[ChatCompletionMessageParam]
+    messages: list[ChatCompletionMessageParam]
     temperature: float = 1.0
-    max_tokens: Optional[int] = None
+    max_tokens: int | None = None
     stream: bool = False
-    metadata: Optional[dict] = None  # Supports queryAnnotations: JSON string of K8s annotations
+    metadata: dict | None = None  # Supports queryAnnotations: JSON string of K8s annotations
 
 
 def process_request_metadata(
-    request_metadata: Optional[Dict[str, str]], base_metadata: Dict[str, any]
-) -> Optional[JSONResponse]:
+    request_metadata: dict[str, str] | None, base_metadata: dict[str, any]
+) -> JSONResponse | None:
     """Process request metadata and merge Ark annotations into base metadata.
 
     Returns JSONResponse with error if validation fails, None if successful.
@@ -167,12 +166,17 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
     # Build metadata for the query resource
     metadata = {"name": query_name, "namespace": namespace}
 
-    # Parse queryAnnotations if provided
+    session_id = None
+    if request.metadata and "sessionId" in request.metadata:
+        session_id = request.metadata["sessionId"]
+
+    # Parse queryAnnotations if provided (for annotations like A2A context ID)
     if request.metadata and "queryAnnotations" in request.metadata:
         try:
             query_annotations = json.loads(request.metadata["queryAnnotations"])
             if "annotations" not in metadata:
                 metadata["annotations"] = {}
+            # Add annotations to metadata (e.g., A2A context ID)
             metadata["annotations"].update(query_annotations)
         except (json.JSONDecodeError, TypeError) as e:
             logger.warning(f"Failed to parse queryAnnotations: {e}")
@@ -185,11 +189,16 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
         metadata["annotations"][STREAMING_ENABLED_ANNOTATION] = "true"
 
     try:
+        # Build query spec with optional sessionId
+        query_spec_dict = {"type": "messages", "input": messages, "targets": [target]}
+        if session_id:
+            query_spec_dict["sessionId"] = session_id
+        
         # Create the QueryV1alpha1 object with type="messages"
         # Pass messages directly without json.dumps() - SDK handles serialization
         query_resource = QueryV1alpha1(
             metadata=metadata,
-            spec=QueryV1alpha1Spec(type="messages", input=messages, targets=[target]),
+            spec=QueryV1alpha1Spec(**query_spec_dict),
         )
 
         async with with_ark_client(namespace, "v1alpha1") as ark_client:
