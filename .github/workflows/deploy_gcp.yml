@@ -2,9 +2,9 @@ name: 'Deploy - GCP'
 
 on:
   workflow_run:
-    workflows: ["CI/CD"]
+    workflows: [CI/CD]
     branches:
-      - "*"
+      - "main"
     types:
       - completed
   workflow_dispatch:
@@ -22,11 +22,6 @@ permissions:
   id-token: write
 
 jobs:
-  test_outcome:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Log success
-        run: echo "Upstream CI/CD workflow finished with ${{ github.event.workflow_run.conclusion}}."
   resolve_version:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
