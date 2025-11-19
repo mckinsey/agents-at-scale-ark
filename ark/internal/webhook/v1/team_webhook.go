@@ -101,6 +101,10 @@ func (v *TeamCustomValidator) validateTeamMembers(ctx context.Context, team *ark
 		return warnings, err
 	}
 
+	if err := v.validateLeaderInMembers(team); err != nil {
+		return warnings, err
+	}
+
 	return warnings, nil
 }
 
@@ -230,4 +234,23 @@ func (v *TeamCustomValidator) validateGraphForSelector(team *arkv1alpha1.Team) e
 	// But if provided, it's still validated by the team spec validation
 
 	return nil
+}
+
+func (v *TeamCustomValidator) validateLeaderInMembers(team *arkv1alpha1.Team) error {
+	if team.Spec.Leader == "" {
+		return fmt.Errorf("leader is required")
+	}
+
+	for _, member := range team.Spec.Members {
+		if member.Name == team.Spec.Leader {
+			return nil
+		}
+	}
+
+	memberNames := make([]string, len(team.Spec.Members))
+	for i, member := range team.Spec.Members {
+		memberNames[i] = member.Name
+	}
+
+	return fmt.Errorf("leader '%s' must be one of the team members: %v", team.Spec.Leader, memberNames)
 }

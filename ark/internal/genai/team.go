@@ -18,6 +18,8 @@ type Team struct {
 	Members           []TeamMember
 	Strategy          string
 	Description       string
+	Prompt            string
+	Leader            string
 	MaxTurns          *int
 	Selector          *arkv1alpha1.TeamSelectorSpec
 	Graph             *arkv1alpha1.TeamGraphSpec
@@ -202,6 +204,8 @@ func MakeTeam(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Tea
 		Members:           members,
 		Strategy:          crd.Spec.Strategy,
 		Description:       crd.Spec.Description,
+		Prompt:            crd.Spec.Prompt,
+		Leader:            crd.Spec.Leader,
 		MaxTurns:          crd.Spec.MaxTurns,
 		Selector:          crd.Spec.Selector,
 		Graph:             crd.Spec.Graph,

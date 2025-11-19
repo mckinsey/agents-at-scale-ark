@@ -17,6 +17,8 @@ spec:
       type: agent
     - name: agent-seq
       type: agent
+  prompt: "Execute agents in sequence to process the input"
+  leader: agent-seq
   strategy: "sequential"
 ---
 apiVersion: ark.mckinsey.com/v1alpha1

@@ -16,6 +16,8 @@ spec:
   members:
     - name: agent-rr
       type: agent
+  prompt: "Take turns processing the input in round-robin fashion"
+  leader: agent-rr
   strategy: "round-robin"
 ---
 apiVersion: ark.mckinsey.com/v1alpha1

@@ -201,4 +201,84 @@ var _ = Describe("Team Webhook", func() {
 			Expect(err.Error()).To(ContainSubstring("more than one outgoing edge"))
 		})
 	})
+
+	Context("Prompt and Leader validation", func() {
+		It("Should accept team with valid prompt and leader", func() {
+			By("creating a team with prompt and leader that is a team member")
+			obj.Spec.Strategy = "sequential"
+			obj.Spec.Members = []arkv1alpha1.TeamMember{
+				{Name: "researcher", Type: "agent"},
+				{Name: "analyst", Type: "agent"},
+			}
+			obj.Spec.Prompt = "Collaborate to solve complex problems"
+			obj.Spec.Leader = "researcher"
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).ToNot(HaveOccurred(), "team with valid prompt and leader should be accepted")
+		})
+
+		It("Should reject team with leader not in members", func() {
+			By("creating a team with leader that is not a team member")
+			obj.Spec.Strategy = "sequential"
+			obj.Spec.Members = []arkv1alpha1.TeamMember{
+				{Name: "researcher", Type: "agent"},
+				{Name: "analyst", Type: "agent"},
+			}
+			obj.Spec.Prompt = "Collaborate to solve complex problems"
+			obj.Spec.Leader = "nonexistent"
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred(), "should reject leader not in members")
+			Expect(err.Error()).To(ContainSubstring("must be one of the team members"))
+		})
+
+		It("Should reject team with empty leader", func() {
+			By("creating a team with empty leader")
+			obj.Spec.Strategy = "sequential"
+			obj.Spec.Members = []arkv1alpha1.TeamMember{
+				{Name: "researcher", Type: "agent"},
+			}
+			obj.Spec.Prompt = "Collaborate to solve complex problems"
+			obj.Spec.Leader = ""
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred(), "should reject empty leader")
+			Expect(err.Error()).To(ContainSubstring("leader is required"))
+		})
+
+		It("Should work with all team strategies", func() {
+			By("creating teams with different strategies and valid leader")
+			strategies := []string{"sequential", "round-robin"}
+
+			for _, strategy := range strategies {
+				obj.Spec.Strategy = strategy
+				obj.Spec.Members = []arkv1alpha1.TeamMember{
+					{Name: "researcher", Type: "agent"},
+					{Name: "analyst", Type: "agent"},
+				}
+				obj.Spec.Prompt = "Team prompt for " + strategy
+				obj.Spec.Leader = "analyst"
+
+				_, err := validator.ValidateCreate(ctx, obj)
+				Expect(err).ToNot(HaveOccurred(), "team with strategy "+strategy+" and valid leader should be accepted")
+			}
+		})
+
+		It("Should work with selector strategy", func() {
+			By("creating a selector team with valid leader")
+			obj.Spec.Strategy = StrategySelector
+			obj.Spec.Members = []arkv1alpha1.TeamMember{
+				{Name: "researcher", Type: "agent"},
+				{Name: "analyst", Type: "agent"},
+			}
+			obj.Spec.Selector = &arkv1alpha1.TeamSelectorSpec{
+				Agent: "coordinator",
+			}
+			obj.Spec.Prompt = "Selector team prompt"
+			obj.Spec.Leader = "researcher"
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).ToNot(HaveOccurred(), "selector team with valid leader should be accepted")
+		})
+	})
 })

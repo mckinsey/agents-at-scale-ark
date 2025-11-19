@@ -39,6 +39,8 @@ metadata:
 spec:
   strategy: selector
   description: AI consulting team with intelligent participant selection
+  prompt: "Collaborate as a consulting team to analyze business opportunities and provide strategic recommendations"
+  leader: research-analyst
   members:
     - name: research-analyst
       type: agent

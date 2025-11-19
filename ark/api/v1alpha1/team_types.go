@@ -29,6 +29,8 @@ type TeamSpec struct {
 	Members     []TeamMember      `json:"members"`
 	Strategy    string            `json:"strategy"`
 	Description string            `json:"description,omitempty"`
+	Prompt      string            `json:"prompt"`
+	Leader      string            `json:"leader"`
 	MaxTurns    *int              `json:"maxTurns,omitempty"`
 	Selector    *TeamSelectorSpec `json:"selector,omitempty"`
 	Graph       *TeamGraphSpec    `json:"graph,omitempty"`

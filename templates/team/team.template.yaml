@@ -9,6 +9,10 @@ metadata:
 spec:
   description: {{ .Values.teamName }} team for {{ .Values.projectName }} project
 
+  prompt: "Collaborate to deliver results for {{ .Values.projectName }}"
+
+  leader: {{ .Values.agentName }}-agent
+
   members:
     - name: {{ .Values.agentName }}-agent
       type: agent

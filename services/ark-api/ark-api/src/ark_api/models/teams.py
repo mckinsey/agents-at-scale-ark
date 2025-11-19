@@ -36,6 +36,8 @@ class TeamResponse(BaseModel):
     name: str
     namespace: str
     description: Optional[str] = None
+    prompt: Optional[str] = None
+    leader: Optional[str] = None
     strategy: Optional[str] = None
     members_count: Optional[int] = None
     status: Optional[str] = None
@@ -51,6 +53,8 @@ class TeamCreateRequest(BaseModel):
     """Request model for creating a team."""
     name: str
     description: Optional[str] = None
+    prompt: str
+    leader: str
     members: List[TeamMember]
     strategy: str
     graph: Optional[Graph] = None
@@ -61,6 +65,8 @@ class TeamCreateRequest(BaseModel):
 class TeamUpdateRequest(BaseModel):
     """Request model for updating a team."""
     description: Optional[str] = None
+    prompt: Optional[str] = None
+    leader: Optional[str] = None
     members: Optional[List[TeamMember]] = None
     strategy: Optional[str] = None
     graph: Optional[Graph] = None
@@ -73,6 +79,8 @@ class TeamDetailResponse(BaseModel):
     name: str
     namespace: str
     description: Optional[str] = None
+    prompt: str
+    leader: str
     members: List[TeamMember]
     strategy: str
     graph: Optional[Graph] = None

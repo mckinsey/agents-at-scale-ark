@@ -30,16 +30,18 @@ def team_to_response(team: dict) -> TeamResponse:
     metadata = team.get("metadata", {})
     spec = team.get("spec", {})
     status = team.get("status", {})
-    
+
     # Count members if they exist
     members_count = None
     if spec.get("members"):
         members_count = len(spec["members"])
-    
+
     return TeamResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
         description=spec.get("description"),
+        prompt=spec.get("prompt"),
+        leader=spec.get("leader"),
         strategy=spec.get("strategy"),
         members_count=members_count,
         status=status.get("phase")
@@ -51,11 +53,13 @@ def team_to_detail_response(team: dict) -> TeamDetailResponse:
     metadata = team.get("metadata", {})
     spec = team.get("spec", {})
     status = team.get("status", {})
-    
+
     return TeamDetailResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
         description=spec.get("description"),
+        prompt=spec.get("prompt", ""),
+        leader=spec.get("leader", ""),
         members=spec.get("members", []),
         strategy=spec.get("strategy", ""),
         graph=spec.get("graph"),
@@ -113,32 +117,34 @@ async def create_team(body: TeamCreateRequest, namespace: Optional[str] = Query(
         # Build the team spec
         team_spec = {
             "members": [member.model_dump(exclude_none=True) for member in body.members],
-            "strategy": body.strategy
+            "strategy": body.strategy,
+            "prompt": body.prompt,
+            "leader": body.leader
         }
-        
+
         # Add optional fields if provided
         if body.description is not None:
             team_spec["description"] = body.description
-        
+
         if body.graph is not None:
             # Handle graph edges with from_ field conversion
             graph_dict = body.graph.model_dump(exclude_none=True, by_alias=True)
             team_spec["graph"] = graph_dict
-        
+
         if body.maxTurns is not None:
             team_spec["maxTurns"] = body.maxTurns
-        
+
         if body.selector is not None:
             team_spec["selector"] = body.selector.model_dump(exclude_none=True)
-        
+
         # Create the team object
         team = TeamV1alpha1(
             metadata={"name": body.name, "namespace": namespace},
             spec=team_spec
         )
-        
+
         created_team = await ark_client.teams.a_create(team)
-        
+
         return team_to_detail_response(created_team.to_dict())
 
 
@@ -179,38 +185,44 @@ async def update_team(team_name: str, body: TeamUpdateRequest, namespace: Option
         # Get the existing team first
         existing_team = await ark_client.teams.a_get(team_name)
         existing_spec = existing_team.to_dict()["spec"]
-        
+
         # Update only the fields that are provided
         if body.description is not None:
             existing_spec["description"] = body.description
-        
+
+        if body.prompt is not None:
+            existing_spec["prompt"] = body.prompt
+
+        if body.leader is not None:
+            existing_spec["leader"] = body.leader
+
         if body.members is not None:
             existing_spec["members"] = [member.model_dump(exclude_none=True) for member in body.members]
-        
+
         if body.strategy is not None:
             existing_spec["strategy"] = body.strategy
-        
+
         if body.graph is not None:
             # Handle graph edges with from_ field conversion
             graph_dict = body.graph.model_dump(exclude_none=True, by_alias=True)
             existing_spec["graph"] = graph_dict
-        
+
         if body.maxTurns is not None:
             existing_spec["maxTurns"] = body.maxTurns
-        
+
         if body.selector is not None:
             existing_spec["selector"] = body.selector.model_dump(exclude_none=True)
-        
+
         # Update the team
         # Get the full existing team object and update its spec
         existing_team_dict = existing_team.to_dict()
         existing_team_dict["spec"] = existing_spec
-        
+
         # Create updated team object
         updated_team_obj = TeamV1alpha1(**existing_team_dict)
-        
+
         updated_team = await ark_client.teams.a_update(updated_team_obj)
-        
+
         return team_to_detail_response(updated_team.to_dict())
 
 

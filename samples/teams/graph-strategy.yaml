@@ -33,6 +33,8 @@ metadata:
 spec:
   strategy: graph
   description: "A team that executes members following a directed graph workflow"
+  prompt: "Follow the workflow from research to analysis to review to final report"
+  leader: researcher
   maxTurns: 5
   members:
   - name: researcher

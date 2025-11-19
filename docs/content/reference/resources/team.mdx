@@ -24,6 +24,12 @@ spec:
     - name: writer
       type: agent
 
+  # Team-level prompt - context/guidelines for team execution
+  prompt: "Work together to analyze and write comprehensive reports"
+
+  # Team leader - designated leader (must be one of the team members)
+  leader: researcher
+
   # Turn limit (optional) - prevents infinite loops
   maxTurns: 10
 
@@ -61,6 +67,26 @@ spec:
   #     - from: analyst
   #       to: writer
 ```
+
+## Team Configuration
+
+### Prompt
+
+The `prompt` field provides team-level context and guidelines for team execution. This prompt is metadata that describes the team's purpose and collaboration approach.
+
+```yaml
+prompt: "Work together to analyze and write comprehensive reports"
+```
+
+### Leader
+
+The `leader` field designates a team leader from the team members. The leader must be one of the members listed in the `members` array.
+
+```yaml
+leader: researcher  # Must be one of the team members
+```
+
+The leader designation is metadata and does not affect execution order or logic.
 
 ## Execution Strategies
 
