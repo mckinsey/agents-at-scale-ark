@@ -1968,6 +1968,8 @@ class TestTeamsEndpoint(unittest.TestCase):
         # Make the request
         request_data = {
             "name": "simple-team",
+            "prompt": "You are a collaborative team",
+            "leader": "agent1",
             "members": [
                 {"name": "agent1", "type": "agent"},
                 {"name": "agent2", "type": "agent"}
@@ -2019,6 +2021,8 @@ class TestTeamsEndpoint(unittest.TestCase):
         request_data = {
             "name": "graph-team",
             "description": "Team with custom workflow",
+            "prompt": "You are a team with custom workflow",
+            "leader": "planner",
             "members": [
                 {"name": "planner", "type": "agent"},
                 {"name": "executor", "type": "agent"},
@@ -2073,6 +2077,8 @@ class TestTeamsEndpoint(unittest.TestCase):
         request_data = {
             "name": "full-team",
             "description": "Complete team configuration",
+            "prompt": "You are a full-featured team",
+            "leader": "agent1",
             "members": [{"name": "agent1", "type": "agent"}],
             "strategy": "selector",
             "maxTurns": 10,
@@ -2131,6 +2137,8 @@ class TestTeamsEndpoint(unittest.TestCase):
         request_data = {
             "name": "graph-selector-team",
             "description": "Team with selector and graph constraints",
+            "prompt": "You are a team with selector and graph constraints",
+            "leader": "coordinator",
             "members": [
                 {"name": "researcher", "type": "agent"},
                 {"name": "analyzer", "type": "agent"},
@@ -2347,6 +2355,8 @@ class TestTeamsEndpoint(unittest.TestCase):
         # Make the request (graph team without maxTurns)
         request_data = {
             "name": "invalid-graph-team",
+            "prompt": "You are a graph team",
+            "leader": "agent1",
             "members": [
                 {"name": "agent1", "type": "agent"},
                 {"name": "agent2", "type": "agent"}
