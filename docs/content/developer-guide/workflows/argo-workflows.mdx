@@ -103,6 +103,24 @@ Note: Similar to Argo, removing Minio CRDs will delete stored artifacts and data
 kubectl get crd -o name | grep min.io | xargs kubectl delete
 ```
 
+## Opening the Argo and Minio Dashboards
+
+Wait for services to be ready before accessing dashboards.
+
+You can now check the Argo Workflows dashboard as well as the Minio dashboard:
+
+```bash
+# Show the Argo Workflows dashboard:
+kubectl port-forward svc/argo-workflows-server 2746:2746
+# http://localhost:2746
+
+# Show the minio dashboard:
+kubectl port-forward svc/myminio-console 9443:9443
+# https://localhost:9443
+# Username: minio
+# Password: minio123
+```
+
 ## Running Workflows
 
 Start by creating a workflow or workflow template.
