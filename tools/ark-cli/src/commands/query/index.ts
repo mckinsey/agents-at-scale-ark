@@ -15,12 +15,17 @@ export function createQueryCommand(_: ArkConfig): Command {
       '-o, --output <format>',
       'Output format: yaml, json, or name (prints only resource name)'
     )
+    .option(
+      '--session-id <sessionId>',
+      'Session ID to associate with the query for conversation continuity'
+    )
     .action(
       async (
         target: string,
         message: string,
         options: {
           output?: string;
+          sessionId?: string;
         }
       ) => {
         const parsed = parseTarget(target);
@@ -38,6 +43,7 @@ export function createQueryCommand(_: ArkConfig): Command {
           targetName: parsed.name,
           message,
           outputFormat: options.output,
+          sessionId: options.sessionId,
         });
       }
     );

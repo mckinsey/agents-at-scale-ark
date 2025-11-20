@@ -89,12 +89,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       XRAY_WATCH_NAME: 'ark-20863-security-watch'
+      SCAN_JSON: "xray-scan-agents-at-scale-${{ github.run_number }}.json"
     steps:
       - uses: actions/checkout@v4
       
       - name: Run JFrog Xray scan
         id: xray-scan
-        continue-on-error: true
         uses: ./.github/actions/jfrog-xray-scan
         with:
           github_repo: ${{ github.repository }}
@@ -104,19 +104,37 @@ jobs:
           jfrog_user: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME }}
           jfrog_password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD }}
           jfrog_url: ${{ vars.JFROG_PLATFORM_URL }}
+        
+      - name: Get last vulnarability report from the main branch run
+        if: always()
+        shell: bash
+        run: |
+          GITHUB_REPOSITORY="${{ github.repository }}"
+          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&per_page=50" | jq -c '.workflow_runs[] | select(.name == "CI/CD") | .id' | head -n 1)
+          
+          echo "Downloading artifacts from run ID: $LAST_RUN_ID"
+          gh run download "$LAST_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern "xray-scan-results-agents-at-scale-*" --dir ./artifacts
+          cp ./artifacts/**/xray-scan-agents-at-scale-*.json ./last-main-scan.json
         env:
           GH_TOKEN: ${{ github.token }}
-          SCAN_JSON: "xray-scan-agents-at-scale-${{ github.run_number }}.json"
-
-      - name: Report scan status
+      - name: Detect new violations
         if: always()
+        shell: bash
         run: |
-          if [ "${{ steps.xray-scan.outcome }}" = "failure" ]; then
-            echo "Security scan found violations"
-            echo "View results: ${{ vars.JFROG_PLATFORM_URL }}/ui/watchesNew/edit/${{ env.XRAY_WATCH_NAME }}?activeTab=violations"
-            echo "::warning::JFrog Xray scan detected security violations"
+          echo "Comparing with last scan file: ./last-main-scan.json"
+
+          echo "New violations since last scan:"
+          jq -r '.[].violations[]?.issue_id' "./last-main-scan.json" > old.txt
+          jq -r '.[].violations[]?.issue_id' "$SCAN_JSON" > new.txt
+
+          NEW_VIOLATIONS=$(comm -13 <(sort old.txt) <(sort new.txt))
+
+          if [ -n "$NEW_VIOLATIONS" ]; then
+            echo "New violations found:"
+            echo "$NEW_VIOLATIONS"
+            exit 1
           else
-            echo "Security scan passed"
+            echo "No new violations found."
           fi
 
   # Build and test Ark itself.
