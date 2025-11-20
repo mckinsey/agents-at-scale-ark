@@ -12,7 +12,7 @@ cd {{ .Values.projectName }}
 source .env  # Edit this file first with your API keys
 
 # 3. Deploy to your ARK cluster
-make quickstart
+devspace dev
 
 # 4. Check your deployment
 kubectl get agents,teams,queries --namespace {{ .Values.namespace }}

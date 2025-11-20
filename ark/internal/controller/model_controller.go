@@ -17,6 +17,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/genai"
 	"mckinsey.com/ark/internal/telemetry"
+	"mckinsey.com/ark/internal/telemetry/noop"
 )
 
 const (
@@ -84,15 +85,12 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 }
 
 func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Model) genai.ProbeResult {
-	ctx, span := r.Telemetry.ModelRecorder().StartModelProbe(ctx, model.Name, model.Namespace)
-	defer span.End()
-
+	noopRecorder := noop.NewModelRecorder()
 	resolvedModel, err := genai.LoadModel(ctx, r.Client, &arkv1alpha1.AgentModelRef{
 		Name:      model.Name,
 		Namespace: model.Namespace,
-	}, model.Namespace, nil, r.Telemetry.ModelRecorder())
+	}, model.Namespace, nil, noopRecorder)
 	if err != nil {
-		r.Telemetry.ModelRecorder().RecordError(span, err)
 		return genai.ProbeResult{
 			Available:     false,
 			Message:       "Failed to load model configuration",
@@ -101,12 +99,6 @@ func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Mode
 	}
 
 	result := genai.ProbeModel(ctx, resolvedModel)
-	if !result.Available {
-		r.Telemetry.ModelRecorder().RecordError(span, result.DetailedError)
-	} else {
-		r.Telemetry.ModelRecorder().RecordSuccess(span)
-	}
-
 	return result
 }
 

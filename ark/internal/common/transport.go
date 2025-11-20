@@ -79,3 +79,11 @@ func NewHTTPClientWithLogging(ctx context.Context) *http.Client {
 		Transport: NewLoggingTransport(ctx, nil),
 	}
 }
+
+// NewHTTPClientWithoutTracing creates an HTTP client without OpenTelemetry instrumentation.
+// Use this for health checks, probes, and other operations that should not generate traces.
+func NewHTTPClientWithoutTracing() *http.Client {
+	return &http.Client{
+		Transport: http.DefaultTransport,
+	}
+}
