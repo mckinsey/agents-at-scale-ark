@@ -1,9 +1,7 @@
-/* Container */
 .container {
   margin: 2rem 0;
 }
 
-/* Grid Layout */
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -18,7 +16,6 @@
   }
 }
 
-/* Contributor Card */
 .card {
   display: flex;
   flex-direction: column;
@@ -32,7 +29,6 @@
   opacity: 0.7;
 }
 
-/* Avatar */
 .avatarWrapper {
   margin-bottom: 0.75rem;
 }
@@ -44,7 +40,6 @@
   display: block;
 }
 
-/* Info Section */
 .info {
   text-align: center;
   width: 100%;
@@ -59,7 +54,6 @@
   color: inherit;
 }
 
-/* Badges */
 .badges {
   display: flex;
   flex-wrap: wrap;
@@ -73,7 +67,6 @@
   line-height: 1;
 }
 
-/* Loading State */
 .loading {
   display: flex;
   flex-direction: column;
@@ -99,7 +92,6 @@
   }
 }
 
-/* Empty State */
 .empty {
   text-align: center;
   padding: 3rem 2rem;
