@@ -3350,6 +3350,8 @@ export interface components {
             /** Maxturns */
             maxTurns?: number | null;
             selector?: components["schemas"]["Selector"] | null;
+            /** Prompt */
+            prompt?: string | null;
         };
         /**
          * TeamDetailResponse
@@ -3374,6 +3376,8 @@ export interface components {
             status?: {
                 [key: string]: unknown;
             } | null;
+            /** Prompt */
+            prompt?: string | null;
         };
         /**
          * TeamListResponse
@@ -3412,6 +3416,8 @@ export interface components {
             members_count?: number | null;
             /** Status */
             status?: string | null;
+            /** Prompt */
+            prompt?: string | null;
         };
         /**
          * TeamUpdateRequest
@@ -3428,6 +3434,8 @@ export interface components {
             /** Maxturns */
             maxTurns?: number | null;
             selector?: components["schemas"]["Selector"] | null;
+            /** Prompt */
+            prompt?: string | null;
         };
         /**
          * TokenUsage

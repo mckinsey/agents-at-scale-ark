@@ -1,7 +1,7 @@
 """Team CRD response models."""
 from typing import List, Dict, Optional, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class TeamMember(BaseModel):
@@ -39,6 +39,7 @@ class TeamResponse(BaseModel):
     strategy: Optional[str] = None
     members_count: Optional[int] = None
     status: Optional[str] = None
+    prompt: Optional[str] = None
 
 
 class TeamListResponse(BaseModel):
@@ -56,6 +57,15 @@ class TeamCreateRequest(BaseModel):
     graph: Optional[Graph] = None
     maxTurns: Optional[int] = None
     selector: Optional[Selector] = None
+    prompt: Optional[str] = None
+
+    @field_validator('prompt')
+    @classmethod
+    def validate_prompt_size(cls, v: Optional[str]) -> Optional[str]:
+        """Validate prompt does not exceed 10KB."""
+        if v is not None and len(v.encode('utf-8')) > 10240:
+            raise ValueError('Prompt must not exceed 10KB')
+        return v
 
 
 class TeamUpdateRequest(BaseModel):
@@ -66,6 +76,15 @@ class TeamUpdateRequest(BaseModel):
     graph: Optional[Graph] = None
     maxTurns: Optional[int] = None
     selector: Optional[Selector] = None
+    prompt: Optional[str] = None
+
+    @field_validator('prompt')
+    @classmethod
+    def validate_prompt_size(cls, v: Optional[str]) -> Optional[str]:
+        """Validate prompt does not exceed 10KB."""
+        if v is not None and len(v.encode('utf-8')) > 10240:
+            raise ValueError('Prompt must not exceed 10KB')
+        return v
 
 
 class TeamDetailResponse(BaseModel):
@@ -79,3 +98,4 @@ class TeamDetailResponse(BaseModel):
     maxTurns: Optional[int] = None
     selector: Optional[Selector] = None
     status: Optional[Dict[str, Any]] = None
+    prompt: Optional[str] = None

@@ -122,14 +122,27 @@ class TestDeleteEndpoints(unittest.TestCase):
         """Test successful team deletion."""
         # Setup mock
         mock_client = AsyncMock()
+
+        # Mock team object without ConfigMap reference
+        mock_team = Mock()
+        mock_team.to_dict.return_value = {
+            "metadata": {"name": "test-team", "namespace": "default"},
+            "spec": {
+                "members": [{"name": "agent1", "type": "agent"}],
+                "strategy": "sequential"
+            }
+        }
+
+        mock_client.teams.a_get = AsyncMock(return_value=mock_team)
         mock_client.teams.a_delete = AsyncMock()
         mock_with_ark_client.return_value.__aenter__.return_value = mock_client
-        
+
         # Make the request
         response = self.client.delete("/v1/teams/test-team")
-        
+
         # Assert response
         self.assertEqual(response.status_code, 204)
+        mock_client.teams.a_get.assert_called_once_with("test-team")
         mock_client.teams.a_delete.assert_called_once_with("test-team")
     
     @patch('ark_api.api.v1.queries.with_ark_client')
@@ -2310,17 +2323,28 @@ class TestTeamsEndpoint(unittest.TestCase):
         # Setup async context manager mock
         mock_client = AsyncMock()
         mock_ark_client.return_value.__aenter__.return_value = mock_client
-        
-        # Mock successful deletion (no return value)
+
+        # Mock team object without ConfigMap reference
+        mock_team = Mock()
+        mock_team.to_dict.return_value = {
+            "metadata": {"name": "test-team", "namespace": "default"},
+            "spec": {
+                "members": [{"name": "agent1", "type": "agent"}],
+                "strategy": "sequential"
+            }
+        }
+
+        mock_client.teams.a_get = AsyncMock(return_value=mock_team)
         mock_client.teams.a_delete = AsyncMock(return_value=None)
-        
+
         # Make the request
         response = self.client.delete("/v1/teams/test-team?namespace=default")
-        
+
         # Assert response
         self.assertEqual(response.status_code, 204)
-        
-        # Verify the delete was called correctly
+
+        # Verify the get and delete were called correctly
+        mock_client.teams.a_get.assert_called_once_with("test-team")
         mock_client.teams.a_delete.assert_called_once_with("test-team")
     
     @patch('ark_api.api.v1.teams.with_ark_client')
@@ -2363,3 +2387,132 @@ class TestTeamsEndpoint(unittest.TestCase):
         data = response.json()
         self.assertIn("graph strategy requires maxTurns", data["detail"])
         self.assertIn("admission webhook", data["detail"])
+
+    @patch('ark_api.api.v1.teams.create_prompt_configmap')
+    @patch('ark_api.api.v1.teams.with_ark_client')
+    def test_create_team_with_prompt(self, mock_ark_client, mock_create_configmap):
+        """Test creating a team with a prompt field."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_create_configmap.return_value = "team-test-team-prompt"
+
+        mock_team = Mock()
+        mock_team.to_dict.return_value = {
+            "metadata": {"name": "test-team", "namespace": "default"},
+            "spec": {
+                "members": [{"name": "agent1", "type": "agent"}],
+                "strategy": "sequential",
+                "promptConfigMapRef": "team-test-team-prompt"
+            },
+            "status": {}
+        }
+
+        mock_client.teams.a_create = AsyncMock(return_value=mock_team)
+
+        request_data = {
+            "name": "test-team",
+            "members": [{"name": "agent1", "type": "agent"}],
+            "strategy": "sequential",
+            "prompt": "You are a helpful assistant"
+        }
+        response = self.client.post("/v1/teams?namespace=default", json=request_data)
+
+        self.assertEqual(response.status_code, 200)
+        mock_create_configmap.assert_awaited_once_with("test-team", "default", "You are a helpful assistant")
+
+    @patch('ark_api.api.v1.teams.get_prompt_from_configmap')
+    @patch('ark_api.api.v1.teams.with_ark_client')
+    def test_get_team_with_prompt(self, mock_ark_client, mock_get_prompt):
+        """Test getting a team that has a prompt ConfigMap."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_team = Mock()
+        mock_team.to_dict.return_value = {
+            "metadata": {"name": "test-team", "namespace": "default"},
+            "spec": {
+                "members": [{"name": "agent1", "type": "agent"}],
+                "strategy": "sequential",
+                "promptConfigMapRef": "team-test-team-prompt"
+            },
+            "status": {}
+        }
+
+        mock_client.teams.a_get = AsyncMock(return_value=mock_team)
+        mock_get_prompt.return_value = "You are a helpful assistant"
+
+        response = self.client.get("/v1/teams/test-team?namespace=default")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["prompt"], "You are a helpful assistant")
+        mock_get_prompt.assert_awaited_once_with("team-test-team-prompt", "default")
+
+    @patch('ark_api.api.v1.teams.update_prompt_configmap')
+    @patch('ark_api.api.v1.teams.get_prompt_from_configmap')
+    @patch('ark_api.api.v1.teams.with_ark_client')
+    def test_update_team_with_prompt(self, mock_ark_client, mock_get_prompt, mock_update_configmap):
+        """Test updating a team's prompt."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        existing_team = Mock()
+        existing_team.to_dict.return_value = {
+            "metadata": {"name": "test-team", "namespace": "default"},
+            "spec": {
+                "members": [{"name": "agent1", "type": "agent"}],
+                "strategy": "sequential",
+                "promptConfigMapRef": "team-test-team-prompt"
+            }
+        }
+
+        updated_team = Mock()
+        updated_team.to_dict.return_value = {
+            "metadata": {"name": "test-team", "namespace": "default"},
+            "spec": {
+                "members": [{"name": "agent1", "type": "agent"}],
+                "strategy": "sequential",
+                "promptConfigMapRef": "team-test-team-prompt"
+            },
+            "status": {}
+        }
+
+        mock_client.teams.a_get = AsyncMock(return_value=existing_team)
+        mock_client.teams.a_update = AsyncMock(return_value=updated_team)
+        mock_get_prompt.return_value = "Updated prompt"
+
+        request_data = {"prompt": "Updated prompt"}
+        response = self.client.put("/v1/teams/test-team?namespace=default", json=request_data)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["prompt"], "Updated prompt")
+        mock_update_configmap.assert_awaited_once_with("team-test-team-prompt", "default", "Updated prompt")
+
+    @patch('ark_api.api.v1.teams.delete_prompt_configmap')
+    @patch('ark_api.api.v1.teams.with_ark_client')
+    def test_delete_team_with_prompt(self, mock_ark_client, mock_delete_configmap):
+        """Test deleting a team that has a prompt ConfigMap."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_team = Mock()
+        mock_team.to_dict.return_value = {
+            "metadata": {"name": "test-team", "namespace": "default"},
+            "spec": {
+                "members": [{"name": "agent1", "type": "agent"}],
+                "strategy": "sequential",
+                "promptConfigMapRef": "team-test-team-prompt"
+            }
+        }
+
+        mock_client.teams.a_get = AsyncMock(return_value=mock_team)
+        mock_client.teams.a_delete = AsyncMock()
+
+        response = self.client.delete("/v1/teams/test-team?namespace=default")
+
+        self.assertEqual(response.status_code, 204)
+        mock_delete_configmap.assert_awaited_once_with("team-test-team-prompt", "default")
+        mock_client.teams.a_delete.assert_awaited_once_with("test-team")
+

@@ -26,12 +26,13 @@ type TeamGraphSpec struct {
 }
 
 type TeamSpec struct {
-	Members     []TeamMember      `json:"members"`
-	Strategy    string            `json:"strategy"`
-	Description string            `json:"description,omitempty"`
-	MaxTurns    *int              `json:"maxTurns,omitempty"`
-	Selector    *TeamSelectorSpec `json:"selector,omitempty"`
-	Graph       *TeamGraphSpec    `json:"graph,omitempty"`
+	Members            []TeamMember      `json:"members"`
+	Strategy           string            `json:"strategy"`
+	Description        string            `json:"description,omitempty"`
+	MaxTurns           *int              `json:"maxTurns,omitempty"`
+	Selector           *TeamSelectorSpec `json:"selector,omitempty"`
+	Graph              *TeamGraphSpec    `json:"graph,omitempty"`
+	PromptConfigMapRef *string           `json:"promptConfigMapRef,omitempty"`
 }
 
 type TeamStatus struct{}
