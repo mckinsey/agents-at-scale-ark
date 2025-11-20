@@ -390,8 +390,9 @@ export function createStatusCommand(): Command {
     .description('Check ARK system status')
     .argument('[services...]', 'specific services to check (optional)')
     .option(
-      '--wait-for-ready <timeout>',
-      'wait for services to be ready (e.g., 30s, 2m, 1h)'
+      '--wait-for-ready [timeout]',
+      'wait for services to be ready, e.g, 30s, 2m, 1h (default: 5m)',
+      '5m'
     )
     .action((services, options) => checkStatus(services, options));
 
