@@ -51,37 +51,31 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 	// Initialize conditions if empty
 	if len(model.Status.Conditions) == 0 {
-		r.setCondition(&model, ModelAvailable, metav1.ConditionUnknown, "Initializing", "Model availability is being determined")
+		if _, err := r.reconcileCondition(ctx, &model, ModelAvailable, metav1.ConditionUnknown, "Initializing", "Model availability is being determined"); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Probe the model to test whether it is available.
 	result := r.probeModel(ctx, model)
 
 	if !result.Available {
-		// Log the failure with a detailed error message. This is still 'info'
-		// as probe failures are expected - the model events and conditions
-		// will make the error clear to the user.
-		log.Info("model probe failed",
-			"model", model.Name,
-			"status", result.Message,
-			"details", result.DetailedError)
-
-		// Update the condition and events with the (stable) error message.
-		r.setCondition(&model, ModelAvailable, metav1.ConditionFalse, "ModelProbeFailed", result.Message)
-		r.Recorder.Event(&model, corev1.EventTypeWarning, "ModelProbeFailed", result.Message)
-
-		// Update the status and re-attempt after the poll interval.
-		if err := r.updateStatus(ctx, &model); err != nil {
+		changed, err := r.reconcileCondition(ctx, &model, ModelAvailable, metav1.ConditionFalse, "ModelProbeFailed", result.Message)
+		if err != nil {
 			return ctrl.Result{}, err
+		}
+		// Log the failure only when condition changes
+		if changed {
+			log.Info("model probe failed",
+				"model", model.Name,
+				"status", result.Message,
+				"details", result.DetailedError)
 		}
 		return ctrl.Result{RequeueAfter: model.Spec.PollInterval.Duration}, nil
 	}
 
 	// Success case - model is available
-	r.setCondition(&model, ModelAvailable, metav1.ConditionTrue, "Available", result.Message)
-	r.Recorder.Event(&model, corev1.EventTypeNormal, "ModelProbeSucceeded", result.Message)
-
-	if err := r.updateStatus(ctx, &model); err != nil {
+	if _, err := r.reconcileCondition(ctx, &model, ModelAvailable, metav1.ConditionTrue, "Available", result.Message); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -96,7 +90,7 @@ func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Mode
 	resolvedModel, err := genai.LoadModel(ctx, r.Client, &arkv1alpha1.AgentModelRef{
 		Name:      model.Name,
 		Namespace: model.Namespace,
-	}, model.Namespace, r.Telemetry.ModelRecorder())
+	}, model.Namespace, nil, r.Telemetry.ModelRecorder())
 	if err != nil {
 		r.Telemetry.ModelRecorder().RecordError(span, err)
 		return genai.ProbeResult{
@@ -116,15 +110,30 @@ func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Mode
 	return result
 }
 
-// setCondition sets a condition on the Model
-func (r *ModelReconciler) setCondition(model *arkv1alpha1.Model, conditionType string, status metav1.ConditionStatus, reason, message string) {
-	meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
+// reconcileCondition updates a condition on the Model, emits an event if changed, and updates status
+// Returns true if the condition changed, false otherwise
+func (r *ModelReconciler) reconcileCondition(ctx context.Context, model *arkv1alpha1.Model, conditionType string, status metav1.ConditionStatus, reason, message string) (bool, error) {
+	changed := meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
 		Type:               conditionType,
 		Status:             status,
 		Reason:             reason,
 		Message:            message,
 		ObservedGeneration: model.Generation,
 	})
+
+	if !changed {
+		return false, nil
+	}
+
+	// Emit event based on condition status
+	eventType := corev1.EventTypeNormal
+	if status == metav1.ConditionFalse {
+		eventType = corev1.EventTypeWarning
+	}
+	r.Recorder.Event(model, eventType, reason, message)
+
+	// Update status
+	return true, r.updateStatus(ctx, model)
 }
 
 // updateStatus updates the Model status

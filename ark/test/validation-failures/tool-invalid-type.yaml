@@ -1,8 +1,0 @@
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Tool
-metadata:
-  name: test-tool-invalid-type
-  namespace: default
-spec:
-  type: invalid-type
-  description: "This tool has an invalid type"

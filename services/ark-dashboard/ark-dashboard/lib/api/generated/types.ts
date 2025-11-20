@@ -49,6 +49,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/a2a/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Agents
+         * @description List all available agents for A2A communication.
+         */
+        get: operations["list_agents_a2a_agents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/namespaces": {
         parameters: {
             query?: never;
@@ -352,6 +372,12 @@ export interface paths {
         /**
          * Create Team
          * @description Create a new Team CR.
+         *
+         *     Supports various execution strategies:
+         *     - sequential: Members execute in order
+         *     - round-robin: Members take turns
+         *     - graph: Custom workflow defined by graph edges
+         *     - selector: AI-powered member selection (can be combined with graph constraints)
          *
          *     Args:
          *         namespace: The namespace to create the team in
@@ -775,7 +801,51 @@ export interface paths {
         get: operations["list_sessions_v1_sessions_get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete All Sessions
+         * @description Delete all sessions and their messages.
+         */
+        delete: operations["delete_all_sessions_v1_sessions_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Session
+         * @description Delete a specific session and all its messages.
+         */
+        delete: operations["delete_session_v1_sessions__session_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/{session_id}/queries/{query_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Query Messages
+         * @description Delete messages for a specific query within a session.
+         */
+        delete: operations["delete_query_messages_v1_sessions__session_id__queries__query_id__messages_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1335,6 +1405,8 @@ export interface components {
             prompt?: string | null;
             /** Tools */
             tools?: components["schemas"]["Tool-Input"][] | null;
+            /** Overrides */
+            overrides?: components["schemas"]["Override-Input"][] | null;
         };
         /**
          * AgentDetailResponse
@@ -1355,6 +1427,8 @@ export interface components {
             prompt?: string | null;
             /** Tools */
             tools?: components["schemas"]["Tool-Output"][] | null;
+            /** Overrides */
+            overrides?: components["schemas"]["Override-Output"][] | null;
             /** Skills */
             skills?: components["schemas"]["Skill"][] | null;
             /**
@@ -1418,6 +1492,8 @@ export interface components {
             prompt?: string | null;
             /** Tools */
             tools?: components["schemas"]["Tool-Input"][] | null;
+            /** Overrides */
+            overrides?: components["schemas"]["Override-Input"][] | null;
         };
         /** Annotation */
         Annotation: {
@@ -1514,6 +1590,8 @@ export interface components {
             baseUrl: string | components["schemas"]["ark_api__models__models__ValueSource"];
             /** Apiversion */
             apiVersion?: string | components["schemas"]["ark_api__models__models__ValueSource"] | null;
+            /** Headers */
+            headers?: components["schemas"]["Header-Input"][] | null;
         };
         /**
          * BaselineEvaluationMetadata
@@ -1861,7 +1939,7 @@ export interface components {
             stream: boolean;
             /** Metadata */
             metadata?: {
-                [key: string]: string;
+                [key: string]: unknown;
             } | null;
         };
         /** ChatCompletionSystemMessageParam */
@@ -2492,6 +2570,42 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * Header
+         * @description HTTP header configuration.
+         */
+        "Header-Input": {
+            /** Name */
+            name: string;
+            value: components["schemas"]["HeaderValue-Input"];
+        };
+        /**
+         * Header
+         * @description HTTP header configuration.
+         */
+        "Header-Output": {
+            /** Name */
+            name: string;
+            value: components["schemas"]["HeaderValue-Output"];
+        };
+        /**
+         * HeaderValue
+         * @description Value configuration for a header.
+         */
+        "HeaderValue-Input": {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["ark_api__models__agents__ValueFrom"] | null;
+        };
+        /**
+         * HeaderValue
+         * @description Value configuration for a header.
+         */
+        "HeaderValue-Output": {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["ark_api__models__agents__ValueFrom"] | null;
+        };
+        /**
          * HealthResponse
          * @description Health check response model.
          */
@@ -2750,7 +2864,7 @@ export interface components {
                 [key: string]: {
                     [key: string]: string | {
                         [key: string]: unknown;
-                    };
+                    } | unknown[];
                 };
             };
             available?: components["schemas"]["AvailabilityStatus"] | null;
@@ -2847,6 +2961,30 @@ export interface components {
             apiKey: string | components["schemas"]["ark_api__models__models__ValueSource"];
             /** Baseurl */
             baseUrl: string | components["schemas"]["ark_api__models__models__ValueSource"];
+            /** Headers */
+            headers?: components["schemas"]["Header-Input"][] | null;
+        };
+        /**
+         * Override
+         * @description Header override configuration for models and MCP servers.
+         */
+        "Override-Input": {
+            /** Headers */
+            headers: components["schemas"]["Header-Input"][];
+            /** Resourcetype */
+            resourceType: string;
+            labelSelector?: components["schemas"]["ark_api__models__agents__LabelSelector"] | null;
+        };
+        /**
+         * Override
+         * @description Header override configuration for models and MCP servers.
+         */
+        "Override-Output": {
+            /** Headers */
+            headers: components["schemas"]["Header-Output"][];
+            /** Resourcetype */
+            resourceType: string;
+            labelSelector?: components["schemas"]["ark_api__models__agents__LabelSelector"] | null;
         };
         /** PromptTokensDetails */
         PromptTokensDetails: {
@@ -2884,6 +3022,8 @@ export interface components {
             ttl?: string | null;
             /** Cancel */
             cancel?: boolean | null;
+            /** Overrides */
+            overrides?: components["schemas"]["Override-Input"][] | null;
             /** Evaluators */
             evaluators?: components["schemas"]["Memory"][] | null;
             evaluatorSelector?: components["schemas"]["ark_api__models__queries__LabelSelector"] | null;
@@ -2921,6 +3061,8 @@ export interface components {
             ttl?: string | null;
             /** Cancel */
             cancel?: boolean | null;
+            /** Overrides */
+            overrides?: components["schemas"]["Override-Output"][] | null;
             /** Metadata */
             metadata?: {
                 [key: string]: unknown;
@@ -3019,6 +3161,8 @@ export interface components {
             ttl?: string | null;
             /** Cancel */
             cancel?: boolean | null;
+            /** Overrides */
+            overrides?: components["schemas"]["Override-Input"][] | null;
         };
         /**
          * ReadinessResponse
@@ -3733,6 +3877,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReadinessResponse"];
+                };
+            };
+        };
+    };
+    list_agents_a2a_agents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
                 };
             };
         };
@@ -5272,6 +5438,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_all_sessions_v1_sessions_delete: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_session_v1_sessions__session_id__delete: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_query_messages_v1_sessions__session_id__queries__query_id__messages_delete: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                session_id: string;
+                query_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

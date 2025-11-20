@@ -131,16 +131,6 @@ const defaultArkServices: ServiceCollection = {
     k8sPortForwardLocalPort: 3274,
   },
 
-  'ark-api-a2a': {
-    name: 'ark-api-a2a',
-    helmReleaseName: 'ark-api-a2a',
-    description: 'Ark API agent-to-agent communication service',
-    enabled: false, // Disabled - not currently used
-    category: 'service',
-    // namespace: undefined - uses current context namespace
-    // Note: This service might be installed as part of ark-api or separately
-  },
-
   'ark-mcp': {
     name: 'ark-mcp',
     helmReleaseName: 'ark-mcp',
@@ -152,6 +142,19 @@ const defaultArkServices: ServiceCollection = {
     installArgs: [],
     k8sDeploymentName: 'ark-mcp',
     k8sDevDeploymentName: 'ark-mcp-devspace',
+  },
+
+  'ark-cluster-memory': {
+    name: 'ark-cluster-memory',
+    helmReleaseName: 'ark-cluster-memory',
+    description: 'In-memory storage service with streaming support for Ark queries',
+    enabled: true,
+    category: 'service',
+    // namespace: undefined - uses current context namespace
+    chartPath: `${REGISTRY_BASE}/ark-cluster-memory`,
+    installArgs: [],
+    k8sDeploymentName: 'ark-cluster-memory',
+    k8sDevDeploymentName: 'ark-cluster-memory-devspace',
   },
 
   'mcp-filesystem': {

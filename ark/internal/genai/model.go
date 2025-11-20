@@ -42,7 +42,7 @@ func ResolveModelSpec(modelSpec any, defaultNamespace string) (string, string, e
 }
 
 // LoadModel loads a model by resolving modelSpec and defaultNamespace
-func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface{}, defaultNamespace string, modelRecorder telemetry.ModelRecorder) (*Model, error) {
+func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface{}, defaultNamespace string, additionalHeaders map[string]string, modelRecorder telemetry.ModelRecorder) (*Model, error) {
 	modelName, namespace, err := ResolveModelSpec(modelSpec, defaultNamespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve model spec: %w", err)
@@ -66,11 +66,11 @@ func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface
 
 	switch modelCRD.Spec.Type {
 	case ModelTypeAzure:
-		if err := loadAzureConfig(ctx, resolver, modelCRD.Spec.Config.Azure, namespace, modelInstance); err != nil {
+		if err := loadAzureConfig(ctx, resolver, modelCRD.Spec.Config.Azure, namespace, modelInstance, additionalHeaders); err != nil {
 			return nil, err
 		}
 	case ModelTypeOpenAI:
-		if err := loadOpenAIConfig(ctx, resolver, modelCRD.Spec.Config.OpenAI, namespace, modelInstance); err != nil {
+		if err := loadOpenAIConfig(ctx, resolver, modelCRD.Spec.Config.OpenAI, namespace, modelInstance, additionalHeaders); err != nil {
 			return nil, err
 		}
 	case ModelTypeBedrock:
@@ -95,23 +95,10 @@ func loadModelCRD(ctx context.Context, k8sClient client.Client, name, namespace 
 	return &modelCRD, nil
 }
 
-// resolveModelHeaders resolves custom headers from Model configuration
-func resolveModelHeaders(ctx context.Context, k8sClient client.Client, headers []arkv1alpha1.Header, modelName, namespace, providerName string) (map[string]string, error) {
-	if len(headers) == 0 {
-		return nil, nil
-	}
-
-	log := logf.FromContext(ctx)
-	resolvedHeaders := make(map[string]string)
-	log.Info("resolving custom headers for model", "provider", providerName, "model", modelName, "namespace", namespace, "header_count", len(headers))
-
-	for _, header := range headers {
-		value, err := ResolveHeaderValue(ctx, k8sClient, header, namespace)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve %s header %s: %w", providerName, header.Name, err)
-		}
-		resolvedHeaders[header.Name] = value
-		log.Info("resolved custom header for model", "provider", providerName, "model", modelName, "header_name", header.Name)
+func resolveModelHeaders(ctx context.Context, k8sClient client.Client, headers []arkv1alpha1.Header, namespace string) (map[string]string, error) {
+	resolvedHeaders, err := ResolveHeaders(ctx, k8sClient, headers, namespace)
+	if err != nil {
+		return nil, err
 	}
 
 	return resolvedHeaders, nil

@@ -50,6 +50,10 @@ inputs:
     description: Addition arguments to be passed to the K3S setup script
     required: false
     default: ""
+  mock-llm-enabled:
+    description: Enable Mock LLM Servder
+    required: false
+    default: "true"
 
 outputs:
   kubeconfig:
@@ -192,6 +196,18 @@ runs:
         echo "k8s-version=$(k3s --version | grep --max-count=1 'k3s' | sed 's/.*\(v[0-9][^+]*\).*/\1/')" >> $GITHUB_OUTPUT
         echo "calico-version=$(cat /tmp/calico.yaml | grep --max-count=1 'calico/cni:v' | sed 's/.*calico\/cni:\(.*\)/\1/')" >> $GITHUB_OUTPUT
         echo "helm-version=$(helm version --short | sed 's/\([^+]*\).*/\1/')" >> $GITHUB_OUTPUT
+        echo "::endgroup::"
+      shell: bash
+
+    - name: Setup Mock LLM
+      id: setup-mock-llm
+      run: |
+        echo "::group::Install Mock LLM"
+        if [[ "${{ inputs.mock-llm-enabled }}" == "true" ]]; then
+          kubectl apply -f samples/mocks/mock-llm.yaml
+        else
+          echo "Mock LLM disabled, skipping installation"
+        fi
         echo "::endgroup::"
       shell: bash
 

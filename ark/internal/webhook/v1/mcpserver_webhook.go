@@ -6,9 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -56,9 +54,10 @@ func (v *MCPServerValidator) ValidateCreate(ctx context.Context, obj runtime.Obj
 	}
 
 	for i, header := range mcpserver.Spec.Headers {
-		if err := v.validateHeaderValue(ctx, header.Value, mcpserver.GetNamespace()); err != nil {
-			mcpserverlog.Error(err, "Failed to validate header value", "mcpserver", mcpserver.GetName(), "header", header.Name)
-			return nil, fmt.Errorf("failed to validate header %s (index %d): %w", header.Name, i, err)
+		contextPrefix := fmt.Sprintf("headers[%d]", i)
+		if err := ValidateHeader(header, contextPrefix); err != nil {
+			mcpserverlog.Error(err, "Failed to validate header", "mcpserver", mcpserver.GetName(), "header", header.Name)
+			return nil, err
 		}
 	}
 
@@ -79,43 +78,4 @@ func (v *MCPServerValidator) ValidateUpdate(ctx context.Context, oldObj, newObj 
 
 func (v *MCPServerValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	return nil, nil
-}
-
-func (v *MCPServerValidator) validateHeaderValue(ctx context.Context, headerValue arkv1alpha1.HeaderValue, namespace string) error {
-	if headerValue.Value != "" {
-		return nil
-	}
-
-	if headerValue.ValueFrom == nil {
-		return fmt.Errorf("header value must have either value or valueFrom specified")
-	}
-
-	if headerValue.ValueFrom.SecretKeyRef != nil {
-		return v.validateSecretKeyRef(ctx, headerValue.ValueFrom.SecretKeyRef, namespace)
-	}
-
-	return fmt.Errorf("no valid valueFrom source specified for header")
-}
-
-func (v *MCPServerValidator) validateSecretKeyRef(ctx context.Context, secretRef *corev1.SecretKeySelector, namespace string) error {
-	if secretRef.Name == "" {
-		return fmt.Errorf("secret name is required")
-	}
-
-	secret := &corev1.Secret{}
-	err := v.Client.Get(ctx, types.NamespacedName{
-		Name:      secretRef.Name,
-		Namespace: namespace,
-	}, secret)
-	if err != nil {
-		return fmt.Errorf("failed to get secret %s/%s: %w", namespace, secretRef.Name, err)
-	}
-
-	if secretRef.Key != "" {
-		if _, exists := secret.Data[secretRef.Key]; !exists {
-			return fmt.Errorf("key %s not found in secret %s/%s", secretRef.Key, namespace, secretRef.Name)
-		}
-	}
-
-	return nil
 }

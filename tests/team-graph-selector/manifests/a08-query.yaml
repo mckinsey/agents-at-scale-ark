@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-graph-selector-team
+spec:
+  input: Research renewable energy trends, analyze the findings, and create a summary report
+  targets:
+  - type: team
+    name: graph-selector-team
+

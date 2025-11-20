@@ -1,0 +1,23 @@
+{{- if .Values.minio.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: artifact-repositories
+  annotations:
+    workflows.argoproj.io/default-artifact-repository: default
+data:
+  default: |
+    s3:
+      bucket: argo-artifacts
+      endpoint: minio.{{ .Release.Namespace }}.svc.cluster.local:443
+      insecure: false
+      caSecret:
+        name: myminio-tls
+        key: public.crt
+      accessKeySecret:
+        name: argo-minio-credentials
+        key: accesskey
+      secretKeySecret:
+        name: argo-minio-credentials
+        key: secretkey
+{{- end }}

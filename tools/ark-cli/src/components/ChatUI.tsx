@@ -92,10 +92,12 @@ const generateMessageId = (): string => {
 // Configure marked with terminal renderer for markdown output
 const configureMarkdown = () => {
   marked.setOptions({
+    // @ts-ignore - TerminalRenderer types are incomplete
     renderer: new TerminalRenderer({
       showSectionPrefix: false,
       width: 80,
       reflowText: true,
+      // @ts-ignore - preserveNewlines exists but not in types
       preserveNewlines: true,
     }),
   });
@@ -151,6 +153,9 @@ const ChatUI: React.FC<ChatUIProps> = ({
     streamingEnabled: config?.chat?.streaming ?? true,
     currentTarget: undefined,
   });
+
+  // Track A2A context ID for conversation continuity using ref
+  const a2aContextIdRef = React.useRef<string | undefined>(undefined);
 
   React.useEffect(() => {
     if (showAgentSelector && agents.length === 0) {
@@ -456,11 +461,14 @@ const ChatUI: React.FC<ChatUIProps> = ({
       // Clear all messages
       setMessages([]);
 
+      // Clear A2A context ID
+      a2aContextIdRef.current = undefined;
+
       // Add system message to show the reset
       const systemMessage: SystemMessage = {
         id: generateMessageId(),
         type: 'system',
-        content: 'Message history cleared',
+        content: 'Message history and A2A context cleared',
         timestamp: new Date(),
         command: '/reset',
       };
@@ -607,8 +615,17 @@ const ChatUI: React.FC<ChatUIProps> = ({
       const fullResponse = await chatClientRef.current.sendMessage(
         target.id,
         apiMessages,
-        chatConfig,
+        {...chatConfig, a2aContextId: a2aContextIdRef.current},
         (chunk: string, toolCalls?: ToolCall[], arkMetadata?: ArkMetadata) => {
+          // Extract A2A context ID from first response
+          // Chat TUI always queries a single target, so contextId is in responses[0]
+          if (
+            arkMetadata?.completedQuery?.status?.responses?.[0]?.a2a?.contextId
+          ) {
+            a2aContextIdRef.current =
+              arkMetadata.completedQuery.status.responses[0].a2a.contextId;
+          }
+
           // Update message progressively as chunks arrive
           setMessages((prev) => {
             const newMessages = [...prev];

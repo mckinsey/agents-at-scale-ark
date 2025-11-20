@@ -59,7 +59,18 @@ spec:
         type: string
       confidence:
         type: number
-        
+
+  # Header overrides for models and MCP servers (optional)
+  overrides:
+    - headers:
+        - name: X-User-ID
+          value:
+            value: "user123"
+      resourceType: model
+      labelSelector:
+        matchLabels:
+          provider: openai
+
 status:
   # Status conditions indicate agent health and availability
   conditions:
@@ -191,6 +202,36 @@ spec:
     - name: expertise_level
       value: "expert"  # Static value
 ```
+
+### Agent with Overrides
+
+Inject custom headers when interacting with models:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: custom-headers-agent
+spec:
+  prompt: You are a helpful assistant.
+  overrides:
+    - headers:
+        - name: X-User-ID
+          value:
+            valueFrom:
+              secretKeyRef:
+                name: user-session
+                key: user-id
+        - name: X-Request-Context
+          value:
+            value: "production"
+      resourceType: model
+      labelSelector:
+        matchLabels:
+          provider: openai
+```
+
+See [Overrides](/user-guide/overrides) for detailed documentation.
 
 ### Agent with Partial Tools
 ```yaml

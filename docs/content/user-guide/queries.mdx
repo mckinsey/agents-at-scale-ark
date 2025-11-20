@@ -15,6 +15,8 @@ A query is a request to execute a task using an agent or team. It contains:
 - **Target**: Which agent or team should process the request
 - **Output**: The response from the agent or team
 
+Queries support [overrides](/user-guide/overrides) to dynamically inject headers when interacting with models and MCP servers.
+
 ### User Messages
 
 If a `type` is not specified, then the input of a query is a single user message:

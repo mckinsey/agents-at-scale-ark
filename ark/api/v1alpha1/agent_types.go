@@ -79,6 +79,8 @@ type AgentSpec struct {
 	// +kubebuilder:validation:Optional
 	// JSON schema for structured output format
 	OutputSchema *runtime.RawExtension `json:"outputSchema,omitempty"`
+	// +kubebuilder:validation:Optional
+	Overrides []Override `json:"overrides,omitempty"`
 }
 
 type AgentStatus struct {

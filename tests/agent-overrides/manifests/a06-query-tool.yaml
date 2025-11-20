@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: overrides-test-query-tool
+spec:
+  input: echo-headers
+  targets:
+  - type: agent
+    name: overrides-test-agent

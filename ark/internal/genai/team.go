@@ -35,7 +35,7 @@ func (t *Team) FullName() string {
 	return t.Namespace + "/" + t.Name
 }
 
-func (t *Team) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
+func (t *Team) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	if len(t.Members) == 0 {
 		return nil, fmt.Errorf("team %s has no members configured", t.FullName())
 	}
@@ -68,7 +68,8 @@ func (t *Team) Execute(ctx context.Context, userInput Message, history []Message
 		return nil, err
 	}
 
-	return t.executeWithTracking(teamTracker, execFunc, ctx, userInput, history)
+	messages, err := t.executeWithTracking(teamTracker, execFunc, ctx, userInput, history)
+	return &ExecutionResult{Messages: messages}, err
 }
 
 func (t *Team) executeSequential(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
@@ -83,7 +84,6 @@ func (t *Team) executeSequential(ctx context.Context, userInput Message, history
 
 		// Start turn-level telemetry span
 		turnCtx, turnSpan := t.TeamRecorder.StartTurn(ctx, i, member.GetName(), member.GetType())
-		defer turnSpan.End()
 
 		err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, i)
 
@@ -93,14 +93,16 @@ func (t *Team) executeSequential(ctx context.Context, userInput Message, history
 		}
 
 		if err != nil {
+			t.TeamRecorder.RecordError(turnSpan, err)
+			turnSpan.End()
 			if IsTerminateTeam(err) {
 				return newMessages, nil
 			}
-			t.TeamRecorder.RecordError(turnSpan, err)
 			return newMessages, err
 		}
 
 		t.TeamRecorder.RecordSuccess(turnSpan)
+		turnSpan.End()
 	}
 
 	return newMessages, nil
@@ -142,7 +144,6 @@ func (t *Team) executeRoundRobin(ctx context.Context, userInput Message, history
 
 		// Start turn-level telemetry span
 		turnCtx, turnSpan := t.TeamRecorder.StartTurn(ctx, messageCount, member.GetName(), member.GetType())
-		defer turnSpan.End()
 
 		err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, messageCount)
 
@@ -152,10 +153,11 @@ func (t *Team) executeRoundRobin(ctx context.Context, userInput Message, history
 		}
 
 		if err != nil {
+			t.TeamRecorder.RecordError(turnSpan, err)
+			turnSpan.End()
 			if IsTerminateTeam(err) {
 				return newMessages, nil
 			}
-			t.TeamRecorder.RecordError(turnSpan, err)
 
 			// Fail immediately on any genuine error - emit event for visibility in events view
 			t.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "TeamMemberFailed", BaseEvent{
@@ -172,6 +174,7 @@ func (t *Team) executeRoundRobin(ctx context.Context, userInput Message, history
 		}
 
 		t.TeamRecorder.RecordSuccess(turnSpan)
+		turnSpan.End()
 
 		messageCount++                                   // Increment message count
 		memberIndex = (memberIndex + 1) % len(t.Members) // Move to next agent in round-robin
@@ -300,22 +303,24 @@ func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember
 		"strategy":   t.Strategy,
 	})
 
-	memberNewMessages, err := member.Execute(ctx, userInput, *messages, t.memory, t.eventStream)
+	result, err := member.Execute(ctx, userInput, *messages, t.memory, t.eventStream)
 	if err != nil {
 		if IsTerminateTeam(err) {
 			memberTracker.CompleteWithTermination(err.Error())
 		} else {
 			memberTracker.Fail(err)
 		}
-		// Still accumulate messages even on error
-		*messages = append(*messages, memberNewMessages...)
-		*newMessages = append(*newMessages, memberNewMessages...)
+		// Still accumulate messages even on error if result is not nil
+		if result != nil {
+			*messages = append(*messages, result.Messages...)
+			*newMessages = append(*newMessages, result.Messages...)
+		}
 		return err
 	}
 
 	memberTracker.Complete("")
-	*messages = append(*messages, memberNewMessages...)
-	*newMessages = append(*newMessages, memberNewMessages...)
+	*messages = append(*messages, result.Messages...)
+	*newMessages = append(*newMessages, result.Messages...)
 	return nil
 }
 

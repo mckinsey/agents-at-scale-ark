@@ -1,0 +1,285 @@
+---
+title: Overrides
+description: Override headers for models and MCP servers in agents and queries
+---
+
+# Overrides
+
+Overrides allow you to dynamically inject or modify headers when agents or queries interact with models and MCP servers. This is useful for passing user-specific context, authentication tokens, or other runtime information.
+
+## Overview
+
+The overrides feature enables you to:
+
+- Add custom headers to model API requests
+- Add custom headers to MCP server requests
+- Target specific models or MCP servers using label selectors
+- Pass sensitive information from secrets or config maps
+- Configure different headers per agent or query
+
+Overrides are defined in the `spec.overrides` field of Agent and Query resources and share the same schema.
+
+## Structure
+
+Each override consists of:
+
+- **headers**: Array of headers to add or override
+- **resourceType**: Type of resource to target (`model` or `mcpserver`)
+- **labelSelector**: Optional selector to target specific resources by labels
+
+```yaml
+spec:
+  overrides:
+    - headers:
+        - name: X-User-ID
+          value:
+            value: "user123"
+        - name: Authorization
+          value:
+            valueFrom:
+              secretKeyRef:
+                name: user-token
+                key: token
+      resourceType: model
+      labelSelector:
+        matchLabels:
+          provider: openai
+```
+
+## Header Values
+
+Headers support two value sources:
+
+### Direct Values
+
+Provide the value directly in the configuration:
+
+```yaml
+headers:
+  - name: X-Custom-Header
+    value:
+      value: "my-value"
+```
+
+### Referenced Values
+
+Reference values from secrets or config maps:
+
+```yaml
+headers:
+  - name: Authorization
+    value:
+      valueFrom:
+        secretKeyRef:
+          name: api-credentials
+          key: token
+```
+
+```yaml
+headers:
+  - name: X-Config-Value
+    value:
+      valueFrom:
+        configMapKeyRef:
+          name: app-config
+          key: value
+```
+
+## Resource Types
+
+### Model Overrides
+
+Override headers for model API requests:
+
+```yaml
+overrides:
+  - headers:
+      - name: X-Request-ID
+        value:
+          value: "req-12345"
+    resourceType: model
+```
+
+### MCP Server Overrides
+
+Override headers for MCP server requests:
+
+```yaml
+overrides:
+  - headers:
+      - name: X-User-Context
+        value:
+          value: "engineering-team"
+    resourceType: mcpserver
+```
+
+## Label Selectors
+
+Use label selectors to target specific models or MCP servers:
+
+### Match Labels
+
+Target resources with specific labels:
+
+```yaml
+overrides:
+  - headers:
+      - name: X-Team
+        value:
+          value: "data-science"
+    resourceType: model
+    labelSelector:
+      matchLabels:
+        provider: anthropic
+        tier: production
+```
+
+### Match Expressions
+
+Use more complex matching logic:
+
+```yaml
+overrides:
+  - headers:
+      - name: X-Environment
+        value:
+          value: "production"
+    resourceType: model
+    labelSelector:
+      matchExpressions:
+        - key: provider
+          operator: In
+          values:
+            - openai
+            - anthropic
+        - key: tier
+          operator: NotIn
+          values:
+            - development
+```
+
+## Examples
+
+### Agent with User Context
+
+Pass user-specific context to models:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: personalized-agent
+spec:
+  prompt: "You are a helpful assistant."
+  overrides:
+    - headers:
+        - name: X-User-ID
+          value:
+            valueFrom:
+              secretKeyRef:
+                name: user-session
+                key: user-id
+        - name: X-Session-ID
+          value:
+            value: "session-abc123"
+      resourceType: model
+```
+
+### Query with Authentication
+
+Add authentication headers for specific models:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: authenticated-query
+spec:
+  input: "Analyze this data"
+  targets:
+    - type: agent
+      name: data-analyst
+  overrides:
+    - headers:
+        - name: Authorization
+          value:
+            valueFrom:
+              secretKeyRef:
+                name: api-token
+                key: token
+      resourceType: model
+      labelSelector:
+        matchLabels:
+          provider: openai
+```
+
+### Multiple Overrides
+
+Apply different headers to models and MCP servers:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: multi-override-agent
+spec:
+  prompt: "You are a helpful assistant."
+  overrides:
+    - headers:
+        - name: X-Model-Context
+          value:
+            value: "production"
+      resourceType: model
+    - headers:
+        - name: X-MCP-Context
+          value:
+            value: "engineering"
+      resourceType: mcpserver
+      labelSelector:
+        matchLabels:
+          team: engineering
+```
+
+### Conditional Targeting
+
+Apply headers only to specific resources:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: conditional-query
+spec:
+  input: "What's the weather?"
+  targets:
+    - type: agent
+      name: weather-agent
+  overrides:
+    - headers:
+        - name: X-Priority
+          value:
+            value: "high"
+      resourceType: model
+      labelSelector:
+        matchExpressions:
+          - key: tier
+            operator: In
+            values:
+              - premium
+              - enterprise
+```
+
+## Best Practices
+
+1. **Use Secrets for Sensitive Data**: Always store API keys, tokens, and credentials in Kubernetes secrets
+2. **Label Your Resources**: Add labels to models and MCP servers for flexible targeting
+3. **Be Specific with Selectors**: Use label selectors to avoid unintended header application
+4. **Document Header Usage**: Comment your override configurations to explain their purpose
+5. **Test Overrides**: Verify that headers are correctly applied using query logs or debugging
+
+## Related Resources
+
+- [Agents](/user-guide/agents) - Learn about configuring agents
+- [Queries](/user-guide/queries) - Learn about creating queries
+- [Models](/user-guide/models) - Learn about model configuration
+- [Tools](/user-guide/tools) - Learn about MCP servers and tools

@@ -99,6 +99,23 @@ cd services/vnext-ui/    # UI service
 make build         # Build Docker image
 ```
 
+# Marketplace
+
+Ark has a separate marketplace repository for community-contributed services and components:
+
+**Repository**: https://github.com/mckinsey/agents-at-scale-marketplace
+
+The marketplace includes observability platforms (Phoenix, Langfuse) and other optional services. Services can be deployed using DevSpace or Helm as dependencies of your Ark installation.
+
+Example usage in `devspace.yaml`:
+```yaml
+dependencies:
+  phoenix:
+    git: https://github.com/mckinsey/agents-at-scale-marketplace
+    tag: v0.1.1
+    subPath: services/phoenix
+```
+
 ## CLI Tools
 ```bash
 cd tools/ark-cli/  # Ark CLI (Node.js)

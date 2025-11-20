@@ -99,7 +99,7 @@ runs:
     - name: Run Query
       shell: bash
       run: |
-        ark query model/default "Hello, please confirm you received this test message"
+        ark query model/default "Hello, please confirm you received this test message" -o yaml
 
     - name: Uninstall Ark
       shell: bash

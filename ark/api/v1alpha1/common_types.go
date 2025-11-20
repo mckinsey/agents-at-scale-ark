@@ -82,6 +82,16 @@ type Header struct {
 	Value HeaderValue `json:"value"`
 }
 
+type Override struct {
+	// +kubebuilder:validation:Required
+	Headers []Header `json:"headers"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=model;mcpserver
+	ResourceType string `json:"resourceType"`
+	// +kubebuilder:validation:Optional
+	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"`
+}
+
 type ExpressionRule struct {
 	// Name identifies the rule
 	// +kubebuilder:validation:Required

@@ -8,7 +8,10 @@ import {
   Shrink,
   X,
 } from 'lucide-react';
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import type {
+  ChatCompletionChunk,
+  ChatCompletionMessageParam,
+} from 'openai/resources/chat/completions';
 import { useEffect, useRef, useState } from 'react';
 
 import { ChatMessage } from '@/components/chat/chat-message';
@@ -50,7 +53,6 @@ export default function FloatingChat({
   const [viewMode, setViewMode] = useState<'text' | 'markdown'>('markdown');
   const [sessionId] = useState(() => `session-${Date.now()}`);
   const inputRef = useRef<HTMLInputElement>(null);
-  const stopPollingRef = useRef<(() => void) | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -61,13 +63,6 @@ export default function FloatingChat({
   useEffect(() => {
     // Focus input when chat opens
     setTimeout(() => inputRef.current?.focus(), 100);
-
-    // Cleanup: stop polling when component unmounts
-    return () => {
-      if (stopPollingRef.current) {
-        stopPollingRef.current();
-      }
-    };
   }, []);
 
   useEffect(() => {
@@ -81,50 +76,6 @@ export default function FloatingChat({
     // Scroll to bottom when messages change
     setTimeout(scrollToBottom, 100);
   }, [chatMessages]);
-
-  const pollQueryStatus = async (queryName: string) => {
-    let pollingStopped = false;
-    stopPollingRef.current = () => {
-      pollingStopped = true;
-    };
-
-    while (!pollingStopped) {
-      try {
-        const result = await chatService.getQueryResult(queryName);
-
-        // Check if terminal state with response
-        if (result.terminal) {
-          let content = '';
-
-          if (result.status === 'done' && result.response) {
-            content = result.response;
-          } else if (result.status === 'error') {
-            content = result.response || 'Query failed';
-          } else if (result.status === 'unknown') {
-            content = 'Query status unknown';
-          }
-
-          setChatMessages(prev => [...prev, { role: 'assistant', content }]);
-
-          pollingStopped = true;
-          break;
-        }
-      } catch (err) {
-        console.error('Error polling query status:', err);
-
-        setChatMessages(prev => [
-          ...prev,
-          { role: 'assistant', content: 'Error while processing query' },
-        ]);
-
-        pollingStopped = true;
-      }
-
-      if (!pollingStopped) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-    }
-  };
 
   const buildChatMessages = (
     messages: ChatCompletionMessageParam[],
@@ -150,13 +101,36 @@ export default function FloatingChat({
 
     try {
       const messageArray = buildChatMessages(chatMessages, userMessage);
-      const query = await chatService.submitChatQuery(
+
+      // Add empty assistant message that will be updated with streamed content
+      const assistantMessageIndex = chatMessages.length + 1; // +1 for user message already added
+      setChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+
+      let accumulatedContent = '';
+
+      for await (const chunk of chatService.streamChatResponse(
         messageArray,
         type,
         name,
         sessionId,
-      );
-      await pollQueryStatus(query.name);
+      )) {
+        // Extract content from the chunk (OpenAI format)
+        const typedChunk = chunk as unknown as ChatCompletionChunk;
+        const delta = typedChunk?.choices?.[0]?.delta;
+        if (delta?.content) {
+          accumulatedContent += delta.content;
+
+          // Update the assistant message with accumulated content
+          setChatMessages(prev => {
+            const updated = [...prev];
+            updated[assistantMessageIndex] = {
+              role: 'assistant',
+              content: accumulatedContent,
+            };
+            return updated;
+          });
+        }
+      }
     } catch (err) {
       console.error('Error sending message:', err);
       let errorMessage = 'Failed to send message';
@@ -351,7 +325,8 @@ export default function FloatingChat({
             onClick={handleSendMessage}
             disabled={!currentMessage.trim() || isProcessing}
             size="sm"
-            variant="default">
+            variant="default"
+            aria-label="Send message">
             <Send className="h-4 w-4" />
           </Button>
         </div>

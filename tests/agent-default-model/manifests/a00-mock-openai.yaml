@@ -8,7 +8,7 @@ spec:
     app: mock-openai
   ports:
   - port: 80
-    targetPort: 8080
+    targetPort: 6556
 ---
 apiVersion: v1
 kind: Pod
@@ -19,12 +19,12 @@ metadata:
 spec:
   containers:
   - name: mock-llm
-    image: ghcr.io/dwmkerr/mock-llm:0.1.8
+    image: ghcr.io/dwmkerr/mock-llm:0.1.22
     ports:
-    - containerPort: 8080
+    - containerPort: 6556
     readinessProbe:
       httpGet:
         path: /health
-        port: 8080
+        port: 6556
       initialDelaySeconds: 2
       periodSeconds: 5

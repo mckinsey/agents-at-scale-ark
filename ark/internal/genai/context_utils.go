@@ -7,9 +7,10 @@ import (
 type contextKey string
 
 const (
-	queryIDKey   contextKey = "queryId"
-	sessionIDKey contextKey = "sessionId"
-	queryNameKey contextKey = "queryName"
+	queryIDKey      contextKey = "queryId"
+	sessionIDKey    contextKey = "sessionId"
+	queryNameKey    contextKey = "queryName"
+	a2aContextIDKey contextKey = "a2aContextId"
 	// QueryContextKey is used to pass the Query resource through context to agents
 	QueryContextKey contextKey = "queryContext"
 	// Execution metadata keys for streaming
@@ -46,6 +47,15 @@ func getSessionID(ctx context.Context) string {
 	return ""
 }
 
+func getQueryName(ctx context.Context) string {
+	if val := ctx.Value(queryNameKey); val != nil {
+		if queryName, ok := val.(string); ok {
+			return queryName
+		}
+	}
+	return ""
+}
+
 // WithExecutionMetadata adds execution metadata to context for streaming
 func WithExecutionMetadata(ctx context.Context, metadata map[string]interface{}) context.Context {
 	// Avoid nested context in loop by accumulating in temporary variable
@@ -56,7 +66,7 @@ func WithExecutionMetadata(ctx context.Context, metadata map[string]interface{})
 			tmpCtx = context.WithValue(tmpCtx, targetKey, value) //nolint:fatcontext // accumulating context values
 		case "team":
 			tmpCtx = context.WithValue(tmpCtx, teamKey, value)
-		case "agent":
+		case MemberTypeAgent:
 			tmpCtx = context.WithValue(tmpCtx, agentKey, value)
 		case "model":
 			tmpCtx = context.WithValue(tmpCtx, modelKey, value)
@@ -83,4 +93,17 @@ func GetExecutionMetadata(ctx context.Context) map[string]interface{} {
 	}
 
 	return metadata
+}
+
+func WithA2AContextID(ctx context.Context, contextID string) context.Context {
+	return context.WithValue(ctx, a2aContextIDKey, contextID)
+}
+
+func GetA2AContextID(ctx context.Context) string {
+	if val := ctx.Value(a2aContextIDKey); val != nil {
+		if contextID, ok := val.(string); ok {
+			return contextID
+		}
+	}
+	return ""
 }

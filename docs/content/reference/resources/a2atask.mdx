@@ -1,0 +1,251 @@
+---
+title: A2ATask
+description: Agent-to-Agent protocol tasks for external agent execution
+---
+# A2ATask
+
+A2ATask represents tasks executed by external agents through the Agent-to-Agent (A2A) protocol. These tasks enable ARK to integrate with external agent frameworks and provide structured task execution with progress tracking.
+
+A2ATasks are created automatically by the ARK controller when queries target agents hosted via A2A servers. They provide a bridge between ARK's native query system and external agent implementations.
+
+## Example YAML
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: A2ATask
+metadata:
+  name: task-example-12345
+  namespace: default
+spec:
+  queryRef:
+    name: weather-query
+    namespace: default
+  taskId: "task-12345"
+  contextId: "context-67890"
+  input: "What is the weather like in New York today?"
+  parameters:
+    location: "New York"
+    format: "detailed"
+  priority: 0
+  timeout: "5m"
+status:
+  phase: "running"
+  assignedAgent:
+    name: "langchain-weather-agent"
+    namespace: "default"
+  startTime: "2025-01-15T10:30:00Z"
+  task:
+    id: "task-12345"
+    sessionId: "context-67890"
+    status:
+      state: "working"
+      timestamp: "2025-01-15T10:32:30Z"
+    artifacts:
+      - artifactId: "weather-data-001"
+        name: "Weather Report"
+        description: "Current weather conditions for New York City"
+        parts:
+          - kind: "text"
+            text: "Current temperature: 72°F, Humidity: 65%, Wind: 8 mph"
+          - kind: "file"
+            uri: "https://api.weather.com/v1/reports/nyc-20250115.json"
+            mimeType: "application/json"
+        metadata:
+          location: "New York, NY"
+          source: "WeatherAPI"
+          timestamp: "2025-01-15T10:32:00Z"
+    history:
+      - messageId: "msg-001"
+        role: "user"
+        parts:
+          - kind: "text"
+            text: "What is the weather like in New York today?"
+      - messageId: "msg-002"
+        role: "agent"
+        parts:
+          - kind: "text"
+            text: "I'll check the current weather conditions for New York..."
+      - messageId: "msg-003"
+        role: "agent"
+        parts:
+          - kind: "text"
+            text: "The current weather in New York is 72°F with sunny conditions."
+```
+
+## Specification Fields
+
+### Spec
+
+- **queryRef** (required, Ark): Reference to the originating Query resource. The Query's `status.a2a.taskId` field references this A2ATask.
+  - **name**: Name of the Query resource
+  - **namespace**: Namespace of the Query resource (optional)
+  - **responseTarget**: Target name to match against query responses (optional)
+- **taskId** (required, A2A protocol): Unique identifier for the task
+- **contextId** (optional, A2A protocol): Context or session identifier for grouped tasks. Matches the Query's `status.a2a.contextId` field.
+- **input** (optional, A2A protocol): Input text or prompt for the task
+- **parameters** (optional, A2A protocol): Key-value parameters for task execution
+- **priority** (optional, A2A protocol): Task priority (default: 0)
+- **timeout** (optional, Ark): Maximum execution time (default: "5m")
+
+### Status
+
+- **phase** (Ark): Current task phase derived from A2A protocol state
+  - `pending`: Task created but not yet assigned
+  - `assigned`: Task assigned to an agent
+  - `running`: Task is actively being executed
+  - `completed`: Task execution finished successfully
+  - `failed`: Task execution failed
+  - `cancelled`: Task was cancelled
+- **assignedAgent** (Ark): Reference to the agent executing the task
+- **startTime** (Ark): When task execution began, set from A2A protocol timestamp
+- **completionTime** (Ark): When task execution finished, set from A2A protocol timestamp
+- **error** (Ark): Error message if task failed
+- **task** (A2A protocol): Full A2A protocol task structure with execution details
+  - **id** (A2A protocol): Task identifier
+  - **sessionId** (A2A protocol): Session or context identifier
+  - **artifacts** (A2A protocol): Array of task artifacts produced during execution, each with artifactId
+  - **history** (A2A protocol): Complete message history, each message includes messageId from A2A protocol for deduplication
+  - **status** (A2A protocol): Current task status with state and timestamps
+
+## A2A Protocol Integration
+
+A2ATasks implement the Agent-to-Agent protocol specification, providing structured communication between ARK and external agent frameworks.
+
+### Task Parts
+
+Content is structured using typed parts:
+
+- **text**: Plain text content
+- **file**: File references with URI or embedded bytes
+- **data**: Structured data content
+
+### Message History
+
+Tasks maintain a complete history of interactions:
+
+- **user**: Messages from the user or system
+- **agent**: Responses from the executing agent
+- **system**: System-generated messages
+
+### Artifacts
+
+Artifacts represent structured outputs produced by agents during task execution. Each artifact contains multiple parts and metadata describing the content.
+
+#### Artifact Structure
+
+```yaml
+artifacts:
+  - artifactId: "weather-report-001"          # Required: Unique artifact identifier
+    name: "NYC Weather Report"               # Optional: Human-readable name
+    description: "Current weather conditions for New York City"  # Optional: Artifact description
+    parts:                                   # Required: Array of content parts
+      - kind: "text"                        # Part type: text, file, or data
+        text: "Temperature: 72°F, Conditions: Sunny"
+      - kind: "file"
+        uri: "https://weather.example.com/report.json"
+        mimeType: "application/json"
+      - kind: "data"
+        data: "eyJkYXRhIjoiYmFzZTY0In0="      # Base64-encoded binary data
+        mimeType: "application/octet-stream"
+    metadata:                               # Optional: Additional key-value metadata
+      category: "weather"
+      timestamp: "2025-01-15T10:35:00Z"
+```
+
+#### Artifact Fields
+
+- **artifactId** (required): Unique identifier for the artifact within the task
+- **name** (optional): Human-readable name for the artifact
+- **description** (optional): Detailed description of the artifact content
+- **parts** (required): Array of content parts that make up the artifact
+- **metadata** (optional): Additional key-value pairs for artifact classification
+
+#### Part Types
+
+Each artifact part specifies its content type:
+
+- **text**: Plain text content stored in the `text` field
+- **file**: File references with either:
+  - `uri`: External file location
+  - `data`: Base64-encoded file content
+  - `mimeType`: File content type (optional)
+- **data**: Raw binary data encoded in base64 format
+
+#### Use Cases
+
+Artifacts enable agents to produce structured outputs such as:
+
+- **Reports**: Generated documents, summaries, or analysis results
+- **Files**: Created or modified files (code, configurations, documents)
+- **Data**: Structured datasets, API responses, or computed results
+- **Media**: Images, audio, or video content produced by the agent
+
+## Usage with A2A Servers
+
+A2ATasks work in conjunction with A2AServer resources:
+
+**A2AServer** → **Agent** → **Query** → **A2ATask**
+
+```yaml
+# A2AServer configuration
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: A2AServer
+metadata:
+  name: langchain-agents
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: langchain-service
+        port: "8080"
+        path: "/a2a"
+
+---
+# Agent using A2A server
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: weather-agent
+spec:
+  description: "Weather forecasting via LangChain"
+  executionEngine:
+    type: a2a
+    a2aServerRef:
+      name: langchain-agents
+```
+
+## Task Lifecycle
+
+1. **Creation**: A2ATask created when Query targets A2A-hosted agent
+2. **Assignment**: Task assigned to appropriate A2A server agent
+3. **Execution**: External agent processes the task
+4. **Monitoring**: Progress and status updates tracked in real-time
+5. **Completion**: Final results and artifacts captured in task status
+
+## Key Features
+
+- **Protocol Compliance**: Full A2A protocol implementation
+- **Progress Tracking**: Real-time execution monitoring
+- **Artifact Management**: Structured output handling
+- **History Preservation**: Complete interaction timeline
+- **Error Handling**: Detailed failure information
+- **Timeout Management**: Configurable execution limits
+
+## Status Tracking
+
+Monitor task execution using standard Kubernetes tools:
+
+```bash
+# List all A2A tasks
+kubectl get a2atasks
+
+# Watch task progress
+kubectl get a2atask task-example-12345 -w
+
+# View detailed task status
+kubectl describe a2atask task-example-12345
+```
+
+---
+
+**Next**: Learn about [A2A Servers](/reference/crds#a2a-servers) for hosting external agents.

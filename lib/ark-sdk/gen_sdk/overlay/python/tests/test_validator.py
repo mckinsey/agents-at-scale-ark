@@ -1,8 +1,8 @@
 """Tests for token validator."""
 import unittest
 from unittest.mock import patch, Mock, AsyncMock, MagicMock
-import jwt
-from jwt.exceptions import InvalidTokenError, ExpiredSignatureError, DecodeError
+from jose import jwt
+from jose.exceptions import JWTError, ExpiredSignatureError, JWTClaimsError
 from ark_sdk.auth.validator import TokenValidator
 from ark_sdk.auth.config import AuthConfig
 from ark_sdk.auth.exceptions import (
@@ -29,66 +29,63 @@ class TestTokenValidator(unittest.TestCase):
     def test_init(self):
         """Test TokenValidator initialization."""
         self.assertEqual(self.validator.config, self.config)
-        self.assertIsNone(self.validator._jwks_client)
+        self.assertIsNone(self.validator._jwks_cache)
 
-    @patch('ark_sdk.auth.validator.PyJWKClient')
-    def test_get_jwks_client_success(self, mock_jwks_client_class):
-        """Test successful JWKS client creation."""
-        mock_client = Mock()
-        mock_jwks_client_class.return_value = mock_client
+    @patch('ark_sdk.auth.validator.requests.get')
+    def test_fetch_jwks_success(self, mock_get):
+        """Test successful JWKS fetching."""
+        mock_response = Mock()
+        mock_response.json.return_value = {"keys": [{"kid": "test-key-id", "kty": "RSA"}]}
+        mock_get.return_value = mock_response
         
-        result = self.validator._get_jwks_client()
+        result = self.validator._fetch_jwks()
         
-        self.assertEqual(result, mock_client)
-        mock_jwks_client_class.assert_called_once_with(self.config.jwks_url)
+        self.assertEqual(result, {"keys": [{"kid": "test-key-id", "kty": "RSA"}]})
+        mock_get.assert_called_once_with(self.config.jwks_url, timeout=10)
 
-    @patch('ark_sdk.auth.validator.PyJWKClient')
-    def test_get_jwks_client_no_url(self, mock_jwks_client_class):
-        """Test JWKS client creation with no URL configured."""
+    def test_fetch_jwks_no_url(self):
+        """Test JWKS fetching with no URL configured."""
         config = AuthConfig(jwks_url=None)
         validator = TokenValidator(config)
         
-        result = validator._get_jwks_client()
+        with self.assertRaises(TokenValidationError) as context:
+            validator._fetch_jwks()
         
-        self.assertIsNone(result)
-        mock_jwks_client_class.assert_not_called()
+        self.assertIn("JWKS URL not configured", str(context.exception))
 
-    @patch('ark_sdk.auth.validator.PyJWKClient')
-    def test_get_jwks_client_caching(self, mock_jwks_client_class):
-        """Test that JWKS client is cached after first creation."""
-        mock_client = Mock()
-        mock_jwks_client_class.return_value = mock_client
+    @patch('ark_sdk.auth.validator.requests.get')
+    def test_get_jwks_caching(self, mock_get):
+        """Test that JWKS is cached after first fetch."""
+        mock_response = Mock()
+        mock_response.json.return_value = {"keys": [{"kid": "test-key-id"}]}
+        mock_get.return_value = mock_response
         
         # First call
-        result1 = self.validator._get_jwks_client()
+        result1 = self.validator._get_jwks()
         # Second call
-        result2 = self.validator._get_jwks_client()
+        result2 = self.validator._get_jwks()
         
         self.assertEqual(result1, result2)
-        self.assertEqual(result1, mock_client)
         # Should only be called once due to caching
-        mock_jwks_client_class.assert_called_once()
+        mock_get.assert_called_once()
 
-    @patch('ark_sdk.auth.validator.PyJWKClient')
-    def test_get_jwks_client_exception(self, mock_jwks_client_class):
-        """Test JWKS client creation with exception."""
-        mock_jwks_client_class.side_effect = Exception("JWKS client creation failed")
+    @patch('ark_sdk.auth.validator.requests.get')
+    def test_fetch_jwks_exception(self, mock_get):
+        """Test JWKS fetching with exception."""
+        import requests
+        mock_get.side_effect = requests.RequestException("Network error")
         
         with self.assertRaises(TokenValidationError) as context:
-            self.validator._get_jwks_client()
+            self.validator._fetch_jwks()
         
-        self.assertIn("Failed to create JWKS client", str(context.exception))
+        self.assertIn("Failed to fetch JWKS", str(context.exception))
 
-    @patch('ark_sdk.auth.validator.decode')
-    @patch('ark_sdk.auth.validator.PyJWKClient')
-    def test_validate_token_success(self, mock_jwks_client_class, mock_decode):
+    @patch('ark_sdk.auth.validator.jwt.decode')
+    @patch.object(TokenValidator, '_get_signing_key')
+    def test_validate_token_success(self, mock_get_signing_key, mock_decode):
         """Test successful token validation."""
         # Setup mocks
-        mock_jwks_client = Mock()
-        mock_signing_key = Mock()
-        mock_signing_key.key = "test-key"
-        mock_jwks_client.get_signing_key_from_jwt.return_value = mock_signing_key
-        mock_jwks_client_class.return_value = mock_jwks_client
+        mock_get_signing_key.return_value = "test-key"
         
         mock_payload = {"sub": "test-user", "aud": "okta-audience", "iss": "https://test.okta.com/oauth2/default"}
         mock_decode.return_value = mock_payload
@@ -98,7 +95,7 @@ class TestTokenValidator(unittest.TestCase):
         
         # Verify
         self.assertEqual(result, mock_payload)
-        mock_jwks_client.get_signing_key_from_jwt.assert_called_once_with("test-token")
+        mock_get_signing_key.assert_called_once_with("test-token")
         mock_decode.assert_called_once_with(
             "test-token",
             "test-key",
@@ -113,9 +110,9 @@ class TestTokenValidator(unittest.TestCase):
             }
         )
 
-    @patch('ark_sdk.auth.validator.decode')
-    @patch('ark_sdk.auth.validator.PyJWKClient')
-    def test_validate_token_fallback_to_jwt_config(self, mock_jwks_client_class, mock_decode):
+    @patch('ark_sdk.auth.validator.jwt.decode')
+    @patch.object(TokenValidator, '_get_signing_key')
+    def test_validate_token_fallback_to_jwt_config(self, mock_get_signing_key, mock_decode):
         """Test token validation falls back to JWT config when OKTA is not set."""
         # Setup config without audience/issuer values
         config = AuthConfig(
@@ -127,11 +124,7 @@ class TestTokenValidator(unittest.TestCase):
         validator = TokenValidator(config)
         
         # Setup mocks
-        mock_jwks_client = Mock()
-        mock_signing_key = Mock()
-        mock_signing_key.key = "test-key"
-        mock_jwks_client.get_signing_key_from_jwt.return_value = mock_signing_key
-        mock_jwks_client_class.return_value = mock_jwks_client
+        mock_get_signing_key.return_value = "test-key"
         
         mock_payload = {"sub": "test-user"}
         mock_decode.return_value = mock_payload
@@ -154,9 +147,9 @@ class TestTokenValidator(unittest.TestCase):
             }
         )
 
-    @patch('ark_sdk.auth.validator.decode')
-    @patch('ark_sdk.auth.validator.PyJWKClient')
-    def test_validate_token_no_audience_issuer(self, mock_jwks_client_class, mock_decode):
+    @patch('ark_sdk.auth.validator.jwt.decode')
+    @patch.object(TokenValidator, '_get_signing_key')
+    def test_validate_token_no_audience_issuer(self, mock_get_signing_key, mock_decode):
         """Test token validation when no audience/issuer is configured."""
         # Setup config without audience/issuer
         config = AuthConfig(
@@ -168,11 +161,7 @@ class TestTokenValidator(unittest.TestCase):
         validator = TokenValidator(config)
         
         # Setup mocks
-        mock_jwks_client = Mock()
-        mock_signing_key = Mock()
-        mock_signing_key.key = "test-key"
-        mock_jwks_client.get_signing_key_from_jwt.return_value = mock_signing_key
-        mock_jwks_client_class.return_value = mock_jwks_client
+        mock_get_signing_key.return_value = "test-key"
         
         mock_payload = {"sub": "test-user"}
         mock_decode.return_value = mock_payload
@@ -195,28 +184,25 @@ class TestTokenValidator(unittest.TestCase):
             }
         )
 
-    @patch('ark_sdk.auth.validator.PyJWKClient')
-    def test_validate_token_no_jwks_url(self, mock_jwks_client_class):
+    @patch.object(TokenValidator, '_get_signing_key')
+    def test_validate_token_no_jwks_url(self, mock_get_signing_key):
         """Test token validation with no JWKS URL configured."""
         config = AuthConfig(jwks_url=None)
         validator = TokenValidator(config)
+        
+        mock_get_signing_key.side_effect = TokenValidationError("JWKS URL not configured")
         
         with self.assertRaises(TokenValidationError) as context:
             validator.validate_token("test-token")
         
         self.assertIn("JWKS URL not configured", str(context.exception))
 
-    @patch('ark_sdk.auth.validator.decode')
-    @patch('ark_sdk.auth.validator.PyJWKClient')
-    def test_validate_token_expired_signature(self, mock_jwks_client_class, mock_decode):
+    @patch('ark_sdk.auth.validator.jwt.decode')
+    @patch.object(TokenValidator, '_get_signing_key')
+    def test_validate_token_expired_signature(self, mock_get_signing_key, mock_decode):
         """Test token validation with expired signature."""
         # Setup mocks
-        mock_jwks_client = Mock()
-        mock_signing_key = Mock()
-        mock_signing_key.key = "test-key"
-        mock_jwks_client.get_signing_key_from_jwt.return_value = mock_signing_key
-        mock_jwks_client_class.return_value = mock_jwks_client
-        
+        mock_get_signing_key.return_value = "test-key"
         mock_decode.side_effect = ExpiredSignatureError("Token has expired")
         
         with self.assertRaises(ExpiredTokenError) as context:
@@ -224,53 +210,38 @@ class TestTokenValidator(unittest.TestCase):
         
         self.assertIn("Token has expired", str(context.exception))
 
-    @patch('ark_sdk.auth.validator.decode')
-    @patch('ark_sdk.auth.validator.PyJWKClient')
-    def test_validate_token_invalid_token(self, mock_jwks_client_class, mock_decode):
+    @patch('ark_sdk.auth.validator.jwt.decode')
+    @patch.object(TokenValidator, '_get_signing_key')
+    def test_validate_token_invalid_token(self, mock_get_signing_key, mock_decode):
         """Test token validation with invalid token."""
         # Setup mocks
-        mock_jwks_client = Mock()
-        mock_signing_key = Mock()
-        mock_signing_key.key = "test-key"
-        mock_jwks_client.get_signing_key_from_jwt.return_value = mock_signing_key
-        mock_jwks_client_class.return_value = mock_jwks_client
-        
-        mock_decode.side_effect = InvalidTokenError("Invalid token")
+        mock_get_signing_key.return_value = "test-key"
+        mock_decode.side_effect = JWTError("Invalid token")
         
         with self.assertRaises(InvalidTokenError) as context:
             self.validator.validate_token("invalid-token")
         
         self.assertIn("Invalid token", str(context.exception))
 
-    @patch('ark_sdk.auth.validator.decode')
-    @patch('ark_sdk.auth.validator.PyJWKClient')
-    def test_validate_token_decode_error(self, mock_jwks_client_class, mock_decode):
-        """Test token validation with decode error."""
+    @patch('ark_sdk.auth.validator.jwt.decode')
+    @patch.object(TokenValidator, '_get_signing_key')
+    def test_validate_token_decode_error(self, mock_get_signing_key, mock_decode):
+        """Test token validation with JWT claims error."""
         # Setup mocks
-        mock_jwks_client = Mock()
-        mock_signing_key = Mock()
-        mock_signing_key.key = "test-key"
-        mock_jwks_client.get_signing_key_from_jwt.return_value = mock_signing_key
-        mock_jwks_client_class.return_value = mock_jwks_client
-        
-        mock_decode.side_effect = DecodeError("Token could not be decoded")
+        mock_get_signing_key.return_value = "test-key"
+        mock_decode.side_effect = JWTClaimsError("Invalid claims")
         
         with self.assertRaises(InvalidTokenError) as context:
             self.validator.validate_token("malformed-token")
         
-        self.assertIn("Token could not be decoded", str(context.exception))
+        self.assertIn("Invalid token claims", str(context.exception))
 
-    @patch('ark_sdk.auth.validator.decode')
-    @patch('ark_sdk.auth.validator.PyJWKClient')
-    def test_validate_token_general_exception(self, mock_jwks_client_class, mock_decode):
+    @patch('ark_sdk.auth.validator.jwt.decode')
+    @patch.object(TokenValidator, '_get_signing_key')
+    def test_validate_token_general_exception(self, mock_get_signing_key, mock_decode):
         """Test token validation with general exception."""
         # Setup mocks
-        mock_jwks_client = Mock()
-        mock_signing_key = Mock()
-        mock_signing_key.key = "test-key"
-        mock_jwks_client.get_signing_key_from_jwt.return_value = mock_signing_key
-        mock_jwks_client_class.return_value = mock_jwks_client
-        
+        mock_get_signing_key.return_value = "test-key"
         mock_decode.side_effect = Exception("Unexpected error")
         
         with self.assertRaises(TokenValidationError) as context:
@@ -278,28 +249,26 @@ class TestTokenValidator(unittest.TestCase):
         
         self.assertIn("Token validation failed", str(context.exception))
 
-    @patch('ark_sdk.auth.validator.PyJWKClient')
-    def test_validate_token_jwks_client_exception(self, mock_jwks_client_class):
-        """Test token validation when JWKS client raises exception."""
-        mock_jwks_client_class.side_effect = Exception("JWKS client error")
+    @patch.object(TokenValidator, '_get_signing_key')
+    def test_validate_token_jwks_exception(self, mock_get_signing_key):
+        """Test token validation when JWKS fetching raises exception."""
+        mock_get_signing_key.side_effect = TokenValidationError("Failed to fetch JWKS")
         
         with self.assertRaises(TokenValidationError) as context:
             self.validator.validate_token("test-token")
         
-        self.assertIn("Failed to create JWKS client", str(context.exception))
+        self.assertIn("Failed to fetch JWKS", str(context.exception))
 
-    @patch('ark_sdk.auth.validator.PyJWKClient')
-    def test_validate_token_signing_key_exception(self, mock_jwks_client_class):
+    @patch.object(TokenValidator, '_get_signing_key')
+    def test_validate_token_signing_key_exception(self, mock_get_signing_key):
         """Test token validation when getting signing key raises exception."""
         # Setup mocks
-        mock_jwks_client = Mock()
-        mock_jwks_client.get_signing_key_from_jwt.side_effect = Exception("Signing key error")
-        mock_jwks_client_class.return_value = mock_jwks_client
+        mock_get_signing_key.side_effect = TokenValidationError("Unable to find key")
         
         with self.assertRaises(TokenValidationError) as context:
             self.validator.validate_token("test-token")
         
-        self.assertIn("Token validation failed", str(context.exception))
+        self.assertIn("Unable to find key", str(context.exception))
 
     def test_validate_token_config_values(self):
         """Test that config values are set correctly."""

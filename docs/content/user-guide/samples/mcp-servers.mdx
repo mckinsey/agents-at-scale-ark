@@ -24,7 +24,7 @@ kubectl apply -f -
 
 This will substitute your GitHub PAT into the configuration and deploy the remote MCP server.
 
-The [`samples/mcp/github-external-mcp-server-sample.yaml`](https://github.com/McK-Internal/qbaf/blob/main/samples/mcp/github-external-mcp-server-sample.yaml) file contains:
+The [`samples/mcp/github-external-mcp-server-sample.yaml`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/samples/mcp/github-external-mcp-server-sample.yaml) file contains:
 
 - A `Secret` GitHub Personal Access Token 
 - An `MCPServer` that routes authenticated requests to the externally hosted Official GitHub MCP Server (at `https://api.githubcopilot.com/mcp/`)
@@ -61,7 +61,7 @@ The `Query` object will show all tool calls made.
 
 This sample shows how to create an MCP server, the example we'll use is the official [GitHub MCP Server](https://github.com/github/github). Note that like many MCP servers, this only supports `stdio` when running locally - but we'll work around this with a simple trick - using a proxy such as [`mcp-proxy`](https://github.com/sparfenyuk/mcp-proxy).
 
-Now deploy the [`samples/mcp/github-stdio-mcp-server-sample.yaml`](https://github.com/McK-Internal/qbaf/blob/main/samples/mcp/github-stdio-mcp-server-sample.yaml) resources:
+Now deploy the [`samples/mcp/github-stdio-mcp-server-sample.yaml`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/samples/mcp/github-stdio-mcp-server-sample.yaml) resources:
 
 ```bash
 export GITHUB_PAT="your_token"
@@ -145,7 +145,7 @@ You can quickly check the server with the MCP Inspector:
 npx @modelcontextprotocol/inspector http://localhost:30001/mcp
 ```
 
-Now deploy a new `Agent` that has access to the `MCPServer`. The [`samples/mcp/local-mcp-server.yaml`](https://github.com/McK-Internal/qbaf/blob/main/samples/mcp/local-mcp-server.yaml) file can be used:
+Now deploy a new `Agent` that has access to the `MCPServer`. The [`samples/mcp/local-mcp-server.yaml`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/samples/mcp/local-mcp-server.yaml) file can be used:
 
 ```bash
 kubectl apply -f samples/mcp/local-mcp-server.yaml

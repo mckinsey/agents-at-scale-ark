@@ -56,12 +56,15 @@ def model_to_detail_response(model: dict) -> ModelDetailResponse:
     # Process config to preserve value/valueFrom structure
     raw_config = spec.get("config", {})
     processed_config = {}
-    
+
     for provider, provider_config in raw_config.items():
         if isinstance(provider_config, dict):
             processed_config[provider] = {}
             for key, value_obj in provider_config.items():
-                if isinstance(value_obj, dict):
+                if key == "headers" and isinstance(value_obj, list):
+                    # Preserve headers as a list structure, not wrapped in value
+                    processed_config[provider][key] = value_obj
+                elif isinstance(value_obj, dict):
                     # Preserve the full structure for both value and valueFrom
                     processed_config[provider][key] = value_obj
                 else:
@@ -125,16 +128,20 @@ async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Quer
         if body.config.openai and body.type == "openai":
             config_dict["openai"] = {}
             # Convert to the expected format with value/valueFrom
-            for field, value in body.config.openai.model_dump(by_alias=True).items():
-                if isinstance(value, dict) and ("value" in value or "valueFrom" in value):
+            for field, value in body.config.openai.model_dump(by_alias=True, exclude_none=True).items():
+                if field == "headers" and value is not None:
+                    config_dict["openai"][field] = value
+                elif isinstance(value, dict) and ("value" in value or "valueFrom" in value):
                     config_dict["openai"][field] = value
                 elif isinstance(value, str):
                     config_dict["openai"][field] = {"value": value}
                     
         elif body.config.azure and body.type == "azure":
             config_dict["azure"] = {}
-            for field, value in body.config.azure.model_dump(by_alias=True).items():
-                if isinstance(value, dict) and ("value" in value or "valueFrom" in value):
+            for field, value in body.config.azure.model_dump(by_alias=True, exclude_none=True).items():
+                if field == "headers" and value is not None:
+                    config_dict["azure"][field] = value
+                elif isinstance(value, dict) and ("value" in value or "valueFrom" in value):
                     config_dict["azure"][field] = value
                 elif isinstance(value, str):
                     config_dict["azure"][field] = {"value": value}
@@ -226,16 +233,20 @@ async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Opt
             
             if body.config.openai and model_type == "openai":
                 config_dict["openai"] = {}
-                for field, value in body.config.openai.model_dump(by_alias=True).items():
-                    if isinstance(value, dict) and ("value" in value or "valueFrom" in value):
+                for field, value in body.config.openai.model_dump(by_alias=True, exclude_none=True).items():
+                    if field == "headers" and value is not None:
+                        config_dict["openai"][field] = value
+                    elif isinstance(value, dict) and ("value" in value or "valueFrom" in value):
                         config_dict["openai"][field] = value
                     elif isinstance(value, str):
                         config_dict["openai"][field] = {"value": value}
                         
             elif body.config.azure and model_type == "azure":
                 config_dict["azure"] = {}
-                for field, value in body.config.azure.model_dump(by_alias=True).items():
-                    if isinstance(value, dict) and ("value" in value or "valueFrom" in value):
+                for field, value in body.config.azure.model_dump(by_alias=True, exclude_none=True).items():
+                    if field == "headers" and value is not None:
+                        config_dict["azure"][field] = value
+                    elif isinstance(value, dict) and ("value" in value or "valueFrom" in value):
                         config_dict["azure"][field] = value
                     elif isinstance(value, str):
                         config_dict["azure"][field] = {"value": value}

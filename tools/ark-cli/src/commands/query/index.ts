@@ -11,21 +11,42 @@ export function createQueryCommand(_: ArkConfig): Command {
     .description('Execute a single query against a model or agent')
     .argument('<target>', 'Query target (e.g., model/default, agent/my-agent)')
     .argument('<message>', 'Message to send')
-    .action(async (target: string, message: string) => {
-      const parsed = parseTarget(target);
-      if (!parsed) {
-        console.error(
-          chalk.red('Invalid target format. Use: model/name or agent/name etc')
-        );
-        process.exit(ExitCodes.CliError);
-      }
+    .option(
+      '-o, --output <format>',
+      'Output format: yaml, json, or name (prints only resource name)'
+    )
+    .option(
+      '--session-id <sessionId>',
+      'Session ID to associate with the query for conversation continuity'
+    )
+    .action(
+      async (
+        target: string,
+        message: string,
+        options: {
+          output?: string;
+          sessionId?: string;
+        }
+      ) => {
+        const parsed = parseTarget(target);
+        if (!parsed) {
+          console.error(
+            chalk.red(
+              'Invalid target format. Use: model/name or agent/name etc'
+            )
+          );
+          process.exit(ExitCodes.CliError);
+        }
 
-      await executeQuery({
-        targetType: parsed.type,
-        targetName: parsed.name,
-        message,
-      });
-    });
+        await executeQuery({
+          targetType: parsed.type,
+          targetName: parsed.name,
+          message,
+          outputFormat: options.output,
+          sessionId: options.sessionId,
+        });
+      }
+    );
 
   return queryCommand;
 }

@@ -372,6 +372,51 @@
         "doc",
         "bug"
       ]
+    },
+    {
+      "login": "marcklingen",
+      "name": "Marc Klingen",
+      "avatar_url": "https://avatars.githubusercontent.com/u/2834609?v=4",
+      "profile": "http://marcklingen.com",
+      "contributions": [
+        "doc",
+        "code"
+      ]
+    },
+    {
+      "login": "MariusM",
+      "name": "Marius Mateescu",
+      "avatar_url": "https://avatars.githubusercontent.com/u/409931?v=4",
+      "profile": "https://github.com/MariusM",
+      "contributions": [
+        "code",
+        "doc",
+        "bug"
+      ]
+    },
+    {
+      "login": "lucaromagnoli",
+      "name": "Luca Romagnoli",
+      "avatar_url": "https://avatars.githubusercontent.com/u/38782977?v=4",
+      "profile": "https://github.com/lucaromagnoli",
+      "contributions": [
+        "code",
+        "test",
+        "doc"
+      ]
+    },
+    {
+      "login": "iliassjabali",
+      "name": "Iliass JABALI",
+      "avatar_url": "https://avatars.githubusercontent.com/u/42617188?v=4",
+      "profile": "http://linkedin.com/in/iliassjabali/",
+      "contributions": [
+        "code",
+        "test",
+        "doc",
+        "bug",
+        "ideas"
+      ]
     }
   ],
   "contributorsPerLine": 7,

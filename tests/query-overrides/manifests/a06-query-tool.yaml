@@ -1,0 +1,30 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: query-overrides-test-query-tool
+spec:
+  input: echo-headers
+  targets:
+  - type: agent
+    name: query-overrides-test-agent
+  overrides:
+  - resourceType: mcpserver
+    labelSelector:
+      matchLabels:
+        mcp-query-override-target: "true"
+    headers:
+    - name: X-Query-Override-MCP-Static
+      value:
+        value: "query-mcp-static-value"
+    - name: X-Query-Override-MCP-Secret
+      value:
+        valueFrom:
+          secretKeyRef:
+            name: query-override-headers
+            key: mcp-auth-token
+    - name: X-Query-Override-MCP-Configmap
+      value:
+        valueFrom:
+          configMapKeyRef:
+            name: query-override-headers
+            key: mcp-consumer-group

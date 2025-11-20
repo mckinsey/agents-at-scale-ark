@@ -166,6 +166,70 @@ devspace dev
 ark agent query langchain-weather-agent "What's the weather in Chicago?"
 ```
 
+## Timeout Configuration
+
+ARK provides flexible timeout configuration for A2A agent execution through multiple layers:
+
+### Timeout Behavior
+
+A2A execution automatically respects query timeouts:
+
+1. **Query.spec.timeout** (default: 5 minutes) sets the overall time limit
+2. **A2AServer.spec.timeout** (optional) can reduce the timeout for specific A2A servers
+
+The A2A execution uses Go's context deadline, so remaining time is automatically tracked as the query progresses.
+
+### Configuring A2AServer Timeout
+
+```yaml
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: A2AServer
+metadata:
+  name: my-a2a-server
+spec:
+  address: "http://my-a2a-server:8000"
+  timeout: "2m"  # Limit this server's calls to 2 minutes
+```
+
+### Example Usage
+
+```yaml
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: A2AServer
+metadata:
+  name: my-agent
+spec:
+  address:
+    value: "http://my-agent.default.svc.cluster.local:80"
+  description: "My A2A agent"
+  timeout: "10m"  # 10 minutes timeout
+```
+
+### Configuring Query Timeout
+
+Override the timeout for specific queries:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: long-running-query
+spec:
+  input:
+  - content: "Complex analysis task"
+    role: user
+  targets:
+  - type: agent
+    name: my-agent
+  timeout: "30m"  # 30 minutes for this specific query
+```
+
+### Best Practices
+
+- **Set Query timeout appropriately**: Configure query timeout based on expected total execution time
+- **Monitor context deadlines**: HTTP clients automatically respect context deadlines with buffer
+- **Use A2AServer timeout for documentation**: Set A2AServer timeout to document expected response times
+- **Monitor and adjust**: Use ARK telemetry to identify queries that timeout and adjust accordingly
 ## Further Reading
 
 - The [`A2AServer`](/reference/resources/a2aserver) specification has the full details of the `A2AServer` resource

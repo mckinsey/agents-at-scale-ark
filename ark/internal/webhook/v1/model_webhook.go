@@ -125,6 +125,13 @@ func (v *ModelValidator) validateAzureConfig(ctx context.Context, model *arkv1al
 		return fmt.Errorf("failed to resolve Azure BaseURL: %w", err)
 	}
 
+	for i, header := range model.Spec.Config.Azure.Headers {
+		contextPrefix := fmt.Sprintf("spec.config.azure.headers[%d]", i)
+		if err := ValidateHeader(header, contextPrefix); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -144,6 +151,13 @@ func (v *ModelValidator) validateOpenAIConfig(ctx context.Context, model *arkv1a
 	if err != nil {
 		modellog.Error(err, "Failed to resolve OpenAI BaseURL", "model", model.GetName())
 		return fmt.Errorf("failed to resolve OpenAI BaseURL: %w", err)
+	}
+
+	for i, header := range model.Spec.Config.OpenAI.Headers {
+		contextPrefix := fmt.Sprintf("spec.config.openai.headers[%d]", i)
+		if err := ValidateHeader(header, contextPrefix); err != nil {
+			return err
+		}
 	}
 
 	return nil

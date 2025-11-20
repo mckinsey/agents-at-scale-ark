@@ -58,6 +58,64 @@ describe('createQueryCommand', () => {
       targetType: 'model',
       targetName: 'default',
       message: 'Hello world',
+      outputFormat: undefined,
+    });
+  });
+
+  it('should pass output format option to executeQuery', async () => {
+    mockParseTarget.mockReturnValue({
+      type: 'model',
+      name: 'default',
+    });
+
+    mockExecuteQuery.mockResolvedValue(undefined);
+
+    const command = createQueryCommand({} as any);
+
+    await command.parseAsync([
+      'node',
+      'test',
+      'model/default',
+      'Hello world',
+      '-o',
+      'json',
+    ]);
+
+    expect(mockParseTarget).toHaveBeenCalledWith('model/default');
+    expect(mockExecuteQuery).toHaveBeenCalledWith({
+      targetType: 'model',
+      targetName: 'default',
+      message: 'Hello world',
+      outputFormat: 'json',
+    });
+  });
+
+  it('should pass session-id option to executeQuery', async () => {
+    mockParseTarget.mockReturnValue({
+      type: 'agent',
+      name: 'test-agent',
+    });
+
+    mockExecuteQuery.mockResolvedValue(undefined);
+
+    const command = createQueryCommand({} as any);
+
+    await command.parseAsync([
+      'node',
+      'test',
+      'agent/test-agent',
+      'Hello world',
+      '--session-id',
+      'my-session-123',
+    ]);
+
+    expect(mockParseTarget).toHaveBeenCalledWith('agent/test-agent');
+    expect(mockExecuteQuery).toHaveBeenCalledWith({
+      targetType: 'agent',
+      targetName: 'test-agent',
+      message: 'Hello world',
+      outputFormat: undefined,
+      sessionId: 'my-session-123',
     });
   });
 

@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: researcher
+spec:
+  modelRef:
+    name: test-model
+  prompt: "You are a research specialist. Gather and compile relevant information on the given topic."
+

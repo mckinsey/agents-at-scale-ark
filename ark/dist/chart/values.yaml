@@ -103,3 +103,10 @@ containerRegistry:
   username: ""
   password: ""
   email: ""
+
+# Custom CA certificate configuration
+# When set, mounts a CA certificate from a Kubernetes secret to trust custom certificate authorities
+customCACert:
+  enabled: false
+  secretName: "custom-ca-cert"
+  key: "ca.crt"

@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: writer
+spec:
+  modelRef:
+    name: test-model
+  prompt: "You are a technical writer. Create a final report based on the analyzed data."
+

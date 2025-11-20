@@ -31,7 +31,8 @@ spec:
           metadata:
             name: test-graph-team
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
         timeout: 180s
 
   - name: validate-graph-execution

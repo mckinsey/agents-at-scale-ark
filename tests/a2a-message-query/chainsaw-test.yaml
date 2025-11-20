@@ -11,7 +11,7 @@ spec:
     - script:
         content: |
           helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.16 \
+            --version 0.1.22 \
             --namespace $NAMESPACE \
             --values mock-llm-values.yaml
         env:
@@ -45,7 +45,8 @@ spec:
           metadata:
             name: echo-test-query
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     # Verify response contains the echoed message
     - assert:
         timeout: 1s
