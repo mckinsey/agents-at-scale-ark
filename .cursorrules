@@ -33,3 +33,13 @@ When creating pull requests, use this simple format:
 ```
 
 DO NOT include "Test plan" sections in PR descriptions.
+
+## Personal/Experimental Files
+**MANDATORY**: All personal documentation, experimental tests, and working artifacts must be placed in the `vibe_artifacts/` directory at the repository root.
+
+- ✅ Correct: `vibe_artifacts/QUERY_DEEP_DIVE.md`
+- ✅ Correct: `vibe_artifacts/a2a-streaming-error-test/`
+- ❌ Incorrect: `QUERY_DEEP_DIVE.md` (root level)
+- ❌ Incorrect: `tests/a2a-streaming-error-test/` (unless it's an official test)
+
+The `vibe_artifacts/` folder is gitignored and is intended for personal working documents, experimental code, and temporary artifacts that don't need to be committed to the repository.

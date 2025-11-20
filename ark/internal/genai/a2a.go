@@ -76,7 +76,6 @@ func DiscoverA2AAgentsWithRecorder(ctx context.Context, k8sClient client.Client,
 		}
 
 		lastErr = err
-		logf.FromContext(ctx).Info("Failed to discover agent using endpoint, trying next", "url", endpoint.url, "version", endpoint.version, "error", err)
 	}
 
 	return nil, fmt.Errorf("failed to discover agent from all endpoints (%s, %s): %w",
