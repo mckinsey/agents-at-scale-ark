@@ -20,6 +20,15 @@ argo-workflows:
         memory: "512Mi"
         cpu: "500m"
 
+    # Workflow defaults - applied to all workflows
+    workflowDefaults:
+      spec:
+        # Reference the artifact repository ConfigMap when Minio is enabled
+        # This is populated by the artifact-repository.yaml template
+        artifactRepositoryRef:
+          configMap: artifact-repositories
+          key: default
+
   # Server configuration
   server:
     # Development mode, disable auth.
@@ -53,15 +62,6 @@ argo-workflows:
       limits:
         memory: "256Mi"
         cpu: "200m"
-
-  # Workflow defaults - applied to all workflows
-  workflowDefaults:
-    spec:
-      # Reference the artifact repository ConfigMap when Minio is enabled
-      # This is populated by the artifact-repository.yaml template
-      artifactRepositoryRef:
-        configMap: artifact-repositories
-        key: default
 
 # Additional role bindings. For development, we are generally installing argo
 # into an existing tenant namespace (such as 'default'). So we can bind the
