@@ -404,7 +404,7 @@ jobs:
           ARK_QUICKSTART_MODEL_TYPE: 'openai'
           ARK_QUICKSTART_MODEL_VERSION: 'gpt-5'
           ARK_QUICKSTART_BASE_URL: 'http://mock-llm.default.svc.cluster.local/v1'
-          ARK_QUICKSTART_API_KEY: 'xxxxxxxxxxx'
+          ARK_QUICKSTART_API_KEY: 'mock-api-key'
           ARK_QUICKSTART_CONTROLLER_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller
           ARK_QUICKSTART_CONTROLLER_TAG: ${{ github.sha }}
           CACHE_ARGS: --cache-from type=registry,ref=${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache --cache-to type=registry,ref=${{ needs.setup-container-cache-registry.outputs.ci-cache-registry|| format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache,mode=max
