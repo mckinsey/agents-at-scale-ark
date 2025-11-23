@@ -14,7 +14,7 @@ interface Contributor {
     }[]
 }
 
-function getContributors(): Contributor[] {
+export function getContributors(): Contributor[] {
     try {
         const possiblePaths = [
             join(process.cwd(), 'public', 'contributors.html'),
