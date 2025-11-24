@@ -170,16 +170,6 @@ const defaultArkServices: ServiceCollection = {
     k8sDevDeploymentName: 'mcp-filesystem-devspace',
   },
 
-  'agents-at-scale': {
-    name: 'agents-at-scale',
-    helmReleaseName: 'agents-at-scale',
-    description: 'Agents @ Scale Platform',
-    enabled: false,
-    category: 'service',
-    chartPath: 'oci://ghcr.io/mck-private/qb-fm-labs-legacyx/charts/legacyx',
-    installArgs: [],
-  },
-
   'localhost-gateway': {
     name: 'localhost-gateway',
     helmReleaseName: 'localhost-gateway',
