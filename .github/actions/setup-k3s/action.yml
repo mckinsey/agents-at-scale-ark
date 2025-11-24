@@ -202,8 +202,13 @@ runs:
     - name: Setup Mock LLM
       id: setup-mock-llm
       run: |
-        echo "::group::Install Mock LLM" 
-        kubectl apply -f samples/mocks/mock-llm.yaml
+        echo "::group::Install Mock LLM"
+        if [[ "${{ inputs.mock-llm-enabled }}" == "true" ]]; then
+          kubectl apply -f samples/mocks/mock-llm.yaml
+        else
+          echo "Mock LLM disabled, skipping installation"
+        fi
+        echo "::endgroup::"
       shell: bash
 
     - name: Wait for calico, coredns, metrics server, traefik
