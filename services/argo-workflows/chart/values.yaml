@@ -20,6 +20,15 @@ argo-workflows:
         memory: "512Mi"
         cpu: "500m"
 
+    # Workflow defaults - applied to all workflows
+    workflowDefaults:
+      spec:
+        # Reference the artifact repository ConfigMap when Minio is enabled
+        # This is populated by the artifact-repository.yaml template
+        artifactRepositoryRef:
+          configMap: artifact-repositories
+          key: default
+
   # Server configuration
   server:
     # Development mode, disable auth.
