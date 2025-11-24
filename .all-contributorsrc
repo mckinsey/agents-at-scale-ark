@@ -417,6 +417,16 @@
         "bug",
         "ideas"
       ]
+    },
+    {
+      "login": "louisdecharson",
+      "name": "Louis de Charsonville",
+      "avatar_url": "https://avatars.githubusercontent.com/u/3234544?v=4",
+      "profile": "http://louisdecharson.github.io",
+      "contributions": [
+        "doc",
+        "bug"
+      ]
     }
   ],
   "contributorsPerLine": 7,
