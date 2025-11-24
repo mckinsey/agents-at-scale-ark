@@ -50,7 +50,7 @@ func (c *TargetCommand) Run() error {
 	}
 
 	targets := []arkv1alpha1.QueryTarget{{Type: c.TargetType, Name: c.TargetName}}
-	query, err := createQuery(c.Input, targets, c.Namespace, params, c.SessionId)
+	query, err := createQuery(c.Input, targets, c.Namespace, params, c.SessionId, &c.Timeout)
 	if err != nil {
 		return fmt.Errorf("failed to create query: %v", err)
 	}
@@ -123,7 +123,7 @@ func (c *TriggerCommand) Run() error {
 		params = parsedParams
 	}
 
-	newQuery, err := createTriggerQuery(existingQuery, queryInput, params, c.SessionId)
+	newQuery, err := createTriggerQuery(existingQuery, queryInput, params, c.SessionId, &c.Timeout)
 	if err != nil {
 		return fmt.Errorf("failed to create triggered query: %v", err)
 	}

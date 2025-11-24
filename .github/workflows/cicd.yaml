@@ -375,7 +375,7 @@ jobs:
           metrics-enabled: false
           traefik-enabled: false
           k3s-channel: latest
-          mock-llm-enabled: false
+          mock-llm-enabled: true
 
       - name: Install fark, ark CLI and configure kubectl
         run: |
@@ -401,11 +401,10 @@ jobs:
       - name: Run quickstart
         env:
           ARK_QUICKSTART_PROMPT_YES: 1
-          ARK_QUICKSTART_MODEL_TYPE: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL && 'azure' || 'openai' }}
-          ARK_QUICKSTART_MODEL_VERSION: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL && 'gpt-4.1-mini' || 'gpt-4' }}
-          ARK_QUICKSTART_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL != '' &&  secrets.CICD_AZURE_OPENAI_BASE_URL || 'http://mock-llm.default.svc.cluster.local/v1' }}
-          ARK_QUICKSTART_API_VERSION: 2024-12-01-preview
-          ARK_QUICKSTART_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY != '' && secrets.CICD_AZURE_OPENAI_KEY || 'xxxxxxxxxxx' }}
+          ARK_QUICKSTART_MODEL_TYPE: 'openai'
+          ARK_QUICKSTART_MODEL_VERSION: 'gpt-5'
+          ARK_QUICKSTART_BASE_URL: 'http://mock-llm.default.svc.cluster.local/v1'
+          ARK_QUICKSTART_API_KEY: 'mock-api-key'
           ARK_QUICKSTART_CONTROLLER_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller
           ARK_QUICKSTART_CONTROLLER_TAG: ${{ github.sha }}
           CACHE_ARGS: --cache-from type=registry,ref=${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache --cache-to type=registry,ref=${{ needs.setup-container-cache-registry.outputs.ci-cache-registry|| format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache,mode=max
@@ -415,11 +414,11 @@ jobs:
           echo "ARK_QUICKSTART_MODEL_TYPE=$ARK_QUICKSTART_MODEL_TYPE"
           echo "ARK_QUICKSTART_MODEL_VERSION=$ARK_QUICKSTART_MODEL_VERSION"
           echo "ARK_QUICKSTART_BASE_URL=$ARK_QUICKSTART_BASE_URL"
-          echo "ARK_QUICKSTART_API_VERSION=$ARK_QUICKSTART_API_VERSION"
           echo "ARK_QUICKSTART_API_KEY=***"
           make quickstart-force
       - name: Test end-to-end query
         run: |
+          kubectl describe agent sample-agent
           # Test the soon-to-be-deprecated query script (still used in quickstart).
           ./scripts/query.sh agent/sample-agent "confirm you have read this message"
           # Test fark.

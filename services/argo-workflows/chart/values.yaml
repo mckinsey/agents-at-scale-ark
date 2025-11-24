@@ -3,7 +3,7 @@
 argo-workflows:
   # Single namespace mode. Suitable for development and does not require
   # cluster roles.
-  singleNamespace: true
+  singleNamespace: false
 
   # Controller configuration
   controller:
@@ -19,6 +19,15 @@ argo-workflows:
       limits:
         memory: "512Mi"
         cpu: "500m"
+
+    # Workflow defaults - applied to all workflows
+    workflowDefaults:
+      spec:
+        # Reference the artifact repository ConfigMap when Minio is enabled
+        # This is populated by the artifact-repository.yaml template
+        artifactRepositoryRef:
+          configMap: artifact-repositories
+          key: default
 
   # Server configuration
   server:
