@@ -191,16 +191,23 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 
 func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client, agentTool arkv1alpha1.AgentTool, namespace string, telemetryProvider telemetry.Provider) error {
 	tool := &arkv1alpha1.Tool{}
-	key := client.ObjectKey{Name: agentTool.Name, Namespace: namespace}
+
+	toolName := agentTool.GetToolCRDName()
+
+	key := client.ObjectKey{Name: toolName, Namespace: namespace}
 
 	if err := k8sClient.Get(ctx, key, tool); err != nil {
-		return fmt.Errorf("failed to get tool %s: %w", agentTool.Name, err)
+		return fmt.Errorf("failed to get tool %s: %w", toolName, err)
 	}
 
 	toolDef := CreateToolFromCRD(tool)
+	// Set the exposed name (the name the agent will see)
+	// For partial tools, this is agentTool.Name, not the actual CRD name
+	toolDef.Name = agentTool.Name
+
 	executor, err := CreateToolExecutor(ctx, k8sClient, tool, namespace, r.mcpPool, r.mcpSettings, telemetryProvider)
 	if err != nil {
-		return fmt.Errorf("failed to create executor for tool %s: %w", agentTool.Name, err)
+		return fmt.Errorf("failed to create executor for tool %s: %w", toolDef.Name, err)
 	}
 
 	// Override description if provided at the agent tool level
@@ -208,12 +215,12 @@ func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client
 		toolDef.Description = agentTool.Description
 	}
 
-	// Apply partial modifications (name override and parameter injection)
+	// Apply partial modifications (parameter injection only - name already set above)
 	if agentTool.Partial != nil {
 		var err error
 		toolDef, err = CreatePartialToolDefinition(toolDef, agentTool.Partial)
 		if err != nil {
-			return fmt.Errorf("failed to create partial tool definition for tool %s: %w", agentTool.Name, err)
+			return fmt.Errorf("failed to create partial tool definition for tool %s: %w", toolName, err)
 		}
 		// Wrap with PartialToolExecutor if partial is specified
 		executor = &PartialToolExecutor{

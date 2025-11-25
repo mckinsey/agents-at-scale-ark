@@ -29,9 +29,19 @@ spec:
       - assert:
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Agent
+            metadata:
+              name: partial-tool-agent
+            status:
+              (conditions[?type == 'Available']):
+              - status: 'True'
+      - assert:
+          resource:
+            apiVersion: ark.mckinsey.com/v1alpha1
             kind: Query
             metadata:
               name: partial-tool-query
             status:
               (conditions[?type == 'Completed']):
               - status: 'True'
+      

@@ -44,6 +44,16 @@ type AgentTool struct {
 	Partial *ToolPartial `json:"partial,omitempty"`
 }
 
+// GetToolCRDName returns the actual Tool CRD name to lookup in Kubernetes.
+// For partial tools, this is the partial.name (the actual tool CRD).
+// Otherwise, it's the tool name (exposed name and CRD name are the same).
+func (a *AgentTool) GetToolCRDName() string {
+	if a.Partial != nil && a.Partial.Name != "" {
+		return a.Partial.Name
+	}
+	return a.Name
+}
+
 type AgentModelRef struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
