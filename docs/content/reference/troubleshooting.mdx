@@ -175,7 +175,7 @@ Then upgrade your installation:
 helm upgrade ark-controller ./ark/dist/chart -f values.yaml -n ark-system
 ```
 
-**Option 2: Use Ignore Policy (Workaround)**
+**Option 2: Use Ignore Policy (Workaround - But its not advised and just for local development. In the codebase we should maintain `Fail` only)**
 
 If increasing the timeout doesn't work, you can temporarily set the failure policy to `Ignore`:
 
@@ -186,7 +186,7 @@ webhook:
   failurePolicy: Ignore  # Allows resources to be created even if webhook fails
 ```
 
-**Note:** Using `Ignore` means webhook validation will be bypassed, which is not recommended for production but can be used as a temporary workaround for development.
+**Note:** Using `Ignore` means webhook validation will be bypassed, which is not recommended for production but can be used as a temporary workaround for local development.
 
 #### Access Denied When Installing agents-at-scale
 

@@ -84,11 +84,6 @@ metrics:
 webhook:
   enable: true
   timeoutSeconds: 30
-  # Failure policy:
-  # - Fail (default, recommended for production): Reject resource if webhook fails
-  # - Ignore (workaround only): Allow resource even if webhook fails (NOT for production!)
-  # - For production — use a cloud cluster or minikube, and set failurePolicy: Fail
-  # - For development — if we use kind clusters, and set failurePolicy: Ignore for local development
   failurePolicy: Fail
 
 # [PROMETHEUS]: To enable a ServiceMonitor to export metrics to Prometheus set true
