@@ -203,6 +203,12 @@ func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client
 		return fmt.Errorf("failed to create executor for tool %s: %w", agentTool.Name, err)
 	}
 
+	// Override description if provided at the agent tool level
+	if agentTool.Description != "" {
+		toolDef.Description = agentTool.Description
+	}
+
+	// Apply partial modifications (name override and parameter injection)
 	if agentTool.Partial != nil {
 		var err error
 		toolDef, err = CreatePartialToolDefinition(toolDef, agentTool.Partial)
