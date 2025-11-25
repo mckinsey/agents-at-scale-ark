@@ -9,9 +9,9 @@ spec:
   tools:
     - type: custom
       name: get-coordinates
+      description: Pre-fills city parameter for New York
       partial:
         name: get-coordinates-of-ny
-        description: Pre-fills city parameter for New York
         parameters:
           - name: city
             value: New York
