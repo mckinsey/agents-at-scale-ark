@@ -9,8 +9,8 @@ global:
 app:
   name: ark-cluster-memory
   image:
-    repository: ark-cluster-memory
-    tag: latest
+    repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-cluster-memory
+    # tag defaults to .Chart.AppVersion if not specified
     pullPolicy: IfNotPresent
   
   # Resource configuration
