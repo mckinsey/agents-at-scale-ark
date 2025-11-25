@@ -212,6 +212,7 @@ jobs:
           - ark-api
           - ark-dashboard
           - ark-mcp
+          - ark-cluster-memory
           - mcp-filesystem
           - localhost-gateway
           - ark-tenant

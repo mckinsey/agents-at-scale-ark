@@ -404,6 +404,29 @@
         "test",
         "doc"
       ]
+    },
+    {
+      "login": "iliassjabali",
+      "name": "Iliass JABALI",
+      "avatar_url": "https://avatars.githubusercontent.com/u/42617188?v=4",
+      "profile": "http://linkedin.com/in/iliassjabali/",
+      "contributions": [
+        "code",
+        "test",
+        "doc",
+        "bug",
+        "ideas"
+      ]
+    },
+    {
+      "login": "louisdecharson",
+      "name": "Louis de Charsonville",
+      "avatar_url": "https://avatars.githubusercontent.com/u/3234544?v=4",
+      "profile": "http://louisdecharson.github.io",
+      "contributions": [
+        "doc",
+        "bug"
+      ]
     }
   ],
   "contributorsPerLine": 7,

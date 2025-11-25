@@ -999,13 +999,13 @@ Generated with ARK CLI generator`;
         {desc: 'Add YAML files to agents/, teams/, queries/ directories'},
         {desc: 'Copy model configurations from samples/models/'},
         {desc: 'Edit .env file to set your API keys'},
-        {desc: 'Deploy your project', cmd: 'make quickstart'}
+        {desc: 'Deploy your project', cmd: 'devspace dev'}
       );
     } else if (config.selectedModels && config.selectedModels !== 'none') {
       steps.push(
         {desc: 'Edit .env file to set your API keys'},
         {desc: 'Load environment variables', cmd: 'source .env'},
-        {desc: 'Deploy your project', cmd: 'make quickstart'},
+        {desc: 'Deploy your project', cmd: 'devspace dev'},
         {
           desc: 'Test your deployment',
           cmd: `kubectl get query sample-team-query -w --namespace ${config.namespace}`,
@@ -1015,7 +1015,7 @@ Generated with ARK CLI generator`;
       steps.push(
         {desc: 'Copy model configurations from samples/models/'},
         {desc: 'Edit .env file to set your API keys'},
-        {desc: 'Deploy your project', cmd: 'make quickstart'}
+        {desc: 'Deploy your project', cmd: 'devspace dev'}
       );
     }
 

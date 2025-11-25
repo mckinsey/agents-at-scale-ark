@@ -18,6 +18,7 @@ export interface QueryOptions {
   watchTimeout?: string;
   verbose?: boolean;
   outputFormat?: string;
+  sessionId?: string;
 }
 
 interface StreamState {
@@ -53,10 +54,13 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
     let headerShown = false;
     let firstOutput = true;
 
+    // Get sessionId from option or environment variable
+    const sessionId = options.sessionId || process.env.ARK_SESSION_ID;
+
     await chatClient.sendMessage(
       targetId,
       messages,
-      {streamingEnabled: true},
+      {streamingEnabled: true, sessionId},
       (chunk: string, toolCalls?: ToolCall[], arkMetadata?: ArkMetadata) => {
         if (firstOutput) {
           spinner.stop();
@@ -142,9 +146,12 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
     metadata: {
       name: queryName,
     },
-    spec: {
-      input: options.message,
-      ...(options.timeout && {timeout: options.timeout}),
+      spec: {
+        input: options.message,
+        ...(options.timeout && {timeout: options.timeout}),
+        ...((options.sessionId || process.env.ARK_SESSION_ID) && {
+          sessionId: options.sessionId || process.env.ARK_SESSION_ID,
+        }),
       targets: [
         {
           type: options.targetType,
