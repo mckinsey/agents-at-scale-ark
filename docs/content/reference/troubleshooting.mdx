@@ -184,7 +184,45 @@ If your GitHub token is missing the read:packages scope or is not authorized for
 **Workaround**
 
 Work in progress to fix the issue. Until it is fixed, you can install agents-at-scale manually by following the setup steps in its repository 'agent-at-scale-user'
+
 This ensures the required charts are locally available for Ark to reference.
+
+#### 'Field is immutable' errors on install or upgrade
+
+When installing or upgrading Ark, if a previous installation exists that was _not_ installed with the expected installation name, or has only been partly uninstalled then you may encounter errors like:
+
+```
+# Example 1:
+Error: rendered manifests contain a resource that already exists. Unable to continue with install: Deployment
+  "ark-controller-manager" in namespace "ark-system" exists and cannot be imported into the current release
+
+# Example 2:
+The CustomResourceDefinition "agents.ark.ai" is invalid:
+  spec.versions[0].schema.openAPIV3Schema.properties[spec].properties[model].properties[name]: Invalid value: "string":
+   field is immutable
+
+# Example 3:
+Error: UPGRADE FAILED: cannot patch "ark-controller-manager" with kind Deployment: Deployment.apps "ark-controller-manager" is invalid: spec.selector: Invalid value:
+  v1.LabelSelector{MatchLabels:map[string]string{"app.kubernetes.io/name":"ark", "app.kubernetes.io/instance":"ark"}, MatchExpressions:[]v1.LabelSelectorRequirement(nil)}: field is immutable
+```
+
+The fastest way to deal with this is to re-install on a clean cluster (e.g. for local development by doing `minikube delete && minikube start`).
+
+To manually clean up, you must find and delete all `ark` resources:
+
+```bash
+# Search for any ark installation then uninstall it.
+helm list --all-namespaces | grep ark
+# for each namespace/install found:
+# helm uninstall -n <namespace found> -n <installation_found>
+
+# Go through each ark resources (agent, query etc)...
+ kubectl get crds | grep ark | awk '{print $1}' | while read crd; do
+   # Delete all the resources and its definition.
+   kubectl delete $crd --all --all-namespaces --force --grace-period=0 --timeout=10s || true
+   kubectl delete crd $crd --force --grace-period=0
+done
+```
 
 ## Agents
 

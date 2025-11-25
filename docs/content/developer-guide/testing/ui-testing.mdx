@@ -1,0 +1,72 @@
+---
+title: UI Testing with Playwright
+description: Automated browser testing for ARK Dashboard using pytest and Playwright
+---
+
+# UI Testing with Playwright
+
+ARK uses [Playwright](https://playwright.dev/) with pytest to automate browser-based testing of the ARK Dashboard.
+
+## Installation
+
+### Install Dependencies
+
+```bash
+cd tests/pytest
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+playwright install
+```
+
+## Setup
+
+Configure environment variables and ensure dashboard is accessible:
+
+```bash
+cd tests/pytest/ui-tests
+cp env.example .env
+# Edit .env with your API keys
+
+# Start dashboard (pick one):
+kubectl port-forward svc/ark-dashboard 8080:3000 -n default
+# OR
+devspace dev
+```
+
+## Running Tests
+
+```bash
+cd tests/pytest
+
+# Run all tests
+pytest ui-tests/ -sv
+
+# Run specific test file
+pytest ui-tests/tests/test_ark_dashboard.py -sv
+
+# Run in headed mode (see browser)
+pytest ui-tests/ -sv --headed
+
+# Run with specific browser
+pytest ui-tests/ -sv --browser firefox
+
+# Generate HTML report
+pytest ui-tests/ -sv --html=report.html --self-contained-html
+```
+
+## Test Structure
+
+Tests use the Page Object Model pattern:
+
+```
+ui-tests/
+├── pages/           # Page objects
+│   ├── dashboard_page.py
+│   ├── agents_page.py
+│   └── models_page.py
+└── tests/           # Test files
+    ├── test_ark_dashboard.py
+    ├── test_ark_agents.py
+    └── test_ark_models.py
+```

@@ -153,6 +153,8 @@ export interface Query {
   spec?: {
     input: string;
     targets: QueryTarget[];
+    sessionId?: string;
+    timeout?: string;
   };
   status?: QueryStatus;
 }

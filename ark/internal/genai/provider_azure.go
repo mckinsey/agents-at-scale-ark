@@ -3,6 +3,7 @@ package genai
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -137,7 +138,12 @@ func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []Me
 }
 
 func (ap *AzureProvider) createClient(ctx context.Context) openai.Client {
-	httpClient := common.NewHTTPClientWithLogging(ctx)
+	var httpClient *http.Client
+	if IsProbeContext(ctx) {
+		httpClient = common.NewHTTPClientWithoutTracing()
+	} else {
+		httpClient = common.NewHTTPClientWithLogging(ctx)
+	}
 
 	deploymentURL := fmt.Sprintf("%s/openai/deployments/%s", ap.BaseURL, ap.Model)
 	options := []option.RequestOption{

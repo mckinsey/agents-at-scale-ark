@@ -170,7 +170,7 @@ func handleQueryResourceWithName(config *Config, resourceType ResourceType, w ht
 
 	// Create query targets
 	targets := []arkv1alpha1.QueryTarget{{Type: string(resourceType)[:len(resourceType)-1], Name: req.Name}}
-	query, err := createQuery(req.Input, targets, config.Namespace, req.Parameters, req.SessionId)
+	query, err := createQuery(req.Input, targets, config.Namespace, req.Parameters, req.SessionId, nil)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to create query: %v", err), http.StatusInternalServerError)
 		return
@@ -226,7 +226,7 @@ func handleTriggerQueryWithName(config *Config, w http.ResponseWriter, r *http.R
 	}
 
 	// Create triggered query
-	newQuery, err := createTriggerQuery(existingQuery, input, params, req.SessionId)
+	newQuery, err := createTriggerQuery(existingQuery, input, params, req.SessionId, nil)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to create trigger query: %v", err), http.StatusInternalServerError)
 		return
