@@ -433,6 +433,8 @@ When `watchArgoWorkflows: "true"` is configured, the unified watcher handles:
 ### Purpose
 Reliably consume events from Kafka, persist to PostgreSQL with batch processing, and broadcast to subscribers via multiple protocols. **Core part of Ark**. Replaces ark-cluster-memory service functionality.
 
+**Interface Compatibility**: AER implements the same HTTP API endpoints as ark-cluster-memory (`POST /messages`, `GET /messages`, `/stream/{queryId}`), so the Ark controller's `MemoryInterface` (HTTPMemory) and `EventStreamInterface` implementations continue to work without changes. The controller makes HTTP calls to AER instead of ark-cluster-memory, but the API contract remains identical.
+
 ### Processing Flow
 
 1. **Consume from Kafka**: Poll up to 100 messages or wait 1 second (whichever comes first)
