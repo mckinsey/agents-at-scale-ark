@@ -4,40 +4,37 @@ metadata:
   name: agent-partial-tool
 spec:
   description: Test agent with a tool using partial parameters
+  timeouts:
+    cleanup: 5s
+  forceTerminationGracePeriod: 1s
   steps:
     - name: setup-mock-service
       try:
+        - script:
+            content: |
+              helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+                --version 0.1.22 \
+                --namespace $NAMESPACE \
+                --values mock-llm-values.yaml
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
         - script:
             content: |
               helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
             env:
               - name: NAMESPACE
                 value: ($namespace)
-        - apply:
-            file: manifests/a00-mock-openai.yaml
         - assert:
             resource:
               apiVersion: v1
               kind: Pod
               metadata:
-                name: mock-openai
+                labels:
+                  app.kubernetes.io/name: mock-llm
               status:
                 phase: Running
                 (contains(conditions[?type == 'Ready'].status, 'True')): true
-      catch:
-        - events: {}
-        - describe:
-            apiVersion: v1
-            kind: Pod
-            name: mock-openai
-
-    - name: create-model-and-tool
-      try:
-        - script:
-            content: |
-              envsubst < ./manifests/a02-model-template.yaml | kubectl apply -n $NAMESPACE -f -
-        - apply:
-            file: manifests/a0[3-4]-*.yaml
         - assert:
             resource:
               apiVersion: ark.mckinsey.com/v1alpha1
@@ -48,6 +45,21 @@ spec:
                 conditions:
                   - type: ModelAvailable
                     status: "True"
+      catch:
+        - events: {}
+        - describe:
+            apiVersion: v1
+            kind: Pod
+            selector: app.kubernetes.io/name=mock-llm
+        - describe:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Model
+            name: test-model
+
+    - name: create-tool-and-agent
+      try:
+        - apply:
+            file: manifests/a0[3-4]-*.yaml
         - assert:
             resource:
               apiVersion: ark.mckinsey.com/v1alpha1
@@ -59,10 +71,6 @@ spec:
                   - status: "True"
       catch:
         - events: {}
-        - describe:
-            apiVersion: ark.mckinsey.com/v1alpha1
-            kind: Model
-            name: test-model
         - describe:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Agent
