@@ -17,7 +17,8 @@ webhooks:
         name: ark-webhook-service
         namespace: {{ .Release.Namespace }}
         path: /mutate-ark-mckinsey-com-v1alpha1-agent
-    failurePolicy: Fail
+    failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds | default 10 }}
     sideEffects: None
     admissionReviewVersions:
       - v1
@@ -50,7 +51,8 @@ webhooks:
         name: ark-webhook-service
         namespace: {{ .Release.Namespace }}
         path: /validate-ark-mckinsey-com-v1alpha1-agent
-    failurePolicy: Fail
+    failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds | default 10 }}
     sideEffects: None
     admissionReviewVersions:
       - v1
@@ -70,7 +72,8 @@ webhooks:
         name: ark-webhook-service
         namespace: {{ .Release.Namespace }}
         path: /validate-ark-mckinsey-com-v1alpha1-evaluator
-    failurePolicy: Fail
+    failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds | default 10 }}
     sideEffects: None
     admissionReviewVersions:
       - v1
@@ -90,7 +93,8 @@ webhooks:
         name: ark-webhook-service
         namespace: {{ .Release.Namespace }}
         path: /validate-ark-mckinsey-com-v1alpha1-mcpserver
-    failurePolicy: Fail
+    failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds | default 10 }}
     sideEffects: None
     admissionReviewVersions:
       - v1
@@ -110,7 +114,8 @@ webhooks:
         name: ark-webhook-service
         namespace: {{ .Release.Namespace }}
         path: /validate-ark-mckinsey-com-v1alpha1-model
-    failurePolicy: Fail
+    failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds | default 10 }}
     sideEffects: None
     admissionReviewVersions:
       - v1
@@ -130,7 +135,8 @@ webhooks:
         name: ark-webhook-service
         namespace: {{ .Release.Namespace }}
         path: /validate-ark-mckinsey-com-v1alpha1-query
-    failurePolicy: Fail
+    failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds | default 10 }}
     sideEffects: None
     admissionReviewVersions:
       - v1
@@ -150,7 +156,8 @@ webhooks:
         name: ark-webhook-service
         namespace: {{ .Release.Namespace }}
         path: /validate-ark-mckinsey-com-v1alpha1-team
-    failurePolicy: Fail
+    failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds | default 10 }}
     sideEffects: None
     admissionReviewVersions:
       - v1
@@ -175,7 +182,8 @@ webhooks:
         name: ark-webhook-service
         namespace: {{ .Release.Namespace }}
         path: /validate-ark-mckinsey-com-v1alpha1-tool
-    failurePolicy: Fail
+    failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds | default 10 }}
     sideEffects: None
     admissionReviewVersions:
       - v1
@@ -195,7 +203,8 @@ webhooks:
         name: ark-webhook-service
         namespace: {{ .Release.Namespace }}
         path: /validate-ark-mckinsey-com-v1prealpha1-a2aserver
-    failurePolicy: Fail
+    failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds | default 10 }}
     sideEffects: None
     admissionReviewVersions:
       - v1
@@ -215,7 +224,8 @@ webhooks:
         name: ark-webhook-service
         namespace: {{ .Release.Namespace }}
         path: /validate-ark-mckinsey-com-v1prealpha1-executionengine
-    failurePolicy: Fail
+    failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds | default 10 }}
     sideEffects: None
     admissionReviewVersions:
       - v1

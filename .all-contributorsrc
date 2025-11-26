@@ -427,6 +427,16 @@
         "doc",
         "bug"
       ]
+    },
+    {
+      "login": "carminoplata",
+      "name": "Carmine Sacco",
+      "avatar_url": "https://avatars.githubusercontent.com/u/40350337?v=4",
+      "profile": "https://www.csacco.eu/",
+      "contributions": [
+        "code",
+        "bug"
+      ]
     }
   ],
   "contributorsPerLine": 7,

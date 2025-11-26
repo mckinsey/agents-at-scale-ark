@@ -10,8 +10,8 @@
 * @dwmkerr @cm94242 @Nab-0 @CeliaPrieto @david-gombos
 
 # Significant changes to K8S CRDs.
-/ark/config/crd/ @dwmkerr @cm94242
-/ark/api/ @dwmkerr @cm94242
+/ark/config/crd/ @dwmkerr @cm94242 @Nab-0 @CeliaPrieto @david-gombos
+/ark/api/ @dwmkerr @cm94242 @Nab-0 @CeliaPrieto @david-gombos
 
 # UI - led by @av3n93rz. TLs/PM fallback.
-/services/ark-dashboard/ @av3n93rz @dwmkerr @cm94242 @Nab-0
+/services/ark-dashboard/ @av3n93rz @dwmkerr @cm94242 @Nab-0 @CeliaPrieto @david-gombos

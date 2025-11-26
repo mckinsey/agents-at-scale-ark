@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.45](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.44...v0.1.45) (2025-11-25)
+
+
+### Bug Fixes
+
+* ark cli helm chart version ([#498](https://github.com/mckinsey/agents-at-scale-ark/issues/498)) ([e91c9e4](https://github.com/mckinsey/agents-at-scale-ark/commit/e91c9e47848c580c1e4094b7612d081ace50ae0d))
+* ark-cli shows the correct message when default model is configured  ([81bb2a4](https://github.com/mckinsey/agents-at-scale-ark/commit/81bb2a4cec2b1742ec9146da43ad92cd31aaa221))
+* ark-status doesn't show the right message for default model ([#493](https://github.com/mckinsey/agents-at-scale-ark/issues/493)) ([81bb2a4](https://github.com/mckinsey/agents-at-scale-ark/commit/81bb2a4cec2b1742ec9146da43ad92cd31aaa221))
+* increase webhook timeout and add configurable failure policy for kind clusters ([#492](https://github.com/mckinsey/agents-at-scale-ark/issues/492)) ([53b2d5d](https://github.com/mckinsey/agents-at-scale-ark/commit/53b2d5dcba2afbbe53c361a3dcd572877629c212))
+
 ## [0.1.44](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.43...v0.1.44) (2025-11-24)
 
 
