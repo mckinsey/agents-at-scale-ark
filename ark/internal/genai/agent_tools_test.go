@@ -165,3 +165,49 @@ func TestRegisterToolDescriptionWithPartial(t *testing.T) {
 	require.Equal(t, "Get weather by city name only", definitions[0].Description, "Description should be overridden")
 	require.Equal(t, "weather-forecast", definitions[0].Name, "Name should be overridden by partial")
 }
+
+func TestCreatePartialToolDefinitionPreservesDescription(t *testing.T) {
+	// Test that CreatePartialToolDefinition preserves the tool description
+	originalTool := ToolDefinition{
+		Name:        "original-tool",
+		Description: "Original tool description",
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"city": map[string]any{
+					"type":        "string",
+					"description": "City name",
+				},
+				"units": map[string]any{
+					"type":        "string",
+					"description": "Temperature units",
+				},
+			},
+			"required": []any{"city"},
+		},
+	}
+
+	partial := &arkv1alpha1.ToolPartial{
+		Name: "weather-forecast",
+		Parameters: []arkv1alpha1.ToolFunction{
+			{
+				Name:  "units",
+				Value: "metric",
+			},
+		},
+	}
+
+	result, err := CreatePartialToolDefinition(originalTool, partial)
+	require.NoError(t, err)
+	require.Equal(t, "weather-forecast", result.Name, "Name should be overridden by partial")
+	require.Equal(t, "Original tool description", result.Description, "Description should be preserved from original tool")
+
+	// Verify units parameter was removed from schema
+	props, ok := result.Parameters["properties"].(map[string]any)
+	require.True(t, ok)
+	_, hasUnits := props["units"]
+	require.False(t, hasUnits, "units parameter should be removed from schema")
+	_, hasCity := props["city"]
+	require.True(t, hasCity, "city parameter should remain in schema")
+}
+
