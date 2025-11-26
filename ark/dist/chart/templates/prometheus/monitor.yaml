@@ -31,8 +31,8 @@ spec:
           name: metrics-server-cert
           key: tls.key
         {{- else }}
-        # Secure TLS configuration (self-signed certificates)
-        insecureSkipVerify: false
+        # Development/Test mode (insecure configuration)
+        insecureSkipVerify: true
         {{- end }}
   selector:
     matchLabels:

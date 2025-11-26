@@ -12,11 +12,10 @@ spec:
   privateKey:
     rotationPolicy: Always
   dnsNames:
-  # These DNS names must match the serverName in the Prometheus ServiceMonitor
-  # (config/prometheus/monitor.yaml) to ensure TLS verification succeeds.
-  # The namespace 'ark-system' is set by the kustomization.yaml namespace field.
-  - ark.ark-system.svc
-  - ark.ark-system.svc.cluster.local
+  # SERVICE_NAME and SERVICE_NAMESPACE will be substituted by kustomize
+  # replacements in the config/default/kustomization.yaml file.
+  - SERVICE_NAME.SERVICE_NAMESPACE.svc
+  - SERVICE_NAME.SERVICE_NAMESPACE.svc.cluster.local
   issuerRef:
     kind: Issuer
     name: selfsigned-issuer
