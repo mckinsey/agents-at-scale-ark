@@ -14,8 +14,8 @@ import (
 	"mckinsey.com/ark/internal/annotations"
 )
 
-func createQuery(input string, targets []arkv1alpha1.QueryTarget, namespace string, params []arkv1alpha1.Parameter, sessionId string) (*arkv1alpha1.Query, error) {
-	queryName := fmt.Sprintf("query-%d", time.Now().Unix())
+func createQuery(input string, targets []arkv1alpha1.QueryTarget, namespace string, params []arkv1alpha1.Parameter, sessionId string, timeout *time.Duration) (*arkv1alpha1.Query, error) {
+	queryName := fmt.Sprintf("cli-query-%d", time.Now().Unix())
 
 	spec := &arkv1alpha1.QuerySpec{
 		Input:      runtime.RawExtension{Raw: []byte(input)},
@@ -24,9 +24,21 @@ func createQuery(input string, targets []arkv1alpha1.QueryTarget, namespace stri
 		SessionId:  sessionId,
 	}
 
+	// Set timeout if provided
+	if timeout != nil {
+		spec.Timeout = &metav1.Duration{Duration: *timeout}
+	}
+
+	// Set TTL to 720 hours (30 days) to keep query resource around like other queries
+	spec.TTL = &metav1.Duration{Duration: 720 * time.Hour}
+
 	queryObjectMeta := &metav1.ObjectMeta{
-		Name:      queryName,
-		Namespace: namespace,
+		Name:       queryName,
+		Namespace:  namespace,
+		Finalizers: []string{"ark.mckinsey.com/finalizer"},
+		Annotations: map[string]string{
+			"ark.mckinsey.com/fark-created": "true",
+		},
 	}
 
 	return &arkv1alpha1.Query{
@@ -45,6 +57,7 @@ func submitQuery(config *Config, query *arkv1alpha1.Query) error {
 		return fmt.Errorf("failed to convert query: %v", err)
 	}
 
+	// Create the query with finalizer and annotation already set
 	_, err = config.DynamicClient.Resource(GetGVR(ResourceQuery)).Namespace(query.Namespace).Create(
 		context.TODO(),
 		unstructuredQuery,
@@ -153,8 +166,8 @@ func getSessionId(provided, existing string) string {
 	return existing
 }
 
-func createTriggerQuery(existingQuery *arkv1alpha1.Query, input runtime.RawExtension, params []arkv1alpha1.Parameter, sessionId string) (*arkv1alpha1.Query, error) {
-	queryName := fmt.Sprintf("trigger-%d", time.Now().Unix())
+func createTriggerQuery(existingQuery *arkv1alpha1.Query, input runtime.RawExtension, params []arkv1alpha1.Parameter, sessionId string, timeout *time.Duration) (*arkv1alpha1.Query, error) {
+	queryName := fmt.Sprintf("cli-trigger-%d", time.Now().Unix())
 
 	spec := &arkv1alpha1.QuerySpec{
 		Input:          input,
@@ -166,6 +179,16 @@ func createTriggerQuery(existingQuery *arkv1alpha1.Query, input runtime.RawExten
 		SessionId:      getSessionId(sessionId, existingQuery.Spec.SessionId),
 	}
 
+	// Set timeout - use provided timeout or inherit from existing query
+	if timeout != nil {
+		spec.Timeout = &metav1.Duration{Duration: *timeout}
+	} else {
+		spec.Timeout = existingQuery.Spec.Timeout
+	}
+
+	// Set TTL to 720 hours (30 days) to keep query resource around like other queries
+	spec.TTL = &metav1.Duration{Duration: 720 * time.Hour}
+
 	queryObjectMeta := &metav1.ObjectMeta{
 		Name:        queryName,
 		Namespace:   existingQuery.Namespace,
@@ -173,6 +196,7 @@ func createTriggerQuery(existingQuery *arkv1alpha1.Query, input runtime.RawExten
 		Labels: map[string]string{
 			annotations.TriggeredFrom: existingQuery.Name,
 		},
+		Finalizers: []string{"ark.mckinsey.com/finalizer"},
 	}
 
 	return &arkv1alpha1.Query{

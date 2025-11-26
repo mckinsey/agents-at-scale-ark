@@ -11,6 +11,9 @@ spec:
   outputSchema:
     type: object
     properties:
+      annual_report_analysis:
+        type: string
+        description: The final analysis text compiled by the research squad in markdown format with references to sections of the annual report used. No unrelated comments are present.
       summary:
         type: string
         description: "A brief summary of the input"

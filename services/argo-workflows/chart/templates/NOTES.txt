@@ -1,0 +1,36 @@
+Argo Workflows has been deployed!
+
+Wait for services to be ready:
+  kubectl wait --for=condition=Available -n {{ .Release.Namespace }} deployment/argo-workflows-server --timeout=5m
+{{- if .Values.minio.enabled }}
+  kubectl wait --for=condition=Ready -n {{ .Release.Namespace }} tenant/myminio --timeout=5m
+{{- end }}
+
+Argo Workflows Dashboard:
+{{- if .Values.httpRoute.argo.enabled }}
+  Access via HTTPRoute:
+{{- range .Values.httpRoute.argo.hostnames }}
+    http://{{ . }}
+{{- end }}
+{{- end }}
+  Port Forward:
+    kubectl port-forward -n {{ .Release.Namespace }} svc/argo-workflows-server 2746:2746
+    Then access: http://localhost:2746
+
+{{- if .Values.minio.enabled }}
+
+Minio Dashboard:
+{{- if .Values.httpRoute.minio.enabled }}
+  Access via HTTPRoute:
+{{- range .Values.httpRoute.minio.hostnames }}
+    https://{{ . }}
+{{- end }}
+{{- end }}
+  Port Forward:
+    kubectl port-forward -n {{ .Release.Namespace }} svc/myminio-console 9443:9443
+    Then access: https://localhost:9443
+
+  Credentials:
+    Username: {{ .Values.minio.tenant.configSecret.accessKey }}
+    Password: {{ .Values.minio.tenant.configSecret.secretKey }}
+{{- end }}
