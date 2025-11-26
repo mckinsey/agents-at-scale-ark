@@ -1,0 +1,128 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { Provider as JotaiProvider } from 'jotai';
+import { useRouter } from 'next/navigation';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { AppSidebar } from '@/components/app-sidebar';
+import { SidebarProvider } from '@/components/ui/sidebar';
+import { A2A_TASKS_FEATURE_KEY } from '@/atoms/experimental-features';
+
+vi.mock('next/navigation', () => ({
+  useRouter: vi.fn(),
+  usePathname: vi.fn(() => '/'),
+}));
+
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: vi.fn(() => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    availableNamespaces: [{ name: 'default' }],
+    loading: false,
+    setNamespace: vi.fn(),
+    createNamespace: vi.fn(),
+  })),
+}));
+
+vi.mock('@/providers/UserProvider', () => ({
+  useUser: vi.fn(() => ({
+    user: { name: 'Test User', email: 'test@example.com' },
+  })),
+}));
+
+vi.mock('@/lib/services/system-info', () => ({
+  systemInfoService: {
+    getSystemInfo: vi.fn(() =>
+      Promise.resolve({
+        system_version: '1.0.0',
+        kubernetes_version: '1.28.0',
+      }),
+    ),
+  },
+}));
+
+describe('AppSidebar - A2A Tasks Menu Item', () => {
+  const mockPush = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
+      push: mockPush,
+    });
+  });
+
+  it('should not show Tasks menu item when feature is disabled', async () => {
+    render(
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Tasks')).not.toBeInTheDocument();
+    });
+  });
+
+  it('should show Tasks menu item when feature is enabled', async () => {
+    localStorage.setItem(A2A_TASKS_FEATURE_KEY, 'true');
+
+    render(
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('A2A Tasks')).toBeInTheDocument();
+    });
+  });
+
+  it('should be in the Operations section when visible', async () => {
+    localStorage.setItem(A2A_TASKS_FEATURE_KEY, 'true');
+
+    render(
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>,
+    );
+
+    await waitFor(() => {
+      const operationsSection = screen
+        .getByText('Operations')
+        .closest('[data-sidebar="group"]');
+      expect(operationsSection).toBeInTheDocument();
+
+      const tasksButton = screen.getByText('A2A Tasks');
+      expect(operationsSection).toContainElement(tasksButton);
+    });
+  });
+
+  it('should navigate to /tasks when clicked', async () => {
+    localStorage.setItem(A2A_TASKS_FEATURE_KEY, 'true');
+    const user = userEvent.setup();
+
+    render(
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('A2A Tasks')).toBeInTheDocument();
+    });
+
+    const tasksButton = screen.getByText('A2A Tasks');
+    await user.click(tasksButton);
+
+    expect(mockPush).toHaveBeenCalledWith('/tasks');
+  });
+});
