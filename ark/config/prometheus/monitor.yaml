@@ -15,23 +15,12 @@ spec:
       scheme: https
       bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
       tlsConfig:
-        # Secure TLS configuration using certificates managed by cert-manager.
-        # The metrics-server-cert secret is created by cert-manager when certmanager resources are enabled.
-        # The serverName must match one of the DNS names in the metrics certificate (certificate-metrics.yaml).
-        # Note: If certificate DNS names use SERVICE_NAME replacement, ensure serverName matches the actual service name.
-        serverName: ark.ark-system.svc
-        insecureSkipVerify: false
-        ca:
-          secret:
-            name: metrics-server-cert
-            key: ca.crt
-        cert:
-          secret:
-            name: metrics-server-cert
-            key: tls.crt
-        keySecret:
-          name: metrics-server-cert
-          key: tls.key
+        # TODO(user): The option insecureSkipVerify: true is not recommended for production since it disables
+        # certificate verification, exposing the system to potential man-in-the-middle attacks.
+        # For production environments, it is recommended to use cert-manager for automatic TLS certificate management.
+        # To apply this configuration, enable cert-manager and use the patch located at config/prometheus/servicemonitor_tls_patch.yaml,
+        # which securely references the certificate from the 'metrics-server-cert' secret.
+        insecureSkipVerify: true
   selector:
     matchLabels:
       control-plane: ark-controller
