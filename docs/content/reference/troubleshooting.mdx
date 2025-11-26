@@ -141,7 +141,7 @@ See [issue #393](https://github.com/mckinsey/agents-at-scale-ark/issues/393) for
 
 **Error Message**
 
-When running Ark locally on a Kind cluster, model creation or installation fails with a timeout error when attempting to reach the validating webhook.
+When running Ark locally on a Kind cluster (especially multi-node clusters), model creation or installation fails with a timeout error when attempting to reach the validating webhook.
 The same setup works without issues on Minikube.
 
 ```bash
@@ -151,21 +151,42 @@ HTTP response body: {"kind":"Status","apiVersion":"v1","metadata":{},"status":"F
 
 **Cause**
 
-This failure occurs because the webhook service (ark-webhook-service) cannot be reached within the Kind cluster.
-While the specific root cause is still under investigation, it appears to be related to networking differences between Kind and Minikube.
+This failure occurs because the webhook service (ark-webhook-service) cannot be reached within the Kind cluster within the default 10-second timeout.
+This is more common in multi-node Kind clusters due to networking differences and potential delays in service discovery.
 
-**Workaround**
+**Fix**
 
-Use Minikube as a sanity check and use it for local.
+The issue can be resolved by increasing the webhook timeout and changing the failure policy. Update your Helm values:
 
-**Verification**
+**Option 1: Increase Timeout (Recommended)**
 
-After switching to Minikube, confirm that webhook validation succeeds by creating a model:
+Create or update a `values.yaml` file with:
+
+```yaml
+webhook:
+  enable: true
+  timeoutSeconds: 30  # Increase from default 10s to 30s
+  failurePolicy: Fail
+```
+
+Then upgrade your installation:
 
 ```bash
-ark models create default
-✓ Model 'default' created successfully
+helm upgrade ark-controller ./ark/dist/chart -f values.yaml -n ark-system
 ```
+
+**Option 2: Use Ignore Policy (Workaround - But its not advised and just for local development. In the codebase we should maintain `Fail` only)**
+
+If increasing the timeout doesn't work, you can temporarily set the failure policy to `Ignore`:
+
+```yaml
+webhook:
+  enable: true
+  timeoutSeconds: 30
+  failurePolicy: Ignore  # Allows resources to be created even if webhook fails
+```
+
+**Note:** Using `Ignore` means webhook validation will be bypassed, which is not recommended for production but can be used as a temporary workaround for local development.
 
 #### Access Denied When Installing agents-at-scale
 
