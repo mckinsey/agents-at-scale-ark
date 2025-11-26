@@ -388,9 +388,6 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall, recorder 
 	userInput := NewSystemMessage(inputStr)
 	history := []Message{} // Provide history if applicable
 
-	// Call the team's Execute function
-	// Pass nil for memory and eventStream (teams-as-tools don't use memory or streaming)
-	// See ARKQB-137 for discussion on streaming support for agents as tools
 	result, err := team.Execute(ctx, userInput, history, nil, nil)
 	if err != nil {
 		log.Info("team execution error", "team", t.TeamName, "error", err)
