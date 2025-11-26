@@ -235,7 +235,7 @@ export function createStreamRouter(stream: StreamStore): Router {
       if (waitForQuery) {
         timeoutHandle = setTimeout(() => {
           if (!hasReceivedChunks) {
-            console.log(`[STREAM] Query ${query_name}: Timeout after ${timeout}ms waiting for chunks (no chunks received)`);
+            console.error(`[STREAM] Query ${query_name}: Timeout after ${timeout}ms waiting for chunks (no chunks received)`);
             const errorEvent = {
               error: {
                 message: "Request timeout waiting for streaming query response",
