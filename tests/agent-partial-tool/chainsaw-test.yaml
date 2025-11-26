@@ -4,9 +4,6 @@ metadata:
   name: agent-partial-tool
 spec:
   description: Test agent with a tool using partial parameters
-  timeouts:
-    cleanup: 5s
-  forceTerminationGracePeriod: 1s
   steps:
     - name: setup-mock-service
       try:

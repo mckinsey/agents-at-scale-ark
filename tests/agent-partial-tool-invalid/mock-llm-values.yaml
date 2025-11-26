@@ -20,3 +20,5 @@ resources:
     cpu: 100m
     memory: 128Mi
     ephemeral-storage: 128Mi
+
+terminationGracePeriodSeconds: 1

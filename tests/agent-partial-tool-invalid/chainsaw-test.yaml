@@ -4,9 +4,6 @@ metadata:
   name: agent-partial-tool-invalid
 spec:
   description: Test agent with an invalid partial tool reference should have Available=False
-  timeouts:
-    cleanup: 5s
-  forceTerminationGracePeriod: 1s
   steps:
     - name: setup-mock-service
       try:
