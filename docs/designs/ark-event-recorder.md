@@ -325,7 +325,9 @@ CREATE INDEX idx_session_id ON events ((payload->>'sessionId'));
 ## Component 1: Unified Event Watcher Service
 
 ### Purpose
-A single, configurable service that watches multiple event sources (Kubernetes Events, Argo Workflows, etc.), normalizes them to the standard event format, and publishes to Kafka. **Core part of Ark**
+A single, configurable service that watches multiple event sources (Kubernetes Events, Argo Workflows, etc.), normalizes them to the standard event format, and publishes events via the `EventPublisher` interface. **Core part of Ark**
+
+**Note**: Initially implements `HTTPEventPublisher` (direct HTTP to AER). Can be swapped to `KafkaEventPublisher` or other implementations via configuration when buffering/replay capabilities are needed.
 
 **Design Philosophy**: Start with a single unified service for deployment simplicity. Can be split into dedicated services later if needed for scale or operational reasons.
 
@@ -343,9 +345,12 @@ A single, configurable service that watches multiple event sources (Kubernetes E
 
 3. **Event Normalization**: Convert all event types to standardized AER protobuf format
 
-4. **UUID Generation**: Generate `event_id` before publishing to Kafka
+4. **UUID Generation**: Generate `event_id` before publishing
 
-5. **Kafka Publishing**: Serialize normalized events to protobuf binary format and send to "events" topic with `correlation_id` as partition key
+5. **Event Publishing**: Use `EventPublisher` interface to publish normalized events:
+   - Serialize events to protobuf binary format
+   - Call `publisher.publish(event, correlation_id)`
+   - Implementation (HTTP/Kafka/Redis) is configurable
 
 ### Configuration
 
@@ -361,8 +366,18 @@ data:
   watchArgoWorkflows: "true"
   
   # Event routing
-  # "k8s+broker" = emit to K8s events API AND Kafka
-  # "broker-only" = skip K8s events API, go directly to Kafka
+  # "k8s+broker" = emit to K8s events API AND event broker (HTTP/Kafka/etc)
+  # "broker-only" = skip K8s events API, go directly to event broker
+  
+  # Event broker configuration
+  eventBroker:
+    type: "http"  # Options: "http", "kafka", "redis-streams"
+    config:
+      # For HTTP: AER service URL
+      aerUrl: "http://ark-event-recorder:8080"
+      # For Kafka: (when type=kafka)
+      # brokers: ["kafka:9092"]
+      # topic: "events"
   eventRouting: |
     query.*: k8s+broker
     agent.*: k8s+broker
@@ -431,14 +446,19 @@ When `watchArgoWorkflows: "true"` is configured, the unified watcher handles:
 ## Component 2: Ark Event Recorder Service
 
 ### Purpose
-Reliably consume events from Kafka, persist to PostgreSQL with batch processing, and broadcast to subscribers via multiple protocols. **Core part of Ark**. Replaces ark-cluster-memory service functionality.
+Reliably consume events via the `EventConsumer` interface, persist to PostgreSQL with batch processing, and broadcast to subscribers via multiple protocols. **Core part of Ark**. Replaces ark-cluster-memory service functionality.
+
+**Note**: Initially implements `HTTPEventConsumer` (receives events via HTTP endpoint). Can be swapped to `KafkaEventConsumer` or other implementations via configuration when buffering/replay capabilities are needed.
 
 **Interface Compatibility**: AER implements the same HTTP API endpoints as ark-cluster-memory (`POST /messages`, `GET /messages`, `/stream/{queryId}`), so the Ark controller's `MemoryInterface` (HTTPMemory) and `EventStreamInterface` implementations continue to work without changes. The controller makes HTTP calls to AER instead of ark-cluster-memory, but the API contract remains identical.
 
 ### Processing Flow
 
-1. **Consume from Kafka**: Poll up to 100 messages or wait 1 second (whichever comes first)
-2. **Deserialize Protobuf**: Deserialize binary protobuf messages to Event objects
+1. **Consume Events**: Use `EventConsumer` interface to poll for events:
+   - Call `consumer.consume_batch(max_events=100, timeout=1.0)`
+   - Returns list of (event, correlation_id) tuples
+   - Implementation (HTTP/Kafka/Redis) is configurable
+2. **Deserialize Protobuf**: Events are already deserialized by consumer (or deserialize if needed)
 3. **Validate**: Check event schema compliance and version. Discard malformed events or events with unsupported versions (log warning and continue processing batch)
 4. **Route by Event Type**:
    - **Persistent Events**: Query execution, agent operations, workflow state → PostgreSQL
@@ -446,7 +466,7 @@ Reliably consume events from Kafka, persist to PostgreSQL with batch processing,
    - **Fast Mode**: High-frequency events → Pass-through only (no storage, immediate broadcast)
 5. **Convert to JSONB**: Convert protobuf payload to JSONB for PostgreSQL storage (maintains queryability)
 6. **Batch Insert**: Write persistent events to PostgreSQL in single transaction using `ON CONFLICT (event_id) DO NOTHING` to handle duplicate deliveries
-7. **Commit Offsets**: Only commit Kafka offsets after successful processing
+7. **Commit**: Call `consumer.commit()` after successful database write (for at-least-once delivery semantics)
 8. **Broadcast**: Publish events via multiple protocols:
    - HTTP/SSE streaming (K8s WATCH compatible)
    - GraphQL subscriptions (WebSocket)
@@ -468,9 +488,9 @@ Events are categorized and routed differently based on their type:
 ### Key Design Decisions
 
 1. **Batch Processing**: Fetches up to 100 events at once, reducing database round-trips significantly
-2. **Manual Offset Commit**: Only commits after successful database write, ensuring at-least-once delivery
-3. **Partition Key**: Kafka uses `correlation_id` as partition key, ensuring all events for a session/workflow stay ordered
-4. **Error Handling**: On failure, don't commit offsets → Kafka replays events → eventual consistency
+2. **Manual Commit**: Only commits after successful database write, ensuring at-least-once delivery (implementation-specific: Kafka offsets, HTTP no-op, etc.)
+3. **Ordering**: `correlation_id` is used for ordering (Kafka partition key, HTTP header, etc.), ensuring all events for a session/workflow stay ordered
+4. **Error Handling**: On failure, don't commit → broker replays events → eventual consistency (Kafka) or retry logic (HTTP)
 5. **Atomicity**: Database insert and pubsub broadcast happen sequentially; if pubsub fails, event is still persisted
 6. **Version-Aware Parsing**: Event parser must be version-aware, supporting the current schema version (v1) and gracefully rejecting unsupported versions
 
@@ -508,6 +528,221 @@ Min In-Sync Replicas: 2          # Requires 2 replicas to acknowledge write
 3. **Reliability**: Replicated storage across brokers. Service restarts don't lose events.
 4. **Replay Capability**: Can reprocess events from any point in time within retention period.
 5. **Ordering**: Partition key guarantees ensures events for a session/workflow stay in order.
+
+## Event Broker Interface (Abstraction Layer)
+
+### Design Philosophy
+
+The event broker is abstracted behind a clean interface, allowing the system to start with a simple implementation (direct HTTP) and swap in a more sophisticated broker (Kafka, Redis Streams, etc.) later without changing watcher or AER code.
+
+### Interface Specification
+
+**EventPublisher Interface** (used by watchers):
+```python
+class EventPublisher:
+    async def publish(self, event: Event, correlation_id: str) -> None:
+        """
+        Publish an event to the broker.
+        
+        Args:
+            event: Protobuf Event object (serialized as binary)
+            correlation_id: Used for partitioning/ordering (e.g., session_id, query_id)
+        """
+        pass
+```
+
+**EventConsumer Interface** (used by AER):
+```python
+class EventConsumer:
+    async def consume_batch(
+        self, 
+        max_events: int = 100, 
+        timeout: float = 1.0
+    ) -> list[tuple[Event, str]]:
+        """
+        Consume a batch of events.
+        
+        Args:
+            max_events: Maximum number of events to return
+            timeout: Maximum time to wait for events (seconds)
+        
+        Returns:
+            List of (event, correlation_id) tuples
+        """
+        pass
+    
+    async def commit(self) -> None:
+        """
+        Commit processed events (for at-least-once delivery semantics).
+        Only called after successful database write.
+        """
+        pass
+```
+
+### Implementation Phases
+
+#### Phase 1: Direct HTTP (Initial Implementation)
+
+Start with the simplest implementation - watchers POST directly to AER:
+
+**HTTPEventPublisher** (in watchers):
+```python
+class HTTPEventPublisher(EventPublisher):
+    def __init__(self, aer_base_url: str):
+        self.aer_url = f"{aer_base_url}/events"
+    
+    async def publish(self, event: Event, correlation_id: str) -> None:
+        # Serialize protobuf to binary
+        event_bytes = event.SerializeToString()
+        # POST to AER with correlation_id header
+        await http.post(
+            self.aer_url,
+            body=event_bytes,
+            headers={"X-Correlation-ID": correlation_id},
+            content_type="application/x-protobuf"
+        )
+```
+
+**HTTPEventConsumer** (in AER):
+```python
+class HTTPEventConsumer(EventConsumer):
+    def __init__(self):
+        self.queue = asyncio.Queue()
+    
+    async def consume_batch(
+        self, max_events: int = 100, timeout: float = 1.0
+    ) -> list[tuple[Event, str]]:
+        # Poll internal in-memory queue
+        events = []
+        deadline = time.time() + timeout
+        while len(events) < max_events and time.time() < deadline:
+            try:
+                event, correlation_id = await asyncio.wait_for(
+                    self.queue.get(), 
+                    timeout=min(0.1, deadline - time.time())
+                )
+                events.append((event, correlation_id))
+            except asyncio.TimeoutError:
+                break
+        return events
+    
+    async def commit(self) -> None:
+        # No-op for HTTP (events already processed)
+        pass
+
+# HTTP endpoint receives events and enqueues
+@app.post("/events")
+async def receive_event(request: Request):
+    correlation_id = request.headers.get("X-Correlation-ID")
+    event_bytes = await request.body()
+    event = Event()
+    event.ParseFromString(event_bytes)
+    await consumer.queue.put((event, correlation_id))
+    return {"status": "accepted"}
+```
+
+**Benefits of Phase 1:**
+- No external dependencies (no Kafka/Redis to manage)
+- Simple to implement and test
+- Fast to get started
+- Easy to debug (direct HTTP calls)
+
+**Limitations:**
+- No buffering (AER must be available)
+- No replay capability
+- Tight coupling between watchers and AER
+
+#### Phase 2: Swap in Kafka (When Needed)
+
+When you need buffering, replay, or higher reliability, swap implementations:
+
+**KafkaEventPublisher** (in watchers):
+```python
+class KafkaEventPublisher(EventPublisher):
+    def __init__(self, kafka_brokers: list[str], topic: str):
+        self.producer = KafkaProducer(
+            bootstrap_servers=kafka_brokers,
+            value_serializer=lambda v: v.SerializeToString(),
+            key_serializer=lambda k: k.encode() if k else None
+        )
+        self.topic = topic
+    
+    async def publish(self, event: Event, correlation_id: str) -> None:
+        # Publish to Kafka with correlation_id as partition key
+        await self.producer.send(
+            self.topic,
+            value=event,
+            key=correlation_id
+        )
+```
+
+**KafkaEventConsumer** (in AER):
+```python
+class KafkaEventConsumer(EventConsumer):
+    def __init__(self, kafka_brokers: list[str], topic: str, group_id: str):
+        self.consumer = KafkaConsumer(
+            topic,
+            bootstrap_servers=kafka_brokers,
+            group_id=group_id,
+            value_deserializer=lambda m: Event().ParseFromString(m),
+            key_deserializer=lambda k: k.decode() if k else None,
+            enable_auto_commit=False,  # Manual commit after DB write
+            max_poll_records=100
+        )
+        self.pending_offsets = []
+    
+    async def consume_batch(
+        self, max_events: int = 100, timeout: float = 1.0
+    ) -> list[tuple[Event, str]]:
+        # Poll from Kafka
+        events = []
+        deadline = time.time() + timeout
+        while len(events) < max_events and time.time() < deadline:
+            records = self.consumer.poll(timeout_ms=int((deadline - time.time()) * 1000))
+            for topic_partition, messages in records.items():
+                for msg in messages:
+                    events.append((msg.value, msg.key))
+                    self.pending_offsets.append((topic_partition, msg.offset + 1))
+        return events
+    
+    async def commit(self) -> None:
+        # Commit Kafka offsets
+        for topic_partition, offset in self.pending_offsets:
+            self.consumer.commit({topic_partition: offset})
+        self.pending_offsets.clear()
+```
+
+**Migration Path:**
+1. Watchers and AER use the same interface - no code changes needed
+2. Swap implementations via configuration:
+   ```yaml
+   eventBroker:
+     type: "kafka"  # or "http" or "redis-streams"
+     config:
+       brokers: ["kafka:9092"]
+       topic: "events"
+   ```
+3. Both implementations can coexist during migration
+
+### Alternative Implementations
+
+**Redis Streams:**
+- Similar interface to Kafka
+- Simpler operations, less durable
+- Good for moderate volume
+
+**PostgreSQL Queue Table:**
+- Use database as queue
+- Simple, but less efficient than dedicated brokers
+- Good for low volume or when you want to avoid extra infrastructure
+
+### Benefits of Abstraction
+
+1. **Flexibility**: Start simple, scale up when needed
+2. **Testability**: Easy to mock for unit tests
+3. **No Lock-in**: Swap implementations without changing business logic
+4. **Incremental Complexity**: Add sophisticated features only when needed
+5. **Same Protobuf Schema**: Event format doesn't change regardless of transport
 
 ## API Endpoints
 
