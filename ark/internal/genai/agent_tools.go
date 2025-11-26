@@ -76,6 +76,8 @@ func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv
 		return createMCPExecutor(ctx, k8sClient, tool, namespace, mcpPool, mcpSettings)
 	case ToolTypeAgent:
 		return createAgentExecutor(ctx, k8sClient, tool, namespace, telemetryProvider)
+	case ToolTypeTeam:
+		return createTeamExecutor(ctx, k8sClient, tool, namespace, telemetryProvider)
 	case ToolTypeBuiltin:
 		return createBuiltinExecutor(tool)
 	default:
@@ -98,6 +100,26 @@ func createAgentExecutor(ctx context.Context, k8sClient client.Client, tool *ark
 		AgentName:         tool.Spec.Agent.Name,
 		Namespace:         namespace,
 		AgentCRD:          agentCRD,
+		k8sClient:         k8sClient,
+		telemetryProvider: telemetryProvider,
+	}, nil
+}
+
+func createTeamExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, telemetryProvider telemetry.Provider) (ToolExecutor, error) {
+	if tool.Spec.Team.Name == "" {
+		return nil, fmt.Errorf("team spec is required for tool %s", tool.Name)
+	}
+
+	teamCRD := &arkv1alpha1.Team{}
+	key := types.NamespacedName{Name: tool.Spec.Team.Name, Namespace: namespace}
+	if err := k8sClient.Get(ctx, key, teamCRD); err != nil {
+		return nil, fmt.Errorf("failed to get team %v: %w", key, err)
+	}
+
+	return &TeamToolExecutor{
+		TeamName:          tool.Spec.Team.Name,
+		Namespace:         namespace,
+		TeamCRD:           teamCRD,
 		k8sClient:         k8sClient,
 		telemetryProvider: telemetryProvider,
 	}, nil
@@ -306,5 +328,110 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall, recorder
 		ID:      call.ID,
 		Name:    call.Function.Name,
 		Content: lastMessage.OfAssistant.Content.OfString.Value,
+	}, nil
+}
+
+// TeamToolExecutor executes team tools by calling teams
+type TeamToolExecutor struct {
+	TeamName          string
+	Namespace         string
+	TeamCRD           *arkv1alpha1.Team
+	k8sClient         client.Client
+	telemetryProvider telemetry.Provider
+}
+
+func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall, recorder EventEmitter) (ToolResult, error) {
+	var arguments map[string]any
+	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
+		log := logf.FromContext(ctx)
+		log.Error(err, "Error parsing tool arguments", "ToolCall")
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: "Failed to parse tool arguments",
+		}, fmt.Errorf("failed to parse tool arguments: %v", err)
+	}
+
+	input, exists := arguments["input"]
+	if !exists {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: "input parameter is required",
+		}, fmt.Errorf("input parameter is required for team tool %s", t.TeamName)
+	}
+
+	inputStr, ok := input.(string)
+	if !ok {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: "input parameter must be a string",
+		}, fmt.Errorf("input parameter must be a string for team tool %s", t.TeamName)
+	}
+
+	// Log the team execution
+	log := logf.FromContext(ctx)
+	log.Info("calling team directly", "team", t.TeamName, "namespace", t.Namespace, "input", inputStr)
+
+	// Create the Team object using the Team CRD and recorder
+	team, err := MakeTeam(ctx, t.k8sClient, t.TeamCRD, recorder, t.telemetryProvider)
+	if err != nil {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: fmt.Sprintf("failed to create team %s: %v", t.TeamName, err),
+		}, err
+	}
+
+	// Prepare user input and history
+	userInput := NewSystemMessage(inputStr)
+	history := []Message{} // Provide history if applicable
+
+	// Call the team's Execute function
+	// Pass nil for memory and eventStream (teams-as-tools don't use memory or streaming)
+	// See ARKQB-137 for discussion on streaming support for agents as tools
+	result, err := team.Execute(ctx, userInput, history, nil, nil)
+	if err != nil {
+		log.Info("team execution error", "team", t.TeamName, "error", err)
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: fmt.Sprintf("failed to execute team %s: %v", t.TeamName, err),
+		}, err
+	}
+
+	if len(result.Messages) == 0 {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: "team execution returned no messages",
+		}, fmt.Errorf("team %s execution returned no messages", t.TeamName)
+	}
+
+	// Find the last assistant message (teams may return multiple messages)
+	var content string
+	for i := len(result.Messages) - 1; i >= 0; i-- {
+		msg := result.Messages[i]
+		if msg.OfAssistant != nil && msg.OfAssistant.Content.OfString.Value != "" {
+			content = msg.OfAssistant.Content.OfString.Value
+			break
+		}
+	}
+
+	if content == "" {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: "team execution returned no assistant message content",
+		}, fmt.Errorf("team %s execution returned no assistant message content", t.TeamName)
+	}
+
+	log.Info("team direct call response", "team", t.TeamName, "response", content)
+
+	return ToolResult{
+		ID:      call.ID,
+		Name:    call.Function.Name,
+		Content: content,
 	}, nil
 }
