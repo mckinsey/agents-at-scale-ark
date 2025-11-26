@@ -6,6 +6,7 @@ The Ark Event Recorder (AER) is a high-throughput event collection and streaming
 
 **Key Goals:**
 - **Replace ark-cluster-memory**: AER provides both streaming and memory functionality, allowing removal of the ark-cluster-memory service
+- **Backward Compatible API**: AER implements the same HTTP API spec as ark-cluster-memory, so the Ark controller's `MemoryInterface` and `EventStreamInterface` work unchanged
 - **Optional Service**: Cluster remains fully functional without AER (only K8s events, no streaming/memory)
 - **Per-Namespace Deployment**: One AER instance per namespace (NS=tenant), sharing a single Kafka cluster
 - **Multiple Protocols**: Support HTTP streaming (K8s WATCH compatible) and other protocols for flexibility
@@ -96,13 +97,14 @@ The system uses Kafka for reliable buffering, PostgreSQL for persistent storage 
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │  Query & Memory APIs                                      │   │
 │  │                                                           │   │
-│  │  • GraphQL query API (events, messages)                 │   │
-│  │  • HTTP REST API (messages, chunks)                    │   │
-│  │  • Memory API (conversation history)                    │   │
-│  │    - GET /memory/{sessionId}                            │   │
-│  │    - POST /memory/{sessionId}                           │   │
-│  │    - GET /stream/{queryId} (SSE)                        │   │
-│  │    - POST /stream/{queryId} (NDJSON)                    │   │
+│  │  • Memory HTTP API (implements MemoryInterface)         │   │
+│  │    - GET /messages?session_id={sessionId}              │   │
+│  │    - POST /messages                                    │   │
+│  │  • Streaming HTTP API (implements EventStreamInterface)│   │
+│  │    - GET /stream/{queryId} (SSE)                      │   │
+│  │    - POST /stream/{queryId} (NDJSON)                   │   │
+│  │    - POST /stream/{queryId}/complete                   │   │
+│  │  • GraphQL API (events, messages, subscriptions)      │   │
 │  └──────────────────────────────────────────────────────────┘   │
 └────────────────────────────────────────────────────────────────────┘
                                 │
@@ -507,6 +509,25 @@ Min In-Sync Replicas: 2          # Requires 2 replicas to acknowledge write
 
 ## API Endpoints
 
+AER implements the same HTTP API spec as ark-cluster-memory, allowing the Ark controller to continue using the existing `MemoryInterface` without changes. The controller calls AER via HTTP using the same endpoints it currently uses for ark-cluster-memory.
+
+### Memory HTTP API (Implements MemoryInterface for Ark Controller)
+
+**Get Messages** - `GET /messages?session_id={sessionId}`
+- Retrieve conversation history for a session
+- Returns messages in chronological order
+- **Used by**: Ark controller's `MemoryInterface.GetMessages()`
+- **Response**: JSON array of message records
+
+**Add Messages** - `POST /messages`
+- Content-Type: `application/json`
+- Request body: `{ "session_id": "...", "query_id": "...", "messages": [...] }`
+- Add new messages to conversation history
+- **Used by**: Ark controller's `MemoryInterface.AddMessages()`
+- **Response**: 200 OK on success
+
+**Note**: These endpoints maintain backward compatibility with the existing Memory HTTP spec, so the controller's `MemoryInterface` implementation (HTTPMemory) works unchanged with AER.
+
 ### HTTP/SSE Streaming API (Replaces ark-cluster-memory streaming)
 
 **Read Stream** - `GET /stream/{queryId}`
@@ -515,29 +536,19 @@ Min In-Sync Replicas: 2          # Requires 2 replicas to acknowledge write
 - Query parameters:
   - `from-beginning=true`: Send all existing messages first, then stream new ones
   - `wait-for-query=<timeout>`: Wait for query execution to start
+- **Used by**: Clients consuming streaming responses
 
 **Write Stream** - `POST /stream/{queryId}`
 - Content-Type: `application/x-ndjson`
 - Newline-delimited JSON chunks in OpenAI format
 - Used by Query Controller to write streaming chunks
 - **Note**: HTTP API uses NDJSON format, but internally events are stored/transmitted as protobuf via Kafka
+- **Used by**: Ark controller's EventStreamInterface implementation
 
 **Complete Stream** - `POST /stream/{queryId}/complete`
 - Marks query execution as complete
 - Closes connections to consumers
-
-### Memory API (Replaces ark-cluster-memory conversation storage)
-
-**Get Messages** - `GET /memory/{sessionId}`
-- Retrieve conversation history for a session
-- Returns messages in chronological order
-
-**Add Messages** - `POST /memory/{sessionId}`
-- Add new messages to conversation history
-- Accepts array of messages
-
-**Get Messages by Query** - `GET /memory/query/{queryId}`
-- Retrieve messages for a specific query
+- **Used by**: Ark controller to signal stream completion
 
 ### GraphQL API
 
