@@ -520,6 +520,7 @@ Min In-Sync Replicas: 2          # Requires 2 replicas to acknowledge write
 - Content-Type: `application/x-ndjson`
 - Newline-delimited JSON chunks in OpenAI format
 - Used by Query Controller to write streaming chunks
+- **Note**: HTTP API uses NDJSON format, but internally events are stored/transmitted as protobuf via Kafka
 
 **Complete Stream** - `POST /stream/{queryId}/complete`
 - Marks query execution as complete
