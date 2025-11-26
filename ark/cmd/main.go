@@ -238,7 +238,7 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			Telemetry: telemetryProvider,
 		}},
 		{"Tool", &controller.ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
-		{"Team", &controller.TeamReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
+		{"Team", &controller.TeamReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("team-controller")}},
 		{"A2AServer", &controller.A2AServerReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("a2aserver-controller")}},
 		{"MCPServer", &controller.MCPServerReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("mcpserver-controller")}},
 		{"Model", &controller.ModelReconciler{

@@ -14,6 +14,7 @@ from ...models.teams import (
     TeamUpdateRequest,
     TeamDetailResponse
 )
+from ...models.common import extract_availability_from_conditions
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,10 @@ def team_to_detail_response(team: dict) -> TeamDetailResponse:
     metadata = team.get("metadata", {})
     spec = team.get("spec", {})
     status = team.get("status", {})
-    
+
+    conditions = status.get("conditions", [])
+    availability = extract_availability_from_conditions(conditions, "Available")
+
     return TeamDetailResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
@@ -61,6 +65,7 @@ def team_to_detail_response(team: dict) -> TeamDetailResponse:
         graph=spec.get("graph"),
         maxTurns=spec.get("maxTurns"),
         selector=spec.get("selector"),
+        available=availability,
         status=status
     )
 

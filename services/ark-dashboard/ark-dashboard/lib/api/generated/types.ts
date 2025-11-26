@@ -3597,6 +3597,7 @@ export interface components {
             maxTurns?: number | null;
             selector?: components["schemas"]["Selector"] | null;
             /** Status */
+            available?: components["schemas"]["AvailabilityStatus"] | null;
             status?: {
                 [key: string]: unknown;
             } | null;
