@@ -3,6 +3,7 @@ package genai
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -260,7 +261,12 @@ func (op *OpenAIProvider) ChatCompletionStream(ctx context.Context, messages []M
 }
 
 func (op *OpenAIProvider) createClient(ctx context.Context) openai.Client {
-	httpClient := common.NewHTTPClientWithLogging(ctx)
+	var httpClient *http.Client
+	if IsProbeContext(ctx) {
+		httpClient = common.NewHTTPClientWithoutTracing()
+	} else {
+		httpClient = common.NewHTTPClientWithLogging(ctx)
+	}
 
 	options := []option.RequestOption{
 		option.WithBaseURL(op.BaseURL),

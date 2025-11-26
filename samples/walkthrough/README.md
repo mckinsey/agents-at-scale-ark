@@ -60,7 +60,7 @@ Install ARK by following the [quickstart guide](../../docs/content/developer-gui
 
 ```bash
 # Quick installation (installs tools, sets up cluster, chainsaw, deploys controller)
-make quickstart
+devspace dev
 ```
 
 Verify installation:

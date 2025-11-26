@@ -203,7 +203,7 @@ Common variables:
 
 ```bash
 # In your project directory
-make quickstart
+devspace dev
 
 # Test a query
 kubectl apply -f queries/sample-query.yaml

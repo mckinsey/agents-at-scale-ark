@@ -13,6 +13,17 @@ import (
 	"github.com/openai/openai-go"
 )
 
+type probeContextKey struct{}
+
+func contextWithProbeMode(ctx context.Context) context.Context {
+	return context.WithValue(ctx, probeContextKey{}, true)
+}
+
+func IsProbeContext(ctx context.Context) bool {
+	val, ok := ctx.Value(probeContextKey{}).(bool)
+	return ok && val
+}
+
 // ProbeResult contains the outcome of a model probe
 type ProbeResult struct {
 	Available     bool
@@ -22,15 +33,13 @@ type ProbeResult struct {
 
 // ProbeModel tests if a model is available
 func ProbeModel(ctx context.Context, model *Model) ProbeResult {
-	// Create probe context with 30s timeout, inheriting trace context from parent
 	timeout := 30 * time.Second
-	probeCtx, cancel := context.WithTimeout(ctx, timeout)
+	probeCtx := contextWithProbeMode(context.Background())
+	probeCtx, cancel := context.WithTimeout(probeCtx, timeout)
 	defer cancel()
 
-	// Simple test message
 	testMessages := []Message{NewUserMessage("Hello")}
 
-	// Try to get a completion (streaming disabled for probe)
 	_, err := model.ChatCompletion(probeCtx, testMessages, nil, 1)
 	if err != nil {
 		return ProbeResult{
