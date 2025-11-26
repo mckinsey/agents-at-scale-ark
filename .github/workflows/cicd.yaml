@@ -110,7 +110,7 @@ jobs:
         shell: bash
         run: |
           GITHUB_REPOSITORY="${{ github.repository }}"
-          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&per_page=50" | jq -c '.workflow_runs[] | select(.name == "CI/CD") | .id' | head -n 1)
+          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&status=completed&per_page=50" | jq -c '.workflow_runs[] | select(.name == "CI/CD") | .id' | head -n 1)
           
           echo "Downloading artifacts from run ID: $LAST_RUN_ID"
           gh run download "$LAST_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern "xray-scan-results-agents-at-scale-*" --dir ./artifacts
@@ -218,6 +218,12 @@ jobs:
           source-path: services/ark-api/ark-api/coverage/
           artifact-folder: ark-api/unit-tests
           artifact-suffix: ark-api-unit
+
+      - uses: ./.github/actions/collect-coverage
+        with:
+          source-path: services/ark-dashboard/ark-dashboard/coverage/
+          artifact-folder: ark-dashboard/unit-tests
+          artifact-suffix: ark-dashboard-unit
 
   build-containers:
     needs: [setup-container-cache-registry, build-libs]
