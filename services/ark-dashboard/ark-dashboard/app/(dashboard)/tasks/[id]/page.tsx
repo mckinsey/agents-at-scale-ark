@@ -50,10 +50,10 @@ export default function A2ATaskPage() {
   ];
 
   const duration =
-    task.creationTimestamp && task.status?.completionTime
+    task.metadata?.creationTimestamp && task.status?.completionTime
       ? simplifyDuration(
           (new Date(task.status.completionTime).getTime() -
-            new Date(task.creationTimestamp).getTime()) /
+            new Date(task.metadata.creationTimestamp as string).getTime()) /
             1000 +
             's',
         )
@@ -77,9 +77,11 @@ export default function A2ATaskPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Phase</span>
-                  <div className="flex items-center gap-2">
-                    <StatusDot variant={mapTaskPhaseToVariant(task.phase)} />
-                    <span>{task.phase}</span>
+                  <div className="flex items-center justify-center gap-2">
+                    <span>{task.status?.phase}</span>
+                    <StatusDot
+                      variant={mapTaskPhaseToVariant(task.status?.phase)}
+                    />
                   </div>
                 </div>
                 <div className="flex justify-between">
@@ -118,8 +120,10 @@ export default function A2ATaskPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-500">Created</span>
                   <span>
-                    {task.creationTimestamp
-                      ? new Date(task.creationTimestamp).toLocaleString()
+                    {task.metadata?.creationTimestamp
+                      ? new Date(
+                          task.metadata.creationTimestamp as string,
+                        ).toLocaleString()
                       : '-'}
                   </span>
                 </div>

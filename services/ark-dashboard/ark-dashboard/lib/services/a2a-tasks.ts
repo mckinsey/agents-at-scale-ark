@@ -4,16 +4,17 @@ import type {
 } from '@/lib/api/a2a-tasks-types';
 import { apiClient } from '@/lib/api/client';
 
-export type A2ATaskPhase =
-  | 'completed'
-  | 'running'
-  | 'failed'
-  | 'pending'
-  | 'unknown'
-  | 'assigned'
-  | 'input-required'
-  | 'auth-required'
-  | 'cancelled';
+export enum A2ATaskPhase {
+  COMPLETED = 'completed',
+  RUNNING = 'running',
+  FAILED = 'failed',
+  PENDING = 'pending',
+  UNKNOWN = 'unknown',
+  ASSIGNED = 'assigned',
+  INPUT_REQUIRED = 'input-required',
+  AUTH_REQUIRED = 'auth-required',
+  CANCELLED = 'cancelled',
+}
 
 export type A2ATask = A2ATaskDetailResponse & {
   id: string;
@@ -31,13 +32,13 @@ export const a2aTasksService = {
       id: item.name,
     })) as A2ATask[];
   },
-  async get(id: string): Promise<A2ATask> {
+  async get(id: string): Promise<A2ATaskDetailResponse> {
     const response = await apiClient.get<A2ATaskDetailResponse>(
       `/api/v1/a2a-tasks/${id}`,
     );
     return {
       ...response,
       id: response.name,
-    } as A2ATask;
+    } as A2ATaskDetailResponse;
   },
 };
