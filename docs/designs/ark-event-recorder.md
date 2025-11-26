@@ -4,7 +4,13 @@
 
 The Ark Event Recorder (AER) is a high-throughput event collection and streaming system designed to capture, persist, and broadcast events from multiple sources across a Kubernetes-based workflow execution environment. It integrates with Ark's structured eventing system (PR #477) to collect events emitted by Ark controllers, along with events from Argo Workflows, Kubernetes events, and other sources.
 
-The system uses Kafka for reliable buffering, PostgreSQL for persistent storage with rich querying capabilities, and GraphQL subscriptions for real-time event streaming to clients.
+**Key Goals:**
+- **Replace ark-cluster-memory**: AER provides both streaming and memory functionality, allowing removal of the ark-cluster-memory service
+- **Optional Service**: Cluster remains fully functional without AER (only K8s events, no streaming/memory)
+- **Per-Namespace Deployment**: One AER instance per namespace (NS=tenant), sharing a single Kafka cluster
+- **Multiple Protocols**: Support HTTP streaming (K8s WATCH compatible) and other protocols for flexibility
+
+The system uses Kafka for reliable buffering, PostgreSQL for persistent storage with rich querying capabilities, and multiple streaming protocols (HTTP/SSE, GraphQL subscriptions) for real-time event delivery to clients.
 
 ## System Architecture
 
@@ -12,19 +18,21 @@ The system uses Kafka for reliable buffering, PostgreSQL for persistent storage 
 ┌────────────────────────────────────────────────────────────────────┐
 │                    External Event Sources                          │
 │                                                                    │
-│  ┌──────────────┐      ┌──────────────┐      ┌──────────────┐   │
-│  │ Ark-Watcher  │      │ Argo-Watcher │      │   Monitor    │   │
-│  │ (K8s events  │      │  (workflows/ │      │   Service    │   │
-│  │  with        │      │   pod logs)  │      │              │   │
-│  │  structured  │      │              │      │              │   │
-│  │  annotations)│      │              │      │              │   │
-│  └──────┬───────┘      └──────┬───────┘      └──────┬───────┘   │
-│         │                     │                     │            │
-│         │   Extract from      │   Generate UUID     │            │
-│         │   K8s events +      │   Normalize event   │            │
-│         │   annotations       │                     │            │
-│         │                     │                     │            │
-│         └─────────────────────┴─────────────────────┘            │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Unified Event Watcher Service                            │   │
+│  │  (Configurable event sources)                             │   │
+│  │                                                            │   │
+│  │  • K8s Events (with structured annotations from Ark)     │   │
+│  │  • Argo Workflows (workflow state + pod logs)            │   │
+│  │  • Custom event sources (configurable)                   │   │
+│  │                                                            │   │
+│  │  Note: Starts as single service, can split later if      │   │
+│  │        needed for scale/deployment simplicity            │   │
+│  └──────────────────────┬───────────────────────────────────┘   │
+│                         │                                        │
+│                         │   Extract/Normalize events            │
+│                         │   Generate UUID                       │
+│                         │   Filter (K8s+broker vs broker-only)  │
 │                               │                                   │
 │                    Publish to Kafka Topic                        │
 └───────────────────────────────┼───────────────────────────────────┘
@@ -52,40 +60,49 @@ The system uses Kafka for reliable buffering, PostgreSQL for persistent storage 
 │                            ▼                                      │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │  Batch Process Events                                     │   │
-│  │  1. Parse JSON from Kafka messages                       │   │
+│  │  1. Deserialize protobuf from Kafka messages            │   │
 │  │  2. Validate event schema                                │   │
-│  │  3. Batch INSERT into PostgreSQL                         │   │
-│  │  4. Commit Kafka offsets on success                      │   │
+│  │  3. Route by event type:                                 │   │
+│  │     • Persistent events → PostgreSQL                     │   │
+│  │     • Ephemeral chunks → In-memory (60min TTL)         │   │
+│  │     • Fast mode → Pass-through only (no storage)       │   │
+│  │  4. Convert protobuf payload to JSONB for PostgreSQL    │   │
+│  │  5. Batch INSERT into PostgreSQL (persistent only)      │   │
+│  │  6. Commit Kafka offsets on success                      │   │
 │  └────────────────────────┬──────────────────────────────────┘   │
 │                            │                                      │
 │                            ▼                                      │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │  Broadcast to Subscribers                                 │   │
 │  │  • In-memory EventPubSub                                 │   │
-│  │  • Publishes to all active GraphQL subscriptions        │   │
+│  │  • Multiple outbound protocols:                          │   │
+│  │    - HTTP/SSE streaming (K8s WATCH compatible)          │   │
+│  │    - GraphQL subscriptions (WebSocket)                  │   │
+│  │    - Custom protocols (extensible)                      │   │
 │  │  • Async queue per subscriber                           │   │
 │  └────────────────────────┬──────────────────────────────────┘   │
 │                            │                                      │
 │            ┌───────────────┴───────────────┐                    │
 │            │                                │                    │
 │  ┌─────────▼─────────┐          ┌──────────▼────────┐          │
-│  │  GraphQL          │          │  Cleanup Service   │          │
-│  │  Subscription     │          │  (Background Task) │          │
-│  │  (WebSocket)      │          │  • Runs every 24h  │          │
-│  │                   │          │  • DELETE old rows │          │
-│  │  subscription {   │          │                    │          │
-│  │    events { ... } │          └────────────────────┘          │
-│  │  }                │                                           │
-│  └───────────────────┘                                           │
+│  │  Streaming APIs    │          │  Cleanup Service   │          │
+│  │  • HTTP/SSE        │          │  (Background Task) │          │
+│  │  • GraphQL Sub     │          │  • Runs every 24h  │          │
+│  │  • Memory API      │          │  • DELETE old rows │          │
+│  │    (replaces       │          │  • Expire ephemeral │          │
+│  │     cluster-memory)│          │    chunks (60min)  │          │
+│  └───────────────────┘          └────────────────────┘          │
 │                                                                   │
 │  ┌──────────────────────────────────────────────────────────┐   │
-│  │  GraphQL Query API                                        │   │
+│  │  Query & Memory APIs                                      │   │
 │  │                                                           │   │
-│  │  query {                                                  │   │
-│  │    events(correlationId: "workflow-123") {              │   │
-│  │      eventId, timestamp, severity, type, subtype ...    │   │
-│  │    }                                                      │   │
-│  │  }                                                        │   │
+│  │  • GraphQL query API (events, messages)                 │   │
+│  │  • HTTP REST API (messages, chunks)                    │   │
+│  │  • Memory API (conversation history)                    │   │
+│  │    - GET /memory/{sessionId}                            │   │
+│  │    - POST /memory/{sessionId}                           │   │
+│  │    - GET /stream/{queryId} (SSE)                        │   │
+│  │    - POST /stream/{queryId} (NDJSON)                    │   │
 │  └──────────────────────────────────────────────────────────┘   │
 └────────────────────────────────────────────────────────────────────┘
                                 │
@@ -97,6 +114,13 @@ The system uses Kafka for reliable buffering, PostgreSQL for persistent storage 
                     │   • 10 core fields    │
                     │   • JSONB payload     │
                     │   • Multiple indexes  │
+                    │                       │
+                    │   messages table      │
+                    │   (conversation history)│
+                    │   • sessionId         │
+                    │   • queryId           │
+                    │   • message content   │
+                    │   • timestamps        │
                     └───────────────────────┘
 ```
 
@@ -296,19 +320,53 @@ CREATE INDEX idx_query_id ON events ((payload->>'queryId'));
 CREATE INDEX idx_session_id ON events ((payload->>'sessionId'));
 ```
 
-## Component 1: Ark-Watcher Microservice
+## Component 1: Unified Event Watcher Service
 
 ### Purpose
-Watches Kubernetes Events (including those with structured annotations from Ark controllers), normalizes them to the standard event format, and publishes to Kafka. **Core part of Ark**
+A single, configurable service that watches multiple event sources (Kubernetes Events, Argo Workflows, etc.), normalizes them to the standard event format, and publishes to Kafka. **Core part of Ark**
+
+**Design Philosophy**: Start with a single unified service for deployment simplicity. Can be split into dedicated services later if needed for scale or operational reasons.
 
 ### Responsibilities
 
-1. **Kubernetes Event Monitoring**: Watch Kubernetes Event resources for:
-   - Events with `ark.mckinsey.com/event-data` annotation (from Ark controllers)
-   - Standard K8s events related to workflow execution (pods, containers, resource issues)
-2. **Event Normalization**: Convert K8s events to standardized AER event format
-3. **UUID Generation**: Generate `event_id` before publishing to Kafka
-4. **Kafka Publishing**: Serialize normalized events to protobuf binary format and send to "events" topic with `correlation_id` as partition key
+1. **Configurable Event Sources**: Watch different event types based on configuration:
+   - **Kubernetes Events**: Events with `ark.mckinsey.com/event-data` annotation (from Ark controllers)
+   - **Standard K8s Events**: Pod, container, resource issues
+   - **Argo Workflows**: Workflow state changes and pod logs
+   - **Custom Sources**: Extensible for future event sources
+
+2. **Event Filtering**: Route events based on configuration:
+   - **K8s + Broker**: Events that go to both K8s events API and Kafka (e.g., core query events)
+   - **Broker Only**: Events that skip K8s events API and go directly to Kafka (future: granular events to reduce etcd pressure)
+
+3. **Event Normalization**: Convert all event types to standardized AER protobuf format
+
+4. **UUID Generation**: Generate `event_id` before publishing to Kafka
+
+5. **Kafka Publishing**: Serialize normalized events to protobuf binary format and send to "events" topic with `correlation_id` as partition key
+
+### Configuration
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ark-event-watcher-config
+  namespace: default
+data:
+  # Enable/disable event sources
+  watchK8sEvents: "true"
+  watchArgoWorkflows: "true"
+  
+  # Event routing
+  # "k8s+broker" = emit to K8s events API AND Kafka
+  # "broker-only" = skip K8s events API, go directly to Kafka
+  eventRouting: |
+    query.*: k8s+broker
+    agent.*: k8s+broker
+    workflow.*: broker-only
+    pod.log: broker-only
+```
 
 ### Event Normalization for Ark Controller Events
 
@@ -334,18 +392,17 @@ The `correlation_id` field is designed to tie related events together and is **n
 
 This allows all events from a query execution (or session) to be queried together.
 
-## Component 2: Argo Watcher Microservice
+### Argo Workflow Monitoring
 
-### Purpose
-Watches Argo Workflows and pod logs in Kubernetes, normalizes them to the standard event format, and publishes to Kafka. **Lives with Argo marketplace entry**
-
-### Responsibilities
+When `watchArgoWorkflows: "true"` is configured, the unified watcher handles:
 
 1. **Workflow State Monitoring**: Watch Argo Workflow resources for phase changes (Pending, Running, Succeeded, Failed, Error)
 2. **Pod Log Streaming**: Stream stdout/stderr from workflow pods
 3. **Event Normalization**: Convert Argo-specific data to standardized event format
 4. **UUID Generation**: Generate `event_id` before publishing to Kafka
 5. **Kafka Publishing**: Serialize normalized events to protobuf binary format and send to "events" topic with `correlation_id` as partition key
+
+**Note**: Argo workflow monitoring can be deployed as part of the Argo marketplace entry, but uses the same unified watcher service architecture.
 
 ### Event Normalization
 
@@ -369,20 +426,40 @@ Watches Argo Workflows and pod logs in Kubernetes, normalizes them to the standa
 - In practice, this is typically stored in workflow metadata or labels (e.g., `workflow.metadata.labels['session-id']`)
 - If no session ID is available, fall back to `workflow.metadata.name` as correlation_id
 
-## Component 3: Ark Event Recorder Service
+## Component 2: Ark Event Recorder Service
 
 ### Purpose
-Reliably consume events from Kafka, persist to PostgreSQL with batch processing, and broadcast to active GraphQL subscribers. **Core part of Ark**
+Reliably consume events from Kafka, persist to PostgreSQL with batch processing, and broadcast to subscribers via multiple protocols. **Core part of Ark**. Replaces ark-cluster-memory service functionality.
 
 ### Processing Flow
 
 1. **Consume from Kafka**: Poll up to 100 messages or wait 1 second (whichever comes first)
 2. **Deserialize Protobuf**: Deserialize binary protobuf messages to Event objects
 3. **Validate**: Check event schema compliance and version. Discard malformed events or events with unsupported versions (log warning and continue processing batch)
-4. **Convert to JSONB**: Convert protobuf payload to JSONB for PostgreSQL storage (maintains queryability)
-5. **Batch Insert**: Write all valid events to PostgreSQL in single transaction using `ON CONFLICT (event_id) DO NOTHING` to handle duplicate deliveries
-6. **Commit Offsets**: Only commit Kafka offsets after successful database write
-7. **Broadcast**: Publish events (as protobuf or JSON) to in-memory pub/sub for GraphQL subscribers
+4. **Route by Event Type**:
+   - **Persistent Events**: Query execution, agent operations, workflow state → PostgreSQL
+   - **Ephemeral Chunks**: LLM streaming chunks, A2A task chunks → In-memory cache (60min TTL)
+   - **Fast Mode**: High-frequency events → Pass-through only (no storage, immediate broadcast)
+5. **Convert to JSONB**: Convert protobuf payload to JSONB for PostgreSQL storage (maintains queryability)
+6. **Batch Insert**: Write persistent events to PostgreSQL in single transaction using `ON CONFLICT (event_id) DO NOTHING` to handle duplicate deliveries
+7. **Commit Offsets**: Only commit Kafka offsets after successful processing
+8. **Broadcast**: Publish events via multiple protocols:
+   - HTTP/SSE streaming (K8s WATCH compatible)
+   - GraphQL subscriptions (WebSocket)
+   - In-memory pub/sub for real-time delivery
+
+### Event Type Routing
+
+Events are categorized and routed differently based on their type:
+
+| Event Type | Storage | TTL | Use Case |
+|------------|---------|-----|----------|
+| Query execution events | PostgreSQL | Configurable (default 30 days) | Audit, debugging, analysis |
+| Agent/Team operations | PostgreSQL | Configurable (default 30 days) | Observability, telemetry |
+| Workflow state changes | PostgreSQL | Configurable (default 30 days) | Workflow tracking |
+| LLM streaming chunks | In-memory | 60 minutes | Real-time streaming only |
+| A2A task chunks | In-memory | 60 minutes | Real-time streaming only |
+| High-frequency metrics | Fast mode (no storage) | N/A | Real-time monitoring only |
 
 ### Key Design Decisions
 
@@ -428,9 +505,40 @@ Min In-Sync Replicas: 2          # Requires 2 replicas to acknowledge write
 4. **Replay Capability**: Can reprocess events from any point in time within retention period.
 5. **Ordering**: Partition key guarantees ensures events for a session/workflow stay in order.
 
-## GraphQL API
+## API Endpoints
 
-### Schema Definition
+### HTTP/SSE Streaming API (Replaces ark-cluster-memory streaming)
+
+**Read Stream** - `GET /stream/{queryId}`
+- Server-Sent Events (SSE) for real-time streaming
+- K8s WATCH compatible (HTTP streaming)
+- Query parameters:
+  - `from-beginning=true`: Send all existing messages first, then stream new ones
+  - `wait-for-query=<timeout>`: Wait for query execution to start
+
+**Write Stream** - `POST /stream/{queryId}`
+- Content-Type: `application/x-ndjson`
+- Newline-delimited JSON chunks in OpenAI format
+- Used by Query Controller to write streaming chunks
+
+**Complete Stream** - `POST /stream/{queryId}/complete`
+- Marks query execution as complete
+- Closes connections to consumers
+
+### Memory API (Replaces ark-cluster-memory conversation storage)
+
+**Get Messages** - `GET /memory/{sessionId}`
+- Retrieve conversation history for a session
+- Returns messages in chronological order
+
+**Add Messages** - `POST /memory/{sessionId}`
+- Add new messages to conversation history
+- Accepts array of messages
+
+**Get Messages by Query** - `GET /memory/query/{queryId}`
+- Retrieve messages for a specific query
+
+### GraphQL API
 
 ```graphql
 scalar DateTime
@@ -452,6 +560,15 @@ type Event {
   createdAt: DateTime!
 }
 
+type Message {
+  id: ID!
+  sessionId: String!
+  queryId: String
+  role: String!
+  content: String!
+  timestamp: DateTime!
+}
+
 type Query {
   # Get events for a specific correlation ID (session ID, query ID, etc.)
   events(correlationId: String!): [Event!]!
@@ -464,6 +581,10 @@ type Query {
   
   # Query events by time range
   eventsByTimeRange(startTime: DateTime!, endTime: DateTime!, correlationId: String): [Event!]!
+  
+  # Get conversation messages
+  messages(sessionId: String!): [Message!]!
+  messagesByQuery(queryId: String!): [Message!]!
 }
 
 type Subscription {
@@ -491,6 +612,18 @@ query GetSessionEvents {
 }
 ```
 
+**Get conversation messages:**
+```graphql
+query GetConversation {
+  messages(sessionId: "sess-123") {
+    id
+    role
+    content
+    timestamp
+  }
+}
+```
+
 **Subscribe to query execution events:**
 ```graphql
 subscription StreamQueryEvents {
@@ -505,6 +638,15 @@ subscription StreamQueryEvents {
     payload
   }
 }
+```
+
+**HTTP/SSE Streaming Example:**
+```bash
+# Stream query execution chunks
+curl -N "http://ark-event-recorder.default.svc.cluster.local/stream/query-123"
+
+# Stream with replay from beginning
+curl -N "http://ark-event-recorder.default.svc.cluster.local/stream/query-123?from-beginning=true"
 ```
 
 ## Event Retention & Expiration
@@ -545,26 +687,43 @@ WHERE timestamp < NOW() - INTERVAL '$EVENT_RETENTION_DAYS days'
 
 ### Service Components
 
-**1. Ark Event Recorder**
-- FastAPI service with GraphQL endpoint (using Ariadne for GraphQL)
+**1. Ark Event Recorder (Per-Namespace)**
+- FastAPI service with multiple API endpoints:
+  - GraphQL (queries, subscriptions)
+  - HTTP REST (memory API, streaming API)
+  - HTTP/SSE streaming (K8s WATCH compatible)
 - Background Kafka consumer task
 - Background cleanup task for event expiration
+- In-memory cache for ephemeral chunks (60min TTL)
 - No Kubernetes RBAC needed (doesn't watch K8s directly)
-- Deployment: 1 replica initially (may scale to 3 replicas later if needed for higher throughput)
+- **Deployment**: 1 replica per namespace (NS=tenant)
+- **Kafka**: Shared single Kafka cluster across all namespaces
 
-**2. Ark-Watcher**
+**2. Unified Event Watcher (Per-Namespace)**
 - Minimal service (health check endpoint only)
-- Background task: Kubernetes event watcher
-- Requires K8s RBAC: read events
-- Deployment: 1 replica
+- Background tasks: Configurable event watchers
+  - Kubernetes event watcher
+  - Argo workflow watcher (if enabled)
+  - Custom event sources (extensible)
+- Requires K8s RBAC: read events, workflows, pods, logs (based on configuration)
+- **Deployment**: 1 replica per namespace
 - **Note**: In the future, Ark controllers may publish directly to Kafka to avoid etcd/event pressure
 
-**3. Argo-Watcher**
-- Minimal service (health check endpoint only)
-- Background tasks: workflow watcher + log streamer
-- Requires K8s RBAC: read workflows, pods, logs
-- Deployment: 1 replica (K8s watch has built-in HA via resource version bookmarking)
-- Lives with Argo marketplace entry (optional component)
+### Optional Service Behavior
+
+**If AER is NOT installed:**
+- ✅ Cluster remains fully functional
+- ✅ Only K8s events available (ephemeral, via `kubectl get events`)
+- ❌ No conversation memory
+- ❌ No LLM streaming
+- ❌ No persistent event history
+
+**If AER is installed:**
+- ✅ Full event persistence and querying
+- ✅ Conversation memory (replaces ark-cluster-memory)
+- ✅ LLM streaming (replaces ark-cluster-memory streaming)
+- ✅ Multiple streaming protocols
+- ✅ Rich event history and analysis
 
 **4. Kafka**
 - Use off-the-shelf Helm chart (Bitnami or the like)
@@ -610,12 +769,47 @@ protoc --python_out=. ark/eventing/proto/event.proto
 protoc --ts_out=. ark/eventing/proto/event.proto
 ```
 
+## Fast Mode
+
+For high-frequency events that don't need persistence, AER supports a "fast mode" that passes events through without storing them:
+
+**Configuration:**
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ark-event-recorder-config
+data:
+  fastModeEvents: |
+    - type: "metrics"
+    - type: "heartbeat"
+    - subtype: "chunk"  # LLM/A2A chunks (already ephemeral)
+```
+
+**Behavior:**
+- Events matching fast mode patterns skip PostgreSQL storage
+- Events are still broadcast to active subscribers (real-time delivery)
+- Events are still available in Kafka for short-term replay (7 days retention)
+- Reduces database load for high-frequency, low-value events
+
+## Event Routing Strategy
+
+Events can be routed to different destinations based on configuration:
+
+| Route | K8s Events API | Kafka | PostgreSQL | Use Case |
+|-------|----------------|-------|------------|----------|
+| `k8s+broker` | ✅ | ✅ | ✅ | Core query/agent events (audit trail) |
+| `broker-only` | ❌ | ✅ | ✅ | Granular events (reduce etcd pressure) |
+| `fast-mode` | ❌ | ✅ | ❌ | High-frequency metrics/chunks |
+
+**Future**: As Ark matures, more granular events can move to `broker-only` to reduce etcd/event API pressure while maintaining full observability through AER.
+
 ## Future Enhancements
 
 1. **Direct Kafka Publishing from Ark Controllers**: Instead of emitting K8s events, controllers could publish directly to Kafka (as protobuf) to reduce etcd pressure
 2. **Event Filtering in Subscriptions**: Add filtering capabilities to GraphQL subscriptions (by type, severity, etc.)
 3. **Event Aggregation**: Pre-compute aggregations (e.g., error rates per session, average execution time per query type)
-4. **Multi-tenant Support**: Add tenant isolation for events
-5. **Event Replay API**: Allow replaying events from a specific point in time for debugging
-6. **Schema Registry Integration**: Integrate with Confluent Schema Registry for schema management and validation
+4. **Schema Registry Integration**: Integrate with Confluent Schema Registry for schema management and validation
+5. **Service Splitting**: Split unified watcher into dedicated services if needed for scale
+6. **Event Replay API**: Allow replaying events from a specific point in time for debugging
 
