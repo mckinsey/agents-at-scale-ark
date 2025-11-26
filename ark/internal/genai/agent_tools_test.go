@@ -138,10 +138,10 @@ func TestRegisterToolDescriptionWithPartial(t *testing.T) {
 	// Create agent tool with both description override and partial parameters
 	agentTool := arkv1alpha1.AgentTool{
 		Type:        "built-in",
-		Name:        "noop",
+		Name:        "non-existent-name", // Will be overridden by partial
 		Description: "Get weather by city name only",
 		Partial: &arkv1alpha1.ToolPartial{
-			Name: "weather-forecast",
+			Name: "noop",
 			Parameters: []arkv1alpha1.ToolFunction{
 				{
 					Name:  "units",
@@ -163,7 +163,7 @@ func TestRegisterToolDescriptionWithPartial(t *testing.T) {
 	definitions := registry.GetToolDefinitions()
 	require.Len(t, definitions, 1)
 	require.Equal(t, "Get weather by city name only", definitions[0].Description, "Description should be overridden")
-	require.Equal(t, "weather-forecast", definitions[0].Name, "Name should be overridden by partial")
+	require.Equal(t, "noop", definitions[0].Name, "Name should be overridden by partial")
 }
 
 func TestCreatePartialToolDefinitionPreservesDescription(t *testing.T) {
