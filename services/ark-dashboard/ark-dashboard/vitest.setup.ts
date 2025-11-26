@@ -37,3 +37,55 @@ global.IntersectionObserver = class IntersectionObserver {
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any;
+
+// Mock localStorage
+const localStorageMock: Storage = {
+  getItem: vi.fn((key: string) => {
+    return (localStorageMock as unknown as Record<string, string>)[key] || null;
+  }),
+  setItem: vi.fn((key: string, value: string) => {
+    (localStorageMock as unknown as Record<string, string>)[key] = value;
+  }),
+  removeItem: vi.fn((key: string) => {
+    delete (localStorageMock as unknown as Record<string, string>)[key];
+  }),
+  clear: vi.fn(() => {
+    Object.keys(localStorageMock).forEach(key => {
+      if (
+        key !== 'getItem' &&
+        key !== 'setItem' &&
+        key !== 'removeItem' &&
+        key !== 'clear' &&
+        key !== 'length' &&
+        key !== 'key'
+      ) {
+        delete (localStorageMock as unknown as Record<string, string>)[key];
+      }
+    });
+  }),
+  get length() {
+    return Object.keys(localStorageMock).filter(
+      key =>
+        key !== 'getItem' &&
+        key !== 'setItem' &&
+        key !== 'removeItem' &&
+        key !== 'clear' &&
+        key !== 'length' &&
+        key !== 'key',
+    ).length;
+  },
+  key: vi.fn((index: number) => {
+    const keys = Object.keys(localStorageMock).filter(
+      key =>
+        key !== 'getItem' &&
+        key !== 'setItem' &&
+        key !== 'removeItem' &&
+        key !== 'clear' &&
+        key !== 'length' &&
+        key !== 'key',
+    );
+    return keys[index] || null;
+  }),
+};
+
+global.localStorage = localStorageMock;
