@@ -222,7 +222,6 @@ func (r *MCPServerReconciler) reconcileConditionsToolCreationFailed(ctx context.
 
 // reconcileConditionsReady updates conditions when MCPServer is ready
 func (r *MCPServerReconciler) reconcileConditionsReady(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, toolCount int, toolsChanged bool) error {
-	log := logf.FromContext(ctx)
 	mcpServer.Status.ToolCount = toolCount
 	changed1 := r.reconcileCondition(mcpServer, MCPServerDiscovering, metav1.ConditionFalse, "DiscoveryComplete", "Tool discovery completed")
 	changed2 := r.reconcileCondition(mcpServer, MCPServerReady, metav1.ConditionTrue, "ToolsDiscovered", fmt.Sprintf("Successfully discovered %d tools", toolCount))
@@ -232,9 +231,6 @@ func (r *MCPServerReconciler) reconcileConditionsReady(ctx context.Context, mcpS
 			if err := r.updateStatus(ctx, mcpServer); err != nil {
 				return err
 			}
-		}
-		if toolsChanged {
-			log.Info("mcp tools discovered", "server", mcpServer.Name, "namespace", mcpServer.Namespace, "count", toolCount)
 		}
 	}
 	return nil
