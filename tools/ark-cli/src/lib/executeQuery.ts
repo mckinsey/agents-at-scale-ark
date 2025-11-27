@@ -9,6 +9,7 @@ import type {Query, QueryTarget} from './types.js';
 import {ExitCodes} from './errors.js';
 import {ArkApiProxy} from './arkApiProxy.js';
 import {ChatClient, ToolCall, ArkMetadata} from './chatClient.js';
+import {watchEventsLive} from './kubectl.js';
 
 export interface QueryOptions {
   targetType: string;
@@ -212,85 +213,6 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
       chalk.red(error instanceof Error ? error.message : 'Unknown error')
     );
     process.exit(ExitCodes.CliError);
-  }
-}
-
-async function watchEventsLive(queryName: string): Promise<void> {
-  const seenEvents = new Set<string>();
-
-  const pollEvents = async () => {
-    try {
-      const {stdout} = await execa('kubectl', [
-        'get',
-        'events',
-        '--field-selector',
-        `involvedObject.name=${queryName}`,
-        '-n',
-        'default',
-        '-o',
-        'json',
-      ]);
-
-      const eventsData = JSON.parse(stdout);
-      for (const event of eventsData.items || []) {
-        const eventId = event.metadata?.uid;
-
-        if (eventId && !seenEvents.has(eventId)) {
-          seenEvents.add(eventId);
-
-          const annotations = event.metadata?.annotations || {};
-          const eventData = annotations['ark.mckinsey.com/event-data'];
-
-          if (eventData) {
-            const now = new Date();
-            const hours = now.getHours().toString().padStart(2, '0');
-            const minutes = now.getMinutes().toString().padStart(2, '0');
-            const seconds = now.getSeconds().toString().padStart(2, '0');
-            const millis = now.getMilliseconds().toString().padStart(3, '0');
-            const timestamp = `${hours}:${minutes}:${seconds}.${millis}`;
-
-            const reason = event.reason || 'Unknown';
-            const eventType = event.type || 'Normal';
-
-            const colorCode = eventType === 'Normal' ? 32 : eventType === 'Warning' ? 33 : 31;
-            console.log(
-              `${timestamp} \x1b[${colorCode}m${reason}\x1b[0m ${eventData}`
-            );
-          }
-        }
-      }
-    } catch (error) {
-    }
-  };
-
-  const pollInterval = setInterval(pollEvents, 200);
-
-  const timeoutSeconds = 300;
-
-  const waitProcess = execa(
-    'kubectl',
-    [
-      'wait',
-      '--for=condition=Completed',
-      `query/${queryName}`,
-      `-n`,
-      'default',
-      `--timeout=${timeoutSeconds}s`,
-    ],
-    {
-      timeout: timeoutSeconds * 1000,
-    }
-  );
-
-  try {
-    await waitProcess;
-    await pollEvents();
-    await new Promise(resolve => setTimeout(resolve, 200));
-    await pollEvents();
-  } catch (error) {
-    console.error(chalk.red('Query wait failed:', error instanceof Error ? error.message : 'Unknown error'));
-  } finally {
-    clearInterval(pollInterval);
   }
 }
 
