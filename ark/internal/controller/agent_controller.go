@@ -148,11 +148,14 @@ func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1
 func (r *AgentReconciler) checkToolDependencies(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string) {
 	for _, toolSpec := range agent.Spec.Tools {
 		if toolSpec.Type == "custom" && toolSpec.Name != "" {
+			
+			toolName := toolSpec.GetToolCRDName()
+
 			var tool arkv1alpha1.Tool
-			toolKey := types.NamespacedName{Name: toolSpec.Name, Namespace: agent.Namespace}
+			toolKey := types.NamespacedName{Name: toolName, Namespace: agent.Namespace}
 			if err := r.Get(ctx, toolKey, &tool); err != nil {
 				if errors.IsNotFound(err) {
-					msg := fmt.Sprintf("Tool '%s' not found in namespace '%s'", toolSpec.Name, agent.Namespace)
+					msg := fmt.Sprintf("Tool '%s' not found in namespace '%s'", toolName, agent.Namespace)
 					return false, msg
 				}
 				return false, fmt.Sprintf("Error checking tool: %v", err)
@@ -318,8 +321,14 @@ func (r *AgentReconciler) findAgentsForDependency(ctx context.Context, resourceN
 // agentDependsOnTool checks if an agent depends on a specific tool
 func (r *AgentReconciler) agentDependsOnTool(agent *arkv1alpha1.Agent, toolName string) bool {
 	for _, toolSpec := range agent.Spec.Tools {
-		if toolSpec.Type == "custom" && toolSpec.Name == toolName {
-			return true
+		if toolSpec.Type == "custom" {
+			// Check both the exposed name and the actual tool name (for partial tools)
+			if toolSpec.Name == toolName {
+				return true
+			}
+			if toolSpec.Partial != nil && toolSpec.Partial.Name == toolName {
+				return true
+			}
 		}
 	}
 	return false

@@ -83,6 +83,8 @@ metrics:
 # the edit command with the '--force' flag
 webhook:
   enable: true
+  timeoutSeconds: 30
+  failurePolicy: Fail
 
 # [PROMETHEUS]: To enable a ServiceMonitor to export metrics to Prometheus set true
 prometheus:

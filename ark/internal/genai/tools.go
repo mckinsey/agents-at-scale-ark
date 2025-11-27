@@ -432,10 +432,6 @@ func CreatePartialToolDefinition(tooldefinition ToolDefinition, partial *arkv1al
 		newName = partial.Name
 	}
 
-	if partial.Description != "" {
-		newDesc = partial.Description
-	}
-
 	// Remove partial parameters from schema
 	props, ok := newParams["properties"].(map[string]any)
 	if !ok {

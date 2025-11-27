@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.1.46](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.45...v0.1.46) (2025-11-27)
+
+
+### Features
+
+* added A2A Task detail page ([#491](https://github.com/mckinsey/agents-at-scale-ark/issues/491)) ([c115f59](https://github.com/mckinsey/agents-at-scale-ark/commit/c115f598abac0cb7cbfd19154879a4b306aaa883))
+* added A2A Tasks page ([#480](https://github.com/mckinsey/agents-at-scale-ark/issues/480)) ([db8830f](https://github.com/mckinsey/agents-at-scale-ark/commit/db8830ffcabe9212daf45e3ae18eb6c0044f7c29))
+* agent tool description field ([#495](https://github.com/mckinsey/agents-at-scale-ark/issues/495)) ([7ca8a06](https://github.com/mckinsey/agents-at-scale-ark/commit/7ca8a06d1bd883ae9e13d66dc802ff3b0b369c7b))
+* chat streaming can be enabled under feature flag ([#517](https://github.com/mckinsey/agents-at-scale-ark/issues/517)) ([6c0e9a6](https://github.com/mckinsey/agents-at-scale-ark/commit/6c0e9a6f149bba3d51c9109af72522800a590e4d))
+
+
+### Bug Fixes
+
+* filter xray workflow lookup to completed runs only ([#501](https://github.com/mckinsey/agents-at-scale-ark/issues/501)) ([5ed789b](https://github.com/mckinsey/agents-at-scale-ark/commit/5ed789bc359a697675e4c1bcf32840fb5ba9e305))
+* partial lookup ([#500](https://github.com/mckinsey/agents-at-scale-ark/issues/500)) ([6ca5b88](https://github.com/mckinsey/agents-at-scale-ark/commit/6ca5b88033d9fa44607f27c8dbba4cbc41686fbb))
+* **prometheus:** secure ServiceMonitor TLS by removing insecureSkipVerify ([#459](https://github.com/mckinsey/agents-at-scale-ark/issues/459)) ([0a52707](https://github.com/mckinsey/agents-at-scale-ark/commit/0a52707e7c0a2de8787756f23df813c667a0f42f))
+
+
+### Reverts
+
+* fix(prometheus): secure ServiceMonitor TLS by removing insecureSkipVerify ([#508](https://github.com/mckinsey/agents-at-scale-ark/issues/508)) ([f41da43](https://github.com/mckinsey/agents-at-scale-ark/commit/f41da43223cb480e927be645ac20f07b75fac8b7))
+
+## [0.1.45](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.44...v0.1.45) (2025-11-25)
+
+
+### Bug Fixes
+
+* ark cli helm chart version ([#498](https://github.com/mckinsey/agents-at-scale-ark/issues/498)) ([e91c9e4](https://github.com/mckinsey/agents-at-scale-ark/commit/e91c9e47848c580c1e4094b7612d081ace50ae0d))
+* ark-cli shows the correct message when default model is configured  ([81bb2a4](https://github.com/mckinsey/agents-at-scale-ark/commit/81bb2a4cec2b1742ec9146da43ad92cd31aaa221))
+* ark-status doesn't show the right message for default model ([#493](https://github.com/mckinsey/agents-at-scale-ark/issues/493)) ([81bb2a4](https://github.com/mckinsey/agents-at-scale-ark/commit/81bb2a4cec2b1742ec9146da43ad92cd31aaa221))
+* increase webhook timeout and add configurable failure policy for kind clusters ([#492](https://github.com/mckinsey/agents-at-scale-ark/issues/492)) ([53b2d5d](https://github.com/mckinsey/agents-at-scale-ark/commit/53b2d5dcba2afbbe53c361a3dcd572877629c212))
+
 ## [0.1.44](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.43...v0.1.44) (2025-11-24)
 
 
