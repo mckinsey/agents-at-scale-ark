@@ -9,26 +9,21 @@ ark:
 
 config:
   rules:
-    # Default FIRST: return OK for model probes and any request without a sequence match
+    # Fallback for model probes (no sequence, matches everything)
     - path: "/v1/chat/completions"
       response:
         status: 200
         content: |
           {
-            "id": "mock-default",
+            "id": "mock-probe",
             "object": "chat.completion",
             "model": "gpt-4.1-mini",
-            "choices": [{
-              "message": {
-                "role": "assistant",
-                "content": "OK"
-              },
-              "finish_reason": "stop"
-            }]
+            "choices": [{"message": {"role": "assistant", "content": "OK"}, "finish_reason": "stop"}]
           }
 
-    # Call 1: researcher agent
+    # Sequence 0: researcher agent
     - path: "/v1/chat/completions"
+      match: "body.messages[0].content | contains(@, 'research agent')"
       sequence: 0
       response:
         status: 200
@@ -46,8 +41,9 @@ config:
             }]
           }
 
-    # Call 2: analyst agent
+    # Sequence 1: analyst agent
     - path: "/v1/chat/completions"
+      match: "body.messages[0].content | contains(@, 'analysis agent')"
       sequence: 1
       response:
         status: 200
@@ -65,8 +61,9 @@ config:
             }]
           }
 
-    # Call 3: summarizer agent
+    # Sequence 2: summarizer agent
     - path: "/v1/chat/completions"
+      match: "body.messages[0].content | contains(@, 'summarization agent')"
       sequence: 2
       response:
         status: 200
