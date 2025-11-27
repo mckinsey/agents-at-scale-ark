@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { mapTaskPhaseToVariant } from '@/components/sections/a2a-tasks-section/utils';
-import { type A2ATaskPhase } from '@/lib/services/a2a-tasks';
+import { A2ATaskPhase } from '@/lib/services/a2a-tasks';
 
 describe('mapTaskPhaseToVariant', () => {
   it.each([
@@ -22,4 +22,10 @@ describe('mapTaskPhaseToVariant', () => {
       expect(mapTaskPhaseToVariant(phase as A2ATaskPhase)).toBe(expected);
     },
   );
+
+  it('should accept enum values directly', () => {
+    expect(mapTaskPhaseToVariant(A2ATaskPhase.COMPLETED)).toBe('completed');
+    expect(mapTaskPhaseToVariant(A2ATaskPhase.RUNNING)).toBe('running');
+    expect(mapTaskPhaseToVariant(A2ATaskPhase.FAILED)).toBe('failed');
+  });
 });

@@ -1,9 +1,9 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  name: agent-partial-tool
+  name: agent-partial-tool-invalid
 spec:
-  description: Test agent with a tool using partial parameters
+  description: Test agent with an invalid partial tool reference should have Available=False
   steps:
     - name: setup-mock-service
       try:
@@ -53,51 +53,23 @@ spec:
             kind: Model
             name: test-model
 
-    - name: create-tool-and-agent
+    - name: create-invalid-agent
       try:
         - apply:
-            file: manifests/a0[3-4]-*.yaml
+            file: manifests/*.yaml
         - assert:
             resource:
               apiVersion: ark.mckinsey.com/v1alpha1
               kind: Agent
               metadata:
-                name: partial-tool-agent
+                name: partial-tool-agent-invalid
               status:
                 (conditions[?type == 'Available']):
-                  - status: "True"
+                - status: 'False'
+                  reason: 'ToolNotFound'
       catch:
         - events: {}
         - describe:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Agent
-            name: partial-tool-agent
-
-    - name: create-and-verify-query
-      try:
-        - apply:
-            file: manifests/a05-query.yaml
-        - assert:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Query
-              metadata:
-                name: partial-tool-query
-              status:
-                (conditions[?type == 'Completed']):
-                  - status: "True"
-        - assert:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Query
-              metadata:
-                name: partial-tool-query
-              status:
-                (length(responses)): 1
-                (contains(responses[*].target.name, 'partial-tool-agent')): true
-      catch:
-        - events: {}
-        - describe:
-            apiVersion: ark.mckinsey.com/v1alpha1
-            kind: Query
-            name: partial-tool-query
+            name: partial-tool-agent-invalid

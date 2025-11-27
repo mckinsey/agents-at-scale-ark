@@ -1,9 +1,9 @@
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
-  name: partial-tool-agent
+  name: partial-tool-agent-invalid
 spec:
-  description: Agent with a tool using partial parameters
+  description: Agent with an invalid partial tool reference
   modelRef:
     name: test-model
   tools:
@@ -11,8 +11,8 @@ spec:
       name: get-coordinates-of-nyc
       description: Pre-fills city parameter for New York
       partial:
-        # it overwrites the tool name exposed to the Agent
-        name: get-coordinates
+        # Reference to a tool that does NOT exist
+        name: non-existent-tool
         parameters:
           - name: city
             value: New York
