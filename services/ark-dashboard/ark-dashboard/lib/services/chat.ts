@@ -170,7 +170,7 @@ export const chatService = {
     if (enableStreaming) {
       queryRequest.metadata = {
         annotations: {
-          [ARK_ANNOTATIONS.STREAMING_ENABLED]: 'true',
+          [ARK_ANNOTATIONS.STREAMING_ENABLED]: 'false',
         },
       };
     }
@@ -209,7 +209,7 @@ export const chatService = {
       const query = await this.getQuery(queryName);
 
       if (!query || !query.status) {
-        return { status: 'unknown', terminal: true };
+        return { status: 'unknown', terminal: false };
       }
 
       const status = query.status;

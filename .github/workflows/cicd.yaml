@@ -219,6 +219,12 @@ jobs:
           artifact-folder: ark-api/unit-tests
           artifact-suffix: ark-api-unit
 
+      - uses: ./.github/actions/collect-coverage
+        with:
+          source-path: services/ark-dashboard/ark-dashboard/coverage/
+          artifact-folder: ark-dashboard/unit-tests
+          artifact-suffix: ark-dashboard-unit
+
   build-containers:
     needs: [setup-container-cache-registry, build-libs]
     runs-on: ubuntu-24.04

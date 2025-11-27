@@ -1,4 +1,5 @@
 # Mock LLM configuration for A2A blocking task failed test
+terminationGracePeriodSeconds: 3
 ark:
   a2a:
     enabled: true
