@@ -13,9 +13,7 @@ class MemoryStorage(MemoryInterface):
     Storage for conversation messages (implements MemoryInterface).
 
     Stores conversation/chat messages (user-assistant turns), NOT system events.
-    Messages can arrive via:
-    1. Direct HTTP API: POST /messages
-    2. Embedded in Events: When event.type="memory" or event.subtype contains "message"
+    Messages arrive via direct HTTP API: POST /messages
 
     This is a backend-agnostic in-memory implementation.
     Can be swapped with database or other backends in the future.

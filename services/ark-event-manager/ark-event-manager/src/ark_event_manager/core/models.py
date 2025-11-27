@@ -15,10 +15,8 @@
 - Store user-assistant conversation turns
 - Simple schema: session_id, query_id, message_data
 - Used for conversation memory and context
-- Source: HTTP API (POST /messages) or embedded in Events
+- Source: HTTP API (POST /messages) only
 - Stored in `messages` table
-
-Note: Messages can arrive via Events when event.type="memory" or event.subtype contains "message".
 """
 
 from datetime import datetime

@@ -42,8 +42,7 @@
   - `{"role": "assistant", "content": "The weather is sunny."}`
 
 **Source**:
-1. **Direct API**: `POST /messages` (MemoryInterface)
-2. **Via Events**: When `event.type="memory"` or `"message" in event.subtype`, messages are extracted from `event.payload.messages`
+- **Direct API**: `POST /messages` (MemoryInterface)
 
 **Storage**:
 - `messages` table (SQLModel `Message`)
@@ -73,23 +72,19 @@
         │  (Deserialize & Route)│
         └───────┬───────────────┘
                 │
-        ┌───────┴────────┐
+                ▼
+        ┌───────────────┐
+        │  Events       │
+        │  Storage       │
         │                │
-        ▼                ▼
-  ┌──────────┐    ┌──────────────┐
-  │ Events   │    │  Messages    │
-  │ Storage  │    │  Storage     │
-  │          │    │              │
-  │ (All     │    │ (Extracted   │
-  │ events)  │    │  from event  │
-  │          │    │  payload)    │
-  └──────────┘    └──────────────┘
-        │                │
-        ▼                ▼
-  ┌──────────┐    ┌──────────────┐
-  │ events   │    │  messages    │
-  │ table    │    │  table       │
-  └──────────┘    └──────────────┘
+        │ (All events)   │
+        └───────┬───────┘
+                │
+                ▼
+        ┌───────────────┐
+        │  events       │
+        │  table        │
+        └───────────────┘
 
 ┌─────────────────────────────────────────────────────────┐
 │              Direct Message API                         │
@@ -112,7 +107,7 @@
 ## Key Design Decisions
 
 1. **Separation of Concerns**: Events (observability) and Messages (conversation) are stored separately
-2. **Dual Entry Points**: Messages can arrive via Events OR direct API (backward compatibility)
-3. **Event-Driven**: Most data flows through the event system for consistency
+2. **Single Entry Point**: Messages arrive via direct HTTP API only (simpler, clearer separation)
+3. **Event-Driven**: System telemetry flows through the event system
 4. **Backward Compatible**: Direct message API maintains compatibility with ark-cluster-memory
 

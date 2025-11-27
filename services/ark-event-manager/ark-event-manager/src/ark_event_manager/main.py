@@ -48,7 +48,6 @@ async def lifespan(app: FastAPI):
     # Start event processor
     processor = EventProcessor(
         consumer,
-        memory_storage=storage,
         stream_storage=stream_storage,
         event_storage=event_storage,
     )
