@@ -310,6 +310,9 @@ spec:
               tools:
                 items:
                   properties:
+                    description:
+                      description: Description of the tool as exposed to the agent
+                      type: string
                     functions:
                       items:
                         properties:
@@ -327,14 +330,10 @@ spec:
                       type: string
                     partial:
                       description: |-
-                        ToolPartial allows overriding the tool's name and description as exposed to the agent,
-                        and preconfiguring or hiding tool parameters from the agent. Parameters defined here
-                        are injected at runtime and are not visible or editable by the agent itself.
+                        ToolPartial allows overriding the tool's name and preconfiguring or hiding tool parameters
+                        from the agent. Parameters defined here are injected at runtime and are not visible or
+                        editable by the agent itself.
                       properties:
-                        description:
-                          description: Description to override the tool's description
-                            as exposed to the agent (optional)
-                          type: string
                         name:
                           description: Name to override the tool's name as exposed
                             to the agent (optional)

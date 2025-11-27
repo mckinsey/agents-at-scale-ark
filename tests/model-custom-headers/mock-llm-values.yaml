@@ -1,5 +1,6 @@
 # Mock LLM configuration for custom headers test
 # Echoes back received headers as JSON for verification
+terminationGracePeriodSeconds: 3
 ark:
   model:
     enabled: true
