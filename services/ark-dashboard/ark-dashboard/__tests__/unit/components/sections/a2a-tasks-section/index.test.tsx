@@ -1,5 +1,9 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {
+  AppRouterContext,
+  type AppRouterInstance,
+} from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import { type Mock, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { A2ATasksSection } from '@/components/sections/a2a-tasks-section';
@@ -9,11 +13,22 @@ vi.mock('@/lib/services/a2a-tasks-hooks');
 
 const mockPush = vi.fn();
 
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
+const MockRouter = ({ children }: { children: React.ReactNode }) => {
+  const mockRouter: AppRouterInstance = {
+    back: vi.fn(),
+    forward: vi.fn(),
     push: mockPush,
-  }),
-}));
+    replace: vi.fn(),
+    refresh: vi.fn(),
+    prefetch: vi.fn(),
+  };
+
+  return (
+    <AppRouterContext.Provider value={mockRouter}>
+      {children}
+    </AppRouterContext.Provider>
+  );
+};
 
 describe('A2ATasksSection', () => {
   const mockUseListA2ATasks = useListA2ATasks as Mock;
@@ -31,7 +46,11 @@ describe('A2ATasksSection', () => {
       isFetching: false,
     });
 
-    render(<A2ATasksSection />);
+    render(
+      <MockRouter>
+        <A2ATasksSection />
+      </MockRouter>,
+    );
     expect(screen.getByText('Loading tasks...')).toBeInTheDocument();
   });
 
@@ -45,7 +64,11 @@ describe('A2ATasksSection', () => {
       isFetching: false,
     });
 
-    render(<A2ATasksSection />);
+    render(
+      <MockRouter>
+        <A2ATasksSection />
+      </MockRouter>,
+    );
     expect(screen.getByText('Error loading tasks')).toBeInTheDocument();
     expect(screen.getByText('Failed to fetch')).toBeInTheDocument();
   });
@@ -59,7 +82,11 @@ describe('A2ATasksSection', () => {
       isFetching: false,
     });
 
-    render(<A2ATasksSection />);
+    render(
+      <MockRouter>
+        <A2ATasksSection />
+      </MockRouter>,
+    );
     expect(screen.getByText('No A2A Tasks Found')).toBeInTheDocument();
   });
 
@@ -91,7 +118,11 @@ describe('A2ATasksSection', () => {
       isFetching: false,
     });
 
-    render(<A2ATasksSection />);
+    render(
+      <MockRouter>
+        <A2ATasksSection />
+      </MockRouter>,
+    );
 
     const rows = screen.getAllByRole('row');
     expect(rows.length).toBe(3);
@@ -123,7 +154,11 @@ describe('A2ATasksSection', () => {
       isFetching: false,
     });
 
-    render(<A2ATasksSection />);
+    render(
+      <MockRouter>
+        <A2ATasksSection />
+      </MockRouter>,
+    );
 
     const refreshButton = screen.getByRole('button', { name: /refresh/i });
     await userEvent.click(refreshButton);
@@ -151,7 +186,11 @@ describe('A2ATasksSection', () => {
       isFetching: false,
     });
 
-    render(<A2ATasksSection />);
+    render(
+      <MockRouter>
+        <A2ATasksSection />
+      </MockRouter>,
+    );
 
     const taskRow = screen.getByText('Task 1');
     await userEvent.click(taskRow);
