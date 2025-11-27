@@ -1,3 +1,4 @@
+terminationGracePeriodSeconds: 3
 ark:
   model:
     enabled: true

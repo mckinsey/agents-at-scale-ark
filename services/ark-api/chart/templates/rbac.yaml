@@ -38,7 +38,7 @@ rules:
     verbs: ["get", "list"]
   # Ark resources
   - apiGroups: ["ark.mckinsey.com"]
-    resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories", "evaluations", "evaluators"]
+    resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories", "evaluations", "evaluators", "a2atasks"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 ---
