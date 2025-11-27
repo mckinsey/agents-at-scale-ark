@@ -1,0 +1,67 @@
+terminationGracePeriodSeconds: 3
+ark:
+  model:
+    enabled: true
+    name: test-model
+    type: openai
+    model: gpt-4.1-mini
+    apiKey: mock-api-key
+
+config:
+  rules:
+    # Call 1: researcher agent
+    - path: "/v1/chat/completions"
+      sequence: 0
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-{{timestamp}}",
+            "object": "chat.completion",
+            "model": "{{jmes request body.model}}",
+            "choices": [{
+              "message": {
+                "role": "assistant",
+                "content": "RESEARCH: Here are key facts about AI in business: 1) AI adoption has increased 270% in the last 4 years. 2) 77% of companies are using or exploring AI. 3) AI can automate up to 45% of repetitive tasks. 4) Machine learning improves decision-making accuracy by 35%."
+              },
+              "finish_reason": "stop"
+            }]
+          }
+
+    # Call 2: analyst agent
+    - path: "/v1/chat/completions"
+      sequence: 1
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-{{timestamp}}",
+            "object": "chat.completion",
+            "model": "{{jmes request body.model}}",
+            "choices": [{
+              "message": {
+                "role": "assistant",
+                "content": "ANALYSIS: The research reveals significant AI transformation in business. Key patterns: 1) Exponential adoption curve suggests AI is becoming essential. 2) Automation potential indicates major workforce restructuring ahead. 3) Decision-making improvements drive competitive advantage. The trend shows AI transitioning from optional to mandatory."
+              },
+              "finish_reason": "stop"
+            }]
+          }
+
+    # Call 3: summarizer agent
+    - path: "/v1/chat/completions"
+      sequence: 2
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-{{timestamp}}",
+            "object": "chat.completion",
+            "model": "{{jmes request body.model}}",
+            "choices": [{
+              "message": {
+                "role": "assistant",
+                "content": "SUMMARY: Artificial intelligence is fundamentally reshaping modern business operations. With 77% of companies now engaged with AI and adoption growing 270% over four years, AI has transitioned from innovation to necessity. Businesses leveraging AI gain competitive advantages through 35% better decision-making and potential automation of 45% of tasks. Organizations must prioritize AI integration or risk falling behind competitors who harness these transformative capabilities."
+              },
+              "finish_reason": "stop"
+            }]
+          }
