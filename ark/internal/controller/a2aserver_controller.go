@@ -150,10 +150,9 @@ func (r *A2AServerReconciler) reconcileConditionsAddressResolutionFailed(ctx con
 
 // reconcileConditionsDiscoveryFailed updates conditions when discovery fails
 func (r *A2AServerReconciler) reconcileConditionsDiscoveryFailed(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, err error, resolvedAddress string) error {
-	log := logf.FromContext(ctx)
 	changed := r.reconcileCondition(a2aServer, A2AServerReady, metav1.ConditionFalse, "DiscoveryFailed", fmt.Sprintf("Server not ready due to discovery failure: %v", err))
 	if changed {
-		log.Error(err, "A2A agent discovery failed", "server", a2aServer.Name, "address", resolvedAddress)
+		r.Eventing.A2aRecorder().AgentDiscoveryFailed(ctx, a2aServer, fmt.Sprintf("Failed to discover agents from A2A server %s: %v", resolvedAddress, err))
 		return r.updateStatusWithConditions(ctx, a2aServer)
 	}
 	return nil

@@ -33,6 +33,7 @@ type A2aRecorder interface {
 	OperationTracker
 	AgentCreationFailed(ctx context.Context, obj runtime.Object, reason string)
 	AgentDeletionFailed(ctx context.Context, obj runtime.Object, reason string)
+	AgentDiscoveryFailed(ctx context.Context, obj runtime.Object, reason string)
 	TaskPollingFailed(ctx context.Context, obj runtime.Object, reason string)
 	A2AMessageFailed(ctx context.Context, reason string)
 	A2AConnectionFailed(ctx context.Context, reason string)

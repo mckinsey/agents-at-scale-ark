@@ -29,6 +29,10 @@ func (t *a2aRecorder) AgentDeletionFailed(ctx context.Context, obj runtime.Objec
 	t.emitter.EmitWarning(ctx, obj, "AgentDeletionFailed", reason)
 }
 
+func (t *a2aRecorder) AgentDiscoveryFailed(ctx context.Context, obj runtime.Object, reason string) {
+	t.emitter.EmitWarning(ctx, obj, "AgentDiscoveryFailed", reason)
+}
+
 func (t *a2aRecorder) TaskPollingFailed(ctx context.Context, obj runtime.Object, reason string) {
 	t.emitter.EmitWarning(ctx, obj, "TaskPollingFailed", reason)
 }
