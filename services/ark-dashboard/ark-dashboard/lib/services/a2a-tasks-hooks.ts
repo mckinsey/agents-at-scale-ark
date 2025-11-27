@@ -11,3 +11,11 @@ export function useListA2ATasks() {
     },
   });
 }
+
+export function useA2ATask(id: string) {
+  return useQuery({
+    queryKey: ['a2a-tasks', id],
+    queryFn: () => a2aTasksService.get(id),
+    enabled: !!id,
+  });
+}
