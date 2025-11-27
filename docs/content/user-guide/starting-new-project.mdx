@@ -7,6 +7,20 @@ description: A complete guide to bootstrapping and testing a new ARK agentic pro
 
 This guide walks you through creating a new agentic project from scratch using ARK's code generation tools and testing the complete workflow end-to-end.
 
+## Important: Project Structure
+
+**ARK is the platform, not where you build agents.** This guide shows you how to create a new agent project in its own repository, separate from the ARK platform repository.
+
+- **ARK Repository**: Contains the platform code (controllers, APIs, services)
+- **Your Agent Project**: A separate repository with agents, teams, queries, and tools
+
+Multiple teams can build their own agent projects, each with their own repository, all using the same ARK platform. This separation allows:
+
+- Teams to work independently on their agents
+- Version control for agent configurations
+- Different deployment lifecycles for platform vs. agents
+- Sharing agent projects across teams
+
 ## Prerequisites
 
 Before starting, ensure you have:
@@ -91,6 +105,55 @@ my-agents/
 ├── Makefile         # Build and deployment targets
 ├── .env             # Environment configuration
 └── README.md        # Project README
+```
+
+## Deploying Your Project to ARK
+
+After generating your project, deploy it to your ARK cluster:
+
+### Using Make (Recommended)
+
+```bash
+# Deploy all resources to your cluster
+make deploy
+
+# Or deploy to a specific namespace
+make deploy NAMESPACE=my-team-agents
+```
+
+### Using Helm Directly
+
+```bash
+# Install as a Helm chart
+helm install my-agents . --namespace my-team-agents --create-namespace
+
+# Upgrade an existing deployment
+helm upgrade my-agents . --namespace my-team-agents
+```
+
+### Using kubectl
+
+```bash
+# Apply individual resources
+kubectl apply -f agents/
+kubectl apply -f teams/
+kubectl apply -f queries/
+
+# Or apply all YAML files
+kubectl apply -f . -R
+```
+
+### Verify Deployment
+
+```bash
+# Check deployed resources
+kubectl get agents,teams,queries -n my-team-agents
+
+# Check agent status
+kubectl get agents -n my-team-agents -o wide
+
+# View agent logs
+kubectl logs -l app=ark-api -n my-team-agents --tail=100
 ```
 
 ## Step 2: Generate Your First Agent
