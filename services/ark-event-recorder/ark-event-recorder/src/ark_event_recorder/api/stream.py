@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from ..storage import StreamStorage
+from ark_event_recorder.storage import StreamStorage
 
 router = APIRouter()
 
@@ -102,4 +102,6 @@ async def complete_stream(query_id: str) -> dict:
         raise HTTPException(
             status_code=500, detail=f"Failed to complete stream: {str(e)}"
         ) from e
+
+
 

@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Header, HTTPException, Request, Response
 
-from ..broker import HTTPEventConsumer
+from ark_event_recorder.broker import HTTPEventConsumer
 
 router = APIRouter()
 
@@ -46,4 +46,6 @@ async def receive_event(
         status_code=202,
         media_type="application/json",
     )
+
+
 

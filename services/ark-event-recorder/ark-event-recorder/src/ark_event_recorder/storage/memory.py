@@ -7,12 +7,17 @@ logger = logging.getLogger(__name__)
 
 
 class MemoryStorage:
-    """Storage for conversation messages (implements MemoryInterface)."""
+    """
+    Storage for conversation messages (implements MemoryInterface).
+
+    This is a backend-agnostic in-memory implementation.
+    Can be swapped with PostgreSQL or other backends in the future.
+    """
 
     def __init__(self):
         """Initialize memory storage."""
-        # TODO: Initialize PostgreSQL connection
         self.messages: dict[str, list[dict[str, Any]]] = {}
+        logger.info("MemoryStorage initialized (in-memory backend)")
 
     async def get_messages(self, session_id: str) -> list[dict[str, Any]]:
         """
@@ -24,8 +29,9 @@ class MemoryStorage:
         Returns:
             List of message records
         """
-        # TODO: Query PostgreSQL
-        return self.messages.get(session_id, [])
+        messages = self.messages.get(session_id, [])
+        logger.debug(f"Retrieved {len(messages)} messages for session {session_id}")
+        return messages
 
     async def add_messages(
         self, session_id: str, query_id: str | None, messages: list[dict[str, Any]]
@@ -38,11 +44,12 @@ class MemoryStorage:
             query_id: Optional query ID
             messages: List of message objects
         """
-        # TODO: Insert into PostgreSQL
         if session_id not in self.messages:
             self.messages[session_id] = []
         self.messages[session_id].extend(messages)
         logger.debug(
             f"Added {len(messages)} messages to session {session_id} (query: {query_id})"
         )
+
+
 

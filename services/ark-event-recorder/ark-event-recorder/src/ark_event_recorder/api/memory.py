@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query
 
-from ..storage import MemoryStorage
+from ark_event_recorder.storage import MemoryStorage
 
 router = APIRouter()
 
@@ -73,4 +73,6 @@ async def add_messages(data: dict) -> dict:
         raise HTTPException(
             status_code=500, detail=f"Failed to add messages: {str(e)}"
         ) from e
+
+
 
