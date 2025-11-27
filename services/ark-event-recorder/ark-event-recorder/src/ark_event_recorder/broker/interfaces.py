@@ -2,17 +2,19 @@
 
 from abc import ABC, abstractmethod
 
+from ark_event_recorder.core.types import Protobuf
+
 
 class EventPublisher(ABC):
     """Interface for publishing events to a broker."""
 
     @abstractmethod
-    async def publish(self, event: bytes, correlation_id: str) -> None:
+    async def publish(self, event: Protobuf, correlation_id: str) -> None:
         """
         Publish an event to the broker.
 
         Args:
-            event: Protobuf Event object serialized as binary
+            event: Protobuf Event object serialized as binary (Protobuf type)
             correlation_id: Used for partitioning/ordering (e.g., session_id, query_id)
         """
         pass
@@ -24,7 +26,7 @@ class EventConsumer(ABC):
     @abstractmethod
     async def consume_batch(
         self, max_events: int = 100, timeout: float = 1.0
-    ) -> list[tuple[bytes, str]]:
+    ) -> list[tuple[Protobuf, str]]:
         """
         Consume a batch of events.
 
@@ -33,7 +35,7 @@ class EventConsumer(ABC):
             timeout: Maximum time to wait for events (seconds)
 
         Returns:
-            List of (event_bytes, correlation_id) tuples
+            List of (event_bytes, correlation_id) tuples where event_bytes is Protobuf type
         """
         pass
 

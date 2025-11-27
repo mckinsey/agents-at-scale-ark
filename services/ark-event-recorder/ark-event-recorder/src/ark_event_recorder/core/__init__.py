@@ -21,6 +21,7 @@ except ImportError:
 from ark_event_recorder.core.models import Event, Message
 from ark_event_recorder.core.processor import EventProcessor
 from ark_event_recorder.core.proto_helpers import parse_event_protobuf
+from ark_event_recorder.core.types import Protobuf
 
 __all__ = [
     "AsyncSessionLocal",
@@ -34,5 +35,6 @@ __all__ = [
     "init_db",
     "Message",
     "parse_event_protobuf",
+    "Protobuf",
 ]
 

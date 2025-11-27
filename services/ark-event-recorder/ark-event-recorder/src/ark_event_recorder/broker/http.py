@@ -5,6 +5,7 @@ from typing import Optional
 import httpx
 
 from ark_event_recorder.broker.interfaces import EventConsumer, EventPublisher
+from ark_event_recorder.core.types import Protobuf
 
 
 class HTTPEventPublisher(EventPublisher):
@@ -28,12 +29,12 @@ class HTTPEventPublisher(EventPublisher):
             self._client = httpx.AsyncClient(timeout=self.timeout)
         return self._client
 
-    async def publish(self, event: bytes, correlation_id: str) -> None:
+    async def publish(self, event: Protobuf, correlation_id: str) -> None:
         """
         Publish an event via HTTP POST to AER.
 
         Args:
-            event: Protobuf Event object serialized as binary
+            event: Protobuf Event object serialized as binary (Protobuf type)
             correlation_id: Used for partitioning/ordering
         """
         client = await self._get_client()
@@ -62,22 +63,22 @@ class HTTPEventConsumer(EventConsumer):
 
     def __init__(self):
         """Initialize HTTP event consumer with internal queue."""
-        self.queue: asyncio.Queue[tuple[bytes, str]] = asyncio.Queue()
-        self.pending_events: list[tuple[bytes, str]] = []
+        self.queue: asyncio.Queue[tuple[Protobuf, str]] = asyncio.Queue()
+        self.pending_events: list[tuple[Protobuf, str]] = []
 
-    async def enqueue(self, event: bytes, correlation_id: str) -> None:
+    async def enqueue(self, event: Protobuf, correlation_id: str) -> None:
         """
         Enqueue an event (called by HTTP endpoint handler).
 
         Args:
-            event: Protobuf Event object serialized as binary
+            event: Protobuf Event object serialized as binary (Protobuf type)
             correlation_id: Correlation ID from HTTP header
         """
         await self.queue.put((event, correlation_id))
 
     async def consume_batch(
         self, max_events: int = 100, timeout: float = 1.0
-    ) -> list[tuple[bytes, str]]:
+    ) -> list[tuple[Protobuf, str]]:
         """
         Consume a batch of events from internal queue.
 
@@ -86,7 +87,7 @@ class HTTPEventConsumer(EventConsumer):
             timeout: Maximum time to wait for events (seconds)
 
         Returns:
-            List of (event_bytes, correlation_id) tuples
+            List of (event_bytes, correlation_id) tuples where event_bytes is Protobuf type
         """
         events = []
         deadline = asyncio.get_event_loop().time() + timeout

@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 from ark_event_recorder.core.event_model import EventModel
 from ark_event_recorder.core.proto_helpers import parse_event_protobuf
+from ark_event_recorder.core.types import Protobuf
 
 logger = logging.getLogger(__name__)
 
@@ -88,12 +89,12 @@ class EventProcessor:
             f"Event processor stopped (processed {self._events_processed} events)"
         )
 
-    async def _process_event(self, event_bytes: bytes, correlation_id: str) -> None:
+    async def _process_event(self, event_bytes: Protobuf, correlation_id: str) -> None:
         """
         Process a single event.
 
         Args:
-            event_bytes: Protobuf-serialized event
+            event_bytes: Protobuf-serialized event (Protobuf type)
             correlation_id: Correlation ID for the event
         """
         try:
@@ -123,14 +124,22 @@ class EventProcessor:
         """
         Route event to appropriate storage based on type.
 
+        Events can contain different types of data:
+        - Query events → StreamStorage (for real-time streaming)
+        - Memory/message events → MemoryStorage (extracts conversation messages from payload)
+
         Args:
             event: Event model instance
         """
+        # Route query execution events to streaming
         if event.type == "query" and event.subtype in ("execution_start", "execution_complete"):
             query_id = event.payload.get("queryId") or event.correlation_id
             if query_id and self.stream_storage:
                 await self.stream_storage.write_stream(query_id, event.model_dump())
 
+        # Route memory/message events to message storage
+        # Note: Messages can arrive via Events (when event.type="memory" or event.subtype contains "message")
+        # The actual conversation messages are extracted from event.payload.messages
         if event.type == "memory" or "message" in event.subtype.lower():
             session_id = event.payload.get("sessionId") or event.correlation_id
             if session_id and self.memory_storage:

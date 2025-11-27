@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Header, HTTPException, Request, Response
 
 from ark_event_recorder.broker import HTTPEventConsumer
+from ark_event_recorder.core.types import Protobuf
 
 router = APIRouter()
 
@@ -29,7 +30,7 @@ async def receive_event(
     if consumer is None:
         raise HTTPException(status_code=503, detail="Event consumer not initialized")
 
-    event_bytes = await request.body()
+    event_bytes: Protobuf = Protobuf(await request.body())
 
     if not event_bytes:
         raise HTTPException(status_code=400, detail="Empty event body")

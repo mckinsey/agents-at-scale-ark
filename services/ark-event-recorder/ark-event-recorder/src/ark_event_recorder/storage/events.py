@@ -13,7 +13,10 @@ class EventStorage(EventStorageInterface):
     """
     Database storage for events using SQLModel.
 
-    Persists all events to the database for querying and analysis.
+    Persists system telemetry/observability events (NOT conversation messages).
+    Events represent what happened in the system (query started, workflow completed, etc.).
+
+    For conversation messages, see MemoryStorage.
     """
 
     def __init__(self):

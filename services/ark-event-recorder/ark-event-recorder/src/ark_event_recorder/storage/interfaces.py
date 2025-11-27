@@ -1,7 +1,7 @@
 """Storage interfaces for abstraction layer."""
 
 from abc import ABC, abstractmethod
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 from ark_event_recorder.core.event_model import EventModel
 

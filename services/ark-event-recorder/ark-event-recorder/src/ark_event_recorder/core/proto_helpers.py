@@ -11,10 +11,12 @@ try:
 except ImportError:
     from ark_event_recorder.core.event_model import EventModel
 
+from ark_event_recorder.core.types import Protobuf
+
 logger = logging.getLogger(__name__)
 
 
-def parse_event_protobuf(event_bytes: bytes) -> EventModel:
+def parse_event_protobuf(event_bytes: Protobuf) -> EventModel:
     """
     Parse protobuf event bytes into an EventModel.
 
@@ -22,7 +24,7 @@ def parse_event_protobuf(event_bytes: bytes) -> EventModel:
     For production with generated protobuf code, replace this implementation.
 
     Args:
-        event_bytes: Protobuf-serialized Event message
+        event_bytes: Protobuf-serialized Event message (Protobuf type)
 
     Returns:
         EventModel instance
@@ -69,7 +71,7 @@ def parse_event_protobuf(event_bytes: bytes) -> EventModel:
         raise ValueError(f"Invalid protobuf event: {e}") from e
 
 
-def _parse_protobuf_message(event_bytes: bytes) -> Any:
+def _parse_protobuf_message(event_bytes: Protobuf) -> Any:
     """Try to parse using protobuf library if available."""
     try:
         from google.protobuf.message import Message
@@ -84,7 +86,7 @@ def _parse_protobuf_message(event_bytes: bytes) -> Any:
         raise ValueError("Cannot parse protobuf message")
 
 
-def _parse_simple_protobuf(event_bytes: bytes) -> dict[str, Any]:
+def _parse_simple_protobuf(event_bytes: Protobuf) -> dict[str, Any]:
     """Fallback simple parser for basic protobuf structure."""
     event_dict: dict[str, Any] = {
         "event_id": str(uuid.uuid4()),
