@@ -680,9 +680,117 @@ async def receive_event(request: Request):
 - No replay capability
 - Tight coupling between watchers and AER
 
-#### Phase 2: Swap in Kafka (When Needed)
+#### Phase 2: Swap in Fluentd (When Buffering Needed)
 
-When you need buffering, replay, or higher reliability, swap implementations:
+When you need buffering but don't need Kafka's full feature set, swap to Fluentd:
+
+**FluentdEventPublisher** (in watchers):
+```python
+class FluentdEventPublisher(EventPublisher):
+    def __init__(self, fluentd_url: str, timeout: float = 30.0):
+        """
+        Initialize Fluentd event publisher.
+        
+        Args:
+            fluentd_url: Fluentd HTTP input endpoint (e.g., "http://fluentd:9880/events")
+            timeout: HTTP request timeout in seconds
+        """
+        self.fluentd_url = fluentd_url
+        self.timeout = timeout
+        self._client = httpx.AsyncClient(timeout=timeout)
+    
+    async def publish(self, event: bytes, correlation_id: str) -> None:
+        """
+        Publish an event via HTTP POST to Fluentd.
+        Fluentd buffers and forwards to AER.
+        
+        Args:
+            event: Protobuf Event object serialized as binary
+            correlation_id: Used for partitioning/ordering
+        """
+        # Fluentd accepts JSON or binary, we send protobuf binary
+        response = await self._client.post(
+            self.fluentd_url,
+            content=event,
+            headers={
+                "Content-Type": "application/x-protobuf",
+                "X-Correlation-ID": correlation_id,
+            },
+        )
+        response.raise_for_status()
+```
+
+**FluentdEventConsumer** (in AER):
+```python
+class FluentdEventConsumer(EventConsumer):
+    def __init__(self, aer_http_endpoint: str):
+        """
+        Initialize Fluentd event consumer.
+        
+        Note: Fluentd forwards events to AER's HTTP endpoint.
+        This consumer receives via the same HTTP endpoint as Phase 1,
+        but events are buffered by Fluentd before delivery.
+        """
+        # Fluentd forwards to AER HTTP endpoint, so we use HTTPEventConsumer
+        # internally, but events are buffered by Fluentd
+        self.http_consumer = HTTPEventConsumer()
+    
+    async def consume_batch(
+        self, max_events: int = 100, timeout: float = 1.0
+    ) -> list[tuple[bytes, str]]:
+        """
+        Consume events forwarded by Fluentd.
+        Events are buffered by Fluentd, so AER can process at its own pace.
+        """
+        return await self.http_consumer.consume_batch(max_events, timeout)
+    
+    async def commit(self) -> None:
+        """Commit processed events (no-op, Fluentd handles delivery confirmation)."""
+        await self.http_consumer.commit()
+```
+
+**Fluentd Configuration** (separate service):
+```ruby
+# fluentd.conf
+<source>
+  @type http
+  port 9880
+  bind 0.0.0.0
+  <parse>
+    @type none
+    message_key message
+  </parse>
+</source>
+
+<match events>
+  @type forward
+  <buffer>
+    @type file
+    path /var/log/fluentd-buffers/events.buffer
+    flush_interval 1s
+    retry_type exponential_backoff
+    retry_wait 1s
+    retry_max_interval 60s
+    retry_timeout 1h
+  </buffer>
+  <server>
+    name aer
+    host ark-event-recorder
+    port 8080
+  </server>
+</match>
+```
+
+**Benefits of Fluentd:**
+- Buffering with retry logic
+- Lower operational overhead than Kafka
+- Leverages existing K8s logging infrastructure
+- Can buffer to filesystem (PVC) for durability
+- HTTP IN → Buffering → HTTP OUT pattern
+
+#### Phase 3: Swap in Kafka (When Scale/Replay Needed)
+
+When you need high-scale, replay capability, or stronger ordering guarantees, swap to Kafka:
 
 **KafkaEventPublisher** (in watchers):
 ```python
@@ -741,55 +849,97 @@ class KafkaEventConsumer(EventConsumer):
 ```
 
 **Migration Path:**
-1. Watchers and AER use the same interface - no code changes needed
-2. Swap implementations via configuration:
+1. **Same Interface**: All implementations (HTTP, Fluentd, Kafka, Redis Streams) implement `EventPublisher` and `EventConsumer` - no code changes needed when swapping
+2. **Configuration-Driven**: Swap implementations via configuration:
    ```yaml
    eventBroker:
-     type: "fluentd"  # or "http", "kafka", "redis-streams"
+     type: "fluentd"  # Options: "http", "fluentd", "kafka", "redis-streams"
      config:
+       # For Fluentd:
        fluentdUrl: "http://fluentd:9880/events"
-       # Fluentd forwards to AER with buffering
+       # For Kafka:
+       # brokers: ["kafka:9092"]
+       # topic: "events"
+       # For Redis Streams:
+       # redisUrl: "redis://redis:6379"
+       # streamName: "events"
    ```
-3. Both implementations can coexist during migration
-4. **Progression**: HTTP → Fluentd (when buffering needed) → Kafka (when scale/replay needed)
+3. **Zero-Downtime Migration**: Both implementations can coexist during migration
+4. **Progression Path**: 
+   - **Phase 1**: HTTP (direct, no buffering)
+   - **Phase 2**: Fluentd (when buffering needed, lower ops overhead)
+   - **Phase 3**: Kafka (when scale/replay/ordering guarantees needed)
+   - **Alternative**: Redis Streams (when you need simpler operations than Kafka)
 
 ### Alternative Implementations
 
-#### Fluentd (Lightweight Buffering Alternative)
+### Implementation Summary
 
-**FluentdEventPublisher/Consumer** - Use Fluentd as a lightweight buffering layer before jumping to Kafka:
+All broker implementations use the same `EventPublisher` and `EventConsumer` interfaces, making them fully swappable:
 
-**Benefits:**
-- **HTTP IN → Buffering → HTTP OUT**: Fluentd can accept HTTP input, buffer events, and forward to AER via HTTP
-- **Filesystem buffering**: Can also buffer to filesystem with PVC for durability
-- **Retry logic**: Built-in retry and backpressure handling
-- **Less opinionated**: Well-documented in K8s ecosystem
-- **OTEL support**: Has OpenTelemetry plugin for integration
-- **Lower operational overhead**: Simpler than Kafka for moderate scale
+| Implementation | Buffering | Replay | Ordering | Ops Complexity | Use Case |
+|---------------|-----------|--------|----------|----------------|----------|
+| **HTTP** | ❌ | ❌ | ❌ | Low | Initial development, low volume |
+| **Fluentd** | ✅ | Limited | ❌ | Medium | Moderate volume, need buffering |
+| **Kafka** | ✅ | ✅ | ✅ | High | High scale, replay needed |
+| **Redis Streams** | ✅ | Limited | ✅ | Medium | Moderate scale, simpler than Kafka |
 
-**Use Case:**
-- When you need buffering but don't need Kafka's full feature set
-- When you want to leverage existing K8s logging infrastructure
-- As a stepping stone before Kafka (can migrate later)
-
-**Configuration:**
-```yaml
-eventBroker:
-  type: "fluentd"
-  config:
-    # Fluentd HTTP input endpoint
-    fluentdUrl: "http://fluentd:9880/events"
-    # Fluentd forwards to AER
-    aerUrl: "http://ark-event-recorder:8080/events"
-```
-
-**Note**: Fluentd can also be used for filesystem-based event forwarding (structured JSON logs), but HTTP/gRPC endpoints are preferred for programmatic event emission from controllers and services.
+**Key Point**: The same code works with any implementation - just change the configuration. No code changes needed when migrating between implementations.
 
 #### Redis Streams
 
-- Similar interface to Kafka
-- Simpler operations, less durable
+**RedisStreamsEventPublisher/Consumer** - Similar interface to Kafka but simpler:
+
+```python
+class RedisStreamsEventPublisher(EventPublisher):
+    def __init__(self, redis_url: str, stream_name: str):
+        self.redis = redis.from_url(redis_url)
+        self.stream_name = stream_name
+    
+    async def publish(self, event: bytes, correlation_id: str) -> None:
+        # Add to Redis stream with correlation_id as field
+        await self.redis.xadd(
+            self.stream_name,
+            {"event": event, "correlation_id": correlation_id}
+        )
+
+class RedisStreamsEventConsumer(EventConsumer):
+    def __init__(self, redis_url: str, stream_name: str, group_name: str):
+        self.redis = redis.from_url(redis_url)
+        self.stream_name = stream_name
+        self.group_name = group_name
+        self.consumer_name = f"aer-{uuid.uuid4()}"
+    
+    async def consume_batch(
+        self, max_events: int = 100, timeout: float = 1.0
+    ) -> list[tuple[bytes, str]]:
+        # Read from Redis stream
+        messages = await self.redis.xreadgroup(
+            self.group_name,
+            self.consumer_name,
+            {self.stream_name: ">"},
+            count=max_events,
+            block=int(timeout * 1000)
+        )
+        events = []
+        for stream, msgs in messages:
+            for msg_id, fields in msgs:
+                events.append((fields[b"event"], fields[b"correlation_id"].decode()))
+                self.pending_ids.append((stream, msg_id))
+        return events
+    
+    async def commit(self) -> None:
+        # Acknowledge processed messages
+        for stream, msg_id in self.pending_ids:
+            await self.redis.xack(self.stream_name, self.group_name, msg_id)
+        self.pending_ids.clear()
+```
+
+**Benefits:**
+- Simpler than Kafka
+- Built-in ordering via streams
 - Good for moderate volume
+- Less durable than Kafka (in-memory with optional persistence)
 
 #### PostgreSQL Queue Table
 
