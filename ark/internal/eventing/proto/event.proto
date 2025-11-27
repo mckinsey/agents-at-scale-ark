@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package ark.eventing.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+enum EventSeverity {
+  EVENT_SEVERITY_UNSPECIFIED = 0;
+  EVENT_SEVERITY_DEBUG = 1;
+  EVENT_SEVERITY_INFO = 2;
+  EVENT_SEVERITY_WARNING = 3;
+  EVENT_SEVERITY_ERROR = 4;
+  EVENT_SEVERITY_CRITICAL = 5;
+}
+
+enum EventSourceType {
+  EVENT_SOURCE_TYPE_UNSPECIFIED = 0;
+  EVENT_SOURCE_TYPE_ARK_CONTROLLER = 1;
+  EVENT_SOURCE_TYPE_WATCHER = 2;
+  EVENT_SOURCE_TYPE_SERVICE = 3;
+  EVENT_SOURCE_TYPE_USER = 4;
+  EVENT_SOURCE_TYPE_K8S = 5;
+}
+
+message Event {
+  string event_id = 1;
+  string correlation_id = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  EventSeverity severity = 4;
+  string type = 5;
+  string subtype = 6;
+  EventSourceType source_type = 7;
+  string source = 8;
+  string version = 9;
+  google.protobuf.Struct payload = 10;
+  google.protobuf.Timestamp created_at = 11;
+}
+

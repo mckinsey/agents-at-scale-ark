@@ -327,9 +327,31 @@ CREATE INDEX idx_session_id ON events ((payload->>'sessionId'));
 ### Purpose
 A single, configurable service that watches multiple event sources (Kubernetes Events, Argo Workflows, etc.), normalizes them to the standard event format, and publishes events via the `EventPublisher` interface. **Core part of Ark**
 
-**Note**: Initially implements `HTTPEventPublisher` (direct HTTP to AER). Can be swapped to `KafkaEventPublisher` or other implementations via configuration when buffering/replay capabilities are needed.
+**Note**: Initially implements `HTTPEventPublisher` (direct HTTP to AER). Can be swapped to `FluentdEventPublisher`, `KafkaEventPublisher`, or other implementations via configuration when buffering/replay capabilities are needed.
 
 **Design Philosophy**: Start with a single unified service for deployment simplicity. Can be split into dedicated services later if needed for scale or operational reasons.
+
+### Event Emission from Ark Controller
+
+The Ark controller uses an `EventEmitter` interface abstraction that allows different implementations:
+
+**EventEmitter Interface** (in Ark controller):
+```go
+type EventEmitter interface {
+    EmitEvent(ctx context.Context, eventType, reason string, data EventData)
+}
+```
+
+**Implementations:**
+- **KubernetesEventEmitter**: Emits to K8s Events API (for administrative events)
+- **HTTPEventEmitter**: Emits directly to AER via HTTP (for query execution tracking)
+- **HybridEventEmitter**: Routes events based on type (K8s + AER, or AER only)
+
+**Event Routing in Controller:**
+- **Query execution tracking events** (e.g., `QueryExecutionStart`, `MemoryGetMessagesComplete`, `TeamExecutionStart`): Emit to AER via HTTP/gRPC for persistent storage and streaming
+- **Administrative events** (e.g., `ModelProbeFailed`, `ModelNotAvailable`, `StatusChanged`): Emit to K8s Events API for standard K8s observability
+
+This allows the controller to use a unified event model while routing events to appropriate destinations based on their purpose.
 
 ### Responsibilities
 
@@ -340,8 +362,10 @@ A single, configurable service that watches multiple event sources (Kubernetes E
    - **Custom Sources**: Extensible for future event sources
 
 2. **Event Filtering**: Route events based on configuration:
-   - **K8s + Broker**: Events that go to both K8s events API and Kafka (e.g., core query events)
-   - **Broker Only**: Events that skip K8s events API and go directly to Kafka (future: granular events to reduce etcd pressure)
+   - **K8s + Broker**: Events that go to both K8s events API and event broker (e.g., core query events for backward compatibility)
+   - **Broker Only**: Events that skip K8s events API and go directly to event broker (future: granular events to reduce etcd pressure)
+   - **Query Execution Tracking**: Structured logs/events from controller stdout (via Fluentd or direct HTTP) for query execution lifecycle
+   - **Administrative Events**: Standard K8s events for resource lifecycle (ModelNotAvailable, StatusChanged, etc.)
 
 3. **Event Normalization**: Convert all event types to standardized AER protobuf format
 
@@ -350,7 +374,9 @@ A single, configurable service that watches multiple event sources (Kubernetes E
 5. **Event Publishing**: Use `EventPublisher` interface to publish normalized events:
    - Serialize events to protobuf binary format
    - Call `publisher.publish(event, correlation_id)`
-   - Implementation (HTTP/Kafka/Redis) is configurable
+   - Implementation (HTTP/Fluentd/Kafka/Redis) is configurable
+   - **Primary Interface**: HTTP/gRPC endpoints (preferred for programmatic emission)
+   - **Alternative**: Filesystem-based forwarding via Fluentd for structured logs (when HTTP not available)
 
 ### Configuration
 
@@ -371,10 +397,12 @@ data:
   
   # Event broker configuration
   eventBroker:
-    type: "http"  # Options: "http", "kafka", "redis-streams"
+    type: "http"  # Options: "http", "fluentd", "kafka", "redis-streams"
     config:
-      # For HTTP: AER service URL
+      # For HTTP: AER service URL (direct connection)
       aerUrl: "http://ark-event-recorder:8080"
+      # For Fluentd: (when type=fluentd)
+      # fluentdUrl: "http://fluentd:9880/events"
       # For Kafka: (when type=kafka)
       # brokers: ["kafka:9092"]
       # topic: "events"
@@ -717,21 +745,54 @@ class KafkaEventConsumer(EventConsumer):
 2. Swap implementations via configuration:
    ```yaml
    eventBroker:
-     type: "kafka"  # or "http" or "redis-streams"
+     type: "fluentd"  # or "http", "kafka", "redis-streams"
      config:
-       brokers: ["kafka:9092"]
-       topic: "events"
+       fluentdUrl: "http://fluentd:9880/events"
+       # Fluentd forwards to AER with buffering
    ```
 3. Both implementations can coexist during migration
+4. **Progression**: HTTP → Fluentd (when buffering needed) → Kafka (when scale/replay needed)
 
 ### Alternative Implementations
 
-**Redis Streams:**
+#### Fluentd (Lightweight Buffering Alternative)
+
+**FluentdEventPublisher/Consumer** - Use Fluentd as a lightweight buffering layer before jumping to Kafka:
+
+**Benefits:**
+- **HTTP IN → Buffering → HTTP OUT**: Fluentd can accept HTTP input, buffer events, and forward to AER via HTTP
+- **Filesystem buffering**: Can also buffer to filesystem with PVC for durability
+- **Retry logic**: Built-in retry and backpressure handling
+- **Less opinionated**: Well-documented in K8s ecosystem
+- **OTEL support**: Has OpenTelemetry plugin for integration
+- **Lower operational overhead**: Simpler than Kafka for moderate scale
+
+**Use Case:**
+- When you need buffering but don't need Kafka's full feature set
+- When you want to leverage existing K8s logging infrastructure
+- As a stepping stone before Kafka (can migrate later)
+
+**Configuration:**
+```yaml
+eventBroker:
+  type: "fluentd"
+  config:
+    # Fluentd HTTP input endpoint
+    fluentdUrl: "http://fluentd:9880/events"
+    # Fluentd forwards to AER
+    aerUrl: "http://ark-event-recorder:8080/events"
+```
+
+**Note**: Fluentd can also be used for filesystem-based event forwarding (structured JSON logs), but HTTP/gRPC endpoints are preferred for programmatic event emission from controllers and services.
+
+#### Redis Streams
+
 - Similar interface to Kafka
 - Simpler operations, less durable
 - Good for moderate volume
 
-**PostgreSQL Queue Table:**
+#### PostgreSQL Queue Table
+
 - Use database as queue
 - Simple, but less efficient than dedicated brokers
 - Good for low volume or when you want to avoid extra infrastructure
