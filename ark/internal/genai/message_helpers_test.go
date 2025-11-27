@@ -397,3 +397,100 @@ func BenchmarkPrepareNewMessagesForMemory(b *testing.B) {
 		_ = PrepareNewMessagesForMemory(inputMessages, responseMessages)
 	}
 }
+
+func TestExtractLastAssistantMessageContent(t *testing.T) {
+	tests := []struct {
+		name     string
+		messages []Message
+		want     string
+	}{
+		{
+			name: "assistant message at the end",
+			messages: []Message{
+				createTestMessage("user", "Question"),
+				createTestMessage("assistant", "Answer"),
+			},
+			want: "Answer",
+		},
+		{
+			name: "assistant message in the middle, user at end",
+			messages: []Message{
+				createTestMessage("user", "Question 1"),
+				createTestMessage("assistant", "Answer 1"),
+				createTestMessage("user", "Question 2"),
+			},
+			want: "Answer 1",
+		},
+		{
+			name: "multiple assistant messages, returns last one",
+			messages: []Message{
+				createTestMessage("user", "Question 1"),
+				createTestMessage("assistant", "Answer 1"),
+				createTestMessage("user", "Question 2"),
+				createTestMessage("assistant", "Answer 2"),
+			},
+			want: "Answer 2",
+		},
+		{
+			name: "no assistant messages",
+			messages: []Message{
+				createTestMessage("user", "Question 1"),
+				createTestMessage("user", "Question 2"),
+				createTestMessage("system", "System prompt"),
+			},
+			want: "",
+		},
+		{
+			name:     "empty messages",
+			messages: []Message{},
+			want:     "",
+		},
+		{
+			name: "assistant message with empty content",
+			messages: []Message{
+				createTestMessage("user", "Question"),
+				createTestMessage("assistant", ""),
+			},
+			want: "",
+		},
+		{
+			name: "assistant message with empty content, then valid assistant message",
+			messages: []Message{
+				createTestMessage("user", "Question 1"),
+				createTestMessage("assistant", ""),
+				createTestMessage("user", "Question 2"),
+				createTestMessage("assistant", "Valid answer"),
+			},
+			want: "Valid answer",
+		},
+		{
+			name: "assistant message at the beginning",
+			messages: []Message{
+				createTestMessage("assistant", "First answer"),
+				createTestMessage("user", "Question"),
+				createTestMessage("system", "System"),
+			},
+			want: "First answer",
+		},
+		{
+			name: "mixed message types with assistant at end",
+			messages: []Message{
+				createTestMessage("system", "System prompt"),
+				createTestMessage("user", "Question 1"),
+				createTestMessage("assistant", "Answer 1"),
+				createTestMessage("user", "Question 2"),
+				createTestMessage("assistant", "Final answer"),
+			},
+			want: "Final answer",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ExtractLastAssistantMessageContent(tt.messages)
+			if got != tt.want {
+				t.Errorf("ExtractLastAssistantMessageContent() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

@@ -210,4 +210,3 @@ func TestCreatePartialToolDefinitionPreservesDescription(t *testing.T) {
 	_, hasCity := props["city"]
 	require.True(t, hasCity, "city parameter should remain in schema")
 }
-
