@@ -47,6 +47,11 @@ const (
 	LocalhostGatewayPort = ARKPrefix + "localhost-gateway-port"
 )
 
+// Event annotations
+const (
+	EventData = ARKPrefix + "event-data"
+)
+
 // Streaming annotations
 const (
 	StreamingEnabled = ARKPrefix + "streaming-enabled"

@@ -70,7 +70,6 @@ func (r *MemoryReconciler) getResolver() *common.ValueSourceResolver {
 
 func (r *MemoryReconciler) processMemory(ctx context.Context, memory arkv1alpha1.Memory) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
-	log.Info("Processing memory", "memory", memory.Name)
 
 	resolver := r.getResolver()
 	resolvedAddress, err := resolver.ResolveValueSource(ctx, memory.Spec.Address, memory.Namespace)
@@ -98,8 +97,6 @@ func (r *MemoryReconciler) processMemory(ctx context.Context, memory arkv1alpha1
 	if err := r.updateStatus(ctx, memory, statusReady, "Memory address resolved and validated"); err != nil {
 		return ctrl.Result{}, err
 	}
-
-	log.Info("Memory processed successfully", "memory", memory.Name, "address", resolvedAddress)
 
 	return ctrl.Result{}, nil
 }

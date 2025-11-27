@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"mckinsey.com/ark/internal/eventing"
@@ -32,7 +33,7 @@ func (e *MockEventEmitter) EmitNormal(ctx context.Context, obj runtime.Object, r
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.events = append(e.events, Event{
-		Type:    "Normal",
+		Type:    corev1.EventTypeNormal,
 		Reason:  reason,
 		Message: message,
 		Object:  obj,
@@ -43,7 +44,7 @@ func (e *MockEventEmitter) EmitWarning(ctx context.Context, obj runtime.Object, 
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.events = append(e.events, Event{
-		Type:    "Warning",
+		Type:    corev1.EventTypeWarning,
 		Reason:  reason,
 		Message: message,
 		Object:  obj,

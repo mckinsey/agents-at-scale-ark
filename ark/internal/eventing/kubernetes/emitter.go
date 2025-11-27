@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 
+	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/eventing"
 )
 
@@ -21,11 +23,11 @@ func NewKubernetesEventEmitter(recorder record.EventRecorder) eventing.EventEmit
 }
 
 func (e *KubernetesEventEmitter) EmitNormal(ctx context.Context, obj runtime.Object, reason, message string) {
-	e.recorder.Event(obj, "Normal", reason, message)
+	e.recorder.Event(obj, corev1.EventTypeNormal, reason, message)
 }
 
 func (e *KubernetesEventEmitter) EmitWarning(ctx context.Context, obj runtime.Object, reason, message string) {
-	e.recorder.Event(obj, "Warning", reason, message)
+	e.recorder.Event(obj, corev1.EventTypeWarning, reason, message)
 }
 
 func (e *KubernetesEventEmitter) EmitStructured(ctx context.Context, obj runtime.Object, eventType, reason, message string, data any) {
@@ -35,8 +37,8 @@ func (e *KubernetesEventEmitter) EmitStructured(ctx context.Context, obj runtime
 		return
 	}
 
-	annotations := map[string]string{
-		"ark.mckinsey.com/event-data": string(jsonBytes),
+	eventAnnotations := map[string]string{
+		annotations.EventData: string(jsonBytes),
 	}
-	e.recorder.AnnotatedEventf(obj, annotations, eventType, reason, message)
+	e.recorder.AnnotatedEventf(obj, eventAnnotations, eventType, reason, message)
 }
