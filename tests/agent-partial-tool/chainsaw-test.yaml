@@ -5,33 +5,99 @@ metadata:
 spec:
   description: Test agent with a tool using partial parameters
   steps:
-    - try:
-      - script:
-          skipLogOutput: true
-          content: |
-            set -u
-            echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-          outputs:
-          - name: azure
-            value: (json_parse($stdout))
-      - apply:
-          file: "manifests/*.yaml"
-      - assert:
-          resource:
+    - name: setup-mock-service
+      try:
+        - script:
+            content: |
+              helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+                --version 0.1.23 \
+                --namespace $NAMESPACE \
+                --values mock-llm-values.yaml
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+        - script:
+            content: |
+              helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                labels:
+                  app.kubernetes.io/name: mock-llm
+              status:
+                phase: Running
+                (contains(conditions[?type == 'Ready'].status, 'True')): true
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Model
+              metadata:
+                name: test-model
+              status:
+                conditions:
+                  - type: ModelAvailable
+                    status: "True"
+      catch:
+        - events: {}
+        - describe:
+            apiVersion: v1
+            kind: Pod
+            selector: app.kubernetes.io/name=mock-llm
+        - describe:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Model
-            metadata:
-              name: test-model
-            status:
-              conditions:
-              - type: ModelAvailable
-                status: "True"
-      - assert:
-          resource:
+            name: test-model
+
+    - name: create-tool-and-agent
+      try:
+        - apply:
+            file: manifests/a0[3-4]-*.yaml
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                name: partial-tool-agent
+              status:
+                (conditions[?type == 'Available']):
+                  - status: "True"
+      catch:
+        - events: {}
+        - describe:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Agent
+            name: partial-tool-agent
+
+    - name: create-and-verify-query
+      try:
+        - apply:
+            file: manifests/a05-query.yaml
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Query
+              metadata:
+                name: partial-tool-query
+              status:
+                (conditions[?type == 'Completed']):
+                  - status: "True"
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Query
+              metadata:
+                name: partial-tool-query
+              status:
+                (length(responses)): 1
+                (contains(responses[*].target.name, 'partial-tool-agent')): true
+      catch:
+        - events: {}
+        - describe:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Query
-            metadata:
-              name: partial-tool-query
-            status:
-              (conditions[?type == 'Completed']):
-              - status: 'True'
+            name: partial-tool-query

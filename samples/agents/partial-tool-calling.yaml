@@ -8,9 +8,9 @@ spec:
   tools:
     - type: custom
       name: get-coordinates # Actual Tool CRD name
+      description: Get the current location coordinates of the user # Description exposed to Agent
       partial: 
         name: get-current-location-coordinates # Name exposed to Agent
-        description: Get the current location coordinates of the user # Description exposed to Agent
         parameters:
           - name: city
             value: "{{ .Query.city }}" # From query parameters
