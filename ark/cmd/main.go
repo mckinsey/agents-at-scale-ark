@@ -118,7 +118,7 @@ func parseFlags() struct {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.BoolVar(&showVersion, "version", false, "Show version information and exit")
 
-	zapOpts := zap.Options{Development: true}
+	zapOpts := zap.Options{Development: false}
 	zapOpts.BindFlags(flag.CommandLine)
 	flag.Parse()
 

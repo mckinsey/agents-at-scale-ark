@@ -45,7 +45,7 @@ dev:
     imageSelector: ark-controller
     devImage: golang:1.24-bookworm
     command:
-      ["sh", "-c", "cd /app && go run cmd/main.go --leader-elect=false --zap-log-level=info"]
+      ["sh", "-c", "cd /app && go run cmd/main.go --leader-elect=false"]
     namespace: ark-system
     logs:
       lastLines: 50
