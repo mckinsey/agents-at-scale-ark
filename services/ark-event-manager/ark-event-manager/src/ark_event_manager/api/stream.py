@@ -1,11 +1,9 @@
 """Streaming API endpoints (replaces ark-cluster-memory streaming)."""
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from ark_event_manager.storage import StreamStorage
-
-router = APIRouter()
 
 # Global stream storage instance (set by main.py)
 stream_storage: StreamStorage | None = None
@@ -17,7 +15,6 @@ def set_stream_storage(s: StreamStorage) -> None:
     stream_storage = s
 
 
-@router.get("/{query_id}")
 async def read_stream(
     query_id: str,
     from_beginning: bool = Query(False, alias="from-beginning"),
@@ -57,7 +54,6 @@ async def read_stream(
     )
 
 
-@router.post("/{query_id}")
 async def write_stream(query_id: str, request: dict) -> dict:
     """
     Write chunks to a stream (NDJSON format).
@@ -81,7 +77,6 @@ async def write_stream(query_id: str, request: dict) -> dict:
         ) from e
 
 
-@router.post("/{query_id}/complete")
 async def complete_stream(query_id: str) -> dict:
     """
     Mark query execution as complete.

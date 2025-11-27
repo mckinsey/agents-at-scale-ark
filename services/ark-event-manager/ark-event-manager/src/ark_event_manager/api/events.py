@@ -1,11 +1,9 @@
 """Event ingestion endpoint."""
 
-from fastapi import APIRouter, Header, HTTPException, Request, Response
+from fastapi import Header, HTTPException, Request, Response
 
 from ark_event_manager.transport import HTTPEventConsumer
 from ark_event_manager.core.types import Protobuf
-
-router = APIRouter()
 
 # Global consumer instance (set by main.py)
 consumer: HTTPEventConsumer | None = None
@@ -17,7 +15,6 @@ def set_consumer(c: HTTPEventConsumer) -> None:
     consumer = c
 
 
-@router.post("")
 async def receive_event(
     request: Request,
     x_correlation_id: str = Header(..., alias="X-Correlation-ID"),

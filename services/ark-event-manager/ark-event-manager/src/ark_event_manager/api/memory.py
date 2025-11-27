@@ -1,10 +1,8 @@
 """Memory API endpoints (implements MemoryInterface for Ark controller)."""
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import HTTPException, Query
 
 from ark_event_manager.storage import MemoryStorage
-
-router = APIRouter()
 
 # Global storage instance (set by main.py)
 storage: MemoryStorage | None = None
@@ -16,7 +14,6 @@ def set_storage(s: MemoryStorage) -> None:
     storage = s
 
 
-@router.get("")
 async def get_messages(session_id: str = Query(..., alias="session_id")) -> dict:
     """
     Get messages for a session (implements MemoryInterface.GetMessages).
@@ -39,7 +36,6 @@ async def get_messages(session_id: str = Query(..., alias="session_id")) -> dict
         ) from e
 
 
-@router.post("")
 async def add_messages(data: dict) -> dict:
     """
     Add messages to a session (implements MemoryInterface.AddMessages).
