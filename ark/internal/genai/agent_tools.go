@@ -289,10 +289,6 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall, recorder
 		}, fmt.Errorf("input parameter must be a string for agent tool %s", a.AgentName)
 	}
 
-	// Log the agent execution
-	log := logf.FromContext(ctx)
-	log.Info("calling agent directly", "agent", a.AgentName, "namespace", a.Namespace, "input", inputStr)
-
 	// Create the Agent object using the Agent CRD and recorder
 	agent, err := MakeAgent(ctx, a.k8sClient, a.AgentCRD, recorder, a.telemetryProvider)
 	if err != nil {
@@ -303,16 +299,15 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall, recorder
 		}, err
 	}
 
-	// Prepare user input and history
-	userInput := NewSystemMessage(inputStr)
-	history := []Message{} // Provide history if applicable
+	// Prepare user input. No conversation history is ever provided
+	userInput := NewUserMessage(inputStr)
+	history := []Message{}
 
 	// Call the agent's Execute function
 	// Pass nil for memory and eventStream (agents-as-tools don't use memory or streaming)
 	// See ARKQB-137 for discussion on streaming support for agents as tools
 	result, err := agent.Execute(ctx, userInput, history, nil, nil)
 	if err != nil {
-		log.Info("agent execution error", "agent", a.AgentName, "error", err)
 		return ToolResult{
 			ID:    call.ID,
 			Name:  call.Function.Name,
@@ -320,14 +315,19 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall, recorder
 		}, err
 	}
 
-	lastMessage := result.Messages[len(result.Messages)-1]
-
-	log.Info("agent direct call response", "agent", a.AgentName, "response", lastMessage.OfAssistant.Content.OfString.Value)
+	content := ExtractLastAssistantMessageContent(result.Messages)
+	if content == "" {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: "agent execution returned no assistant message content",
+		}, fmt.Errorf("agent %s execution returned no assistant message content", a.AgentName)
+	}
 
 	return ToolResult{
 		ID:      call.ID,
 		Name:    call.Function.Name,
-		Content: lastMessage.OfAssistant.Content.OfString.Value,
+		Content: content,
 	}, nil
 }
 
@@ -370,10 +370,6 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall, recorder 
 		}, fmt.Errorf("input parameter must be a string for team tool %s", t.TeamName)
 	}
 
-	// Log the team execution
-	log := logf.FromContext(ctx)
-	log.Info("calling team directly", "team", t.TeamName, "namespace", t.Namespace, "input", inputStr)
-
 	// Create the Team object using the Team CRD and recorder
 	team, err := MakeTeam(ctx, t.k8sClient, t.TeamCRD, recorder, t.telemetryProvider)
 	if err != nil {
@@ -384,13 +380,12 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall, recorder 
 		}, err
 	}
 
-	// Prepare user input and history
-	userInput := NewSystemMessage(inputStr)
-	history := []Message{} // Provide history if applicable
+	// Prepare user input. No conversation history is ever provided
+	userInput := NewUserMessage(inputStr)
+	history := []Message{}
 
 	result, err := team.Execute(ctx, userInput, history, nil, nil)
 	if err != nil {
-		log.Info("team execution error", "team", t.TeamName, "error", err)
 		return ToolResult{
 			ID:    call.ID,
 			Name:  call.Function.Name,
@@ -406,16 +401,7 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall, recorder 
 		}, fmt.Errorf("team %s execution returned no messages", t.TeamName)
 	}
 
-	// Find the last assistant message (teams may return multiple messages)
-	var content string
-	for i := len(result.Messages) - 1; i >= 0; i-- {
-		msg := result.Messages[i]
-		if msg.OfAssistant != nil && msg.OfAssistant.Content.OfString.Value != "" {
-			content = msg.OfAssistant.Content.OfString.Value
-			break
-		}
-	}
-
+	content := ExtractLastAssistantMessageContent(result.Messages)
 	if content == "" {
 		return ToolResult{
 			ID:    call.ID,
@@ -423,8 +409,6 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall, recorder 
 			Error: "team execution returned no assistant message content",
 		}, fmt.Errorf("team %s execution returned no assistant message content", t.TeamName)
 	}
-
-	log.Info("team direct call response", "team", t.TeamName, "response", content)
 
 	return ToolResult{
 		ID:      call.ID,
