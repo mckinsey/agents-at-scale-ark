@@ -37,6 +37,7 @@ type TeamReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=teams/finalizers,verbs=update
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=agents,verbs=get;list;watch
 
+//nolint:dupl
 func (r *TeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 

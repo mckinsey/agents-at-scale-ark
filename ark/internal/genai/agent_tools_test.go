@@ -27,11 +27,11 @@ func setupTestClientForTools(objects []client.Object) client.Client {
 
 func TestRegisterToolDescriptionOverride(t *testing.T) {
 	tests := []struct {
-		name                   string
-		toolDescription        string
-		agentToolDescription   string
-		expectedDescription    string
-		shouldOverride         bool
+		name                 string
+		toolDescription      string
+		agentToolDescription string
+		expectedDescription  string
+		shouldOverride       bool
 	}{
 		{
 			name:                 "agent tool description overrides tool description",
@@ -210,4 +210,3 @@ func TestCreatePartialToolDefinitionPreservesDescription(t *testing.T) {
 	_, hasCity := props["city"]
 	require.True(t, hasCity, "city parameter should remain in schema")
 }
-

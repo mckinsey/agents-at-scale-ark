@@ -241,7 +241,7 @@ var _ = Describe("Agent Controller", func() {
 					Namespace: "default",
 				},
 				Spec: arkv1alpha1.AgentSpec{
-					Prompt:   "test prompt for missing tool agent",
+					Prompt: "test prompt for missing tool agent",
 					Tools: []arkv1alpha1.AgentTool{
 						{
 							Type: "custom",
