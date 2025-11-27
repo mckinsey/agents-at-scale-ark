@@ -71,8 +71,8 @@ spec:
 ## Step 3: Deploy to ARK
 
 ```bash
-# Deploy using make
-make deploy
+# Deploy using make (applies resources in dependency order)
+make resources-apply
 
 # Or deploy manually
 kubectl apply -f agents/support-agent.yaml
@@ -219,7 +219,7 @@ kubectl get query test-billing -o jsonpath='{.status.responses[0].content}' | jq
 
 ## Step 10: Add a Triage Agent (Optional)
 
-Build a multi-agent workflow:
+Build a multi-agent team:
 
 ```bash
 # Generate a triage agent
@@ -250,7 +250,7 @@ spec:
     Respond with just the category name.
 ```
 
-## Step 11: Create a Team Workflow
+## Step 11: Create a Team
 
 ```bash
 # Generate a team
@@ -289,10 +289,10 @@ kubectl get query team-test -o jsonpath='{.status.responses}' | jq
 
 1. **Generated** a new agent project with proper structure
 2. **Created** a customer support agent with custom system prompt
-3. **Deployed** the agent to ARK using `make deploy` or `kubectl`
+3. **Deployed** the agent to ARK using `make resources-apply` or `kubectl`
 4. **Tested** with queries and viewed responses
 5. **Monitored** execution via kubectl and dashboard
-6. **Built** multi-agent workflows with teams
+6. **Built** multi-agent teams for collaboration
 
 ## Next Steps
 
@@ -300,4 +300,3 @@ kubectl get query team-test -o jsonpath='{.status.responses}' | jq
 - [Learn about team strategies](/user-guide/teams)
 - [Add tools to agents](/user-guide/tools)
 - [Review best practices](/user-guide/tips-on-building-agentic-use-cases)
-

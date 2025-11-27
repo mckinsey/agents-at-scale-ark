@@ -114,11 +114,14 @@ After generating your project, deploy it to your ARK cluster:
 ### Using Make (Recommended)
 
 ```bash
-# Deploy all resources to your cluster
-make deploy
+# Deploy using Helm with custom resources
+make install
 
 # Or deploy to a specific namespace
-make deploy NAMESPACE=my-team-agents
+make install NAMESPACE=my-team-agents
+
+# Apply only custom resources (agents, teams, queries)
+make resources-apply
 ```
 
 ### Using Helm Directly
