@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Header, HTTPException, Request, Response
 
-from ark_event_manager.broker import HTTPEventConsumer
+from ark_event_manager.transport import HTTPEventConsumer
 from ark_event_manager.core.types import Protobuf
 
 router = APIRouter()

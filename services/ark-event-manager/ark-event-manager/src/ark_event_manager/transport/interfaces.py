@@ -1,4 +1,4 @@
-"""Event broker interfaces for abstraction layer."""
+"""Event transport interfaces for abstraction layer."""
 
 from abc import ABC, abstractmethod
 
@@ -6,12 +6,12 @@ from ark_event_manager.core.types import Protobuf
 
 
 class EventPublisher(ABC):
-    """Interface for publishing events to a broker."""
+    """Interface for publishing events via transport layer."""
 
     @abstractmethod
     async def publish(self, event: Protobuf, correlation_id: str) -> None:
         """
-        Publish an event to the broker.
+        Publish an event via transport.
 
         Args:
             event: Protobuf Event object serialized as binary (Protobuf type)
@@ -21,7 +21,7 @@ class EventPublisher(ABC):
 
 
 class EventConsumer(ABC):
-    """Interface for consuming events from a broker."""
+    """Interface for consuming events from transport layer."""
 
     @abstractmethod
     async def consume_batch(

@@ -2,7 +2,7 @@
 
 __version__ = "0.1.0"
 
-from ark_event_manager.broker import (
+from ark_event_manager.transport import (
     EventConsumer,
     EventPublisher,
     HTTPEventConsumer,

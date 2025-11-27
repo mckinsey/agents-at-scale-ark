@@ -5,7 +5,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ark_event_manager.broker import EventConsumer
+    from ark_event_manager.transport import EventConsumer
     from ark_event_manager.storage import EventStorage, MemoryStorage, StreamStorage
 
 from ark_event_manager.core.event_model import EventModel
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class EventProcessor:
-    """Processes events from the broker and routes them to storage."""
+    """Processes events from the transport layer and routes them to storage."""
 
     def __init__(
         self,

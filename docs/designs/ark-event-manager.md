@@ -1,8 +1,8 @@
-# Ark Event Recorder - Design Document
+# Ark Event Manager - Design Document
 
 ## Overview
 
-The Ark Event Recorder (AER) is a high-throughput event collection and streaming system designed to capture, persist, and broadcast events from multiple sources across a Kubernetes-based workflow execution environment. It integrates with Ark's structured eventing system (PR #477) to collect events emitted by Ark controllers, along with events from Argo Workflows, Kubernetes events, and other sources.
+The Ark Event Manager (AER) is a high-throughput event collection and streaming system designed to capture, persist, and broadcast events from multiple sources across a Kubernetes-based workflow execution environment. It integrates with Ark's structured eventing system (PR #477) to collect events emitted by Ark controllers, along with events from Argo Workflows, Kubernetes events, and other sources.
 
 **Key Goals:**
 - **Replace ark-cluster-memory**: AER provides both streaming and memory functionality, allowing removal of the ark-cluster-memory service
@@ -47,10 +47,10 @@ The system uses Kafka for reliable buffering, PostgreSQL for persistent storage 
                     └───────────┬───────────┘
                                 │
                                 │ Consumer Group:
-                                │ "ark-event-recorder"
+                                │ "ark-event-manager"
                                 ▼
 ┌────────────────────────────────────────────────────────────────────┐
-│              Ark Event Recorder Service                            │
+│              Ark Event Manager Service                            │
 │                                                                    │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │  Kafka Consumer (Background Task)                         │   │
@@ -362,8 +362,8 @@ This allows the controller to use a unified event model while routing events to 
    - **Custom Sources**: Extensible for future event sources
 
 2. **Event Filtering**: Route events based on configuration:
-   - **K8s + Broker**: Events that go to both K8s events API and event broker (e.g., core query events for backward compatibility)
-   - **Broker Only**: Events that skip K8s events API and go directly to event broker (future: granular events to reduce etcd pressure)
+   - **K8s + Broker**: Events that go to both K8s events API and event transport (e.g., core query events for backward compatibility)
+   - **Broker Only**: Events that skip K8s events API and go directly to event transport (future: granular events to reduce etcd pressure)
    - **Query Execution Tracking**: Structured logs/events from controller stdout (via Fluentd or direct HTTP) for query execution lifecycle
    - **Administrative Events**: Standard K8s events for resource lifecycle (ModelNotAvailable, StatusChanged, etc.)
 
@@ -392,15 +392,15 @@ data:
   watchArgoWorkflows: "true"
   
   # Event routing
-  # "k8s+broker" = emit to K8s events API AND event broker (HTTP/Kafka/etc)
-  # "broker-only" = skip K8s events API, go directly to event broker
+  # "k8s+broker" = emit to K8s events API AND event transport (HTTP/Kafka/etc)
+  # "broker-only" = skip K8s events API, go directly to event transport
   
-  # Event broker configuration
+  # Event transport configuration
   eventBroker:
     type: "http"  # Options: "http", "fluentd", "kafka", "redis-streams"
     config:
       # For HTTP: AER service URL (direct connection)
-      aerUrl: "http://ark-event-recorder:8080"
+      aerUrl: "http://ark-event-manager:8080"
       # For Fluentd: (when type=fluentd)
       # fluentdUrl: "http://fluentd:9880/events"
       # For Kafka: (when type=kafka)
@@ -471,7 +471,7 @@ When `watchArgoWorkflows: "true"` is configured, the unified watcher handles:
 - In practice, this is typically stored in workflow metadata or labels (e.g., `workflow.metadata.labels['session-id']`)
 - If no session ID is available, fall back to `workflow.metadata.name` as correlation_id
 
-## Component 2: Ark Event Recorder Service
+## Component 2: Ark Event Manager Service
 
 ### Purpose
 Reliably consume events via the `EventConsumer` interface, persist to PostgreSQL with batch processing, and broadcast to subscribers via multiple protocols. **Core part of Ark**. Replaces ark-cluster-memory service functionality.
@@ -541,8 +541,8 @@ Min In-Sync Replicas: 2          # Requires 2 replicas to acknowledge write
 - **partition key**: correlation_id (ensures ordering per session/workflow)
 - **serializer**: Protobuf binary format (Content-Type: application/x-protobuf)
 
-### Consumer Configuration (Ark Event Recorder)
-- **group_id**: "ark-event-recorder"
+### Consumer Configuration (Ark Event Manager)
+- **group_id**: "ark-event-manager"
 - **auto_offset_reset**: "earliest" (start from beginning if no offset exists)
 - **enable_auto_commit**: false (manual commit after DB write for reliability)
 - **max_poll_records**: 100 (batch size)
@@ -557,11 +557,11 @@ Min In-Sync Replicas: 2          # Requires 2 replicas to acknowledge write
 4. **Replay Capability**: Can reprocess events from any point in time within retention period.
 5. **Ordering**: Partition key guarantees ensures events for a session/workflow stay in order.
 
-## Event Broker Interface (Abstraction Layer)
+## Event Transport Interface (Abstraction Layer)
 
 ### Design Philosophy
 
-The event broker is abstracted behind a clean interface, allowing the system to start with a simple implementation (direct HTTP) and swap in a more sophisticated broker (Kafka, Redis Streams, etc.) later without changing watcher or AER code.
+The event transport is abstracted behind a clean interface, allowing the system to start with a simple implementation (direct HTTP) and swap in a more sophisticated broker (Kafka, Redis Streams, etc.) later without changing watcher or AER code.
 
 ### Interface Specification
 
@@ -775,7 +775,7 @@ class FluentdEventConsumer(EventConsumer):
   </buffer>
   <server>
     name aer
-    host ark-event-recorder
+    host ark-event-manager
     port 8080
   </server>
 </match>
@@ -1103,10 +1103,10 @@ subscription StreamQueryEvents {
 **HTTP/SSE Streaming Example:**
 ```bash
 # Stream query execution chunks
-curl -N "http://ark-event-recorder.default.svc.cluster.local/stream/query-123"
+curl -N "http://ark-event-manager.default.svc.cluster.local/stream/query-123"
 
 # Stream with replay from beginning
-curl -N "http://ark-event-recorder.default.svc.cluster.local/stream/query-123?from-beginning=true"
+curl -N "http://ark-event-manager.default.svc.cluster.local/stream/query-123?from-beginning=true"
 ```
 
 ## Event Retention & Expiration
@@ -1147,7 +1147,7 @@ WHERE timestamp < NOW() - INTERVAL '$EVENT_RETENTION_DAYS days'
 
 ### Service Components
 
-**1. Ark Event Recorder (Per-Namespace)**
+**1. Ark Event Manager (Per-Namespace)**
 - FastAPI service with multiple API endpoints:
   - GraphQL (queries, subscriptions)
   - HTTP REST (memory API, streaming API)
@@ -1238,7 +1238,7 @@ For high-frequency events that don't need persistence, AER supports a "fast mode
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: ark-event-recorder-config
+  name: ark-event-manager-config
 data:
   fastModeEvents: |
     - type: "metrics"

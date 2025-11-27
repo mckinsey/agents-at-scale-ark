@@ -11,7 +11,7 @@ from ark_event_manager.api import router
 from ark_event_manager.api.events import set_consumer
 from ark_event_manager.api.memory import set_storage
 from ark_event_manager.api.stream import set_stream_storage
-from ark_event_manager.broker import HTTPEventConsumer
+from ark_event_manager.transport import HTTPEventConsumer
 from ark_event_manager.core import EventProcessor, close_db, init_db
 from ark_event_manager.storage import DatabaseStorage, EventStorage, MemoryStorage, StreamStorage
 

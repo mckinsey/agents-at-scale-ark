@@ -1,10 +1,10 @@
-"""HTTP implementation of event broker interfaces (Phase 1)."""
+"""HTTP implementation of event transport interfaces (Phase 1)."""
 
 import asyncio
 from typing import Optional
 import httpx
 
-from ark_event_manager.broker.interfaces import EventConsumer, EventPublisher
+from ark_event_manager.transport.interfaces import EventConsumer, EventPublisher
 from ark_event_manager.core.types import Protobuf
 
 
