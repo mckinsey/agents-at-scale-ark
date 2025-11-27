@@ -1,4 +1,4 @@
-"""PostgreSQL storage implementation using SQLModel."""
+"""Database storage implementation using SQLModel."""
 
 import logging
 from typing import Any
@@ -12,16 +12,17 @@ from ark_event_recorder.models import Message
 logger = logging.getLogger(__name__)
 
 
-class PostgresStorage:
+class DatabaseStorage:
     """
-    PostgreSQL storage for conversation messages using SQLModel.
+    Database storage for conversation messages using SQLModel.
 
     This implementation uses SQLModel for type-safe database operations.
+    Works with SQLite (default) or other SQLAlchemy-supported databases.
     """
 
     def __init__(self):
-        """Initialize PostgreSQL storage."""
-        logger.info("PostgresStorage initialized (SQLModel backend)")
+        """Initialize database storage."""
+        logger.info("DatabaseStorage initialized (SQLModel backend)")
 
     async def get_messages(self, session_id: str) -> list[dict[str, Any]]:
         """

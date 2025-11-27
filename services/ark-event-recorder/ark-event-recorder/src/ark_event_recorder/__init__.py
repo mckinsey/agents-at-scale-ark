@@ -12,9 +12,9 @@ from ark_event_recorder.database import AsyncSessionLocal, close_db, get_session
 from ark_event_recorder.models import Event, Message
 from ark_event_recorder.processor import EventProcessor
 from ark_event_recorder.storage import (
+    DatabaseStorage,
     EventStorage,
     MemoryStorage,
-    PostgresStorage,
     StreamStorage,
 )
 
@@ -30,9 +30,9 @@ __all__ = [
     "Event",
     "Message",
     "EventProcessor",
+    "DatabaseStorage",
     "EventStorage",
     "MemoryStorage",
-    "PostgresStorage",
     "StreamStorage",
 ]
 

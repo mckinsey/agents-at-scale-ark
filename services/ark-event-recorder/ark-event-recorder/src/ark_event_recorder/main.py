@@ -14,7 +14,7 @@ from ark_event_recorder.api.stream import set_stream_storage
 from ark_event_recorder.broker import HTTPEventConsumer
 from ark_event_recorder.database import close_db, init_db
 from ark_event_recorder.processor import EventProcessor
-from ark_event_recorder.storage import EventStorage, MemoryStorage, PostgresStorage, StreamStorage
+from ark_event_recorder.storage import DatabaseStorage, EventStorage, MemoryStorage, StreamStorage
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,13 +23,12 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-USE_POSTGRES = os.getenv("USE_POSTGRES", "false").lower() == "true"
-DATABASE_URL = os.getenv("DATABASE_URL")
+USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
 
 consumer = HTTPEventConsumer()
-storage = PostgresStorage() if USE_POSTGRES and DATABASE_URL else MemoryStorage()
+storage = DatabaseStorage() if USE_DATABASE else MemoryStorage()
 stream_storage = StreamStorage()
-event_storage = EventStorage() if USE_POSTGRES and DATABASE_URL else None
+event_storage = EventStorage() if USE_DATABASE else None
 processor: EventProcessor | None = None
 
 
@@ -38,9 +37,9 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     global processor
 
-    if USE_POSTGRES and DATABASE_URL:
+    if USE_DATABASE:
         await init_db()
-        logger.info("Database initialized (PostgreSQL backend)")
+        logger.info("Database initialized (SQLite backend)")
 
     # Initialize API dependencies
     set_consumer(consumer)
@@ -69,7 +68,7 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
 
-    if USE_POSTGRES and DATABASE_URL:
+    if USE_DATABASE:
         await close_db()
 
     logger.info("Ark Event Recorder stopped")

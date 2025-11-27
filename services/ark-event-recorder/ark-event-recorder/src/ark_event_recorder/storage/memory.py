@@ -11,7 +11,7 @@ class MemoryStorage:
     Storage for conversation messages (implements MemoryInterface).
 
     This is a backend-agnostic in-memory implementation.
-    Can be swapped with PostgreSQL or other backends in the future.
+    Can be swapped with database or other backends in the future.
     """
 
     def __init__(self):

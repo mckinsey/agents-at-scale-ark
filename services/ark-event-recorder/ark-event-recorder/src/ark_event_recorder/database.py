@@ -13,16 +13,14 @@ logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/aer",
+    "sqlite+aiosqlite:///./aer.db",
 )
 
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
     future=True,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
+    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
 )
 
 AsyncSessionLocal = sessionmaker(

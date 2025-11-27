@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class EventStorage:
     """
-    PostgreSQL storage for events using SQLModel.
+    Database storage for events using SQLModel.
 
     Persists all events to the database for querying and analysis.
     """
@@ -22,7 +22,7 @@ class EventStorage:
 
     async def persist_event(self, event_dict: dict[str, Any]) -> None:
         """
-        Persist an event to PostgreSQL.
+        Persist an event to the database.
 
         Args:
             event_dict: Normalized event dictionary
