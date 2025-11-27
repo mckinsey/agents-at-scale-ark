@@ -1,4 +1,5 @@
 import {jest} from '@jest/globals';
+import {Buffer} from 'buffer';
 import type {ArkService} from '../types/arkService.js';
 
 type MockFn = ReturnType<typeof jest.fn>;
@@ -129,7 +130,7 @@ describe('ArkServiceProxy', () => {
       const proxy = new ArkServiceProxy(mockService, 3000, true);
 
       await expect(proxy.start()).rejects.toThrow(
-        'Port 3000 is already in use by node (PID: 54321)'
+        'test-service port forward failed: port 3000 is already in use by node (PID: 54321)'
       );
 
       expect(mockFind).toHaveBeenCalledWith('port', 3000);

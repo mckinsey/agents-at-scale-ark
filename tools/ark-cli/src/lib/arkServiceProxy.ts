@@ -48,8 +48,7 @@ export class ArkServiceProxy {
 
       const processInfo = processes[0];
       throw new Error(
-        `Port ${this.localPort} is already in use by ${processInfo.name} (PID: ${processInfo.pid}). ` +
-          `Please free the port or specify a different port.`
+        `${this.service.name} port forward failed: port ${this.localPort} is already in use by ${processInfo.name} (PID: ${processInfo.pid})`
       );
     } catch (error) {
       if (error instanceof Error && error.message.includes('already in use')) {
