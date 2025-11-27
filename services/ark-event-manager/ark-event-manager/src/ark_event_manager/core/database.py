@@ -7,7 +7,7 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from ark_event_manager.core.models import Event, Message, SQLModel
+from ark_event_manager.core.models import SQLModel
 
 logger = logging.getLogger(__name__)
 

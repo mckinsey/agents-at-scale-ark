@@ -1,8 +1,3 @@
-.PHONY: generate-models
-generate-models:
-	@echo "Generating Pydantic models from protobuf..."
-	uv run python generate_event_model.py
-
 .PHONY: install
 install:
 	uv sync

@@ -18,21 +18,6 @@ uv sync
 # pip install -e .
 ```
 
-### Generating Pydantic Models from Protobuf
-
-The Pydantic event model can be auto-generated from the protobuf definition:
-
-```bash
-# Generate models (requires protobuf-to-pydantic and grpc-tools)
-make generate-models
-# or directly:
-uv run python generate_event_model.py
-```
-
-This generates `src/ark_event_manager/core/event_model_gen.py` from `ark/internal/eventing/proto/event.proto`.
-
-**Note:** The code falls back to the manual `event_model.py` if the generated file doesn't exist.
-
 ### Running the Service
 
 ```bash

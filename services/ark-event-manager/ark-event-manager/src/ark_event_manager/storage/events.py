@@ -3,7 +3,6 @@
 import logging
 
 from ark_event_manager.core import AsyncSessionLocal, Event
-from ark_event_manager.core.event_model import EventModel
 from ark_event_manager.storage.interfaces import EventStorageInterface
 
 logger = logging.getLogger(__name__)
@@ -23,7 +22,7 @@ class EventStorage(EventStorageInterface):
         """Initialize event storage."""
         logger.info("EventStorage initialized (SQLModel backend)")
 
-    async def persist_event(self, event: EventModel) -> None:
+    async def persist_event(self, event: Event) -> None:
         """
         Persist an event to the database.
 
@@ -32,14 +31,18 @@ class EventStorage(EventStorageInterface):
         """
         try:
             async with AsyncSessionLocal() as db_session:
+                # Create a new Event instance for DB (id=None, created_at will be auto-set)
+                # Convert enums to strings for database storage
+                from ark_event_manager.core.models import EventSeverity, EventSourceType
+                
                 db_event = Event(
                     event_id=event.event_id,
                     correlation_id=event.correlation_id,
                     timestamp=event.timestamp,
-                    severity=event.severity.name,
+                    severity=event.severity.name if isinstance(event.severity, EventSeverity) else str(event.severity),
                     type=event.type,
                     subtype=event.subtype,
-                    source_type=event.source_type.name,
+                    source_type=event.source_type.name if isinstance(event.source_type, EventSourceType) else str(event.source_type),
                     source=event.source,
                     version=event.version,
                     payload=event.payload,

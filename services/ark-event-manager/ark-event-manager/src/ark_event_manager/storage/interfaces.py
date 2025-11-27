@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, AsyncGenerator
 
-from ark_event_manager.core.event_model import EventModel
+from ark_event_manager.core.models import Event
 
 
 class MemoryInterface(ABC):
@@ -86,7 +86,7 @@ class EventStorageInterface(ABC):
     """Interface for event persistence."""
 
     @abstractmethod
-    async def persist_event(self, event: EventModel) -> None:
+    async def persist_event(self, event: Event) -> None:
         """
         Persist an event to storage.
 

@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from ark_event_manager.transport import EventConsumer
     from ark_event_manager.storage import EventStorage, StreamStorage
 
-from ark_event_manager.core.event_model import EventModel
+from ark_event_manager.core.models import Event
 from ark_event_manager.core.proto_helpers import parse_event_protobuf
 from ark_event_manager.core.types import Protobuf
 
@@ -117,7 +117,7 @@ class EventProcessor:
             logger.error(f"Unexpected error processing event: {e}", exc_info=True)
             raise
 
-    async def _route_event(self, event: EventModel) -> None:
+    async def _route_event(self, event: Event) -> None:
         """
         Route event to appropriate storage based on type.
 
