@@ -148,7 +148,7 @@ func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1
 func (r *AgentReconciler) checkToolDependencies(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string) {
 	for _, toolSpec := range agent.Spec.Tools {
 		if toolSpec.Type == "custom" && toolSpec.Name != "" {
-			
+
 			toolName := toolSpec.GetToolCRDName()
 
 			var tool arkv1alpha1.Tool

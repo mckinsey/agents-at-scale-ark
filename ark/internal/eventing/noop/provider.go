@@ -8,6 +8,7 @@ import (
 type noopProvider struct {
 	queryRecorder eventing.QueryRecorder
 	modelRecorder eventing.ModelRecorder
+	agentRecorder eventing.AgentRecorder
 	teamRecorder  eventing.TeamRecorder
 	toolRecorder  eventing.ToolRecorder
 }
@@ -17,6 +18,7 @@ func NewProvider() eventing.Provider {
 	return &noopProvider{
 		queryRecorder: NewQueryRecorder(),
 		modelRecorder: recorder.NewModelRecorder(emitter),
+		agentRecorder: recorder.NewAgentRecorder(emitter),
 		teamRecorder:  recorder.NewTeamRecorder(emitter),
 		toolRecorder:  recorder.NewToolRecorder(emitter),
 	}
@@ -31,7 +33,7 @@ func (p *noopProvider) A2aRecorder() eventing.A2aRecorder {
 }
 
 func (p *noopProvider) AgentRecorder() eventing.AgentRecorder {
-	return nil
+	return p.agentRecorder
 }
 
 func (p *noopProvider) TeamRecorder() eventing.TeamRecorder {
