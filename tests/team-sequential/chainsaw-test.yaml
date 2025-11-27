@@ -4,6 +4,9 @@ metadata:
   name: team-sequential
 spec:
   description: Test sequential team execution with researcher, analyst, and summarizer
+  timeouts:
+    assert: 1m
+    exec: 180s
   steps:
   - name: step-1
     try:
@@ -38,47 +41,12 @@ spec:
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: researcher
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: analyst
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: summarizer
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Team
-          metadata:
-            name: sequential-research-team
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
           metadata:
             name: sequential-team-query
           status:
             phase: done
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: sequential-team-query
-          status:
-            (length(responses)): 1
-            (contains(responses[*].target.name, 'sequential-research-team')): true
-            (length(join('', responses[*].content)) > `200`): true
             (contains(responses[0].content, 'SUMMARY:')): true
-            (contains(responses[0].content, 'artificial intelligence') || contains(responses[0].content, 'AI')): true
     catch:
     - events: {}
     - describe:

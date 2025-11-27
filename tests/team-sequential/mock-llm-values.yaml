@@ -9,6 +9,24 @@ ark:
 
 config:
   rules:
+    # Default FIRST: return OK for model probes and any request without a sequence match
+    - path: "/v1/chat/completions"
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-default",
+            "object": "chat.completion",
+            "model": "gpt-4.1-mini",
+            "choices": [{
+              "message": {
+                "role": "assistant",
+                "content": "OK"
+              },
+              "finish_reason": "stop"
+            }]
+          }
+
     # Call 1: researcher agent
     - path: "/v1/chat/completions"
       sequence: 0
