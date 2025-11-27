@@ -3,8 +3,7 @@
 import logging
 from typing import Any
 
-from ark_event_recorder.database import AsyncSessionLocal
-from ark_event_recorder.models import Event
+from ark_event_recorder.core import AsyncSessionLocal, Event
 from ark_event_recorder.storage.interfaces import EventStorageInterface
 
 logger = logging.getLogger(__name__)

@@ -12,8 +12,7 @@ from ark_event_recorder.api.events import set_consumer
 from ark_event_recorder.api.memory import set_storage
 from ark_event_recorder.api.stream import set_stream_storage
 from ark_event_recorder.broker import HTTPEventConsumer
-from ark_event_recorder.database import close_db, init_db
-from ark_event_recorder.processor import EventProcessor
+from ark_event_recorder.core import EventProcessor, close_db, init_db
 from ark_event_recorder.storage import DatabaseStorage, EventStorage, MemoryStorage, StreamStorage
 
 logging.basicConfig(

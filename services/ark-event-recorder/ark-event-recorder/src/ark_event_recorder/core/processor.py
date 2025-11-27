@@ -8,7 +8,10 @@ if TYPE_CHECKING:
     from ark_event_recorder.broker import EventConsumer
     from ark_event_recorder.storage import EventStorage, MemoryStorage, StreamStorage
 
-from ark_event_recorder.proto_helpers import parse_event_protobuf, normalize_event_dict
+from ark_event_recorder.core.proto_helpers import (
+    normalize_event_dict,
+    parse_event_protobuf,
+)
 
 logger = logging.getLogger(__name__)
 

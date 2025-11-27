@@ -6,8 +6,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ark_event_recorder.database import AsyncSessionLocal
-from ark_event_recorder.models import Message
+from ark_event_recorder.core import AsyncSessionLocal, Message
 from ark_event_recorder.storage.interfaces import MemoryInterface
 
 logger = logging.getLogger(__name__)
