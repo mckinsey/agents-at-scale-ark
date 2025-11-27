@@ -1,3 +1,5 @@
+import { describe, expect, it } from 'vitest';
+
 import { storedIsA2ATasksEnabledAtom } from '@/atoms/experimental-features';
 import { experimentalFeatureGroups } from '@/components/experimental-features-dialog/experimental-features';
 

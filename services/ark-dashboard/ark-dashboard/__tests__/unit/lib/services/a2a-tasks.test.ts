@@ -72,4 +72,36 @@ describe('a2aTasksService', () => {
       });
     });
   });
+
+  describe('get', () => {
+    it('should fetch a single task by id', async () => {
+      const mockTask = {
+        name: 'task-1',
+        namespace: 'default',
+        taskId: '123',
+        phase: 'completed',
+        agentRef: { name: 'agent-1' },
+        queryRef: { name: 'query-1' },
+        creationTimestamp: '2023-01-01T00:00:00Z',
+        a2aServerRef: { name: 'server-1' },
+      };
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockTask);
+
+      const result = await a2aTasksService.get('task-1');
+
+      expect(apiClient.get).toHaveBeenCalledTimes(1);
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/a2a-tasks/task-1');
+
+      expect(result).toMatchObject({
+        id: 'task-1',
+        name: 'task-1',
+        phase: 'completed',
+        taskId: '123',
+        agentRef: { name: 'agent-1' },
+        queryRef: { name: 'query-1' },
+        creationTimestamp: '2023-01-01T00:00:00Z',
+      });
+    });
+  });
 });

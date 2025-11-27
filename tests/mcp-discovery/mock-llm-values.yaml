@@ -1,4 +1,5 @@
 # Mock LLM configuration for MCP discovery test
+terminationGracePeriodSeconds: 3
 ark:
   mcp:
     enabled: true
