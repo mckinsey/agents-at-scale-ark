@@ -8,10 +8,8 @@ if TYPE_CHECKING:
     from ark_event_recorder.broker import EventConsumer
     from ark_event_recorder.storage import EventStorage, MemoryStorage, StreamStorage
 
-from ark_event_recorder.core.proto_helpers import (
-    normalize_event_dict,
-    parse_event_protobuf,
-)
+from ark_event_recorder.core.event_model import EventModel
+from ark_event_recorder.core.proto_helpers import parse_event_protobuf
 
 logger = logging.getLogger(__name__)
 
@@ -99,25 +97,21 @@ class EventProcessor:
             correlation_id: Correlation ID for the event
         """
         try:
-            event_dict = parse_event_protobuf(event_bytes)
-            normalized_event = normalize_event_dict(event_dict)
+            event = parse_event_protobuf(event_bytes)
 
-            if correlation_id and not normalized_event.get("correlation_id"):
-                normalized_event["correlation_id"] = correlation_id
-
-            event_type = normalized_event.get("type", "")
-            event_subtype = normalized_event.get("subtype", "")
+            if correlation_id and not event.correlation_id:
+                event.correlation_id = correlation_id
 
             logger.debug(
-                f"Processing event: id={normalized_event.get('event_id')}, "
-                f"type={event_type}, subtype={event_subtype}, "
-                f"correlation_id={normalized_event.get('correlation_id')}"
+                f"Processing event: id={event.event_id}, "
+                f"type={event.type}, subtype={event.subtype}, "
+                f"correlation_id={event.correlation_id}"
             )
 
-            await self._route_event(normalized_event)
+            await self._route_event(event)
 
             if self.event_storage:
-                await self.event_storage.persist_event(normalized_event)
+                await self.event_storage.persist_event(event)
 
         except ValueError as e:
             logger.warning(f"Invalid event format: {e}")
@@ -125,34 +119,29 @@ class EventProcessor:
             logger.error(f"Unexpected error processing event: {e}", exc_info=True)
             raise
 
-    async def _route_event(self, event: dict) -> None:
+    async def _route_event(self, event: EventModel) -> None:
         """
         Route event to appropriate storage based on type.
 
         Args:
-            event: Normalized event dictionary
+            event: Event model instance
         """
-        event_type = event.get("type", "")
-        event_subtype = event.get("subtype", "")
-        payload = event.get("payload", {})
-        correlation_id = event.get("correlation_id", "")
-
-        if event_type == "query" and event_subtype in ("execution_start", "execution_complete"):
-            query_id = payload.get("queryId") or correlation_id
+        if event.type == "query" and event.subtype in ("execution_start", "execution_complete"):
+            query_id = event.payload.get("queryId") or event.correlation_id
             if query_id and self.stream_storage:
-                await self.stream_storage.write_stream(query_id, event)
+                await self.stream_storage.write_stream(query_id, event.model_dump())
 
-        if event_type == "memory" or "message" in event_subtype.lower():
-            session_id = payload.get("sessionId") or correlation_id
+        if event.type == "memory" or "message" in event.subtype.lower():
+            session_id = event.payload.get("sessionId") or event.correlation_id
             if session_id and self.memory_storage:
-                messages = payload.get("messages", [])
+                messages = event.payload.get("messages", [])
                 if messages:
-                    query_id = payload.get("queryId")
+                    query_id = event.payload.get("queryId")
                     await self.memory_storage.add_messages(
                         session_id, query_id, messages
                     )
 
-        logger.debug(f"Routed event type={event_type}, subtype={event_subtype}")
+        logger.debug(f"Routed event type={event.type}, subtype={event.subtype}")
 
     def stop(self) -> None:
         """Stop the event processor."""

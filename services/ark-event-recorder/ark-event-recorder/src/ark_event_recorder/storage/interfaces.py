@@ -1,7 +1,9 @@
 """Storage interfaces for abstraction layer."""
 
 from abc import ABC, abstractmethod
-from typing import Any, AsyncGenerator
+from typing import AsyncGenerator
+
+from ark_event_recorder.core.event_model import EventModel
 
 
 class MemoryInterface(ABC):
@@ -84,12 +86,12 @@ class EventStorageInterface(ABC):
     """Interface for event persistence."""
 
     @abstractmethod
-    async def persist_event(self, event_dict: dict[str, Any]) -> None:
+    async def persist_event(self, event: EventModel) -> None:
         """
         Persist an event to storage.
 
         Args:
-            event_dict: Normalized event dictionary
+            event: Event model instance
         """
         pass
 

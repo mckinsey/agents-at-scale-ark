@@ -1,9 +1,9 @@
 """Event storage implementation using SQLModel."""
 
 import logging
-from typing import Any
 
 from ark_event_recorder.core import AsyncSessionLocal, Event
+from ark_event_recorder.core.event_model import EventModel
 from ark_event_recorder.storage.interfaces import EventStorageInterface
 
 logger = logging.getLogger(__name__)
@@ -20,30 +20,30 @@ class EventStorage(EventStorageInterface):
         """Initialize event storage."""
         logger.info("EventStorage initialized (SQLModel backend)")
 
-    async def persist_event(self, event_dict: dict[str, Any]) -> None:
+    async def persist_event(self, event: EventModel) -> None:
         """
         Persist an event to the database.
 
         Args:
-            event_dict: Normalized event dictionary
+            event: Event model instance
         """
         try:
             async with AsyncSessionLocal() as db_session:
-                event = Event(
-                    event_id=event_dict.get("event_id", ""),
-                    correlation_id=event_dict.get("correlation_id", ""),
-                    timestamp=event_dict.get("timestamp"),
-                    severity=event_dict.get("severity", "INFO"),
-                    type=event_dict.get("type", "unknown"),
-                    subtype=event_dict.get("subtype", ""),
-                    source_type=event_dict.get("source_type", "UNSPECIFIED"),
-                    source=event_dict.get("source", ""),
-                    version=event_dict.get("version", "v1"),
-                    payload=event_dict.get("payload", {}),
+                db_event = Event(
+                    event_id=event.event_id,
+                    correlation_id=event.correlation_id,
+                    timestamp=event.timestamp,
+                    severity=event.severity.name,
+                    type=event.type,
+                    subtype=event.subtype,
+                    source_type=event.source_type.name,
+                    source=event.source,
+                    version=event.version,
+                    payload=event.payload,
                 )
-                db_session.add(event)
+                db_session.add(db_event)
                 await db_session.commit()
-                logger.debug(f"Persisted event: {event.event_id}")
+                logger.debug(f"Persisted event: {db_event.event_id}")
         except Exception as e:
             logger.error(f"Failed to persist event: {e}", exc_info=True)
             raise
