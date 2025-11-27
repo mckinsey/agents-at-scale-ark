@@ -568,25 +568,25 @@ The event transport is abstracted behind a clean interface, allowing the system 
 **EventPublisher Interface** (used by watchers):
 ```python
 class EventPublisher:
-    async def publish(self, event: Event, correlation_id: str) -> None:
+    async def publish(self, event: Protobuf, correlation_id: str) -> None:
         """
-        Publish an event to the broker.
+        Publish an event via transport.
         
         Args:
-            event: Protobuf Event object (serialized as binary)
+            event: Protobuf Event object serialized as binary (Protobuf type)
             correlation_id: Used for partitioning/ordering (e.g., session_id, query_id)
         """
         pass
 ```
 
-**EventConsumer Interface** (used by AER):
+**EventConsumer Interface** (used by AEM):
 ```python
 class EventConsumer:
     async def consume_batch(
         self, 
         max_events: int = 100, 
         timeout: float = 1.0
-    ) -> list[tuple[Event, str]]:
+    ) -> list[tuple[Protobuf, str]]:
         """
         Consume a batch of events.
         
@@ -595,7 +595,7 @@ class EventConsumer:
             timeout: Maximum time to wait for events (seconds)
         
         Returns:
-            List of (event, correlation_id) tuples
+            List of (event_bytes, correlation_id) tuples where event_bytes is Protobuf type
         """
         pass
     
@@ -616,22 +616,20 @@ Start with the simplest implementation - watchers POST directly to AER:
 **HTTPEventPublisher** (in watchers):
 ```python
 class HTTPEventPublisher(EventPublisher):
-    def __init__(self, aer_base_url: str):
-        self.aer_url = f"{aer_base_url}/events"
+    def __init__(self, base_url: str):
+        self.url = f"{base_url}/events"
     
-    async def publish(self, event: Event, correlation_id: str) -> None:
-        # Serialize protobuf to binary
-        event_bytes = event.SerializeToString()
-        # POST to AER with correlation_id header
+    async def publish(self, event: Protobuf, correlation_id: str) -> None:
+        # Event is already Protobuf (bytes), POST to AEM with correlation_id header
         await http.post(
-            self.aer_url,
-            body=event_bytes,
+            self.url,
+            body=event,
             headers={"X-Correlation-ID": correlation_id},
             content_type="application/x-protobuf"
         )
 ```
 
-**HTTPEventConsumer** (in AER):
+**HTTPEventConsumer** (in AEM):
 ```python
 class HTTPEventConsumer(EventConsumer):
     def __init__(self):
@@ -639,7 +637,7 @@ class HTTPEventConsumer(EventConsumer):
     
     async def consume_batch(
         self, max_events: int = 100, timeout: float = 1.0
-    ) -> list[tuple[Event, str]]:
+    ) -> list[tuple[Protobuf, str]]:
         # Poll internal in-memory queue
         events = []
         deadline = time.time() + timeout
@@ -798,21 +796,21 @@ class KafkaEventPublisher(EventPublisher):
     def __init__(self, kafka_brokers: list[str], topic: str):
         self.producer = KafkaProducer(
             bootstrap_servers=kafka_brokers,
-            value_serializer=lambda v: v.SerializeToString(),
+            value_serializer=lambda v: v,  # Protobuf is already bytes
             key_serializer=lambda k: k.encode() if k else None
         )
         self.topic = topic
     
-    async def publish(self, event: Event, correlation_id: str) -> None:
+    async def publish(self, event: Protobuf, correlation_id: str) -> None:
         # Publish to Kafka with correlation_id as partition key
         await self.producer.send(
             self.topic,
-            value=event,
+            value=event,  # Protobuf (bytes) directly
             key=correlation_id
         )
 ```
 
-**KafkaEventConsumer** (in AER):
+**KafkaEventConsumer** (in AEM):
 ```python
 class KafkaEventConsumer(EventConsumer):
     def __init__(self, kafka_brokers: list[str], topic: str, group_id: str):
@@ -820,7 +818,7 @@ class KafkaEventConsumer(EventConsumer):
             topic,
             bootstrap_servers=kafka_brokers,
             group_id=group_id,
-            value_deserializer=lambda m: Event().ParseFromString(m),
+            value_deserializer=lambda m: m,  # Return Protobuf (bytes) as-is
             key_deserializer=lambda k: k.decode() if k else None,
             enable_auto_commit=False,  # Manual commit after DB write
             max_poll_records=100
@@ -829,7 +827,7 @@ class KafkaEventConsumer(EventConsumer):
     
     async def consume_batch(
         self, max_events: int = 100, timeout: float = 1.0
-    ) -> list[tuple[Event, str]]:
+    ) -> list[tuple[Protobuf, str]]:
         # Poll from Kafka
         events = []
         deadline = time.time() + timeout
