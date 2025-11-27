@@ -391,10 +391,14 @@ export function createStatusCommand(): Command {
     .argument('[services...]', 'specific services to check (optional)')
     .option(
       '--wait-for-ready [timeout]',
-      'wait for services to be ready, e.g, 30s, 2m, 1h (default: 30m)',
-      '30m'
+      'wait for services to be ready, e.g, 30s, 2m, 1h (default: 30m)'
     )
-    .action((services, options) => checkStatus(services, options));
+    .action((services, options) => {
+      if (options.waitForReady === true) {
+        options.waitForReady = '30m';
+      }
+      checkStatus(services, options);
+    });
 
   return statusCommand;
 }
