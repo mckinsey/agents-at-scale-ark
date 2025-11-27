@@ -6,13 +6,15 @@ import logging
 import time
 from typing import Any, AsyncGenerator
 
+from ark_event_recorder.storage.interfaces import StreamInterface
+
 logger = logging.getLogger(__name__)
 
 _STREAM_TTL_SECONDS = 3600
 _COMPLETION_MARKER = "__STREAM_COMPLETE__"
 
 
-class StreamStorage:
+class StreamStorage(StreamInterface):
     """
     Storage for streaming chunks (ephemeral, in-memory).
 

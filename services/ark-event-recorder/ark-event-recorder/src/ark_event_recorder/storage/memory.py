@@ -3,10 +3,12 @@
 import logging
 from typing import Any
 
+from ark_event_recorder.storage.interfaces import MemoryInterface
+
 logger = logging.getLogger(__name__)
 
 
-class MemoryStorage:
+class MemoryStorage(MemoryInterface):
     """
     Storage for conversation messages (implements MemoryInterface).
 

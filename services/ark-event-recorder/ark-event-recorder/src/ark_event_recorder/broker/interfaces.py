@@ -1,10 +1,9 @@
 """Event broker interfaces for abstraction layer."""
 
 from abc import ABC, abstractmethod
-from typing import Protocol
 
 
-class EventPublisher(Protocol):
+class EventPublisher(ABC):
     """Interface for publishing events to a broker."""
 
     @abstractmethod
@@ -19,7 +18,7 @@ class EventPublisher(Protocol):
         pass
 
 
-class EventConsumer(Protocol):
+class EventConsumer(ABC):
     """Interface for consuming events from a broker."""
 
     @abstractmethod

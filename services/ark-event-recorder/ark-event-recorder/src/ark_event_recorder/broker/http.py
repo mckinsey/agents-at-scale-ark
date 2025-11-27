@@ -4,8 +4,10 @@ import asyncio
 from typing import Optional
 import httpx
 
+from ark_event_recorder.broker.interfaces import EventConsumer, EventPublisher
 
-class HTTPEventPublisher:
+
+class HTTPEventPublisher(EventPublisher):
     """HTTP implementation of EventPublisher - publishes directly to AER."""
 
     def __init__(self, aer_base_url: str, timeout: float = 30.0):
@@ -55,7 +57,7 @@ class HTTPEventPublisher:
             self._client = None
 
 
-class HTTPEventConsumer:
+class HTTPEventConsumer(EventConsumer):
     """HTTP implementation of EventConsumer - receives events via internal queue."""
 
     def __init__(self):
