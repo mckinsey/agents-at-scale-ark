@@ -1,3 +1,4 @@
+terminationGracePeriodSeconds: 3
 ark:
   model:
     enabled: true
@@ -8,28 +9,9 @@ ark:
 
 config:
   rules:
-    # After tool result, return final answer
+    # First request: trigger weather-tool call
     - path: "/v1/chat/completions"
-      match: "body.messages[-1].role == 'tool'"
-      response:
-        status: 200
-        content: |
-          {
-            "id": "mock-{{timestamp}}",
-            "object": "chat.completion",
-            "model": "{{jmes request body.model}}",
-            "choices": [{
-              "message": {
-                "role": "assistant",
-                "content": "The current weather in New York City is 68°F (20°C) with partly cloudy skies and winds from the west at 12 mph."
-              },
-              "finish_reason": "stop"
-            }]
-          }
-
-    # Default: trigger weather-tool call
-    - path: "/v1/chat/completions"
-      match: "@"
+      sequence: 0
       response:
         status: 200
         content: |
@@ -50,5 +32,24 @@ config:
                 }]
               },
               "finish_reason": "tool_calls"
+            }]
+          }
+
+    # Second request: return final answer after tool result
+    - path: "/v1/chat/completions"
+      sequence: 1
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-{{timestamp}}",
+            "object": "chat.completion",
+            "model": "{{jmes request body.model}}",
+            "choices": [{
+              "message": {
+                "role": "assistant",
+                "content": "The current weather in New York City is 68°F (20°C) with partly cloudy skies and winds from the west at 12 mph."
+              },
+              "finish_reason": "stop"
             }]
           }
