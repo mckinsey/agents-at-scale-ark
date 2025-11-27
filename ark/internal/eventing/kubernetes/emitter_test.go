@@ -15,12 +15,11 @@ import (
 )
 
 type mockEventRecorder struct {
-	events           []string
-	annotatedEvents  []annotatedEvent
-	eventType        string
-	reason           string
-	message          string
-	eventAnnotations map[string]string
+	events          []string
+	annotatedEvents []annotatedEvent
+	eventType       string
+	reason          string
+	message         string
 }
 
 type annotatedEvent struct {
@@ -41,9 +40,9 @@ func (m *mockEventRecorder) Event(object runtime.Object, eventtype, reason, mess
 func (m *mockEventRecorder) Eventf(object runtime.Object, eventtype, reason, messageFmt string, args ...interface{}) {
 }
 
-func (m *mockEventRecorder) AnnotatedEventf(object runtime.Object, annotations map[string]string, eventtype, reason, messageFmt string, args ...interface{}) {
+func (m *mockEventRecorder) AnnotatedEventf(object runtime.Object, eventAnnotations map[string]string, eventtype, reason, messageFmt string, args ...interface{}) {
 	m.annotatedEvents = append(m.annotatedEvents, annotatedEvent{
-		annotations: annotations,
+		annotations: eventAnnotations,
 		eventType:   eventtype,
 		reason:      reason,
 		message:     messageFmt,

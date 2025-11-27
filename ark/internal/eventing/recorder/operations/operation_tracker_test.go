@@ -98,7 +98,7 @@ func TestOperationTracker_Start(t *testing.T) {
 		"agentName": "test-agent",
 	}
 
-	ctx = ot.Start(ctx, "TestOperation", "Starting test operation", operationData)
+	_ = ot.Start(ctx, "TestOperation", "Starting test operation", operationData)
 
 	events := emitter.GetEvents()
 	assert.Equal(t, 1, len(events))
