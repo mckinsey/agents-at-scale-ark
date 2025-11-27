@@ -161,11 +161,9 @@ func (r *A2AServerReconciler) reconcileConditionsDiscoveryFailed(ctx context.Con
 
 // reconcileConditionsAgentCreationFailed updates conditions when agent creation fails
 func (r *A2AServerReconciler) reconcileConditionsAgentCreationFailed(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, err error, agentName string) error {
-	log := logf.FromContext(ctx)
 	changed := r.reconcileCondition(a2aServer, A2AServerReady, metav1.ConditionFalse, "AgentCreationFailed", fmt.Sprintf("Failed to create agent: %v", err))
 	if changed {
-		log.Error(err, "A2A agent creation failed", "server", a2aServer.Name, "agent", agentName)
-		r.Eventing.A2aRecorder().AgentCreationFailed(ctx, a2aServer, fmt.Sprintf("Failed to create agent %s: %v", agentName, err))
+		r.Eventing.A2aRecorder().AgentCreationFailed(ctx, a2aServer, fmt.Sprintf("Failed to create A2A agent %s: %v", agentName, err))
 		return r.updateStatusWithConditions(ctx, a2aServer)
 	}
 	return nil
