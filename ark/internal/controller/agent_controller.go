@@ -40,6 +40,7 @@ type AgentReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=models,verbs=get;list;watch
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=a2aservers,verbs=get;list;watch
 
+//nolint:dupl
 func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 

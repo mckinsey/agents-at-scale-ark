@@ -27,6 +27,13 @@ import (
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 )
 
+const (
+	targetTypeAgent = "agent"
+	targetTypeTeam  = "team"
+	targetTypeModel = "model"
+	targetTypeTool  = "tool"
+)
+
 type targetResult struct {
 	executionResult *genai.ExecutionResult
 	err             error
@@ -320,7 +327,7 @@ func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.
 
 	for _, agent := range agentList.Items {
 		targets = append(targets, arkv1alpha1.QueryTarget{
-			Type: "agent",
+			Type: targetTypeAgent,
 			Name: agent.Name,
 		})
 	}
@@ -336,7 +343,7 @@ func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.
 
 	for _, team := range teamList.Items {
 		targets = append(targets, arkv1alpha1.QueryTarget{
-			Type: "team",
+			Type: targetTypeTeam,
 			Name: team.Name,
 		})
 	}
@@ -352,7 +359,7 @@ func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.
 
 	for _, model := range modelList.Items {
 		targets = append(targets, arkv1alpha1.QueryTarget{
-			Type: "model",
+			Type: targetTypeModel,
 			Name: model.Name,
 		})
 	}
@@ -368,7 +375,7 @@ func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.
 
 	for _, tool := range toolList.Items {
 		targets = append(targets, arkv1alpha1.QueryTarget{
-			Type: "tool",
+			Type: targetTypeTool,
 			Name: tool.Name,
 		})
 	}
@@ -660,15 +667,15 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 
 	var result *genai.ExecutionResult
 	switch target.Type {
-	case "agent":
+	case targetTypeAgent:
 		result, err = r.executeAgent(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream)
-	case "team":
+	case targetTypeTeam:
 		result, err = r.executeTeam(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream)
-	case "model":
+	case targetTypeModel:
 		var messages []genai.Message
 		messages, err = r.executeModel(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream)
 		result = &genai.ExecutionResult{Messages: messages}
-	case "tool":
+	case targetTypeTool:
 		var messages []genai.Message
 		messages, err = r.executeTool(execCtx, query, inputMessages, target.Name, impersonatedClient)
 		result = &genai.ExecutionResult{Messages: messages}
