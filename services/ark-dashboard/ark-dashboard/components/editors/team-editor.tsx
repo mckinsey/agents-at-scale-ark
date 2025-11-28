@@ -27,15 +27,17 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { components } from '@/lib/api/generated/types';
-import type {
-  Agent,
-  Team,
-  TeamCreateRequest,
-  TeamMember,
-  TeamUpdateRequest,
+import {
+  type Agent,
+  type Team,
+  type TeamCreateRequest,
+  type TeamMember,
+  type TeamUpdateRequest,
 } from '@/lib/services';
 import { cn } from '@/lib/utils';
 import { getKubernetesNameError } from '@/lib/utils/kubernetes-validation';
+import { TeamMemberSelectionSection } from './member-editor';
+import { T } from 'vitest/dist/chunks/reporters.d.BFLkQcL6.js';
 
 type GraphEdge = components['schemas']['GraphEdge'];
 
@@ -143,12 +145,56 @@ export function TeamEditor({
   const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
   const [nameError, setNameError] = useState<string | null>(null);
   const [orderedAgents, setOrderedAgents] = useState<Agent[]>([]);
+  const [unavailableMembers, setUnavailableMembers] = useState<TeamMember[]>([]);
+  const [availableMembers, setAvailableMembers] = useState<TeamMember[]>([])
+
+  useEffect(() => {
+    if(open){
+      const checkMissingAgents = async () => {
+        try {
+          if(team && team.members)
+          {
+            const missingMembers = team.members.filter(
+              teamMember => !agents.some(a => a.name === teamMember.name),
+            ) as TeamMember[];
+            if(missingMembers.length > 0){
+              setAvailableMembers(team.members.filter(m => !missingMembers.includes(m)));
+              var edges: GraphEdge[] = []
+              missingMembers.forEach(member => {
+                if(member.type == "agent"){
+                  agents = agents.filter(a => member.name === a.name)
+                }
+                if(team.graph && team.graph.edges.length > 0){
+                  const found = team.graph.edges.filter(e => e.from === member.name || e.to === member.name)
+                  edges = [...edges, ...found]
+                }
+              });
+              if(team.graph && edges.length>0){
+                team.graph.edges = team.graph.edges.filter(e => !edges.includes(e));
+              }
+            }else{
+              setAvailableMembers(team.members);
+            }
+            setUnavailableMembers(missingMembers || []);
+            
+          }
+         
+        } catch (error) {
+          console.error('Failed to load all agents:', error);
+          setUnavailableMembers([]);
+        }
+      };
+      checkMissingAgents();
+    }else if(team){
+        setAvailableMembers(team.members.filter(m => !unavailableMembers.includes(m)));
+    }
+  }, [open, team?.members, agents]);
 
   useEffect(() => {
     if (team) {
       setName(team.name);
       setDescription(team.description ?? '');
-      setSelectedMembers(team.members || []);
+      setSelectedMembers(availableMembers)
       setStrategy(team.strategy || 'round-robin');
       setMaxTurns(team.maxTurns ? String(team.maxTurns) : '');
       setSelectorAgent(team.selector?.agent ?? '');
@@ -165,7 +211,7 @@ export function TeamEditor({
       setGraphEdges([]);
       setOrderedAgents(agents);
     }
-  }, [team, open, agents]);
+  }, [open, team, unavailableMembers, team?.members]);
 
   useEffect(() => {
     if (agents && selectedMembers) {
@@ -267,6 +313,14 @@ export function TeamEditor({
 
   const removeGraphEdge = (index: number) => {
     setGraphEdges(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const onDeleteClick = (member: TeamMember) => {
+    setUnavailableMembers(prev =>
+      prev.filter(unavailableMember => unavailableMember.name !== member.name),
+    );
+    setAvailableMembers(prev => prev.filter(m => m.name !== member.name));
+    setSelectedMembers(prev => prev.filter(m => m.name !== member.name));
   };
 
   const isGraphValid =
@@ -374,6 +428,11 @@ export function TeamEditor({
               </Alert>
             )}
           </div>
+          <TeamMemberSelectionSection
+            agents={orderedAgents}
+            unavailableMembers={unavailableMembers}
+            selectedMembers={selectedMembers}
+            onDeleteMember={onDeleteClick}/>
           <div className="grid gap-2">
             <Label>Members</Label>
             <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
