@@ -36,8 +36,8 @@ import {
 } from '@/lib/services';
 import { cn } from '@/lib/utils';
 import { getKubernetesNameError } from '@/lib/utils/kubernetes-validation';
+
 import { TeamMemberSelectionSection } from './member-editor';
-import { T } from 'vitest/dist/chunks/reporters.d.BFLkQcL6.js';
 
 type GraphEdge = components['schemas']['GraphEdge'];
 
@@ -145,56 +145,63 @@ export function TeamEditor({
   const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
   const [nameError, setNameError] = useState<string | null>(null);
   const [orderedAgents, setOrderedAgents] = useState<Agent[]>([]);
-  const [unavailableMembers, setUnavailableMembers] = useState<TeamMember[]>([]);
-  const [availableMembers, setAvailableMembers] = useState<TeamMember[]>([])
+  const [unavailableMembers, setUnavailableMembers] = useState<TeamMember[]>(
+    [],
+  );
+  const [availableMembers, setAvailableMembers] = useState<TeamMember[]>([]);
 
   useEffect(() => {
-    if(open){
+    if (team && team.members) {
+      const missingMembers = team.members.filter(
+        teamMember => !agents.some(a => a.name === teamMember.name),
+      ) as TeamMember[];
       const checkMissingAgents = async () => {
         try {
-          if(team && team.members)
-          {
-            const missingMembers = team.members.filter(
-              teamMember => !agents.some(a => a.name === teamMember.name),
-            ) as TeamMember[];
-            if(missingMembers.length > 0){
-              setAvailableMembers(team.members.filter(m => !missingMembers.includes(m)));
-              var edges: GraphEdge[] = []
-              missingMembers.forEach(member => {
-                if(member.type == "agent"){
-                  agents = agents.filter(a => member.name === a.name)
-                }
-                if(team.graph && team.graph.edges.length > 0){
-                  const found = team.graph.edges.filter(e => e.from === member.name || e.to === member.name)
-                  edges = [...edges, ...found]
-                }
-              });
-              if(team.graph && edges.length>0){
-                team.graph.edges = team.graph.edges.filter(e => !edges.includes(e));
+          if (missingMembers.length > 0) {
+            setAvailableMembers(
+              team.members.filter(m => !missingMembers.includes(m)),
+            );
+            let edges: GraphEdge[] = [];
+            missingMembers.forEach(member => {
+              /*if (member.type === 'agent') {
+                agents = agents.filter(a => member.name === a.name);
+              }*/
+              if (team.graph && team.graph.edges.length > 0) {
+                const found = team.graph.edges.filter(
+                  e => e.from === member.name || e.to === member.name,
+                );
+                edges = [...edges, ...found];
               }
-            }else{
-              setAvailableMembers(team.members);
+            });
+            if (team.graph && edges.length > 0) {
+              team.graph.edges = team.graph.edges.filter(
+                e => !edges.includes(e),
+              );
             }
-            setUnavailableMembers(missingMembers || []);
-            
+          } else {
+            setAvailableMembers(team.members);
           }
-         
+          setUnavailableMembers(missingMembers || []);
         } catch (error) {
           console.error('Failed to load all agents:', error);
           setUnavailableMembers([]);
         }
       };
-      checkMissingAgents();
-    }else if(team){
-        setAvailableMembers(team.members.filter(m => !unavailableMembers.includes(m)));
+      if (open) {
+        checkMissingAgents();
+      } else {
+        setAvailableMembers(
+          team.members.filter(m => !missingMembers.includes(m)),
+        );
+      }
     }
-  }, [open, team?.members, agents]);
+  }, [open, team, team?.members, agents]);
 
   useEffect(() => {
     if (team) {
       setName(team.name);
       setDescription(team.description ?? '');
-      setSelectedMembers(availableMembers)
+      setSelectedMembers(availableMembers);
       setStrategy(team.strategy || 'round-robin');
       setMaxTurns(team.maxTurns ? String(team.maxTurns) : '');
       setSelectorAgent(team.selector?.agent ?? '');
@@ -211,7 +218,7 @@ export function TeamEditor({
       setGraphEdges([]);
       setOrderedAgents(agents);
     }
-  }, [open, team, unavailableMembers, team?.members]);
+  }, [open, team, availableMembers, team?.members, agents]);
 
   useEffect(() => {
     if (agents && selectedMembers) {
@@ -429,10 +436,9 @@ export function TeamEditor({
             )}
           </div>
           <TeamMemberSelectionSection
-            agents={orderedAgents}
             unavailableMembers={unavailableMembers}
-            selectedMembers={selectedMembers}
-            onDeleteMember={onDeleteClick}/>
+            onDeleteMember={onDeleteClick}
+          />
           <div className="grid gap-2">
             <Label>Members</Label>
             <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
