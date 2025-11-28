@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { A2AServerRow } from '@/components/rows/a2a-server-row';
 import type { A2AServer } from '@/lib/services';
 
@@ -92,13 +93,13 @@ describe('A2AServerRow', () => {
     expect(screen.queryByText('View A2A server details')).not.toBeInTheDocument();
   });
 
-  it('should call onInfo when info button clicked', () => {
+  it('should call onInfo when info button clicked', async () => {
     const onInfo = vi.fn();
     render(<A2AServerRow a2aServer={mockA2AServer} onInfo={onInfo} />);
 
     const buttons = screen.getAllByRole('button');
     const infoButton = buttons.find(btn => btn.className.includes('h-8 w-8'));
-    fireEvent.click(infoButton!);
+    await userEvent.click(infoButton!);
 
     expect(onInfo).toHaveBeenCalledWith(mockA2AServer);
   });
@@ -116,27 +117,27 @@ describe('A2AServerRow', () => {
     expect(screen.queryByText('Delete A2A server')).not.toBeInTheDocument();
   });
 
-  it('should show confirmation dialog on delete click', () => {
+  it('should show confirmation dialog on delete click', async () => {
     const onDelete = vi.fn();
     render(<A2AServerRow a2aServer={mockA2AServer} onDelete={onDelete} />);
 
     const buttons = screen.getAllByRole('button');
     const deleteButton = buttons.find(btn => btn.className.includes('hover:bg-destructive'));
-    fireEvent.click(deleteButton!);
+    await userEvent.click(deleteButton!);
 
     expect(screen.getByTestId('confirmation-dialog')).toBeInTheDocument();
     expect(screen.getByText('Delete A2A Server')).toBeInTheDocument();
   });
 
-  it('should call onDelete with correct id when confirmed', () => {
+  it('should call onDelete with correct id when confirmed', async () => {
     const onDelete = vi.fn();
     render(<A2AServerRow a2aServer={mockA2AServer} onDelete={onDelete} />);
 
     const buttons = screen.getAllByRole('button');
     const deleteButton = buttons.find(btn => btn.className.includes('hover:bg-destructive'));
-    fireEvent.click(deleteButton!);
+    await userEvent.click(deleteButton!);
 
-    fireEvent.click(screen.getByText('Delete'));
+    await userEvent.click(screen.getByText('Delete'));
 
     expect(onDelete).toHaveBeenCalledWith('test-id');
   });

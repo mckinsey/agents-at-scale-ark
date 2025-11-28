@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { A2AServersSection } from '@/components/sections/a2a-servers-section';
 import { A2AServersService } from '@/lib/services';
 import type { A2AServer } from '@/lib/services';
@@ -162,7 +163,7 @@ describe('A2AServersSection', () => {
     });
 
     const infoButtons = screen.getAllByText('Info');
-    fireEvent.click(infoButtons[0]);
+    await userEvent.click(infoButtons[0]);
 
     await waitFor(() => {
       expect(screen.getByTestId('info-dialog')).toBeInTheDocument();
@@ -181,7 +182,7 @@ describe('A2AServersSection', () => {
     });
 
     const deleteButtons = screen.getAllByText('Delete');
-    fireEvent.click(deleteButtons[0]);
+    await userEvent.click(deleteButtons[0]);
 
     await waitFor(() => {
       expect(A2AServersService.delete).toHaveBeenCalledWith('server-1');
@@ -203,7 +204,7 @@ describe('A2AServersSection', () => {
     });
 
     const deleteButtons = screen.getAllByText('Delete');
-    fireEvent.click(deleteButtons[0]);
+    await userEvent.click(deleteButtons[0]);
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith('Failed to Delete A2A Server', {
@@ -222,7 +223,7 @@ describe('A2AServersSection', () => {
     });
 
     const addButton = screen.getByText('Add A2A Server');
-    fireEvent.click(addButton);
+    await userEvent.click(addButton);
 
     await waitFor(() => {
       expect(screen.getByTestId('a2a-editor')).toBeInTheDocument();
@@ -244,14 +245,14 @@ describe('A2AServersSection', () => {
     });
 
     const addButton = screen.getByText('Add A2A Server');
-    fireEvent.click(addButton);
+    await userEvent.click(addButton);
 
     await waitFor(() => {
       expect(screen.getByTestId('a2a-editor')).toBeInTheDocument();
     });
 
     const saveButton = screen.getByText('Save');
-    fireEvent.click(saveButton);
+    await userEvent.click(saveButton);
 
     await waitFor(() => {
       expect(A2AServersService.create).toHaveBeenCalled();
@@ -273,14 +274,14 @@ describe('A2AServersSection', () => {
     });
 
     const addButton = screen.getByText('Add A2A Server');
-    fireEvent.click(addButton);
+    await userEvent.click(addButton);
 
     await waitFor(() => {
       expect(screen.getByTestId('a2a-editor')).toBeInTheDocument();
     });
 
     const saveButton = screen.getByText('Save');
-    fireEvent.click(saveButton);
+    await userEvent.click(saveButton);
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith('Failed to Create A2A Server', {
