@@ -4,21 +4,29 @@ The ark operator provides comprehensive observability through a structured event
 
 ## Event Recording Architecture
 
-All operations in the system are tracked using two main components:
+All operations in the system are tracked using specialized recorders in the `eventing` package:
 
-### OperationTracker
-Tracks individual operations with timing and lifecycle management:
-- **Start events**: Emitted when operations begin
-- **Completion events**: Emitted when operations succeed with duration
-- **Error events**: Emitted when operations fail with error details
-- **Termination events**: Special completion for graceful termination
+### Operation Recorders
+Each resource type has a dedicated recorder that tracks operations with timing and lifecycle management:
+- **QueryRecorder**: Tracks query execution lifecycle
+- **AgentRecorder**: Tracks agent execution
+- **TeamRecorder**: Tracks team strategy execution
+- **ToolRecorder**: Tracks tool invocations
+- **ModelRecorder**: Tracks model interactions
+- **MCPServerRecorder**: Tracks MCP server operations
+- **MemoryRecorder**: Tracks memory operations
 
-### ExecutionRecorder  
-Records high-level execution events for teams and agents:
-- **Team execution**: Team strategy and lifecycle events
-- **Team members**: Individual member execution within teams
-- **Team turns**: Round-robin turn tracking
-- **Agent execution**: Agent lifecycle and model interactions
+### Operation Tracking Pattern
+All operations follow a consistent naming pattern:
+- **Start events**: `{Operation}Start` - Emitted when operations begin
+- **Completion events**: `{Operation}Complete` - Emitted when operations succeed with duration
+- **Error events**: `{Operation}Error` - Emitted when operations fail with error details
+
+### Structured Event Data
+Events now include structured metadata stored in the annotation `ark.mckinsey.com/event-data` as JSON, containing:
+- Operation context (queryId, sessionId, namespace)
+- Timing information (timestamp, durationMs)
+- Component-specific data (toolName, agentName, parameters, etc.)
 
 ## Verbosity Levels
 
@@ -27,8 +35,8 @@ The system uses 4 verbosity levels to control event granularity:
 ### Level 0 (Always Visible) - Critical Operations
 **Always emitted regardless of log configuration**
 
-- **Query Resolution**: Query start, completion, and errors
-- **Model Resolution**: Model validation and configuration
+- **Query Execution**: Query start, completion, and errors
+- **Model Operations**: Model validation and configuration
 
 **Use Case**: Production monitoring, health checks, SLA tracking
 
@@ -145,7 +153,10 @@ spec:
 kubectl get events --sort-by='.lastTimestamp'
 
 # Filter by event type
-kubectl get events --field-selector reason=ResolveStart
+kubectl get events --field-selector reason=QueryExecutionStart
+
+# View structured event data from annotations
+kubectl get events -o json | jq -r '.items[] | select(.metadata.annotations."ark.mckinsey.com/event-data") | {reason: .reason, data: (.metadata.annotations."ark.mckinsey.com/event-data" | fromjson)}'
 ```
 
 #### Resource-Specific Events
@@ -178,28 +189,58 @@ kubectl get events --watch --field-selector reason!=Pulled,reason!=Created
 
 | Event Type | Verbosity | Description |
 |------------|-----------|-------------|
-| `ResolveStart` | 0 | Query/Model resolution begins |
-| `ResolveComplete` | 0 | Query/Model resolution succeeds |
-| `ResolveError` | 0 | Query/Model resolution fails |
+| `QueryExecutionStart` | 0 | Query execution begins |
+| `QueryExecutionComplete` | 0 | Query execution succeeds |
+| `QueryExecutionError` | 0 | Query execution fails |
 | `AgentExecutionStart` | 1 | Agent begins execution |
 | `AgentExecutionComplete` | 1 | Agent completes execution |
+| `AgentExecutionError` | 1 | Agent execution fails |
 | `LLMCallStart` | 2 | LLM API call begins |
 | `LLMCallComplete` | 2 | LLM API call completes |
 | `ToolCallStart` | 1 | Tool invocation begins |
 | `ToolCallComplete` | 1 | Tool invocation completes |
+| `ToolCallError` | 1 | Tool invocation fails |
+| `TeamExecutionStart` | 1 | Team execution begins |
+| `TeamExecutionComplete` | 1 | Team execution completes |
 
 #### Event Metadata Structure
 
-All events include structured metadata in JSON format:
+Events with structured data store it in the `ark.mckinsey.com/event-data` annotation as JSON. The structure varies by operation type but commonly includes:
 
+**Query Events:**
 ```json
 {
-  "name": "resource-name",
-  "component": "query|agent|team|tool|llm|model",
-  "duration": "1.234s",
-  "error": "error message if failed",
-  "namespace": "kubernetes-namespace",
-  "additionalContext": "varies by component"
+  "queryId": "uuid",
+  "queryName": "my-query",
+  "queryNamespace": "default",
+  "sessionId": "session-uuid",
+  "timestamp": "2025-11-25T12:00:00Z",
+  "durationMs": "1234.56"
+}
+```
+
+**Tool Events:**
+```json
+{
+  "toolName": "get-weather",
+  "toolType": "http",
+  "toolId": "call_abc123",
+  "parameters": "{\"city\":\"Chicago\"}",
+  "queryId": "uuid",
+  "sessionId": "session-uuid",
+  "timestamp": "2025-11-25T12:00:01Z",
+  "durationMs": "245.12"
+}
+```
+
+**Agent Events:**
+```json
+{
+  "agentName": "weather-agent",
+  "queryId": "uuid",
+  "sessionId": "session-uuid",
+  "timestamp": "2025-11-25T12:00:00Z",
+  "durationMs": "3456.78"
 }
 ```
 
@@ -259,7 +300,14 @@ Events are structured JSON suitable for log aggregation:
 
 ```bash
 # Export events for analysis
-kubectl get events -o json | jq '.items[] | select(.reason | startswith("Resolve"))'
+kubectl get events -o json | jq '.items[] | select(.reason | startswith("QueryExecution"))'
+
+# Extract structured event data from annotations
+kubectl get events -o json | jq -r '.items[] | select(.metadata.annotations."ark.mckinsey.com/event-data") | {
+  reason: .reason,
+  involvedObject: .involvedObject.name,
+  data: (.metadata.annotations."ark.mckinsey.com/event-data" | fromjson)
+}'
 ```
 
 ### Alerting
@@ -268,10 +316,10 @@ Create alerts based on event patterns:
 
 ```yaml
 # Example alert for query failures
-- alert: QueryResolutionFailure
-  expr: increase(kubernetes_events_total{reason="ResolveError"}[5m]) > 0
+- alert: QueryExecutionFailure
+  expr: increase(kubernetes_events_total{reason="QueryExecutionError"}[5m]) > 0
   labels:
     severity: warning
   annotations:
-    summary: "Query resolution failing"
+    summary: "Query execution failing"
 ```

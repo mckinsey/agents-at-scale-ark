@@ -237,7 +237,7 @@ class SequenceHelper:
         
         # Define phase patterns
         phase_patterns = {
-            "query_resolution": ["ResolveStart", "ResolveComplete"],
+            "query_execution": ["QueryExecutionStart", "QueryExecutionComplete"],
             "agent_execution": ["AgentExecutionStart", "AgentExecutionComplete"],
             "team_execution": ["TeamExecutionStart", "TeamExecutionComplete"],
             "tool_calls": ["ToolCallStart", "ToolCallComplete"],

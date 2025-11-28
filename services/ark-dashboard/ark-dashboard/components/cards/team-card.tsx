@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { TeamEditor } from '@/components/editors';
+import { AvailabilityStatusBadge } from '@/components/ui/availability-status-badge';
 import {
   Tooltip,
   TooltipContent,
@@ -83,23 +84,29 @@ export function TeamCard({ team, agents, onUpdate, onDelete }: TeamCardProps) {
             : actions
         }
         footer={
-          <div className="text-muted-foreground flex items-center gap-2 text-sm">
-            <Users className="h-4 w-4" />
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="cursor-help">
-                    {team.members.length} member
-                    {team.members.length !== 1 ? 's' : ''}
-                  </span>
-                </TooltipTrigger>
-                {team.members.length > 0 && (
-                  <TooltipContent>
-                    <p>{memberNames}</p>
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
+          <div className="flex w-full flex-row items-end justify-between">
+            <div className="text-muted-foreground flex items-center gap-2 text-sm">
+              <Users className="h-4 w-4" />
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help">
+                      {team.members.length} member
+                      {team.members.length !== 1 ? 's' : ''}
+                    </span>
+                  </TooltipTrigger>
+                  {team.members.length > 0 && (
+                    <TooltipContent>
+                      <p>{memberNames}</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <AvailabilityStatusBadge
+              status={team.available}
+              eventsLink={`/events?kind=Team&name=${team.name}&page=1`}
+            />
           </div>
         }
       />
