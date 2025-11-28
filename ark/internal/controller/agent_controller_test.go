@@ -9,12 +9,12 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	eventnoop "mckinsey.com/ark/internal/eventing/noop"
 )
 
 var _ = Describe("Agent Controller", func() {
@@ -65,7 +65,7 @@ var _ = Describe("Agent Controller", func() {
 			controllerReconciler := &AgentReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -100,7 +100,7 @@ var _ = Describe("Agent Controller", func() {
 			controllerReconciler := &AgentReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -139,7 +139,7 @@ var _ = Describe("Agent Controller", func() {
 			controllerReconciler := &AgentReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -210,7 +210,7 @@ var _ = Describe("Agent Controller", func() {
 			controllerReconciler := &AgentReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -241,7 +241,7 @@ var _ = Describe("Agent Controller", func() {
 					Namespace: "default",
 				},
 				Spec: arkv1alpha1.AgentSpec{
-					Prompt:   "test prompt for missing tool agent",
+					Prompt: "test prompt for missing tool agent",
 					Tools: []arkv1alpha1.AgentTool{
 						{
 							Type: "custom",
@@ -262,7 +262,7 @@ var _ = Describe("Agent Controller", func() {
 			controllerReconciler := &AgentReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			// First reconcile to initialize status

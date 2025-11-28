@@ -28,6 +28,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/controller"
+	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 	webhookv1 "mckinsey.com/ark/internal/webhook/v1"
 	webhookv1prealpha1 "mckinsey.com/ark/internal/webhook/v1prealpha1"
@@ -82,7 +83,11 @@ func main() {
 	}()
 
 	mgr, metricsCertWatcher, webhookCertWatcher := setupManager(result.config)
-	setupControllers(mgr, telemetryProvider)
+
+	// Initialize eventing provider
+	eventingProvider := eventingconfig.NewProvider(mgr)
+
+	setupControllers(mgr, telemetryProvider, eventingProvider)
 	setupWebhooks(mgr)
 	startManager(mgr, metricsCertWatcher, webhookCertWatcher)
 }
@@ -113,7 +118,7 @@ func parseFlags() struct {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.BoolVar(&showVersion, "version", false, "Show version information and exit")
 
-	zapOpts := zap.Options{Development: true}
+	zapOpts := zap.Options{Development: false}
 	zapOpts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
@@ -225,33 +230,53 @@ func setupMetricsServer(cfg config, baseTLSOpts []func(*tls.Config)) (metricsser
 	return metricsServerOptions, metricsCertWatcher
 }
 
-func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provider) {
+func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provider, eventingProvider *eventingconfig.Provider) {
 	controllers := []struct {
 		name       string
 		reconciler interface{ SetupWithManager(ctrl.Manager) error }
 	}{
-		{"Agent", &controller.AgentReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("agent-controller")}},
+		{"Agent", &controller.AgentReconciler{
+			Client:   mgr.GetClient(),
+			Scheme:   mgr.GetScheme(),
+			Eventing: eventingProvider,
+		}},
 		{"Query", &controller.QueryReconciler{
 			Client:    mgr.GetClient(),
 			Scheme:    mgr.GetScheme(),
-			Recorder:  mgr.GetEventRecorderFor("query-controller"),
 			Telemetry: telemetryProvider,
+			Eventing:  eventingProvider,
 		}},
 		{"Tool", &controller.ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
 		{"Team", &controller.TeamReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
-		{"A2AServer", &controller.A2AServerReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("a2aserver-controller")}},
-		{"MCPServer", &controller.MCPServerReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("mcpserver-controller")}},
+		{"A2AServer", &controller.A2AServerReconciler{
+			Client:   mgr.GetClient(),
+			Scheme:   mgr.GetScheme(),
+			Eventing: eventingProvider,
+		}},
+		{"MCPServer", &controller.MCPServerReconciler{
+			Client:   mgr.GetClient(),
+			Scheme:   mgr.GetScheme(),
+			Eventing: eventingProvider,
+		}},
 		{"Model", &controller.ModelReconciler{
 			Client:    mgr.GetClient(),
 			Scheme:    mgr.GetScheme(),
-			Recorder:  mgr.GetEventRecorderFor("model-controller"),
 			Telemetry: telemetryProvider,
+			Eventing:  eventingProvider,
 		}},
-		{"Memory", &controller.MemoryReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("memory-controller")}},
-		{"ExecutionEngine", &controller.ExecutionEngineReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("executionengine-controller")}},
+		{"Memory", &controller.MemoryReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
+		{"ExecutionEngine", &controller.ExecutionEngineReconciler{
+			Client:   mgr.GetClient(),
+			Scheme:   mgr.GetScheme(),
+			Eventing: eventingProvider,
+		}},
 		{"Evaluator", &controller.EvaluatorReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
-		{"Evaluation", &controller.EvaluationReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("evaluation-controller")}},
-		{"A2ATask", &controller.A2ATaskReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("a2atask-controller")}},
+		{"Evaluation", &controller.EvaluationReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
+		{"A2ATask", &controller.A2ATaskReconciler{
+			Client:   mgr.GetClient(),
+			Scheme:   mgr.GetScheme(),
+			Eventing: eventingProvider,
+		}},
 	}
 
 	for _, reconciler := range controllers {

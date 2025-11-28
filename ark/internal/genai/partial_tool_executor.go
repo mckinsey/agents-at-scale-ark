@@ -14,7 +14,7 @@ type PartialToolExecutor struct {
 	Partial      *arkv1alpha1.ToolPartial
 }
 
-func (p *PartialToolExecutor) Execute(ctx context.Context, call ToolCall, recorder EventEmitter) (ToolResult, error) {
+func (p *PartialToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
 	// Parse agent-provided arguments
 	var agentParams map[string]any
 	if call.Function.Arguments != "" {
@@ -79,5 +79,5 @@ func (p *PartialToolExecutor) Execute(ctx context.Context, call ToolCall, record
 		}, fmt.Errorf("failed to marshal merged arguments to JSON. Error: %w", err)
 	}
 	call.Function.Arguments = string(argsBytes)
-	return p.BaseExecutor.Execute(ctx, call, recorder)
+	return p.BaseExecutor.Execute(ctx, call)
 }
