@@ -4,6 +4,7 @@ package v1alpha1
 
 import (
 	"testing"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,4 +36,3 @@ func TestToolSpec_DeepCopyInto_WithTeam(t *testing.T) {
 	require.Equal(t, "test-team", out.Team.Name)
 	require.NotSame(t, in.Team, out.Team, "Team should be a new instance")
 }
-
