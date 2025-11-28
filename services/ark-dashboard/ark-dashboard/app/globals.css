@@ -146,7 +146,7 @@
 
   --border: var(--border-subtle-alpha01);
   --input: var(--field-enabled);
-  --ring: var(--border-subtle-alpha01);
+  --ring: var(--surface-bg03);
 
   --chart-1: var(--datavis-01-cyan);
   --chart-2: var(--datavis-02-orange);
@@ -264,7 +264,7 @@
 
   --border: var(--border-subtle-alpha01);
   --input: var(--field-enabled);
-  --ring: var(--border-subtle-alpha01);
+  --ring: var(--surface-bg03);
 
   --chart-1: var(--datavis-01-cyan);
   --chart-2: var(--datavis-02-orange);
@@ -284,7 +284,7 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
   body {
     @apply bg-background text-foreground font-sans;
