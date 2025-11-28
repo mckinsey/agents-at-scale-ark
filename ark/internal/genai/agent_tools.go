@@ -78,7 +78,7 @@ func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv
 	case ToolTypeAgent:
 		return createAgentExecutor(ctx, k8sClient, tool, namespace, telemetryProvider, eventingProvider)
 	case ToolTypeTeam:
-		return createTeamExecutor(ctx, k8sClient, tool, namespace, telemetryProvider)
+		return createTeamExecutor(ctx, k8sClient, tool, namespace, telemetryProvider, eventingProvider)
 	case ToolTypeBuiltin:
 		return createBuiltinExecutor(tool)
 	default:
@@ -107,7 +107,7 @@ func createAgentExecutor(ctx context.Context, k8sClient client.Client, tool *ark
 	}, nil
 }
 
-func createTeamExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, telemetryProvider telemetry.Provider) (ToolExecutor, error) {
+func createTeamExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) (ToolExecutor, error) {
 	if tool.Spec.Team.Name == "" {
 		return nil, fmt.Errorf("team spec is required for tool %s", tool.Name)
 	}
@@ -124,6 +124,7 @@ func createTeamExecutor(ctx context.Context, k8sClient client.Client, tool *arkv
 		TeamCRD:           teamCRD,
 		k8sClient:         k8sClient,
 		telemetryProvider: telemetryProvider,
+		eventingProvider:  eventingProvider,
 	}, nil
 }
 
@@ -355,9 +356,10 @@ type TeamToolExecutor struct {
 	TeamCRD           *arkv1alpha1.Team
 	k8sClient         client.Client
 	telemetryProvider telemetry.Provider
+	eventingProvider  eventing.Provider
 }
 
-func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall, recorder EventEmitter) (ToolResult, error) {
+func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
 	var arguments map[string]any
 	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
 		log := logf.FromContext(ctx)
@@ -387,8 +389,8 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall, recorder 
 		}, fmt.Errorf("input parameter must be a string for team tool %s", t.TeamName)
 	}
 
-	// Create the Team object using the Team CRD and recorder
-	team, err := MakeTeam(ctx, t.k8sClient, t.TeamCRD, recorder, t.telemetryProvider)
+	// Create the Team object using the Team CRD and providers
+	team, err := MakeTeam(ctx, t.k8sClient, t.TeamCRD, t.telemetryProvider, t.eventingProvider)
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
