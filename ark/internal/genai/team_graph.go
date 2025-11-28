@@ -3,8 +3,6 @@ package genai
 import (
 	"context"
 	"fmt"
-
-	corev1 "k8s.io/api/core/v1"
 )
 
 func (t *Team) executeGraph(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
@@ -27,9 +25,6 @@ func (t *Team) executeGraph(ctx context.Context, userInput Message, history []Me
 		}
 	}
 
-	turnTracker := NewExecutionRecorder(t.Recorder)
-	turnTracker.TeamTurn(ctx, "Start", t.FullName(), t.Strategy, 0)
-
 	currentMemberName := t.Members[0].GetName()
 
 	for turns := 0; ; turns++ {
@@ -38,30 +33,36 @@ func (t *Team) executeGraph(ctx context.Context, userInput Message, history []Me
 			return newMessages, fmt.Errorf("member %s not found in team %s", currentMemberName, t.FullName())
 		}
 
-		memberTracker := NewExecutionRecorder(t.Recorder)
-		memberTracker.ParticipantSelected(ctx, t.FullName(), currentMemberName, "graph")
-
 		// Start turn-level telemetry span
-		turnCtx, turnSpan := t.TeamRecorder.StartTurn(ctx, turns, member.GetName(), member.GetType())
+		turnCtx, turnSpan := t.telemetryRecorder.StartTurn(ctx, turns, member.GetName(), member.GetType())
+
+		operationData := map[string]string{
+			"teamName": t.Name,
+			"strategy": t.Strategy,
+			"turn":     fmt.Sprintf("%d", turns),
+		}
+		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", turns, t.Name), operationData)
 
 		err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, turns)
 
 		// Record turn output
 		if len(newMessages) > 0 {
-			t.TeamRecorder.RecordTurnOutput(turnSpan, newMessages, len(newMessages))
+			t.telemetryRecorder.RecordTurnOutput(turnSpan, newMessages, len(newMessages))
 		}
 
 		if err != nil {
-			t.TeamRecorder.RecordError(turnSpan, err)
+			t.telemetryRecorder.RecordError(turnSpan, err)
 			turnSpan.End()
+			t.eventingRecorder.Fail(turnCtx, "TeamTurn", fmt.Sprintf("Team turn failed: %v", err), err, operationData)
 			if IsTerminateTeam(err) {
 				return newMessages, nil
 			}
 			return newMessages, err
 		}
 
-		t.TeamRecorder.RecordSuccess(turnSpan)
+		t.telemetryRecorder.RecordSuccess(turnSpan)
 		turnSpan.End()
+		t.eventingRecorder.Complete(turnCtx, "TeamTurn", fmt.Sprintf("Team turn %d completed successfully", turns), operationData)
 
 		nextMember := transitionMap[currentMemberName]
 		if nextMember == "" {
@@ -71,16 +72,6 @@ func (t *Team) executeGraph(ctx context.Context, userInput Message, history []Me
 		currentMemberName = nextMember
 
 		if t.MaxTurns != nil && turns+1 >= *t.MaxTurns {
-			turnTracker.TeamTurn(ctx, "MaxTurns", t.FullName(), t.Strategy, turns+1)
-			// Log the maxTurns limit for observability, but return success with accumulated messages
-			t.Recorder.EmitEvent(ctx, corev1.EventTypeWarning, "TeamMaxTurnsReached", BaseEvent{
-				Name: t.FullName(),
-				Metadata: map[string]string{
-					"strategy": t.Strategy,
-					"maxTurns": fmt.Sprintf("%d", *t.MaxTurns),
-					"teamName": t.FullName(),
-				},
-			})
 			return newMessages, nil
 		}
 	}

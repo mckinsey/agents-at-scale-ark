@@ -1,5 +1,6 @@
 # Mock LLM configuration for token usage test
 # Returns deterministic token counts in usage field
+terminationGracePeriodSeconds: 3
 ark:
   model:
     enabled: true

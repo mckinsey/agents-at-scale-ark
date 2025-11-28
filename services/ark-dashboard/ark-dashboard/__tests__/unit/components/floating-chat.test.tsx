@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useAtomValue } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import FloatingChat from '@/components/floating-chat';
@@ -22,8 +23,19 @@ Element.prototype.scrollIntoView = vi.fn();
 vi.mock('@/lib/services', () => ({
   chatService: {
     streamChatResponse: vi.fn(),
+    submitChatQuery: vi.fn(),
+    getQueryResult: vi.fn(),
   },
 }));
+
+// Mock jotai
+vi.mock('jotai', async importOriginal => {
+  const actual = await importOriginal<typeof import('jotai')>();
+  return {
+    ...actual,
+    useAtomValue: vi.fn(),
+  };
+});
 
 describe('FloatingChat', () => {
   const defaultProps = {
@@ -38,7 +50,10 @@ describe('FloatingChat', () => {
     vi.clearAllMocks();
   });
 
-  describe('Display streaming chunks incrementally', () => {
+  describe('streaming enabled', () => {
+    // Mock feature flag to true
+    vi.mocked(useAtomValue).mockReturnValue(true);
+
     it('should display streaming chunks as they arrive', async () => {
       const user = userEvent.setup();
 
@@ -118,9 +133,7 @@ describe('FloatingChat', () => {
       const assistantMessages = screen.getAllByText(/First/);
       expect(assistantMessages).toHaveLength(1);
     });
-  });
 
-  describe('Handle streaming completion', () => {
     it('should stop processing when stream completes', async () => {
       const user = userEvent.setup();
 
@@ -149,9 +162,7 @@ describe('FloatingChat', () => {
         expect(input).not.toBeDisabled();
       });
     });
-  });
 
-  describe('Show streaming indicator', () => {
     it('should disable input while streaming', async () => {
       const user = userEvent.setup();
 
@@ -227,9 +238,7 @@ describe('FloatingChat', () => {
         ).toBeInTheDocument();
       });
     });
-  });
 
-  describe('Complete conversation flow', () => {
     it('should handle multiple messages in succession', async () => {
       const user = userEvent.setup();
 
@@ -267,6 +276,93 @@ describe('FloatingChat', () => {
       expect(screen.getByText('First response')).toBeInTheDocument();
       expect(screen.getByText('Second message')).toBeInTheDocument();
       expect(screen.getByText('Second response')).toBeInTheDocument();
+    });
+  });
+
+  describe('streaming disabled', () => {
+    it('should poll for response when feature flag is disabled', async () => {
+      // Mock feature flag to false
+      vi.mocked(useAtomValue).mockReturnValue(false);
+
+      const user = userEvent.setup();
+
+      // Mock submitChatQuery
+      vi.mocked(chatService.submitChatQuery).mockResolvedValue({
+        name: 'query-123',
+      } as any);
+
+      // Mock getQueryResult to return pending then done
+      vi.mocked(chatService.getQueryResult)
+        .mockResolvedValueOnce({
+          terminal: false,
+          status: 'running',
+          response: undefined,
+        })
+        .mockResolvedValueOnce({
+          terminal: true,
+          status: 'done',
+          response: 'Polled response',
+        });
+
+      render(<FloatingChat {...defaultProps} />);
+
+      const input = screen.getByPlaceholderText('Type your message...');
+      await user.type(input, 'Test message');
+
+      const sendButton = screen.getByRole('button', { name: /send/i });
+      await user.click(sendButton);
+
+      // Should call submitChatQuery
+      await waitFor(() => {
+        expect(chatService.submitChatQuery).toHaveBeenCalledWith(
+          expect.arrayContaining([{ role: 'user', content: 'Test message' }]),
+          'agent',
+          'Test Agent',
+          expect.any(String),
+        );
+      });
+
+      // Should call getQueryResult
+      await waitFor(() => {
+        expect(chatService.getQueryResult).toHaveBeenCalledWith('query-123');
+      });
+
+      // Should eventually show the response
+      await waitFor(() => {
+        expect(screen.getByText('Polled response')).toBeInTheDocument();
+      });
+
+      // Should NOT call streamChatResponse
+      expect(chatService.streamChatResponse).not.toHaveBeenCalled();
+    });
+
+    it('should handle polling errors', async () => {
+      // Mock feature flag to false
+      vi.mocked(useAtomValue).mockReturnValue(false);
+
+      const user = userEvent.setup();
+
+      vi.mocked(chatService.submitChatQuery).mockResolvedValue({
+        name: 'query-error',
+      } as any);
+
+      vi.mocked(chatService.getQueryResult).mockResolvedValue({
+        terminal: true,
+        status: 'error',
+        response: 'Something went wrong',
+      });
+
+      render(<FloatingChat {...defaultProps} />);
+
+      const input = screen.getByPlaceholderText('Type your message...');
+      await user.type(input, 'Test message');
+
+      const sendButton = screen.getByRole('button', { name: /send/i });
+      await user.click(sendButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+      });
     });
   });
 });
