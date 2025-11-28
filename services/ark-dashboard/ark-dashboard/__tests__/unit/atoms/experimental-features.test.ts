@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   A2A_TASKS_FEATURE_KEY,
+  CHAT_STREAMING_FEATURE_KEY,
   isA2ATasksEnabledAtom,
   storedIsA2ATasksEnabledAtom,
+  storedIsChatStreamingEnabledAtom,
 } from '@/atoms/experimental-features';
 
 describe('A2A Tasks Feature Flag Atoms', () => {
@@ -60,6 +62,26 @@ describe('A2A Tasks Feature Flag Atoms', () => {
       expect(() => {
         // @ts-expect-error derived atoms are read-only
         store.set(isA2ATasksEnabledAtom, true);
+      }).toThrow();
+    });
+  });
+
+  describe('experimental-chat-streaming', () => {
+    it('should default to false', () => {
+      expect(CHAT_STREAMING_FEATURE_KEY).toBe('experimental-chat-streaming');
+      expect(store.get(storedIsChatStreamingEnabledAtom)).toBe(false);
+    });
+
+    it('should return true when storedIsChatStreamingEnabledAtom is true', () => {
+      store.set(storedIsChatStreamingEnabledAtom, true);
+      const value = store.get(storedIsChatStreamingEnabledAtom);
+      expect(value).toBe(true);
+    });
+
+    it('should be read-only (derived atom)', () => {
+      expect(() => {
+        // @ts-expect-error derived atoms are read-only
+        store.set(isChatStreamingEnabledAtom, true);
       }).toThrow();
     });
   });

@@ -1,27 +1,25 @@
-import { type A2ATaskPhase } from '@/lib/services/a2a-tasks';
+import { A2ATaskPhase } from '@/lib/services/a2a-tasks';
 
 import { type StatusDotVariant } from './status-dot';
 
-export const mapTaskPhaseToVariant = (
-  phase?: A2ATaskPhase,
-): StatusDotVariant => {
+export const mapTaskPhaseToVariant = (phase?: string): StatusDotVariant => {
   if (!phase) {
     return 'unknown';
   }
 
-  const normalizedPhase = phase?.toLowerCase();
+  const normalizedPhase = phase.toLowerCase();
   switch (normalizedPhase) {
-    case 'completed':
+    case A2ATaskPhase.COMPLETED:
       return 'completed';
-    case 'running':
-    case 'assigned':
+    case A2ATaskPhase.RUNNING:
+    case A2ATaskPhase.ASSIGNED:
       return 'running';
-    case 'failed':
-    case 'cancelled':
+    case A2ATaskPhase.FAILED:
+    case A2ATaskPhase.CANCELLED:
       return 'failed';
-    case 'input-required':
-    case 'auth-required':
-    case 'pending':
+    case A2ATaskPhase.INPUT_REQUIRED:
+    case A2ATaskPhase.AUTH_REQUIRED:
+    case A2ATaskPhase.PENDING:
       return 'pending';
     default:
       return 'unknown';

@@ -41,7 +41,7 @@ class QueryHelper:
         # Look for ResolveComplete events
         resolve_complete_events = [
             e for e in events 
-            if e.reason == EventType.RESOLVE_COMPLETE.value
+            if e.reason == EventType.QUERY_EXECUTION_COMPLETE.value
         ]
         
         return len(resolve_complete_events) > 0
@@ -66,9 +66,9 @@ class QueryHelper:
         resolve_complete = None
         
         for event in events:
-            if event.reason == EventType.RESOLVE_START.value and resolve_start is None:
+            if event.reason == EventType.QUERY_EXECUTION_START.value and resolve_start is None:
                 resolve_start = event
-            elif event.reason == EventType.RESOLVE_COMPLETE.value:
+            elif event.reason == EventType.QUERY_EXECUTION_COMPLETE.value:
                 resolve_complete = event
         
         if not resolve_start or not resolve_complete:
@@ -98,9 +98,9 @@ class QueryHelper:
         events = await self.event_analyzer.get_events(scope=scope)
         
         # Check for completion and error events
-        has_resolve_complete = any(e.reason == EventType.RESOLVE_COMPLETE.value for e in events)
-        has_resolve_error = any(e.reason == EventType.RESOLVE_ERROR.value for e in events)
-        has_resolve_start = any(e.reason == EventType.RESOLVE_START.value for e in events)
+        has_resolve_complete = any(e.reason == EventType.QUERY_EXECUTION_COMPLETE.value for e in events)
+        has_resolve_error = any(e.reason == EventType.QUERY_EXECUTION_ERROR.value for e in events)
+        has_resolve_start = any(e.reason == EventType.QUERY_EXECUTION_START.value for e in events)
         
         if has_resolve_error:
             return "error"
@@ -129,7 +129,7 @@ class QueryHelper:
         # Count unique queries by looking for ResolveStart events
         query_ids = set()
         for event in events:
-            if (event.reason == EventType.RESOLVE_START.value and 
+            if (event.reason == EventType.QUERY_EXECUTION_START.value and 
                 event.metadata and event.metadata.queryId):
                 query_ids.add(event.metadata.queryId)
         
@@ -187,7 +187,7 @@ class QueryHelper:
         
         error_messages = []
         for event in events:
-            if event.reason == EventType.RESOLVE_ERROR.value:
+            if event.reason == EventType.QUERY_EXECUTION_ERROR.value:
                 if event.metadata and event.metadata.error:
                     error_messages.append(event.metadata.error)
                 elif "error" in event.message.lower():
@@ -234,8 +234,8 @@ class QueryHelper:
                     model_names.add(event.metadata.modelName)
         
         # Calculate success rates
-        successful_queries = event_counts.get(EventType.RESOLVE_COMPLETE.value, 0)
-        failed_queries = event_counts.get(EventType.RESOLVE_ERROR.value, 0)
+        successful_queries = event_counts.get(EventType.QUERY_EXECUTION_COMPLETE.value, 0)
+        failed_queries = event_counts.get(EventType.QUERY_EXECUTION_ERROR.value, 0)
         total_queries = max(successful_queries + failed_queries, query_count)
         
         successful_agents = event_counts.get(EventType.AGENT_EXECUTION_COMPLETE.value, 0)

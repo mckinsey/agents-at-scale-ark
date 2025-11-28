@@ -6,23 +6,22 @@ import (
 	"context"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/common"
+	"mckinsey.com/ark/internal/eventing"
 )
 
 // ExecutionEngineReconciler reconciles an ExecutionEngine object
 type ExecutionEngineReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Eventing eventing.Provider
 	resolver *common.ValueSourceResolverV1PreAlpha1
 }
 
@@ -75,7 +74,7 @@ func (r *ExecutionEngineReconciler) processExecutionEngine(ctx context.Context, 
 	resolvedAddress, err := resolver.ResolveValueSource(ctx, executionEngine.Spec.Address, executionEngine.Namespace)
 	if err != nil {
 		log.Error(err, "failed to resolve ExecutionEngine address", "executionEngine", executionEngine.Name)
-		r.Recorder.Event(&executionEngine, corev1.EventTypeWarning, "AddressResolutionFailed", fmt.Sprintf("Failed to resolve address: %v", err))
+		r.Eventing.ExecutionEngineRecorder().AddressResolutionFailed(ctx, &executionEngine, fmt.Sprintf("Failed to resolve address: %v", err))
 		if err := r.updateStatus(ctx, executionEngine, statusError, fmt.Sprintf("Failed to resolve address: %v", err)); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -88,7 +87,6 @@ func (r *ExecutionEngineReconciler) processExecutionEngine(ctx context.Context, 
 		return ctrl.Result{}, err
 	}
 
-	r.Recorder.Event(&executionEngine, corev1.EventTypeNormal, "AddressResolved", fmt.Sprintf("Address resolved: %s", resolvedAddress))
 	log.Info("ExecutionEngine processed successfully", "executionEngine", executionEngine.Name, "resolvedAddress", resolvedAddress)
 	return ctrl.Result{}, nil
 }
