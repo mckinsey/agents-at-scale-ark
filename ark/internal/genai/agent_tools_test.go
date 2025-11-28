@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	eventnoop "mckinsey.com/ark/internal/eventing/noop"
 	"mckinsey.com/ark/internal/telemetry/noop"
 )
 
@@ -27,11 +28,11 @@ func setupTestClientForTools(objects []client.Object) client.Client {
 
 func TestRegisterToolDescriptionOverride(t *testing.T) {
 	tests := []struct {
-		name                   string
-		toolDescription        string
-		agentToolDescription   string
-		expectedDescription    string
-		shouldOverride         bool
+		name                 string
+		toolDescription      string
+		agentToolDescription string
+		expectedDescription  string
+		shouldOverride       bool
 	}{
 		{
 			name:                 "agent tool description overrides tool description",
@@ -84,10 +85,11 @@ func TestRegisterToolDescriptionOverride(t *testing.T) {
 
 			// Create tool registry
 			telemetryProvider := noop.NewProvider()
-			registry := NewToolRegistry(nil, telemetryProvider.ToolRecorder())
+			eventingProvider := eventnoop.NewProvider()
+			registry := NewToolRegistry(nil, telemetryProvider.ToolRecorder(), eventingProvider.ToolRecorder())
 
 			// Register the tool
-			err := registry.registerTool(ctx, k8sClient, agentTool, "default", telemetryProvider)
+			err := registry.registerTool(ctx, k8sClient, agentTool, "default", telemetryProvider, eventingProvider)
 			require.NoError(t, err)
 
 			// Verify the tool was registered with correct description
@@ -153,10 +155,11 @@ func TestRegisterToolDescriptionWithPartial(t *testing.T) {
 
 	// Create tool registry
 	telemetryProvider := noop.NewProvider()
-	registry := NewToolRegistry(nil, telemetryProvider.ToolRecorder())
+	eventingProvider := eventnoop.NewProvider()
+	registry := NewToolRegistry(nil, telemetryProvider.ToolRecorder(), eventingProvider.ToolRecorder())
 
 	// Register the tool
-	err = registry.registerTool(ctx, k8sClient, agentTool, "default", telemetryProvider)
+	err = registry.registerTool(ctx, k8sClient, agentTool, "default", telemetryProvider, eventingProvider)
 	require.NoError(t, err)
 
 	// Verify the tool was registered with correct description and name
@@ -210,4 +213,3 @@ func TestCreatePartialToolDefinitionPreservesDescription(t *testing.T) {
 	_, hasCity := props["city"]
 	require.True(t, hasCity, "city parameter should remain in schema")
 }
-

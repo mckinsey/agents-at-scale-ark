@@ -245,8 +245,7 @@ func TestDetermineNextMember(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			team := &Team{
-				Members:  members,
-				Recorder: &mockEventRecorder{},
+				Members: members,
 			}
 
 			ctx := context.Background()
@@ -334,8 +333,7 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			team := &Team{
-				Members:  members,
-				Recorder: &mockEventRecorder{},
+				Members: members,
 			}
 
 			ctx := context.Background()
@@ -463,10 +461,4 @@ func TestBuildRoles(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
-}
-
-// mockEventRecorder implements EventEmitter for testing
-type mockEventRecorder struct{}
-
-func (m *mockEventRecorder) EmitEvent(ctx context.Context, eventType, reason string, data EventData) {
 }

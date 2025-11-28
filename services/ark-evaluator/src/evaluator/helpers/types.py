@@ -17,9 +17,9 @@ class EventScope(str, Enum):
 class EventType(str, Enum):
     """Common event types in the ARK system"""
     # Query Events
-    RESOLVE_START = "QueryResolveStart"
-    RESOLVE_COMPLETE = "QueryResolveComplete"
-    RESOLVE_ERROR = "QueryResolveError"
+    QUERY_EXECUTION_START = "QueryExecutionStart"
+    QUERY_EXECUTION_COMPLETE = "QueryExecutionComplete"
+    QUERY_EXECUTION_ERROR = "QueryExecutionError"
     
     # Agent Events
     AGENT_EXECUTION_START = "AgentExecutionStart"

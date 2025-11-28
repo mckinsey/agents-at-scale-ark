@@ -13,7 +13,7 @@ export function createQueryCommand(_: ArkConfig): Command {
     .argument('<message>', 'Message to send')
     .option(
       '-o, --output <format>',
-      'Output format: yaml, json, or name (prints only resource name)'
+      'Output format: yaml, json, name or events (shows structured event data)'
     )
     .option(
       '--session-id <sessionId>',

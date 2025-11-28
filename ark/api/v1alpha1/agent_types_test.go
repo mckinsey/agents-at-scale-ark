@@ -48,7 +48,7 @@ func TestAgentTool_GetToolCRDName(t *testing.T) {
 		{
 			name: "returns tool name when partial is nil",
 			tool: AgentTool{
-				Name: weatherToolName,
+				Name:    weatherToolName,
 				Partial: nil,
 			},
 			expected: weatherToolName,

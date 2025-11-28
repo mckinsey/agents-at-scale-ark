@@ -23,6 +23,12 @@ kubectl get events --sort-by='.lastTimestamp'
 
 # Show events for specific resource type
 kubectl get events --field-selector involvedObject.kind=Query
+
+# Show structured event data from annotations
+kubectl get events --field-selector involvedObject.kind=Query -o json | jq -r '.items[] | select(.metadata.annotations."ark.mckinsey.com/event-data") | {reason: .reason, data: (.metadata.annotations."ark.mckinsey.com/event-data" | fromjson)}'
+
+# Filter by specific event type
+kubectl get events --field-selector reason=QueryExecutionComplete
 ```
 
 You can also view events in `k9s` with the `:events` command:
@@ -53,11 +59,17 @@ Use events for:
 - Successful completion of significant operations
 - Error reporting that application owners need to see
 
-As an example, query execution emits these events:
+As an example, query execution emits these events following the `{Operation}{State}` pattern:
 
-- `Normal/LLMCallComplete`: LLM call with token usage details
-- `Normal/AgentExecutionComplete`: Agent execution completion with duration
-- `Normal/TargetExecutionComplete`: Target execution completion
+- `Normal/QueryExecutionStart`: Query begins execution
+- `Normal/AgentExecutionStart`: Agent begins execution
+- `Normal/ToolCallStart`: Tool invocation begins
+- `Normal/ToolCallComplete`: Tool invocation completes with duration and results
+- `Normal/LLMCallComplete`: LLM call completes with token usage details
+- `Normal/AgentExecutionComplete`: Agent execution completes with duration
+- `Normal/QueryExecutionComplete`: Query execution completes
+
+All events with structured data store it in the `ark.mckinsey.com/event-data` annotation as JSON.
 
 Use Logging For:
 
@@ -78,17 +90,31 @@ log.Info("model probe failed", "model", model.Name, "status", errorMessage)
 
 ## How to log events
 
-Controllers with event recording include an `EventRecorder` field. Events must be either `Normal` (informational) or `Warning` (errors/warnings) as per the [Kubernetes Event API documentation](https://kubernetes.io/docs/reference/kubernetes-api/cluster-resources/event-v1/):
+The new eventing system uses specialized recorders from the `eventing` package. Each resource type has a dedicated recorder:
 
 ```go
 import (
-    corev1 "k8s.io/api/core/v1"
+    "mckinsey.com/ark/internal/eventing"
 )
 
-// Event recording in reconciler - follow {Resource}{Action}{State} convention
-r.Recorder.Event(&query, corev1.EventTypeNormal, "QueryLLMCallComplete", eventData)
-r.Recorder.Event(&query, corev1.EventTypeWarning, "QueryExecutionFailed", fmt.Sprintf("Error: %v", err))
+// In controller setup
+r.Eventing = eventing.NewRecorders(eventEmitter)
+
+// In reconciler - use operation recorders with Start/Complete/Fail pattern
+ctx = r.Eventing.QueryRecorder().Start(ctx, "QueryExecution", "Executing query", nil)
+
+// On success
+r.Eventing.QueryRecorder().Complete(ctx, "QueryExecution", "Query execution completed", operationData)
+
+// On failure
+r.Eventing.QueryRecorder().Fail(ctx, "QueryExecution", "Query execution failed", err, nil)
 ```
+
+The recorders automatically:
+- Track timing and duration
+- Add structured metadata to annotations (`ark.mckinsey.com/event-data`)
+- Follow consistent naming patterns (`{Operation}Start`, `{Operation}Complete`, `{Operation}Error`)
+- Include operation context (queryId, sessionId, namespace, etc.)
 
 ### Stable Messages for Conditions and Events
 
