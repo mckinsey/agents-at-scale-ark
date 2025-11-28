@@ -1,5 +1,7 @@
 import {
   isExperimentalFeaturesEnabledAtom,
+  storedIsA2ATasksEnabledAtom,
+  storedIsChatStreamingEnabledAtom,
   storedIsExperimentalDarkModeEnabledAtom,
   storedIsExperimentalExecutionEngineEnabledAtom,
 } from '@/atoms/experimental-features';
@@ -41,6 +43,27 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
           </span>
         ),
         atom: storedIsExperimentalExecutionEngineEnabledAtom,
+      },
+      {
+        feature: 'A2A Tasks',
+        description: (
+          <span>
+            Enables the experimental{' '}
+            <span className="font-bold">A2A Tasks</span> functionality
+          </span>
+        ),
+        atom: storedIsA2ATasksEnabledAtom,
+      },
+    ],
+  },
+  {
+    groupKey: 'chat',
+    groupLabel: 'Chat',
+    features: [
+      {
+        feature: 'Chat Streaming',
+        description: 'Enables streaming responses in the chat',
+        atom: storedIsChatStreamingEnabledAtom,
       },
     ],
   },

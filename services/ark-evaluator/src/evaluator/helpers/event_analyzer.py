@@ -126,11 +126,20 @@ class EventAnalyzer:
     
     def _event_to_dict(self, event) -> Dict[str, Any]:
         """Convert Kubernetes event to dictionary"""
+        message = event.message or ""
+
+        # Check for structured event data in annotations (new eventing system)
+        if event.metadata and event.metadata.annotations:
+            event_data_json = event.metadata.annotations.get("ark.mckinsey.com/event-data")
+            if event_data_json:
+                # Replace message with the structured JSON data
+                message = event_data_json
+
         return {
             "name": event.metadata.name if event.metadata else "",
             "namespace": event.metadata.namespace if event.metadata else "",
             "reason": event.reason or "",
-            "message": event.message or "",
+            "message": message,
             "firstTimestamp": event.first_timestamp.isoformat() if event.first_timestamp else "",
             "lastTimestamp": event.last_timestamp.isoformat() if event.last_timestamp else "",
             "count": event.count or 1,

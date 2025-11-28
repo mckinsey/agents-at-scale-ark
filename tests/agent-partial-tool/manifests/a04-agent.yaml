@@ -8,10 +8,11 @@ spec:
     name: test-model
   tools:
     - type: custom
-      name: get-coordinates
+      name: get-coordinates-of-nyc
+      description: Pre-fills city parameter for New York
       partial:
-        name: get-coordinates-of-ny
-        description: Pre-fills city parameter for New York
+        # it overwrites the tool name exposed to the Agent
+        name: get-coordinates
         parameters:
           - name: city
             value: New York
