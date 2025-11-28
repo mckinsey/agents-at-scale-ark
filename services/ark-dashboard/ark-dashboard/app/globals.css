@@ -120,10 +120,10 @@
   /*    Semantic Variables     */
   /* ------------------------- */
 
-  --background: var(--surface-bg03);
+  --background: var(--surface-bg01);
   --foreground: var(--text-primary);
 
-  --card: var(--surface-bg03);
+  --card: var(--surface-bg01);
   --card-foreground: var(--text-primary);
 
   --popover: var(--surface-bg01);
@@ -138,7 +138,7 @@
   --muted: var(--surface-bg02);
   --muted-foreground: var(--text-secondary);
 
-  --accent: var(--surface-bg03);
+  --accent: var(--surface-bg01);
   --accent-foreground: var(--text-primary);
 
   --destructive: var(--status-error);
@@ -146,7 +146,7 @@
 
   --border: var(--border-subtle-alpha01);
   --input: var(--field-enabled);
-  --ring: var(--surface-bg03);
+  --ring: var(--surface-bg01);
 
   --chart-1: var(--datavis-01-cyan);
   --chart-2: var(--datavis-02-orange);
@@ -154,11 +154,11 @@
   --chart-4: var(--datavis-04-red);
   --chart-5: var(--datavis-05-teal);
 
-  --sidebar: var(--surface-bg03);
+  --sidebar: var(--surface-bg01);
   --sidebar-foreground: var(--text-secondary);
   --sidebar-primary: var(--text-primary);
   --sidebar-primary-foreground: var(--surface-bg01);
-  --sidebar-accent: var(--surface-bg03);
+  --sidebar-accent: var(--surface-bg01);
   --sidebar-accent-foreground: var(--text-primary);
   --sidebar-border: var(--border-subtle-alpha01);
   --sidebar-ring: var(--border-selected);
