@@ -34,10 +34,15 @@ type TeamSpec struct {
 	Graph       *TeamGraphSpec    `json:"graph,omitempty"`
 }
 
-type TeamStatus struct{}
+type TeamStatus struct {
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Strategy",type=string,JSONPath=`.spec.strategy`
+// +kubebuilder:printcolumn:name="Available",type=string,JSONPath=`.status.conditions[?(@.type=="Available")].status`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type Team struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
