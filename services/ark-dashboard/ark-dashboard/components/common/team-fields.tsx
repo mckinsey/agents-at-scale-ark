@@ -49,9 +49,7 @@ function TeamFields({
       <Select value={selectedTeam} onValueChange={setSelectedTeam}>
         <SelectTrigger id="team">
           <SelectValue
-            placeholder={
-              loadingTeams ? 'Loading teams...' : 'Select team...'
-            }
+            placeholder={loadingTeams ? 'Loading teams...' : 'Select team...'}
           />
         </SelectTrigger>
         <SelectContent>
@@ -77,4 +75,3 @@ function TeamFields({
 }
 
 export { TeamFields };
-
