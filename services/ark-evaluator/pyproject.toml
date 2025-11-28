@@ -29,7 +29,7 @@ dependencies = [
 package = true
 
 [tool.uv.sources]
-ark-sdk = { path = "ark_sdk-0.1.40-py3-none-any.whl" }
+ark-sdk = { path = "ark_sdk-0.1.44-py3-none-any.whl" }
 
 # ark-sdk dependency is managed by the build system
 # uv add $(ARK_SDK_WHL) is called in build.mk

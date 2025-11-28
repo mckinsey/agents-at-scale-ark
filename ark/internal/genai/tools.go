@@ -20,6 +20,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
@@ -37,7 +38,7 @@ type HTTPExecutor struct {
 }
 
 // Execute implements ToolExecutor interface for HTTP tools
-func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall, recorder EventEmitter) (ToolResult, error) {
+func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
 	// Parse arguments
 	var arguments map[string]any
 	if call.Function.Arguments != "" {
@@ -179,20 +180,22 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall, recorder Even
 }
 
 type ToolRegistry struct {
-	tools        map[string]ToolDefinition
-	executors    map[string]ToolExecutor
-	mcpPool      *MCPClientPool         // One MCP client pool per agent
-	mcpSettings  map[string]MCPSettings // MCP settings per MCP server (namespace/name)
-	toolRecorder telemetry.ToolRecorder
+	tools             map[string]ToolDefinition
+	executors         map[string]ToolExecutor
+	mcpPool           *MCPClientPool         // One MCP client pool per agent
+	mcpSettings       map[string]MCPSettings // MCP settings per MCP server (namespace/name)
+	telemetryRecorder telemetry.ToolRecorder
+	eventingRecorder  eventing.ToolRecorder
 }
 
-func NewToolRegistry(mcpSettings map[string]MCPSettings, toolRecorder telemetry.ToolRecorder) *ToolRegistry {
+func NewToolRegistry(mcpSettings map[string]MCPSettings, telemetryRecorder telemetry.ToolRecorder, eventingRecorder eventing.ToolRecorder) *ToolRegistry {
 	return &ToolRegistry{
-		tools:        make(map[string]ToolDefinition),
-		executors:    make(map[string]ToolExecutor),
-		mcpPool:      NewMCPClientPool(),
-		mcpSettings:  mcpSettings,
-		toolRecorder: toolRecorder,
+		tools:             make(map[string]ToolDefinition),
+		executors:         make(map[string]ToolExecutor),
+		mcpPool:           NewMCPClientPool(),
+		mcpSettings:       mcpSettings,
+		telemetryRecorder: telemetryRecorder,
+		eventingRecorder:  eventingRecorder,
 	}
 }
 
@@ -231,7 +234,7 @@ func (tr *ToolRegistry) GetToolType(toolName string) string {
 	}
 }
 
-func (tr *ToolRegistry) ExecuteTool(ctx context.Context, call ToolCall, recorder EventEmitter) (ToolResult, error) {
+func (tr *ToolRegistry) ExecuteTool(ctx context.Context, call ToolCall) (ToolResult, error) {
 	executor, exists := tr.executors[call.Function.Name]
 	if !exists {
 		return ToolResult{
@@ -242,17 +245,32 @@ func (tr *ToolRegistry) ExecuteTool(ctx context.Context, call ToolCall, recorder
 	}
 
 	toolType := tr.GetToolType(call.Function.Name)
-	ctx, span := tr.toolRecorder.StartToolExecution(ctx, call.Function.Name, toolType, call.ID, call.Function.Arguments)
+	ctx, span := tr.telemetryRecorder.StartToolExecution(ctx, call.Function.Name, toolType, call.ID, call.Function.Arguments)
 	defer span.End()
 
-	result, err := executor.Execute(ctx, call, recorder)
+	operationData := map[string]string{
+		"toolName":   call.Function.Name,
+		"toolType":   toolType,
+		"toolId":     call.ID,
+		"parameters": call.Function.Arguments,
+	}
+	ctx = tr.eventingRecorder.Start(ctx, "ToolCall", fmt.Sprintf("Executing tool %s", call.Function.Name), operationData)
+
+	result, err := executor.Execute(ctx, call)
 	if err != nil {
-		tr.toolRecorder.RecordError(span, err)
+		tr.telemetryRecorder.RecordError(span, err)
+		if IsTerminateTeam(err) {
+			operationData["terminationMessage"] = "TerminateTeam"
+			tr.eventingRecorder.Complete(ctx, "ToolCall", "Tool execution completed with termination", operationData)
+		} else {
+			tr.eventingRecorder.Fail(ctx, "ToolCall", fmt.Sprintf("Tool execution failed: %v", err), err, operationData)
+		}
 		return result, err
 	}
 
-	tr.toolRecorder.RecordToolResult(span, result.Content)
-	tr.toolRecorder.RecordSuccess(span)
+	tr.telemetryRecorder.RecordToolResult(span, result.Content)
+	tr.telemetryRecorder.RecordSuccess(span)
+	tr.eventingRecorder.Complete(ctx, "ToolCall", "Tool execution completed successfully", operationData)
 
 	return result, nil
 }
@@ -290,7 +308,7 @@ func (tr *ToolRegistry) Close() error {
 
 type NoopExecutor struct{}
 
-func (n *NoopExecutor) Execute(ctx context.Context, call ToolCall, recorder EventEmitter) (ToolResult, error) {
+func (n *NoopExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
 	var arguments map[string]any
 	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
 		logf.Log.Info("Error parsing tool arguments", "ToolCall", call)
@@ -321,7 +339,7 @@ func GetNoopTool() ToolDefinition {
 
 type TerminateExecutor struct{}
 
-func (t *TerminateExecutor) Execute(ctx context.Context, call ToolCall, recorder EventEmitter) (ToolResult, error) {
+func (t *TerminateExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
 	var arguments map[string]any
 	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
 		logf.Log.Info("Error parsing tool arguments", "ToolCall", call)

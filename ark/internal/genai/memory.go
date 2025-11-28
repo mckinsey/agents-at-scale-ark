@@ -10,6 +10,7 @@ import (
 
 	"github.com/openai/openai-go"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/eventing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -78,15 +79,15 @@ func DefaultConfig() Config {
 	}
 }
 
-func NewMemory(ctx context.Context, k8sClient client.Client, memoryName, namespace string, recorder EventEmitter) (MemoryInterface, error) {
-	return NewMemoryWithConfig(ctx, k8sClient, memoryName, namespace, recorder, DefaultConfig())
+func NewMemory(ctx context.Context, k8sClient client.Client, memoryName, namespace string, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
+	return NewMemoryWithConfig(ctx, k8sClient, memoryName, namespace, DefaultConfig(), memoryRecorder)
 }
 
-func NewMemoryWithConfig(ctx context.Context, k8sClient client.Client, memoryName, namespace string, recorder EventEmitter, config Config) (MemoryInterface, error) {
-	return NewHTTPMemory(ctx, k8sClient, memoryName, namespace, recorder, config)
+func NewMemoryWithConfig(ctx context.Context, k8sClient client.Client, memoryName, namespace string, config Config, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
+	return NewHTTPMemory(ctx, k8sClient, memoryName, namespace, config, memoryRecorder)
 }
 
-func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *arkv1alpha1.MemoryRef, namespace string, recorder EventEmitter, sessionId, queryName string) (MemoryInterface, error) {
+func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *arkv1alpha1.MemoryRef, namespace, sessionId, queryName string, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
 	config := DefaultConfig()
 	config.SessionId = sessionId
 	config.QueryName = queryName
@@ -106,7 +107,7 @@ func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *
 		memoryNamespace = resolveNamespace(memoryRef.Namespace, namespace)
 	}
 
-	memory, err := NewMemoryWithConfig(ctx, k8sClient, memoryName, memoryNamespace, recorder, config)
+	memory, err := NewMemoryWithConfig(ctx, k8sClient, memoryName, memoryNamespace, config, memoryRecorder)
 	if err != nil {
 		return nil, err
 	}
