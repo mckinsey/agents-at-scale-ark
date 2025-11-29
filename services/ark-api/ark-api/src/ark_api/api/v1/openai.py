@@ -18,7 +18,7 @@ from kubernetes_asyncio import client as k8s_client
 from ark_sdk.client import with_ark_client
 from ...models.queries import ArkOpenAICompletionsMetadata
 from ...utils.query_targets import parse_model_to_query_target
-from ...utils.query_polling import poll_query_completion
+from ...utils.query_watch import watch_query_completion
 from ...utils.streaming import StreamingErrorResponse, create_single_chunk_sse_response
 from ...constants.annotations import STREAMING_ENABLED_ANNOTATION
 
@@ -209,7 +209,7 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             # If the caller didn't request streaming, we can simply poll for
             # the response.
             if not request.stream:
-                return await poll_query_completion(
+                return await watch_query_completion(
                     ark_client, query_name, model, messages
                 )
 
@@ -228,7 +228,7 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             # If no config or not enabled, fall back to polling
             if not streaming_config or not streaming_config.enabled:
                 logger.info("No streaming backend configured, falling back to polling")
-                completion = await poll_query_completion(
+                completion = await watch_query_completion(
                     ark_client, query_name, model, messages
                 )
                 sse_lines = create_single_chunk_sse_response(completion)
