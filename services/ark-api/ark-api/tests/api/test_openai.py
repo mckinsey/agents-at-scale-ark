@@ -24,8 +24,8 @@ class TestOpenAIChatCompletions(unittest.TestCase):
     @patch('ark_api.api.v1.openai.with_ark_client')
     @patch('ark_api.api.v1.openai.get_namespace')
     @patch('ark_api.api.v1.openai.parse_model_to_query_target')
-    @patch('ark_api.api.v1.openai.poll_query_completion')
-    def test_chat_completions_with_session_id(self, mock_poll, mock_parse_target, mock_get_namespace, mock_with_ark_client):
+    @patch('ark_api.api.v1.openai.watch_query_completion')
+    def test_chat_completions_with_session_id(self, mock_watch, mock_parse_target, mock_get_namespace, mock_with_ark_client):
         """Test chat completions with session ID in queryAnnotations."""
         # Setup mocks
         mock_get_namespace.return_value = "default"
@@ -54,7 +54,7 @@ class TestOpenAIChatCompletions(unittest.TestCase):
                 total_tokens=15,
             ),
         )
-        mock_poll.return_value = mock_completion
+        mock_watch.return_value = mock_completion
         
         # Make the request with session ID directly in metadata
         request_data = {
@@ -80,8 +80,8 @@ class TestOpenAIChatCompletions(unittest.TestCase):
     @patch('ark_api.api.v1.openai.with_ark_client')
     @patch('ark_api.api.v1.openai.get_namespace')
     @patch('ark_api.api.v1.openai.parse_model_to_query_target')
-    @patch('ark_api.api.v1.openai.poll_query_completion')
-    def test_chat_completions_without_session_id(self, mock_poll, mock_parse_target, mock_get_namespace, mock_with_ark_client):
+    @patch('ark_api.api.v1.openai.watch_query_completion')
+    def test_chat_completions_without_session_id(self, mock_watch, mock_parse_target, mock_get_namespace, mock_with_ark_client):
         """Test chat completions without session ID."""
         # Setup mocks
         mock_get_namespace.return_value = "default"
@@ -110,7 +110,7 @@ class TestOpenAIChatCompletions(unittest.TestCase):
                 total_tokens=15,
             ),
         )
-        mock_poll.return_value = mock_completion
+        mock_watch.return_value = mock_completion
         
         # Make the request without session ID
         request_data = {
@@ -132,8 +132,8 @@ class TestOpenAIChatCompletions(unittest.TestCase):
     @patch('ark_api.api.v1.openai.with_ark_client')
     @patch('ark_api.api.v1.openai.get_namespace')
     @patch('ark_api.api.v1.openai.parse_model_to_query_target')
-    @patch('ark_api.api.v1.openai.poll_query_completion')
-    def test_chat_completions_with_session_id_and_other_annotations(self, mock_poll, mock_parse_target, mock_get_namespace, mock_with_ark_client):
+    @patch('ark_api.api.v1.openai.watch_query_completion')
+    def test_chat_completions_with_session_id_and_other_annotations(self, mock_watch, mock_parse_target, mock_get_namespace, mock_with_ark_client):
         """Test chat completions with session ID and other annotations (e.g., A2A context ID)."""
         # Setup mocks
         mock_get_namespace.return_value = "default"
@@ -162,7 +162,7 @@ class TestOpenAIChatCompletions(unittest.TestCase):
                 total_tokens=15,
             ),
         )
-        mock_poll.return_value = mock_completion
+        mock_watch.return_value = mock_completion
         
         # Make the request with session ID directly in metadata and A2A context ID in queryAnnotations
         request_data = {
@@ -195,8 +195,8 @@ class TestOpenAIChatCompletions(unittest.TestCase):
     @patch('ark_api.api.v1.openai.with_ark_client')
     @patch('ark_api.api.v1.openai.get_namespace')
     @patch('ark_api.api.v1.openai.parse_model_to_query_target')
-    @patch('ark_api.api.v1.openai.poll_query_completion')
-    def test_chat_completions_with_invalid_query_annotations(self, mock_poll, mock_parse_target, mock_get_namespace, mock_with_ark_client):
+    @patch('ark_api.api.v1.openai.watch_query_completion')
+    def test_chat_completions_with_invalid_query_annotations(self, mock_watch, mock_parse_target, mock_get_namespace, mock_with_ark_client):
         """Test chat completions with invalid queryAnnotations JSON."""
         # Setup mocks
         mock_get_namespace.return_value = "default"
@@ -225,7 +225,7 @@ class TestOpenAIChatCompletions(unittest.TestCase):
                 total_tokens=15,
             ),
         )
-        mock_poll.return_value = mock_completion
+        mock_watch.return_value = mock_completion
         
         # Make the request with invalid JSON in queryAnnotations
         request_data = {
