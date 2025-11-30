@@ -126,7 +126,7 @@ describe('chatService', () => {
         status: { phase: 'pending' },
         metadata: {
           annotations: {
-            'ark.mckinsey.com/streaming-enabled': 'true',
+            'ark.mckinsey.com/streaming-enabled': 'false',
           },
         },
       };
@@ -149,7 +149,7 @@ describe('chatService', () => {
         sessionId: 'session-123',
         metadata: {
           annotations: {
-            'ark.mckinsey.com/streaming-enabled': 'true',
+            'ark.mckinsey.com/streaming-enabled': 'false',
           },
         },
       });

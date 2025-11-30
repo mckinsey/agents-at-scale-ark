@@ -9,6 +9,7 @@ import type {Query, QueryTarget} from './types.js';
 import {ExitCodes} from './errors.js';
 import {ArkApiProxy} from './arkApiProxy.js';
 import {ChatClient, ToolCall, ArkMetadata} from './chatClient.js';
+import {watchEventsLive} from './kubectl.js';
 
 export interface QueryOptions {
   targetType: string;
@@ -167,6 +168,14 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
+    // Give Kubernetes a moment to process the resource before watching
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    if (options.outputFormat === 'events') {
+      await watchEventsLive(queryName);
+      return;
+    }
+
     const timeoutSeconds = 300;
     await execa(
       'kubectl',
@@ -194,7 +203,7 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
     } else {
       console.error(
         chalk.red(
-          `Invalid output format: ${options.outputFormat}. Use: yaml, json, or name`
+          `Invalid output format: ${options.outputFormat}. Use: yaml, json, name, or events`
         )
       );
       process.exit(ExitCodes.CliError);

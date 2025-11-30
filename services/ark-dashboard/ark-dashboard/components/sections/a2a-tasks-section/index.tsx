@@ -1,4 +1,5 @@
 import { RefreshCw } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -16,6 +17,7 @@ import { StatusDot } from './status-dot';
 import { mapTaskPhaseToVariant } from './utils';
 
 function DataTable({ data }: { data: A2ATask[] }) {
+  const router = useRouter();
   const Icon =
     DASHBOARD_SECTIONS['tasks']?.icon || DASHBOARD_SECTIONS['a2a']?.icon;
 
@@ -49,7 +51,8 @@ function DataTable({ data }: { data: A2ATask[] }) {
             data.map(task => (
               <tr
                 key={task.name}
-                className="border-b border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/30">
+                onClick={() => router.push(`/tasks/${task.name}`)}
+                className="cursor-pointer border-b border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/30">
                 <td className="px-3 py-3 font-mono text-sm text-gray-900 dark:text-gray-100">
                   {task.taskId}
                 </td>

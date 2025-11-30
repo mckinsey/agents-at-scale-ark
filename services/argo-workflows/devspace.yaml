@@ -4,7 +4,7 @@ version: v2beta1
 vars:
   ENABLE_MINIO:
     question: "Enable Minio artifact storage (true/false)?"
-    default: "false"
+    default: false
 
 pipelines:
   deploy: create_deployments argo-workflows
@@ -16,7 +16,7 @@ hooks:
   - name: install-minio-operator
     events: ["before:deploy"]
     command: |-
-      if [ "${ENABLE_MINIO}" = "true" ]; then
+      if [ "${ENABLE_MINIO}" == "true" ]; then
         echo "Checking MinIO operator installation..."
         if ! helm list -n minio-operator | grep -q minio-operator; then
           echo "Installing MinIO operator..."
