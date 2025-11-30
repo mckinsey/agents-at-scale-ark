@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,7 +28,6 @@ import (
 type EvaluatorReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
 	resolver *common.ValueSourceResolver
 }
 
@@ -136,10 +134,6 @@ func (r *EvaluatorReconciler) processEvaluator(ctx context.Context, evaluator *a
 	}); err != nil {
 		return ctrl.Result{}, err
 	}
-
-	// Record event for successful processing
-	r.Recorder.Event(evaluator, corev1.EventTypeNormal, "AddressResolved",
-		fmt.Sprintf("Successfully resolved address: %s", resolvedAddress))
 
 	log.Info("Evaluator processed successfully", "evaluator", evaluator.Name, "resolvedAddress", resolvedAddress)
 	return ctrl.Result{}, nil

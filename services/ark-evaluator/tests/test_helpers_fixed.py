@@ -174,14 +174,14 @@ class TestQueryHelperFixed:
             ParsedEvent(
                 name="event-1",
                 namespace="test-namespace",
-                reason=EventType.RESOLVE_COMPLETE.value,
+                reason=EventType.QUERY_EXECUTION_COMPLETE.value,
                 message="Query resolved",
                 involved_object={"kind": "Query", "name": "query-123"},
                 first_timestamp="2024-01-01T00:00:00Z"
             )
         ]
         query_helper.event_analyzer.get_events = AsyncMock(return_value=mock_events)
-        
+
         result = await query_helper.was_query_resolved()
         assert result is True
     
@@ -192,7 +192,7 @@ class TestQueryHelperFixed:
             ParsedEvent(
                 name="event-1",
                 namespace="test-namespace",
-                reason=EventType.RESOLVE_START.value,
+                reason=EventType.QUERY_EXECUTION_START.value,
                 message="Query started",
                 involved_object={"kind": "Query", "name": "query-123"},
                 first_timestamp="2024-01-01T00:00:00Z"
@@ -200,14 +200,14 @@ class TestQueryHelperFixed:
             ParsedEvent(
                 name="event-2",
                 namespace="test-namespace",
-                reason=EventType.RESOLVE_COMPLETE.value,
+                reason=EventType.QUERY_EXECUTION_COMPLETE.value,
                 message="Query completed",
                 involved_object={"kind": "Query", "name": "query-123"},
                 first_timestamp="2024-01-01T00:00:15Z"
             )
         ]
         query_helper.event_analyzer.get_events = AsyncMock(return_value=mock_events)
-        
+
         exec_time = await query_helper.get_query_execution_time()
         # Should return time difference or None
         assert exec_time is None or isinstance(exec_time, float)
@@ -298,9 +298,9 @@ def test_event_types_enum():
     core_types = [
         'TOOL_CALL_START', 'TOOL_CALL_COMPLETE',
         'AGENT_EXECUTION_START', 'AGENT_EXECUTION_COMPLETE',
-        'RESOLVE_START', 'RESOLVE_COMPLETE'
+        'QUERY_EXECUTION_START', 'QUERY_EXECUTION_COMPLETE'
     ]
-    
+
     for event_type in core_types:
         assert hasattr(EventType, event_type), f"EventType missing: {event_type}"
 

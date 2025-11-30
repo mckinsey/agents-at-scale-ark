@@ -1,5 +1,6 @@
 'use client';
 
+import { useAtomValue } from 'jotai';
 import {
   AlertCircle,
   Expand,
@@ -14,6 +15,7 @@ import type {
 } from 'openai/resources/chat/completions';
 import { useEffect, useRef, useState } from 'react';
 
+import { isChatStreamingEnabledAtom } from '@/atoms/experimental-features';
 import { ChatMessage } from '@/components/chat/chat-message';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -53,6 +55,8 @@ export default function FloatingChat({
   const [viewMode, setViewMode] = useState<'text' | 'markdown'>('markdown');
   const [sessionId] = useState(() => `session-${Date.now()}`);
   const inputRef = useRef<HTMLInputElement>(null);
+  const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
+  const stopPollingRef = useRef<(() => void) | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -63,6 +67,13 @@ export default function FloatingChat({
   useEffect(() => {
     // Focus input when chat opens
     setTimeout(() => inputRef.current?.focus(), 100);
+
+    // Cleanup: stop polling when component unmounts
+    return () => {
+      if (stopPollingRef.current) {
+        stopPollingRef.current();
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -84,6 +95,97 @@ export default function FloatingChat({
     return [...messages, { role: 'user', content: currentMsg }];
   };
 
+  const handleStreamChatResponse = async (userMessage: string) => {
+    const messageArray = buildChatMessages(chatMessages, userMessage);
+
+    // Add empty assistant message that will be updated with streamed content
+    const assistantMessageIndex = chatMessages.length + 1; // +1 for user message already added
+    setChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+
+    let accumulatedContent = '';
+
+    for await (const chunk of chatService.streamChatResponse(
+      messageArray,
+      type,
+      name,
+      sessionId,
+    )) {
+      // Extract content from the chunk (OpenAI format)
+      const typedChunk = chunk as unknown as ChatCompletionChunk;
+      const delta = typedChunk?.choices?.[0]?.delta;
+      if (delta?.content) {
+        accumulatedContent += delta.content;
+
+        // Update the assistant message with accumulated content
+        setChatMessages(prev => {
+          const updated = [...prev];
+          updated[assistantMessageIndex] = {
+            role: 'assistant',
+            content: accumulatedContent,
+          };
+          return updated;
+        });
+      }
+    }
+  };
+
+  const handlePollChatResponse = async (userMessage: string) => {
+    const messageArray = buildChatMessages(chatMessages, userMessage);
+
+    // Add empty assistant message that will be updated with streamed content
+    // const assistantMessageIndex = chatMessages.length + 1; // +1 for user message already added
+    // setChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+
+    const query = await chatService.submitChatQuery(
+      messageArray,
+      type,
+      name,
+      sessionId,
+    );
+
+    let pollingStopped = false;
+    stopPollingRef.current = () => {
+      pollingStopped = true;
+    };
+
+    while (!pollingStopped) {
+      try {
+        const result = await chatService.getQueryResult(query.name);
+
+        // Check if terminal state with response
+        if (result.terminal) {
+          let content = '';
+
+          if (result.status === 'done' && result.response) {
+            content = result.response;
+          } else if (result.status === 'error') {
+            content = result.response || 'Query failed';
+          } else if (result.status === 'unknown') {
+            content = 'Query status unknown';
+          }
+
+          setChatMessages(prev => [...prev, { role: 'assistant', content }]);
+
+          pollingStopped = true;
+          break;
+        }
+      } catch (err) {
+        console.error('Error polling query status:', err);
+
+        setChatMessages(prev => [
+          ...prev,
+          { role: 'assistant', content: 'Error while processing query' },
+        ]);
+
+        pollingStopped = true;
+      }
+
+      if (!pollingStopped) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isProcessing) return;
 
@@ -100,36 +202,10 @@ export default function FloatingChat({
     setIsProcessing(true);
 
     try {
-      const messageArray = buildChatMessages(chatMessages, userMessage);
-
-      // Add empty assistant message that will be updated with streamed content
-      const assistantMessageIndex = chatMessages.length + 1; // +1 for user message already added
-      setChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
-
-      let accumulatedContent = '';
-
-      for await (const chunk of chatService.streamChatResponse(
-        messageArray,
-        type,
-        name,
-        sessionId,
-      )) {
-        // Extract content from the chunk (OpenAI format)
-        const typedChunk = chunk as unknown as ChatCompletionChunk;
-        const delta = typedChunk?.choices?.[0]?.delta;
-        if (delta?.content) {
-          accumulatedContent += delta.content;
-
-          // Update the assistant message with accumulated content
-          setChatMessages(prev => {
-            const updated = [...prev];
-            updated[assistantMessageIndex] = {
-              role: 'assistant',
-              content: accumulatedContent,
-            };
-            return updated;
-          });
-        }
+      if (isChatStreamingEnabled) {
+        await handleStreamChatResponse(userMessage);
+      } else {
+        await handlePollChatResponse(userMessage);
       }
     } catch (err) {
       console.error('Error sending message:', err);

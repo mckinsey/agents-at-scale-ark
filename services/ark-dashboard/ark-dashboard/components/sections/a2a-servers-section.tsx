@@ -82,6 +82,27 @@ export const A2AServersSection = forwardRef<
     setInfoDialogOpen(true);
   };
 
+  const handleDelete = async (id: string) => {
+    try {
+      const server = a2aServers.find(s => s.id === id);
+      if (!server) {
+        throw new Error('A2A Server not found');
+      }
+      await A2AServersService.delete(id);
+      toast.success('A2A Server Deleted', {
+        description: `Successfully deleted ${server.name}`,
+      });
+      await loadData();
+    } catch (error) {
+      toast.error('Failed to Delete A2A Server', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred',
+      });
+    }
+  };
+
   const handleSave = async (config: A2AServerConfiguration) => {
     try {
       await A2AServersService.create(config);
@@ -159,6 +180,7 @@ export const A2AServersSection = forwardRef<
               key={server.name || server.id}
               a2aServer={server}
               onInfo={handleInfo}
+              onDelete={handleDelete}
               namespace={namespace}
             />
           ))}
