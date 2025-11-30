@@ -144,7 +144,9 @@ deploy: manifests ## Deploy controller and cert-manager to the K8s cluster speci
 	# NOTE: cert-manager might be better in 'prepare-cluster' target as it's required infra rather than ark-deployment
 	# NOTE: cert-manager is enabled via MicroK8s add-on: microk8s enable cert-manager
 	# NOTE: cert-manager is enabled via MicroK8s add-on: microk8s enable cert-manager
-	../scripts/build-and-push.sh -i $(IMAGE) -t $(IMAGE_TAG) -f Dockerfile -c . -b VERSION=$(VERSION) -b GIT_COMMIT=$(GIT_COMMIT)
+	@if [ "$(SKIP_BUILD)" != "true" ]; then \
+		../scripts/build-and-push.sh -i $(IMAGE) -t $(IMAGE_TAG) -f Dockerfile -c . -b VERSION=$(VERSION) -b GIT_COMMIT=$(GIT_COMMIT); \
+	fi
 	# Deploy controller with impersonation enabled for development
 	helm upgrade --install ark-controller ./dist/chart \
 		--namespace ark-system \

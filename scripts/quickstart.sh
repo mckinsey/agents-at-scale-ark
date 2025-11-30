@@ -506,7 +506,7 @@ check_ark_controller() {
         echo -e "${yellow}warning${nc}: ark controller not deployed"
         if prompt_yes_no "deploy ark controller (this can take some time)? (Y/n): "; then
             echo "deploying ark controller..."
-            if ! (cd ark && IMAGE="${ARK_QUICKSTART_CONTROLLER_IMAGE:-${ARK_CONTROLLER_NAME}}" IMAGE_TAG="${ARK_QUICKSTART_CONTROLLER_TAG:-latest}" make deploy); then
+            if ! (cd ark && IMAGE="${ARK_QUICKSTART_CONTROLLER_IMAGE:-${ARK_CONTROLLER_NAME}}" IMAGE_TAG="${ARK_QUICKSTART_CONTROLLER_TAG:-latest}" SKIP_BUILD="${ARK_QUICKSTART_CONTROLLER_IMAGE:+true}" make deploy); then
                 echo -e "${red}error${nc}: deployment failed"
                 echo
                 echo "If you see CRD ownership errors, this means you have an old ARK installation."

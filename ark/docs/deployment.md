@@ -4,7 +4,8 @@
 
 - Kubernetes cluster (MicroK8s recommended)
 - kubectl configured to talk to the cluster
-- helm installedrvice with API keys and endpoint (Azure OpenAI supported)
+- helm installed
+- LLM service with API keys and endpoint (Azure OpenAI supported)
 
 ## Deploy to cluster
 
