@@ -29,9 +29,6 @@ describe('arkServices', () => {
     expect(originalArkServices['ark-controller'].namespace).toBe('ark-system');
     expect(originalArkServices['ark-api'].namespace).toBeUndefined();
     expect(originalArkServices['ark-dashboard'].namespace).toBeUndefined();
-    expect(originalArkServices['localhost-gateway'].namespace).toBe(
-      'ark-system'
-    );
   });
 
   it('getInstallableServices returns services with chartPath', () => {
@@ -84,7 +81,6 @@ describe('arkServices', () => {
         services: {
           'ark-controller': {enabled: false},
           'ark-api': {enabled: false},
-          'localhost-gateway': {enabled: true},
         },
       });
 
@@ -93,7 +89,6 @@ describe('arkServices', () => {
 
       expect(arkServices['ark-controller'].enabled).toBe(false);
       expect(arkServices['ark-api'].enabled).toBe(false);
-      expect(arkServices['localhost-gateway'].enabled).toBe(true);
     });
 
     it('applies overrides to namespace', async () => {

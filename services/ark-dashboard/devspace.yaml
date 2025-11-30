@@ -34,7 +34,7 @@ deployments:
             requests:
               memory: "256Mi"
               cpu: "200m"
-        httpRoute:
+        ingress:
           enabled: true
 
 dev:

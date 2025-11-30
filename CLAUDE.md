@@ -157,7 +157,7 @@ make install       # Install to ~/.local/bin
 
 ### Cross-Service Dependencies
 
-When a service depends on another service's stamp file (e.g., ark-api depends on localhost-gateway), use double-dollar syntax for deferred expansion:
+When a service depends on another service's stamp file (e.g., ark-dashboard depends on ark-api), use double-dollar syntax for deferred expansion:
 
 ```makefile
 # Correct - uses secondary expansion

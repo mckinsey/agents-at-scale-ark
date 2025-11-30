@@ -8,9 +8,30 @@ description: "Local development with DevSpace for ARK services"
 Develop and live-reload ARK services directly in your Kubernetes cluster using DevSpace.
 
 ## Prerequisites
-- A running Kubernetes cluster (e.g., minikube)
+- A running Kubernetes cluster (e.g., microk8s)
 - kubectl, uv and DevSpace installed
 - Docker running locally
+
+## Cluster Setup
+
+We recommend using **MicroK8s** for local development.
+
+### MicroK8s Setup
+
+1. Install MicroK8s:
+   ```bash
+   sudo snap install microk8s --classic
+   ```
+
+2. Enable Add-ons:
+   ```bash
+   microk8s enable dns storage registry metrics-server cert-manager ingress
+   ```
+
+3. Configure kubectl:
+   ```bash
+   microk8s kubectl config view --raw > ~/.kube/config
+   ```
 
 ## One-time setup
 ```bash

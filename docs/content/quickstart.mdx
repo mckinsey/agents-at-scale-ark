@@ -1,22 +1,41 @@
+```
 ---
 title: Getting Started
 ---
 
+## Prerequisites
+
+- **Kubernetes Cluster**: MicroK8s (recommended)
+- **Tools**: kubectl, helm, docker, nodejs, go
+
+## Installation
+
+1. Install MicroK8s:
+   ```bash
+   sudo snap install microk8s --classic
+   microk8s start
+   microk8s enable dns storage registry metrics-server cert-manager ingress
+   ```
+
+2. Configure kubectl:
+   ```bash
+   microk8s kubectl config view --raw > ~/.kube/config
+   ```
+
+3. Install Ark:
+   ```bash
+   ./scripts/quickstart.sh
+   ```
+
 # Quickstart
 
-Ensure you have [Node.js](https://nodejs.org/en/download) and [Helm](https://helm.sh/docs/intro/install/) installed. Then run the following commands to install Ark:
-
+Optionally configure a 'default' model to use for agents:
 ```bash
-# Install the 'ark' CLI:
-npm install -g @agents-at-scale/ark
-
-# Install Ark:
-ark install
-
-# Optionally configure a 'default' model to use for agents:
 ark models create default
+```
 
 # Run the dashboard:
+```bash
 ark dashboard
 ```
 

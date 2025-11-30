@@ -50,13 +50,13 @@ Example `.arkrc.yaml`:
 
 ```yaml
 services:
-  localhost-gateway:
+  ark-api:
     enabled: true
   ark-controller:
     namespace: custom-namespace
 ```
 
-This example enables the `localhost-gateway` service (disabled by default) and changes the namespace for `ark-controller`.
+This example enables the `ark-api` service and changes the namespace for `ark-controller`.
 
 ### Installing Agents @ Scale
 

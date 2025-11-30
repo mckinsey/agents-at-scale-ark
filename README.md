@@ -21,25 +21,29 @@
   </p>
 </div>
 
+## Prerequisites
+
+- **Kubernetes Cluster**: MicroK8s (recommended)
+- **Tools**: kubectl, helm, docker, nodejs, go
+
 ## Quickstart
 
-You will need a Kubernetes cluster to install Ark into. You can use [Minikube](https://minikube.sigs.k8s.io/docs/start), [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/), [Docker Desktop](https://docs.docker.com/desktop/kubernetes/) or similar to run a local cluster. 
+1. Install MicroK8s:
+   ```bash
+   sudo snap install microk8s --classic
+   microk8s start
+   microk8s enable dns storage registry metrics-server cert-manager ingress
+   ```
 
-Ensure you have [Node.js](https://nodejs.org/en/download) and [Helm](https://helm.sh/docs/intro/install/) installed, as well as [kubectl](https://kubernetes.io/docs/reference/kubectl/) if not already installed as part of your Kubernetes setup. Then run the following commands to install Ark:
+2. Configure kubectl:
+   ```bash
+   microk8s kubectl config view --raw > ~/.kube/config
+   ```
 
-```bash
-# Install the 'ark' CLI:
-npm install -g @agents-at-scale/ark
-
-# Install Ark:
-ark install
-
-# Optionally configure a 'default' model to use for agents:
-ark models create default
-
-# Run the dashboard:
-ark dashboard
-```
+3. Install Ark:
+   ```bash
+   ./scripts/quickstart.sh
+   ```
 
 In most cases the default installation options will be sufficient. This will install the Ark dependencies, the controller, the APIs and the dashboard. You can optionally setup a `default` model that will be the default used by agents. The `install` command will warn if any required dependencies are missing.
 

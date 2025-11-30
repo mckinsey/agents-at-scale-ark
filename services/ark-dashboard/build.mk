@@ -70,21 +70,15 @@ $(ARK_DASHBOARD_STAMP_BUILD): $(ARK_DASHBOARD_STAMP_TEST)
 
 # Install target
 $(ARK_DASHBOARD_SERVICE_NAME)-install: $(ARK_DASHBOARD_STAMP_INSTALL) # HELP: Deploy ARK Dashboard UI to cluster
-$(ARK_DASHBOARD_STAMP_INSTALL): $(ARK_DASHBOARD_STAMP_BUILD) $$(ARK_API_STAMP_INSTALL) $$(LOCALHOST_GATEWAY_STAMP_INSTALL)
-	@echo "Installing ark-dashboard..."
-	./scripts/build-and-push.sh -i $(DASHBOARD_IMAGE) -t $(DASHBOARD_TAG) -f $(ARK_DASHBOARD_SERVICE_DIR)/Dockerfile -c $(ARK_DASHBOARD_SERVICE_DIR)
-	helm upgrade --install $(ARK_DASHBOARD_SERVICE_NAME) $(ARK_DASHBOARD_SERVICE_DIR)/chart \
-		--namespace $(DASHBOARD_NAMESPACE) \
-		--create-namespace \
-		--set app.image.repository=$(DASHBOARD_IMAGE) \
-		--set app.image.tag=$(DASHBOARD_TAG) \
-		--set httpRoute.enabled=true \
-		--wait \
-		--timeout=5m
-	@echo "ark-dashboard installed successfully"
-	@echo ""
-	@echo "Dashboard hostnames (use with localhost-gateway port):"
-	@kubectl get httproute localhost-gateway-routes -n default --no-headers -o custom-columns="HOSTNAMES:.spec.hostnames" 2>/dev/null | tr ',' '\n' | sed 's/^[[:space:]]*/  /' || echo "  Routes not found"
+$(ARK_DASHBOARD_STAMP_INSTALL): $(ARK_DASHBOARD_STAMP_BUILD) $$(ARK_API_STAMP_INSTALL)
+	@echo "Deploying ark-dashboard..."
+	@$(MAKE) -C $(ARK_DASHBOARD_SERVICE_DIR) deploy
+	@touch $@
+
+.PHONY: ark-dashboard-routes
+ark-dashboard-routes:
+	@echo "Dashboard hostnames (MicroK8s Ingress):"
+	@kubectl get ingress -n default --no-headers -o custom-columns="HOSTS:.spec.rules[*].host" 2>/dev/null | tr ',' '\n' | sed 's/^[[:space:]]*/  /' || echo "  Routes not found"
 	@touch $@
 
 # Uninstall target

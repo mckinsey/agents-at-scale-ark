@@ -61,12 +61,11 @@ helm upgrade --install \
   --set rbac.enable=true
 ```
 
-In many cases, you will want to install the `ark-api` and `ark-dashboard` services as well. When running on a local cluster you may also want to install the `localhost-gateway`:
+In many cases, you will want to install the `ark-api` and `ark-dashboard` services as well:
 
 ```bash
 helm upgrade --install ark-api oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api
 helm upgrade --install ark-dashboard oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-dashboard
-helm upgrade --install localhost-gateway oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/localhost-gateway
 ```
 
 The `fark` (Fast Agentic Runtime Kit) CLI can be built from source:

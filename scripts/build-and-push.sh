@@ -65,20 +65,10 @@ EOF
 }
 
 detect_cluster() {
-    if kubectl config current-context | grep -q "kind"; then
-        echo "kind"
-    elif kubectl config current-context | grep -q "k3d-"; then
-        echo "k3d"
-    elif kubectl config current-context | grep -q "minikube"; then
-        echo "minikube"
-    elif kubectl config current-context | grep -q "k3s"; then
-        echo "k3s"
-    elif kubectl config current-context | grep -q "default" && kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.containerRuntimeVersion}' 2>/dev/null | grep -q "k3s"; then
-        echo "k3s"
-    elif minikube status >/dev/null 2>&1; then
-        echo "minikube"
-    elif kind get clusters >/dev/null 2>&1 && [ "$(kind get clusters | wc -l)" -gt 0 ]; then
-        echo "kind"
+    if microk8s status >/dev/null 2>&1; then
+        echo "microk8s"
+    elif kubectl config current-context | grep -q "microk8s"; then
+        echo "microk8s"
     else
         echo ""
     fi
@@ -107,90 +97,43 @@ docker_build() {
     fi
 }
 
-build_and_push_kind() {
+build_and_push_microk8s() {
     local image_name="$1"
     local tag="$2"
     local dockerfile_path="$3"
     local build_context="$4"
     
-    echo -e "${blue}Building image for kind cluster...${nc}"
+    echo -e "${blue}Building image for MicroK8s cluster...${nc}"
     
-    # Build the image
+    # Build the image locally
     docker_build "$image_name" "$tag" "$dockerfile_path" "$build_context"
     
-    # Load into kind cluster
-    echo -e "${blue}Loading image into kind cluster...${nc}"
+    # Detect registry
+    local registry="localhost:32000"
     
-    # Get the first kind cluster name
-    local cluster_name=$(kind get clusters | head -n1)
-    if [ -n "$cluster_name" ]; then
-        kind load docker-image "$image_name:$tag" --name "$cluster_name"
-    else
-        kind load docker-image "$image_name:$tag"
+    # Check if localhost is accessible
+    if ! curl -s --connect-timeout 1 http://localhost:32000/v2/ &> /dev/null; then
+        # Try to detect VM IP (common on macOS)
+        if command -v microk8s &> /dev/null; then
+            local vm_ip=$(microk8s config | grep server: | sed 's/.*server: https:\/\/\(.*\):.*/\1/')
+            if [ -n "$vm_ip" ]; then
+                if curl -s --connect-timeout 1 http://$vm_ip:32000/v2/ &> /dev/null; then
+                    registry="$vm_ip:32000"
+                    echo -e "${blue}Detected MicroK8s registry at $registry${nc}"
+                fi
+            fi
+        fi
     fi
-    
-    echo -e "${green}✔${nc} Image $image_name:$tag loaded into kind cluster"
-}
 
-build_and_push_minikube() {
-    local image_name="$1"
-    local tag="$2"
-    local dockerfile_path="$3"
-    local build_context="$4"
+    local registry_image="$registry/$image_name:$tag"
     
-    echo -e "${blue}Building image for minikube cluster...${nc}"
+    # Tag for MicroK8s registry
+    docker tag "$image_name:$tag" "$registry_image"
     
-    # Use minikube docker environment
-    eval $(minikube docker-env)
+    # Push to MicroK8s registry
+    docker push localhost:32000/"$image_name:$tag"
     
-    # Build the image directly in minikube's docker daemon
-    docker_build "$image_name" "$tag" "$dockerfile_path" "$build_context"
-    
-    echo -e "${green}✔${nc} Image $image_name:$tag built in minikube cluster"
-}
-
-build_and_push_k3s() {
-    local image_name="$1"
-    local tag="$2"
-    local dockerfile_path="$3"
-    local build_context="$4"
-    
-    echo -e "${blue}Building image for k3s cluster...${nc}"
-    
-    # Build the image locally
-    docker_build "$image_name" "$tag" "$dockerfile_path" "$build_context"
-    
-    # Import image into k3s containerd
-    echo -e "${blue}Importing image into k3s cluster...${nc}"
-    
-    # Save image as tar and import to k3s
-    docker save "$image_name:$tag" | sudo k3s ctr images import -
-    
-    echo -e "${green}✔${nc} Image $image_name:$tag imported into k3s cluster"
-}
-
-build_and_push_k3d() {
-    local image_name="$1"
-    local tag="$2"
-    local dockerfile_path="$3"
-    local build_context="$4"
-    
-    echo -e "${blue}Building image for k3d cluster...${nc}"
-    
-    # Build the image locally
-    docker_build "$image_name" "$tag" "$dockerfile_path" "$build_context"
-    
-    # Import image into k3d cluster
-    echo -e "${blue}Importing image into k3d cluster...${nc}"
-    
-    # Get current context and extract cluster name
-    local context=$(kubectl config current-context)
-    local cluster_name=${context#k3d-}  # Remove k3d- prefix
-    
-    # Import image using k3d
-    k3d image import "$image_name:$tag" -c "$cluster_name"
-    
-    echo -e "${green}✔${nc} Image $image_name:$tag imported into k3d cluster"
+    echo -e "${green}✔${nc} Image $image_name:$tag pushed to MicroK8s registry"
 }
 
 main() {
@@ -284,61 +227,22 @@ main() {
 
     # Check cluster-specific requirements
     case "$TARGET_CLUSTER" in
-        kind)
-            if ! command -v kind >/dev/null 2>&1; then
-                echo -e "${red}error${nc}: kind not found"
-                echo "install with: brew install kind"
+        microk8s)
+            if ! command -v microk8s >/dev/null 2>&1; then
+                echo -e "${red}error${nc}: microk8s not found"
+                echo "install with: sudo snap install microk8s --classic"
                 exit 1
             fi
-            if [ "$(kind get clusters | wc -l)" -eq 0 ]; then
-                echo -e "${red}error${nc}: no kind clusters found"
-                echo "create one with: kind create cluster"
+            if ! microk8s status >/dev/null 2>&1; then
+                echo -e "${red}error${nc}: microk8s not running"
+                echo "start with: microk8s start"
                 exit 1
             fi
-            build_and_push_kind "$IMAGE_NAME" "$TAG" "$DOCKERFILE_PATH" "$BUILD_CONTEXT" "$PLATFORM"
-            ;;
-        minikube)
-            if ! command -v minikube >/dev/null 2>&1; then
-                echo -e "${red}error${nc}: minikube not found"
-                echo "install with: brew install minikube"
-                exit 1
-            fi
-            if ! minikube status >/dev/null 2>&1; then
-                echo -e "${red}error${nc}: minikube not running"
-                echo "start with: minikube start"
-                exit 1
-            fi
-            build_and_push_minikube "$IMAGE_NAME" "$TAG" "$DOCKERFILE_PATH" "$BUILD_CONTEXT"
-            ;;
-        k3d)
-            if ! command -v k3d >/dev/null 2>&1; then
-                echo -e "${red}error${nc}: k3d not found"
-                echo "install with: brew install k3d"
-                exit 1
-            fi
-            # Check if current context points to a k3d cluster
-            if ! kubectl config current-context | grep -q "k3d-"; then
-                echo -e "${red}error${nc}: current context is not a k3d cluster"
-                exit 1
-            fi
-            build_and_push_k3d "$IMAGE_NAME" "$TAG" "$DOCKERFILE_PATH" "$BUILD_CONTEXT"
-            ;;
-        k3s)
-            if ! command -v k3s >/dev/null 2>&1; then
-                echo -e "${red}error${nc}: k3s not found"
-                echo "install k3s from https://k3s.io/"
-                exit 1
-            fi
-            if ! sudo k3s kubectl get nodes >/dev/null 2>&1; then
-                echo -e "${red}error${nc}: k3s cluster not accessible"
-                echo "make sure k3s is running and accessible"
-                exit 1
-            fi
-            build_and_push_k3s "$IMAGE_NAME" "$TAG" "$DOCKERFILE_PATH" "$BUILD_CONTEXT"
+            build_and_push_microk8s "$IMAGE_NAME" "$TAG" "$DOCKERFILE_PATH" "$BUILD_CONTEXT"
             ;;
         *)
             echo -e "${red}error${nc}: unsupported cluster type: $TARGET_CLUSTER"
-            echo "supported cluster types: kind, k3d, minikube, k3s"
+            echo "supported cluster types: microk8s"
             exit 1
             ;;
     esac

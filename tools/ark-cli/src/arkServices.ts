@@ -169,17 +169,6 @@ const defaultArkServices: ServiceCollection = {
     k8sDeploymentName: 'mcp-filesystem',
     k8sDevDeploymentName: 'mcp-filesystem-devspace',
   },
-
-  'localhost-gateway': {
-    name: 'localhost-gateway',
-    helmReleaseName: 'localhost-gateway',
-    description: 'Gateway for local development clusters',
-    enabled: false, // Disabled - not needed for most users
-    category: 'service',
-    namespace: 'ark-system',
-    chartPath: `${REGISTRY_BASE}/localhost-gateway`,
-    installArgs: [],
-  },
 };
 
 function applyConfigOverrides(defaults: ServiceCollection): ServiceCollection {

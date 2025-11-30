@@ -1,8 +1,0 @@
-name: localhost-gateway
-description: A Gateway for local development that routes to Ark services
-supports:
-  - install
-  - uninstall
-post-install-instructions: |
-  A useful command is:
-    - (cd services/localhost-gateway && make routes)

@@ -1,11 +1,10 @@
 # Deployment Guide
 
 ## Prerequisites
-- Go v1.24.0+
-- Docker v17.03+
-- kubectl v1.11.3+
-- Kubernetes v1.11.3+ cluster
-- LLM service with API keys and endpoint (Azure OpenAI supported)
+
+- Kubernetes cluster (MicroK8s recommended)
+- kubectl configured to talk to the cluster
+- helm installedrvice with API keys and endpoint (Azure OpenAI supported)
 
 ## Deploy to cluster
 

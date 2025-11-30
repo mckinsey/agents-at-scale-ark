@@ -3,8 +3,6 @@ version: v2beta1
 
 # Dependencies - include other DevSpace configurations
 dependencies:
-  localhost-gateway:
-    path: ./services/localhost-gateway
   ark:
     path: ./ark
   ark-cluster-memory:
@@ -39,54 +37,17 @@ dependencies:
   #   subPath: services/langfuse
 
 # Vars - To disable, set environment variables before the devspace commands
-#        For example: ENABLE_CERT_MANAGER=false devspace dev
+#        For example: ENABLE_ARK_TENANT=false devspace dev
 vars:
-  ENABLE_CERT_MANAGER:
-    source: env
-    default: true
-  ENABLE_GATEWAY_API_CRDS:
-    source: env
-    default: true
   ENABLE_ARK_TENANT:
     source: env
     default: true
 
 commands:
   routes:
-    ./services/localhost-gateway/scripts/show-routes.sh
+    echo "Routes are managed by MicroK8s Ingress"
 
 profiles:
-  - name: enable-cert-manager
-    activation:
-    - vars:
-        ENABLE_CERT_MANAGER: true
-    patches:
-    - op: add
-      path: deployments
-      value:
-        cert-manager:
-          namespace: cert-manager
-          helm:
-            chart:
-              name: cert-manager
-              repo: https://charts.jetstack.io
-            releaseName: cert-manager
-            upgradeArgs: [ "--install" ]
-            values:
-              installCRDs: true
-  - name: enable-gateway-api
-    activation:
-      - vars:
-          ENABLE_GATEWAY_API_CRDS: true
-    patches:
-      - op: add
-        path: deployments
-        value:
-          gateway-api:
-            namespace: default
-            kubectl:
-              manifests:
-                - "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml"
   - name: enable-ark-tenant
     activation:
       - vars:
@@ -106,14 +67,6 @@ profiles:
 pipelines:
   deploy: |-
     
-    if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
-      create_deployments cert-manager
-    fi
-    
-    if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
-      create_deployments gateway-api
-    fi
-    
     run_dependency_pipelines ark --pipeline=deploy
     
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
@@ -122,14 +75,6 @@ pipelines:
     
     run_dependency_pipelines --all --exclude ark --pipeline=deploy
   dev: |-
-    
-    if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
-      create_deployments cert-manager
-    fi
-    
-    if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
-      create_deployments gateway-api
-    fi
     
     run_dependency_pipelines ark --pipeline=dev
     

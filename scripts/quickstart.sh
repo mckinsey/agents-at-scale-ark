@@ -103,33 +103,28 @@ quickstart() {
         echo -e "${yellow}warning${nc}: kubernetes cluster not accessible"
         echo "make sure your cluster is running and kubectl context is set"
         echo "for local development"
-        # check_tool "minikube"
-        if is_installed minikube; then
-            echo -e "${green}✔${nc} Minikube is installed"
-            minikube start
-        # check_tool "kind"
-        elif is_installed kind; then
-            echo -e "${green}✔${nc} Kind is installed"
-            kind create cluster
-
+        # check_tool "microk8s"
+        if is_installed microk8s; then
+            echo -e "${green}✔${nc} MicroK8s is installed"
+            microk8s start
+            microk8s enable dns storage registry metrics-server cert-manager ingress
         else
-           echo -e "${yellow}⚠${nc} Neither Minikube nor Kind is installed"
-            echo "Choose the Kubernetes tool to install:"
-            echo "1) Minikube (default)"
-            echo "2) Kind"
-
-            read -r -p "Enter choice [1/2]: " choice
-
-            choice=${choice:-1}  # Default to 1 if empty
-
-            if [[ "$choice" == "1" ]]; then
-                brew install minikube
-                minikube start
-            elif [[ "$choice" == "2" ]]; then
-                brew install kind
-                kind create cluster
+            echo -e "${yellow}⚠${nc} MicroK8s is not installed"
+            if prompt_yes_no "Install MicroK8s? (Y/n): "; then
+                if [[ "$OSTYPE" == "darwin"* ]]; then
+                    brew install ubuntu/microk8s/microk8s
+                    microk8s install
+                else
+                    sudo snap install microk8s --classic
+                fi
+                microk8s start
+                microk8s enable dns storage registry metrics-server cert-manager ingress
+                
+                # Configure kubectl
+                microk8s kubectl config view --raw > ~/.kube/microk8s-config
+                export KUBECONFIG=~/.kube/microk8s-config
             else
-                echo "Invalid choice. Exiting."
+                echo "MicroK8s is required. Exiting."
                 exit 1
             fi
         fi

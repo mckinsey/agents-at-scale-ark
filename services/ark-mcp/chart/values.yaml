@@ -59,7 +59,7 @@ httpRoute:
     # Custom annotations can be added here
   # Gateway references
   parentRefs:
-    - name: localhost-gateway
+    # - name: localhost-gateway
       namespace: ark-system
   # Hostnames this route matches
   hostnames:

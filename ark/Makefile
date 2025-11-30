@@ -70,8 +70,8 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -v $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
-# The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
-# CertManager is installed by default; skip with:
+# The default setup assumes MicroK8s is installed and running.
+# CertManager is installed via MicroK8s add-on: microk8s enable cert-manager
 # - CERT_MANAGER_INSTALL_SKIP=true
 
 .PHONY: lint
@@ -142,13 +142,8 @@ build-container: ## Build the ark-controller
 .PHONY: deploy
 deploy: manifests ## Deploy controller and cert-manager to the K8s cluster specified in ~/.kube/config.
 	# NOTE: cert-manager might be better in 'prepare-cluster' target as it's required infra rather than ark-deployment
-	@helm repo add jetstack https://charts.jetstack.io --force-update
-	@helm repo update
-	@helm upgrade --install cert-manager jetstack/cert-manager \
-		--namespace cert-manager \
-		--create-namespace \
-		--set crds.enabled=true
-	kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
+	# NOTE: cert-manager is enabled via MicroK8s add-on: microk8s enable cert-manager
+	# NOTE: cert-manager is enabled via MicroK8s add-on: microk8s enable cert-manager
 	../scripts/build-and-push.sh -i $(IMAGE) -t $(IMAGE_TAG) -f Dockerfile -c . -b VERSION=$(VERSION) -b GIT_COMMIT=$(GIT_COMMIT)
 	# Deploy controller with impersonation enabled for development
 	helm upgrade --install ark-controller ./dist/chart \
