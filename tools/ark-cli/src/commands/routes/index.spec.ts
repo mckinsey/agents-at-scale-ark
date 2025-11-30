@@ -37,7 +37,7 @@ describe('routes command', () => {
 
     // Mock httproutes check
     mockExeca.mockResolvedValueOnce({
-      stdout: 'NAMESPACE NAME HOSTNAMES\ndefault route1 [host1.com]',
+      stdout: 'default route1 [host1.com]',
     });
 
     const command = createRoutesCommand({});
@@ -72,7 +72,14 @@ describe('routes command', () => {
   });
 
   it('should handle errors', async () => {
-    // Mock ingress check failure
+    // Mock ingress check success
+    mockExeca.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+    });
+
+    // Mock httproutes check failure
     mockExeca.mockRejectedValueOnce(new Error('kubectl failed'));
 
     const command = createRoutesCommand({});
