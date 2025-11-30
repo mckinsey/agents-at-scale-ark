@@ -113,4 +113,11 @@ describe('microk8s', () => {
       await expect(configureMicroK8s()).rejects.toThrow('Command failed');
     });
   });
+  it('throws error if kubeconfig is not a string', async () => {
+    (mockExecute as any).mockResolvedValueOnce({}); // status
+    (mockExecute as any).mockResolvedValueOnce({}); // enable
+    (mockExecute as any).mockResolvedValueOnce({stdout: 123}); // config (invalid type)
+
+    await expect(configureMicroK8s()).rejects.toThrow('Failed to retrieve kubeconfig');
+  });
 });

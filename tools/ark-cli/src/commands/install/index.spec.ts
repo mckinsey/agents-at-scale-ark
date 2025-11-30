@@ -1,17 +1,29 @@
 import {jest} from '@jest/globals';
 import {Command} from 'commander';
 
-const mockExeca = jest.fn(() => Promise.resolve()) as any;
+import {execa} from 'execa';
+import {getClusterInfo} from '../../lib/cluster.js';
+import {getInstallableServices} from '../../arkServices.js';
+import output from '../../lib/output.js';
+import {isMicroK8sInstalled, configureMicroK8s} from '../../lib/microk8s.js';
+import {loadConfig} from '../../lib/config.js';
+import inquirer from 'inquirer';
+
+const mockExeca = jest.fn() as unknown as jest.MockedFunction<typeof execa>;
 jest.unstable_mockModule('execa', () => ({
   execa: mockExeca,
 }));
 
-const mockGetClusterInfo = jest.fn() as any;
+const mockGetClusterInfo = jest.fn() as jest.MockedFunction<
+  typeof getClusterInfo
+>;
 jest.unstable_mockModule('../../lib/cluster.js', () => ({
   getClusterInfo: mockGetClusterInfo,
 }));
 
-const mockGetInstallableServices = jest.fn() as any;
+const mockGetInstallableServices = jest.fn() as jest.MockedFunction<
+  typeof getInstallableServices
+>;
 const mockArkServices = {};
 const mockArkDependencies = {};
 jest.unstable_mockModule('../../arkServices.js', () => ({
@@ -25,7 +37,7 @@ const mockOutput = {
   info: jest.fn(),
   success: jest.fn(),
   warning: jest.fn(),
-};
+} as unknown as jest.Mocked<typeof output>;
 jest.unstable_mockModule('../../lib/output.js', () => ({
   default: mockOutput,
 }));
@@ -37,14 +49,18 @@ const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
 jest.spyOn(console, 'log').mockImplementation(() => {});
 jest.spyOn(console, 'error').mockImplementation(() => {});
 
-const mockIsMicroK8sInstalled = jest.fn() as any;
-const mockConfigureMicroK8s = jest.fn() as any;
+const mockIsMicroK8sInstalled = jest.fn() as jest.MockedFunction<
+  typeof isMicroK8sInstalled
+>;
+const mockConfigureMicroK8s = jest.fn() as jest.MockedFunction<
+  typeof configureMicroK8s
+>;
 jest.unstable_mockModule('../../lib/microk8s.js', () => ({
   isMicroK8sInstalled: mockIsMicroK8sInstalled,
   configureMicroK8s: mockConfigureMicroK8s,
 }));
 
-const mockLoadConfig = jest.fn() as any;
+const mockLoadConfig = jest.fn() as jest.MockedFunction<typeof loadConfig>;
 jest.unstable_mockModule('../../lib/config.js', () => ({
   loadConfig: mockLoadConfig,
 }));
@@ -52,12 +68,12 @@ jest.unstable_mockModule('../../lib/config.js', () => ({
 const mockInquirer = {
   prompt: jest.fn(),
   Separator: jest.fn(),
-};
+} as unknown as jest.Mocked<typeof inquirer>;
 jest.unstable_mockModule('inquirer', () => ({
   default: mockInquirer,
 }));
 
-const {createInstallCommand} = await import('./index.js');
+const {createInstallCommand, installArk} = await import('./index.js');
 
 describe('install command', () => {
   const mockConfig = {
@@ -92,6 +108,9 @@ describe('install command', () => {
       chartPath: './charts/ark-api',
       namespace: 'ark-system',
       installArgs: ['--set', 'image.tag=latest'],
+      description: 'Ark API Service',
+      enabled: true,
+      category: 'core',
     };
     mockGetInstallableServices.mockReturnValue({
       'ark-api': mockService,
@@ -121,8 +140,8 @@ describe('install command', () => {
 
   it('shows error when service not found', async () => {
     mockGetInstallableServices.mockReturnValue({
-      'ark-api': {name: 'ark-api'},
-      'ark-controller': {name: 'ark-controller'},
+      'ark-api': {name: 'ark-api', description: 'Ark API', enabled: true, category: 'core', helmReleaseName: 'ark-api'} as any,
+      'ark-controller': {name: 'ark-controller', description: 'Ark Controller', enabled: true, category: 'core', helmReleaseName: 'ark-controller'} as any,
     });
 
     const command = createInstallCommand(mockConfig);
@@ -146,6 +165,9 @@ describe('install command', () => {
       chartPath: './charts/ark-dashboard',
       // namespace is undefined - should use current context
       installArgs: ['--set', 'replicas=2'],
+      description: 'Ark Dashboard',
+      enabled: true,
+      category: 'service',
     };
     mockGetInstallableServices.mockReturnValue({
       'ark-dashboard': mockService,
@@ -175,6 +197,9 @@ describe('install command', () => {
       helmReleaseName: 'simple-service',
       chartPath: './charts/simple',
       namespace: 'default',
+      description: 'Simple Service',
+      enabled: true,
+      category: 'service',
     };
     mockGetInstallableServices.mockReturnValue({
       'simple-service': mockService,
@@ -198,7 +223,7 @@ describe('install command', () => {
   });
 
   it('exits when cluster not connected and microk8s not installed', async () => {
-    mockGetClusterInfo.mockResolvedValue({error: true});
+    mockGetClusterInfo.mockResolvedValue({error: true} as any);
     mockIsMicroK8sInstalled.mockResolvedValue(false);
 
     const command = createInstallCommand({});
@@ -220,7 +245,7 @@ describe('install command', () => {
         namespace: 'default',
       },
     });
-    (mockInquirer.prompt as any).mockResolvedValue({
+    mockInquirer.prompt.mockResolvedValue({
       configure: true,
     });
 
@@ -230,6 +255,9 @@ describe('install command', () => {
         name: 'ark-api',
         helmReleaseName: 'ark-api',
         chartPath: './charts/ark-api',
+        description: 'Ark API',
+        enabled: true,
+        category: 'core',
       },
     });
 
@@ -243,5 +271,36 @@ describe('install command', () => {
     expect(mockOutput.success).toHaveBeenCalledWith(
       'ark-api installed successfully'
     );
+  });
+  it('should handle prompt cancellation (Ctrl-C)', async () => {
+    mockLoadConfig.mockReturnValue({clusterInfo: {type: 'microk8s', context: 'microk8s'}});
+    
+    const error = new Error('ExitPromptError');
+    error.name = 'ExitPromptError';
+    mockInquirer.prompt.mockRejectedValue(error);
+
+    await expect(installArk(mockLoadConfig())).rejects.toThrow('process.exit called');
+    
+    expect(mockExit).toHaveBeenCalledWith(130);
+  });
+
+  it('should handle installation errors for specific service', async () => {
+    mockLoadConfig.mockReturnValue({clusterInfo: {type: 'microk8s', context: 'microk8s'}});
+    mockGetInstallableServices.mockReturnValue({
+      'ark-api': {
+        name: 'ark-api',
+        helmReleaseName: 'ark-api',
+        chartPath: './charts/ark-api',
+        description: 'Ark API',
+        enabled: true,
+        category: 'core',
+      },
+    });
+    mockExeca.mockRejectedValue(new Error('Install failed'));
+
+    await expect(installArk(mockLoadConfig(), 'ark-api')).rejects.toThrow('process.exit called');
+    
+    expect(mockOutput.error).toHaveBeenCalledWith(expect.stringContaining('failed to install ark-api'));
+    expect(mockExit).toHaveBeenCalledWith(1);
   });
 });

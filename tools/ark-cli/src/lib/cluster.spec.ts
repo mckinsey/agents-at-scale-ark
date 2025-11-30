@@ -60,7 +60,19 @@ describe('cluster', () => {
       const result = await detectClusterType();
       expect(result).toEqual({type: 'unknown', error: 'kubectl not found'});
     });
-  });
+    it('should return unknown type for unrecognized context', async () => {
+      mockExeca.mockResolvedValue({stdout: 'some-other-context'});
+      const info = await detectClusterType();
+      expect(info.type).toBe('unknown');
+    });
+
+    it('should handle error during detection', async () => {
+      mockExeca.mockRejectedValue(new Error('kubectl failed'));
+      const info = await detectClusterType();
+      expect(info.type).toBe('unknown');
+      expect(info.error).toContain('kubectl failed');
+    });
+});
 
   describe('getClusterInfo', () => {
     const mockConfig = {
