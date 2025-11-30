@@ -4,7 +4,8 @@ import { Info, Pencil, Server, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
-import { StatusBadge } from '@/components/ui/status-badge';
+import { AvailabilityStatusBadge } from '@/components/ui/availability-status-badge';
+import type { AvailabilityStatus } from '@/components/ui/availability-status-badge';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import type { MCPServerConfiguration } from '@/lib/services/mcp-servers';
 import { type MCPServer } from '@/lib/services/mcp-servers';
@@ -69,6 +70,12 @@ export function McpServerCard({
   const address = mcpServer.address || 'Address not available';
   const transport = mcpServer.transport || 'unknown';
 
+  const getAvailabilityStatus = (): AvailabilityStatus => {
+    if (mcpServer.ready) return 'True';
+    if (mcpServer.discovering) return 'Unknown';
+    return 'False';
+  };
+
   return (
     <>
       <BaseCard
@@ -79,9 +86,9 @@ export function McpServerCard({
         footer={
           <div className="text-muted-foreground flex flex-col gap-1 text-sm">
             <div className="w-fit">
-              <StatusBadge
-                ready={mcpServer.ready}
-                discovering={mcpServer.discovering}
+              <AvailabilityStatusBadge
+                status={getAvailabilityStatus()}
+                eventsLink={`/events?kind=MCPServer&name=${mcpServer.name}&page=1`}
               />
             </div>
             <div>
