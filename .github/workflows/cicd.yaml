@@ -461,21 +461,7 @@ jobs:
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
-      - name: Deploy localhost-gateway
-        run: |
-          echo "=== Deploying localhost-gateway ==="
-          # Install nginx-gateway-fabric CRDs (not handled by setup-e2e)
-          kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v2.0.2/deploy/crds.yaml
-          helm upgrade --install localhost-gateway services/localhost-gateway/chart \
-            --namespace ark-system \
-            --create-namespace \
-            --wait \
-            --timeout=10m
-          
-          # Wait for gateway to be ready
-          echo "=== Waiting for gateway to be ready ==="
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=nginx-gateway-fabric -n ark-system --timeout=120s
-          kubectl wait --for=condition=Programmed gateway/localhost-gateway -n ark-system --timeout=120s
+
 
       - name: Deploy ark-api
         run: |
@@ -658,7 +644,7 @@ jobs:
           - { name: ark-mcp, path: services/ark-mcp/chart }
           - { name: ark-cluster-memory, path: services/ark-cluster-memory/chart }
           - { name: mcp-filesystem, path: mcp/filesystem-mcp/chart }
-          - { name: localhost-gateway, path: services/localhost-gateway/chart }
+
           - { name: ark-tenant, path: charts/ark-tenant }
           - { name: argo-workflows, path: services/argo-workflows/chart }
     steps:
