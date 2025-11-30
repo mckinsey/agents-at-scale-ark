@@ -45,7 +45,7 @@ This sample shows how to implement RAG in ARK using:
   - ARK API Server (REST API)
   - Default model configured
   - *If not installed*: Run `devspace dev` from project root or use `ark install` CLI
-- **Kubernetes cluster**: minikube, kind, or cloud provider
+- **Kubernetes cluster**: MicroK8s or cloud provider
 - **Azure OpenAI**: Account with API key for embeddings
 - **kubectl**: Configured to access your cluster
 - **Docker**: For building the retrieval service image
@@ -145,7 +145,7 @@ kubectl wait --for=condition=ready pod -l app=pgvector --timeout=120s
 # Deploy retrieval service
 cd retrieval-service
 docker build -t rag-retrieval-http:azure-openai .
-minikube image load rag-retrieval-http:azure-openai  # if using minikube
+docker save rag-retrieval-http:azure-openai | microk8s ctr images import -
 kubectl apply -k deployment/
 cd ..
 

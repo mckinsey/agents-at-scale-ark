@@ -120,8 +120,8 @@ def check_url(
 docker build -t tool:latest .
 
 # Load into local cluster (check your cluster documentation)
-# For kind: kind load docker-image tool:latest
-# For minikube: use minikube docker-env or image loading commands
+# Load into MicroK8s
+docker save tool:latest | microk8s ctr images import -
 
 # Deploy to Kubernetes
 kubectl apply -k deployment/

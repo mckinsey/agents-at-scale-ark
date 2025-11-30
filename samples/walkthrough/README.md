@@ -264,8 +264,8 @@ First, set up the MCP filesystem server for document storage:
 cd mcp-servers/filesystem-mcp
 docker build -t filesystem-mcp-server:latest .
 # Load image into cluster (choose based on your setup)
-kind load docker-image filesystem-mcp-server:latest        # For kind
-minikube image load filesystem-mcp-server:latest           # For minikube
+# Load image into MicroK8s
+docker save filesystem-mcp-server:latest | microk8s ctr images import -
 cd ../..
 
 # Deploy filesystem MCP server
@@ -356,7 +356,8 @@ If you want to deploy everything at once without the step-by-step tutorial:
 # 1. Build and load the filesys MCP server image
 cd mcp-servers/filesystem-mcp
 docker build -t filesystem-mcp-server:latest .
-kind load docker-image filesystem-mcp-server:latest
+# Load into MicroK8s
+docker save filesystem-mcp-server:latest | microk8s ctr images import -
 cd ../..
 
 # Deploy MCP filesystem server

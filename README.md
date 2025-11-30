@@ -32,18 +32,17 @@
    ```bash
    sudo snap install microk8s --classic
    microk8s start
-   microk8s enable dns storage registry metrics-server cert-manager ingress
    ```
 
-2. Configure kubectl:
-   ```bash
-   microk8s kubectl config view --raw > ~/.kube/config
-   ```
-
-3. Install Ark:
+2. Install Ark:
    ```bash
    ./scripts/quickstart.sh
+   # Or manually:
+   # npm install -g @agents-at-scale/ark
+   # ark install
    ```
+
+Ark will automatically detect MicroK8s and configure it (enabling DNS, storage, ingress, etc.) if no other cluster is connected.
 
 In most cases the default installation options will be sufficient. This will install the Ark dependencies, the controller, the APIs and the dashboard. You can optionally setup a `default` model that will be the default used by agents. The `install` command will warn if any required dependencies are missing.
 

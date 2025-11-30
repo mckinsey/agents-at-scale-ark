@@ -263,8 +263,8 @@ cd mcp/filesystem-mcp
 docker build -t filesystem-mcp-server:latest .
 
 # Load image into cluster (choose based on your setup)
-kind load docker-image filesystem-mcp-server:latest        # For kind
-minikube image load filesystem-mcp-server:latest           # For minikube
+# Load image into MicroK8s
+docker save filesystem-mcp-server:latest | microk8s ctr images import -
 
 cd ../..
 
@@ -340,7 +340,8 @@ If you want to deploy everything at once without the step-by-step tutorial:
 ```bash
 # 1. Build and deploy MCP filesystem server
 cd mcp/filesystem-mcp && docker build -t filesystem-mcp-server:latest . && cd ../..
-# Load into cluster: kind load docker-image filesystem-mcp-server:latest OR minikube image load filesystem-mcp-server:latest
+# Load into cluster:
+docker save filesystem-mcp-server:latest | microk8s ctr images import -
 helm install mcp-filesystem mcp/filesystem-mcp/chart --set image.repository=filesystem-mcp-server --set image.tag=latest
 
 # 2. Deploy complete workflow using kustomization.yaml

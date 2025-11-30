@@ -232,13 +232,13 @@ metadata:
   name: simple-calculator-remote-http
 spec:
   address:
-    value: "http://localhost:8000/mcp"  # replace with full K8s service URL for deployment - "http://calc-service.default.svc.cluster.local" or "http://host.docker.internal:8000" or "http://host.minikube.internal:8000/mcp" if you use minikube
+    value: "http://localhost:8000/mcp"  # replace with full K8s service URL for deployment - "http://calc-service.default.svc.cluster.local" or "http://<YOUR_HOST_IP>:8000/mcp" for local development
   timeout: "60s"
   transport: http
   description: "Remote server for performing calculations such as mul and div."
 ```
 
-- Please apply the above yaml (update to address value to http://host.minikube.internal:8000/mcp if you use minikube)
+- Please apply the above yaml (update the address value if running locally)
 - Shell verification
 ```sh
 k get mcpserver

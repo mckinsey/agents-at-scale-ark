@@ -32,7 +32,9 @@ ark models create default
 ark dashboard
 ```
 
-In most cases the default installation options will be sufficient. This will install the Ark dependencies, the controller, the APIs and the dashboard. You can optionally setup a `default` model that will be the default used by agents. You will need a Kubernetes cluster to install Ark into, you can use [Minikube](https://minikube.sigs.k8s.io/docs/start), [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/), [Docker Desktop](https://docs.docker.com/desktop/kubernetes/) or similar to run a local cluster. The `install` command will warn if any required dependencies are missing.
+In most cases the default installation options will be sufficient. This will install the Ark dependencies, the controller, the APIs and the dashboard. You can optionally setup a `default` model that will be the default used by agents.
+
+If you don't have a cluster, `ark install` can automatically set up [MicroK8s](https://microk8s.io/) for you. The `install` command will warn if any required dependencies are missing.
 
 User guides, developer guides, operations guides and API reference documentation is all available at:
 

@@ -34,9 +34,8 @@ The service provides three retrieval endpoints that connect to a pgvector databa
 docker build -t rag-retrieval-http:azure-openai .
 
 # Load into cluster (adjust for your cluster type)
-minikube image load rag-retrieval-http:azure-openai
-# OR for kind:
-# kind load docker-image rag-retrieval-http:azure-openai
+# Load into MicroK8s
+docker save rag-retrieval-http:azure-openai | microk8s ctr images import -
 
 # Deploy all resources (includes secrets, deployment, service)
 kubectl apply -k deployment/
