@@ -13,35 +13,14 @@ describe('cluster', () => {
   });
 
   describe('detectClusterType', () => {
-    it('detects minikube cluster', async () => {
-      mockExeca.mockResolvedValue({stdout: 'minikube'});
+    it('detects microk8s cluster', async () => {
+      mockExeca.mockResolvedValue({stdout: 'microk8s'});
       const result = await detectClusterType();
-      expect(result).toEqual({type: 'minikube', context: 'minikube'});
+      expect(result).toEqual({type: 'microk8s', context: 'microk8s'});
       expect(mockExeca).toHaveBeenCalledWith('kubectl', [
         'config',
         'current-context',
       ]);
-    });
-
-    it('detects kind cluster', async () => {
-      mockExeca.mockResolvedValue({stdout: 'kind-kind'});
-      const result = await detectClusterType();
-      expect(result).toEqual({type: 'kind', context: 'kind-kind'});
-    });
-
-    it('detects k3s cluster', async () => {
-      mockExeca.mockResolvedValue({stdout: 'k3s-default'});
-      const result = await detectClusterType();
-      expect(result).toEqual({type: 'k3s', context: 'k3s-default'});
-    });
-
-    it('detects docker-desktop cluster', async () => {
-      mockExeca.mockResolvedValue({stdout: 'docker-desktop'});
-      const result = await detectClusterType();
-      expect(result).toEqual({
-        type: 'docker-desktop',
-        context: 'docker-desktop',
-      });
     });
 
     it('detects gke cloud cluster', async () => {
@@ -85,10 +64,10 @@ describe('cluster', () => {
 
   describe('getClusterInfo', () => {
     const mockConfig = {
-      'current-context': 'minikube',
+      'current-context': 'microk8s',
       contexts: [
         {
-          name: 'minikube',
+          name: 'microk8s',
           context: {
             namespace: 'default',
           },
@@ -96,19 +75,19 @@ describe('cluster', () => {
       ],
     };
 
-    it('gets minikube cluster info with IP', async () => {
+    it('gets microk8s cluster info with IP', async () => {
       mockExeca
         .mockResolvedValueOnce({stdout: JSON.stringify(mockConfig)})
-        .mockResolvedValueOnce({stdout: 'minikube'})
-        .mockResolvedValueOnce({stdout: '192.168.49.2'});
+        .mockResolvedValueOnce({stdout: 'microk8s'})
+        .mockResolvedValueOnce({stdout: '192.168.1.10'});
 
       const result = await getClusterInfo();
 
       expect(result).toEqual({
-        type: 'minikube',
-        context: 'minikube',
+        type: 'microk8s',
+        context: 'microk8s',
         namespace: 'default',
-        ip: '192.168.49.2',
+        ip: '192.168.1.10',
       });
 
       expect(mockExeca).toHaveBeenCalledWith('kubectl', [
@@ -122,78 +101,12 @@ describe('cluster', () => {
         'config',
         'current-context',
       ]);
-      expect(mockExeca).toHaveBeenCalledWith('minikube', ['ip']);
-    });
-
-    it('falls back to kubectl for minikube IP if minikube command fails', async () => {
-      mockExeca
-        .mockResolvedValueOnce({stdout: JSON.stringify(mockConfig)})
-        .mockResolvedValueOnce({stdout: 'minikube'})
-        .mockRejectedValueOnce(new Error('minikube not found'))
-        .mockResolvedValueOnce({stdout: '192.168.49.2'});
-
-      const result = await getClusterInfo();
-
-      expect(result.ip).toBe('192.168.49.2');
       expect(mockExeca).toHaveBeenCalledWith('kubectl', [
         'get',
         'nodes',
         '-o',
         'jsonpath={.items[0].status.addresses[?(@.type=="InternalIP")].address}',
       ]);
-    });
-
-    it('gets kind cluster info with IP', async () => {
-      const kindConfig = {
-        'current-context': 'kind-kind',
-        contexts: [
-          {
-            name: 'kind-kind',
-            context: {
-              namespace: 'kube-system',
-            },
-          },
-        ],
-      };
-
-      mockExeca
-        .mockResolvedValueOnce({stdout: JSON.stringify(kindConfig)})
-        .mockResolvedValueOnce({stdout: 'kind-kind'})
-        .mockResolvedValueOnce({stdout: '172.18.0.2'});
-
-      const result = await getClusterInfo();
-
-      expect(result).toEqual({
-        type: 'kind',
-        context: 'kind-kind',
-        namespace: 'kube-system',
-        ip: '172.18.0.2',
-      });
-    });
-
-    it('gets docker-desktop cluster info', async () => {
-      const dockerConfig = {
-        'current-context': 'docker-desktop',
-        contexts: [
-          {
-            name: 'docker-desktop',
-            context: {},
-          },
-        ],
-      };
-
-      mockExeca
-        .mockResolvedValueOnce({stdout: JSON.stringify(dockerConfig)})
-        .mockResolvedValueOnce({stdout: 'docker-desktop'});
-
-      const result = await getClusterInfo();
-
-      expect(result).toEqual({
-        type: 'docker-desktop',
-        context: 'docker-desktop',
-        namespace: 'default',
-        ip: 'localhost',
-      });
     });
 
     it('gets cloud cluster info with load balancer IP', async () => {
@@ -284,38 +197,12 @@ describe('cluster', () => {
       ]);
     });
 
-    it('gets k3s cluster info', async () => {
-      const k3sConfig = {
-        'current-context': 'k3s-default',
-        contexts: [
-          {
-            name: 'k3s-default',
-            context: {},
-          },
-        ],
-      };
-
-      mockExeca
-        .mockResolvedValueOnce({stdout: JSON.stringify(k3sConfig)})
-        .mockResolvedValueOnce({stdout: 'k3s-default'})
-        .mockResolvedValueOnce({stdout: '10.0.0.5'});
-
-      const result = await getClusterInfo();
-
-      expect(result).toEqual({
-        type: 'k3s',
-        context: 'k3s-default',
-        namespace: 'default',
-        ip: '10.0.0.5',
-      });
-    });
-
     it('uses provided context parameter', async () => {
       const multiConfig = {
-        'current-context': 'kind-staging',
+        'current-context': 'microk8s',
         contexts: [
           {
-            name: 'kind-staging',
+            name: 'microk8s',
             context: {
               namespace: 'staging-ns',
             },
@@ -325,12 +212,12 @@ describe('cluster', () => {
 
       mockExeca
         .mockResolvedValueOnce({stdout: JSON.stringify(multiConfig)})
-        .mockResolvedValueOnce({stdout: 'kind-staging'})
-        .mockResolvedValueOnce({stdout: '172.18.0.3'});
+        .mockResolvedValueOnce({stdout: 'microk8s'})
+        .mockResolvedValueOnce({stdout: '192.168.1.11'});
 
-      const result = await getClusterInfo('kind-staging');
+      const result = await getClusterInfo('microk8s');
 
-      expect(result.context).toBe('kind-staging');
+      expect(result.context).toBe('microk8s');
       expect(mockExeca).toHaveBeenCalledWith('kubectl', [
         'config',
         'view',
@@ -338,7 +225,7 @@ describe('cluster', () => {
         '-o',
         'json',
         '--context',
-        'kind-staging',
+        'microk8s',
       ]);
     });
 

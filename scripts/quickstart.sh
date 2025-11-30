@@ -512,8 +512,9 @@ check_ark_controller() {
                 echo "If you see CRD ownership errors, this means you have an old ARK installation."
                 echo "Please recreate your local cluster to start fresh."
                 echo
-                echo "For minikube: minikube delete && minikube start"
-                echo "For kind: kind delete cluster && kind create cluster"
+                echo "Please recreate your local cluster to start fresh."
+                echo
+                echo "For MicroK8s: microk8s stop && microk8s start"
                 return
             fi
             # Wait for controller to be ready before webhook validation can work

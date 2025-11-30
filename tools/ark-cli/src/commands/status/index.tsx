@@ -116,7 +116,7 @@ function buildStatusSections(
       status: 'unreachable',
       statusColor: 'red' as StatusColor,
       name: 'kubernetes cluster',
-      subtext: 'Install minikube: https://minikube.sigs.k8s.io/docs/start',
+      subtext: 'Install MicroK8s: https://microk8s.io/docs/getting-started',
     });
   }
   sections.push({title: 'cluster access:', lines: clusterLines});

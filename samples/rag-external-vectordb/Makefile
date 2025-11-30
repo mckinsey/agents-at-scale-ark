@@ -83,11 +83,8 @@ rag-deploy-service: ## Build and deploy retrieval service
 	@echo "$(YELLOW)Building retrieval service Docker image...$(NC)"
 	@cd retrieval-service && docker build -t rag-retrieval-http:azure-openai . --quiet
 	@echo "$(YELLOW)Loading image into cluster...$(NC)"
-	@if command -v minikube >/dev/null 2>&1 && minikube status >/dev/null 2>&1; then \
-		minikube image load rag-retrieval-http:azure-openai; \
-	elif command -v kind >/dev/null 2>&1; then \
-		kind load docker-image rag-retrieval-http:azure-openai; \
-	fi
+	@echo "Saving and importing image into MicroK8s..."
+	@docker save rag-retrieval-http:azure-openai | microk8s ctr images import -
 	@echo "$(YELLOW)Deploying retrieval service...$(NC)"
 	@kubectl apply -k retrieval-service/deployment/
 	@echo "Waiting for retrieval service to be ready..."

@@ -61,8 +61,7 @@ export function ErrorResponseContent({
           event.reason === 'QueryResolveError' ||
           event.reason === 'TargetExecutionError' ||
           event.reason === 'LLMCallError') &&
-        !event.message.toLowerCase().includes('rebooted') &&
-        !event.message.toLowerCase().includes('minikube'),
+        !event.message.toLowerCase().includes('rebooted'),
     );
 
     // If we have valid error events, use them

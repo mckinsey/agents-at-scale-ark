@@ -54,20 +54,10 @@ export const getHelmVersion = (): CommandVersionConfig => ({
   versionExtract: (output: string) => output.trim(),
 });
 
-export const getMinikubeVersion = (): CommandVersionConfig => ({
-  command: 'minikube',
-  versionArgs: 'version --short',
-  versionExtract: (output: string) => output.trim(),
-});
-
-export const getKindVersion = (): CommandVersionConfig => ({
-  command: 'kind',
+export const getMicroK8sVersion = (): CommandVersionConfig => ({
+  command: 'microk8s',
   versionArgs: 'version',
-  versionExtract: (output: string) => {
-    // kind version output is like "kind v0.20.0 go1.21.0 linux/amd64"
-    const match = output.match(/kind (v[\d.]+)/);
-    return match ? match[1] : output.trim();
-  },
+  versionExtract: (output: string) => output.trim(),
 });
 
 function createErrorServiceStatus(
@@ -405,8 +395,7 @@ export class StatusChecker {
       {name: 'kubectl', ...getKubectlVersion()},
       {name: 'docker', ...getDockerVersion()},
       {name: 'helm', ...getHelmVersion()},
-      {name: 'minikube', ...getMinikubeVersion()},
-      {name: 'kind', ...getKindVersion()},
+      {name: 'microk8s', ...getMicroK8sVersion()},
     ];
 
     const results: DependencyStatus[] = [];

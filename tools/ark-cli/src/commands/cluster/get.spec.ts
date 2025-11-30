@@ -37,7 +37,7 @@ describe('cluster get command', () => {
     mockGetClusterInfo.mockResolvedValue({
       context: 'test-cluster',
       namespace: 'default',
-      type: 'minikube',
+      type: 'microk8s',
       ip: '192.168.1.1',
     });
 
@@ -47,7 +47,7 @@ describe('cluster get command', () => {
     expect(mockGetClusterInfo).toHaveBeenCalledWith(undefined);
     expect(mockConsoleLog).toHaveBeenCalledWith('context: test-cluster');
     expect(mockConsoleLog).toHaveBeenCalledWith('namespace: default');
-    expect(mockConsoleLog).toHaveBeenCalledWith('type: minikube');
+    expect(mockConsoleLog).toHaveBeenCalledWith('type: microk8s');
     expect(mockConsoleLog).toHaveBeenCalledWith('ip: 192.168.1.1');
   });
 
@@ -72,7 +72,7 @@ describe('cluster get command', () => {
     mockGetClusterInfo.mockResolvedValue({
       context: 'custom-context',
       namespace: 'custom',
-      type: 'kind',
+      type: 'microk8s',
       ip: '127.0.0.1',
     });
 

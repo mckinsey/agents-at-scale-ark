@@ -17,7 +17,7 @@ The easiest way to install dependencies on macOS:
 
 ```bash
 brew install node kubectl helm ubuntu/microk8s/microk8s
-microk8s install
+# ark install will handle the rest
 ```
 
 Verify your cluster context:
@@ -37,10 +37,7 @@ Ark requires a Kubernetes cluster to run. We recommend using MicroK8s on WSL2.
 In most cases, you should install and enable [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install) with Ubuntu.
 
 Then install MicroK8s:
-```bash
-sudo snap install microk8s --classic
-microk8s start
-```
+Then install MicroK8s and let `ark install` configure it.
 
 **Missing Dependencies**
 

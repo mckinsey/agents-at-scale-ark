@@ -20,35 +20,17 @@ case $TARGET_CLUSTER in
     "auto")
         echo "Auto-detecting cluster configuration..."
         # Try to detect if we're in a local development environment
-        if kubectl config current-context | grep -E "(kind|minikube|docker-desktop)" > /dev/null 2>&1; then
-            echo "Local development cluster detected, loading image locally..."
-            
-            # Load image into kind if available
-            if command -v kind > /dev/null 2>&1 && kind get clusters > /dev/null 2>&1; then
-                echo "Loading image into kind cluster..."
-                kind load docker-image ${IMAGE_NAME}:${IMAGE_TAG}
-            fi
-            
-            # Load image into minikube if available
-            if command -v minikube > /dev/null 2>&1 && minikube status > /dev/null 2>&1; then
-                echo "Loading image into minikube..."
-                minikube image load ${IMAGE_NAME}:${IMAGE_TAG}
-            fi
+        if kubectl config current-context | grep -E "(microk8s)" > /dev/null 2>&1; then
+            echo "MicroK8s cluster detected, loading image locally..."
+            docker save ${IMAGE_NAME}:${IMAGE_TAG} | microk8s ctr images import -
         else
             echo "Remote cluster detected, pushing to registry..."
             docker push ${IMAGE_NAME}:${IMAGE_TAG}
         fi
         ;;
-    "local"|"kind"|"minikube")
-        echo "Loading image into local cluster..."
-        
-        if [[ $TARGET_CLUSTER == "kind" ]] && command -v kind > /dev/null 2>&1; then
-            kind load docker-image ${IMAGE_NAME}:${IMAGE_TAG}
-        elif [[ $TARGET_CLUSTER == "minikube" ]] && command -v minikube > /dev/null 2>&1; then
-            minikube image load ${IMAGE_NAME}:${IMAGE_TAG}
-        else
-            echo "Local cluster tools not available, skipping image load"
-        fi
+    "local"|"microk8s")
+        echo "Loading image into MicroK8s..."
+        docker save ${IMAGE_NAME}:${IMAGE_TAG} | microk8s ctr images import -
         ;;
     "remote"|"registry")
         echo "Pushing image to registry..."
@@ -56,7 +38,7 @@ case $TARGET_CLUSTER in
         ;;
     *)
         echo "Unknown target cluster: $TARGET_CLUSTER"
-        echo "Valid options: auto, local, kind, minikube, remote, registry"
+        echo "Valid options: auto, local, microk8s, remote, registry"
         exit 1
         ;;
 esac

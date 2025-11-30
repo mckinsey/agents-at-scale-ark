@@ -37,13 +37,33 @@ const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
 jest.spyOn(console, 'log').mockImplementation(() => {});
 jest.spyOn(console, 'error').mockImplementation(() => {});
 
+const mockIsMicroK8sInstalled = jest.fn() as any;
+const mockConfigureMicroK8s = jest.fn() as any;
+jest.unstable_mockModule('../../lib/microk8s.js', () => ({
+  isMicroK8sInstalled: mockIsMicroK8sInstalled,
+  configureMicroK8s: mockConfigureMicroK8s,
+}));
+
+const mockLoadConfig = jest.fn() as any;
+jest.unstable_mockModule('../../lib/config.js', () => ({
+  loadConfig: mockLoadConfig,
+}));
+
+const mockInquirer = {
+  prompt: jest.fn(),
+  Separator: jest.fn(),
+};
+jest.unstable_mockModule('inquirer', () => ({
+  default: mockInquirer,
+}));
+
 const {createInstallCommand} = await import('./index.js');
 
 describe('install command', () => {
   const mockConfig = {
     clusterInfo: {
       context: 'test-cluster',
-      type: 'minikube',
+      type: 'microk8s',
       namespace: 'default',
     },
   } as any;
@@ -52,9 +72,10 @@ describe('install command', () => {
     jest.clearAllMocks();
     mockGetClusterInfo.mockResolvedValue({
       context: 'test-cluster',
-      type: 'minikube',
+      type: 'microk8s',
       namespace: 'default',
     });
+    mockIsMicroK8sInstalled.mockResolvedValue(false);
   });
 
   it('creates command with correct structure', () => {
@@ -176,8 +197,9 @@ describe('install command', () => {
     );
   });
 
-  it('exits when cluster not connected', async () => {
+  it('exits when cluster not connected and microk8s not installed', async () => {
     mockGetClusterInfo.mockResolvedValue({error: true});
+    mockIsMicroK8sInstalled.mockResolvedValue(false);
 
     const command = createInstallCommand({});
 
@@ -185,5 +207,41 @@ describe('install command', () => {
       command.parseAsync(['node', 'test', 'ark-api'])
     ).rejects.toThrow('process.exit called');
     expect(mockExit).toHaveBeenCalledWith(1);
+    expect(mockIsMicroK8sInstalled).toHaveBeenCalled();
+  });
+
+  it('configures microk8s when no cluster connected and microk8s installed', async () => {
+    mockIsMicroK8sInstalled.mockResolvedValue(true);
+    mockConfigureMicroK8s.mockResolvedValue(undefined);
+    mockLoadConfig.mockReturnValue({
+      clusterInfo: {
+        context: 'microk8s',
+        type: 'microk8s',
+        namespace: 'default',
+      },
+    });
+    (mockInquirer.prompt as any).mockResolvedValue({
+      configure: true,
+    });
+
+    // We need to mock getInstallableServices to return something so it doesn't fail later
+    mockGetInstallableServices.mockReturnValue({
+      'ark-api': {
+        name: 'ark-api',
+        helmReleaseName: 'ark-api',
+        chartPath: './charts/ark-api',
+      },
+    });
+
+    const command = createInstallCommand({});
+    await command.parseAsync(['node', 'test', 'ark-api']);
+
+    expect(mockIsMicroK8sInstalled).toHaveBeenCalled();
+    expect(mockInquirer.prompt).toHaveBeenCalled();
+    expect(mockConfigureMicroK8s).toHaveBeenCalled();
+    expect(mockLoadConfig).toHaveBeenCalled();
+    expect(mockOutput.success).toHaveBeenCalledWith(
+      'ark-api installed successfully'
+    );
   });
 });

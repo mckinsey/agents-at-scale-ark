@@ -41,7 +41,7 @@ describe('uninstall command', () => {
   const mockConfig = {
     clusterInfo: {
       context: 'test-cluster',
-      type: 'minikube',
+      type: 'microk8s',
       namespace: 'default',
     },
   } as any;
@@ -50,7 +50,7 @@ describe('uninstall command', () => {
     jest.clearAllMocks();
     mockGetClusterInfo.mockResolvedValue({
       context: 'test-cluster',
-      type: 'minikube',
+      type: 'microk8s',
       namespace: 'default',
     });
   });

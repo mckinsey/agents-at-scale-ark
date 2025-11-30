@@ -53,15 +53,9 @@ export function showNoClusterError(): void {
   console.log(
     'Please ensure you have configured a connection to a Kubernetes cluster.'
   );
-  console.log('For local development, you can use:');
+  console.log('For local development, we recommend MicroK8s:');
   console.log(
-    `  • Minikube: ${chalk.blue('https://minikube.sigs.k8s.io/docs/start')}`
-  );
-  console.log(
-    `  • Docker Desktop: ${chalk.blue('https://docs.docker.com/desktop/kubernetes/')}`
-  );
-  console.log(
-    `  • Kind: ${chalk.blue('https://kind.sigs.k8s.io/docs/user/quick-start/')}`
+    `  • MicroK8s: ${chalk.blue('https://microk8s.io/docs/getting-started')}`
   );
   console.log('');
   console.log('And more. For help, check the Quickstart guide:');

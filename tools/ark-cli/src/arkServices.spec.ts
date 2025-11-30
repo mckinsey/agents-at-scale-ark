@@ -53,14 +53,14 @@ describe('arkServices', () => {
     it('applies overrides to enable a disabled service', async () => {
       mockLoadConfig.mockReturnValue({
         services: {
-          'localhost-gateway': {enabled: true},
+          'mcp-filesystem': {enabled: true},
         },
       });
 
       jest.resetModules();
       const {arkServices} = await import('./arkServices.js');
 
-      expect(arkServices['localhost-gateway'].enabled).toBe(true);
+      expect(arkServices['mcp-filesystem'].enabled).toBe(true);
     });
 
     it('applies overrides to disable an enabled service', async () => {

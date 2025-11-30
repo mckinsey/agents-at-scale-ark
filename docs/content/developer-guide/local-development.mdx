@@ -18,20 +18,9 @@ We recommend using **MicroK8s** for local development.
 
 ### MicroK8s Setup
 
-1. Install MicroK8s:
-   ```bash
-   sudo snap install microk8s --classic
-   ```
+The `ark install` command will automatically detect and configure MicroK8s for you, including enabling necessary add-ons (dns, storage, registry, metrics-server, cert-manager, ingress).
 
-2. Enable Add-ons:
-   ```bash
-   microk8s enable dns storage registry metrics-server cert-manager ingress
-   ```
-
-3. Configure kubectl:
-   ```bash
-   microk8s kubectl config view --raw > ~/.kube/config
-   ```
+If you prefer to set it up manually or are troubleshooting, you can follow the [MicroK8s documentation](https://microk8s.io/docs).
 
 ## One-time setup
 ```bash

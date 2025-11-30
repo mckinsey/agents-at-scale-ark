@@ -1,7 +1,7 @@
 import {execa} from 'execa';
 
 export interface ClusterInfo {
-  type: 'minikube' | 'kind' | 'k3s' | 'docker-desktop' | 'cloud' | 'unknown';
+  type: 'microk8s' | 'cloud' | 'unknown';
   ip?: string;
   context?: string;
   namespace?: string;
@@ -13,14 +13,8 @@ export async function detectClusterType(): Promise<ClusterInfo> {
     const {stdout} = await execa('kubectl', ['config', 'current-context']);
     const context = stdout.trim();
 
-    if (context.includes('minikube')) {
-      return {type: 'minikube', context};
-    } else if (context.includes('kind')) {
-      return {type: 'kind', context};
-    } else if (context.includes('k3s')) {
-      return {type: 'k3s', context};
-    } else if (context.includes('docker-desktop')) {
-      return {type: 'docker-desktop', context};
+    if (context.includes('microk8s')) {
+      return {type: 'microk8s', context};
     } else if (
       context.includes('gke') ||
       context.includes('eks') ||
@@ -78,12 +72,9 @@ export async function getClusterInfo(context?: string): Promise<ClusterInfo> {
     let ip: string | undefined;
 
     switch (clusterInfo.type) {
-      case 'minikube':
+      case 'microk8s':
         try {
-          const {stdout} = await execa('minikube', ['ip']);
-          ip = stdout.trim();
-        } catch {
-          // Fallback to kubectl if minikube command fails
+          // For MicroK8s, we can try to get the node IP
           const {stdout} = await execa('kubectl', [
             'get',
             'nodes',
@@ -91,34 +82,11 @@ export async function getClusterInfo(context?: string): Promise<ClusterInfo> {
             'jsonpath={.items[0].status.addresses[?(@.type=="InternalIP")].address}',
           ]);
           ip = stdout.trim();
+        } catch {
+          // Fallback to localhost if kubectl fails (unlikely if context is set)
+          ip = 'localhost';
         }
         break;
-
-      case 'kind': {
-        const {stdout: kindOutput} = await execa('kubectl', [
-          'get',
-          'nodes',
-          '-o',
-          'jsonpath={.items[0].status.addresses[?(@.type=="InternalIP")].address}',
-        ]);
-        ip = kindOutput.trim();
-        break;
-      }
-
-      case 'docker-desktop':
-        ip = 'localhost';
-        break;
-
-      case 'k3s': {
-        const {stdout: k3sOutput} = await execa('kubectl', [
-          'get',
-          'nodes',
-          '-o',
-          'jsonpath={.items[0].status.addresses[?(@.type=="InternalIP")].address}',
-        ]);
-        ip = k3sOutput.trim();
-        break;
-      }
 
       case 'cloud':
         // For cloud clusters, try to get the external IP or load balancer IP

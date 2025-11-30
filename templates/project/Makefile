@@ -206,14 +206,14 @@ images-push: tools-build ## Push images to registry
 	done
 
 .PHONY: images-load
-images-load: tools-build ## Load images into local cluster (kind/minikube)
+images-load: tools-build ## Load images into MicroK8s
 	@echo "Loading images into local cluster..."
 	@for tool in $(shell find $(TOOLS_DIR) -mindepth 1 -maxdepth 1 -type d -not -name examples); do \
 		if [ -f "$$tool/Dockerfile" ]; then \
 			echo "Loading: $(REGISTRY)/$(PROJECT_NAME)-$$(basename $$tool):$(IMAGE_TAG)"; \
-			kind load docker-image $(REGISTRY)/$(PROJECT_NAME)-$$(basename $$tool):$(IMAGE_TAG) || \
-			minikube image load $(REGISTRY)/$(PROJECT_NAME)-$$(basename $$tool):$(IMAGE_TAG) || \
-			echo "Could not load image (not using kind or minikube?)"; \
+			echo "Loading: $(REGISTRY)/$(PROJECT_NAME)-$$(basename $$tool):$(IMAGE_TAG)"; \
+			docker save $(REGISTRY)/$(PROJECT_NAME)-$$(basename $$tool):$(IMAGE_TAG) | microk8s ctr images import - || \
+			echo "Could not load image into MicroK8s"; \
 		fi; \
 	done
 

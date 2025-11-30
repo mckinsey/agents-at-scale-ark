@@ -167,7 +167,7 @@ describe('startup', () => {
     mockLoadConfig.mockReturnValue({chat: {streaming: true}});
     // Mock successful kubectl context check
     mockExeca.mockResolvedValue({
-      stdout: 'minikube',
+      stdout: 'microk8s',
       stderr: '',
     });
 
@@ -175,7 +175,7 @@ describe('startup', () => {
 
     expect(config.clusterInfo).toEqual({
       type: 'unknown',
-      context: 'minikube',
+      context: 'microk8s',
     });
     expect(mockExeca).toHaveBeenCalledWith(
       'kubectl',

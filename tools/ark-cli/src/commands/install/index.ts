@@ -25,6 +25,9 @@ import {
 } from '../../lib/waitForReady.js';
 import {parseTimeoutToSeconds} from '../../lib/timeout.js';
 
+import {isMicroK8sInstalled, configureMicroK8s} from '../../lib/microk8s.js';
+import {loadConfig} from '../../lib/config.js';
+
 async function installService(service: ArkService, verbose: boolean = false) {
   const helmArgs = [
     'upgrade',
@@ -56,6 +59,32 @@ export async function installArk(
   }
 
   // Check cluster connectivity from config
+  if (!config.clusterInfo) {
+    // Check for MicroK8s
+    if (await isMicroK8sInstalled()) {
+      output.warning('No Kubernetes cluster detected, but MicroK8s was found.');
+
+      let shouldConfigure = options.yes;
+      if (!shouldConfigure) {
+        const answers = await inquirer.prompt([
+          {
+            type: 'confirm',
+            name: 'configure',
+            message: 'Do you want to configure MicroK8s for Ark?',
+            default: true,
+          },
+        ]);
+        shouldConfigure = answers.configure;
+      }
+
+      if (shouldConfigure) {
+        await configureMicroK8s(options.verbose);
+        // Reload config to pick up the new cluster
+        config = loadConfig();
+      }
+    }
+  }
+
   if (!config.clusterInfo) {
     showNoClusterError();
     process.exit(1);
