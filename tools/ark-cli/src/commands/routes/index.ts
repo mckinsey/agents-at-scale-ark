@@ -5,7 +5,7 @@ import type {ArkConfig} from '../../lib/config.js';
 import output from '../../lib/output.js';
 
 // Helper function to run kubectl commands, similar to execa but with custom options
-async function runCommand(
+export async function runCommand(
   args: string[],
   options: {showOutput: boolean; showCommand: boolean} = {
     showOutput: true,

@@ -429,4 +429,37 @@ describe('install command', () => {
       expect.anything()
     );
   });
+
+  it('should fail if --wait-for-ready is used without -y', async () => {
+    const command = createInstallCommand(mockConfig);
+    
+    await expect(
+      command.parseAsync(['node', 'test', '--wait-for-ready', '30s'])
+    ).rejects.toThrow('process.exit called');
+
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      '--wait-for-ready requires -y flag for non-interactive mode'
+    );
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('should not configure microk8s if user declines', async () => {
+    mockIsMicroK8sInstalled.mockResolvedValue(true);
+    mockLoadConfig.mockReturnValue({}); // No cluster info
+    mockInquirer.prompt.mockResolvedValue({
+      configure: false,
+    });
+
+    const command = createInstallCommand({});
+    
+    await expect(
+      command.parseAsync(['node', 'test', 'ark-api'])
+    ).rejects.toThrow('process.exit called');
+
+    expect(mockIsMicroK8sInstalled).toHaveBeenCalled();
+    expect(mockInquirer.prompt).toHaveBeenCalled();
+    expect(mockConfigureMicroK8s).not.toHaveBeenCalled();
+    // Should eventually fail because no cluster is connected
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
 });
