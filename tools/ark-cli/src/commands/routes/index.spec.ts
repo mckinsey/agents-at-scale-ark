@@ -91,4 +91,22 @@ describe('routes command', () => {
     );
     expect(mockExit).toHaveBeenCalledWith(1);
   });
+  it('should handle stderr output', async () => {
+    // Mock ingress check with stderr
+    mockExeca.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: '',
+      stderr: 'some warning',
+    });
+
+    // Mock httproutes check
+    mockExeca.mockResolvedValueOnce({
+      stdout: '',
+    });
+
+    const command = createRoutesCommand({});
+    await command.parseAsync(['node', 'ark', 'routes']);
+
+    expect(mockOutput.error).toHaveBeenCalledWith('some warning');
+  });
 });

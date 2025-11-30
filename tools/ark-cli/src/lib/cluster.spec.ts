@@ -293,5 +293,26 @@ describe('cluster', () => {
       expect(result.context).toBe('');
       expect(result.namespace).toBe('default');
     });
+
+    it('falls back to localhost for microk8s if node IP lookup fails', async () => {
+      mockExeca
+        .mockResolvedValueOnce({stdout: JSON.stringify(mockConfig)})
+        .mockResolvedValueOnce({stdout: 'microk8s'})
+        .mockRejectedValueOnce(new Error('kubectl failed'));
+
+      const result = await getClusterInfo();
+
+      expect(result.ip).toBe('localhost');
+    });
+
+    it('returns error if detectClusterType fails', async () => {
+      mockExeca
+        .mockResolvedValueOnce({stdout: JSON.stringify(mockConfig)})
+        .mockRejectedValueOnce(new Error('kubectl failed'));
+
+      const result = await getClusterInfo();
+
+      expect(result.error).toBe('kubectl failed');
+    });
   });
 });

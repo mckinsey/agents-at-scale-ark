@@ -134,6 +134,7 @@ quickstart() {
     echo -e "${blue}info${nc}: cluster resources (CRDs) will be installed automatically during deployment"
 
     # Check ark controller status, will warn the user if not deployed.
+    check_cert_manager
     check_ark_controller
 
     # Wait for webhook to be ready
@@ -360,6 +361,34 @@ EOF
 # Helper function to check tools
 is_installed() {
     command -v "$1" >/dev/null 2>&1
+}
+
+# Helper function to check and optionally install cert-manager
+check_cert_manager() {
+    if helm list -n cert-manager | grep -q cert-manager; then
+        echo -e "${green}✔${nc} cert-manager installed"
+        return 0
+    else
+        echo -e "${yellow}warning${nc}: cert-manager not found"
+        if prompt_yes_no "install cert-manager? (Y/n): "; then
+            echo "installing cert-manager..."
+            helm repo add jetstack https://charts.jetstack.io --force-update > /dev/null 2>&1
+            if helm upgrade --install cert-manager jetstack/cert-manager \
+                --namespace cert-manager \
+                --create-namespace \
+                --set crds.enabled=true \
+                --wait --timeout=300s > /dev/null 2>&1; then
+                echo -e "${green}✔${nc} cert-manager installed successfully"
+                return 0
+            else
+                echo -e "${red}error${nc}: failed to install cert-manager"
+                return 1
+            fi
+        else
+            echo -e "${yellow}warning${nc}: skipping cert-manager installation (required for ark-controller)"
+            return 0
+        fi
+    fi
 }
 
 # Helper function to check and optionally install optional tools

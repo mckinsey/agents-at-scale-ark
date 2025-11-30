@@ -73,6 +73,33 @@ jest.unstable_mockModule('inquirer', () => ({
   default: mockInquirer,
 }));
 
+const mockIsMarketplaceService = jest.fn() as jest.Mock;
+const mockExtractMarketplaceServiceName = jest.fn() as jest.Mock;
+const mockGetMarketplaceService = jest.fn() as jest.Mock;
+const mockGetAllMarketplaceServices = jest.fn() as jest.Mock;
+
+jest.unstable_mockModule('../../marketplaceServices.js', () => ({
+  isMarketplaceService: mockIsMarketplaceService,
+  extractMarketplaceServiceName: mockExtractMarketplaceServiceName,
+  getMarketplaceService: mockGetMarketplaceService,
+  getAllMarketplaceServices: mockGetAllMarketplaceServices,
+}));
+
+const mockWaitForServicesReady = jest.fn() as jest.Mock;
+jest.unstable_mockModule('../../lib/waitForReady.js', () => ({
+  waitForServicesReady: mockWaitForServicesReady,
+}));
+
+const mockOra = jest.fn(() => ({
+  start: jest.fn().mockReturnThis(),
+  succeed: jest.fn(),
+  fail: jest.fn(),
+  text: '',
+}));
+jest.unstable_mockModule('ora', () => ({
+  default: mockOra,
+}));
+
 const {createInstallCommand, installArk} = await import('./index.js');
 
 describe('install command', () => {
@@ -85,13 +112,32 @@ describe('install command', () => {
   } as any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     mockGetClusterInfo.mockResolvedValue({
       context: 'test-cluster',
       type: 'microk8s',
       namespace: 'default',
     });
     mockIsMicroK8sInstalled.mockResolvedValue(false);
+    mockExeca.mockResolvedValue({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+    } as any);
+    
+    // Default marketplace mocks
+    mockIsMarketplaceService.mockReturnValue(false);
+    mockExtractMarketplaceServiceName.mockReturnValue('');
+    mockGetMarketplaceService.mockReturnValue(undefined);
+    mockGetAllMarketplaceServices.mockReturnValue({});
+    
+    // Default waitForReady mock
+    (mockWaitForServicesReady as jest.Mock).mockReturnValue(Promise.resolve(true));
+    
+    // Restore mockExit
+    mockExit.mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as any);
   });
 
   it('creates command with correct structure', () => {
@@ -302,5 +348,85 @@ describe('install command', () => {
     
     expect(mockOutput.error).toHaveBeenCalledWith(expect.stringContaining('failed to install ark-api'));
     expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('should install marketplace service', async () => {
+    mockIsMarketplaceService.mockReturnValue(true);
+    mockExtractMarketplaceServiceName.mockReturnValue('test-service');
+    mockGetMarketplaceService.mockReturnValue({
+      name: 'test-service',
+      helmReleaseName: 'test-service',
+      chartPath: './charts/test-service',
+      namespace: 'ark-system',
+    });
+
+    const command = createInstallCommand(mockConfig);
+    await command.parseAsync(['node', 'test', 'marketplace/services/test-service']);
+
+    expect(mockExeca).toHaveBeenCalledWith(
+      'helm',
+      expect.arrayContaining(['upgrade', '--install', 'test-service']),
+      expect.anything()
+    );
+    expect(mockOutput.success).toHaveBeenCalledWith('test-service installed successfully');
+  });
+
+  it('should show error for invalid marketplace service', async () => {
+    mockIsMarketplaceService.mockReturnValue(true);
+    mockExtractMarketplaceServiceName.mockReturnValue('invalid-service');
+    mockGetMarketplaceService.mockReturnValue(undefined);
+    mockGetAllMarketplaceServices.mockReturnValue({});
+
+    const command = createInstallCommand(mockConfig);
+    await expect(command.parseAsync(['node', 'test', 'marketplace/services/invalid-service'])).rejects.toThrow('process.exit called');
+
+    expect(mockOutput.error).toHaveBeenCalledWith("marketplace service 'invalid-service' not found");
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('should install selected components interactively', async () => {
+    mockInquirer.prompt.mockResolvedValue({
+      components: ['cert-manager', 'ark-api'],
+    });
+    
+    // Mock dependencies
+    (mockArkDependencies as any)['cert-manager'] = {
+      name: 'cert-manager',
+      command: 'helm',
+      args: ['install', 'cert-manager'],
+    };
+    (mockArkDependencies as any)['cert-manager-repo'] = {
+      name: 'cert-manager-repo',
+      command: 'helm',
+      args: ['repo', 'add'],
+    };
+    (mockArkDependencies as any)['helm-repo-update'] = {
+      name: 'helm-repo-update',
+      command: 'helm',
+      args: ['repo', 'update'],
+    };
+
+    // Mock services
+    (mockArkServices as any)['ark-api'] = {
+      name: 'ark-api',
+      helmReleaseName: 'ark-api',
+      chartPath: './charts/ark-api',
+      category: 'core',
+      enabled: true,
+    };
+
+    const command = createInstallCommand(mockConfig);
+    await command.parseAsync(['node', 'test']);
+
+    // Should install dependencies
+    expect(mockExeca).toHaveBeenCalledWith('helm', ['repo', 'add'], expect.anything());
+    expect(mockExeca).toHaveBeenCalledWith('helm', ['install', 'cert-manager'], expect.anything());
+    
+    // Should install selected service
+    expect(mockExeca).toHaveBeenCalledWith(
+      'helm',
+      expect.arrayContaining(['upgrade', '--install', 'ark-api']),
+      expect.anything()
+    );
   });
 });
