@@ -1,9 +1,9 @@
 replicaCount: 1
 
 image:
-  repository: filesystem-mcp-server
+  repository: ghcr.io/mckinsey/agents-at-scale-ark/filesystem-mcp-server
+  # tag defaults to .Chart.AppVersion if not specified
   pullPolicy: IfNotPresent
-  tag: "latest"
 
 service:
   type: ClusterIP
