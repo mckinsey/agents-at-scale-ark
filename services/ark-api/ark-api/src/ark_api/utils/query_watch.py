@@ -8,6 +8,8 @@ from openai.types.chat.chat_completion import Choice
 from openai.types.completion_usage import CompletionUsage
 from kubernetes_asyncio import client, watch
 
+from ark_api.core.constants import GROUP
+
 logger = logging.getLogger(__name__)
 
 
@@ -101,7 +103,7 @@ async def watch_query_completion(ark_client, query_name: str, model: str, messag
     try:
         async for event in w.stream(
             custom_api.list_namespaced_custom_object,
-            group="ark.mckinsey.com",
+            group=GROUP,
             version="v1alpha1",
             namespace=namespace,
             plural="queries",
@@ -113,8 +115,6 @@ async def watch_query_completion(ark_client, query_name: str, model: str, messag
 
             status = query_obj.get("status", {})
             phase = status.get("phase", "pending")
-
-            logger.info(f"Query {query_name} watch event: {event_type}, phase: {phase}")
 
             if phase == "done":
                 responses = status.get("responses", [])
