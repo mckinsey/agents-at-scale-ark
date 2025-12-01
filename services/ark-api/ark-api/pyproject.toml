@@ -1,6 +1,6 @@
 [project]
 name = "ark-api"
-version = "0.1.45"
+version = "0.1.46"
 description = ""
 requires-python = ">=3.11"
 dependencies = [
@@ -31,7 +31,7 @@ dependencies = [
 package = true
 
 [tool.uv.sources]
-ark-sdk = { path = "out/ark_sdk-0.1.42-py3-none-any.whl" }
+ark-sdk = { path = "out/ark_sdk-0.1.46-py3-none-any.whl" }
 
 [tool.coverage.run]
 data_file = "coverage/.coverage"

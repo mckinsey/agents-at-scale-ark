@@ -13,19 +13,20 @@ import (
 
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arkann "mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/eventing"
 )
 
 // A2AExecutionEngine handles execution for agents with the reserved 'a2a' execution engine
 type A2AExecutionEngine struct {
-	client   client.Client
-	recorder EventEmitter
+	client           client.Client
+	eventingRecorder eventing.A2aRecorder
 }
 
 // NewA2AExecutionEngine creates a new A2A execution engine
-func NewA2AExecutionEngine(k8sClient client.Client, recorder EventEmitter) *A2AExecutionEngine {
+func NewA2AExecutionEngine(k8sClient client.Client, eventingRecorder eventing.A2aRecorder) *A2AExecutionEngine {
 	return &A2AExecutionEngine{
-		client:   k8sClient,
-		recorder: recorder,
+		client:           k8sClient,
+		eventingRecorder: eventingRecorder,
 	}
 }
 
@@ -33,15 +34,6 @@ func NewA2AExecutionEngine(k8sClient client.Client, recorder EventEmitter) *A2AE
 func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace string, agentAnnotations map[string]string, contextID string, userInput Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	log := logf.FromContext(ctx)
 	log.Info("executing A2A agent", "agent", agentName)
-
-	a2aTracker := NewOperationTracker(e.recorder, ctx, "A2ACall", agentName, map[string]string{
-		"a2aServer":  agentAnnotations[arkann.A2AServerName],
-		"serverAddr": agentAnnotations[arkann.A2AServerAddress],
-		"queryId":    getQueryID(ctx),
-		"sessionId":  getSessionID(ctx),
-		"protocol":   "a2a-jsonrpc",
-		"namespace":  namespace,
-	})
 
 	// Get the A2A server address from annotations
 	a2aAddress, hasAddress := agentAnnotations[arkann.A2AServerAddress]
@@ -54,6 +46,13 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 	if !hasServerName {
 		return nil, fmt.Errorf("A2A agent missing %s annotation", arkann.A2AServerName)
 	}
+
+	operationData := map[string]string{
+		"a2aServer":  a2aServerName,
+		"serverAddr": a2aAddress,
+		"protocol":   "a2a-jsonrpc",
+	}
+	ctx = e.eventingRecorder.Start(ctx, "A2AExecution", fmt.Sprintf("Executing A2A agent %s", agentName), operationData)
 
 	var a2aServer arkv1prealpha1.A2AServer
 	serverKey := client.ObjectKey{Name: a2aServerName, Namespace: namespace}
@@ -80,46 +79,15 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		content = userInput.OfUser.Content.OfString.Value
 	}
 
-	// Execute A2A agent with event recording
+	// Execute A2A agent
 	queryName := getQueryName(ctx)
-	a2aResponse, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, nil, &a2aServer)
+	a2aResponse, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, e.eventingRecorder, &a2aServer)
 	if err != nil {
-		a2aTracker.Fail(err)
-		e.recorder.EmitEvent(ctx, "Warning", "A2AExecutionFailed", BaseEvent{
-			Name: "A2AAgentExecutionFailed",
-			Metadata: map[string]string{
-				"agent":     agentName,
-				"namespace": namespace,
-				"error":     err.Error(),
-				"a2aServer": a2aServerName,
-				"address":   a2aAddress,
-			},
-		})
-
 		modelID := fmt.Sprintf("agent/%s", agentName)
 		StreamError(ctx, eventStream, err, "a2a_execution_failed", modelID)
-
+		e.eventingRecorder.Fail(ctx, "A2AExecution", fmt.Sprintf("A2A execution failed: %v", err), err, operationData)
 		return nil, err
 	}
-
-	// Emit success event
-	e.recorder.EmitEvent(ctx, "Normal", "A2AExecutionSuccess", BaseEvent{
-		Name: "A2AAgentExecutionCompleted",
-		Metadata: map[string]string{
-			"agent":          agentName,
-			"namespace":      namespace,
-			"responseLength": fmt.Sprintf("%d", len(a2aResponse.Content)),
-			"a2aServer":      a2aServerName,
-			"address":        a2aAddress,
-			"hasError":       "false",
-		},
-	})
-
-	a2aTracker.CompleteWithMetadata(a2aResponse.Content, map[string]string{
-		"responseLength": fmt.Sprintf("%d", len(a2aResponse.Content)),
-		"hasError":       "false",
-		"messageCount":   "1",
-	})
 
 	// Convert response to genai.Message format
 	responseMessage := NewAssistantMessage(a2aResponse.Content)
@@ -154,6 +122,8 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 			log.Error(err, "failed to send A2A response chunk to event stream")
 		}
 	}
+
+	e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)
 
 	return &ExecutionResult{
 		Messages:    []Message{responseMessage},

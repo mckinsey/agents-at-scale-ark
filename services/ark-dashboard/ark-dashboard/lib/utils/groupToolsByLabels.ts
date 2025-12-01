@@ -11,6 +11,9 @@ export const groupToolsByLabel = (tools: Tool[]) => {
     if (tool.type === 'agent') {
       groupName = 'Agent as tool';
       isMcp = false;
+    } else if (tool.type === 'team') {
+      groupName = 'Team as tool';
+      isMcp = false;
     } else if (tool.type === 'http') {
       groupName = 'Built in';
       isMcp = false;
