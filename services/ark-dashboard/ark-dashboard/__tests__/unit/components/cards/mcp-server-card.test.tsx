@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { McpServerCard } from '@/components/cards/mcp-server-card';
 import type { MCPServer } from '@/lib/services/mcp-servers';
@@ -11,8 +11,8 @@ vi.mock('@/lib/utils/icon-resolver', () => ({
 vi.mock('@/components/dialogs/confirmation-dialog', () => ({
   ConfirmationDialog: vi.fn(({ open, title, onConfirm, confirmText }) =>
     open ? (
-      <div data-testid="confirmation-dialog">
-        <div>{title}</div>
+      <div role="dialog" aria-labelledby="dialog-title" data-testid="confirmation-dialog">
+        <div id="dialog-title">{title}</div>
         <button onClick={onConfirm}>{confirmText}</button>
       </div>
     ) : null
@@ -152,24 +152,10 @@ describe('McpServerCard', () => {
     );
 
     await userEvent.click(screen.getByRole('button', { name: /delete/i }));
-
     expect(screen.getByTestId('confirmation-dialog')).toBeInTheDocument();
-    expect(screen.getByText('Delete MCP Server')).toBeInTheDocument();
-  });
-
-  it('should call onDelete with correct name when confirmed', async () => {
-    const onDelete = vi.fn();
-    render(
-      <McpServerCard
-        mcpServer={mockMcpServer}
-        namespace="default"
-        onDelete={onDelete}
-      />
-    );
-
-    await userEvent.click(screen.getByRole('button', { name: /delete/i }));
-    await userEvent.click(screen.getByText('Delete'));
-
+    
+    const deleteDialog = screen.getByRole('dialog', { name: /delete mcp server/i })
+    await userEvent.click(within(deleteDialog).getByRole('button', { name: /delete/i }))
     expect(onDelete).toHaveBeenCalledWith('test-server');
   });
 
