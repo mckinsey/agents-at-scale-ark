@@ -25,6 +25,8 @@ from datetime import datetime
 from enum import IntEnum
 from typing import Any
 
+from google.protobuf.json_format import MessageToDict
+from google.protobuf.message import Message
 from pydantic import field_validator
 from sqlalchemy import JSON
 from sqlmodel import Column, Field, SQLModel
@@ -164,8 +166,6 @@ class Event(SQLModel, table=True):
             }
 
             try:
-                from google.protobuf.json_format import MessageToDict
-
                 protobuf_message = cls._parse_protobuf_message(event_bytes)
                 event_dict = MessageToDict(
                     protobuf_message,
@@ -195,18 +195,13 @@ class Event(SQLModel, table=True):
 
     @staticmethod
     def _parse_protobuf_message(event_bytes: Protobuf) -> Any:
-        """Try to parse using protobuf library if available."""
-        try:
-            from google.protobuf.message import Message
+        """Parse protobuf message using protobuf library."""
+        class DynamicEvent(Message):
+            pass
 
-            class DynamicEvent(Message):
-                pass
-
-            event = DynamicEvent()
-            event.ParseFromString(event_bytes)
-            return event
-        except Exception:
-            raise ValueError("Cannot parse protobuf message")
+        event = DynamicEvent()
+        event.ParseFromString(event_bytes)
+        return event
 
     @staticmethod
     def _parse_simple_protobuf(event_bytes: Protobuf) -> dict[str, Any]:
