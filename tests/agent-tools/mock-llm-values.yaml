@@ -53,3 +53,16 @@ config:
               "finish_reason": "stop"
             }]
           }
+
+    # Fallback for model probes (matches health check "Hello" message)
+    - path: "/v1/chat/completions"
+      match: "body.messages[0].content == 'Hello'"
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-probe",
+            "object": "chat.completion",
+            "model": "gpt-4",
+            "choices": [{"message": {"role": "assistant", "content": "OK"}, "finish_reason": "stop"}]
+          }
