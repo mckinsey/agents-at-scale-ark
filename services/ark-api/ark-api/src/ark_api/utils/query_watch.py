@@ -91,9 +91,8 @@ def _get_error_detail(status: dict) -> dict:
     }
 
 
-async def watch_query_completion(ark_client, query_name: str, model: str, messages: list) -> ChatCompletion:
+async def watch_query_completion(ark_client, query_name: str, model: str, messages: list, timeout_seconds: int) -> ChatCompletion:
     """Watch for query completion using Kubernetes watch API and return chat completion response."""
-    timeout_seconds = 300
     namespace = ark_client.namespace
 
     api_client = client.ApiClient()
