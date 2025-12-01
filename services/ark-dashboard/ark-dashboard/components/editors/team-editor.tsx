@@ -163,21 +163,19 @@ export function TeamEditor({
             );
             let edges: GraphEdge[] = [];
             missingMembers.forEach(member => {
-              /*if (member.type === 'agent') {
-                agents = agents.filter(a => member.name === a.name);
-              }*/
-              if (team.graph && team.graph.edges.length > 0) {
+
+              /*if (team.graph && team.graph.edges.length > 0) {
                 const found = team.graph.edges.filter(
                   e => e.from === member.name || e.to === member.name,
                 );
                 edges = [...edges, ...found];
-              }
+              }*/
             });
-            if (team.graph && edges.length > 0) {
+            /*if (team.graph && edges.length > 0) {
               team.graph.edges = team.graph.edges.filter(
                 e => !edges.includes(e),
               );
-            }
+            }*/
           } else {
             setAvailableMembers(team.members);
           }
@@ -204,9 +202,12 @@ export function TeamEditor({
       setSelectedMembers(availableMembers);
       setStrategy(team.strategy || 'round-robin');
       setMaxTurns(team.maxTurns ? String(team.maxTurns) : '');
-      setSelectorAgent(team.selector?.agent ?? '');
       setSelectorPrompt(team.selector?.selectorPrompt ?? '');
-      setGraphEdges(team.graph?.edges || []);
+      if(!open)
+        // only if the TeamEditor is not open to avoid
+        // overwritten while you are updating values on editor
+        setSelectorAgent(team.selector?.agent ?? '');
+        setGraphEdges(team.graph?.edges || []);
     } else {
       setName('');
       setDescription('');
@@ -328,12 +329,39 @@ export function TeamEditor({
     );
     setAvailableMembers(prev => prev.filter(m => m.name !== member.name));
     setSelectedMembers(prev => prev.filter(m => m.name !== member.name));
+    if(strategy === 'selector' && selectorAgent === member.name){
+      setSelectorAgent('')
+    }
+    if((strategy === 'graph' || strategy === 'selector') && 
+      graphEdges.length >0)
+    {
+        setGraphEdges(prev => prev.map(e => {
+          let newEdge: GraphEdge;
+          if(e.from === member.name){
+            newEdge = { 
+              "from": "",
+              "to": e.to
+            };
+          }else if (e.to === member.name) {
+            newEdge = { 
+              "from": e.from,
+              "to": ""
+            };
+          }else{
+            newEdge = e;
+          }
+          return newEdge;
+        }));
+    }
   };
 
   const isGraphValid =
     strategy !== 'graph' ||
     (graphEdges.length > 0 &&
-      graphEdges.every(edge => edge.to) &&
+      graphEdges.every(edge => edge.to && 
+        !unavailableMembers.some(m => 
+          (m.name === edge.from || m.name === edge.to))
+      ) &&
       maxTurns.trim() !== '');
   // Graph edges are optional for selector strategy, but if provided must be valid
   const isGraphEdgesValid =
@@ -341,7 +369,9 @@ export function TeamEditor({
     graphEdges.length === 0 ||
     graphEdges.every(edge => edge.to);
   const isSelectorValid =
-    strategy !== 'selector' || (selectorAgent && selectorAgent !== '__none__');
+    strategy !== 'selector' || (selectorAgent && 
+      selectorAgent !== '__none__' &&
+      !unavailableMembers.some(m => m.name === selectorAgent));
   const isValid =
     name.trim() &&
     selectedMembers.length > 0 &&
@@ -486,7 +516,10 @@ export function TeamEditor({
               <div className="grid gap-2">
                 <Label htmlFor="selector-agent">Selector Agent</Label>
                 <Select value={selectorAgent} onValueChange={setSelectorAgent}>
-                  <SelectTrigger id="selector-agent">
+                  <SelectTrigger id="selector-agent" className={cn('', 
+                    unavailableMembers.some(m => m.name == selectorAgent) &&
+                    'border-red-500'
+                  )}>
                     <SelectValue placeholder="Select an agent" />
                   </SelectTrigger>
                   <SelectContent>
@@ -495,6 +528,11 @@ export function TeamEditor({
                         None (Unset)
                       </span>
                     </SelectItem>
+                    {unavailableMembers.some(m => m.name == selectorAgent) &&
+                      <SelectItem key={selectorAgent} value={selectorAgent}>
+                        {selectorAgent}
+                      </SelectItem>
+                    }
                     {agents.map(agent => (
                       <SelectItem key={agent.name} value={agent.name}>
                         {agent.name}
@@ -534,54 +572,80 @@ export function TeamEditor({
                     connections.
                   </p>
                 ) : (
-                  graphEdges.map((edge, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <Select
-                        value={edge.from || ''}
-                        onValueChange={value =>
-                          updateGraphEdge(index, 'from', value)
-                        }>
-                        <SelectTrigger className="flex-1">
-                          <SelectValue placeholder="From (optional)" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {selectedMembers
-                            .filter(m => m.type === 'agent')
-                            .map(member => (
-                              <SelectItem key={member.name} value={member.name}>
-                                {member.name}
+                  graphEdges.map((edge, index) => {
+                    const isFromUnavailable = unavailableMembers.some(
+                      member => member.name === edge.from
+                    )
+                    const isToUnavailable = unavailableMembers.some(
+                      member => member.name === edge.to
+                    )
+                    return (
+                      <div key={index} className="flex items-center gap-2">
+                        <Select
+                          value={edge.from || ''}
+                          onValueChange={value =>
+                            updateGraphEdge(index, 'from', value)
+                          }>
+                          <SelectTrigger
+                          className={cn("flex-1", 
+                            isFromUnavailable && 'border-red-500')}>
+                            <SelectValue placeholder="From (optional)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            { isFromUnavailable &&
+                              <SelectItem key={edge.from} value={edge.from}>
+                                {edge.from} (Unavailable)
                               </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                      <span className="text-muted-foreground">→</span>
-                      <Select
-                        value={edge.to}
-                        onValueChange={value =>
-                          updateGraphEdge(index, 'to', value)
-                        }>
-                        <SelectTrigger className="flex-1">
-                          <SelectValue placeholder="To (required)" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {selectedMembers
-                            .filter(m => m.type === 'agent')
-                            .map(member => (
-                              <SelectItem key={member.name} value={member.name}>
-                                {member.name}
+                            }
+                            {selectedMembers
+                              .filter(m => m.type === 'agent')
+                              .map(member => (
+                                <SelectItem key={member.name} value={member.name}>
+                                  {member.name}
+                                </SelectItem>
+                              ))}
+                             
+                          </SelectContent>
+                        </Select>
+                        <span className="text-muted-foreground">→</span>
+                        <Select
+                          value={edge.to}
+                          onValueChange={value =>
+                            updateGraphEdge(index, 'to', value)
+                          }
+                          >
+                          <SelectTrigger 
+                            className={cn("flex-1", 
+                              isToUnavailable && 'border-red-500'
+                            )}>
+                            <SelectValue placeholder="To (required)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            { isToUnavailable &&
+                              <SelectItem key={edge.to} value={edge.to}>
+                                {edge.to} (Unavailable)
                               </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeGraphEdge(index)}>
-                        Remove
-                      </Button>
-                    </div>
-                  ))
+                            }
+                            {selectedMembers
+                              .filter(m => m.type === 'agent')
+                              .map(member => (
+                                <SelectItem key={member.name} value={member.name}>
+                                  {member.name}
+                                </SelectItem>
+                              ))
+                            }
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeGraphEdge(index)}>
+                          Remove
+                        </Button>
+                      </div>
+                    )
+                  })
                 )}
               </div>
               <p className="text-muted-foreground text-xs">
