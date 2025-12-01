@@ -93,6 +93,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Upgrade pip to safe version
+        run: |
+          python3 -m pip install --upgrade "pip==25.3"
+      
       - name: Run JFrog Xray scan
         id: xray-scan
         uses: ./.github/actions/jfrog-xray-scan
