@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Ark Event Manager - event collection and streaming system"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.122.0",
+    "fastapi>=0.123.0",
     "uvicorn>=0.38.0",
     "httpx>=0.28.1",
     "protobuf>=6.33.1",
