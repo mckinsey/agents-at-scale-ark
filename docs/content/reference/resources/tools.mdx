@@ -207,13 +207,36 @@ spec:
     name: research-agent
 ```
 
+### Team as Tools
+
+Teams can be declared and exposed as tools, which means they can be called by agents in the system. This lets an agent delegate complex multi-agent workflows to a team, enabling sophisticated orchestration patterns where agents can leverage entire teams as reusable tools.
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: research-team-tool
+spec:
+  type: team
+  description: Multi-agent team that researches a topic and provides analysis
+  inputSchema:
+    type: object
+    properties:
+      input:
+        type: string
+        description: "The topic to research"
+    required: ["input"]
+  team:
+    name: research-team
+```
+
 ## Agent Tool Reference Types
 
 Agents reference tools using the `tools` field in their spec. Tools can be referenced by name and type.
 
 ### Custom Tools
 
-Reference custom Tool resources (HTTP, MCP, Agent, or Builtin tools) by name:
+Reference custom Tool resources (HTTP, MCP, Agent, Team, or Builtin tools) by name:
 
 ```yaml
 tools:
@@ -223,6 +246,8 @@ tools:
     name: mcp-filesystem-read-file   # MCP tool
   - type: custom
     name: call-research-agent        # Agent tool
+  - type: custom
+    name: research-team-tool         # Team tool
 ```
 
 ### Built-in Tools

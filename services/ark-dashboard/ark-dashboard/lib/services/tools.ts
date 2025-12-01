@@ -61,6 +61,7 @@ export const toolsService = {
     annotations?: Record<string, string>;
     url?: string;
     agent?: string;
+    team?: string;
     namespace?: string;
   }): Promise<void> {
     const {
@@ -71,6 +72,7 @@ export const toolsService = {
       annotations,
       url,
       agent,
+      team,
       namespace,
     } = tool;
     let parsedInputSchema: Record<string, unknown> | undefined = undefined;
@@ -89,6 +91,7 @@ export const toolsService = {
       ...(parsedInputSchema ? { inputSchema: parsedInputSchema } : {}),
       ...(type === 'http' && url ? { http: { url } } : {}),
       ...(type === 'agent' && agent ? { agent: { name: agent } } : {}),
+      ...(type === 'team' && team ? { team: { name: team } } : {}),
     };
     const payload = {
       name,

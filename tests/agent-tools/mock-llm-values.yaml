@@ -1,0 +1,55 @@
+terminationGracePeriodSeconds: 3
+ark:
+  model:
+    enabled: true
+    name: test-model
+    type: openai
+    model: gpt-4
+    apiKey: mock-api-key
+
+config:
+  rules:
+    # First request: trigger weather-tool call
+    - path: "/v1/chat/completions"
+      sequence: 0
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-{{timestamp}}",
+            "object": "chat.completion",
+            "model": "{{jmes request body.model}}",
+            "choices": [{
+              "message": {
+                "role": "assistant",
+                "tool_calls": [{
+                  "id": "call_weather",
+                  "type": "function",
+                  "function": {
+                    "name": "weather-tool",
+                    "arguments": "{\"latitude\": 40.7128, \"longitude\": -74.006, \"current_weather\": true}"
+                  }
+                }]
+              },
+              "finish_reason": "tool_calls"
+            }]
+          }
+
+    # Second request: return final answer after tool result
+    - path: "/v1/chat/completions"
+      sequence: 1
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-{{timestamp}}",
+            "object": "chat.completion",
+            "model": "{{jmes request body.model}}",
+            "choices": [{
+              "message": {
+                "role": "assistant",
+                "content": "The current weather in New York City is 68°F (20°C) with partly cloudy skies and winds from the west at 12 mph."
+              },
+              "finish_reason": "stop"
+            }]
+          }
