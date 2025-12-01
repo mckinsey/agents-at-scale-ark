@@ -79,10 +79,12 @@ func (v *ToolCustomValidator) validateTool(_ context.Context, tool *arkv1alpha1.
 		return v.validateMCPTool(tool.Spec.MCP)
 	case genai.ToolTypeAgent:
 		return v.validateAgentTool(tool.Spec.Agent.Name)
+	case genai.ToolTypeTeam:
+		return v.validateTeamTool(tool.Spec.Team.Name)
 	case genai.ToolTypeBuiltin:
 		return v.validateBuiltinTool(tool.Name)
 	default:
-		return warnings, fmt.Errorf("unsupported tool type '%s': supported types are: http, mcp, agent, builtin", tool.Spec.Type)
+		return warnings, fmt.Errorf("unsupported tool type '%s': supported types are: http, mcp, agent, team, builtin", tool.Spec.Type)
 	}
 }
 
@@ -139,6 +141,16 @@ func (v *ToolCustomValidator) validateAgentTool(agent string) (admission.Warning
 	var warnings admission.Warnings
 	if agent == "" {
 		return warnings, fmt.Errorf("agent field is required for agent type")
+	}
+
+	return warnings, nil
+}
+
+// validateTeamTool validates Team-specific configuration
+func (v *ToolCustomValidator) validateTeamTool(team string) (admission.Warnings, error) {
+	var warnings admission.Warnings
+	if team == "" {
+		return warnings, fmt.Errorf("team field is required for team type")
 	}
 
 	return warnings, nil
