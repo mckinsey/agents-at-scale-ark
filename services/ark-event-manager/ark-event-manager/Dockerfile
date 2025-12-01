@@ -2,13 +2,14 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies and pin pip to safe version (avoid XRAY-97724)
 RUN adduser --system --uid 1001 --home /home/ark ark && \
   apt-get update && \
   apt-get --no-install-recommends install -y \
   curl \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* \
+  && python -m pip install --upgrade "pip<25.0.1" \
   && mkdir -p /home/ark \
   && chown -R ark:nogroup /home/ark
 

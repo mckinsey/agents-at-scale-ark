@@ -45,7 +45,7 @@ dev:
       [
         "sh",
         "-c",
-        "cd /app/ark-event-manager && apt-get update && apt-get install -y curl && pip install uv && uv sync && uv run python -m ark_event_manager",
+        "cd /app/ark-event-manager && apt-get update && apt-get install -y curl && python -m pip install --upgrade 'pip<25.0.1' && pip install uv && uv sync && uv run python -m ark_event_manager",
       ]
     namespace: default
     # Stream logs instead of terminal
