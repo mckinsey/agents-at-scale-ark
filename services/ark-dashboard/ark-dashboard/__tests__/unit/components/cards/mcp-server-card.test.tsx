@@ -154,8 +154,8 @@ describe('McpServerCard', () => {
     await userEvent.click(screen.getByRole('button', { name: /delete/i }));
     expect(screen.getByTestId('confirmation-dialog')).toBeInTheDocument();
     
-    const deleteDialog = screen.getByRole('dialog', { name: /delete mcp server/i })
-    await userEvent.click(within(deleteDialog).getByRole('button', { name: /delete/i }))
+    const deleteDialog = screen.getByRole('dialog', { name: /delete mcp server/i });
+    await userEvent.click(within(deleteDialog).getByRole('button', { name: /delete/i }));
     expect(onDelete).toHaveBeenCalledWith('test-server');
   });
 
