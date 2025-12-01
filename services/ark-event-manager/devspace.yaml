@@ -1,0 +1,65 @@
+# DevSpace configuration for ark-event-manager service
+version: v2beta1
+
+images:
+  ark-event-manager:
+    image: ark-event-manager
+    dockerfile: ./ark-event-manager/Dockerfile
+    context: .
+
+pipelines:
+  deploy: |-
+    build_images --all
+    create_deployments --all
+  dev: |-
+    create_deployments --all
+    start_dev --all
+
+deployments:
+  ark-event-manager:
+    namespace: default
+    helm:
+      chart:
+        path: ./chart
+      values:
+        app:
+          image:
+            repository: ${runtime.images.ark-event-manager.image}
+            tag: ${runtime.images.ark-event-manager.tag}
+          # Override resources for local development
+          resources:
+            limits:
+              memory: "1024Mi"
+              cpu: "1000m"
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+        httpRoute:
+          enabled: true
+
+dev:
+  ark-event-manager:
+    imageSelector: ark-event-manager
+    devImage: python:3.12-slim
+    command:
+      [
+        "sh",
+        "-c",
+        "cd /app/ark-event-manager && apt-get update && apt-get install -y curl && pip install uv && uv sync && uv run python -m ark_event_manager",
+      ]
+    namespace: default
+    # Stream logs instead of terminal
+    logs:
+      lastLines: 50
+    # File synchronization for hot reload
+    sync:
+      - path: ./ark-event-manager:/app/ark-event-manager
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+        onUpload:
+          restartContainer: true
+    # Enable SSH for IDE integration
+    ssh:
+      enabled: true
+

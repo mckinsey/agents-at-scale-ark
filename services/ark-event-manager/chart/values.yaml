@@ -1,0 +1,76 @@
+# ARK Event Manager chart values
+
+# Global annotations added to all resources
+global:
+  annotations:
+    ark.mckinsey.com/service: ark-event-manager
+
+# Application configuration
+app:
+  name: ark-event-manager
+  image:
+    repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-event-manager
+    # tag defaults to .Chart.AppVersion if not specified
+    pullPolicy: IfNotPresent
+  
+  # Resource configuration
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  
+  # Environment variables
+  env:
+    - name: USE_DATABASE
+      value: "true"
+    - name: DATABASE_URL
+      value: "sqlite+aiosqlite:///./data/aer.db"
+    # Optional: Add additional environment variables here
+    # - name: EVENT_RETENTION_DAYS
+    #   value: "30"
+
+# Service configuration
+service:
+  name: ark-event-manager
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+# Ingress configuration (legacy routing method)
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: ark-event-manager.example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+# HTTPRoute configuration (Gateway API - modern routing method)
+httpRoute:
+  enabled: false
+  annotations: {}
+  parentRefs:
+    - name: localhost-gateway
+      namespace: ark-system
+  hostnames:
+    - "ark-event-manager.127.0.0.1.nip.io"
+    - "ark-event-manager.default.127.0.0.1.nip.io"
+
+# Service account configuration
+serviceAccount:
+  name: ark-event-manager-sa
+  create: true
+
+# Persistence configuration for SQLite database
+persistence:
+  enabled: true
+  size: 1Gi
+  storageClassName: ""
+  accessMode: ReadWriteOnce
+

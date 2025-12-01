@@ -30,6 +30,97 @@ uvicorn ark_event_manager.main:app --host 0.0.0.0 --port 8080 --reload
 
 The service will start on `http://localhost:8080`
 
+## Development with DevSpace
+
+[DevSpace](https://devspace.sh/) provides a streamlined development experience in Kubernetes.
+
+### Prerequisites
+
+- Kubernetes cluster (local or remote)
+- DevSpace CLI installed
+- kubectl configured to access your cluster
+
+### Setup
+
+```bash
+cd services/ark-event-manager
+devspace dev
+```
+
+This will:
+- Build the Docker image
+- Deploy the service to your cluster
+- Start a development container with hot reload
+- Sync local files to the container
+
+### Accessing the Service
+
+The service will be available at:
+- `http://ark-event-manager.127.0.0.1.nip.io` (if HTTPRoute is enabled)
+- Or via port-forward: `kubectl port-forward -n default svc/ark-event-manager 8080:80`
+
+## Docker
+
+### Building the Image
+
+```bash
+cd services/ark-event-manager
+docker build -f ark-event-manager/Dockerfile -t ark-event-manager:latest .
+```
+
+### Running with Docker
+
+```bash
+docker run -p 8080:8080 \
+  -e USE_DATABASE=true \
+  -e DATABASE_URL=sqlite+aiosqlite:///./data/aer.db \
+  -v $(pwd)/data:/app/data \
+  ark-event-manager:latest
+```
+
+## Helm Deployment
+
+### Prerequisites
+
+- Kubernetes cluster
+- Helm 3.x installed
+- kubectl configured
+
+### Installation
+
+```bash
+cd services/ark-event-manager
+helm install ark-event-manager ./chart \
+  --namespace default \
+  --create-namespace \
+  --set app.image.repository=ghcr.io/mckinsey/agents-at-scale-ark/ark-event-manager \
+  --set app.image.tag=latest
+```
+
+### Configuration
+
+Edit `chart/values.yaml` or override values:
+
+```bash
+helm install ark-event-manager ./chart \
+  --set app.env[0].value="true" \
+  --set persistence.enabled=true \
+  --set persistence.size=2Gi
+```
+
+### Upgrading
+
+```bash
+helm upgrade ark-event-manager ./chart \
+  --set app.image.tag=v0.2.0
+```
+
+### Uninstalling
+
+```bash
+helm uninstall ark-event-manager
+```
+
 ### Testing Locally
 
 Run the test script:

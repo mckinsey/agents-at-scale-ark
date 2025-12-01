@@ -1,0 +1,7 @@
+apiVersion: v2
+name: ark-event-manager
+description: Ark Event Manager - event collection and streaming system
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
