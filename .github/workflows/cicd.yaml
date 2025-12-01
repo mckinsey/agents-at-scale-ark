@@ -199,6 +199,9 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v6
 
+      - name: Upgrade pip to safe version
+        run: python3 -m pip install --upgrade "pip==25.3"
+
       - name: Install ruff
         uses: astral-sh/ruff-action@v3
         with:
