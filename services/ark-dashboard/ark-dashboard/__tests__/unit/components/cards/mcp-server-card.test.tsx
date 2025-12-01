@@ -20,18 +20,30 @@ vi.mock('@/components/dialogs/confirmation-dialog', () => ({
 }));
 
 vi.mock('@/components/ui/availability-status-badge', () => ({
-  AvailabilityStatusBadge: vi.fn(({ status, eventsLink }) => (
-    <a href={eventsLink} data-testid="availability-badge">
-      Status: {status}
-    </a>
-  )),
+  AvailabilityStatusBadge: vi.fn(({ status, eventsLink }) => {
+    const content = (
+      <span data-testid="availability-badge-content">
+        Status: {status}
+      </span>
+    );
+    
+    if (eventsLink) {
+      return (
+        <a href={eventsLink} data-testid="availability-badge">
+          {content}
+        </a>
+      );
+    }
+    
+    return <div data-testid="availability-badge">{content}</div>;
+  }),
 }));
 
 vi.mock('@/components/editors/mcp-editor', () => ({
   McpEditor: vi.fn(() => <div data-testid="mcp-editor" />),
 }));
 
-vi.mock('../base-card', () => ({
+vi.mock('@/components/cards/base-card', () => ({
   BaseCard: vi.fn(({ title, actions, footer }) => (
     <div data-testid="base-card">
       <div>{title}</div>
