@@ -9,7 +9,7 @@ RUN adduser --system --uid 1001 --home /home/ark ark && \
   curl \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* \
-  && python -m pip install --upgrade "pip<25.0.1" \
+  && python -m pip install --upgrade "pip==25.3" \
   && mkdir -p /home/ark \
   && chown -R ark:nogroup /home/ark
 
