@@ -54,7 +54,7 @@ $(ARK_EVENT_MANAGER_STAMP_DEPS): $(ARK_EVENT_MANAGER_SERVICE_SOURCE_DIR)/pyproje
 $(ARK_EVENT_MANAGER_SERVICE_NAME)-test: $(ARK_EVENT_MANAGER_STAMP_TEST) # HELP: Run ARK Event Manager tests
 $(ARK_EVENT_MANAGER_STAMP_TEST): $(ARK_EVENT_MANAGER_STAMP_DEPS)
 	cd $(ARK_EVENT_MANAGER_SERVICE_SOURCE_DIR) && \
-	uv run python generate_proto.py && \
+	uv run python tests/generate_proto.py && \
 	uv run pytest tests/ -v --tb=short -m "unit"
 	@touch $@
 
