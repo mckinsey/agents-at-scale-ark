@@ -124,18 +124,21 @@ jobs:
           echo "Comparing with last scan file: ./last-main-scan.json"
 
           echo "New violations since last scan:"
-          jq -r '.[].violations[]?.issue_id' "./last-main-scan.json" > old.txt
-          jq -r '.[].violations[]?.issue_id' "$SCAN_JSON" > new.txt
+          jq -r '.[].violations[]?.issue_id | unique ' "./last-main-scan.json" > old.txt
+          jq -r '.[].violations[]?.issue_id | unique ' "$SCAN_JSON" > new.txt
 
           NEW_VIOLATIONS=$(comm -13 <(sort old.txt) <(sort new.txt))
+          REMOVED_VIOLATIONS=$(comm -13 <(sort new.txt) <(sort old.txt))
 
           if [ -n "$NEW_VIOLATIONS" ]; then
             echo "New violations found:"
             echo "$NEW_VIOLATIONS"
             exit 1
+          elif [ -n "$REMOVED_VIOLATIONS" ]; then
+            echo "The following violations were eliminated: $REMOVED_VIOLATIONS."
           else
             echo "No new violations found."
-          fi
+          fi  
 
   # Build and test Ark itself.
   build-and-test-ark:
@@ -291,7 +294,6 @@ jobs:
           platforms: linux/amd64
           push: true
           prebuild: ${{ matrix.prebuild }}
-
 
   build-libs:
     runs-on: ubuntu-24.04
