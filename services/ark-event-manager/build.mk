@@ -55,10 +55,11 @@ $(ARK_EVENT_MANAGER_SERVICE_NAME)-test: $(ARK_EVENT_MANAGER_STAMP_TEST) # HELP: 
 $(ARK_EVENT_MANAGER_STAMP_TEST): $(ARK_EVENT_MANAGER_STAMP_DEPS)
 	@mkdir -p $(dir $@)
 	@echo "🧪 Running tests for $(ARK_EVENT_MANAGER_SERVICE_NAME)..."
-	@cd $(ARK_EVENT_MANAGER_SERVICE_SOURCE_DIR) && \
-	(uv run python -c "from tests.generate_proto import generate_proto; generate_proto()" && \
-	uv run pytest tests/ -v --tb=short -m "unit") || \
-	(echo "❌ $(ARK_EVENT_MANAGER_SERVICE_NAME) tests failed with exit code $$?" && exit 1)
+	@set -e; \
+	cd $(ARK_EVENT_MANAGER_SERVICE_SOURCE_DIR) && \
+	uv run python -c "from tests.generate_proto import generate_proto; generate_proto()" && \
+	uv run pytest tests/ -v --tb=short -m "unit" || \
+	(echo "❌ $(ARK_EVENT_MANAGER_SERVICE_NAME) tests failed" >&2 && exit 1)
 	@echo "✅ $(ARK_EVENT_MANAGER_SERVICE_NAME) tests passed"
 	@touch $@
 
