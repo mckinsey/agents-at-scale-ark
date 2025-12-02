@@ -19,6 +19,7 @@ import {createDocsCommand} from './commands/docs/index.js';
 import {createEvaluationCommand} from './commands/evaluation/index.js';
 import {createExportCommand} from './commands/export/index.js';
 import {createGenerateCommand} from './commands/generate/index.js';
+import {createImportCommand} from './commands/import/index.js';
 import {createInstallCommand} from './commands/install/index.js';
 import {createMarketplaceCommand} from './commands/marketplace/index.js';
 import {createMemoryCommand} from './commands/memory/index.js';
@@ -62,6 +63,7 @@ async function main() {
   program.addCommand(createEvaluationCommand(config));
   program.addCommand(createExportCommand(config));
   program.addCommand(createGenerateCommand(config));
+  program.addCommand(createImportCommand(config));
   program.addCommand(createInstallCommand(config));
   program.addCommand(createMarketplaceCommand(config));
   program.addCommand(createMemoryCommand(config));
