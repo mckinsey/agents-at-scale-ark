@@ -4,14 +4,52 @@ ark:
     enabled: true
     name: test-model
     type: openai
-    model: gpt-4.1-mini
+    model: gpt-4
     apiKey: mock-api-key
 
 config:
   rules:
-    # Single catch-all rule that returns SUMMARY for all requests
-    # This handles health probes, all agent calls, and any other requests
+    # Sequence 0: researcher agent
     - path: "/v1/chat/completions"
+      sequence: 0
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-{{timestamp}}",
+            "object": "chat.completion",
+            "model": "{{jmes request body.model}}",
+            "choices": [{
+              "message": {
+                "role": "assistant",
+                "content": "RESEARCH: Key facts about AI in business."
+              },
+              "finish_reason": "stop"
+            }]
+          }
+
+    # Sequence 1: analyst agent
+    - path: "/v1/chat/completions"
+      sequence: 1
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-{{timestamp}}",
+            "object": "chat.completion",
+            "model": "{{jmes request body.model}}",
+            "choices": [{
+              "message": {
+                "role": "assistant",
+                "content": "ANALYSIS: AI transformation patterns."
+              },
+              "finish_reason": "stop"
+            }]
+          }
+
+    # Sequence 2: summarizer agent
+    - path: "/v1/chat/completions"
+      sequence: 2
       response:
         status: 200
         content: |
@@ -26,4 +64,17 @@ config:
               },
               "finish_reason": "stop"
             }]
+          }
+
+    # Fallback for model probes - MUST BE LAST (last match wins, no sequence = no counter increment)
+    - path: "/v1/chat/completions"
+      match: "body.messages[0].content == 'Hello'"
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-probe",
+            "object": "chat.completion",
+            "model": "gpt-4",
+            "choices": [{"message": {"role": "assistant", "content": "OK"}, "finish_reason": "stop"}]
           }
