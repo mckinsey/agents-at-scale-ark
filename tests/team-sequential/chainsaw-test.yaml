@@ -55,6 +55,7 @@ spec:
           metadata:
             name: sequential-team-query
           status:
+            (length(responses)): 1
             (contains(responses[0].content, 'SUMMARY:')): true
     catch:
     - events: {}
