@@ -4,6 +4,10 @@ metadata:
   name: team-sequential
 spec:
   description: Test sequential team execution with researcher, analyst, and summarizer
+  timeouts:
+    apply: 30s
+    assert: 60s
+    exec: 120s
   steps:
   - name: step-1
     try:

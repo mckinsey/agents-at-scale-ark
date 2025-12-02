@@ -9,60 +9,9 @@ ark:
 
 config:
   rules:
-    # Fallback for model probes (matches health check "Hello" message) - MUST BE FIRST
+    # Single catch-all rule that returns SUMMARY for all requests
+    # This handles health probes, all agent calls, and any other requests
     - path: "/v1/chat/completions"
-      match: "body.messages[0].content == 'Hello'"
-      response:
-        status: 200
-        content: |
-          {
-            "id": "mock-probe",
-            "object": "chat.completion",
-            "model": "gpt-4.1-mini",
-            "choices": [{"message": {"role": "assistant", "content": "OK"}, "finish_reason": "stop"}]
-          }
-
-    # Sequence 0: researcher agent
-    - path: "/v1/chat/completions"
-      sequence: 0
-      response:
-        status: 200
-        content: |
-          {
-            "id": "mock-{{timestamp}}",
-            "object": "chat.completion",
-            "model": "{{jmes request body.model}}",
-            "choices": [{
-              "message": {
-                "role": "assistant",
-                "content": "RESEARCH: Key facts about AI in business."
-              },
-              "finish_reason": "stop"
-            }]
-          }
-
-    # Sequence 1: analyst agent
-    - path: "/v1/chat/completions"
-      sequence: 1
-      response:
-        status: 200
-        content: |
-          {
-            "id": "mock-{{timestamp}}",
-            "object": "chat.completion",
-            "model": "{{jmes request body.model}}",
-            "choices": [{
-              "message": {
-                "role": "assistant",
-                "content": "ANALYSIS: AI transformation patterns."
-              },
-              "finish_reason": "stop"
-            }]
-          }
-
-    # Sequence 2: summarizer agent
-    - path: "/v1/chat/completions"
-      sequence: 2
       response:
         status: 200
         content: |
