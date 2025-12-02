@@ -82,15 +82,15 @@ runs:
                 end
               )
             }
-        ' "$SCAN_JSON" | jq -s 'group_by(.issue_id)[] |
+        ' "$SCAN_JSON" | jq -r -s 'group_by(.issue_id)[] | 
           [
             (.[0].issue_id),
             ( map(.component_ids[]) | unique | join(",")),
             ( map(.severity) | unique | join(",")),
             ( map(.cves[]) | unique | join(",")),
             ( map(.references[]) | unique | join(","))
-          ] | @tsv 
-        ' | sort -u -t$'\t' -k1,1 )
+          ] | @tsv
+        ' )
         
         echo "| ID | Affected Component | Criticality | CVEs | Links |" > summary-table.md
         echo "|----|-------------------|-------------|------|-------|" >> summary-table.md
