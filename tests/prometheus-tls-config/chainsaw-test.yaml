@@ -63,9 +63,9 @@ spec:
                 name: metrics-server-cert
                 namespace: ark-system
               data:
-                ca.crt: ~
-                tls.crt: ~
-                tls.key: ~
+                (length("ca.crt") > `0`): true
+                (length("tls.crt") > `0`): true
+                (length("tls.key") > `0`): true
 
 
 
