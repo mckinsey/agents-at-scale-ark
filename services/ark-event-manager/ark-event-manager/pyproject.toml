@@ -21,6 +21,7 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "black>=24.0.0",
     "ruff>=0.6.0",
+    "grpcio-tools>=1.70.0",  # Includes protoc compiler
 ]
 
 [tool.uv]
