@@ -38,6 +38,46 @@ spec:
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: researcher
+          status:
+            conditions:
+            - type: Available
+              status: "True"
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: analyst
+          status:
+            conditions:
+            - type: Available
+              status: "True"
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: summarizer
+          status:
+            conditions:
+            - type: Available
+              status: "True"
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Team
+          metadata:
+            name: sequential-research-team
+          status:
+            conditions:
+            - type: Available
+              status: "True"
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
           metadata:
             name: sequential-team-query
