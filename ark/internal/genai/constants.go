@@ -31,6 +31,7 @@ const (
 	ToolTypeHTTP    = "http"
 	ToolTypeMCP     = "mcp"
 	ToolTypeAgent   = "agent"
+	ToolTypeTeam    = "team"
 	ToolTypeBuiltin = "builtin"
 )
 

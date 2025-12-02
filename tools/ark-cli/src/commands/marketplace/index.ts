@@ -28,6 +28,7 @@ ${chalk.cyan('Examples:')}
 ${chalk.cyan('Available Services:')}
   • phoenix  - AI/ML observability and evaluation platform
   • langfuse - Open-source LLM observability and analytics
+  • noah     - Runtime administration agent with cluster privileges
 `
     );
 

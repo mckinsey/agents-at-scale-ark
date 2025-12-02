@@ -1,12 +1,14 @@
 """Query polling utilities for waiting on query completion."""
 
-import asyncio
 import logging
 import time
 from fastapi import HTTPException
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 from openai.types.completion_usage import CompletionUsage
+from kubernetes_asyncio import client, watch
+
+from ark_api.core.constants import GROUP
 
 logger = logging.getLogger(__name__)
 
@@ -89,33 +91,46 @@ def _get_error_detail(status: dict) -> dict:
     }
 
 
-async def poll_query_completion(ark_client, query_name: str, model: str, messages: list) -> ChatCompletion:
-    """Poll for query completion and return chat completion response."""
-    max_attempts = 60  # 5 minutes with 5 second intervals
+async def watch_query_completion(ark_client, query_name: str, model: str, messages: list, timeout_seconds: int) -> ChatCompletion:
+    """Watch for query completion using Kubernetes watch API and return chat completion response."""
+    namespace = ark_client.namespace
 
-    for attempt in range(max_attempts):
-        query = await ark_client.queries.a_get(query_name)
-        query_dict = query.to_dict()
-        status = query_dict.get("status", {})
-        phase = status.get("phase", "pending")
+    api_client = client.ApiClient()
+    custom_api = client.CustomObjectsApi(api_client)
+    w = watch.Watch()
 
-        logger.info(f"Query {query_name} status: {phase} (attempt {attempt + 1}/{max_attempts})")
+    try:
+        async for event in w.stream(
+            custom_api.list_namespaced_custom_object,
+            group=GROUP,
+            version="v1alpha1",
+            namespace=namespace,
+            plural="queries",
+            field_selector=f"metadata.name={query_name}",
+            timeout_seconds=timeout_seconds
+        ):
+            event_type = event['type']
+            query_obj = event['object']
 
-        if phase == "done":
-            responses = status.get("responses", [])
-            if not responses:
-                raise HTTPException(status_code=500, detail="No response received")
+            status = query_obj.get("status", {})
+            phase = status.get("phase", "pending")
 
-            content = responses[0].get("content", "")
-            return _create_chat_completion_response(query_name, model, content, messages, status)
+            if phase == "done":
+                responses = status.get("responses", [])
+                if not responses:
+                    w.stop()
+                    raise HTTPException(status_code=500, detail="No response received")
 
-        elif phase == "error":
-            error_detail = _get_error_detail(status)
-            raise HTTPException(status_code=500, detail=error_detail)
+                content = responses[0].get("content", "")
+                w.stop()
+                return _create_chat_completion_response(query_name, model, content, messages, status)
 
-        # Sleep before next attempt (but not after last attempt)
-        if attempt < max_attempts - 1:
-            await asyncio.sleep(5)
+            elif phase == "error":
+                error_detail = _get_error_detail(status)
+                w.stop()
+                raise HTTPException(status_code=500, detail=error_detail)
 
-    # If we get here, we timed out waiting for completion
-    raise HTTPException(status_code=504, detail=f"Query {query_name} timed out after 5 minutes")
+        raise HTTPException(status_code=504, detail=f"Query {query_name} timed out after {timeout_seconds} seconds")
+
+    finally:
+        await api_client.close()

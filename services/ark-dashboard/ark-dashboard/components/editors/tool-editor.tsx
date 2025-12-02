@@ -26,6 +26,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 import { AgentFields } from '../common/agent-fields';
 import { HttpFields } from '../common/http-field';
+import { TeamFields } from '../common/team-fields';
 
 interface ToolSpec {
   name: string;
@@ -35,6 +36,7 @@ interface ToolSpec {
   annotations?: Record<string, string>;
   url?: string;
   agent?: string;
+  team?: string;
 }
 
 interface ToolEditorProps {
@@ -56,6 +58,7 @@ export function ToolEditor({
     { value: 'http', label: 'HTTP' },
     { value: 'mcp', label: 'MCP' },
     { value: 'agent', label: 'Agent' },
+    { value: 'team', label: 'Team' },
   ];
   const [description, setDescription] = useState('');
   const [inputSchema, setInputSchema] = useState('');
@@ -66,13 +69,15 @@ export function ToolEditor({
   // Additional fields state
   const [httpUrl, setHttpUrl] = useState('');
   const [selectedAgent, setSelectedAgent] = useState('');
+  const [selectedTeam, setSelectedTeam] = useState('');
 
   const isValid =
     name.trim() &&
     type.trim() &&
     description.trim().length > 0 &&
     inputSchema.trim().length > 0 &&
-    (type !== 'agent' || selectedAgent.trim());
+    (type !== 'agent' || selectedAgent.trim()) &&
+    (type !== 'team' || selectedTeam.trim());
 
   const handleSave = () => {
     let parsedInputSchema: Record<string, unknown> | undefined;
@@ -103,6 +108,7 @@ export function ToolEditor({
       annotations: parsedAnnotations,
       ...(type === 'http' ? { url: httpUrl.trim() } : {}),
       ...(type === 'agent' ? { agent: selectedAgent.trim() } : {}),
+      ...(type === 'team' ? { team: selectedTeam.trim() } : {}),
     };
 
     onOpenChange(false);
@@ -113,6 +119,7 @@ export function ToolEditor({
     setAnnotations('');
     setHttpUrl('');
     setSelectedAgent('');
+    setSelectedTeam('');
     setIsInputSchemaExpanded(false);
     setIsAnnotationsExpanded(false);
     onSave(toolSpec);
@@ -270,6 +277,14 @@ export function ToolEditor({
             <AgentFields
               selectedAgent={selectedAgent}
               setSelectedAgent={setSelectedAgent}
+              namespace={namespace}
+              open={open}
+            />
+          )}
+          {type === 'team' && (
+            <TeamFields
+              selectedTeam={selectedTeam}
+              setSelectedTeam={setSelectedTeam}
               namespace={namespace}
               open={open}
             />
