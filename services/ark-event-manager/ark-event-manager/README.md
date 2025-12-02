@@ -127,9 +127,16 @@ helm uninstall ark-event-manager
 
 The service includes pytest integration tests that test the full event processing pipeline:
 
+**Quick start (recommended):**
+```bash
+# Run integration tests (generates proto code automatically)
+./run_integration_tests.sh
+```
+
+**Manual options:**
 ```bash
 # Generate proto code first (for integration tests)
-uv run python tests/generate_proto.py
+uv run python -c "from tests import generate_proto; generate_proto.generate_proto()"
 
 # Run all tests
 uv run pytest tests/ -v
