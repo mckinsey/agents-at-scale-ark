@@ -53,9 +53,10 @@ $(ARK_EVENT_MANAGER_STAMP_DEPS): $(ARK_EVENT_MANAGER_SERVICE_SOURCE_DIR)/pyproje
 # Test target
 $(ARK_EVENT_MANAGER_SERVICE_NAME)-test: $(ARK_EVENT_MANAGER_STAMP_TEST) # HELP: Run ARK Event Manager tests
 $(ARK_EVENT_MANAGER_STAMP_TEST): $(ARK_EVENT_MANAGER_STAMP_DEPS)
-	cd $(ARK_EVENT_MANAGER_SERVICE_SOURCE_DIR) && \
+	@mkdir -p $(dir $@)
+	@cd $(ARK_EVENT_MANAGER_SERVICE_SOURCE_DIR) && \
 	uv run python -c "from tests.generate_proto import generate_proto; generate_proto()" && \
-	uv run pytest tests/ -v --tb=short -m "unit"
+	uv run pytest tests/ -v --tb=short -m "unit" || (echo "❌ ark-event-manager tests failed" && exit 1)
 	@touch $@
 
 # Build target
