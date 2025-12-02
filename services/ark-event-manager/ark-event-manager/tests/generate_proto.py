@@ -9,8 +9,24 @@ def generate_proto():
     # From tests/generate_proto.py, go up to service root, then to repo root
     # Path: services/ark-event-manager/ark-event-manager/tests/generate_proto.py
     # Need: repo_root/ark/internal/eventing/proto/event.proto
-    service_dir = Path(__file__).parent.parent  # services/ark-event-manager/ark-event-manager/
-    repo_root = service_dir.parent.parent.parent  # repo root (go up: service_dir -> services/ark-event-manager -> services -> repo root)
+    script_path = Path(__file__).resolve()
+    service_dir = script_path.parent.parent  # services/ark-event-manager/ark-event-manager/
+    
+    # Find repo root by looking for 'ark' directory at the root level
+    current = service_dir
+    repo_root = None
+    while current != current.parent:
+        ark_dir = current / "ark"
+        if ark_dir.exists() and (ark_dir / "internal" / "eventing" / "proto" / "event.proto").exists():
+            repo_root = current
+            break
+        current = current.parent
+    
+    if repo_root is None:
+        raise FileNotFoundError(
+            f"Could not find repo root. Searched from {service_dir} up to {current}"
+        )
+    
     proto_file = repo_root / "ark" / "internal" / "eventing" / "proto" / "event.proto"
     output_dir = service_dir / "generated"
     
