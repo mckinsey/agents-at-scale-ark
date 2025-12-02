@@ -165,3 +165,8 @@ vibe_artifacts/
 
 # Personal configuration files
 ~/.claude/
+
+# SQLite database files
+*.db
+*.sqlite
+*.sqlite3
