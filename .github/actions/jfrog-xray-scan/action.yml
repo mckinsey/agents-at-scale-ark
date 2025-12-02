@@ -89,8 +89,8 @@ runs:
             ( map(.severity) | unique | join(",")),
             ( map(.cves[]) | unique | join(",")),
             ( map(.references[]) | unique | join(","))
-          ] | @tsv
-        ' )
+          ] | @tsv 
+        ' | sort -u -t$'\t' -k1,1 )
         
         echo "| ID | Affected Component | Criticality | CVEs | Links |" > summary-table.md
         echo "|----|-------------------|-------------|------|-------|" >> summary-table.md
