@@ -97,5 +97,25 @@ spec:
     - events: {}
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+        name: researcher
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+        name: analyst
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+        name: summarizer
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Team
+        name: sequential-research-team
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: sequential-team-query
