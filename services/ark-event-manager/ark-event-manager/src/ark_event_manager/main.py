@@ -38,12 +38,15 @@ async def lifespan(app: FastAPI):
 
     if USE_DATABASE:
         await init_db()
-        logger.info("Database initialized (SQLite backend)")
+        logger.info("💾 Database initialized (SQLite backend)")
+    else:
+        logger.info("ℹ️  Using in-memory storage (database disabled)")
 
     # Initialize API dependencies
     set_consumer(consumer)
     set_storage(storage)
     set_stream_storage(stream_storage)
+    logger.info("🔌 API dependencies initialized")
 
     # Start event processor
     processor = EventProcessor(
@@ -52,7 +55,12 @@ async def lifespan(app: FastAPI):
         event_storage=event_storage,
     )
     processor_task = asyncio.create_task(processor.run())
-    logger.info("Ark Event Manager started")
+    logger.info("🚀 Ark Event Manager started and ready to receive events")
+    logger.info("📡 API endpoints available:")
+    logger.info("   - POST /events (protobuf)")
+    logger.info("   - GET /messages?session_id=<id>")
+    logger.info("   - POST /messages")
+    logger.info("   - GET /health")
 
     yield
 

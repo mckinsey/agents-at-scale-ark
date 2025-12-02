@@ -1,11 +1,14 @@
 """HTTP implementation of event transport interfaces (Phase 1)."""
 
 import asyncio
+import logging
 from typing import Optional
 import httpx
 
 from ark_event_manager.transport.interfaces import EventConsumer, EventPublisher
 from ark_event_manager.core.types import Protobuf
+
+logger = logging.getLogger(__name__)
 
 
 class HTTPEventPublisher(EventPublisher):
@@ -74,7 +77,12 @@ class HTTPEventConsumer(EventConsumer):
             event: Protobuf Event object serialized as binary (Protobuf type)
             correlation_id: Correlation ID from HTTP header
         """
+        queue_size = self.queue.qsize()
         await self.queue.put((event, correlation_id))
+        logger.debug(
+            f"📬 Event enqueued | correlation_id={correlation_id} | "
+            f"queue_size={queue_size + 1}"
+        )
 
     async def consume_batch(
         self, max_events: int = 100, timeout: float = 1.0

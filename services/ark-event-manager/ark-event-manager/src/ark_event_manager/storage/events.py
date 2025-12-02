@@ -30,6 +30,12 @@ class EventStorage(EventStorageInterface):
             event: Event model instance
         """
         try:
+            logger.debug(
+                f"💾 Persisting event to database | "
+                f"event_id={event.event_id[:8]}... | "
+                f"type={event.type} | "
+                f"subtype={event.subtype}"
+            )
             async with AsyncSessionLocal() as db_session:
                 # Create a new Event instance for DB (id=None, created_at will be auto-set)
                 # Convert enums to strings for database storage
@@ -49,8 +55,15 @@ class EventStorage(EventStorageInterface):
                 )
                 db_session.add(db_event)
                 await db_session.commit()
-                logger.debug(f"Persisted event: {db_event.event_id}")
+                logger.info(
+                    f"✅ Event persisted to database | "
+                    f"event_id={db_event.event_id[:8]}... | "
+                    f"db_id={db_event.id}"
+                )
         except Exception as e:
-            logger.error(f"Failed to persist event: {e}", exc_info=True)
+            logger.error(
+                f"❌ Failed to persist event | event_id={event.event_id[:8]}... | error={e}",
+                exc_info=True,
+            )
             raise
 

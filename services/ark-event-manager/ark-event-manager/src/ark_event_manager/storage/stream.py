@@ -109,16 +109,20 @@ class StreamStorage(StreamInterface):
         """
         self._cleanup_old_streams()
         queue = self._get_or_create_stream(query_id)
+        
+        is_new_stream = query_id not in self.streams or len(self.stream_cache.get(query_id, [])) == 0
+        if is_new_stream:
+            logger.info(f"📡 Creating new stream | query_id={query_id}")
 
         if isinstance(chunks, list):
+            logger.info(f"📡 Writing {len(chunks)} chunk(s) to stream | query_id={query_id}")
             for chunk in chunks:
                 await queue.put(chunk)
                 self.stream_cache[query_id].append(chunk)
         else:
+            logger.info(f"📡 Writing chunk to stream | query_id={query_id}")
             await queue.put(chunks)
             self.stream_cache[query_id].append(chunks)
-
-        logger.debug(f"Wrote chunk(s) to stream {query_id}")
 
     async def complete_stream(self, query_id: str) -> None:
         """
@@ -131,7 +135,9 @@ class StreamStorage(StreamInterface):
             await self.streams[query_id].put(_COMPLETION_MARKER)
             if query_id in self.stream_metadata:
                 self.stream_metadata[query_id]["completed"] = True
-        logger.debug(f"Completed stream {query_id}")
+            logger.info(f"✅ Stream completed | query_id={query_id}")
+        else:
+            logger.warning(f"⚠️  Attempted to complete non-existent stream | query_id={query_id}")
 
 
 
