@@ -38,6 +38,46 @@ class MemoryStorage(MemoryInterface):
         logger.debug(f"Retrieved {len(messages)} messages for session {session_id}")
         return messages
 
+    async def get_all_messages(
+        self, session_id: str | None = None, query_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """
+        Get all messages with optional filtering.
+
+        Args:
+            session_id: Optional session ID filter
+            query_id: Optional query ID filter
+
+        Returns:
+            List of message records with timestamp, session_id, query_id, message fields
+        """
+        all_messages = []
+        for sess_id, msgs in self.messages.items():
+            if session_id and sess_id != session_id:
+                continue
+            for msg in msgs:
+                # In-memory storage doesn't track query_id per message, so we include all
+                # This is a limitation of the in-memory implementation
+                all_messages.append({
+                    "timestamp": msg.get("timestamp"),
+                    "session_id": sess_id,
+                    "query_id": query_id,  # Note: in-memory doesn't track this per message
+                    "message": msg,
+                })
+        logger.debug(f"Retrieved {len(all_messages)} messages (session_id={session_id}, query_id={query_id})")
+        return all_messages
+
+    async def get_sessions(self) -> list[str]:
+        """
+        Get all session IDs.
+
+        Returns:
+            List of session IDs
+        """
+        sessions = list(self.messages.keys())
+        logger.debug(f"Retrieved {len(sessions)} sessions")
+        return sessions
+
     async def add_messages(
         self, session_id: str, query_id: str | None, messages: list[dict[str, Any]]
     ) -> None:

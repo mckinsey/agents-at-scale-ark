@@ -3,7 +3,7 @@
 from fastapi import APIRouter
 
 from .events import receive_event
-from .memory import add_messages, get_messages
+from .memory import add_messages, get_messages, get_sessions
 from .stream import complete_stream, read_stream, write_stream
 
 router = APIRouter()
@@ -24,8 +24,8 @@ router.add_api_route(
     get_messages,
     methods=["GET"],
     tags=["memory"],
-    summary="Get messages for a session",
-    description="Get messages for a session (implements MemoryInterface.GetMessages).",
+    summary="Get messages with optional filtering",
+    description="Get messages for a session or all messages (implements MemoryInterface.GetMessages).",
 )
 router.add_api_route(
     "/messages",
@@ -34,6 +34,14 @@ router.add_api_route(
     tags=["memory"],
     summary="Add messages to a session",
     description="Add messages to a session (implements MemoryInterface.AddMessages).",
+)
+router.add_api_route(
+    "/sessions",
+    get_sessions,
+    methods=["GET"],
+    tags=["memory"],
+    summary="Get all session IDs",
+    description="Get all session IDs (implements MemoryInterface.GetSessions).",
 )
 
 # Stream endpoints

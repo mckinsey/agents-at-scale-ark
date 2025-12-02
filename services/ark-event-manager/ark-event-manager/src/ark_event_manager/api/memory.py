@@ -14,25 +14,55 @@ def set_storage(s: MemoryStorage) -> None:
     storage = s
 
 
-async def get_messages(session_id: str = Query(..., alias="session_id")) -> dict:
+async def get_messages(
+    session_id: str | None = Query(None, alias="session_id"),
+    query_id: str | None = Query(None, alias="query_id"),
+) -> dict:
     """
-    Get messages for a session (implements MemoryInterface.GetMessages).
+    Get messages with optional filtering (implements MemoryInterface.GetMessages).
 
     Args:
-        session_id: Session ID to retrieve messages for
+        session_id: Optional session ID to filter by
+        query_id: Optional query ID to filter by
 
     Returns:
-        JSON array of message records
+        JSON object with messages array (format matches ark-cluster-memory)
     """
     if storage is None:
         raise HTTPException(status_code=503, detail="Storage not initialized")
 
     try:
-        messages = await storage.get_messages(session_id)
-        return {"messages": messages}
+        if session_id:
+            # If session_id is provided, use the simple get_messages (for backward compatibility)
+            messages = await storage.get_messages(session_id)
+            # Format as array of message objects (not wrapped in timestamp/session_id)
+            return {"messages": messages}
+        else:
+            # If no session_id, get all messages with filtering
+            all_messages = await storage.get_all_messages(session_id=session_id, query_id=query_id)
+            return {"messages": all_messages}
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to retrieve messages: {str(e)}"
+        ) from e
+
+
+async def get_sessions() -> dict:
+    """
+    Get all session IDs (implements MemoryInterface.GetSessions).
+
+    Returns:
+        JSON object with sessions array
+    """
+    if storage is None:
+        raise HTTPException(status_code=503, detail="Storage not initialized")
+
+    try:
+        sessions = await storage.get_sessions()
+        return {"sessions": sessions}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to retrieve sessions: {str(e)}"
         ) from e
 
 

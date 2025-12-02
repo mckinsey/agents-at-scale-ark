@@ -23,6 +23,32 @@ class MemoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def get_all_messages(
+        self, session_id: str | None = None, query_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """
+        Get all messages with optional filtering.
+
+        Args:
+            session_id: Optional session ID filter
+            query_id: Optional query ID filter
+
+        Returns:
+            List of message records with timestamp, session_id, query_id, message fields
+        """
+        pass
+
+    @abstractmethod
+    async def get_sessions(self) -> list[str]:
+        """
+        Get all session IDs.
+
+        Returns:
+            List of session IDs
+        """
+        pass
+
+    @abstractmethod
     async def add_messages(
         self, session_id: str, query_id: str | None, messages: list[dict[str, Any]]
     ) -> None:
