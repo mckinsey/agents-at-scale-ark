@@ -6,9 +6,11 @@ from pathlib import Path
 
 def generate_proto():
     """Generate Python code from event.proto."""
-    repo_root = Path(__file__).parent.parent.parent.parent
+    # From tests/generate_proto.py, go up to service root, then to repo root
+    service_dir = Path(__file__).parent.parent
+    repo_root = service_dir.parent.parent
     proto_file = repo_root / "ark" / "internal" / "eventing" / "proto" / "event.proto"
-    output_dir = Path(__file__).parent.parent / "generated"
+    output_dir = service_dir / "generated"
     
     if not proto_file.exists():
         raise FileNotFoundError(f"Proto file not found: {proto_file}")
