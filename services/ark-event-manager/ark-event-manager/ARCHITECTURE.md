@@ -55,6 +55,8 @@
 
 ## Data Flow
 
+### Current Implementation (HTTP Transport)
+
 ```mermaid
 graph TB
     subgraph "Event Sources"
@@ -66,6 +68,7 @@ graph TB
 
     subgraph "Ark Event Manager"
         API[POST /events<br/>API Endpoint]
+        Consumer[HTTPEventConsumer<br/>Internal Queue]
         Processor[EventProcessor<br/>Deserialize & Route]
         EventStorage[EventStorage<br/>Persist Events]
         MemoryStorage[MemoryStorage<br/>Store Messages]
@@ -85,7 +88,8 @@ graph TB
     K8s -->|Protobuf Events| API
     Argo -->|Protobuf Events| API
 
-    API --> Processor
+    API -->|enqueue| Consumer
+    Consumer -->|consume_batch| Processor
     Processor --> EventStorage
     EventStorage --> EventsTable
 
@@ -97,6 +101,7 @@ graph TB
     style K8s fill:#e1f5ff
     style Argo fill:#e1f5ff
     style API fill:#fff4e1
+    style Consumer fill:#fff4e1
     style Processor fill:#fff4e1
     style EventStorage fill:#e8f5e9
     style MemoryStorage fill:#e8f5e9
@@ -104,6 +109,68 @@ graph TB
     style MessagesTable fill:#f3e5f5
     style MessageAPI fill:#fff4e1
 ```
+
+### Future: Kafka Transport
+
+With Kafka, the entry point would be **Kafka topics**, not POST `/events`:
+
+```mermaid
+graph TB
+    subgraph "Event Sources"
+        Controllers[Ark Controllers]
+        Watchers[Event Watchers]
+        K8s[Kubernetes Events]
+        Argo[Argo Workflows]
+    end
+
+    subgraph "Transport Layer"
+        Kafka[Kafka Topics<br/>ark-events]
+    end
+
+    subgraph "Ark Event Manager"
+        Consumer[KafkaEventConsumer<br/>Subscribe to Topics]
+        Processor[EventProcessor<br/>Deserialize & Route]
+        EventStorage[EventStorage<br/>Persist Events]
+        MemoryStorage[MemoryStorage<br/>Store Messages]
+    end
+
+    subgraph "Storage"
+        EventsTable[(events table<br/>SQLite/PostgreSQL)]
+        MessagesTable[(messages table<br/>SQLite/PostgreSQL)]
+    end
+
+    subgraph "Message API"
+        MessageAPI[POST /messages<br/>MemoryInterface]
+    end
+
+    Controllers -->|Protobuf Events| Kafka
+    Watchers -->|Protobuf Events| Kafka
+    K8s -->|Protobuf Events| Kafka
+    Argo -->|Protobuf Events| Kafka
+
+    Kafka -->|consume_batch| Consumer
+    Consumer --> Processor
+    Processor --> EventStorage
+    EventStorage --> EventsTable
+
+    MessageAPI --> MemoryStorage
+    MemoryStorage --> MessagesTable
+
+    style Controllers fill:#e1f5ff
+    style Watchers fill:#e1f5ff
+    style K8s fill:#e1f5ff
+    style Argo fill:#e1f5ff
+    style Kafka fill:#ffe1f5
+    style Consumer fill:#fff4e1
+    style Processor fill:#fff4e1
+    style EventStorage fill:#e8f5e9
+    style MemoryStorage fill:#e8f5e9
+    style EventsTable fill:#f3e5f5
+    style MessagesTable fill:#f3e5f5
+    style MessageAPI fill:#fff4e1
+```
+
+**Note**: POST `/events` could optionally remain as a bridge endpoint that publishes to Kafka, but it would not be the primary entry point.
 
 ## Component Architecture
 
