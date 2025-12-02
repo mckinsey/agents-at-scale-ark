@@ -69,13 +69,13 @@ describe('export command', () => {
     for (const resourceType of expectedResourceTypes) {
       expect(mockExeca).toHaveBeenCalledWith(
         'kubectl',
-        expect.arrayContaining(['get', resourceType, '-o', 'json']),
+        expect.arrayContaining(['get', resourceType, '-o', 'yaml']),
         expect.any(Object)
       );
     }
   });
 
-  it('should filter by resource types when specified', async () => {
+  it('should filter by resource types when specified and export in order', async () => {
     mockExeca.mockResolvedValue({
       stdout: JSON.stringify({items: []}),
     });
@@ -92,17 +92,10 @@ describe('export command', () => {
       'test.yaml',
     ]);
 
-    expect(mockExeca).toHaveBeenCalledTimes(2);
-    expect(mockExeca).toHaveBeenCalledWith(
-      'kubectl',
-      expect.arrayContaining(['get', 'agents']),
-      expect.any(Object)
-    );
-    expect(mockExeca).toHaveBeenCalledWith(
-      'kubectl',
-      expect.arrayContaining(['get', 'models']),
-      expect.any(Object)
-    );
+    expect(mockExeca.mock.calls).toEqual([
+      ['kubectl', expect.arrayContaining(['get', 'models']), expect.any(Object)],
+      ['kubectl', expect.arrayContaining(['get', 'agents']), expect.any(Object)],
+    ]);
   });
 
   it('should use namespace filter when specified', async () => {
