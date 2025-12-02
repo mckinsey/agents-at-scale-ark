@@ -55,53 +55,144 @@
 
 ## Data Flow
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Event Sources                        │
-│  (Controllers, Watchers, K8s, Argo)                    │
-└───────────────────┬─────────────────────────────────────┘
-                    │ Protobuf Events
-                    ▼
-            ┌───────────────┐
-            │ POST /events  │
-            └───────┬───────┘
-                    │
-                    ▼
-        ┌───────────────────────┐
-        │   EventProcessor      │
-        │  (Deserialize & Route)│
-        └───────┬───────────────┘
-                │
-                ▼
-        ┌───────────────┐
-        │  Events       │
-        │  Storage       │
-        │                │
-        │ (All events)   │
-        └───────┬───────┘
-                │
-                ▼
-        ┌───────────────┐
-        │  events       │
-        │  table        │
-        └───────────────┘
+```mermaid
+graph TB
+    subgraph "Event Sources"
+        Controllers[Ark Controllers]
+        Watchers[Event Watchers]
+        K8s[Kubernetes Events]
+        Argo[Argo Workflows]
+    end
 
-┌─────────────────────────────────────────────────────────┐
-│              Direct Message API                         │
-│  POST /messages (MemoryInterface)                      │
-└───────────────────┬─────────────────────────────────────┘
-                    │
-                    ▼
-            ┌───────────────┐
-            │  Messages     │
-            │  Storage      │
-            └───────┬───────┘
-                    │
-                    ▼
-            ┌───────────────┐
-            │  messages     │
-            │  table        │
-            └───────────────┘
+    subgraph "Ark Event Manager"
+        API[POST /events<br/>API Endpoint]
+        Processor[EventProcessor<br/>Deserialize & Route]
+        EventStorage[EventStorage<br/>Persist Events]
+        MemoryStorage[MemoryStorage<br/>Store Messages]
+    end
+
+    subgraph "Storage"
+        EventsTable[(events table<br/>SQLite/PostgreSQL)]
+        MessagesTable[(messages table<br/>SQLite/PostgreSQL)]
+    end
+
+    subgraph "Message API"
+        MessageAPI[POST /messages<br/>MemoryInterface]
+    end
+
+    Controllers -->|Protobuf Events| API
+    Watchers -->|Protobuf Events| API
+    K8s -->|Protobuf Events| API
+    Argo -->|Protobuf Events| API
+
+    API --> Processor
+    Processor --> EventStorage
+    EventStorage --> EventsTable
+
+    MessageAPI --> MemoryStorage
+    MemoryStorage --> MessagesTable
+
+    style Controllers fill:#e1f5ff
+    style Watchers fill:#e1f5ff
+    style K8s fill:#e1f5ff
+    style Argo fill:#e1f5ff
+    style API fill:#fff4e1
+    style Processor fill:#fff4e1
+    style EventStorage fill:#e8f5e9
+    style MemoryStorage fill:#e8f5e9
+    style EventsTable fill:#f3e5f5
+    style MessagesTable fill:#f3e5f5
+    style MessageAPI fill:#fff4e1
+```
+
+## Component Architecture
+
+```mermaid
+graph LR
+    subgraph "Transport Layer"
+        HTTP[HTTP Transport<br/>EventPublisher/Consumer]
+    end
+
+    subgraph "API Layer"
+        EventsAPI[Events API<br/>/events]
+        MemoryAPI[Memory API<br/>/messages]
+        StreamAPI[Stream API<br/>/stream]
+    end
+
+    subgraph "Core Processing"
+        Processor[EventProcessor<br/>Deserialize & Route]
+        Models[Event/Message Models<br/>SQLModel + Protobuf]
+    end
+
+    subgraph "Storage Interfaces"
+        EventStorageI[EventStorageInterface]
+        MemoryI[MemoryInterface]
+        StreamI[StreamInterface]
+    end
+
+    subgraph "Storage Implementations"
+        DatabaseStorage[DatabaseStorage<br/>SQLite/PostgreSQL]
+        MemoryStorage[MemoryStorage<br/>In-Memory]
+        StreamStorage[StreamStorage<br/>Query Events]
+    end
+
+    HTTP --> EventsAPI
+    EventsAPI --> Processor
+    MemoryAPI --> MemoryI
+    StreamAPI --> StreamI
+
+    Processor --> Models
+    Processor --> EventStorageI
+    Processor --> StreamI
+
+    EventStorageI --> DatabaseStorage
+    MemoryI --> MemoryStorage
+    StreamI --> StreamStorage
+
+    style HTTP fill:#e1f5ff
+    style EventsAPI fill:#fff4e1
+    style MemoryAPI fill:#fff4e1
+    style StreamAPI fill:#fff4e1
+    style Processor fill:#e8f5e9
+    style Models fill:#e8f5e9
+    style EventStorageI fill:#f3e5f5
+    style MemoryI fill:#f3e5f5
+    style StreamI fill:#f3e5f5
+    style DatabaseStorage fill:#ffe0b2
+    style MemoryStorage fill:#ffe0b2
+    style StreamStorage fill:#ffe0b2
+```
+
+## Integration Test Flow
+
+```mermaid
+sequenceDiagram
+    participant Test as Integration Test
+    participant Fixture as Test Fixture
+    participant Service as Event Manager
+    participant Publisher as Mock Publisher
+    participant Storage as Event Storage
+
+    Test->>Fixture: Start service_process fixture
+    Fixture->>Service: Start service (if not running)
+    Service-->>Fixture: Health check ready
+    Fixture-->>Test: Service URL
+
+    Test->>Publisher: Create MockEventPublisher
+    Test->>Publisher: Create test event
+    Publisher->>Publisher: Convert to protobuf
+    Publisher->>Service: POST /events (protobuf)
+    Service->>Service: EventProcessor.deserialize
+    Service->>Storage: persist_event()
+    Storage-->>Service: Event stored
+    Service-->>Publisher: 202 Accepted
+    Publisher-->>Test: Response
+
+    Test->>Service: Verify event processing
+    Service-->>Test: Events processed
+
+    Test->>Fixture: Test complete
+    Fixture->>Service: Stop service (if started)
 ```
 
 ## Sessions and Correlation IDs
