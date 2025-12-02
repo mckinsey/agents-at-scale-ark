@@ -9,7 +9,7 @@ ark:
 
 config:
   rules:
-    # Sequence 0: researcher agent
+    # All sequences return SUMMARY to handle any health probe consumption
     - path: "/v1/chat/completions"
       sequence: 0
       response:
@@ -22,13 +22,12 @@ config:
             "choices": [{
               "message": {
                 "role": "assistant",
-                "content": "RESEARCH: Key facts about AI in business."
+                "content": "SUMMARY: AI is reshaping business with 77% adoption."
               },
               "finish_reason": "stop"
             }]
           }
 
-    # Sequence 1: analyst agent
     - path: "/v1/chat/completions"
       sequence: 1
       response:
@@ -41,13 +40,12 @@ config:
             "choices": [{
               "message": {
                 "role": "assistant",
-                "content": "ANALYSIS: AI transformation patterns."
+                "content": "SUMMARY: AI is reshaping business with 77% adoption."
               },
               "finish_reason": "stop"
             }]
           }
 
-    # Sequence 2: summarizer agent
     - path: "/v1/chat/completions"
       sequence: 2
       response:
@@ -66,9 +64,63 @@ config:
             }]
           }
 
-    # Fallback for model probes - MUST BE LAST (last match wins, no sequence = no counter increment)
     - path: "/v1/chat/completions"
-      match: "body.messages[0].content == 'Hello'"
+      sequence: 3
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-{{timestamp}}",
+            "object": "chat.completion",
+            "model": "{{jmes request body.model}}",
+            "choices": [{
+              "message": {
+                "role": "assistant",
+                "content": "SUMMARY: AI is reshaping business with 77% adoption."
+              },
+              "finish_reason": "stop"
+            }]
+          }
+
+    - path: "/v1/chat/completions"
+      sequence: 4
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-{{timestamp}}",
+            "object": "chat.completion",
+            "model": "{{jmes request body.model}}",
+            "choices": [{
+              "message": {
+                "role": "assistant",
+                "content": "SUMMARY: AI is reshaping business with 77% adoption."
+              },
+              "finish_reason": "stop"
+            }]
+          }
+
+    - path: "/v1/chat/completions"
+      sequence: 5
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-{{timestamp}}",
+            "object": "chat.completion",
+            "model": "{{jmes request body.model}}",
+            "choices": [{
+              "message": {
+                "role": "assistant",
+                "content": "SUMMARY: AI is reshaping business with 77% adoption."
+              },
+              "finish_reason": "stop"
+            }]
+          }
+
+    # Fallback for model probes - MUST BE LAST
+    - path: "/v1/chat/completions"
+      match: "contains(body.messages[0].content, 'Hello')"
       response:
         status: 200
         content: |

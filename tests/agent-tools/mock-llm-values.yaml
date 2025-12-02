@@ -9,7 +9,7 @@ ark:
 
 config:
   rules:
-    # First request: trigger weather-tool call
+    # Sequences 0-3: tool call response (extra buffer for health probes)
     - path: "/v1/chat/completions"
       sequence: 0
       response:
@@ -35,9 +35,34 @@ config:
             }]
           }
 
-    # Second request: return final answer after tool result
     - path: "/v1/chat/completions"
       sequence: 1
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-{{timestamp}}",
+            "object": "chat.completion",
+            "model": "{{jmes request body.model}}",
+            "choices": [{
+              "message": {
+                "role": "assistant",
+                "tool_calls": [{
+                  "id": "call_weather",
+                  "type": "function",
+                  "function": {
+                    "name": "weather-tool",
+                    "arguments": "{\"latitude\": 40.7128, \"longitude\": -74.006, \"current_weather\": true}"
+                  }
+                }]
+              },
+              "finish_reason": "tool_calls"
+            }]
+          }
+
+    # Sequences 2-5: final answer (extra buffer)
+    - path: "/v1/chat/completions"
+      sequence: 2
       response:
         status: 200
         content: |
@@ -54,9 +79,63 @@ config:
             }]
           }
 
-    # Fallback for model probes - MUST BE LAST (last match wins, no sequence = no counter increment)
     - path: "/v1/chat/completions"
-      match: "body.messages[0].content == 'Hello'"
+      sequence: 3
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-{{timestamp}}",
+            "object": "chat.completion",
+            "model": "{{jmes request body.model}}",
+            "choices": [{
+              "message": {
+                "role": "assistant",
+                "content": "The current weather in New York City is 68°F (20°C) with partly cloudy skies and winds from the west at 12 mph."
+              },
+              "finish_reason": "stop"
+            }]
+          }
+
+    - path: "/v1/chat/completions"
+      sequence: 4
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-{{timestamp}}",
+            "object": "chat.completion",
+            "model": "{{jmes request body.model}}",
+            "choices": [{
+              "message": {
+                "role": "assistant",
+                "content": "The current weather in New York City is 68°F (20°C) with partly cloudy skies and winds from the west at 12 mph."
+              },
+              "finish_reason": "stop"
+            }]
+          }
+
+    - path: "/v1/chat/completions"
+      sequence: 5
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-{{timestamp}}",
+            "object": "chat.completion",
+            "model": "{{jmes request body.model}}",
+            "choices": [{
+              "message": {
+                "role": "assistant",
+                "content": "The current weather in New York City is 68°F (20°C) with partly cloudy skies and winds from the west at 12 mph."
+              },
+              "finish_reason": "stop"
+            }]
+          }
+
+    # Fallback for model probes - MUST BE LAST
+    - path: "/v1/chat/completions"
+      match: "contains(body.messages[0].content, 'Hello')"
       response:
         status: 200
         content: |
