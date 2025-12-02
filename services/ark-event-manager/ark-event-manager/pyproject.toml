@@ -35,3 +35,22 @@ target-version = ["py311"]
 line-length = 100
 target-version = "py311"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+    "--disable-warnings",
+]
+markers = [
+    "asyncio: marks tests as async (pytest-asyncio)",
+    "unit: marks tests as unit tests",
+    "integration: marks tests as integration tests",
+    "slow: marks tests that take a long time to run",
+]
+asyncio_mode = "auto"
+
