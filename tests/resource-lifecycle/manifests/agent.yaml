@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: lifecycle-agent
+spec:
+  model:
+    name: test-model
+    namespace: ark-system
+  description: "Initial description"
+  instructions: "You are a helpful assistant."

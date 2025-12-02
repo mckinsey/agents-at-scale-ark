@@ -1,0 +1,48 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: resource-lifecycle
+spec:
+  description: Validates the lifecycle (create, update, delete) of ARK resources
+  steps:
+    - name: create-agent
+      try:
+        - apply:
+            file: manifests/agent.yaml
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                name: lifecycle-agent
+              spec:
+                description: "Initial description"
+                instructions: "You are a helpful assistant."
+
+    - name: update-agent
+      try:
+        - apply:
+            file: manifests/agent-updated.yaml
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                name: lifecycle-agent
+              spec:
+                description: "Updated description"
+                instructions: "You are an updated assistant."
+
+    - name: delete-agent
+      try:
+        - delete:
+            ref:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              name: lifecycle-agent
+        - error:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                name: lifecycle-agent
