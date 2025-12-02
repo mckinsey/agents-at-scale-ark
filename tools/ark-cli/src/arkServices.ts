@@ -147,7 +147,8 @@ const defaultArkServices: ServiceCollection = {
   'ark-cluster-memory': {
     name: 'ark-cluster-memory',
     helmReleaseName: 'ark-cluster-memory',
-    description: 'In-memory storage service with streaming support for Ark queries',
+    description:
+      'In-memory storage service with streaming support for Ark queries',
     enabled: true,
     category: 'service',
     // namespace: undefined - uses current context namespace
