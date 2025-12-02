@@ -49,19 +49,11 @@ async function getResources(
 
     return result.stdout || "";
   } catch (error) {
-    if (
-      error instanceof Error &&
-      'stderr' in error &&
-      typeof error.stderr === 'string' &&
-      error.stderr.includes('NotFound')
-    ) {
-      return "";
-    }
     output.warning(
       `failed to fetch ${resourceType}:`,
       error instanceof Error ? error.message : error
     );
-    return "";
+    throw error;
   }
 }
 

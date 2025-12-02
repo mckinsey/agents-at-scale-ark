@@ -149,4 +149,24 @@ describe('export command', () => {
       expect.any(Object)
     );
   });
+
+  it('fails if a resource type cannot be found', async () => {
+    mockExeca.mockRejectedValue('Export broke');
+
+    const command = createExportCommand(mockConfig);
+
+    await expect(command.parseAsync(['node', 'test'])).rejects.toThrow(
+      'process.exit called'
+    );
+
+    expect(mockOutput.warning).toHaveBeenCalledWith(
+      'failed to fetch secrets:',
+      'Export broke'
+    );
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      'export failed:',
+      'Export broke'
+    );
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
 });
