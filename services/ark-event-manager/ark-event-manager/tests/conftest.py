@@ -59,19 +59,39 @@ def service_process(ensure_proto_generated):
     env["USE_DATABASE"] = "true"
     env["PYTHONPATH"] = str(service_dir / "src")
     
+    # Use uv run to ensure dependencies are available
     process = subprocess.Popen(
-        [sys.executable, "-m", "ark_event_manager"],
+        ["uv", "run", "python", "-m", "ark_event_manager"],
         cwd=service_dir,
         env=env,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,  # Combine stderr into stdout for easier debugging
     )
+    
+    # Give process a moment to start
+    time.sleep(1)
+    
+    # Check if process is still alive (if it died immediately, there's an error)
+    if process.poll() is not None:
+        stdout, _ = process.communicate(timeout=5)
+        pytest.fail(
+            f"Service process exited immediately with code {process.returncode}.\n"
+            f"Output: {stdout.decode() if stdout else 'No output'}"
+        )
     
     # Wait for service to be ready
     max_wait = 30
     wait_interval = 0.5
     service_ready = False
     for _ in range(int(max_wait / wait_interval)):
+        # Check if process is still running
+        if process.poll() is not None:
+            stdout, _ = process.communicate(timeout=5)
+            pytest.fail(
+                f"Service process exited with code {process.returncode}.\n"
+                f"Output: {stdout.decode() if stdout else 'No output'}"
+            )
+        
         try:
             response = httpx.get(f"{service_url}/health", timeout=2.0)
             if response.status_code == 200:
@@ -82,11 +102,10 @@ def service_process(ensure_proto_generated):
     
     if not service_ready:
         process.terminate()
-        stdout, stderr = process.communicate(timeout=5)
+        stdout, _ = process.communicate(timeout=5)
         pytest.fail(
             f"Service failed to start within {max_wait}s.\n"
-            f"STDOUT: {stdout.decode()}\n"
-            f"STDERR: {stderr.decode()}"
+            f"Output: {stdout.decode() if stdout else 'No output'}"
         )
     
     yield service_url
