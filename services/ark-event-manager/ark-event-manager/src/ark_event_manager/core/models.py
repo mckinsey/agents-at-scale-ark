@@ -156,28 +156,20 @@ class Event(SQLModel, table=True):
             Event instance
 
         Raises:
-            ValueError: If event cannot be parsed
+            ValueError: If event cannot be parsed as protobuf
         """
         try:
-            event_dict: dict[str, Any] = {
-                "event_id": str(uuid.uuid4()),
-                "timestamp": datetime.utcnow(),
-                "payload": {},
-            }
-
-            try:
-                protobuf_message = cls._parse_protobuf_message(event_bytes)
-                event_dict = MessageToDict(
-                    protobuf_message,
-                    including_default_value_fields=True,
-                    preserving_proto_field_name=True,
+            protobuf_message = cls._parse_protobuf_message(event_bytes)
+            event_dict = MessageToDict(
+                protobuf_message,
+                including_default_value_fields=True,
+                preserving_proto_field_name=True,
+            )
+            
+            if "timestamp" in event_dict and isinstance(event_dict["timestamp"], dict):
+                event_dict["timestamp"] = cls._parse_timestamp_from_dict(
+                    event_dict["timestamp"]
                 )
-                if "timestamp" in event_dict and isinstance(event_dict["timestamp"], dict):
-                    event_dict["timestamp"] = cls._parse_timestamp_from_dict(
-                        event_dict["timestamp"]
-                    )
-            except Exception:
-                event_dict = cls._parse_simple_protobuf(event_bytes)
 
             if not event_dict.get("event_id"):
                 event_dict["event_id"] = str(uuid.uuid4())
@@ -203,29 +195,6 @@ class Event(SQLModel, table=True):
         event.ParseFromString(event_bytes)
         return event
 
-    @staticmethod
-    def _parse_simple_protobuf(event_bytes: Protobuf) -> dict[str, Any]:
-        """Fallback simple parser for basic protobuf structure."""
-        event_dict: dict[str, Any] = {
-            "event_id": str(uuid.uuid4()),
-            "correlation_id": "",
-            "timestamp": datetime.utcnow(),
-            "severity": 2,
-            "type": "unknown",
-            "subtype": "",
-            "source_type": 0,
-            "source": "",
-            "version": "v1",
-            "payload": {},
-        }
-
-        try:
-            if len(event_bytes) > 0:
-                event_dict["payload"] = {"raw_size": len(event_bytes)}
-        except Exception:
-            pass
-
-        return event_dict
 
     @staticmethod
     def _parse_timestamp_from_dict(timestamp_dict: dict[str, Any]) -> datetime:

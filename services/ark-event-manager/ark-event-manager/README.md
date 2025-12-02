@@ -121,16 +121,43 @@ helm upgrade ark-event-manager ./chart \
 helm uninstall ark-event-manager
 ```
 
-### Testing Locally
+### Testing
 
-Run the test script:
+#### Running Integration Tests
+
+The service includes pytest integration tests that test the full event processing pipeline:
 
 ```bash
-# In one terminal, start the service
-python -m ark_event_manager
+# Generate proto code first
+uv run python generate_proto.py
 
-# In another terminal, run tests
-python test_local.py
+# Run all tests
+uv run pytest tests/ -v
+
+# Run only integration tests
+uv run pytest tests/ -v -m integration
+
+# Run a specific test
+uv run pytest tests/test_integration.py::TestEventPipeline::test_publish_query_execution_start -v
+```
+
+The integration tests will:
+- Automatically start the service if not running
+- Create various event types (query, workflow, error)
+- Publish them to the event manager
+- Test the full pipeline: API → Processor → Storage
+- Verify events are processed and stored correctly
+
+#### Manual Testing
+
+For manual testing, you can start the service and use curl or other HTTP clients:
+
+```bash
+# Start the service
+USE_DATABASE=true uv run python -m ark_event_manager
+
+# In another terminal, test with curl
+curl http://localhost:8080/health
 ```
 
 ### Environment Variables
