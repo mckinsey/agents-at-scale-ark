@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "Generating proto code..."
-uv run python -c "from tests import generate_proto; generate_proto.generate_proto()"
+uv run python -c "from tests.generate_proto import generate_proto; generate_proto()"
 
 echo "Running integration tests..."
 uv run pytest tests/ -v -m integration

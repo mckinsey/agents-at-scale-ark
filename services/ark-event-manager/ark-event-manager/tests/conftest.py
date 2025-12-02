@@ -26,9 +26,9 @@ def ensure_proto_generated():
     if proto_file.exists():
         return
     
-    # Import and run generate_proto as a module
-    from tests import generate_proto
-    generate_proto.generate_proto()
+    # Import and run generate_proto function
+    from tests.generate_proto import generate_proto
+    generate_proto()
     
     if not proto_file.exists():
         pytest.skip(f"Proto file not generated at {proto_file}")
