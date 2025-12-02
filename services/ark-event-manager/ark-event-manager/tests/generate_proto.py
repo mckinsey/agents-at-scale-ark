@@ -7,8 +7,10 @@ from pathlib import Path
 def generate_proto():
     """Generate Python code from event.proto."""
     # From tests/generate_proto.py, go up to service root, then to repo root
-    service_dir = Path(__file__).parent.parent
-    repo_root = service_dir.parent.parent
+    # Path: services/ark-event-manager/ark-event-manager/tests/generate_proto.py
+    # Need: repo_root/ark/internal/eventing/proto/event.proto
+    service_dir = Path(__file__).parent.parent  # services/ark-event-manager/ark-event-manager/
+    repo_root = service_dir.parent.parent.parent  # repo root (go up: service_dir -> services/ark-event-manager -> services -> repo root)
     proto_file = repo_root / "ark" / "internal" / "eventing" / "proto" / "event.proto"
     output_dir = service_dir / "generated"
     
