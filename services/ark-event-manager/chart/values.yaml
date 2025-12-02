@@ -39,6 +39,15 @@ service:
   port: 80
   targetPort: 8080
 
+# Memory service configuration
+memory:
+  # Create a Memory CRD resource
+  createMemoryCRD: true
+  # Set this Memory as the default (names it "default")
+  setAsDefault: false
+  # Port for the HTTP server (matches service.targetPort)
+  port: 8080
+
 # Ingress configuration (legacy routing method)
 ingress:
   enabled: false
