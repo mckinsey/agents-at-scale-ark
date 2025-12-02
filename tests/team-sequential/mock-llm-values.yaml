@@ -9,6 +9,19 @@ ark:
 
 config:
   rules:
+    # Fallback for model probes (matches health check "Hello" message) - MUST BE FIRST
+    - path: "/v1/chat/completions"
+      match: "body.messages[0].content == 'Hello'"
+      response:
+        status: 200
+        content: |
+          {
+            "id": "mock-probe",
+            "object": "chat.completion",
+            "model": "gpt-4.1-mini",
+            "choices": [{"message": {"role": "assistant", "content": "OK"}, "finish_reason": "stop"}]
+          }
+
     # Sequence 0: researcher agent
     - path: "/v1/chat/completions"
       sequence: 0
@@ -66,15 +79,3 @@ config:
             }]
           }
 
-    # Fallback for model probes (matches health check "Hello" message)
-    - path: "/v1/chat/completions"
-      match: "body.messages[0].content == 'Hello'"
-      response:
-        status: 200
-        content: |
-          {
-            "id": "mock-probe",
-            "object": "chat.completion",
-            "model": "gpt-4.1-mini",
-            "choices": [{"message": {"role": "assistant", "content": "OK"}, "finish_reason": "stop"}]
-          }
