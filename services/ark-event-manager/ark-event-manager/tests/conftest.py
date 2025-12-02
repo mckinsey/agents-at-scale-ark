@@ -12,14 +12,16 @@ import httpx
 
 
 @pytest.fixture(scope="session", autouse=True)
-def configure_logging():
+def configure_logging(request):
     """Configure logging for integration tests to show demo logs."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)8s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        force=True,  # Override any existing configuration
-    )
+    # Only enable verbose logging if running integration tests
+    if "integration" in request.keywords:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s [%(levelname)8s] %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            force=True,  # Override any existing configuration
+        )
 
 
 @pytest.fixture(scope="session")
