@@ -42,6 +42,20 @@ export const marketplaceServices: ServiceCollection = {
     k8sServicePort: 3000,
     k8sDeploymentName: 'langfuse-web',
   },
+  noah: {
+    name: 'noah',
+    helmReleaseName: 'noah',
+    description:
+      'Runtime administration agent with cluster privileges and MCP server',
+    enabled: true,
+    category: 'marketplace',
+    namespace: 'default',
+    chartPath: `${MARKETPLACE_REGISTRY}/noah`,
+    installArgs: ['--create-namespace'],
+    k8sServiceName: 'noah-mcp',
+    k8sServicePort: 8639,
+    k8sDeploymentName: 'noah-mcp',
+  },
 };
 
 export function getMarketplaceService(name: string): ArkService | undefined {

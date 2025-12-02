@@ -49,6 +49,7 @@ class ToolSpec(BaseModel):
     type: str
     http: Optional[Dict[str, str]] = None
     agent: Optional[Dict[str, str]] = None
+    team: Optional[Dict[str, str]] = None
 
 
 class ToolCreateRequest(BaseModel):
