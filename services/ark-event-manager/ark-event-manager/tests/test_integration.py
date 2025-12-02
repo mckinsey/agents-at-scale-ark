@@ -149,14 +149,14 @@ class TestEventPipeline:
     """Integration tests for the event processing pipeline."""
 
     @pytest.fixture
-    def publisher(self, service_url):
+    def publisher(self, service_process):
         """Create a mock event publisher."""
-        return MockEventPublisher(base_url=service_url)
+        return MockEventPublisher(base_url=service_process)
 
-    async def test_health_check(self, service_url):
+    async def test_health_check(self, service_process):
         """Test service health endpoint."""
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{service_url}/health")
+            response = await client.get(f"{service_process}/health")
             assert response.status_code == 200
             data = response.json()
             assert data["status"] == "healthy"
