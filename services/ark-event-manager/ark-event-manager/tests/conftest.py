@@ -26,16 +26,9 @@ def ensure_proto_generated():
     if proto_file.exists():
         return
     
-    generate_script = service_dir / "tests" / "generate_proto.py"
-    if not generate_script.exists():
-        pytest.skip(f"generate_proto.py not found at {generate_script}")
-    
-    result = subprocess.run(
-        [sys.executable, str(generate_script)],
-        cwd=service_dir,
-        capture_output=True,
-        text=True,
-    )
+    # Import and run generate_proto as a module
+    from tests import generate_proto
+    generate_proto.generate_proto()
     
     if result.returncode != 0:
         pytest.skip(f"Failed to generate proto code: {result.stderr}")
