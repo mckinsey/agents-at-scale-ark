@@ -30,9 +30,6 @@ def ensure_proto_generated():
     from tests import generate_proto
     generate_proto.generate_proto()
     
-    if result.returncode != 0:
-        pytest.skip(f"Failed to generate proto code: {result.stderr}")
-    
     if not proto_file.exists():
         pytest.skip(f"Proto file not generated at {proto_file}")
 
