@@ -23,7 +23,7 @@ import logging
 import uuid
 from datetime import datetime
 from enum import IntEnum
-from typing import Annotated, Any
+from typing import Any
 
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.message import Message
@@ -74,24 +74,22 @@ class Event(SQLModel, table=True):
 
     __tablename__ = "events"
 
-    id: Annotated[int | None, Field(default=None, primary_key=True)]
-    event_id: Annotated[str, Field(..., description="Unique event identifier (UUID)", unique=True, index=True)]
-    correlation_id: Annotated[str, Field(default="", description="Correlation ID for grouping events", index=True)]
-    timestamp: Annotated[datetime, Field(..., description="Event timestamp", index=True)]
-    severity: Annotated[EventSeverity, Field(default=EventSeverity.INFO, description="Event severity")]
-    type: Annotated[str, Field(..., description="Event type (e.g., 'query', 'workflow', 'pod')", index=True)]
-    subtype: Annotated[str, Field(default="", description="Event subtype")]
-    source_type: Annotated[
-        EventSourceType,
-        Field(default=EventSourceType.UNSPECIFIED, description="Source type")
-    ]
-    source: Annotated[str, Field(default="", description="Source identifier")]
-    version: Annotated[str, Field(default="v1", description="Schema version")]
-    payload: Annotated[
-        dict[str, Any],
-        Field(default_factory=dict, description="Event payload data", sa_column=Column(JSON))
-    ]
-    created_at: Annotated[datetime, Field(default_factory=datetime.utcnow, index=True)]
+    id: int | None = Field(default=None, primary_key=True)
+    event_id: str = Field(..., description="Unique event identifier (UUID)", unique=True, index=True)
+    correlation_id: str = Field(default="", description="Correlation ID for grouping events", index=True)
+    timestamp: datetime = Field(..., description="Event timestamp", index=True)
+    severity: EventSeverity = Field(default=EventSeverity.INFO, description="Event severity")
+    type: str = Field(..., description="Event type (e.g., 'query', 'workflow', 'pod')", index=True)
+    subtype: str = Field(default="", description="Event subtype")
+    source_type: EventSourceType = Field(
+        default=EventSourceType.UNSPECIFIED, description="Source type"
+    )
+    source: str = Field(default="", description="Source identifier")
+    version: str = Field(default="v1", description="Schema version")
+    payload: dict[str, Any] = Field(
+        default_factory=dict, description="Event payload data", sa_column=Column(JSON)
+    )
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
 
     @field_validator("severity", mode="before")
     @classmethod
@@ -261,8 +259,8 @@ class Message(SQLModel, table=True):
 
     __tablename__ = "messages"
 
-    id: Annotated[int | None, Field(default=None, primary_key=True)]
-    session_id: Annotated[str, Field(index=True)]
-    query_id: Annotated[str | None, Field(default=None, index=True)]
-    message_data: Annotated[dict[str, Any], Field(sa_column=Column(JSON))]
-    created_at: Annotated[datetime, Field(default_factory=datetime.utcnow, index=True)]
+    id: int | None = Field(default=None, primary_key=True)
+    session_id: str = Field(index=True)
+    query_id: str | None = Field(default=None, index=True)
+    message_data: dict[str, Any] = Field(sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
