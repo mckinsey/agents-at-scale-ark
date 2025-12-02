@@ -1,4 +1,26 @@
-"""Main FastAPI application for Ark Event Manager."""
+"""Main FastAPI application for Ark Event Manager.
+
+Ark Event Manager is a unified service that provides three core capabilities:
+
+1. **Event Ingestion** (`POST /events`)
+   - Receives and processes system telemetry events (protobuf format)
+   - Events represent what happened in the system (query started, workflow completed, etc.)
+   - All events are persisted to the database for observability and analytics
+
+2. **Memory Interface** (`GET/POST /messages`)
+   - Direct implementation of MemoryInterface for Ark controllers
+   - Stores and retrieves conversation messages (not a proxy)
+   - Messages represent conversation/chat history for agent context
+
+3. **Streaming Interface** (`GET/POST /stream/{query_id}`)
+   - Direct implementation of streaming for real-time query execution updates
+   - Provides Server-Sent Events (SSE) for live data delivery
+   - Not a proxy - implements streaming functionality directly
+
+Note: The service name "Ark Event Manager" may be somewhat misleading, as it also handles
+messages and streaming. Without the `POST /events` endpoint, the service still provides
+memory and streaming functionality directly - it's not just a proxy to another service.
+"""
 
 import os
 import asyncio
