@@ -11,5 +11,5 @@ echo "Generating proto code..."
 uv run python -c "from tests.generate_proto import generate_proto; generate_proto()"
 
 echo "Running integration tests..."
-uv run pytest tests/ -v -m integration
+uv run pytest tests/ -v -m integration -s
 

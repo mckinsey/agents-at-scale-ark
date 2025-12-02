@@ -16,12 +16,22 @@ def configure_logging(request):
     """Configure logging for integration tests to show demo logs."""
     # Only enable verbose logging if running integration tests
     if "integration" in request.keywords:
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s [%(levelname)8s] %(name)s: %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            force=True,  # Override any existing configuration
+        # Configure root logger
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.INFO)
+        
+        # Remove existing handlers to avoid duplicates
+        root_logger.handlers.clear()
+        
+        # Create console handler
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(logging.INFO)
+        formatter = logging.Formatter(
+            "%(asctime)s [%(levelname)8s] %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
         )
+        console_handler.setFormatter(formatter)
+        root_logger.addHandler(console_handler)
 
 
 @pytest.fixture(scope="session")
@@ -74,12 +84,14 @@ def service_process(ensure_proto_generated):
     env["PYTHONPATH"] = str(service_dir / "src")
     
     # Use uv run to ensure dependencies are available
+    # Use unbuffered output and forward to stdout so logs are visible
     process = subprocess.Popen(
-        ["uv", "run", "python", "-m", "ark_event_manager"],
+        ["uv", "run", "python", "-u", "-m", "ark_event_manager"],
         cwd=service_dir,
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,  # Combine stderr into stdout for easier debugging
+        stdout=sys.stdout,  # Forward service logs to test output
+        stderr=sys.stderr,
+        bufsize=0,  # Unbuffered
     )
     
     # Give process a moment to start
@@ -87,10 +99,10 @@ def service_process(ensure_proto_generated):
     
     # Check if process is still alive (if it died immediately, there's an error)
     if process.poll() is not None:
-        stdout, _ = process.communicate(timeout=5)
+        # Give it a moment to show any error output
+        time.sleep(0.5)
         pytest.fail(
-            f"Service process exited immediately with code {process.returncode}.\n"
-            f"Output: {stdout.decode() if stdout else 'No output'}"
+            f"Service process exited immediately with code {process.returncode}."
         )
     
     # Wait for service to be ready
@@ -100,10 +112,10 @@ def service_process(ensure_proto_generated):
     for _ in range(int(max_wait / wait_interval)):
         # Check if process is still running
         if process.poll() is not None:
-            stdout, _ = process.communicate(timeout=5)
+            # Give it a moment to show any error output
+            time.sleep(0.5)
             pytest.fail(
-                f"Service process exited with code {process.returncode}.\n"
-                f"Output: {stdout.decode() if stdout else 'No output'}"
+                f"Service process exited with code {process.returncode}."
             )
         
         try:
@@ -116,10 +128,9 @@ def service_process(ensure_proto_generated):
     
     if not service_ready:
         process.terminate()
-        stdout, _ = process.communicate(timeout=5)
+        time.sleep(0.5)  # Give it a moment to show any error output
         pytest.fail(
-            f"Service failed to start within {max_wait}s.\n"
-            f"Output: {stdout.decode() if stdout else 'No output'}"
+            f"Service failed to start within {max_wait}s."
         )
     
     yield service_url
