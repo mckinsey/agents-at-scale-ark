@@ -1,7 +1,3 @@
-[build-system]
-requires = ["setuptools>=64.0", "pip>=25.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "ark-mcp"
 version = "0.1.0"
@@ -29,7 +25,7 @@ Repository = "https://github.com/mckinsey/agents-at-scale-ark"
 Documentation = "https://mckinsey.github.io/agents-at-scale-ark/user-guide/samples/mcp-servers/"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "setuptools>=64.0", "pip>=25.0"]
 build-backend = "hatchling.build"
 
 [project.optional-dependencies]

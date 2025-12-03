@@ -1,7 +1,3 @@
-[build-system]
-requires = ["setuptools>=64.0", "pip>=25.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "executor-langchain"
 # Version is managed via Release Please
@@ -36,7 +32,7 @@ Repository = "https://github.com/mckinsey/agents-at-scale-ark"
 Documentation = "https://mckinsey.github.io/agents-at-scale-ark/developer-guide/langchain-execution-engine/"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "setuptools>=64.0", "pip>=25.0"]
 build-backend = "hatchling.build"
 
 [project.optional-dependencies]
