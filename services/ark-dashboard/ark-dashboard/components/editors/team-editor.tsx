@@ -106,7 +106,7 @@ function DraggableCard({
           type="checkbox"
           checked={isSelected}
           onChange={() => toggleMember(agent)}
-          className="h-4 w-4 rounded border-gray-300"
+          className="h-4 w-4 rounded border border-border bg-input hover:border-border-hover hover:bg-field-hover focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 accent-primary"
         />
         <span className="flex items-center gap-1 text-sm">
           {agent.name}
