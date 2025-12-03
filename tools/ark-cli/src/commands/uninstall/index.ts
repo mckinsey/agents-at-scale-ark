@@ -8,9 +8,9 @@ import output from '../../lib/output.js';
 import {getInstallableServices, type ArkService} from '../../arkServices.js';
 import {
   isMarketplaceService,
-  extractMarketplaceServiceName,
-  getMarketplaceService,
+  getMarketplaceItem,
   getAllMarketplaceServices,
+  getAllMarketplaceAgents,
 } from '../../marketplaceServices.js';
 
 async function uninstallService(service: ArkService, verbose: boolean = false) {
@@ -43,24 +43,34 @@ async function uninstallArk(
 
   // If a specific service is requested, uninstall only that service
   if (serviceName) {
-    // Check if it's a marketplace service
+    // Check if it's a marketplace item
     if (isMarketplaceService(serviceName)) {
-      const marketplaceServiceName = extractMarketplaceServiceName(serviceName);
-      const service = getMarketplaceService(marketplaceServiceName);
+      const service = await getMarketplaceItem(serviceName);
 
       if (!service) {
         output.error(
-          `marketplace service '${marketplaceServiceName}' not found`
+          `marketplace item '${serviceName}' not found`
         );
-        output.info('available marketplace services:');
-        const marketplaceServices = getAllMarketplaceServices();
-        for (const serviceName of Object.keys(marketplaceServices)) {
-          output.info(`  marketplace/services/${serviceName}`);
+        output.info('available marketplace items:');
+        const marketplaceServices = await getAllMarketplaceServices();
+        if (marketplaceServices) {
+          for (const name of Object.keys(marketplaceServices)) {
+            output.info(`  marketplace/services/${name}`);
+          }
+        }
+        const marketplaceAgents = await getAllMarketplaceAgents();
+        if (marketplaceAgents) {
+          for (const name of Object.keys(marketplaceAgents)) {
+            output.info(`  marketplace/agents/${name}`);
+          }
+        }
+        if (!marketplaceServices && !marketplaceAgents) {
+          output.warning('Marketplace unavailable');
         }
         process.exit(1);
       }
 
-      output.info(`uninstalling marketplace service ${service.name}...`);
+      output.info(`uninstalling marketplace item ${service.name}...`);
       try {
         await uninstallService(service, options.verbose);
         output.success(`${service.name} uninstalled successfully`);

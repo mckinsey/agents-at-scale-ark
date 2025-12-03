@@ -35,7 +35,8 @@ export function ToggleSwitch({
             className={cn(
               'cursor-pointer border border-gray-300 px-3 py-1 text-sm transition-colors',
               {
-                'bg-gray-100': option.active,
+                'bg-primary': option.active,
+                'text-primary-foreground': option.active,
                 'rounded-l-sm rounded-tr-none rounded-br-none border-r-0':
                   isFirst,
                 'rounded-tl-none rounded-r-sm rounded-bl-none': isLast,
