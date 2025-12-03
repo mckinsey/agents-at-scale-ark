@@ -126,8 +126,8 @@ jobs:
           echo "Comparing with last scan file: ./last-main-scan.json"
 
           echo "New violations since last scan:"
-          jq -r '[.[].violations[]?.issue_id] | unique | .[] ' "./last-main-scan.json" > old.txt
-          jq -r '[.[].violations[]?.issue_id] | unique | .[] ' "$SCAN_JSON" > new.txt
+          jq -r '.[].violations[]?.issue_id' "./last-main-scan.json" > old.txt
+          jq -r '.[].violations[]?.issue_id' "$SCAN_JSON" > new.txt
 
           NEW_VIOLATIONS=$(comm -13 <(sort old.txt) <(sort new.txt))
           REMOVED_VIOLATIONS=$(comm -13 <(sort new.txt) <(sort old.txt))
