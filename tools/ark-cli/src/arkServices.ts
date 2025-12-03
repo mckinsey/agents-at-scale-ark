@@ -181,6 +181,19 @@ const defaultArkServices: ServiceCollection = {
     chartPath: `${REGISTRY_BASE}/localhost-gateway`,
     installArgs: [],
   },
+
+  'noah': {
+    name: 'noah',
+    helmReleaseName: 'noah',
+    description: 'Runtime administration agent with cluster privileges',
+    enabled: false,
+    category: 'service',
+    chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/noah',
+    installArgs: [],
+    k8sServiceName: 'noah-mcp',
+    k8sServicePort: 8639,
+    k8sDeploymentName: 'noah-mcp',
+  },
 };
 
 function applyConfigOverrides(defaults: ServiceCollection): ServiceCollection {
