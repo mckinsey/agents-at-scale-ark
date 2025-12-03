@@ -51,3 +51,18 @@ func PrepareNewMessagesForMemory(inputMessages, responseMessages []Message) []Me
 	newMessages = append(newMessages, responseMessages...)
 	return newMessages
 }
+
+// ExtractLastAssistantMessageContent extracts the content from the last assistant message
+// in the messages array, searching backwards from the end. Returns empty string if no
+// assistant message with content is found. This is used by tool executors to extract
+// the final response from agent/team execution results.
+func ExtractLastAssistantMessageContent(messages []Message) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		msgUnion := openai.ChatCompletionMessageParamUnion(msg)
+		if msgUnion.OfAssistant != nil && msgUnion.OfAssistant.Content.OfString.Value != "" {
+			return msgUnion.OfAssistant.Content.OfString.Value
+		}
+	}
+	return ""
+}

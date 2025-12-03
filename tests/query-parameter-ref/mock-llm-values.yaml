@@ -1,5 +1,6 @@
 # Mock LLM configuration for query parameter resolution test
 # Custom rule returns messages[0] (system message with resolved query parameters)
+terminationGracePeriodSeconds: 3
 ark:
   model:
     enabled: true

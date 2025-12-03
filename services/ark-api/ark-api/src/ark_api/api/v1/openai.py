@@ -2,7 +2,6 @@ import json
 import logging
 import time
 import uuid
-from typing import Dict, List, Optional
 
 from ark_sdk import QueryV1alpha1Spec
 from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
@@ -19,8 +18,9 @@ from kubernetes_asyncio import client as k8s_client
 from ark_sdk.client import with_ark_client
 from ...models.queries import ArkOpenAICompletionsMetadata
 from ...utils.query_targets import parse_model_to_query_target
-from ...utils.query_polling import poll_query_completion
+from ...utils.query_watch import watch_query_completion
 from ...utils.streaming import StreamingErrorResponse, create_single_chunk_sse_response
+from ...utils.timeout import parse_timeout_to_seconds
 from ...constants.annotations import STREAMING_ENABLED_ANNOTATION
 
 router = APIRouter(prefix="/openai/v1", tags=["OpenAI"])
@@ -52,16 +52,16 @@ def _create_model_entry(resource_id: str, metadata: dict) -> Model:
 
 class ChatCompletionRequest(BaseModel):
     model: str
-    messages: List[ChatCompletionMessageParam]
+    messages: list[ChatCompletionMessageParam]
     temperature: float = 1.0
-    max_tokens: Optional[int] = None
+    max_tokens: int | None = None
     stream: bool = False
-    metadata: Optional[dict] = None  # Supports queryAnnotations: JSON string of K8s annotations
+    metadata: dict | None = None  # Supports queryAnnotations: JSON string of K8s annotations
 
 
 def process_request_metadata(
-    request_metadata: Optional[Dict[str, str]], base_metadata: Dict[str, any]
-) -> Optional[JSONResponse]:
+    request_metadata: dict[str, str] | None, base_metadata: dict[str, any]
+) -> JSONResponse | None:
     """Process request metadata and merge Ark annotations into base metadata.
 
     Returns JSONResponse with error if validation fails, None if successful.
@@ -167,12 +167,21 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
     # Build metadata for the query resource
     metadata = {"name": query_name, "namespace": namespace}
 
-    # Parse queryAnnotations if provided
+    session_id = None
+    if request.metadata and "sessionId" in request.metadata:
+        session_id = request.metadata["sessionId"]
+
+    timeout = None
+    if request.metadata and "timeout" in request.metadata:
+        timeout = request.metadata["timeout"]
+
+    # Parse queryAnnotations if provided (for annotations like A2A context ID)
     if request.metadata and "queryAnnotations" in request.metadata:
         try:
             query_annotations = json.loads(request.metadata["queryAnnotations"])
             if "annotations" not in metadata:
                 metadata["annotations"] = {}
+            # Add annotations to metadata (e.g., A2A context ID)
             metadata["annotations"].update(query_annotations)
         except (json.JSONDecodeError, TypeError) as e:
             logger.warning(f"Failed to parse queryAnnotations: {e}")
@@ -185,11 +194,18 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
         metadata["annotations"][STREAMING_ENABLED_ANNOTATION] = "true"
 
     try:
+        # Build query spec with optional sessionId and timeout
+        query_spec_dict = {"type": "messages", "input": messages, "targets": [target]}
+        if session_id:
+            query_spec_dict["sessionId"] = session_id
+        if timeout:
+            query_spec_dict["timeout"] = timeout
+        
         # Create the QueryV1alpha1 object with type="messages"
         # Pass messages directly without json.dumps() - SDK handles serialization
         query_resource = QueryV1alpha1(
             metadata=metadata,
-            spec=QueryV1alpha1Spec(type="messages", input=messages, targets=[target]),
+            spec=QueryV1alpha1Spec(**query_spec_dict),
         )
 
         async with with_ark_client(namespace, "v1alpha1") as ark_client:
@@ -197,11 +213,15 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             await ark_client.queries.a_create(query_resource)
             logger.info(f"Created query: {query_name}")
 
+            # Extract timeout from query spec
+            query_timeout_str = query_resource.spec.timeout
+            timeout_seconds = parse_timeout_to_seconds(query_timeout_str)
+
             # If the caller didn't request streaming, we can simply poll for
             # the response.
             if not request.stream:
-                return await poll_query_completion(
-                    ark_client, query_name, model, messages
+                return await watch_query_completion(
+                    ark_client, query_name, model, messages, timeout_seconds
                 )
 
             # Streaming was requested - check if streaming backend is available
@@ -219,8 +239,8 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             # If no config or not enabled, fall back to polling
             if not streaming_config or not streaming_config.enabled:
                 logger.info("No streaming backend configured, falling back to polling")
-                completion = await poll_query_completion(
-                    ark_client, query_name, model, messages
+                completion = await watch_query_completion(
+                    ark_client, query_name, model, messages, timeout_seconds
                 )
                 sse_lines = create_single_chunk_sse_response(completion)
                 return StreamingResponse(
@@ -229,11 +249,8 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
 
             # Streaming is enabled - get the base URL and construct full URL
             base_url = await get_streaming_base_url(streaming_config, namespace, v1)
-            # Construct streaming URL with query parameters:
-            # - from-beginning=true: Start streaming from the first chunk (don't skip any data)
-            # - wait-for-query=30s: Wait up to 30 seconds for the query to start producing output
             streaming_url = (
-                f"{base_url}/stream/{query_name}?from-beginning=true&wait-for-query=30s"
+                f"{base_url}/stream/{query_name}?from-beginning=true&wait-for-query={query_timeout_str}"
             )
 
             # Proxy to the streaming endpoint

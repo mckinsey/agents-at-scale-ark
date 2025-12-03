@@ -48,9 +48,9 @@ quickstart() {
 
     if [ "${FORCE:-false}" != true ]; then
         echo -e "Using quickstart is deprecated."
-        echo -e "  Install   : ${yellow}devspace deploy${nc} (or ${yellow}ark install${nc})"
+        echo -e "  Install   : ${yellow}ark install${nc} (recommended)"
         echo -e "  Local dev : ${yellow}devspace dev${nc}"
-        echo -e "If you'd like to continue with quickstart, use ${yellow}make quickstart-force${nc} to continue."
+        echo -e "If you'd like to continue with legacy quickstart, use ${yellow}make quickstart-force${nc} to continue."
         exit 0
     fi
 
@@ -263,7 +263,7 @@ EOF
                 echo "    ARK_QUICKSTART_API_KEY=your_actual_api_key"
                 echo "    ARK_QUICKSTART_BASE_URL=your_actual_base_url"
                 echo ""
-                echo -e "Run ${red}make quickstart-reconfigure-default-model${nc} to reconfigure the default model. Then run the ${red}make quickstart${nc} script again."
+                echo -e "Run ${red}make quickstart-reconfigure-default-model${nc} to reconfigure the default model, or use ${red}ark install${nc} for fresh deployment."
                 echo ""
                 echo -e "${red}Exiting due to authentication failure.${nc}"
                 exit 1

@@ -1,0 +1,701 @@
+---
+title: End-to-End Testing
+description: Comprehensive testing guide for ARK applications using Chainsaw and Hurl
+---
+
+# End-to-End Testing
+
+ARK uses [Chainsaw](https://github.com/kyverno/chainsaw) to declaratively create resources, run scripts, and validate resources. For example, we can create agents, teams, and queries and validate the statuses of each and the success state of a query or evaluation.
+
+## Setup
+
+### Install Tools
+
+Setup your cluster and install testing tools:
+
+```bash
+make quickstart
+```
+
+### Install Chainsaw CLI
+
+Install chainsaw for running tests locally:
+
+```bash
+# Install with Go
+go install github.com/kyverno/chainsaw@latest
+
+# Install with Homebrew
+brew tap kyverno/chainsaw https://github.com/kyverno/chainsaw
+brew install kyverno/chainsaw/chainsaw
+```
+
+## Running Tests Locally
+
+### Simulate GitHub E2E Environment
+
+To replicate the GitHub workflow environment locally:
+
+```bash
+# Install k3d and create test cluster
+brew install k3d
+k3d cluster create ark-e2e
+
+# Setup ARK with all dependencies (cert-manager, postgres, etc.)
+./.github/actions/setup-e2e/setup-local.sh
+
+# Run preferred chainsaw tests...
+(cd tests && chainsaw test --selector '!evaluated')
+
+# Cleanup
+k3d cluster delete ark-e2e
+```
+
+### Model Tests
+
+Use the models e2e test as a sample:
+
+```bash
+# Setup required env vars - these are pre-configured for GitHub actions.
+export E2E_TEST_AZURE_OPENAI_KEY="your-key"
+export E2E_TEST_AZURE_OPENAI_BASE_URL="your-endpoint"
+
+# Run any specific tests.
+chainsaw test ./tests/models --fail-fast
+```
+
+### Test Execution Details
+
+Chainsaw tests will:
+
+- Check required environment variables are set (e.g., API keys)
+- Apply the test resources in a new namespace
+- Assert the resources reach the expected state
+- Clean up resources after test completion
+
+You can see the resources that are created in the namespace during test execution in the chainsaw output.
+
+### Testing Workflows Locally
+
+Use [act](https://github.com/nektos/act) to test GitHub workflows locally:
+
+```bash
+# Install act, then run workflows locally
+act pull_request
+```
+
+## Developing New Tests
+
+### Test Structure
+
+Chainsaw tests follow this typical pattern:
+
+```yaml
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: azure-openai-model-test
+spec:
+  steps:
+    # Validate required environment variables
+    - name: check-env-vars
+      try:
+        - script:
+            content: |
+              if [ -z "$E2E_TEST_AZURE_OPENAI_KEY" ]; then
+                echo "E2E_TEST_AZURE_OPENAI_KEY is required"
+                exit 1
+              fi
+    
+    # Generate templated resources and apply them  
+    - name: apply
+      try:
+        - script:
+            content: |
+              kustomize build manifests | envsubst > /tmp/test-resources.yaml
+        - apply:
+            file: /tmp/test-resources.yaml
+      finally:
+        - script:
+            content: rm -f /tmp/test-resources.yaml
+    
+    # Wait for model to reach ready state
+    - name: assert
+      try:
+        - assert:
+            file: assert-ready.yaml
+```
+
+### Writing Test Assertions
+
+Create assertion files to validate resource states:
+
+```yaml
+# assert-ready.yaml
+apiVersion: v1alpha1
+kind: Model
+metadata:
+  name: test-model
+status:
+  conditions:
+    - type: "Ready"
+      status: "True"
+      reason: "ModelResolved"
+      message: "Model successfully resolved and validated"
+      observedGeneration: 1
+    - type: "Discovering"
+      status: "False"
+      reason: "ValidationComplete"
+      message: "Model validation completed successfully"
+      observedGeneration: 1
+```
+
+### Environment Variable Templating
+
+Use `envsubst` for dynamic resource generation:
+
+```yaml
+# In your manifest template
+apiVersion: v1alpha1
+kind: Model
+metadata:
+  name: test-model
+spec:
+  source: azure-openai
+  config:
+    endpoint: $E2E_TEST_AZURE_OPENAI_BASE_URL
+    apiKey: $E2E_TEST_AZURE_OPENAI_KEY
+```
+
+### Test Organization
+
+Structure tests by component:
+- `tests/models/` - Core model resource tests
+- `services/{service}/test/` - Service-specific integration tests
+- `ark/test/e2e/` - Controller and webhook tests
+
+## Debugging Tests
+
+### Verbose Output
+
+Run chainsaw with verbose flags for debugging:
+
+```bash
+# Detailed output
+chainsaw test ./tests/models --verbose
+
+# Keep test namespaces for inspection
+chainsaw test ./tests/models --cleanup=false
+
+# Run specific test steps
+chainsaw test ./tests/models --test-dir=specific-test
+```
+
+### Inspecting Resources
+
+When tests fail, inspect the created resources:
+
+```bash
+# List namespaces created by chainsaw
+kubectl get ns | grep chainsaw
+
+# Check resources in test namespace
+kubectl get all -n chainsaw-test-namespace
+
+# View logs from failed pods
+kubectl logs -n chainsaw-test-namespace pod/failing-pod
+```
+
+### Summarizing Chainsaw Test Results
+
+For a quick summary of your Chainsaw test results, you can use the provided `scripts/chainsaw_summary.py` script. This script reads a Chainsaw JSON report and prints a concise table showing which tests passed or failed.
+
+#### Usage
+
+1. **Run your Chainsaw tests with JSON reporting enabled** (e.g., `chainsaw test ... --report-json /tmp/coverage-reports/chainsaw-report.json`).
+2. **Run the summary script:**
+
+   ```bash
+   python3 scripts/chainsaw_summary.py /tmp/coverage-reports/chainsaw-report.json
+   ```
+
+   If you omit the report path, it defaults to `/tmp/coverage-reports/chainsaw-report.json`.
+
+#### Example Output
+
+```
+Test Name                    | Result
+------------------------------------------
+query-model-target           | ✅ Passed
+admission-failures           | ❌ Failed
+query-label-selector         | ✅ Passed
+query-event-recorder         | ✅ Passed
+queries                      | ✅ Passed
+models                       | ✅ Passed
+
+```
+3. **Include the evaluation summary with the `--append-evals` flag:**
+
+   ```bash
+    python3 scripts/chainsaw_summary.py --append-evals 
+   ```
+
+#### Example Output
+
+```
+Evaluation                | Score     | Evaluator
+--------------------------------------------------
+chicago-weather-query     | 30       | evaluator-llm
+research-query            | 95       | evaluator-llm
+```
+
+### Common Issues
+
+**Environment Variables Not Set**
+- Ensure all required env vars are exported before running tests
+- Use `env | grep TEST` to verify variables are set
+
+**Resource Not Ready**
+- Increase timeout in assertion files
+- Check controller logs for resource processing errors
+- Verify all dependencies are deployed
+
+**Test Namespace Conflicts**
+- Use unique test names to avoid namespace collisions
+- Clean up previous test runs with `--cleanup=true`
+
+## Available Environment Variables for GitHub Actions
+
+These environment variables are available on GitHub runners for your tests:
+
+| Variable | Description |
+|----------|-------------|
+| `E2E_TEST_AZURE_OPENAI_KEY` | Azure OpenAI API key for testing model deployments |
+| `E2E_TEST_AZURE_OPENAI_BASE_URL` | Azure OpenAI endpoint URL (e.g., `https://your-instance.openai.azure.com`) |
+
+## HTTP API Testing with Hurl
+
+### Overview
+
+[Hurl](https://hurl.dev/) is used for testing HTTP APIs of services within chainsaw tests. It provides comprehensive HTTP client functionality with JSON path validation and test assertions.
+
+### Service Test Structure
+
+Services with HTTP APIs use this test structure:
+
+```
+services/{service-name}/test/
+├── test.hurl              # HTTP test definitions
+├── chainsaw-test.yaml     # Chainsaw integration
+└── manifests/
+    ├── pod-{service}-test.yaml   # Test pod with hurl image
+    └── configmap.yaml            # ConfigMap mounting hurl files
+```
+
+### Basic Hurl Test Patterns
+
+#### Health Check Testing
+```hurl
+# Test service health endpoint
+GET http://service-name/health
+HTTP 200
+[Asserts]
+body == "OK"
+```
+
+#### JSON API Testing
+```hurl
+# Test JSON endpoint with validation
+GET http://service-name/api/endpoint
+HTTP 200
+[Asserts]
+jsonpath "$.status" == "ready"
+jsonpath "$.data" exists
+jsonpath "$.data.items" count >= 1
+```
+
+#### POST with JSON Body
+```hurl
+# Send JSON data to API
+PUT http://service-name/api/resource/session-id
+Content-Type: application/json
+{
+  "data": {
+    "field": "value",
+    "items": ["item1", "item2"]
+  }
+}
+HTTP 200
+[Asserts]
+jsonpath "$.success" == true
+```
+
+### Real-World Examples
+
+#### ARK Cluster Memory Service
+
+From `services/ark-cluster-memory/test/test.hurl`:
+
+```hurl
+# Check stream exists in global status
+GET http://ark-cluster-memory/stream-statistics
+HTTP 200
+[Asserts]
+jsonpath "$.queries.test-hurl-basic.total_chunks" == 4
+jsonpath "$.queries.test-hurl-basic.completed" == false
+jsonpath "$.queries.test-hurl-basic.chunk_types.content" == 3
+jsonpath "$.queries.test-hurl-basic.chunk_types.finish_reason" == 1
+
+# Complete the stream
+POST http://ark-cluster-memory/stream/test-hurl-basic/complete
+HTTP 200
+[Asserts]
+jsonpath "$.status" == "completed"
+jsonpath "$.query" == "test-hurl-basic"
+```
+
+#### A2A Gateway Service
+
+From `services/a2agw/test/test.hurl`:
+
+```hurl
+# Test agent discovery
+GET http://a2agw:8080/agents
+HTTP 200
+[Asserts]
+jsonpath "$" count >= 1
+jsonpath "$[*]" contains "weather-bot"
+
+# Test JSON-RPC messaging
+POST http://a2agw:8080/agent/weather-bot/jsonrpc
+Content-Type: application/json
+{
+  "jsonrpc": "2.0",
+  "method": "message/send",
+  "params": {
+    "message": {
+      "kind": "message",
+      "messageId": "test-1",
+      "role": "user",
+      "parts": [{"text": "What's the weather?"}]
+    }
+  },
+  "id": 1
+}
+HTTP 200
+[Asserts]
+jsonpath "$.jsonrpc" == "2.0"
+jsonpath "$.result.messageId" exists
+```
+
+### Chainsaw Integration
+
+#### Test Pod Setup
+```yaml
+# Pod with hurl Docker image
+- apply:
+    resource:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: service-test
+      spec:
+        containers:
+        - name: test-client
+          image: ghcr.io/orange-opensource/hurl:6.1.1
+          command: ["sleep", "300"]
+          volumeMounts:
+          - name: test-files
+            mountPath: /tests
+        volumes:
+        - name: test-files
+          configMap:
+            name: hurl-test-files
+```
+
+#### Test Execution
+```yaml
+# Execute hurl tests inside pod
+- name: run-hurl-tests
+  try:
+  - script:
+      content: |
+        kubectl exec service-test -n $NAMESPACE -- hurl --test /tests/test.hurl
+      timeout: 120s
+```
+
+### Combined Testing Pattern
+
+Services typically combine HTTP API testing with ARK integration testing:
+
+```yaml
+# First test HTTP endpoints directly
+- name: run-hurl-tests
+  try:
+  - script:
+      content: kubectl exec test-pod -- hurl --test /tests/test.hurl
+
+# Then test ARK integration
+- name: test-ark-integration
+  try:
+  - assert:
+      resource:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        status:
+          phase: done
+```
+
+This validates both the service's HTTP API functionality and its integration with ARK resources.
+
+## Testing Completions API Calls
+
+If you need to validate or verify the values of parameters sent to an LLM endpoint, a simple echo server or similar can be set up as a model. This can be used as 'deterministic' LLM that gives predicatable output.
+
+As an example, this test at:
+
+```
+https://github.com/mckinsey/agents-at-scale-ark/tree/main/tests/query-parameter-ref
+```
+
+Is used to check whether the parameters provided via a query to an agent are expanded correctly. Rather than asking the LLM to give back a response in a prompt, which is brittle, a mock LLM server is used which echos back the response - this can then be validated deterministically by checking the `query.Responses` field. The mock server is defined in `a00-mock-server.yaml`.
+
+## Chainsaw Functions and Expressions
+
+### Basic Expressions
+
+#### Comparison Operators
+```yaml
+# Assert that there are exactly 3 pods ready in a Deployment
+(status.readyReplicas == `3`): true
+
+# Assert that the number of available pods is not zero
+(status.availableReplicas != `0`): true
+
+# Assert that the number of pods is greater than or equal to 2
+(status.replicas >= `2`): true
+
+# Assert that the number of unavailable pods is less than 1
+(status.unavailableReplicas < `1`): true
+
+# Combined conditions: at least 2 pods, but no more than 5
+(status.replicas >= `2` && status.replicas <= `5`): true
+
+# Either all pods are ready, or the deployment is progressing
+(status.readyReplicas == status.replicas || status.conditions[*].type contains 'Progressing'): true
+```
+
+#### Type Conversion
+```yaml
+# Convert string to number
+(to_number(evaluations[0].score) >= `0`): true
+
+# Convert to string
+(to_string(evaluations[0].passed) == 'true'): true
+
+# Type checking
+status:
+  (type(evaluations[0].evaluatorName) == 'string'): true
+  (type(tokenUsage.promptTokens) == 'number'): true
+  (type(evaluations[0].passed) == 'boolean'): true
+  (type(evaluations) == 'array'): true
+  (type(evaluations[0]) == 'object'): true
+```
+
+### Array and Object Functions
+
+#### Array Operations
+```yaml
+# Array length
+(length(responses)): 1
+(length(evaluations) > `0`): true
+
+# Array contains
+(contains(responses[*].target.name, 'agent-name')): true
+(contains(['a', 'b', 'c'], 'b')): true
+
+# Array indexing
+(responses[0].content != ''): true
+(evaluations[0].passed): true
+```
+
+#### Object Operations
+```yaml
+# Check if field exists
+(has(evaluations[0].metadata)): true
+(has(status.phase)): true
+
+# Get object keys
+(contains(keys(evaluations[0].metadata), 'reasoning')): true
+(length(keys(metadata)) > `0`): true
+
+# Get object values
+(contains(values(metadata), 'success')): true
+```
+
+### String Functions
+
+#### String Operations
+```yaml
+# String length
+(length(responses[0].content) > `50`): true
+
+# String contains
+(contains(responses[0].content, 'Chicago')): true
+(contains(responses[0].content, 'weather')): true
+
+# String join
+(length(join('', responses[*].content)) > `50`): true
+(join(',', responses[*].target.name) == 'agent1,agent2'): true
+
+# String matching
+(responses[0].content =~ 'pattern'): true
+```
+
+### Advanced Validation Patterns
+
+#### Range Validation
+```yaml
+# Numeric range (0-100)
+(to_number(evaluations[0].score) >= `0` && to_number(evaluations[0].score) <= `100`): true
+
+# String length range
+(length(responses[0].content) >= `10` && length(responses[0].content) <= `1000`): true
+```
+
+#### Multi-condition Validation
+```yaml
+# All conditions must be true
+(evaluations[0].passed &&
+ to_number(evaluations[0].score) > `70` &&
+ evaluations[0].evaluatorName != ''): true
+
+# At least one condition must be true
+(contains(responses[0].content, 'Chicago') ||
+ contains(responses[0].content, 'chicago') ||
+ contains(responses[0].content, 'CHICAGO')): true
+```
+
+#### Nested Field Validation
+```yaml
+# Deep object access
+(evaluations[0].metadata.reasoning != ''): true
+(responses[0].target.type == 'agent'): true
+
+# Array of objects
+(responses[*].target.name contains 'agent-name'): true
+(evaluations[*].passed contains true): true
+```
+
+### Common ARK Testing Patterns
+
+#### Resource Status Validation
+```yaml
+# Basic resource ready state
+status:
+  phase: ready
+
+# Query completion
+status:
+  phase: done
+  (length(responses) > `0`): true
+  (length(evaluations) > `0`): true
+```
+
+#### Evaluation Validation
+```yaml
+# Complete evaluation check
+(length(evaluations)): 1
+(has(evaluations[0].passed)): true
+(to_number(evaluations[0].score) >= `0` && to_number(evaluations[0].score) <= `100`): true
+(evaluations[0].evaluatorName != ''): true
+(has(evaluations[0].metadata)): true
+(contains(keys(evaluations[0].metadata), 'reasoning')): true
+```
+
+#### Response Content Validation
+```yaml
+# Response existence and content
+(length(responses)): 1
+(contains(responses[*].target.name, 'agent-name')): true
+(length(responses[0].content) > `10`): true
+
+# Multiple content patterns
+(contains(responses[0].content, 'Chicago') ||
+ contains(responses[0].content, 'chicago')): true
+(contains(responses[0].content, 'weather') ||
+ contains(responses[0].content, 'forecast') ||
+ contains(responses[0].content, 'temperature')): true
+```
+
+#### Error Handling
+```yaml
+# Check for absence of errors
+(has(status.error)): false
+(status.error == null): true
+
+# Validate error states
+status:
+  phase: error
+  (has(status.error)): true
+  (status.error != ''): true
+```
+
+### Best Practices
+
+#### Readable Assertions
+```yaml
+# Good: Multiple clear assertions
+(length(evaluations)): 1
+(evaluations[0].passed): true
+(to_number(evaluations[0].score) >= `70`): true
+
+# Avoid: Complex single assertion
+(length(evaluations) == 1 && evaluations[0].passed && to_number(evaluations[0].score) >= `70`): true
+```
+
+#### Defensive Validation
+```yaml
+# Check existence before accessing
+(has(evaluations[0])): true
+(has(evaluations[0].metadata)): true
+(contains(keys(evaluations[0].metadata), 'reasoning')): true
+
+# Validate types
+(type(evaluations[0].passed) == 'boolean'): true
+(type(evaluations[0].score) == 'string'): true
+```
+
+#### Flexible Content Matching
+```yaml
+# Case-insensitive matching
+(contains(to_lower(responses[0].content), 'chicago')): true
+
+# Multiple acceptable values
+(evaluations[0].passed in [true, false]): true
+(status.phase in ['done', 'completed']): true
+```
+
+## Additional Testing Approaches
+
+### Go-based E2E Tests
+
+For controller-specific testing, use the Go-based e2e tests:
+
+```bash
+cd ark/
+make setup-test-e2e  # Setup Kind cluster
+make test-e2e         # Run Ginkgo tests
+make cleanup-test-e2e # Cleanup
+```
+
+These tests validate:
+- Controller deployment and health
+- Webhook configuration and certificates
+- Custom resource processing
+- Metrics endpoints
+
+## Next Steps
+
+- [Services](/developer-guide/services) - Learn about ARK services
+- [Observability](/developer-guide/observability) - Monitor your ARK applications

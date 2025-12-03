@@ -471,7 +471,7 @@ const ToolGroup = ({
     defaultOpen
     className="group/collapsible"
     key={toolGroup.groupName}>
-    <div className="bg-gray-100 p-2">
+    <div className="p-2">
       <CollapsibleTrigger className="w-full">
         <div className="flex w-full flex-row items-center justify-between">
           <Label>{toolGroup.groupName}</Label>

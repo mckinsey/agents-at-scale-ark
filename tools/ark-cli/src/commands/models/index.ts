@@ -39,7 +39,7 @@ async function listModels(options: {output?: string}) {
   }
 }
 
-export function createModelsCommand(_: ArkConfig): Command {
+export function createModelsCommand(config: ArkConfig): Command {
   const modelsCommand = new Command('models');
 
   modelsCommand
@@ -83,13 +83,17 @@ export function createModelsCommand(_: ArkConfig): Command {
     .description('Query a model')
     .argument('<name>', 'Model name (e.g., default)')
     .argument('<message>', 'Message to send')
-    .action(async (name: string, message: string) => {
-      await executeQuery({
-        targetType: 'model',
-        targetName: name,
-        message,
-      });
-    });
+    .option('--timeout <timeout>', 'Query timeout (e.g., 30s, 5m, 1h)')
+    .action(
+      async (name: string, message: string, options: {timeout?: string}) => {
+        await executeQuery({
+          targetType: 'model',
+          targetName: name,
+          message,
+          timeout: options.timeout || config.queryTimeout,
+        });
+      }
+    );
 
   modelsCommand.addCommand(queryCommand);
 
