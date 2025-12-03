@@ -1,6 +1,7 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "setuptools>=64.0", "pip>=25.0"]
 build-backend = "hatchling.build"
+
 
 [project]
 name = "simple-a2a-server"

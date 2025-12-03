@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=64.0", "pip>=25.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "ark-mcp"
 version = "0.1.0"
