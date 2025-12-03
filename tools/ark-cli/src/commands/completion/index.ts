@@ -32,7 +32,7 @@ _ark_completion() {
   
   case \${COMP_CWORD} in
     1)
-      opts="agents chat cluster completion config dashboard docs generate install marketplace models queries query routes status targets teams tools uninstall help"
+      opts="agents chat cluster completion config dashboard docs evaluation export generate import install marketplace memory models queries query routes status targets teams tools uninstall help"
       COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
       return 0
       ;;
@@ -85,6 +85,11 @@ _ark_completion() {
           ;;
         marketplace)
           opts="list ls"
+          COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
+          return 0
+          ;;
+        memory)
+          opts="list ls delete reset"
           COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
           return 0
           ;;
@@ -163,9 +168,13 @@ _ark() {
         'config[Configuration management]' \\
         'dashboard[Open ARK dashboard]' \\
         'docs[Open ARK documentation]' \\
+        'evaluation[Execute evaluations against evaluators]' \\
+        'export[Export ARK resources to a file]' \\
         'generate[Generate ARK resources]' \\
+        'import[Import ARK resources from a file]' \\
         'install[Install ARK services]' \\
         'marketplace[Manage marketplace services]' \\
+        'memory[Manage memory sessions and queries]' \\
         'models[List available models]' \\
         'queries[Manage query resources]' \\
         'query[Execute a single query]' \\
@@ -232,6 +241,13 @@ _ark() {
           _values 'marketplace commands' \\
             'list[List available marketplace services]' \\
             'ls[List available marketplace services]'
+          ;;
+        memory)
+          _values 'memory commands' \\
+            'list[List all sessions]' \\
+            'ls[List all sessions]' \\
+            'delete[Delete memory data]' \\
+            'reset[Delete memory data]'
           ;;
         install)
           _values 'services to install' \\
