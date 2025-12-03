@@ -1,7 +1,3 @@
-[build-system]
-requires = ["setuptools>=64.0", "pip>=25.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "ark-sdk"
 version = "0.1.46"
@@ -57,7 +53,7 @@ Documentation = "https://mckinsey.github.io/agents-at-scale-ark"
 "Bug Tracker" = "https://github.com/mckinsey/agents-at-scale-ark/issues"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "setuptools>=64.0", "pip>=25.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
