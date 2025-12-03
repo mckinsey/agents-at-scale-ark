@@ -46,6 +46,8 @@ import type {
 import { cn } from '@/lib/utils';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 
+import { TeamMemberSelectionSection } from './member-editor';
+
 type GraphEdge = components['schemas']['GraphEdge'];
 
 interface TeamEditorProps {
@@ -94,7 +96,6 @@ function DraggableCard({
       const hoverIndex = index;
       if (dragIndex === hoverIndex) return;
 
-      // Move card when hovering
       moveCard(dragIndex, hoverIndex);
       item.index = hoverIndex;
     },
@@ -156,6 +157,10 @@ export function TeamEditor({
   const [orderedAgents, setOrderedAgents] = useState<Agent[]>([]);
   const [graphEdgesError, setGraphEdgesError] = useState<string | null>(null);
   const [membersError, setMembersError] = useState<string | null>(null);
+  const [unavailableMembers, setUnavailableMembers] = useState<TeamMember[]>(
+    [],
+  );
+  const [availableMembers, setAvailableMembers] = useState<TeamMember[]>([]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -170,14 +175,63 @@ export function TeamEditor({
   });
 
   const selectedStrategy = form.watch('strategy');
+  const selectorAgentValue = form.watch('selectorAgent');
 
-  // Clear errors when strategy changes as validation rules are different per strategy
+  // Clear errors when strategy changes
   useEffect(() => {
     form.clearErrors();
     setGraphEdgesError(null);
+    setMembersError(null);
   }, [selectedStrategy, form]);
 
+  // Check for unavailable members when team changes
   useEffect(() => {
+    if (team && team.members) {
+      const missingMembers = team.members.filter(
+        teamMember => !agents.some(a => a.name === teamMember.name),
+      ) as TeamMember[];
+      const checkMissingAgents = async () => {
+        try {
+          if (missingMembers.length > 0) {
+            setAvailableMembers(
+              team.members.filter(m => !missingMembers.includes(m)),
+            );
+          } else {
+            setAvailableMembers(team.members);
+          }
+          setUnavailableMembers(missingMembers || []);
+        } catch (error) {
+          console.error('Failed to load all agents:', error);
+          setUnavailableMembers([]);
+        }
+      };
+      if (open) {
+        checkMissingAgents();
+      } else {
+        setAvailableMembers(
+          team.members.filter(m => !missingMembers.includes(m)),
+        );
+      }
+    }
+  }, [open, team, team?.members, agents]);
+
+  // Reset form when dialog opens/closes or team changes
+  useEffect(() => {
+    if (!open) {
+      // Reset everything when dialog closes
+      if (!team) {
+        form.reset();
+        setSelectedMembers([]);
+        setGraphEdges([]);
+        setOrderedAgents(agents);
+        setUnavailableMembers([]);
+        setAvailableMembers([]);
+      }
+      setGraphEdgesError(null);
+      setMembersError(null);
+      return;
+    }
+
     if (team) {
       form.reset({
         name: team.name,
@@ -187,7 +241,6 @@ export function TeamEditor({
         selectorAgent: team.selector?.agent ?? '',
         selectorPrompt: team.selector?.selectorPrompt ?? '',
       });
-      setSelectedMembers(team.members || []);
       setGraphEdges(team.graph?.edges || []);
     } else {
       form.reset();
@@ -197,8 +250,17 @@ export function TeamEditor({
     }
     setGraphEdgesError(null);
     setMembersError(null);
-  }, [team, open, agents, form]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [team, open]);
 
+  // Sync selected members with available members when they change
+  useEffect(() => {
+    if (team && open) {
+      setSelectedMembers(availableMembers);
+    }
+  }, [team, open, availableMembers]);
+
+  // Update ordered agents when selection changes
   useEffect(() => {
     if (agents && selectedMembers) {
       const agentsNotSelected = agents.filter(
@@ -223,11 +285,36 @@ export function TeamEditor({
       return;
     }
 
+    // Validate no unavailable members in selector agent
+    if (
+      selectedStrategy === 'selector' &&
+      unavailableMembers.some(m => m.name === values.selectorAgent)
+    ) {
+      form.setError('selectorAgent', {
+        message: 'Selected agent is no longer available',
+      });
+      return;
+    }
+
     // Validate graph edges for both graph and selector strategies
     if (
       (selectedStrategy === 'graph' || selectedStrategy === 'selector') &&
       graphEdges.length > 0
     ) {
+      // Check for unavailable members in edges
+      const hasUnavailableInEdges = graphEdges.some(
+        edge =>
+          unavailableMembers.some(m => m.name === edge.from) ||
+          unavailableMembers.some(m => m.name === edge.to),
+      );
+      if (hasUnavailableInEdges) {
+        setGraphEdgesError(
+          'Some edges reference members that are no longer available',
+        );
+        return;
+      }
+
+      // Both from and to are required per API validation
       if (!graphEdges.every(edge => edge.from && edge.to)) {
         setGraphEdgesError(
           'All edges must have both "From" and "To" set to valid members',
@@ -353,6 +440,41 @@ export function TeamEditor({
     setGraphEdges(prev => prev.filter((_, i) => i !== index));
   };
 
+  const onDeleteClick = (member: TeamMember) => {
+    setUnavailableMembers(prev =>
+      prev.filter(unavailableMember => unavailableMember.name !== member.name),
+    );
+    setAvailableMembers(prev => prev.filter(m => m.name !== member.name));
+    setSelectedMembers(prev => prev.filter(m => m.name !== member.name));
+    if (selectedStrategy === 'selector' && selectorAgentValue === member.name) {
+      form.setValue('selectorAgent', '');
+    }
+    if (
+      (selectedStrategy === 'graph' || selectedStrategy === 'selector') &&
+      graphEdges.length > 0
+    ) {
+      setGraphEdges(prev =>
+        prev.map(e => {
+          let newEdge: GraphEdge;
+          if (e.from === member.name) {
+            newEdge = {
+              from: '',
+              to: e.to,
+            };
+          } else if (e.to === member.name) {
+            newEdge = {
+              from: e.from,
+              to: '',
+            };
+          } else {
+            newEdge = e;
+          }
+          return newEdge;
+        }),
+      );
+    }
+  };
+
   const moveCard = (dragIndex: number, hoverIndex: number) => {
     const updated = [...orderedAgents];
     const [removed] = updated.splice(dragIndex, 1);
@@ -473,6 +595,12 @@ export function TeamEditor({
                   </FormItem>
                 )}
               />
+
+              <TeamMemberSelectionSection
+                unavailableMembers={unavailableMembers}
+                onDeleteMember={onDeleteClick}
+              />
+
               <div className="grid gap-2">
                 <Label>
                   Members <span className="text-red-500">*</span>
@@ -537,7 +665,13 @@ export function TeamEditor({
                           value={field.value}
                           disabled={form.formState.isSubmitting}>
                           <FormControl>
-                            <SelectTrigger>
+                            <SelectTrigger
+                              className={cn(
+                                '',
+                                unavailableMembers.some(
+                                  m => m.name === field.value,
+                                ) && 'border-red-500',
+                              )}>
                               <SelectValue placeholder="Select an agent" />
                             </SelectTrigger>
                           </FormControl>
@@ -547,6 +681,16 @@ export function TeamEditor({
                                 None (Unset)
                               </span>
                             </SelectItem>
+                            {field.value &&
+                              unavailableMembers.some(
+                                m => m.name === field.value,
+                              ) && (
+                                <SelectItem
+                                  key={field.value}
+                                  value={field.value}>
+                                  {field.value} (Unavailable)
+                                </SelectItem>
+                              )}
                             {agents.map(agent => (
                               <SelectItem key={agent.name} value={agent.name}>
                                 {agent.name}
@@ -606,61 +750,87 @@ export function TeamEditor({
                         graph connections.
                       </p>
                     ) : (
-                      graphEdges.map((edge, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                          <Select
-                            value={edge.from || ''}
-                            onValueChange={value =>
-                              updateGraphEdge(index, 'from', value)
-                            }
-                            disabled={form.formState.isSubmitting}>
-                            <SelectTrigger className="flex-1">
-                              <SelectValue placeholder="From" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {selectedMembers
-                                .filter(m => m.type === 'agent')
-                                .map(member => (
-                                  <SelectItem
-                                    key={member.name}
-                                    value={member.name}>
-                                    {member.name}
+                      graphEdges.map((edge, index) => {
+                        const isFromUnavailable = unavailableMembers.some(
+                          member => member.name === edge.from,
+                        );
+                        const isToUnavailable = unavailableMembers.some(
+                          member => member.name === edge.to,
+                        );
+                        return (
+                          <div key={index} className="flex items-center gap-2">
+                            <Select
+                              value={edge.from || ''}
+                              onValueChange={value =>
+                                updateGraphEdge(index, 'from', value)
+                              }
+                              disabled={form.formState.isSubmitting}>
+                              <SelectTrigger
+                                className={cn(
+                                  'flex-1',
+                                  isFromUnavailable && 'border-red-500',
+                                )}>
+                                <SelectValue placeholder="From" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {isFromUnavailable && (
+                                  <SelectItem key={edge.from} value={edge.from}>
+                                    {edge.from} (Unavailable)
                                   </SelectItem>
-                                ))}
-                            </SelectContent>
-                          </Select>
-                          <span className="text-muted-foreground">→</span>
-                          <Select
-                            value={edge.to}
-                            onValueChange={value =>
-                              updateGraphEdge(index, 'to', value)
-                            }
-                            disabled={form.formState.isSubmitting}>
-                            <SelectTrigger className="flex-1">
-                              <SelectValue placeholder="To" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {selectedMembers
-                                .filter(m => m.type === 'agent')
-                                .map(member => (
-                                  <SelectItem
-                                    key={member.name}
-                                    value={member.name}>
-                                    {member.name}
+                                )}
+                                {selectedMembers
+                                  .filter(m => m.type === 'agent')
+                                  .map(member => (
+                                    <SelectItem
+                                      key={member.name}
+                                      value={member.name}>
+                                      {member.name}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                            <span className="text-muted-foreground">→</span>
+                            <Select
+                              value={edge.to}
+                              onValueChange={value =>
+                                updateGraphEdge(index, 'to', value)
+                              }
+                              disabled={form.formState.isSubmitting}>
+                              <SelectTrigger
+                                className={cn(
+                                  'flex-1',
+                                  isToUnavailable && 'border-red-500',
+                                )}>
+                                <SelectValue placeholder="To" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {isToUnavailable && (
+                                  <SelectItem key={edge.to} value={edge.to}>
+                                    {edge.to} (Unavailable)
                                   </SelectItem>
-                                ))}
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeGraphEdge(index)}
-                            disabled={form.formState.isSubmitting}>
-                            Remove
-                          </Button>
-                        </div>
-                      ))
+                                )}
+                                {selectedMembers
+                                  .filter(m => m.type === 'agent')
+                                  .map(member => (
+                                    <SelectItem
+                                      key={member.name}
+                                      value={member.name}>
+                                      {member.name}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeGraphEdge(index)}
+                              disabled={form.formState.isSubmitting}>
+                              Remove
+                            </Button>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                   <p className="text-muted-foreground text-xs">
