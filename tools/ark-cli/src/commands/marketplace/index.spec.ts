@@ -5,7 +5,7 @@ import type {ServiceCollection} from '../../types/arkService.js';
 import type {AnthropicMarketplaceManifest} from '../../types/marketplace.js';
 
 const mockGetAllMarketplaceServices = jest.fn<
-  () => Promise<ServiceCollection>
+  () => Promise<ServiceCollection | null>
 >();
 const mockFetchMarketplaceManifest = jest.fn<
   () => Promise<AnthropicMarketplaceManifest | null>
@@ -71,19 +71,8 @@ describe('marketplace command', () => {
     expect(mockConsoleLog).toHaveBeenCalled();
   });
 
-  it('shows fallback message when manifest unavailable', async () => {
-    const mockServices = {
-      phoenix: {
-        name: 'phoenix',
-        helmReleaseName: 'phoenix',
-        description: 'Phoenix service',
-        enabled: true,
-        category: 'marketplace',
-        namespace: 'phoenix',
-      },
-    };
-
-    mockGetAllMarketplaceServices.mockResolvedValue(mockServices);
+  it('shows unavailable message when marketplace unavailable', async () => {
+    mockGetAllMarketplaceServices.mockResolvedValue(null);
     mockFetchMarketplaceManifest.mockResolvedValue(null);
 
     const command = createMarketplaceCommand({} as ArkConfig);
@@ -91,7 +80,7 @@ describe('marketplace command', () => {
 
     expect(mockConsoleLog).toHaveBeenCalled();
     const logCalls = mockConsoleLog.mock.calls.map((c) => c[0]).join(' ');
-    expect(logCalls).toContain('fallback');
+    expect(logCalls).toContain('unavailable');
   });
 
 });

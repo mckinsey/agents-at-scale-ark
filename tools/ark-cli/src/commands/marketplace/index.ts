@@ -44,19 +44,32 @@ ${chalk.cyan('Available Services:')}
 
       console.log(chalk.blue('\n🏪 ARK Marketplace Services\n'));
 
-      if (manifest) {
+      if (!services || !manifest) {
         console.log(
-          chalk.dim(
-            `Using marketplace.json (version: ${manifest.version})\n`
+          chalk.yellow('⚠️  Marketplace unavailable\n')
+        );
+        console.log(
+          chalk.gray('Could not fetch marketplace.json from repository.\n')
+        );
+        console.log(
+          chalk.cyan(
+            'Repository: https://github.com/mckinsey/agents-at-scale-marketplace'
           )
         );
-      } else {
         console.log(
-          chalk.dim(
-            'Using fallback services (marketplace.json unavailable)\n'
+          chalk.cyan(
+            'Registry: oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts'
           )
         );
+        console.log();
+        return;
       }
+
+      console.log(
+        chalk.dim(
+          `Using marketplace.json (version: ${manifest.version})\n`
+        )
+      );
 
       console.log(
         chalk.gray(
@@ -86,13 +99,11 @@ ${chalk.cyan('Available Services:')}
           'Registry: oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts'
         )
       );
-      if (manifest) {
-        console.log(
-          chalk.dim(
-            `Manifest: marketplace.json (${manifest.items?.length || 0} items)`
-          )
-        );
-      }
+      console.log(
+        chalk.dim(
+          `Manifest: marketplace.json (${manifest.items?.length || 0} items)`
+        )
+      );
       console.log();
     });
 

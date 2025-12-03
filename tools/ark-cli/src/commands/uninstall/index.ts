@@ -54,8 +54,12 @@ async function uninstallArk(
         );
         output.info('available marketplace services:');
         const marketplaceServices = await getAllMarketplaceServices();
-        for (const serviceName of Object.keys(marketplaceServices)) {
-          output.info(`  marketplace/services/${serviceName}`);
+        if (marketplaceServices) {
+          for (const serviceName of Object.keys(marketplaceServices)) {
+            output.info(`  marketplace/services/${serviceName}`);
+          }
+        } else {
+          output.warning('Marketplace unavailable');
         }
         process.exit(1);
       }

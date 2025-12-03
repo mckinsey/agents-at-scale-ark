@@ -17,9 +17,6 @@ jest.unstable_mockModule('./lib/marketplaceFetcher.js', () => ({
 const {
   getAllMarketplaceServices,
   getMarketplaceService,
-  getAllMarketplaceServicesSync,
-  getMarketplaceServiceSync,
-  fallbackMarketplaceServices,
 } = await import('./marketplaceServices.js');
 
 describe('marketplaceServices', () => {
@@ -49,14 +46,12 @@ describe('marketplaceServices', () => {
       expect(mockGetMarketplaceServicesFromManifest).toHaveBeenCalled();
     });
 
-    it('falls back to hardcoded services when manifest unavailable', async () => {
+    it('returns null when manifest unavailable', async () => {
       mockGetMarketplaceServicesFromManifest.mockResolvedValue(null);
 
       const result = await getAllMarketplaceServices();
 
-      expect(result).toEqual(fallbackMarketplaceServices);
-      expect(result['phoenix']).toBeDefined();
-      expect(result['langfuse']).toBeDefined();
+      expect(result).toBeNull();
     });
 
   });
@@ -99,36 +94,12 @@ describe('marketplaceServices', () => {
       expect(result).toBeUndefined();
     });
 
-    it('falls back to hardcoded services', async () => {
+    it('returns null when marketplace unavailable', async () => {
       mockGetMarketplaceServicesFromManifest.mockResolvedValue(null);
-      await getAllMarketplaceServices();
 
       const result = await getMarketplaceService('phoenix');
 
-      expect(result).toEqual(fallbackMarketplaceServices['phoenix']);
-    });
-  });
-
-  describe('getAllMarketplaceServicesSync', () => {
-    it('returns fallback services immediately', () => {
-      const result = getAllMarketplaceServicesSync();
-
-      expect(result).toEqual(fallbackMarketplaceServices);
-      expect(mockGetMarketplaceServicesFromManifest).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('getMarketplaceServiceSync', () => {
-    it('returns service from fallback services', () => {
-      const result = getMarketplaceServiceSync('phoenix');
-
-      expect(result).toEqual(fallbackMarketplaceServices['phoenix']);
-    });
-
-    it('returns undefined for non-existent service', () => {
-      const result = getMarketplaceServiceSync('non-existent');
-
-      expect(result).toBeUndefined();
+      expect(result).toBeNull();
     });
   });
 });
