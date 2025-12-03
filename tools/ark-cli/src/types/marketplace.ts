@@ -2,6 +2,7 @@ export interface AnthropicMarketplaceItem {
   name: string;
   displayName?: string;
   description: string;
+  type?: 'service' | 'agent';
   version?: string;
   author?: string;
   homepage?: string;

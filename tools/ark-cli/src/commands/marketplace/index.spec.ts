@@ -7,6 +7,9 @@ import type {AnthropicMarketplaceManifest} from '../../types/marketplace.js';
 const mockGetAllMarketplaceServices = jest.fn<
   () => Promise<ServiceCollection | null>
 >();
+const mockGetAllMarketplaceAgents = jest.fn<
+  () => Promise<ServiceCollection | null>
+>();
 const mockFetchMarketplaceManifest = jest.fn<
   () => Promise<AnthropicMarketplaceManifest | null>
 >();
@@ -14,6 +17,7 @@ const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
 
 jest.unstable_mockModule('../../marketplaceServices.js', () => ({
   getAllMarketplaceServices: mockGetAllMarketplaceServices,
+  getAllMarketplaceAgents: mockGetAllMarketplaceAgents,
 }));
 
 jest.unstable_mockModule('../../lib/marketplaceFetcher.js', () => ({
@@ -34,12 +38,23 @@ describe('marketplace command', () => {
     expect(command.name()).toBe('marketplace');
   });
 
-  it('lists services from manifest', async () => {
+  it('lists services and agents from manifest', async () => {
     const mockServices = {
       'test-service': {
         name: 'test-service',
         helmReleaseName: 'test-service',
         description: 'Test service description',
+        enabled: true,
+        category: 'marketplace',
+        namespace: 'test-ns',
+      },
+    };
+
+    const mockAgents = {
+      'test-agent': {
+        name: 'test-agent',
+        helmReleaseName: 'test-agent',
+        description: 'Test agent description',
         enabled: true,
         category: 'marketplace',
         namespace: 'test-ns',
@@ -53,8 +68,18 @@ describe('marketplace command', () => {
         {
           name: 'test-service',
           description: 'Test service',
+          type: 'service',
           ark: {
             chartPath: 'oci://registry/test-service',
+            namespace: 'test',
+          },
+        },
+        {
+          name: 'test-agent',
+          description: 'Test agent',
+          type: 'agent',
+          ark: {
+            chartPath: 'oci://registry/test-agent',
             namespace: 'test',
           },
         },
@@ -62,17 +87,20 @@ describe('marketplace command', () => {
     };
 
     mockGetAllMarketplaceServices.mockResolvedValue(mockServices);
+    mockGetAllMarketplaceAgents.mockResolvedValue(mockAgents);
     mockFetchMarketplaceManifest.mockResolvedValue(mockManifest);
 
     const command = createMarketplaceCommand({} as ArkConfig);
     await command.parseAsync(['node', 'test', 'list']);
 
     expect(mockGetAllMarketplaceServices).toHaveBeenCalled();
+    expect(mockGetAllMarketplaceAgents).toHaveBeenCalled();
     expect(mockConsoleLog).toHaveBeenCalled();
   });
 
   it('shows unavailable message when marketplace unavailable', async () => {
     mockGetAllMarketplaceServices.mockResolvedValue(null);
+    mockGetAllMarketplaceAgents.mockResolvedValue(null);
     mockFetchMarketplaceManifest.mockResolvedValue(null);
 
     const command = createMarketplaceCommand({} as ArkConfig);

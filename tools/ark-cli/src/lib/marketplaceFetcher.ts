@@ -70,7 +70,7 @@ export async function getMarketplaceServicesFromManifest(): Promise<ServiceColle
 
   const services: ServiceCollection = {};
   for (const item of manifest.items) {
-    if (item.ark) {
+    if (item.ark && item.type === 'service') {
       const serviceName = item.name
         .toLowerCase()
         .replace(/[^a-z0-9-]/g, '-')
@@ -80,5 +80,25 @@ export async function getMarketplaceServicesFromManifest(): Promise<ServiceColle
   }
 
   return Object.keys(services).length > 0 ? services : null;
+}
+
+export async function getMarketplaceAgentsFromManifest(): Promise<ServiceCollection | null> {
+  const manifest = await fetchMarketplaceManifest();
+  if (!manifest || !manifest.items) {
+    return null;
+  }
+
+  const agents: ServiceCollection = {};
+  for (const item of manifest.items) {
+    if (item.ark && item.type === 'agent') {
+      const agentName = item.name
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, '-')
+        .replace(/^-+|-+$/g, '');
+      agents[agentName] = mapMarketplaceItemToArkService(item);
+    }
+  }
+
+  return Object.keys(agents).length > 0 ? agents : null;
 }
 

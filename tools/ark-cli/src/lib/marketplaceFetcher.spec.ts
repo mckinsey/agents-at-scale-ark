@@ -168,6 +168,7 @@ describe('marketplaceFetcher', () => {
           {
             name: 'service1',
             description: 'Service 1',
+            type: 'service',
             ark: {
               chartPath: 'oci://registry/service1',
               namespace: 'ns1',
@@ -176,6 +177,7 @@ describe('marketplaceFetcher', () => {
           {
             name: 'service2',
             description: 'Service 2',
+            type: 'service',
             ark: {
               chartPath: 'oci://registry/service2',
               namespace: 'ns2',
@@ -209,6 +211,7 @@ describe('marketplaceFetcher', () => {
           {
             name: 'service1',
             description: 'Service 1',
+            type: 'service',
             ark: {
               chartPath: 'oci://registry/service1',
             },
@@ -216,6 +219,7 @@ describe('marketplaceFetcher', () => {
           {
             name: 'service2',
             description: 'Service 2',
+            type: 'service',
           },
         ],
       };

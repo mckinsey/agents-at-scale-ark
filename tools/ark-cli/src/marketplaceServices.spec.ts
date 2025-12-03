@@ -5,18 +5,23 @@ import type {AnthropicMarketplaceManifest} from './types/marketplace.js';
 const mockGetMarketplaceServicesFromManifest = jest.fn<
   () => Promise<ServiceCollection | null>
 >();
+const mockGetMarketplaceAgentsFromManifest = jest.fn<
+  () => Promise<ServiceCollection | null>
+>();
 const mockFetchMarketplaceManifest = jest.fn<
   () => Promise<AnthropicMarketplaceManifest | null>
 >();
 
 jest.unstable_mockModule('./lib/marketplaceFetcher.js', () => ({
   getMarketplaceServicesFromManifest: mockGetMarketplaceServicesFromManifest,
+  getMarketplaceAgentsFromManifest: mockGetMarketplaceAgentsFromManifest,
   fetchMarketplaceManifest: mockFetchMarketplaceManifest,
 }));
 
 const {
   getAllMarketplaceServices,
-  getMarketplaceService,
+  getAllMarketplaceAgents,
+  getMarketplaceItem,
 } = await import('./marketplaceServices.js');
 
 describe('marketplaceServices', () => {
@@ -56,8 +61,8 @@ describe('marketplaceServices', () => {
 
   });
 
-  describe('getMarketplaceService', () => {
-    it('returns service by name from manifest', async () => {
+  describe('getMarketplaceItem', () => {
+    it('returns service by path from manifest', async () => {
       const mockServices = {
         'test-service': {
           name: 'test-service',
@@ -69,12 +74,12 @@ describe('marketplaceServices', () => {
       };
 
       mockGetMarketplaceServicesFromManifest.mockResolvedValue(mockServices);
-      await getAllMarketplaceServices();
 
-      const result = await getMarketplaceService('test-service');
+      const result = await getMarketplaceItem('marketplace/services/test-service');
 
       expect(result).toEqual(mockServices['test-service']);
     });
+
 
     it('returns undefined for non-existent service', async () => {
       const mockServices = {
@@ -87,9 +92,8 @@ describe('marketplaceServices', () => {
         },
       };
       mockGetMarketplaceServicesFromManifest.mockResolvedValue(mockServices);
-      await getAllMarketplaceServices();
 
-      const result = await getMarketplaceService('non-existent');
+      const result = await getMarketplaceItem('marketplace/services/non-existent');
 
       expect(result).toBeUndefined();
     });
@@ -97,7 +101,7 @@ describe('marketplaceServices', () => {
     it('returns null when marketplace unavailable', async () => {
       mockGetMarketplaceServicesFromManifest.mockResolvedValue(null);
 
-      const result = await getMarketplaceService('phoenix');
+      const result = await getMarketplaceItem('marketplace/services/phoenix');
 
       expect(result).toBeNull();
     });
