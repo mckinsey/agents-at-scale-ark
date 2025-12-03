@@ -8,6 +8,9 @@ authors = [
 readme = "README.md"
 keywords = ["kubernetes", "ai", "agents", "mckinsey", "ark", "llm", "automation", "agentic-ai"]
 requires-python = ">=3.9"
+pip = ">=25.0.1,<26"
+setuptools = ">=70.0.0"
+
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",

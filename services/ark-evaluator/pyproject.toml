@@ -4,6 +4,9 @@ version = "0.1.46"
 description = "Evaluator for Ark - AI-powered query evaluation service"
 readme = "README.md"
 requires-python = ">=3.12"
+pip = ">=25.0.1,<26"
+setuptools = ">=70.0.0"
+
 dependencies = [
     "fastapi>=0.104.0",
     "uvicorn[standard]>=0.24.0",

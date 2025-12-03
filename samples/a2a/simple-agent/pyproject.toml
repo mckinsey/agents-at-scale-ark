@@ -8,6 +8,9 @@ version = "1.0.0"
 description = "A simple A2A server demonstrating basic functionality"
 readme = "README.md"
 requires-python = ">=3.12"
+pip = ">=25.0.1,<26"
+setuptools = ">=70.0.0"
+
 dependencies = [
     "a2a-sdk[http-server]>=0.2.6",
     "starlette>=0.27.0",

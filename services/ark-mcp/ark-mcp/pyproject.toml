@@ -6,6 +6,9 @@ authors = [
     {name = "McKinsey Agent Platform Team"}
 ]
 requires-python = ">=3.12"
+pip = ">=25.0.1,<26"
+setuptools = ">=70.0.0"
+
 dependencies = [
     "fastmcp>=0.5.0",
     "pydantic>=2.0.0",
