@@ -18,6 +18,7 @@ export type {
 };
 
 const REGISTRY_BASE = 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts';
+const MARKETPLACE_REGISTRY_BASE = 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts';
 
 /**
  * Dependencies that should be installed before ARK services
@@ -188,7 +189,7 @@ const defaultArkServices: ServiceCollection = {
     description: 'Runtime administration agent with cluster privileges',
     enabled: false,
     category: 'service',
-    chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/noah',
+    chartPath: `${MARKETPLACE_REGISTRY_BASE}/noah`,
     installArgs: [],
     k8sServiceName: 'noah-mcp',
     k8sServicePort: 8639,
