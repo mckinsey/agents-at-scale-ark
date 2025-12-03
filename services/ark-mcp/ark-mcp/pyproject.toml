@@ -7,7 +7,6 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "pip>=25.0",
     "fastmcp>=0.5.0",
     "pydantic>=2.0.0",
     "kubernetes-asyncio>=24.0.0",

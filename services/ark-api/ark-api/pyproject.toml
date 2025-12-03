@@ -3,7 +3,6 @@ name = "ark-api"
 version = "0.1.46"
 description = ""
 requires-python = ">=3.11"
-pip = ">=25.0.1,<26"
 dependencies = [
     "aiofiles>=24.1.0",
     "bcrypt>=4.0.0",
