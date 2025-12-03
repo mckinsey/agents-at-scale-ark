@@ -239,8 +239,8 @@ export default function FloatingChat({
 
   // Handle maximize/minimize styling
   const cardStyles = isMaximized
-    ? 'fixed inset-4 shadow-2xl z-50 transition-all duration-300'
-    : 'fixed bottom-4 shadow-2xl z-50 w-[400px] h-[500px] transition-all duration-300';
+    ? 'fixed inset-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 transition-all duration-300'
+    : 'fixed bottom-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 w-[400px] h-[500px] transition-all duration-300';
 
   return (
     <Card

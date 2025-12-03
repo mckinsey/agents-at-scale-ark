@@ -89,14 +89,12 @@ _ark_completion() {
           return 0
           ;;
         install)
-          # Suggest marketplace services with marketplace/services/ prefix
-          opts="marketplace/services/phoenix marketplace/services/langfuse"
+          opts="marketplace/services/phoenix marketplace/services/langfuse marketplace/agents/noah"
           COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
           return 0
           ;;
         uninstall)
-          # Suggest marketplace services with marketplace/services/ prefix
-          opts="marketplace/services/phoenix marketplace/services/langfuse"
+          opts="marketplace/services/phoenix marketplace/services/langfuse marketplace/agents/noah"
           COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
           return 0
           ;;
