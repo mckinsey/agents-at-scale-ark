@@ -6,8 +6,8 @@ import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -34,7 +34,6 @@ import type {
   TeamMember,
   TeamUpdateRequest,
 } from '@/lib/services';
-import { cn } from '@/lib/utils';
 import { getKubernetesNameError } from '@/lib/utils/kubernetes-validation';
 
 type GraphEdge = components['schemas']['GraphEdge'];
@@ -93,35 +92,21 @@ function DraggableCard({
   drag(drop(ref));
 
   return (
-    <div
-      ref={ref}
-      className="mb-2 cursor-move border border-gray-300 bg-white p-2 text-sm shadow"
-      style={{ opacity: isDragging ? 0.4 : 1 }}>
-      <label
-        className={cn(
-          'flex cursor-pointer items-center space-x-2 rounded p-1',
-          isSelected ? 'hover:bg-accent' : 'opacity-50',
-        )}>
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onChange={() => toggleMember(agent)}
-          className="h-4 w-4 rounded border border-border bg-input hover:border-border-hover hover:bg-field-hover focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 accent-primary"
-        />
-        <span className="flex items-center gap-1 text-sm">
-          {agent.name}
-          {agentIsExternal && (
-            <Badge variant="outline" className="text-xs">
-              External
-            </Badge>
-          )}
-        </span>
+    <div ref={ref} className="flex w-fit cursor-move items-center space-x-2">
+      <Checkbox
+        checked={isSelected}
+        onCheckedChange={() => toggleMember(agent)}
+      />
+      <Label
+        htmlFor={`agent-${agent.id}`}
+        className="flex-10 cursor-pointer text-sm font-normal">
+        <div className="font-medium">{agent.name}</div>
         {agent.description && (
-          <span className="text-muted-foreground text-xs">
-            - {agent.description}
-          </span>
+          <div className="text-muted-foreground text-xs">
+            {agent.description}
+          </div>
         )}
-      </label>
+      </Label>
     </div>
   );
 }
