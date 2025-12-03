@@ -109,23 +109,6 @@ ${chalk.cyan('Examples:')}
         }
       }
 
-      console.log(chalk.bold('Agents:'));
-      console.log(
-        chalk.gray('Install with: ark install marketplace/agents/<name>\n')
-      );
-
-      for (const [key, agent] of Object.entries(agents)) {
-        const icon = '🤖';
-        const agentName = `marketplace/agents/${key.padEnd(12)}`;
-        const agentDesc = agent.description;
-        console.log(
-          `${icon} ${chalk.green(agentName)} ${chalk.gray(agentDesc)}`
-        );
-        const namespaceInfo = `namespace: ${agent.namespace || 'default'}`;
-        console.log(`   ${chalk.dim(namespaceInfo)}`);
-        console.log();
-      }
-
       console.log(
         chalk.cyan(
           'Repository: https://github.com/mckinsey/agents-at-scale-marketplace'
