@@ -45,7 +45,7 @@ describe('export command', () => {
 
   it('should export all resource types by default', async () => {
     mockExeca.mockResolvedValue({
-      stdout: JSON.stringify({items: []}),
+      stdout: "apiVersion: v1\nitems:\n- data: foo",
     });
 
     mockWriteFile.mockResolvedValue(undefined);
@@ -72,12 +72,17 @@ describe('export command', () => {
         expect.arrayContaining(['get', resourceType, '-o', 'yaml']),
         expect.any(Object)
       );
+      expect(mockOutput.success).toHaveBeenCalledWith(
+          `found 1 ${resourceType}`,
+      );
     }
+
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
   });
 
   it('should filter by resource types when specified and export in order', async () => {
     mockExeca.mockResolvedValue({
-      stdout: JSON.stringify({items: []}),
+      stdout: "apiVersion: v1\nitems:\n- data: foo",
     });
 
     mockWriteFile.mockResolvedValue(undefined);
@@ -100,7 +105,7 @@ describe('export command', () => {
 
   it('should use namespace filter when specified', async () => {
     mockExeca.mockResolvedValue({
-      stdout: JSON.stringify({items: []}),
+      stdout: "apiVersion: v1\nitems:\n- data: foo",
     });
 
     mockWriteFile.mockResolvedValue(undefined);
@@ -122,11 +127,13 @@ describe('export command', () => {
       expect.arrayContaining(['-n', 'custom-namespace']),
       expect.any(Object)
     );
+
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
   });
 
   it('should use label selector when specified', async () => {
     mockExeca.mockResolvedValue({
-      stdout: JSON.stringify({items: []}),
+      stdout: "apiVersion: v1\nitems:\n- data: foo",
     });
 
     mockWriteFile.mockResolvedValue(undefined);
@@ -148,9 +155,11 @@ describe('export command', () => {
       expect.arrayContaining(['-l', 'app=test']),
       expect.any(Object)
     );
+
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
   });
 
-  it('fails if a resource type cannot be found', async () => {
+  it('fails if kubectl get fails for a resource type', async () => {
     mockExeca.mockRejectedValue('Export broke');
 
     const command = createExportCommand(mockConfig);
