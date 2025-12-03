@@ -190,7 +190,7 @@ export function McpEditor({
     const allFieldsFilled = headers.every(
       row => row.name.trim() !== '' && row.value.trim() !== '',
     );
-    
+
     if (!allFieldsFilled) {
       form.setError('name', {
         message: 'All header fields must be filled in',

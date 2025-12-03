@@ -386,11 +386,13 @@ export function AgentEditor({
                             {...field}
                           />
                         </FormControl>
-                        {isPromptExpanded && field.value && field.value.length > 0 && (
-                          <div className="text-muted-foreground text-xs">
-                            {field.value.split('\n').length} lines
-                          </div>
-                        )}
+                        {isPromptExpanded &&
+                          field.value &&
+                          field.value.length > 0 && (
+                            <div className="text-muted-foreground text-xs">
+                              {field.value.split('\n').length} lines
+                            </div>
+                          )}
                         <FormMessage />
                       </FormItem>
                     )}

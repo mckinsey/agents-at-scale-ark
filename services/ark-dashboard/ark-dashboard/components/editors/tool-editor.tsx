@@ -1,7 +1,7 @@
 'use client';
 
-import { Label } from '@radix-ui/react-label';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Label } from '@radix-ui/react-label';
 import { Maximize2, Minimize2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -36,7 +36,6 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 
 import { AgentFields } from '../common/agent-fields';
-import { HttpFields } from '../common/http-field';
 import { TeamFields } from '../common/team-fields';
 
 interface ToolSpec {

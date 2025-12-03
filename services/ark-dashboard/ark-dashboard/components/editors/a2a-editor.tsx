@@ -35,10 +35,7 @@ type Props = {
 const formSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
-  baseUrl: z
-    .string()
-    .min(1, 'URL is required')
-    .url('URL must be a valid URL'),
+  baseUrl: z.string().min(1, 'URL is required').url('URL must be a valid URL'),
   pollingInterval: z
     .string()
     .optional()

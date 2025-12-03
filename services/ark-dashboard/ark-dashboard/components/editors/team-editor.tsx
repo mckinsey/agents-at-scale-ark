@@ -1,14 +1,12 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertCircle } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -156,6 +154,8 @@ export function TeamEditor({
   const [selectedMembers, setSelectedMembers] = useState<TeamMember[]>([]);
   const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
   const [orderedAgents, setOrderedAgents] = useState<Agent[]>([]);
+  const [graphEdgesError, setGraphEdgesError] = useState<string | null>(null);
+  const [membersError, setMembersError] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -170,8 +170,12 @@ export function TeamEditor({
   });
 
   const selectedStrategy = form.watch('strategy');
-  const maxTurnsValue = form.watch('maxTurns');
-  const selectorAgentValue = form.watch('selectorAgent');
+
+  // Clear errors when strategy changes as validation rules are different per strategy
+  useEffect(() => {
+    form.clearErrors();
+    setGraphEdgesError(null);
+  }, [selectedStrategy, form]);
 
   useEffect(() => {
     if (team) {
@@ -191,6 +195,8 @@ export function TeamEditor({
       setGraphEdges([]);
       setOrderedAgents(agents);
     }
+    setGraphEdgesError(null);
+    setMembersError(null);
   }, [team, open, agents, form]);
 
   useEffect(() => {
@@ -207,23 +213,57 @@ export function TeamEditor({
   }, [selectedMembers, agents, open]);
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
+    // Clear previous errors
+    setMembersError(null);
+    setGraphEdgesError(null);
+
     // Validate members
     if (selectedMembers.length === 0) {
-      form.setError('name', {
-        message: 'At least one team member is required',
-      });
+      setMembersError('At least one team member is required');
       return;
     }
 
-    // Validate graph strategy requirements
+    // Validate graph edges for both graph and selector strategies
     if (
-      selectedStrategy === 'graph' &&
-      (!values.maxTurns || graphEdges.length === 0 || !graphEdges.every(edge => edge.to))
+      (selectedStrategy === 'graph' || selectedStrategy === 'selector') &&
+      graphEdges.length > 0
     ) {
-      form.setError('maxTurns', {
-        message: 'Graph strategy requires max turns and at least one valid edge',
-      });
-      return;
+      if (!graphEdges.every(edge => edge.from && edge.to)) {
+        setGraphEdgesError(
+          'All edges must have both "From" and "To" set to valid members',
+        );
+        return;
+      }
+    }
+
+    // Validate graph strategy specific requirements
+    if (selectedStrategy === 'graph') {
+      if (!values.maxTurns) {
+        form.setError('maxTurns', {
+          message: 'Max turns is required for graph strategy',
+        });
+        return;
+      }
+      if (graphEdges.length === 0) {
+        setGraphEdgesError('At least one edge is required for graph strategy');
+        return;
+      }
+      // Graph strategy doesn't allow multiple outgoing edges from same member
+      const fromCounts = new Map<string, number>();
+      for (const edge of graphEdges) {
+        if (edge.from) {
+          fromCounts.set(edge.from, (fromCounts.get(edge.from) || 0) + 1);
+        }
+      }
+      const duplicateFrom = Array.from(fromCounts.entries()).find(
+        ([, count]) => count > 1,
+      );
+      if (duplicateFrom) {
+        setGraphEdgesError(
+          `Member "${duplicateFrom[0]}" has more than one outgoing edge`,
+        );
+        return;
+      }
     }
 
     // Validate selector strategy requirements
@@ -415,7 +455,12 @@ export function TeamEditor({
                 name="maxTurns"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Max Turns</FormLabel>
+                    <FormLabel>
+                      Max Turns{' '}
+                      {selectedStrategy === 'graph' && (
+                        <span className="text-red-500">*</span>
+                      )}
+                    </FormLabel>
                     <FormControl>
                       <Input
                         type="number"
@@ -424,14 +469,6 @@ export function TeamEditor({
                         {...field}
                       />
                     </FormControl>
-                    {selectedStrategy === 'graph' && !field.value && (
-                      <Alert variant="destructive" className="py-2">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription className="text-sm">
-                          Graph strategy requires Max Turns to be set
-                        </AlertDescription>
-                      </Alert>
-                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -472,10 +509,8 @@ export function TeamEditor({
                   {selectedMembers.length} member
                   {selectedMembers.length !== 1 ? 's' : ''} selected
                 </p>
-                {selectedMembers.length === 0 && (
-                  <p className="text-sm text-red-500">
-                    At least one member is required
-                  </p>
+                {membersError && (
+                  <p className="text-sm text-red-500">{membersError}</p>
                 )}
               </div>
 
@@ -495,8 +530,7 @@ export function TeamEditor({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>
-                          Selector Agent{' '}
-                          <span className="text-red-500">*</span>
+                          Selector Agent <span className="text-red-500">*</span>
                         </FormLabel>
                         <Select
                           onValueChange={field.onChange}
@@ -550,7 +584,12 @@ export function TeamEditor({
                 selectedStrategy === 'selector') && (
                 <div className="grid gap-2">
                   <div className="flex items-center justify-between">
-                    <Label>Graph Edges</Label>
+                    <Label>
+                      Graph Edges{' '}
+                      {selectedStrategy === 'graph' && (
+                        <span className="text-red-500">*</span>
+                      )}
+                    </Label>
                     <Button
                       type="button"
                       variant="outline"
@@ -576,7 +615,7 @@ export function TeamEditor({
                             }
                             disabled={form.formState.isSubmitting}>
                             <SelectTrigger className="flex-1">
-                              <SelectValue placeholder="From (optional)" />
+                              <SelectValue placeholder="From" />
                             </SelectTrigger>
                             <SelectContent>
                               {selectedMembers
@@ -598,7 +637,7 @@ export function TeamEditor({
                             }
                             disabled={form.formState.isSubmitting}>
                             <SelectTrigger className="flex-1">
-                              <SelectValue placeholder="To (required)" />
+                              <SelectValue placeholder="To" />
                             </SelectTrigger>
                             <SelectContent>
                               {selectedMembers
@@ -627,18 +666,20 @@ export function TeamEditor({
                   <p className="text-muted-foreground text-xs">
                     {selectedStrategy === 'graph' ? (
                       <>
-                        Define the flow between agents. &quot;From&quot; is
-                        optional and defaults to any agent.
+                        Define the flow between agents. Both &quot;From&quot;
+                        and &quot;To&quot; must be valid team members.
                       </>
                     ) : (
                       <>
-                        Optional: Define graph constraints to limit AI selection
-                        to valid transitions. When provided, the selector agent
-                        will only choose from members that are legal according to
-                        the graph edges.
+                        Define graph constraints to limit AI selection to valid
+                        transitions. Both &quot;From&quot; and &quot;To&quot;
+                        must be valid team members.
                       </>
                     )}
                   </p>
+                  {graphEdgesError && (
+                    <p className="text-sm text-red-500">{graphEdgesError}</p>
+                  )}
                 </div>
               )}
             </div>

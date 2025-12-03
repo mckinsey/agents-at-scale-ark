@@ -24,7 +24,6 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -50,7 +49,6 @@ import {
 
 type EvaluationCreateRequest = components['schemas']['EvaluationCreateRequest'];
 type EvaluationUpdateRequest = components['schemas']['EvaluationUpdateRequest'];
-type EvaluationType = components['schemas']['EvaluationType'];
 type QueryResponse = components['schemas']['QueryResponse'];
 
 interface EvaluationEditorProps {
@@ -66,6 +64,12 @@ interface EvaluationEditorProps {
   initialQueryRef?: string;
 }
 
+const VALID_FORM_MODES = ['direct', 'query', 'batch'] as const;
+type FormMode = (typeof VALID_FORM_MODES)[number];
+
+const isValidFormMode = (mode: unknown): mode is FormMode =>
+  VALID_FORM_MODES.includes(mode as FormMode);
+
 const formSchema = z
   .object({
     name: z
@@ -75,7 +79,7 @@ const formSchema = z
         /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/,
         'Name must be a valid Kubernetes name (lowercase letters, numbers, and hyphens only)',
       ),
-    mode: z.enum(['direct', 'query', 'batch'] as const),
+    mode: z.enum(VALID_FORM_MODES),
     evaluatorRef: z.string().min(1, 'Evaluator is required'),
     queryRef: z.string().optional(),
     input: z.string().optional(),
@@ -239,10 +243,10 @@ export function EvaluationEditor({
               name?: string;
             };
 
+            const apiMode = detailedEvaluation.spec?.mode;
             form.reset({
               name: detailedEvaluation.name,
-              mode:
-                (detailedEvaluation.spec?.mode as EvaluationType) || 'direct',
+              mode: isValidFormMode(apiMode) ? apiMode : 'direct',
               evaluatorRef: evaluatorSpec?.name || '',
               queryRef: queryRefSpec?.name || '',
               input: (detailedEvaluation.spec?.input as string) || '',
@@ -260,7 +264,7 @@ export function EvaluationEditor({
           });
           form.reset({
             name: evaluation.name,
-            mode: (evaluation.type as EvaluationType) || 'direct',
+            mode: isValidFormMode(evaluation.type) ? evaluation.type : 'direct',
             evaluatorRef: '',
             queryRef: '',
             input: '',

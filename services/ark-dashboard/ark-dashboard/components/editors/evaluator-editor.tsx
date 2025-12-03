@@ -82,7 +82,10 @@ const formSchema = z.object({
       'Name must be a valid Kubernetes name (lowercase letters, numbers, and hyphens only)',
     ),
   description: z.string().optional(),
-  address: z.string().min(1, 'Address is required').url('Address must be a valid URL'),
+  address: z
+    .string()
+    .min(1, 'Address is required')
+    .url('Address must be a valid URL'),
   modelRef: z.string().optional(),
 });
 
@@ -145,11 +148,11 @@ export function EvaluatorEditor({
               description:
                 (detailedEvaluator.spec?.description as string) || '',
               address:
-                ((detailedEvaluator.spec?.address as { value?: string })
-                  ?.value) || '',
+                (detailedEvaluator.spec?.address as { value?: string })
+                  ?.value || '',
               modelRef:
-                ((detailedEvaluator.spec?.modelRef as { name?: string })
-                  ?.name) || '',
+                (detailedEvaluator.spec?.modelRef as { name?: string })?.name ||
+                '',
             });
 
             const parametersSpec = detailedEvaluator.spec
@@ -360,9 +363,7 @@ export function EvaluatorEditor({
           </div>
         ) : (
           <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit(onSubmit)}
-              className="space-y-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <div className="max-h-[60vh] space-y-4 overflow-y-auto">
                 <FormField
                   control={form.control}
