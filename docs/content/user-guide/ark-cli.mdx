@@ -52,20 +52,21 @@ That's it! The CLI maintains conversation context and lets you interact with any
 The ARK CLI supports dynamic marketplace service enumeration from a `marketplace.json` file hosted in the marketplace repository.
 
 ```bash
-# List available marketplace services
+# List available marketplace services and agents
 ark marketplace list
 
-# Refresh the marketplace cache (bypasses 5-minute cache)
-ark marketplace list --refresh
-
 # Install a marketplace service
-ark install marketplace/<service-name>
+ark install marketplace/services/<service-name>
 
-# Uninstall a marketplace service
-ark uninstall marketplace/<service-name>
+# Install a marketplace agent
+ark install marketplace/agents/<agent-name>
+
+# Uninstall a marketplace service or agent
+ark uninstall marketplace/services/<service-name>
+ark uninstall marketplace/agents/<agent-name>
 ```
 
-The marketplace fetches services from `https://github.com/mckinsey/agents-at-scale-marketplace/raw/main/marketplace.json` using the Anthropic Marketplace JSON format. Results are cached for 5 minutes to reduce network requests. If the fetch fails, the CLI falls back to hardcoded services.
+The marketplace fetches services and agents from `https://github.com/mckinsey/agents-at-scale-marketplace/raw/main/marketplace.json` using the Anthropic Marketplace JSON format. If the fetch fails, an unavailable message is displayed.
 
 ## Local Development
 
