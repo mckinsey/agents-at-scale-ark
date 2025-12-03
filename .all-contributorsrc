@@ -435,7 +435,8 @@
       "profile": "https://www.csacco.eu/",
       "contributions": [
         "code",
-        "bug"
+        "bug",
+        "doc"
       ]
     }
   ],
