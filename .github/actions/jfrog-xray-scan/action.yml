@@ -53,6 +53,7 @@ runs:
         python --version
         pip -V
         pip3 -V
+        pip uninstall pip==24.0 -y || true
         jf audit --watches "$WATCH_NAME" --format json > "$SCAN_JSON" 
       
     - name: Parse scan results
