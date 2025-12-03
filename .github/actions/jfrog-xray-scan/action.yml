@@ -44,7 +44,15 @@ runs:
 
         echo "Xray build audit with watch: $WATCH_NAME"
         echo "View watch violations: ${{ inputs.jfrog_url }}/ui/watchesNew/edit/$WATCH_NAME?activeTab=violations"
-        python -m pip install pip>=25.0.1 setuptools>=70.0.0
+        python3 --version
+        python --version
+        pip -V
+        pip3 -V
+        python3 -m pip install pip>=25.0.1 setuptools>=70.0.0
+        python3 --version
+        python --version
+        pip -V
+        pip3 -V
         jf audit --watches "$WATCH_NAME" --format json > "$SCAN_JSON" 
       
     - name: Parse scan results

@@ -1,8 +1,3 @@
-[build-system]
-requires = ["setuptools>=64.0", "pip>=25.0"]
-build-backend = "setuptools.build_meta"
-
-
 [project]
 name = "langchain-weather-agent"
 version = "1.0.0"
@@ -10,6 +5,7 @@ description = "A LangChain-based weather agent with A2A protocol support"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "pip>=25.0",
     "a2a-sdk[http-server]>=0.2.6",
     "langchain>=0.1.0",
     "langchain-openai>=0.1.0",

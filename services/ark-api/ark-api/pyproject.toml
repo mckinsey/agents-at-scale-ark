@@ -1,13 +1,10 @@
-[build-system]
-requires = ["setuptools>=64.0", "pip>=25.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "ark-api"
 version = "0.1.46"
 description = ""
 requires-python = ">=3.11"
 dependencies = [
+    "pip>=25.0",
     "aiofiles>=24.1.0",
     "bcrypt>=4.0.0",
     "dpath>=2.2.0",

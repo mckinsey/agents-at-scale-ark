@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling", "setuptools>=64.0", "pip>=25.0"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 
@@ -10,6 +10,7 @@ description = "A simple A2A server demonstrating basic functionality"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "pip>=25.0",
     "a2a-sdk[http-server]>=0.2.6",
     "starlette>=0.27.0",
     "uvicorn>=0.23.0",

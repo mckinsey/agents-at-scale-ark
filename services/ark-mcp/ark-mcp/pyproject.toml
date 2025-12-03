@@ -7,6 +7,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "pip>=25.0",
     "fastmcp>=0.5.0",
     "pydantic>=2.0.0",
     "kubernetes-asyncio>=24.0.0",
@@ -25,7 +26,7 @@ Repository = "https://github.com/mckinsey/agents-at-scale-ark"
 Documentation = "https://mckinsey.github.io/agents-at-scale-ark/user-guide/samples/mcp-servers/"
 
 [build-system]
-requires = ["hatchling", "setuptools>=64.0", "pip>=25.0"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.optional-dependencies]

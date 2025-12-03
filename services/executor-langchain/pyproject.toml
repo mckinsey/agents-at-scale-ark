@@ -9,6 +9,7 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "pip>=25.0",
     "fastapi>=0.104.0", # web framework
     "uvicorn[standard]>=0.24.0", # ASGI server
     "pydantic>=2.0.0", # data validation
@@ -32,7 +33,7 @@ Repository = "https://github.com/mckinsey/agents-at-scale-ark"
 Documentation = "https://mckinsey.github.io/agents-at-scale-ark/developer-guide/langchain-execution-engine/"
 
 [build-system]
-requires = ["hatchling", "setuptools>=64.0", "pip>=25.0"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.optional-dependencies]
