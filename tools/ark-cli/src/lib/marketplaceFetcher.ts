@@ -4,24 +4,22 @@ import type {
   AnthropicMarketplaceManifest,
   AnthropicMarketplaceItem,
 } from '../types/marketplace.js';
-
-const MARKETPLACE_REPO_URL =
-  'https://github.com/mckinsey/agents-at-scale-marketplace';
-const MARKETPLACE_JSON_URL = `${MARKETPLACE_REPO_URL}/raw/main/marketplace.json`;
-const MARKETPLACE_REGISTRY =
-  'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts';
+import {loadConfig} from './config.js';
 
 export async function fetchMarketplaceManifest(): Promise<AnthropicMarketplaceManifest | null> {
+  const config = loadConfig();
+  const repoUrl =
+    config.marketplace?.repoUrl ||
+    'https://github.com/mckinsey/agents-at-scale-marketplace';
+  const manifestUrl = `${repoUrl}/raw/main/marketplace.json`;
+
   try {
-    const response = await axios.get<AnthropicMarketplaceManifest>(
-      MARKETPLACE_JSON_URL,
-      {
-        timeout: 10000,
-        headers: {
-          Accept: 'application/json',
-        },
-      }
-    );
+    const response = await axios.get<AnthropicMarketplaceManifest>(manifestUrl, {
+      timeout: 10000,
+      headers: {
+        Accept: 'application/json',
+      },
+    });
 
     return response.data;
   } catch (error) {
@@ -36,14 +34,19 @@ export async function fetchMarketplaceManifest(): Promise<AnthropicMarketplaceMa
 
 export function mapMarketplaceItemToArkService(
   item: AnthropicMarketplaceItem,
-  registry: string = MARKETPLACE_REGISTRY
+  registry?: string
 ): ArkService {
+  const config = loadConfig();
+  const defaultRegistry =
+    registry ||
+    config.marketplace?.registry ||
+    'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts';
+
   const serviceName = item.name
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '-')
     .replace(/^-+|-+$/g, '');
-  const chartPath =
-    item.ark?.chartPath || `${registry}/${serviceName}`;
+  const chartPath = item.ark?.chartPath || `${defaultRegistry}/${serviceName}`;
 
   return {
     name: serviceName,

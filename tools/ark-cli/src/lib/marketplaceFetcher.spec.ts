@@ -22,6 +22,11 @@ jest.unstable_mockModule('axios', () => ({
   },
 }));
 
+const mockLoadConfig = jest.fn();
+jest.unstable_mockModule('./config.js', () => ({
+  loadConfig: mockLoadConfig,
+}));
+
 const {
   fetchMarketplaceManifest,
   mapMarketplaceItemToArkService,
@@ -32,6 +37,12 @@ describe('marketplaceFetcher', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockAxiosGet.mockClear();
+    mockLoadConfig.mockReturnValue({
+      marketplace: {
+        repoUrl: 'https://github.com/mckinsey/agents-at-scale-marketplace',
+        registry: 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts',
+      },
+    });
   });
 
   describe('fetchMarketplaceManifest', () => {

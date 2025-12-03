@@ -46,6 +46,10 @@ describe('config', () => {
         streaming: true,
         outputFormat: 'text',
       },
+      marketplace: {
+        repoUrl: 'https://github.com/mckinsey/agents-at-scale-marketplace',
+        registry: 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts',
+      },
     });
   });
 
@@ -147,5 +151,41 @@ describe('config', () => {
 
     expect(mockYaml.stringify).toHaveBeenCalledWith(config);
     expect(result).toBe('formatted');
+  });
+
+  it('loads marketplace config from config file', () => {
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.readFileSync.mockReturnValue('yaml');
+    mockYaml.parse.mockReturnValue({
+      marketplace: {
+        repoUrl: 'https://example.com/my-marketplace',
+        registry: 'oci://example.com/charts',
+      },
+    });
+
+    const config = loadConfig();
+
+    expect(config.marketplace?.repoUrl).toBe(
+      'https://example.com/my-marketplace'
+    );
+    expect(config.marketplace?.registry).toBe('oci://example.com/charts');
+  });
+
+  it('marketplace environment variables override config', () => {
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.readFileSync.mockReturnValue('yaml');
+    mockYaml.parse.mockReturnValue({
+      marketplace: {
+        repoUrl: 'https://example.com/my-marketplace',
+        registry: 'oci://example.com/charts',
+      },
+    });
+    process.env.ARK_MARKETPLACE_REPO_URL = 'https://custom.com/marketplace';
+    process.env.ARK_MARKETPLACE_REGISTRY = 'oci://custom.com/charts';
+
+    const config = loadConfig();
+
+    expect(config.marketplace?.repoUrl).toBe('https://custom.com/marketplace');
+    expect(config.marketplace?.registry).toBe('oci://custom.com/charts');
   });
 });
