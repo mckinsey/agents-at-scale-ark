@@ -48,7 +48,7 @@ runs:
         python --version
         pip -V
         pip3 -V
-        python3 -m pip install pip>=25.0.1 setuptools>=70.0.0
+        python -m pip install -U pip
         python3 --version
         python --version
         pip -V
