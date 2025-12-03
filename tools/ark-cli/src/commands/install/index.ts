@@ -13,9 +13,9 @@ import {
 } from '../../arkServices.js';
 import {
   isMarketplaceService,
-  extractMarketplaceServiceName,
-  getMarketplaceService,
+  getMarketplaceItem,
   getAllMarketplaceServices,
+  getAllMarketplaceAgents,
 } from '../../marketplaceServices.js';
 import {printNextSteps} from '../../lib/nextSteps.js';
 import ora from 'ora';
@@ -69,24 +69,24 @@ export async function installArk(
 
   // If a specific service is requested, install only that service
   if (serviceName) {
-    // Check if it's a marketplace service
     if (isMarketplaceService(serviceName)) {
-      const marketplaceServiceName = extractMarketplaceServiceName(serviceName);
-      const service = getMarketplaceService(marketplaceServiceName);
+      const service = getMarketplaceItem(serviceName);
 
       if (!service) {
-        output.error(
-          `marketplace service '${marketplaceServiceName}' not found`
-        );
-        output.info('available marketplace services:');
-        const marketplaceServices = getAllMarketplaceServices();
-        for (const serviceName of Object.keys(marketplaceServices)) {
-          output.info(`  marketplace/services/${serviceName}`);
+        output.error(`marketplace item '${serviceName}' not found`);
+        output.info('available marketplace items:');
+        const services = getAllMarketplaceServices();
+        for (const name of Object.keys(services)) {
+          output.info(`  marketplace/services/${name}`);
+        }
+        const agents = getAllMarketplaceAgents();
+        for (const name of Object.keys(agents)) {
+          output.info(`  marketplace/agents/${name}`);
         }
         process.exit(1);
       }
 
-      output.info(`installing marketplace service ${service.name}...`);
+      output.info(`installing marketplace item ${service.name}...`);
       try {
         await installService(service, options.verbose);
         output.success(`${service.name} installed successfully`);

@@ -85,6 +85,27 @@ describe('config', () => {
     expect(config.chat?.outputFormat).toBe('markdown');
   });
 
+  it('loads queryTimeout from config file', () => {
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.readFileSync.mockReturnValue('yaml');
+    mockYaml.parse.mockReturnValue({queryTimeout: '30m'});
+
+    const config = loadConfig();
+
+    expect(config.queryTimeout).toBe('30m');
+  });
+
+  it('ARK_QUERY_TIMEOUT environment variable overrides config', () => {
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.readFileSync.mockReturnValue('yaml');
+    mockYaml.parse.mockReturnValue({queryTimeout: '5m'});
+    process.env.ARK_QUERY_TIMEOUT = '1h';
+
+    const config = loadConfig();
+
+    expect(config.queryTimeout).toBe('1h');
+  });
+
   it('throws error for invalid YAML', () => {
     const userConfigPath = path.join(os.homedir(), '.arkrc.yaml');
     mockFs.existsSync.mockImplementation((path) => path === userConfigPath);

@@ -171,6 +171,10 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
     if request.metadata and "sessionId" in request.metadata:
         session_id = request.metadata["sessionId"]
 
+    timeout = None
+    if request.metadata and "timeout" in request.metadata:
+        timeout = request.metadata["timeout"]
+
     # Parse queryAnnotations if provided (for annotations like A2A context ID)
     if request.metadata and "queryAnnotations" in request.metadata:
         try:
@@ -190,10 +194,12 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
         metadata["annotations"][STREAMING_ENABLED_ANNOTATION] = "true"
 
     try:
-        # Build query spec with optional sessionId
+        # Build query spec with optional sessionId and timeout
         query_spec_dict = {"type": "messages", "input": messages, "targets": [target]}
         if session_id:
             query_spec_dict["sessionId"] = session_id
+        if timeout:
+            query_spec_dict["timeout"] = timeout
         
         # Create the QueryV1alpha1 object with type="messages"
         # Pass messages directly without json.dumps() - SDK handles serialization

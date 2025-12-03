@@ -13,4 +13,3 @@ export const EVENT_ANNOTATIONS = {
   // Event data annotation for structured event data
   EVENT_DATA: `${ARK_PREFIX}event-data`,
 } as const;
-

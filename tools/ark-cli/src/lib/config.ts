@@ -13,6 +13,7 @@ export interface ChatConfig {
 export interface ArkConfig {
   chat?: ChatConfig;
   services?: {[serviceName: string]: Partial<ArkService>};
+  queryTimeout?: string;
   // Cluster info - populated during startup if context exists
   clusterInfo?: ClusterInfo;
 }
@@ -75,6 +76,10 @@ export function loadConfig(): ArkConfig {
     }
   }
 
+  if (process.env.ARK_QUERY_TIMEOUT !== undefined) {
+    config.queryTimeout = process.env.ARK_QUERY_TIMEOUT;
+  }
+
   return config;
 }
 
@@ -100,6 +105,10 @@ function mergeConfig(target: ArkConfig, source: ArkConfig): void {
         ...overrides,
       };
     }
+  }
+
+  if (source.queryTimeout !== undefined) {
+    target.queryTimeout = source.queryTimeout;
   }
 }
 

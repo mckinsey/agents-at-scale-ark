@@ -42,6 +42,13 @@ export const marketplaceServices: ServiceCollection = {
     k8sServicePort: 3000,
     k8sDeploymentName: 'langfuse-web',
   },
+};
+
+/**
+ * Available marketplace agents
+ * Charts are published to: oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts
+ */
+export const marketplaceAgents: ServiceCollection = {
   noah: {
     name: 'noah',
     helmReleaseName: 'noah',
@@ -58,19 +65,29 @@ export const marketplaceServices: ServiceCollection = {
   },
 };
 
-export function getMarketplaceService(name: string): ArkService | undefined {
-  return marketplaceServices[name];
+export function getMarketplaceItem(path: string): ArkService | undefined {
+  if (path.startsWith('marketplace/services/')) {
+    const name = path.replace(/^marketplace\/services\//, '');
+    return marketplaceServices[name];
+  }
+  if (path.startsWith('marketplace/agents/')) {
+    const name = path.replace(/^marketplace\/agents\//, '');
+    return marketplaceAgents[name];
+  }
+  return undefined;
 }
 
 export function getAllMarketplaceServices(): ServiceCollection {
   return marketplaceServices;
 }
 
-export function isMarketplaceService(name: string): boolean {
-  return name.startsWith('marketplace/services/');
+export function getAllMarketplaceAgents(): ServiceCollection {
+  return marketplaceAgents;
 }
 
-export function extractMarketplaceServiceName(path: string): string {
-  // Extract service name from marketplace/services/phoenix
-  return path.replace(/^marketplace\/services\//, '');
+export function isMarketplaceService(name: string): boolean {
+  return (
+    name.startsWith('marketplace/services/') ||
+    name.startsWith('marketplace/agents/')
+  );
 }
