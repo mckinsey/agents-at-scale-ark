@@ -25,6 +25,15 @@ const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
   throw new Error('process.exit called');
 }) as any);
 
+const mockKubectlGetResponse = {
+    "apiVersion": "v1",
+    "items": [{"spec": "foo"}],
+    "kind": "List",
+    "metadata": {
+        "resourceVersion": ""
+    }
+};
+
 const {createExportCommand} = await import('./index.js');
 import type {ArkConfig} from '../../lib/config.js';
 
@@ -45,7 +54,7 @@ describe('export command', () => {
 
   it('should export all resource types by default', async () => {
     mockExeca.mockResolvedValue({
-      stdout: "apiVersion: v1\nitems:\n- data: foo",
+      stdout: JSON.stringify(mockKubectlGetResponse),
     });
 
     mockWriteFile.mockResolvedValue(undefined);
@@ -69,7 +78,7 @@ describe('export command', () => {
     for (const resourceType of expectedResourceTypes) {
       expect(mockExeca).toHaveBeenCalledWith(
         'kubectl',
-        expect.arrayContaining(['get', resourceType, '-o', 'yaml']),
+        expect.arrayContaining(['get', resourceType, '-o', 'json']),
         expect.any(Object)
       );
       expect(mockOutput.success).toHaveBeenCalledWith(
@@ -82,7 +91,7 @@ describe('export command', () => {
 
   it('should filter by resource types when specified and export in order', async () => {
     mockExeca.mockResolvedValue({
-      stdout: "apiVersion: v1\nitems:\n- data: foo",
+      stdout: JSON.stringify(mockKubectlGetResponse),
     });
 
     mockWriteFile.mockResolvedValue(undefined);
@@ -105,7 +114,7 @@ describe('export command', () => {
 
   it('should use namespace filter when specified', async () => {
     mockExeca.mockResolvedValue({
-      stdout: "apiVersion: v1\nitems:\n- data: foo",
+      stdout: JSON.stringify(mockKubectlGetResponse),
     });
 
     mockWriteFile.mockResolvedValue(undefined);
@@ -133,7 +142,7 @@ describe('export command', () => {
 
   it('should use label selector when specified', async () => {
     mockExeca.mockResolvedValue({
-      stdout: "apiVersion: v1\nitems:\n- data: foo",
+      stdout: JSON.stringify(mockKubectlGetResponse),
     });
 
     mockWriteFile.mockResolvedValue(undefined);
@@ -163,19 +172,12 @@ describe('export command', () => {
     mockExeca.mockRejectedValue('Export broke');
 
     const command = createExportCommand(mockConfig);
+    await command.parseAsync(['node', 'test']);
 
-    await expect(command.parseAsync(['node', 'test'])).rejects.toThrow(
-      'process.exit called'
-    );
-
-    expect(mockOutput.warning).toHaveBeenCalledWith(
-      'failed to fetch secrets:',
-      'Export broke'
-    );
     expect(mockOutput.error).toHaveBeenCalledWith(
       'export failed:',
       'Export broke'
     );
-    expect(mockExit).toHaveBeenCalledWith(1);
+
   });
 });

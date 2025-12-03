@@ -3,6 +3,7 @@ import {execa} from 'execa';
 import * as fs from 'fs/promises';
 import yaml from 'yaml';
 import type {ArkConfig} from '../../lib/config.js';
+import {listResources} from '../../lib/kubectl.js';
 import output from '../../lib/output.js';
 
 const ARK_RESOURCE_TYPES = [
@@ -23,38 +24,6 @@ interface ExportOptions {
   namespace?: string;
   types?: string;
   labels?: string;
-}
-
-async function getResources(
-  resourceType: ResourceType,
-  namespace?: string,
-  labels?: string
-): Promise<string> {
-  try {
-    const args = ['get', resourceType, '-o', 'yaml'];
-
-    if (namespace) {
-      args.push('-n', namespace);
-    } else {
-      args.push('--all-namespaces');
-    }
-
-    if (labels) {
-      args.push('-l', labels);
-    }
-
-    const result = await execa('kubectl', args, {
-      stdio: 'pipe',
-    });
-
-    return result.stdout || "";
-  } catch (error) {
-    output.warning(
-      `failed to fetch ${resourceType}:`,
-      error instanceof Error ? error.message : error
-    );
-    throw error;
-  }
 }
 
 async function exportResources(options: ExportOptions) {
@@ -81,16 +50,15 @@ async function exportResources(options: ExportOptions) {
       }
 
       output.info(`fetching ${resourceType}...`);
-      const resources = await getResources(
-        resourceType,
-        options.namespace,
-        options.labels
-      );
+      const resources = await listResources(resourceType, {
+          namespace: options.namespace,
+          labels: options.labels
+        });
 
+      const resourceCount = resources.length
       if (resources.length > 0) {
-        const resourceCount = yaml.parse(resources).items.length
         output.success(`found ${resourceCount} ${resourceType}`);
-        allResources.push(resources);
+        allResources.push(...resources);
         allResourceCount += resourceCount;
       }
     }
@@ -100,7 +68,7 @@ async function exportResources(options: ExportOptions) {
       return;
     }
 
-    const yamlContent = allResources.join("\n---\n");
+    const yamlContent = allResources.map((resource) => yaml.stringify(resource)).join("\n---\n");
 
     await fs.writeFile(outputPath, yamlContent, 'utf-8');
 
@@ -112,7 +80,6 @@ async function exportResources(options: ExportOptions) {
       'export failed:',
       error instanceof Error ? error.message : error
     );
-    process.exit(1);
   }
 }
 
