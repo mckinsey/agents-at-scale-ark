@@ -22,9 +22,12 @@ jest.unstable_mockModule('axios', () => ({
   },
 }));
 
-const mockLoadConfig = jest.fn();
+const mockGetMarketplaceRepoUrl = jest.fn();
+const mockGetMarketplaceRegistry = jest.fn();
+
 jest.unstable_mockModule('./config.js', () => ({
-  loadConfig: mockLoadConfig,
+  getMarketplaceRepoUrl: mockGetMarketplaceRepoUrl,
+  getMarketplaceRegistry: mockGetMarketplaceRegistry,
 }));
 
 const {
@@ -37,12 +40,12 @@ describe('marketplaceFetcher', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockAxiosGet.mockClear();
-    mockLoadConfig.mockReturnValue({
-      marketplace: {
-        repoUrl: 'https://github.com/mckinsey/agents-at-scale-marketplace',
-        registry: 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts',
-      },
-    });
+    mockGetMarketplaceRepoUrl.mockReturnValue(
+      'https://test-repo.example.com/marketplace'
+    );
+    mockGetMarketplaceRegistry.mockReturnValue(
+      'oci://test-registry.example.com/charts'
+    );
   });
 
   describe('fetchMarketplaceManifest', () => {

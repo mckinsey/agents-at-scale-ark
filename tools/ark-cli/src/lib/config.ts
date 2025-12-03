@@ -158,3 +158,19 @@ export function getConfigPaths(): {user: string; project: string} {
 export function formatConfig(config: ArkConfig): string {
   return yaml.stringify(config);
 }
+
+/**
+ * Get marketplace repository URL from config
+ */
+export function getMarketplaceRepoUrl(): string {
+  const config = loadConfig();
+  return config.marketplace!.repoUrl!;
+}
+
+/**
+ * Get marketplace registry from config
+ */
+export function getMarketplaceRegistry(): string {
+  const config = loadConfig();
+  return config.marketplace!.registry!;
+}

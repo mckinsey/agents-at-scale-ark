@@ -4,13 +4,10 @@ import type {
   AnthropicMarketplaceManifest,
   AnthropicMarketplaceItem,
 } from '../types/marketplace.js';
-import {loadConfig} from './config.js';
+import {getMarketplaceRepoUrl, getMarketplaceRegistry} from './config.js';
 
 export async function fetchMarketplaceManifest(): Promise<AnthropicMarketplaceManifest | null> {
-  const config = loadConfig();
-  const repoUrl =
-    config.marketplace?.repoUrl ||
-    'https://github.com/mckinsey/agents-at-scale-marketplace';
+  const repoUrl = getMarketplaceRepoUrl();
   const manifestUrl = `${repoUrl}/raw/main/marketplace.json`;
 
   try {
@@ -36,11 +33,7 @@ export function mapMarketplaceItemToArkService(
   item: AnthropicMarketplaceItem,
   registry?: string
 ): ArkService {
-  const config = loadConfig();
-  const defaultRegistry =
-    registry ||
-    config.marketplace?.registry ||
-    'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts';
+  const defaultRegistry = registry || getMarketplaceRegistry();
 
   const serviceName = item.name
     .toLowerCase()

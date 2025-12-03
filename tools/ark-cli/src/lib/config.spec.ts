@@ -189,3 +189,68 @@ describe('config', () => {
     expect(config.marketplace?.registry).toBe('oci://custom.com/charts');
   });
 });
+
+describe('marketplace helpers', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env = {...originalEnv};
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('getMarketplaceRepoUrl returns custom config value', async () => {
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.readFileSync.mockReturnValue('yaml');
+    mockYaml.parse.mockReturnValue({
+      marketplace: {
+        repoUrl: 'https://custom-repo.com/marketplace',
+      },
+    });
+
+    jest.resetModules();
+    const {getMarketplaceRepoUrl} = await import('./config.js');
+
+    expect(getMarketplaceRepoUrl()).toBe('https://custom-repo.com/marketplace');
+  });
+
+  it('getMarketplaceRepoUrl returns default value', async () => {
+    mockFs.existsSync.mockReturnValue(false);
+
+    jest.resetModules();
+    const {getMarketplaceRepoUrl} = await import('./config.js');
+
+    expect(getMarketplaceRepoUrl()).toBe(
+      'https://github.com/mckinsey/agents-at-scale-marketplace'
+    );
+  });
+
+  it('getMarketplaceRegistry returns custom config value', async () => {
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.readFileSync.mockReturnValue('yaml');
+    mockYaml.parse.mockReturnValue({
+      marketplace: {
+        registry: 'oci://custom-registry.com/charts',
+      },
+    });
+
+    jest.resetModules();
+    const {getMarketplaceRegistry} = await import('./config.js');
+
+    expect(getMarketplaceRegistry()).toBe('oci://custom-registry.com/charts');
+  });
+
+  it('getMarketplaceRegistry returns default value', async () => {
+    mockFs.existsSync.mockReturnValue(false);
+
+    jest.resetModules();
+    const {getMarketplaceRegistry} = await import('./config.js');
+
+    expect(getMarketplaceRegistry()).toBe(
+      'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts'
+    );
+  });
+});

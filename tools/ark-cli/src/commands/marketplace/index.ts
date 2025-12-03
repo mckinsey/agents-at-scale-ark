@@ -2,12 +2,19 @@ import {Command} from 'commander';
 import chalk from 'chalk';
 import type {ArkConfig} from '../../lib/config.js';
 import {
+  getMarketplaceRepoUrl,
+  getMarketplaceRegistry,
+} from '../../lib/config.js';
+import {
   getAllMarketplaceServices,
   getAllMarketplaceAgents,
 } from '../../marketplaceServices.js';
 import {fetchMarketplaceManifest} from '../../lib/marketplaceFetcher.js';
 
 function createMarketplaceCommand(_config: ArkConfig): Command {
+  const repoUrl = getMarketplaceRepoUrl();
+  const registry = getMarketplaceRegistry();
+
   const marketplace = new Command('marketplace');
   marketplace
     .description('Manage marketplace services')
@@ -17,8 +24,8 @@ function createMarketplaceCommand(_config: ArkConfig): Command {
 ${chalk.blue('🏪 ARK Marketplace')}
 Install community-contributed services from the ARK Marketplace.
 
-Repository: ${chalk.cyan('https://github.com/mckinsey/agents-at-scale-marketplace')}
-Registry: ${chalk.cyan('ghcr.io/mckinsey/agents-at-scale-marketplace/charts')}
+Repository: ${chalk.cyan(repoUrl)}
+Registry: ${chalk.cyan(registry.replace('oci://', ''))}
 `
     )
     .addHelpText(
@@ -53,12 +60,12 @@ ${chalk.cyan('Examples:')}
         );
         console.log(
           chalk.cyan(
-            'Repository: https://github.com/mckinsey/agents-at-scale-marketplace'
+            `Repository: ${repoUrl}`
           )
         );
         console.log(
           chalk.cyan(
-            'Registry: oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts'
+            `Registry: ${registry}`
           )
         );
         console.log();
@@ -111,12 +118,12 @@ ${chalk.cyan('Examples:')}
 
       console.log(
         chalk.cyan(
-          'Repository: https://github.com/mckinsey/agents-at-scale-marketplace'
+          `Repository: ${repoUrl}`
         )
       );
       console.log(
         chalk.cyan(
-          'Registry: oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts'
+          `Registry: ${registry}`
         )
       );
       console.log();
