@@ -11,29 +11,7 @@ const MARKETPLACE_JSON_URL = `${MARKETPLACE_REPO_URL}/raw/main/marketplace.json`
 const MARKETPLACE_REGISTRY =
   'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts';
 
-let cachedManifest: AnthropicMarketplaceManifest | null = null;
-let cacheTimestamp: number | null = null;
-const CACHE_TTL_MS = 5 * 60 * 1000;
-
-export function clearMarketplaceCache(): void {
-  cachedManifest = null;
-  cacheTimestamp = null;
-}
-
-export async function fetchMarketplaceManifest(
-  forceRefresh = false
-): Promise<AnthropicMarketplaceManifest | null> {
-  const now = Date.now();
-
-  if (
-    !forceRefresh &&
-    cachedManifest &&
-    cacheTimestamp &&
-    now - cacheTimestamp < CACHE_TTL_MS
-  ) {
-    return cachedManifest;
-  }
-
+export async function fetchMarketplaceManifest(): Promise<AnthropicMarketplaceManifest | null> {
   try {
     const response = await axios.get<AnthropicMarketplaceManifest>(
       MARKETPLACE_JSON_URL,
@@ -45,9 +23,7 @@ export async function fetchMarketplaceManifest(
       }
     );
 
-    cachedManifest = response.data;
-    cacheTimestamp = now;
-    return cachedManifest;
+    return response.data;
   } catch (error) {
     if (axios.isAxiosError(error)) {
       if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
@@ -86,10 +62,8 @@ export function mapMarketplaceItemToArkService(
   };
 }
 
-export async function getMarketplaceServicesFromManifest(
-  forceRefresh = false
-): Promise<ServiceCollection | null> {
-  const manifest = await fetchMarketplaceManifest(forceRefresh);
+export async function getMarketplaceServicesFromManifest(): Promise<ServiceCollection | null> {
+  const manifest = await fetchMarketplaceManifest();
   if (!manifest || !manifest.items) {
     return null;
   }

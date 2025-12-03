@@ -26,14 +26,12 @@ const {
   fetchMarketplaceManifest,
   mapMarketplaceItemToArkService,
   getMarketplaceServicesFromManifest,
-  clearMarketplaceCache,
 } = await import('./marketplaceFetcher.js');
 
 describe('marketplaceFetcher', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockAxiosGet.mockClear();
-    clearMarketplaceCache();
   });
 
   describe('fetchMarketplaceManifest', () => {
@@ -98,51 +96,6 @@ describe('marketplaceFetcher', () => {
       expect(result).toBeNull();
     });
 
-    it('caches manifest for subsequent calls', async () => {
-      clearMarketplaceCache();
-      const mockManifest: AnthropicMarketplaceManifest = {
-        version: '1.0.0',
-        marketplace: 'ARK Marketplace',
-        items: [],
-      };
-
-      mockAxiosGet.mockResolvedValue({
-        data: mockManifest,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      });
-
-      const result1 = await fetchMarketplaceManifest();
-      const result2 = await fetchMarketplaceManifest();
-
-      expect(result1).toEqual(mockManifest);
-      expect(result2).toEqual(mockManifest);
-      expect(mockAxiosGet).toHaveBeenCalledTimes(1);
-    });
-
-    it('forces refresh when forceRefresh is true', async () => {
-      clearMarketplaceCache();
-      const mockManifest: AnthropicMarketplaceManifest = {
-        version: '1.0.0',
-        marketplace: 'ARK Marketplace',
-        items: [],
-      };
-
-      mockAxiosGet.mockResolvedValue({
-        data: mockManifest,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
-      });
-
-      await fetchMarketplaceManifest();
-      await fetchMarketplaceManifest(true);
-
-      expect(mockAxiosGet).toHaveBeenCalledTimes(2);
-    });
   });
 
   describe('mapMarketplaceItemToArkService', () => {

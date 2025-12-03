@@ -61,39 +61,16 @@ export const fallbackMarketplaceServices: ServiceCollection = {
   },
 };
 
-let cachedServices: ServiceCollection | null = null;
-
-/**
- * Clear the cached marketplace services
- */
-export function clearMarketplaceServicesCache(): void {
-  cachedServices = null;
-}
-
 /**
  * Get all marketplace services, fetching from marketplace.json if available
  * Falls back to hardcoded services if fetch fails
  */
-export async function getAllMarketplaceServices(
-  forceRefresh = false
-): Promise<ServiceCollection> {
-  if (forceRefresh) {
-    cachedServices = null;
-  }
-
-  if (!forceRefresh && cachedServices) {
-    return cachedServices;
-  }
-
-  const manifestServices = await getMarketplaceServicesFromManifest(
-    forceRefresh
-  );
+export async function getAllMarketplaceServices(): Promise<ServiceCollection> {
+  const manifestServices = await getMarketplaceServicesFromManifest();
   if (manifestServices) {
-    cachedServices = manifestServices;
     return manifestServices;
   }
 
-  cachedServices = fallbackMarketplaceServices;
   return fallbackMarketplaceServices;
 }
 

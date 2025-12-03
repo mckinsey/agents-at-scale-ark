@@ -3,10 +3,10 @@ import type {ServiceCollection} from './types/arkService.js';
 import type {AnthropicMarketplaceManifest} from './types/marketplace.js';
 
 const mockGetMarketplaceServicesFromManifest = jest.fn<
-  (forceRefresh?: boolean) => Promise<ServiceCollection | null>
+  () => Promise<ServiceCollection | null>
 >();
 const mockFetchMarketplaceManifest = jest.fn<
-  (forceRefresh?: boolean) => Promise<AnthropicMarketplaceManifest | null>
+  () => Promise<AnthropicMarketplaceManifest | null>
 >();
 
 jest.unstable_mockModule('./lib/marketplaceFetcher.js', () => ({
@@ -20,14 +20,12 @@ const {
   getAllMarketplaceServicesSync,
   getMarketplaceServiceSync,
   fallbackMarketplaceServices,
-  clearMarketplaceServicesCache,
 } = await import('./marketplaceServices.js');
 
 describe('marketplaceServices', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetMarketplaceServicesFromManifest.mockClear();
-    clearMarketplaceServicesCache();
   });
 
   describe('getAllMarketplaceServices', () => {
@@ -48,9 +46,7 @@ describe('marketplaceServices', () => {
       const result = await getAllMarketplaceServices();
 
       expect(result).toEqual(mockServices);
-      expect(mockGetMarketplaceServicesFromManifest).toHaveBeenCalledWith(
-        false
-      );
+      expect(mockGetMarketplaceServicesFromManifest).toHaveBeenCalled();
     });
 
     it('falls back to hardcoded services when manifest unavailable', async () => {
@@ -63,50 +59,6 @@ describe('marketplaceServices', () => {
       expect(result['langfuse']).toBeDefined();
     });
 
-    it('caches services between calls', async () => {
-      clearMarketplaceServicesCache();
-      const mockServices = {
-        'cached-service': {
-          name: 'cached-service',
-          helmReleaseName: 'cached-service',
-          description: 'Cached',
-          enabled: true,
-          category: 'marketplace',
-        },
-      };
-
-      mockGetMarketplaceServicesFromManifest.mockResolvedValue(mockServices);
-
-      const result1 = await getAllMarketplaceServices();
-      const result2 = await getAllMarketplaceServices();
-
-      expect(result1).toEqual(mockServices);
-      expect(result2).toEqual(mockServices);
-      expect(mockGetMarketplaceServicesFromManifest).toHaveBeenCalledTimes(1);
-    });
-
-    it('forces refresh when forceRefresh is true', async () => {
-      clearMarketplaceServicesCache();
-      const mockServices = {
-        'refreshed-service': {
-          name: 'refreshed-service',
-          helmReleaseName: 'refreshed-service',
-          description: 'Refreshed',
-          enabled: true,
-          category: 'marketplace',
-        },
-      };
-
-      mockGetMarketplaceServicesFromManifest.mockResolvedValue(mockServices);
-
-      await getAllMarketplaceServices();
-      await getAllMarketplaceServices(true);
-
-      expect(mockGetMarketplaceServicesFromManifest).toHaveBeenCalledTimes(2);
-      expect(mockGetMarketplaceServicesFromManifest).toHaveBeenLastCalledWith(
-        true
-      );
-    });
   });
 
   describe('getMarketplaceService', () => {
@@ -122,7 +74,7 @@ describe('marketplaceServices', () => {
       };
 
       mockGetMarketplaceServicesFromManifest.mockResolvedValue(mockServices);
-      await getAllMarketplaceServices(true);
+      await getAllMarketplaceServices();
 
       const result = await getMarketplaceService('test-service');
 
@@ -140,7 +92,7 @@ describe('marketplaceServices', () => {
         },
       };
       mockGetMarketplaceServicesFromManifest.mockResolvedValue(mockServices);
-      await getAllMarketplaceServices(true);
+      await getAllMarketplaceServices();
 
       const result = await getMarketplaceService('non-existent');
 
@@ -149,7 +101,7 @@ describe('marketplaceServices', () => {
 
     it('falls back to hardcoded services', async () => {
       mockGetMarketplaceServicesFromManifest.mockResolvedValue(null);
-      await getAllMarketplaceServices(true);
+      await getAllMarketplaceServices();
 
       const result = await getMarketplaceService('phoenix');
 

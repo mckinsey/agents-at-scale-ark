@@ -23,7 +23,6 @@ Registry: ${chalk.cyan('ghcr.io/mckinsey/agents-at-scale-marketplace/charts')}
       `
 ${chalk.cyan('Examples:')}
   ${chalk.yellow('ark marketplace list')}                        # List available services
-  ${chalk.yellow('ark marketplace list --refresh')}              # Refresh marketplace cache
   ${chalk.yellow('ark install marketplace/services/phoenix')}    # Install Phoenix
   ${chalk.yellow('ark uninstall marketplace/services/phoenix')}  # Uninstall Phoenix
   
@@ -39,16 +38,9 @@ ${chalk.cyan('Available Services:')}
   list
     .alias('ls')
     .description('List available marketplace services')
-    .option('--refresh', 'Force refresh marketplace data from repository')
-    .action(async (options) => {
-      const forceRefresh = options.refresh === true;
-
-      if (forceRefresh) {
-        console.log(chalk.gray('Refreshing marketplace data...'));
-      }
-
-      const services = await getAllMarketplaceServices(forceRefresh);
-      const manifest = await fetchMarketplaceManifest(forceRefresh);
+    .action(async () => {
+      const services = await getAllMarketplaceServices();
+      const manifest = await fetchMarketplaceManifest();
 
       console.log(chalk.blue('\n🏪 ARK Marketplace Services\n'));
 

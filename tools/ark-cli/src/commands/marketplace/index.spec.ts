@@ -5,10 +5,10 @@ import type {ServiceCollection} from '../../types/arkService.js';
 import type {AnthropicMarketplaceManifest} from '../../types/marketplace.js';
 
 const mockGetAllMarketplaceServices = jest.fn<
-  (forceRefresh?: boolean) => Promise<ServiceCollection>
+  () => Promise<ServiceCollection>
 >();
 const mockFetchMarketplaceManifest = jest.fn<
-  (forceRefresh?: boolean) => Promise<AnthropicMarketplaceManifest | null>
+  () => Promise<AnthropicMarketplaceManifest | null>
 >();
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -94,26 +94,5 @@ describe('marketplace command', () => {
     expect(logCalls).toContain('fallback');
   });
 
-  it('forces refresh when --refresh flag is used', async () => {
-    const mockServices = {
-      'refreshed-service': {
-        name: 'refreshed-service',
-        helmReleaseName: 'refreshed-service',
-        description: 'Refreshed',
-        enabled: true,
-        category: 'marketplace',
-        namespace: 'refreshed',
-      },
-    };
-
-    mockGetAllMarketplaceServices.mockResolvedValue(mockServices);
-    mockFetchMarketplaceManifest.mockResolvedValue(null);
-
-    const command = createMarketplaceCommand({} as ArkConfig);
-    await command.parseAsync(['node', 'test', 'list', '--refresh']);
-
-    expect(mockGetAllMarketplaceServices).toHaveBeenCalledWith(true);
-    expect(mockFetchMarketplaceManifest).toHaveBeenCalledWith(true);
-  });
 });
 
