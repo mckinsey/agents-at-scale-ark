@@ -67,15 +67,15 @@ describe('A2A Tasks Feature Flag Atoms', () => {
   });
 
   describe('experimental-chat-streaming', () => {
-    it('should default to false', () => {
+    it('should default to true', () => {
       expect(CHAT_STREAMING_FEATURE_KEY).toBe('experimental-chat-streaming');
-      expect(store.get(storedIsChatStreamingEnabledAtom)).toBe(false);
+      expect(store.get(storedIsChatStreamingEnabledAtom)).toBe(true);
     });
 
-    it('should return true when storedIsChatStreamingEnabledAtom is true', () => {
-      store.set(storedIsChatStreamingEnabledAtom, true);
+    it('should return true when storedIsChatStreamingEnabledAtom is false', () => {
+      store.set(storedIsChatStreamingEnabledAtom, false);
       const value = store.get(storedIsChatStreamingEnabledAtom);
-      expect(value).toBe(true);
+      expect(value).toBe(false);
     });
 
     it('should be read-only (derived atom)', () => {

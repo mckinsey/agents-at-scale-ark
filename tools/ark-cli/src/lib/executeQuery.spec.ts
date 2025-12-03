@@ -342,9 +342,14 @@ describe('executeQuery', () => {
     });
 
     it('should include sessionId in query manifest when outputFormat is specified', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       let appliedManifest = '';
       mockExeca.mockImplementation(async (command: string, args: string[]) => {
-        if (args.includes('apply') && args.includes('-f') && args.includes('-')) {
+        if (
+          args.includes('apply') &&
+          args.includes('-f') &&
+          args.includes('-')
+        ) {
           // Capture the stdin input
           const stdinIndex = args.indexOf('-');
           if (stdinIndex >= 0 && args[stdinIndex + 1]) {
