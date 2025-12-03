@@ -348,9 +348,7 @@ export function TeamEditor({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="round-robin">Round Robin</SelectItem>
-                <SelectItem value="selector">
-                  Selector (can add graph constraints)
-                </SelectItem>
+                <SelectItem value="selector">Selector</SelectItem>
                 <SelectItem value="graph">Graph</SelectItem>
                 <SelectItem value="sequential">Sequential</SelectItem>
               </SelectContent>
