@@ -4,9 +4,6 @@ version = "0.1.0"
 description = "RAG retrieval HTTP tools with pgvector integration"
 readme = "README.md"
 requires-python = ">=3.12"
-pip = ">=25.0.1,<26"
-setuptools = ">=70.0.0"
-
 dependencies = [
     "flask>=3.0.0",
     "psycopg2-binary>=2.9.9",

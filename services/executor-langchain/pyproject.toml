@@ -8,9 +8,6 @@ authors = [
 ]
 readme = "README.md"
 requires-python = ">=3.11"
-pip = ">=25.0.1,<26"
-setuptools = ">=70.0.0"
-
 dependencies = [
     "fastapi>=0.104.0", # web framework
     "uvicorn[standard]>=0.24.0", # ASGI server

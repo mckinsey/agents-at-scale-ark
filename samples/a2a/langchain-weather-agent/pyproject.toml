@@ -8,9 +8,6 @@ version = "1.0.0"
 description = "A LangChain-based weather agent with A2A protocol support"
 readme = "README.md"
 requires-python = ">=3.11"
-pip = ">=25.0.1,<26"
-setuptools = ">=70.0.0"
-
 dependencies = [
     "a2a-sdk[http-server]>=0.2.6",
     "langchain>=0.1.0",
