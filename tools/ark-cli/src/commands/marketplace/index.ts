@@ -1,7 +1,10 @@
 import {Command} from 'commander';
 import chalk from 'chalk';
 import type {ArkConfig} from '../../lib/config.js';
-import {getAllMarketplaceServices} from '../../marketplaceServices.js';
+import {
+  getAllMarketplaceServices,
+  getAllMarketplaceAgents,
+} from '../../marketplaceServices.js';
 
 function createMarketplaceCommand(_config: ArkConfig): Command {
   const marketplace = new Command('marketplace');
@@ -23,8 +26,9 @@ Registry: ${chalk.cyan('ghcr.io/mckinsey/agents-at-scale-marketplace/charts')}
 ${chalk.cyan('Examples:')}
   ${chalk.yellow('ark marketplace list')}                        # List available services
   ${chalk.yellow('ark install marketplace/services/phoenix')}    # Install Phoenix
+  ${chalk.yellow('ark install marketplace/agents/noah')}         # Install Noah agent
   ${chalk.yellow('ark uninstall marketplace/services/phoenix')}  # Uninstall Phoenix
-  
+
 ${chalk.cyan('Available Services:')}
   • phoenix  - AI/ML observability and evaluation platform
   • langfuse - Open-source LLM observability and analytics
@@ -36,15 +40,16 @@ ${chalk.cyan('Available Services:')}
   const list = new Command('list');
   list
     .alias('ls')
-    .description('List available marketplace services')
+    .description('List available marketplace services and agents')
     .action(() => {
       const services = getAllMarketplaceServices();
+      const agents = getAllMarketplaceAgents();
 
-      console.log(chalk.blue('\n🏪 ARK Marketplace Services\n'));
+      console.log(chalk.blue('\n🏪 ARK Marketplace\n'));
+
+      console.log(chalk.bold('Services:'));
       console.log(
-        chalk.gray(
-          'Install with: ark install marketplace/services/<service-name>\n'
-        )
+        chalk.gray('Install with: ark install marketplace/services/<name>\n')
       );
 
       for (const [key, service] of Object.entries(services)) {
@@ -55,6 +60,23 @@ ${chalk.cyan('Available Services:')}
           `${icon} ${chalk.green(serviceName)} ${chalk.gray(serviceDesc)}`
         );
         const namespaceInfo = `namespace: ${service.namespace || 'default'}`;
+        console.log(`   ${chalk.dim(namespaceInfo)}`);
+        console.log();
+      }
+
+      console.log(chalk.bold('Agents:'));
+      console.log(
+        chalk.gray('Install with: ark install marketplace/agents/<name>\n')
+      );
+
+      for (const [key, agent] of Object.entries(agents)) {
+        const icon = '🤖';
+        const agentName = `marketplace/agents/${key.padEnd(12)}`;
+        const agentDesc = agent.description;
+        console.log(
+          `${icon} ${chalk.green(agentName)} ${chalk.gray(agentDesc)}`
+        );
+        const namespaceInfo = `namespace: ${agent.namespace || 'default'}`;
         console.log(`   ${chalk.dim(namespaceInfo)}`);
         console.log();
       }
