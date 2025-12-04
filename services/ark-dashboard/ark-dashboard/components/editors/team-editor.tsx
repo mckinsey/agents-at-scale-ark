@@ -34,6 +34,7 @@ import {
   type TeamMember,
   type TeamUpdateRequest,
 } from '@/lib/services';
+import { cn } from '@/lib/utils';
 import { getKubernetesNameError } from '@/lib/utils/kubernetes-validation';
 
 import { TeamMemberSelectionSection } from './member-editor';
@@ -58,7 +59,7 @@ function DraggableCard({
   isSelected,
   toggleMember,
   agent,
-  agentIsExternal,
+  agentIsExternal: _agentIsExternal,
 }: Readonly<{
   index: number;
   moveCard: (dragIndex: number, hoverIndex: number) => void;
@@ -83,7 +84,7 @@ function DraggableCard({
     },
   });
 
-  const [{ isDragging }, drag] = useDrag({
+  const [{ isDragging: _isDragging }, drag] = useDrag({
     type: ItemTypes.CARD,
     item: { index },
     collect: monitor => ({
