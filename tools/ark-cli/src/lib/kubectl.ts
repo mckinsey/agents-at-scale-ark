@@ -138,6 +138,7 @@ export async function watchEventsLive(queryName: string): Promise<void> {
           }
         }
       }
+      // eslint-disable-next-line no-empty, @typescript-eslint/no-unused-vars
     } catch (error) {}
   };
 
@@ -161,7 +162,7 @@ export async function watchEventsLive(queryName: string): Promise<void> {
   try {
     await waitProcess;
     await pollEvents();
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
     await pollEvents();
   } catch (error) {
     console.error(
