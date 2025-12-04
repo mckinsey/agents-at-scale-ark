@@ -89,6 +89,27 @@ describe('export command', () => {
     expect(mockWriteFile).toHaveBeenCalledTimes(1);
   });
 
+  it('should export types specified in config in dependency order', async () => {
+    mockExeca.mockResolvedValue({
+      stdout: JSON.stringify(mockKubectlGetResponse),
+    });
+
+    mockWriteFile.mockResolvedValue(undefined);
+
+    const newDefaultTypes = ['teams', 'agents'];
+    const modifiedConfig: ArkConfig = {defaultExportTypes: newDefaultTypes};
+
+    const command = createExportCommand(modifiedConfig);
+    await command.parseAsync(['node', 'test', '-o', 'test.yaml']);
+
+    expect(mockExeca.mock.calls).toEqual([
+      ['kubectl', expect.arrayContaining(['get', 'agents']), expect.any(Object)],
+      ['kubectl', expect.arrayContaining(['get', 'teams']), expect.any(Object)],
+    ])
+
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+  });
+
   it('should filter by resource types when specified and export in order', async () => {
     mockExeca.mockResolvedValue({
       stdout: JSON.stringify(mockKubectlGetResponse),

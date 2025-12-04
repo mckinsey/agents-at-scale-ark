@@ -38,3 +38,14 @@ services:
       - containerRegistry.username=YOUR_USERNAME
       - --set
       - containerRegistry.password=YOUR_PASSWORD
+
+# Which resources ark export should export if not otherwise specified
+defaultExportTypes:
+  - secrets
+  - tools
+  - models
+  - agents
+  - teams
+  - evaluators
+  - mcpservers
+  - a2aservers

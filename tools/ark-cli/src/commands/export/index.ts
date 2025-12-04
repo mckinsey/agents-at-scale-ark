@@ -6,7 +6,9 @@ import type {ArkConfig} from '../../lib/config.js';
 import {listResources} from '../../lib/kubectl.js';
 import output from '../../lib/output.js';
 
-const ARK_RESOURCE_TYPES = [
+// resource types in dependency order so that they can be loaded correctly
+// by default these will all be exported if not specified; can be overridden with defaultExportTypes in config
+const RESOURCE_ORDER = [
   'secrets',
   'tools',
   'models',
@@ -17,8 +19,6 @@ const ARK_RESOURCE_TYPES = [
   'a2aservers',
 ];
 
-type ResourceType = (typeof ARK_RESOURCE_TYPES)[number];
-
 interface ExportOptions {
   output?: string;
   namespace?: string;
@@ -26,16 +26,17 @@ interface ExportOptions {
   labels?: string;
 }
 
-async function exportResources(options: ExportOptions) {
+async function exportResources(options: ExportOptions, config: ArkConfig) {
   try {
+    const allResourceTypes = config.defaultExportTypes || RESOURCE_ORDER
     const outputPath = options.output || 'ark-export.yaml';
     let resourceTypes = options.types
-      ? (options.types.split(',') as ResourceType[])
-      : ARK_RESOURCE_TYPES;
+      ? (options.types.split(','))
+      : allResourceTypes;
 
     // ensure that we get resources in the correct order; e.g. agents before teams that use the agents
     resourceTypes.sort((a, b) => {
-      return ARK_RESOURCE_TYPES.indexOf(a) - ARK_RESOURCE_TYPES.indexOf(b);
+      return RESOURCE_ORDER.indexOf(a) - RESOURCE_ORDER.indexOf(b);
     });
 
     output.info(`exporting ark resources to ${outputPath}...`);
@@ -44,7 +45,7 @@ async function exportResources(options: ExportOptions) {
     let allResourceCount = 0;
 
     for (const resourceType of resourceTypes) {
-      if (!ARK_RESOURCE_TYPES.includes(resourceType)) {
+      if (!RESOURCE_ORDER.includes(resourceType)) {
         output.warning(`unknown resource type: ${resourceType}, skipping`);
         continue;
       }
@@ -83,7 +84,7 @@ async function exportResources(options: ExportOptions) {
   }
 }
 
-export function createExportCommand(_: ArkConfig): Command {
+export function createExportCommand(config: ArkConfig): Command {
   const exportCommand = new Command('export');
 
   exportCommand
@@ -96,7 +97,7 @@ export function createExportCommand(_: ArkConfig): Command {
     )
     .option('-l, --labels <labels>', 'label selector to filter resources')
     .action(async (options: ExportOptions) => {
-      await exportResources(options);
+      await exportResources(options, config);
     });
 
   return exportCommand;
