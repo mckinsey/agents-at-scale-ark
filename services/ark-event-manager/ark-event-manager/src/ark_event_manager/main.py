@@ -3,7 +3,7 @@
 Ark Event Manager is a unified service that provides three core capabilities:
 
 1. **Event Ingestion** (`POST /events`)
-   - Receives and processes system telemetry events (protobuf format)
+   - Receives and processes system telemetry events (JSON format)
    - Events represent what happened in the system (query started, workflow completed, etc.)
    - All events are persisted to the database for observability and analytics
 
@@ -79,7 +79,7 @@ async def lifespan(app: FastAPI):
     processor_task = asyncio.create_task(processor.run())
     logger.info("🚀 Ark Event Manager started and ready to receive events")
     logger.info("📡 API endpoints available:")
-    logger.info("   - POST /events (protobuf)")
+        logger.info("   - POST /events (JSON)")
     logger.info("   - GET /messages?session_id=<id>")
     logger.info("   - POST /messages")
     logger.info("   - GET /health")

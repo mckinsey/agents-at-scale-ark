@@ -15,7 +15,7 @@ router.add_api_route(
     methods=["POST"],
     tags=["events"],
     summary="Receive an event",
-    description="Accepts protobuf-serialized Event objects and enqueues them for processing.",
+    description="Accepts JSON Event objects and enqueues them for processing.",
 )
 
 # Memory endpoints

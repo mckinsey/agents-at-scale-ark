@@ -27,7 +27,7 @@ app:
     - name: USE_DATABASE
       value: "true"
     - name: DATABASE_URL
-      value: "sqlite+aiosqlite:///./data/aer.db"
+      value: "sqlite+aiosqlite:////app/data/aer.db"
     # Optional: Add additional environment variables here
     # - name: EVENT_RETENTION_DAYS
     #   value: "30"

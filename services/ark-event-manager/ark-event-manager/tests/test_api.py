@@ -8,7 +8,6 @@ from fastapi.testclient import TestClient
 
 from ark_event_manager.api.events import receive_event, set_consumer
 from ark_event_manager.api.memory import add_messages, get_messages, set_storage
-from ark_event_manager.core.types import Protobuf
 
 
 @pytest.mark.unit
@@ -26,7 +25,16 @@ class TestEventsAPI:
     def mock_request(self):
         """Create a mock FastAPI request."""
         request = MagicMock(spec=Request)
-        request.body = AsyncMock(return_value=b"fake-protobuf-bytes")
+        request.json = AsyncMock(return_value={
+            "event_id": "test-123",
+            "type": "query",
+            "subtype": "execution_start",
+            "severity": "INFO",
+            "source_type": "ARK_CONTROLLER",
+            "source": "test",
+            "version": "v1",
+            "payload": {}
+        })
         return request
 
     @pytest.mark.asyncio
@@ -45,7 +53,7 @@ class TestEventsAPI:
         """Test receiving an event with empty body."""
         set_consumer(mock_consumer)
         request = MagicMock(spec=Request)
-        request.body = AsyncMock(return_value=b"")
+        request.json = AsyncMock(return_value={})
         
         from fastapi import HTTPException
         

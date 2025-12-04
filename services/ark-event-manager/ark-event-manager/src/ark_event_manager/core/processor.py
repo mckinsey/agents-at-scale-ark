@@ -2,15 +2,13 @@
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ark_event_manager.transport import EventConsumer
     from ark_event_manager.storage import EventStorage, StreamStorage
 
 from ark_event_manager.core.models import Event
-from ark_event_manager.core.proto_helpers import parse_event_protobuf
-from ark_event_manager.core.types import Protobuf
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +59,9 @@ class EventProcessor:
                 logger.info(f"📦 Consumed batch of {len(events)} event(s) from queue")
 
                 # Process events
-                for event_bytes, correlation_id in events:
+                for event_dict, correlation_id in events:
                     try:
-                        await self._process_event(event_bytes, correlation_id)
+                        await self._process_event(event_dict, correlation_id)
                         self._events_processed += 1
                     except Exception as e:
                         logger.error(
@@ -87,20 +85,23 @@ class EventProcessor:
             f"🛑 Event processor stopped | total_events_processed={self._events_processed}"
         )
 
-    async def _process_event(self, event_bytes: Protobuf, correlation_id: str) -> None:
+    async def _process_event(self, event_dict: dict[str, Any], correlation_id: str) -> None:
         """
         Process a single event.
 
         Args:
-            event_bytes: Protobuf-serialized event (Protobuf type)
+            event_dict: Event as JSON dict
             correlation_id: Correlation ID for the event
         """
         try:
-            logger.debug(f"🔍 Parsing protobuf event | correlation_id={correlation_id}")
-            event = parse_event_protobuf(event_bytes)
-
-            if correlation_id and not event.correlation_id:
-                event.correlation_id = correlation_id
+            logger.debug(f"🔍 Parsing JSON event | correlation_id={correlation_id}")
+            
+            # Set correlation_id if not present
+            if correlation_id and not event_dict.get("correlation_id"):
+                event_dict["correlation_id"] = correlation_id
+            
+            # Create Event from dict
+            event = Event.model_validate(event_dict, strict=False)
 
             logger.info(
                 f"📋 Processing event | "

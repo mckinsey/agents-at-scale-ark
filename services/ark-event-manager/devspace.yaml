@@ -45,7 +45,7 @@ dev:
       [
         "sh",
         "-c",
-        "cd /app/ark-event-manager && apt-get update && apt-get install -y curl && python -m pip install --upgrade 'pip==25.3' && pip install uv && uv sync && uv run python -m ark_event_manager",
+        "mkdir -p /app/ark-event-manager/data && cd /app/ark-event-manager && rm -rf .venv && apt-get update && apt-get install -y curl && python -m pip install --upgrade 'pip==25.3' && pip install uv && uv sync && uv run python -m ark_event_manager",
       ]
     namespace: default
     # Stream logs instead of terminal
@@ -57,6 +57,10 @@ dev:
         startContainer: true
         disableDownload: true
         uploadExcludeFile: .dockerignore
+        excludePaths:
+          - .venv
+          - __pycache__
+          - "*.pyc"
         onUpload:
           restartContainer: true
     # Enable SSH for IDE integration

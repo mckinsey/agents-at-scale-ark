@@ -6,7 +6,6 @@ import pytest
 
 from ark_event_manager.core.models import Event, EventSeverity, EventSourceType
 from ark_event_manager.core.processor import EventProcessor
-from ark_event_manager.core.types import Protobuf
 
 
 @pytest.mark.unit
@@ -62,12 +61,9 @@ class TestEventProcessor:
             payload={"queryId": "query-456"},
         )
         
-        # Mock parse_event_protobuf to return our event
-        with patch(
-            "ark_event_manager.core.processor.parse_event_protobuf",
-            return_value=event,
-        ):
-            await processor._process_event(Protobuf(b"fake-protobuf"), "query-456")
+        # Create event dict for processing
+        event_dict = event.model_dump()
+        await processor._process_event(event_dict, "query-456")
         
         # Verify stream storage was called
         mock_stream_storage.write_stream.assert_called_once()
@@ -91,11 +87,10 @@ class TestEventProcessor:
             correlation_id="",  # Empty correlation_id
         )
         
-        with patch(
-            "ark_event_manager.core.processor.parse_event_protobuf",
-            return_value=event,
-        ):
-            await processor._process_event(Protobuf(b"fake-protobuf"), "header-correlation-123")
+        # Create event dict without correlation_id
+        event_dict = event.model_dump()
+        event_dict.pop("correlation_id", None)
+        await processor._process_event(event_dict, "header-correlation-123")
         
         # Verify correlation_id was set
         assert event.correlation_id == "header-correlation-123"

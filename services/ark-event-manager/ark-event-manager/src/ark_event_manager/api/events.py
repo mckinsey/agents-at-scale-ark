@@ -5,7 +5,6 @@ import logging
 from fastapi import Header, HTTPException, Request, Response
 
 from ark_event_manager.transport import HTTPEventConsumer
-from ark_event_manager.core.types import Protobuf
 
 logger = logging.getLogger(__name__)
 
@@ -26,24 +25,27 @@ async def receive_event(
     """
     Receive an event via HTTP POST.
 
-    Accepts protobuf-serialized Event objects and enqueues them for processing.
+    Accepts JSON Event objects and enqueues them for processing.
     """
     if consumer is None:
         raise HTTPException(status_code=503, detail="Event consumer not initialized")
 
-    event_bytes: Protobuf = Protobuf(await request.body())
+    try:
+        event_dict = await request.json()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON: {str(e)}") from e
 
-    if not event_bytes:
+    if not event_dict:
         raise HTTPException(status_code=400, detail="Empty event body")
 
     logger.info(
         f"📥 Event received via HTTP POST | "
         f"correlation_id={x_correlation_id} | "
-        f"size={len(event_bytes)} bytes"
+        f"type={event_dict.get('type', 'unknown')}"
     )
 
     try:
-        await consumer.enqueue(event_bytes, x_correlation_id)
+        await consumer.enqueue(event_dict, x_correlation_id)
         logger.info(
             f"✅ Event enqueued successfully | correlation_id={x_correlation_id}"
         )

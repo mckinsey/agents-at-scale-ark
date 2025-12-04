@@ -8,7 +8,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-from google.protobuf import struct_pb2
 
 # Add src to path for imports
 src_path = Path(__file__).parent.parent / "src"
@@ -20,7 +19,6 @@ if generated_path.exists():
     sys.path.insert(0, str(generated_path))
 
 from ark_event_manager.core.models import Event, EventSeverity, EventSourceType
-from ark_event_manager.core.types import Protobuf
 
 
 class MockEventPublisher:
@@ -61,71 +59,21 @@ class MockEventPublisher:
             payload=payload,
         )
 
-    def event_to_protobuf_bytes(self, event: Event) -> Protobuf:
-        """Convert Event to protobuf-serialized bytes."""
-        if isinstance(event.timestamp, datetime):
-            timestamp_seconds = int(event.timestamp.timestamp())
-            timestamp_nanos = int((event.timestamp.timestamp() - timestamp_seconds) * 1e9)
-        else:
-            timestamp_seconds = int(datetime.now(timezone.utc).timestamp())
-            timestamp_nanos = 0
-
-        import event_pb2
-
-        EventProto = event_pb2.Event
-
-        proto_event = EventProto()
-        proto_event.event_id = event.event_id
-        proto_event.correlation_id = event.correlation_id
-        proto_event.timestamp.seconds = timestamp_seconds
-        proto_event.timestamp.nanos = timestamp_nanos
-        proto_event.severity = event.severity.value
-        proto_event.type = event.type
-        proto_event.subtype = event.subtype
-        proto_event.source_type = event.source_type.value
-        proto_event.source = event.source
-        proto_event.version = event.version
-
-        self._dict_to_protobuf_struct(event.payload, proto_event.payload)
-
-        return Protobuf(proto_event.SerializeToString())
-
-    def _dict_to_protobuf_struct(self, data: dict, struct: struct_pb2.Struct) -> None:
-        """Convert Python dict to protobuf Struct."""
-        for key, value in data.items():
-            if isinstance(value, str):
-                struct.fields[key].string_value = value
-            elif isinstance(value, (int, float)):
-                struct.fields[key].number_value = float(value)
-            elif isinstance(value, bool):
-                struct.fields[key].bool_value = value
-            elif isinstance(value, dict):
-                self._dict_to_protobuf_struct(value, struct.fields[key].struct_value)
-            elif isinstance(value, list):
-                list_value = struct.fields[key].list_value
-                for item in value:
-                    if isinstance(item, str):
-                        list_value.values.add().string_value = item
-                    elif isinstance(item, (int, float)):
-                        list_value.values.add().number_value = float(item)
-                    elif isinstance(item, bool):
-                        list_value.values.add().bool_value = item
-                    elif isinstance(item, dict):
-                        self._dict_to_protobuf_struct(item, list_value.values.add().struct_value)
-            else:
-                struct.fields[key].string_value = str(value)
+    def event_to_json(self, event: Event) -> dict:
+        """Convert Event to JSON dict."""
+        return event.model_dump(exclude={"id", "created_at"})
 
     async def publish(self, event: Event, correlation_id: str | None = None) -> httpx.Response:
         """Publish an event to the event manager."""
-        event_bytes = self.event_to_protobuf_bytes(event)
+        event_dict = self.event_to_json(event)
         corr_id = correlation_id or event.correlation_id
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(
                 self.url,
-                content=event_bytes,
+                json=event_dict,
                 headers={
-                    "Content-Type": "application/x-protobuf",
+                    "Content-Type": "application/json",
                     "X-Correlation-ID": corr_id,
                 },
             )
