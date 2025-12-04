@@ -57,7 +57,6 @@ $(ARK_EVENT_MANAGER_STAMP_TEST): $(ARK_EVENT_MANAGER_STAMP_DEPS)
 	@echo "🧪 Running tests for $(ARK_EVENT_MANAGER_SERVICE_NAME)..."
 	@set -e; \
 	cd $(ARK_EVENT_MANAGER_SERVICE_SOURCE_DIR) && \
-	uv run python -c "from tests.generate_proto import generate_proto; generate_proto()" && \
 	uv run pytest tests/ -v --tb=short -m "unit" || \
 	(echo "❌ $(ARK_EVENT_MANAGER_SERVICE_NAME) tests failed" >&2 && exit 1)
 	@echo "✅ $(ARK_EVENT_MANAGER_SERVICE_NAME) tests passed"

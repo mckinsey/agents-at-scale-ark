@@ -13,11 +13,6 @@ import pytest
 src_path = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(src_path))
 
-# Add generated to path for proto imports
-generated_path = Path(__file__).parent.parent / "generated"
-if generated_path.exists():
-    sys.path.insert(0, str(generated_path))
-
 from ark_event_manager.core.models import Event, EventSeverity, EventSourceType
 
 

@@ -16,7 +16,7 @@
   - `type="error"`, `subtype="model_timeout"` - Error occurred
 
 **Source**:
-- Protobuf Event messages from Ark controllers
+- JSON Event messages from Ark controllers (via HTTP API)
 - Kubernetes events (via watchers)
 - Argo Workflow events
 - System services
@@ -27,7 +27,7 @@
 - Can be queried by correlation_id, type, timestamp, etc.
 
 **API**:
-- `POST /events` - Ingest events (protobuf format)
+- `POST /events` - Ingest events (JSON format)
 - Events flow through the event processor pipeline
 
 ### Messages (Conversation Content)
@@ -83,10 +83,10 @@ graph TB
         MessageAPI[POST /messages<br/>MemoryInterface]
     end
 
-    Controllers -->|Protobuf Events| API
-    Watchers -->|Protobuf Events| API
-    K8s -->|Protobuf Events| API
-    Argo -->|Protobuf Events| API
+    Controllers -->|JSON Events| API
+    Watchers -->|JSON Events| API
+    K8s -->|JSON Events| API
+    Argo -->|JSON Events| API
 
     API -->|enqueue| Consumer
     Consumer -->|consume_batch| Processor
@@ -143,10 +143,10 @@ graph TB
         MessageAPI[POST /messages<br/>MemoryInterface]
     end
 
-    Controllers -->|Protobuf Events| Kafka
-    Watchers -->|Protobuf Events| Kafka
-    K8s -->|Protobuf Events| Kafka
-    Argo -->|Protobuf Events| Kafka
+    Controllers -->|JSON Events| Kafka
+    Watchers -->|JSON Events| Kafka
+    K8s -->|JSON Events| Kafka
+    Argo -->|JSON Events| Kafka
 
     Kafka -->|consume_batch| Consumer
     Consumer --> Processor
@@ -188,7 +188,7 @@ graph LR
 
     subgraph "Core Processing"
         Processor[EventProcessor<br/>Deserialize & Route]
-        Models[Event/Message Models<br/>SQLModel + Protobuf]
+        Models[Event/Message Models<br/>SQLModel + JSON]
     end
 
     subgraph "Storage Interfaces"
@@ -247,8 +247,8 @@ sequenceDiagram
 
     Test->>Publisher: Create MockEventPublisher
     Test->>Publisher: Create test event
-    Publisher->>Publisher: Convert to protobuf
-    Publisher->>Service: POST /events (protobuf)
+    Publisher->>Publisher: Serialize to JSON
+    Publisher->>Service: POST /events (JSON)
     Service->>Service: EventProcessor.deserialize
     Service->>Storage: persist_event()
     Storage-->>Service: Event stored

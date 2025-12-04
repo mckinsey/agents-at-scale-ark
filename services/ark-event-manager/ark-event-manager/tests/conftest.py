@@ -41,25 +41,7 @@ def service_url():
 
 
 @pytest.fixture(scope="session")
-def ensure_proto_generated():
-    """Ensure proto code is generated before tests run."""
-    service_dir = Path(__file__).parent.parent
-    generated_path = service_dir / "generated"
-    proto_file = generated_path / "event_pb2.py"
-    
-    if proto_file.exists():
-        return
-    
-    # Import and run generate_proto function
-    from tests.generate_proto import generate_proto
-    generate_proto()
-    
-    if not proto_file.exists():
-        pytest.skip(f"Proto file not generated at {proto_file}")
-
-
-@pytest.fixture(scope="session")
-def service_process(ensure_proto_generated):
+def service_process():
     """
     Start the event manager service for integration tests.
     

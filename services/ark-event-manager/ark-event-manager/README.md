@@ -129,15 +129,12 @@ The service includes pytest integration tests that test the full event processin
 
 **Quick start (recommended):**
 ```bash
-# Run integration tests (generates proto code automatically)
+# Run integration tests
 ./run_integration_tests.sh
 ```
 
 **Manual options:**
 ```bash
-# Generate proto code first (for integration tests)
-uv run python -c "from tests import generate_proto; generate_proto.generate_proto()"
-
 # Run all tests
 uv run pytest tests/ -v
 
@@ -175,7 +172,7 @@ curl http://localhost:8080/health
 ### API Endpoints
 
 - `GET /health` - Health check
-- `POST /events` - Ingest events (protobuf format)
+- `POST /events` - Ingest events (JSON format)
 - `GET /messages?session_id=<id>` - Get messages for a session
 - `POST /messages` - Add messages to a session
 - `GET /stream/{query_id}` - Stream events for a query (SSE)
