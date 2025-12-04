@@ -215,7 +215,7 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
 
             # Extract timeout from query spec
             query_timeout_str = query_resource.spec.timeout
-            timeout_seconds = parse_duration_to_seconds(query_timeout_str)
+            timeout_seconds = parse_duration_to_seconds(query_timeout_str) or 300
 
             # If the caller didn't request streaming, we can simply poll for
             # the response.
