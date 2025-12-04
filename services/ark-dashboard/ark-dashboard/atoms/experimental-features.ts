@@ -57,7 +57,7 @@ export const isA2ATasksEnabledAtom = atom(get => {
 export const CHAT_STREAMING_FEATURE_KEY = 'experimental-chat-streaming';
 export const storedIsChatStreamingEnabledAtom = atomWithStorage<boolean>(
   CHAT_STREAMING_FEATURE_KEY,
-  false,
+  true,
   undefined,
   { getOnInit: true },
 );

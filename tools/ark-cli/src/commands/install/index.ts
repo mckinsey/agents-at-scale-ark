@@ -69,19 +69,29 @@ export async function installArk(
 
   // If a specific service is requested, install only that service
   if (serviceName) {
+    // Check if it's a marketplace item
     if (isMarketplaceService(serviceName)) {
-      const service = getMarketplaceItem(serviceName);
+      const service = await getMarketplaceItem(serviceName);
 
       if (!service) {
-        output.error(`marketplace item '${serviceName}' not found`);
+        output.error(
+          `marketplace item '${serviceName}' not found`
+        );
         output.info('available marketplace items:');
-        const services = getAllMarketplaceServices();
-        for (const name of Object.keys(services)) {
-          output.info(`  marketplace/services/${name}`);
+        const marketplaceServices = await getAllMarketplaceServices();
+        if (marketplaceServices) {
+          for (const name of Object.keys(marketplaceServices)) {
+            output.info(`  marketplace/services/${name}`);
+          }
         }
-        const agents = getAllMarketplaceAgents();
-        for (const name of Object.keys(agents)) {
-          output.info(`  marketplace/agents/${name}`);
+        const marketplaceAgents = await getAllMarketplaceAgents();
+        if (marketplaceAgents) {
+          for (const name of Object.keys(marketplaceAgents)) {
+            output.info(`  marketplace/agents/${name}`);
+          }
+        }
+        if (!marketplaceServices && !marketplaceAgents) {
+          output.warning('Marketplace unavailable');
         }
         process.exit(1);
       }
