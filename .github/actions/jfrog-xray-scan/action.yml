@@ -60,30 +60,37 @@ runs:
         TABLE=$(jq -r '
           .[] 
           | select(.violations != null) | .violations[]? 
-          | [
-              (.issue_id // "N/A"),
-              (
+          | {
+              issue_id: (.issue_id // "N/A"),
+              component_ids: (
                 if (.components and (.components | length > 0)) 
-                then (.components | to_entries | map( .value.impact_paths[]? | .[].component_id ) | flatten | unique | join(",")) 
-                else "N/A" 
+                then (.components | to_entries | map( .value.impact_paths[]? | .[].component_id ) | flatten | unique ) 
+                else [] 
                 end
               ),
-              (.severity // "N/A"),
-              (
+              severity: (.severity // "N/A"),
+              cves: (
                 if (.cves and (.cves | type == "array" and length > 0))
-                then (.cves | map(.cve) | join(","))
-                else "N/A"
+                then (.cves | map(.cve) )
+                else []
                 end
               ),
-              (
+              references: (
                 if (.references and (.references | length > 0)) 
-                then (.references | join(",")) 
-                else "N/A" 
+                then (.references ) 
+                else [] 
                 end
               )
-            ]
-          | @tsv
-        ' "$SCAN_JSON" | sort -u -t$'\t' -k1,1)
+            }
+        ' "$SCAN_JSON" | jq -r -s 'group_by(.issue_id)[] | 
+          [
+            (.[0].issue_id),
+            ( map(.component_ids[]) | unique | join(",")),
+            ( map(.severity) | unique | join(",")),
+            ( map(.cves[]) | unique | join(",")),
+            ( map(.references[]) | unique | join(","))
+          ] | @tsv
+        ' )
         
         echo "| ID | Affected Component | Criticality | CVEs | Links |" > summary-table.md
         echo "|----|-------------------|-------------|------|-------|" >> summary-table.md

@@ -2,7 +2,7 @@
  * Centralized ARK service definitions used by both install and status commands
  */
 
-import {loadConfig} from './lib/config.js';
+import {loadConfig, getMarketplaceRegistry} from './lib/config.js';
 import type {
   ArkService,
   ServiceCollection,
@@ -18,7 +18,6 @@ export type {
 };
 
 const REGISTRY_BASE = 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts';
-const MARKETPLACE_REGISTRY_BASE = 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts';
 
 /**
  * Dependencies that should be installed before ARK services
@@ -189,7 +188,7 @@ const defaultArkServices: ServiceCollection = {
     description: 'Runtime administration agent with cluster privileges',
     enabled: false,
     category: 'service',
-    chartPath: `${MARKETPLACE_REGISTRY_BASE}/noah`,
+    chartPath: `${getMarketplaceRegistry()}/noah`,
     installArgs: [],
     k8sServiceName: 'noah-mcp',
     k8sServicePort: 8639,

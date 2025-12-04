@@ -1,10 +1,15 @@
 import {jest} from '@jest/globals';
 
 const mockLoadConfig = jest.fn();
+const mockGetMarketplaceRegistry = jest.fn();
 
 jest.unstable_mockModule('./lib/config.js', () => ({
   loadConfig: mockLoadConfig,
+  getMarketplaceRegistry: mockGetMarketplaceRegistry,
 }));
+
+mockLoadConfig.mockReturnValue({});
+mockGetMarketplaceRegistry.mockReturnValue('oci://test-registry/charts');
 
 const {
   arkDependencies,
@@ -15,6 +20,8 @@ const {
 describe('arkServices', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockLoadConfig.mockReturnValue({});
+    mockGetMarketplaceRegistry.mockReturnValue('oci://test-registry/charts');
   });
 
   it('exports arkDependencies with expected structure', () => {
