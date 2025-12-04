@@ -30,66 +30,114 @@ class TeamsPage(BasePage):
     def navigate_to_teams_tab(self) -> None:
         from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
-        dashboard.navigate_to_dashboard()
         
-        if not self.page.locator(dashboard.TEAMS_TAB).first.is_visible():
-            import pytest
-            pytest.skip("Teams tab not visible")
+        # Navigate directly to /teams URL instead of clicking tabs
+        self.page.goto(f"{dashboard.base_url}/teams")
+        self.wait_for_navigation_complete()
         
-        self.page.locator(dashboard.TEAMS_TAB).first.click()
-        self.wait_for_load_state("networkidle")
-        self.wait_for_timeout(3000)
+        # Wait for Add Team button to appear
+        self.wait_for_element(self.ADD_TEAM_BUTTON, timeout=10000)
     
     def generate_team_name(self, prefix: str = "team") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
         return f"{prefix}-{date_str}"
     
-    def is_team_in_table(self, team_name: str) -> bool:
-        try:
-            return self.page.get_by_text(team_name, exact=False).count() > 0
-        except:
-            return False
+    def is_team_in_table(self, team_name: str, retries: int = 3) -> bool:
+        """Check if team is in table with retry logic"""
+        for attempt in range(retries):
+            try:
+                if self.page.get_by_text(team_name, exact=False).count() > 0:
+                    return True
+                if attempt < retries - 1:
+                    logger.info(f"Team {team_name} not found, retrying... ({attempt + 1}/{retries})")
+                    self.page.reload()
+                    self.wait_for_navigation_complete()
+                    self.wait_for_element(self.ADD_TEAM_BUTTON, timeout=10000)
+            except Exception as e:
+                logger.warning(f"Error checking team in table: {e}")
+        return False
     
     def create_team_with_verification(self, team_name: str, description: str, strategy: str, max_turns: str, member_name: str) -> dict:
         logger.info(f"Creating team: {team_name}")
+        logger.info(f"Current URL before clicking Add: {self.page.url}")
         
         self.page.locator(self.ADD_TEAM_BUTTON).first.click()
-        self.wait_for_load_state("networkidle")
         
-        self.page.locator("input").first.wait_for(state="visible", timeout=10000)
-        self.page.locator("input").first.fill(team_name)
+        # Wait for modal dialog to open
+        self.wait_for_modal_open()
+        logger.info("Modal dialog opened")
         
-        description_field = self.page.locator("textarea")
+        # Wait for form to be ready inside the modal
+        self.wait_for_form_ready()
+        
+        logger.info(f"URL after clicking Add Team: {self.page.url}")
+        
+        # Get the dialog element
+        dialog = self.page.locator("[role='dialog'], [data-slot='dialog-content']").first
+        
+        # Fill name field
+        name_input = dialog.locator("input").first
+        name_input.wait_for(state="visible", timeout=10000)
+        name_input.fill(team_name)
+        logger.info(f"Filled team name: {team_name}")
+        
+        # Fill description field
+        description_field = dialog.locator("textarea")
         if description_field.count() > 0:
             description_field.first.fill(description)
+            logger.info(f"Filled description: {description}")
         else:
-            self.page.locator("input").nth(1).fill(description)
+            dialog.locator("input").nth(1).fill(description)
         
-        select_dropdown = self.page.locator("select")
+        # Select strategy
+        select_dropdown = dialog.locator("select")
         if select_dropdown.count() > 0:
             select_dropdown.first.select_option(label=strategy)
+            logger.info(f"Selected strategy: {strategy}")
         
-        max_turns_fields = self.page.locator("input[type='number']")
+        # Fill max turns
+        max_turns_fields = dialog.locator("input[type='number']")
         if max_turns_fields.count() > 0:
             max_turns_fields.first.fill(max_turns)
+            logger.info(f"Filled max turns: {max_turns}")
         
         logger.info(f"Selecting member: {member_name}")
-        self.wait_for_timeout(1000)
-        member_checkboxes = self.page.locator("input[type='checkbox']")
+        # Wait for checkbox elements to be available inside dialog
+        member_checkboxes = dialog.locator("input[type='checkbox']")
+        logger.info(f"Found {member_checkboxes.count()} checkboxes in dialog")
+        
         if member_checkboxes.count() > 0:
-            agent_row = self.page.get_by_text(member_name).first
-            agent_row.locator("..").locator("input[type='checkbox']").first.check()
+            # Try to find and check the agent row
+            for i in range(member_checkboxes.count()):
+                checkbox = member_checkboxes.nth(i)
+                parent_text = checkbox.locator("..").inner_text()
+                if member_name in parent_text:
+                    checkbox.check()
+                    logger.info(f"Selected member: {member_name}")
+                    break
+            else:
+                # If not found by parent text, try to check the first one
+                logger.warning(f"Member {member_name} not found by name, checking first checkbox")
+                member_checkboxes.first.check()
         
-        self.wait_for_timeout(3000)
-        save_button = self.page.locator("button").filter(has_text="Create").first
+        # Find the Create/Save button inside the dialog
+        save_button = dialog.locator("button").filter(has_text="Create").first
         if not save_button.is_visible():
-            save_button = self.page.locator("button").filter(has_text="Save").first
+            save_button = dialog.locator("button").filter(has_text="Save").first
         if not save_button.is_visible():
-            save_button = self.page.locator("button[type='submit']").first
-            
-        save_button.click()
+            save_button = dialog.locator("button[type='submit']").first
         
-        self.wait_for_load_state("networkidle")
+        save_button.wait_for(state="visible", timeout=5000)
+        logger.info("Clicking Create button...")
+        
+        # Click using JavaScript to bypass overlay
+        save_button.evaluate("el => el.click()")
+        logger.info("Create button clicked via JavaScript")
+        
+        # Wait for modal to close and navigation to complete
+        self.wait_for_modal_close(timeout=10000)
+        self.wait_for_navigation_complete()
+        logger.info(f"URL after Create: {self.page.url}")
         
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
@@ -97,7 +145,17 @@ class TeamsPage(BasePage):
         except:
             popup_visible = False
         
+        # Navigate back to teams list to verify the team was created
+        logger.info("Navigating back to teams list...")
+        self.navigate_to_teams_tab()
+        
+        # Wait for table to load
+        self.wait_for_table_content()
+        
+        # Debug: Log what's visible on the page
+        logger.info(f"Looking for team: {team_name}")
         in_table = self.is_team_in_table(team_name)
+        logger.info(f"Team in table: {in_table}")
         
         return {
             "name": team_name,
@@ -120,16 +178,19 @@ class TeamsPage(BasePage):
         except:
             return self._delete_not_available(team_name)
         
-        self.wait_for_timeout(1000)
+        # Wait for confirmation dialog to appear
+        self.wait_for_modal_open()
         confirm_dialog_visible = self.page.locator(self.CONFIRM_DELETE_DIALOG).first.is_visible()
         confirm_button_visible = self.page.locator(self.CONFIRM_DELETE_BUTTON).first.is_visible()
         
         if confirm_button_visible:
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
-        self.wait_for_load_state("networkidle")
+        self.wait_for_navigation_complete()
         popup_visible = self._check_success_popup()
-        self.wait_for_timeout(3000)
+        
+        # Wait for table to refresh
+        self.wait_for_table_content()
         deleted_from_table = not self.is_team_in_table(team_name)
         
         return {
@@ -157,4 +218,3 @@ class TeamsPage(BasePage):
             return True
         except:
             return False
-

@@ -28,5 +28,16 @@ class DashboardPage(BasePage):
     
     def navigate_to_dashboard(self) -> None:
         self.navigate(self.base_url)
-        self.wait_for_load_state("networkidle")
-
+        self.wait_for_navigation_complete()
+        
+        # Wait for main content or sidebar to appear
+        self.wait_for_element(f"{self.MAIN_CONTENT}, {self.SIDEBAR}", timeout=10000)
+    
+    def is_dashboard_loaded(self) -> bool:
+        """Check if dashboard has loaded by verifying main content or sidebar is visible"""
+        try:
+            # Wait for either main content or sidebar to be visible
+            self.page.wait_for_selector(f"{self.MAIN_CONTENT}, {self.SIDEBAR}", timeout=10000)
+            return True
+        except:
+            return False

@@ -40,14 +40,13 @@ class SecretsPage(BasePage):
     def navigate_to_secrets_tab(self) -> None:
         from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
-        dashboard.navigate_to_dashboard()
         
-        if not self.page.locator(dashboard.SECRETS_TAB).first.is_visible():
-            import pytest
-            pytest.skip("Secrets tab not visible")
+        # Navigate directly to /secrets URL instead of clicking tabs
+        self.page.goto(f"{dashboard.base_url}/secrets")
+        self.wait_for_navigation_complete()
         
-        self.page.locator(dashboard.SECRETS_TAB).first.click()
-        self.wait_for_load_state("networkidle")
+        # Wait for Add Secret button to appear
+        self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
     
     def is_secret_in_table(self, secret_name: str) -> bool:
         try:
@@ -61,13 +60,15 @@ class SecretsPage(BasePage):
         
         
         self.page.locator(self.ADD_SECRET_BUTTON).click()
+        self.wait_for_form_ready()
+        
         self.page.locator(self.SECRET_NAME_INPUT).wait_for(state="visible")
         self.page.locator(self.SECRET_NAME_INPUT).fill(secret_name)
         self.page.locator(self.SECRET_VALUE_INPUT).fill(secret_value)
         self.page.locator(f"{self.SAVE_BUTTON}:not([disabled])").wait_for(state="visible", timeout=10000)
         self.page.locator(self.SAVE_BUTTON).click()
         
-        self.wait_for_load_state("networkidle")
+        self.wait_for_navigation_complete()
         
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
@@ -75,7 +76,8 @@ class SecretsPage(BasePage):
         except:
             popup_visible = False
         
-        self.wait_for_timeout(3000)
+        # Wait for table to refresh
+        self.wait_for_table_content()
         in_table = self.is_secret_in_table(secret_name)
         
         return {
@@ -100,16 +102,19 @@ class SecretsPage(BasePage):
         except:
             return self._delete_not_available(secret_name)
         
-        self.wait_for_timeout(1000)
+        # Wait for confirmation dialog to appear
+        self.wait_for_modal_open()
         confirm_dialog_visible = self.page.locator(self.CONFIRM_DELETE_DIALOG).first.is_visible()
         confirm_button_visible = self.page.locator(self.CONFIRM_DELETE_BUTTON).first.is_visible()
         
         if confirm_button_visible:
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
-        self.wait_for_load_state("networkidle")
+        self.wait_for_navigation_complete()
         popup_visible = self._check_success_popup()
-        self.wait_for_timeout(3000)
+        
+        # Wait for table to refresh
+        self.wait_for_table_content()
         deleted_from_table = not self.is_secret_in_table(secret_name)
         
         return {
