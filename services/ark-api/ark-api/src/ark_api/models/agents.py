@@ -32,10 +32,23 @@ class SecretKeyRef(BaseModel):
     optional: Optional[bool] = None
 
 
+class QueryParameterRef(BaseModel):
+    name: str
+
+
+class ServiceRef(BaseModel):
+    name: str
+    namespace: Optional[str] = None
+    port: Optional[str] = None
+    path: Optional[str] = None
+
+
 class ValueFrom(BaseModel):
     """Reference to external sources for parameter values."""
     configMapKeyRef: Optional[ConfigMapKeyRef] = None
     secretKeyRef: Optional[SecretKeyRef] = None
+    serviceRef: Optional[ServiceRef] = None
+    queryParameterRef: Optional[QueryParameterRef] = None
 
 
 class Parameter(BaseModel):
