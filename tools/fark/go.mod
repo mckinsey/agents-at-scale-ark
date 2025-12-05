@@ -2,8 +2,6 @@ module mckinsey.com/ark/tools/fark
 
 go 1.24.11
 
-toolchain go1.24.11
-
 require (
 	github.com/spf13/cobra v1.9.1
 	go.uber.org/zap v1.27.0
