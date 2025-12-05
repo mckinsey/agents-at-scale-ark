@@ -1,8 +1,8 @@
 module mckinsey.com/ark/tools/fark
 
-go 1.24.0
+go 1.24.11
 
-toolchain go1.24.4
+toolchain go1.24.11
 
 require (
 	github.com/spf13/cobra v1.9.1
