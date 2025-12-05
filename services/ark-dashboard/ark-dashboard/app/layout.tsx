@@ -1,26 +1,14 @@
 import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
 import localFont from 'next/font/local';
 
 import { GlobalProviders } from '@/providers/GlobalProviders';
 
 import './globals.css';
 
-const geistSans = localFont({
-  src: [
-    { path: './fonts/geist-v3-latin-200.woff2', weight: '200', style: 'light' },
-    {
-      path: './fonts/geist-v3-latin-regular.woff2',
-      weight: '400',
-      style: 'normal',
-    },
-    {
-      path: './fonts/geist-v3-latin-600.woff2',
-      weight: '600',
-      style: 'medium',
-    },
-    { path: './fonts/geist-v3-latin-800.woff2', weight: '800', style: 'bold' },
-  ],
-  variable: '--font-geist-sans',
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
   display: 'swap',
 });
 
@@ -53,8 +41,7 @@ export default async function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${inter.variable} ${geistMono.variable} antialiased`}>
         <GlobalProviders>{children}</GlobalProviders>
       </body>
     </html>

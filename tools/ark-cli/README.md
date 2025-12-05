@@ -76,3 +76,5 @@ services:
 ```
 
 Replace `YOUR_USERNAME` and `YOUR_PASSWORD` with your JFrog credentials.
+
+See [.arkrc.yaml.sample](.arkrc.yaml.sample) for a complete example with all available options.

@@ -4,7 +4,7 @@ import type {ArkConfig} from '../../lib/config.js';
 import {executeQuery, parseTarget} from '../../lib/executeQuery.js';
 import {ExitCodes} from '../../lib/errors.js';
 
-export function createQueryCommand(_: ArkConfig): Command {
+export function createQueryCommand(config: ArkConfig): Command {
   const queryCommand = new Command('query');
 
   queryCommand
@@ -15,6 +15,7 @@ export function createQueryCommand(_: ArkConfig): Command {
       '-o, --output <format>',
       'Output format: yaml, json, name or events (shows structured event data)'
     )
+    .option('--timeout <timeout>', 'Query timeout (e.g., 30s, 5m, 1h)')
     .option(
       '--session-id <sessionId>',
       'Session ID to associate with the query for conversation continuity'
@@ -25,6 +26,7 @@ export function createQueryCommand(_: ArkConfig): Command {
         message: string,
         options: {
           output?: string;
+          timeout?: string;
           sessionId?: string;
         }
       ) => {
@@ -43,6 +45,7 @@ export function createQueryCommand(_: ArkConfig): Command {
           targetName: parsed.name,
           message,
           outputFormat: options.output,
+          timeout: options.timeout || config.queryTimeout,
           sessionId: options.sessionId,
         });
       }

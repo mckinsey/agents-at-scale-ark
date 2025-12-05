@@ -20,7 +20,7 @@ from ...models.queries import ArkOpenAICompletionsMetadata
 from ...utils.query_targets import parse_model_to_query_target
 from ...utils.query_watch import watch_query_completion
 from ...utils.streaming import StreamingErrorResponse, create_single_chunk_sse_response
-from ...utils.timeout import parse_timeout_to_seconds
+from ...utils.parse_duration import parse_duration_to_seconds
 from ...constants.annotations import STREAMING_ENABLED_ANNOTATION
 
 router = APIRouter(prefix="/openai/v1", tags=["OpenAI"])
@@ -171,6 +171,10 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
     if request.metadata and "sessionId" in request.metadata:
         session_id = request.metadata["sessionId"]
 
+    timeout = None
+    if request.metadata and "timeout" in request.metadata:
+        timeout = request.metadata["timeout"]
+
     # Parse queryAnnotations if provided (for annotations like A2A context ID)
     if request.metadata and "queryAnnotations" in request.metadata:
         try:
@@ -190,10 +194,12 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
         metadata["annotations"][STREAMING_ENABLED_ANNOTATION] = "true"
 
     try:
-        # Build query spec with optional sessionId
+        # Build query spec with optional sessionId and timeout
         query_spec_dict = {"type": "messages", "input": messages, "targets": [target]}
         if session_id:
             query_spec_dict["sessionId"] = session_id
+        if timeout:
+            query_spec_dict["timeout"] = timeout
         
         # Create the QueryV1alpha1 object with type="messages"
         # Pass messages directly without json.dumps() - SDK handles serialization
@@ -209,7 +215,7 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
 
             # Extract timeout from query spec
             query_timeout_str = query_resource.spec.timeout
-            timeout_seconds = parse_timeout_to_seconds(query_timeout_str)
+            timeout_seconds = parse_duration_to_seconds(query_timeout_str) or 300
 
             # If the caller didn't request streaming, we can simply poll for
             # the response.
@@ -244,7 +250,7 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             # Streaming is enabled - get the base URL and construct full URL
             base_url = await get_streaming_base_url(streaming_config, namespace, v1)
             streaming_url = (
-                f"{base_url}/stream/{query_name}?from-beginning=true&wait-for-query={query_timeout_str}"
+                f"{base_url}/stream/{query_name}?from-beginning=true&wait-for-query={timeout_seconds}"
             )
 
             # Proxy to the streaming endpoint
