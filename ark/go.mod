@@ -2,8 +2,6 @@ module mckinsey.com/ark
 
 go 1.24.11
 
-toolchain go1.24.11
-
 require (
 	github.com/aws/aws-sdk-go-v2 v1.38.3
 	github.com/aws/aws-sdk-go-v2/config v1.31.6
