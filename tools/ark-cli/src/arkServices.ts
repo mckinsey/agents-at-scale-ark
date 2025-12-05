@@ -186,7 +186,7 @@ const defaultArkServices: ServiceCollection = {
     name: 'noah',
     helmReleaseName: 'noah',
     description: 'Runtime administration agent with cluster privileges',
-    enabled: false,
+    enabled: true,
     category: 'service',
     chartPath: `${getMarketplaceRegistry()}/noah`,
     installArgs: [],
