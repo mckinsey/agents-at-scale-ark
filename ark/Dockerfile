@@ -7,6 +7,8 @@ ARG VERSION=dev
 ARG GIT_COMMIT=unknown
 
 WORKDIR /workspace
+# Set GOTOOLCHAIN to auto so Go will download the required toolchain version
+ENV GOTOOLCHAIN=auto
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
@@ -26,9 +28,9 @@ COPY version.txt version.txt
 # the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
 RUN if [ "$ENABLE_COVERAGE" = "true" ]; then \
-        CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -cover -covermode=atomic -ldflags "-X main.Version=${VERSION} -X main.GitCommit=${GIT_COMMIT}" -a -o manager cmd/main.go; \
+        CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} GOTOOLCHAIN=auto go build -cover -covermode=atomic -ldflags "-X main.Version=${VERSION} -X main.GitCommit=${GIT_COMMIT}" -a -o manager cmd/main.go; \
     else \
-        CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -ldflags "-X main.Version=${VERSION} -X main.GitCommit=${GIT_COMMIT}" -a -o manager cmd/main.go; \
+        CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} GOTOOLCHAIN=auto go build -ldflags "-X main.Version=${VERSION} -X main.GitCommit=${GIT_COMMIT}" -a -o manager cmd/main.go; \
     fi
 
 # Use distroless as minimal base image to package the manager binary
