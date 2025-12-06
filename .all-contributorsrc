@@ -438,6 +438,16 @@
         "bug",
         "doc"
       ]
+    },
+    {
+      "login": "johndemic",
+      "name": "John D'Emic",
+      "avatar_url": "https://avatars.githubusercontent.com/u/344677?v=4",
+      "profile": "https://www.hypercurrent.io/",
+      "contributions": [
+        "bug",
+        "code"
+      ]
     }
   ],
   "contributorsPerLine": 7,

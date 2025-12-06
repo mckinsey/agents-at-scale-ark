@@ -101,7 +101,7 @@ func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *
 			// If default memory doesn't exist, use noop memory
 			return NewNoopMemory(), nil
 		}
-		memoryName, memoryNamespace = "default", namespace
+		memoryName, memoryNamespace = "default", namespace //nolint:goconst // "default" here is memory name, not model
 	} else {
 		memoryName = memoryRef.Name
 		memoryNamespace = resolveNamespace(memoryRef.Namespace, namespace)

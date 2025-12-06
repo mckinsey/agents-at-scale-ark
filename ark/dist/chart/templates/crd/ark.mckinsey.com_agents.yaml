@@ -357,7 +357,7 @@ spec:
                               value:
                                 type: string
                             required:
-                              - name
+                            - name
                             type: object
                           type: array
                       type: object
@@ -437,4 +437,4 @@ spec:
     storage: true
     subresources:
       status: {}
-{{- end }}
+{{- end -}}
