@@ -4,9 +4,9 @@ import { Provider as JotaiProvider } from 'jotai';
 import { useRouter } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { A2A_TASKS_FEATURE_KEY } from '@/atoms/experimental-features';
 import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarProvider } from '@/components/ui/sidebar';
-import { A2A_TASKS_FEATURE_KEY } from '@/atoms/experimental-features';
 
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(),
