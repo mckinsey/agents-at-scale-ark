@@ -4,6 +4,7 @@ from typing import List, Dict, Optional, Any
 from pydantic import BaseModel
 
 from .common import AvailabilityStatus
+from .mcp_servers import ServiceRef
 
 
 class ExecutionEngineRef(BaseModel):
@@ -34,13 +35,6 @@ class SecretKeyRef(BaseModel):
 
 class QueryParameterRef(BaseModel):
     name: str
-
-
-class ServiceRef(BaseModel):
-    name: str
-    namespace: Optional[str] = None
-    port: Optional[str] = None
-    path: Optional[str] = None
 
 
 class ValueFrom(BaseModel):
