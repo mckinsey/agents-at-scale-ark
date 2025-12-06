@@ -4,26 +4,47 @@ from pydantic import BaseModel, Field, model_serializer
 
 from .common import AvailabilityStatus
 
+
+class ConfigMapKeyRef(BaseModel):
+    key: str
+    name: str
+    optional: Optional[bool] = None
+
+
+class SecretKeyRef(BaseModel):
+    key: str
+    name: str
+    optional: Optional[bool] = None
+
+
+class QueryParameterRef(BaseModel):
+    name: str
+
+
+class ServiceRef(BaseModel):
+    name: str
+    namespace: Optional[str] = None
+    port: Optional[str] = None
+    path: Optional[str] = None
+
+
+class ValueFrom(BaseModel):
+    configMapKeyRef: Optional[ConfigMapKeyRef] = None
+    secretKeyRef: Optional[SecretKeyRef] = None
+    serviceRef: Optional[ServiceRef] = None
+    queryParameterRef: Optional[QueryParameterRef] = None
+
+
 class ValueSource(BaseModel):
     """ValueSource for configuration (supports direct value or valueFrom)."""
     value: Optional[str] = None
-    value_from: Optional[Dict[str, Dict[str, str]]] = Field(None, alias="valueFrom")
-    
-    @model_serializer(mode="plain")
-    def serialize_model(self):
-        """Serialize ValueSource to dict, returning either valueFrom or value."""
-        if self.value_from:
-            return {
-              "valueFrom": self.value_from
-            }
-        else:
-            return {
-                "value": self.value
-            }
+    valueFrom: Optional[ValueFrom] = None
+
 
 class Header(BaseModel):
-    name:str
+    name: str
     value: ValueSource
+
 
 class MCPServerResponse(BaseModel):
     name: str
@@ -54,7 +75,6 @@ class MCPServerDetailResponse(BaseModel):
     tool_count: Optional[int] = None
 
 
-
 class MCPTransport(BaseModel):
     type: str
     image: str
@@ -63,18 +83,11 @@ class MCPTransport(BaseModel):
     command: Optional[List[str]] = None
 
 
-class AddressModel(BaseModel):
-    value: str
-
-
-
-
-
 class MCPServerSpec(BaseModel):
     transport: str
     description: Optional[str] = None
     tools: Optional[List[str]] = None
-    address: AddressModel
+    address: ValueSource
     headers: Optional[List[Header]] = None
 
 

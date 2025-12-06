@@ -3358,6 +3358,11 @@ export interface components {
             /** Count */
             count: number;
         };
+        /** QueryParameterRef */
+        QueryParameterRef: {
+            /** Name */
+            name: string;
+        };
         /**
          * QueryResponse
          * @description Basic query response for list operations.
@@ -3519,6 +3524,17 @@ export interface components {
             agent?: string | null;
             /** Selectorprompt */
             selectorPrompt?: string | null;
+        };
+        /** ServiceRef */
+        ServiceRef: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace?: string | null;
+            /** Port */
+            port?: string | null;
+            /** Path */
+            path?: string | null;
         };
         /**
          * SessionListResponse
@@ -3905,6 +3921,8 @@ export interface components {
         ark_api__models__agents__ValueFrom: {
             configMapKeyRef?: components["schemas"]["ark_api__models__agents__ConfigMapKeyRef"] | null;
             secretKeyRef?: components["schemas"]["ark_api__models__agents__SecretKeyRef"] | null;
+            serviceRef?: components["schemas"]["ServiceRef"] | null;
+            queryParameterRef?: components["schemas"]["QueryParameterRef"] | null;
         };
         /**
          * QueryRef
