@@ -1,43 +1,8 @@
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
-
-class MCPServerResponse(BaseModel):
-    name: str
-    namespace: str
-    description: Optional[str] = None
-    labels: Optional[Dict[str, str]] = None
-    address: Optional[str] = None
-    annotations: Optional[Dict[str, str]] = None
-    transport: Optional[str] = None
-    ready: Optional[bool] = None
-    discovering: Optional[bool] = None
-    status_message: Optional[str] = None
-    tool_count: Optional[int] = None
-
-
-class MCPServerListResponse(BaseModel):
-    items: List[MCPServerResponse]
-    total: int
-
-
-class MCPServerDetailResponse(BaseModel):
-    name: str
-    namespace: str
-    description: Optional[str] = None
-    labels: Optional[Dict[str, str]] = None
-    annotations: Optional[Dict[str, str]] = None
-    spec: Optional[Dict[str, Any]] = None
-    status: Optional[Dict[str, Any]] = None
-
-
-class MCPTransport(BaseModel):
-    type: str
-    image: str
-    env: Optional[Dict[str, str]] = None
-    args: Optional[List[str]] = None
-    command: Optional[List[str]] = None
+from .common import AvailabilityStatus
 
 
 class ConfigMapKeyRef(BaseModel):
@@ -77,8 +42,45 @@ class ValueSource(BaseModel):
 
 
 class Header(BaseModel):
-    name:str
+    name: str
     value: ValueSource
+
+
+class MCPServerResponse(BaseModel):
+    name: str
+    namespace: str
+    address: Optional[str] = None
+    annotations: Optional[Dict[str, str]] = None
+    transport: Optional[str] = None
+    available: Optional[AvailabilityStatus] = None
+    status_message: Optional[str] = None
+    tool_count: Optional[int] = None
+
+
+class MCPServerListResponse(BaseModel):
+    items: List[MCPServerResponse]
+    total: int
+
+
+class MCPServerDetailResponse(BaseModel):
+    name: str
+    namespace: str
+    description: Optional[str] = None
+    labels: Optional[Dict[str, str]] = None
+    annotations: Optional[Dict[str, str]] = None
+    available: Optional[AvailabilityStatus] = None
+    address: Optional[str] = None
+    transport: Optional[str] = None
+    headers: Optional[List[Header]]
+    tool_count: Optional[int] = None
+
+
+class MCPTransport(BaseModel):
+    type: str
+    image: str
+    env: Optional[Dict[str, str]] = None
+    args: Optional[List[str]] = None
+    command: Optional[List[str]] = None
 
 
 class MCPServerSpec(BaseModel):
