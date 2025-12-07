@@ -3892,11 +3892,6 @@ export interface components {
             value?: string | null;
             valueFrom?: components["schemas"]["ark_api__models__agents__ValueFrom"] | null;
         };
-        /** QueryParameterRef */
-        ark_api__models__agents__QueryParameterRef: {
-            /** Name */
-            name: string;
-        };
         /**
          * SecretKeyRef
          * @description Reference to a key in a Secret.
@@ -3917,7 +3912,7 @@ export interface components {
             configMapKeyRef?: components["schemas"]["ark_api__models__agents__ConfigMapKeyRef"] | null;
             secretKeyRef?: components["schemas"]["ark_api__models__agents__SecretKeyRef"] | null;
             serviceRef?: components["schemas"]["ServiceRef"] | null;
-            queryParameterRef?: components["schemas"]["ark_api__models__agents__QueryParameterRef"] | null;
+            queryParameterRef?: components["schemas"]["ark_api__models__mcp_servers__QueryParameterRef"] | null;
         };
         /**
          * QueryRef
@@ -4034,6 +4029,11 @@ export interface components {
             name: string;
             value: components["schemas"]["ark_api__models__mcp_servers__ValueSource"];
         };
+        /** QueryParameterRef */
+        ark_api__models__mcp_servers__QueryParameterRef: {
+            /** Name */
+            name: string;
+        };
         /** SecretKeyRef */
         ark_api__models__mcp_servers__SecretKeyRef: {
             /** Key */
@@ -4048,7 +4048,7 @@ export interface components {
             configMapKeyRef?: components["schemas"]["ark_api__models__mcp_servers__ConfigMapKeyRef"] | null;
             secretKeyRef?: components["schemas"]["ark_api__models__mcp_servers__SecretKeyRef"] | null;
             serviceRef?: components["schemas"]["ServiceRef"] | null;
-            queryParameterRef?: components["schemas"]["ark_api__models__agents__QueryParameterRef"] | null;
+            queryParameterRef?: components["schemas"]["ark_api__models__mcp_servers__QueryParameterRef"] | null;
         };
         /**
          * ValueSource
