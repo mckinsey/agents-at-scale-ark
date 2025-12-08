@@ -12,6 +12,7 @@ dependencies = [
     "kubernetes-asyncio>=24.0.0",
     "setuptools>=75.0.0",
     "ark-sdk",
+    "urllib3>=2.6.0",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
