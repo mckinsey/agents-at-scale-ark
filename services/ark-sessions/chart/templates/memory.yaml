@@ -1,0 +1,21 @@
+{{- if .Values.memory.createMemoryCRD }}
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Memory
+metadata:
+  {{- if .Values.memory.setAsDefault }}
+  name: default
+  {{- else }}
+  name: {{ .Values.app.name }}
+  {{- end }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app.name }}
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: {{ .Values.app.name }}
+        namespace: {{ .Release.Namespace }}
+        port: http
+{{- end }}
+
