@@ -101,6 +101,11 @@
         },
         {
           "type": "yaml",
+          "path": "services/ark-evaluator/chart/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "yaml",
           "path": "ark/dist/chart/Chart.yaml",
           "jsonpath": "$.version"
         },
