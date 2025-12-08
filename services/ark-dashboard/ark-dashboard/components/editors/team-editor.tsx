@@ -7,8 +7,8 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -77,7 +77,7 @@ function DraggableCard({
   isSelected,
   toggleMember,
   agent,
-  agentIsExternal,
+  agentIsExternal: _agentIsExternal,
 }: Readonly<{
   index: number;
   moveCard: (dragIndex: number, hoverIndex: number) => void;
@@ -101,7 +101,7 @@ function DraggableCard({
     },
   });
 
-  const [{ isDragging }, drag] = useDrag({
+  const [{ isDragging: _isDragging }, drag] = useDrag({
     type: ItemTypes.CARD,
     item: { index },
     collect: monitor => ({
@@ -112,35 +112,21 @@ function DraggableCard({
   drag(drop(ref));
 
   return (
-    <div
-      ref={ref}
-      className="mb-2 cursor-move border border-gray-300 bg-white p-2 text-sm shadow"
-      style={{ opacity: isDragging ? 0.4 : 1 }}>
-      <label
-        className={cn(
-          'flex cursor-pointer items-center space-x-2 rounded p-1',
-          isSelected ? 'hover:bg-accent' : 'opacity-50',
-        )}>
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onChange={() => toggleMember(agent)}
-          className="h-4 w-4 rounded border-gray-300"
-        />
-        <span className="flex items-center gap-1 text-sm">
-          {agent.name}
-          {agentIsExternal && (
-            <Badge variant="outline" className="text-xs">
-              External
-            </Badge>
-          )}
-        </span>
+    <div ref={ref} className="flex w-fit cursor-move items-center space-x-2">
+      <Checkbox
+        checked={isSelected}
+        onCheckedChange={() => toggleMember(agent)}
+      />
+      <Label
+        htmlFor={`agent-${agent.id}`}
+        className="flex-10 cursor-pointer text-sm font-normal">
+        <div className="font-medium">{agent.name}</div>
         {agent.description && (
-          <span className="text-muted-foreground text-xs">
-            - {agent.description}
-          </span>
+          <div className="text-muted-foreground text-xs">
+            {agent.description}
+          </div>
         )}
-      </label>
+      </Label>
     </div>
   );
 }

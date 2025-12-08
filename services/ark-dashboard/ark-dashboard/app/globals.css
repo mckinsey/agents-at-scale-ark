@@ -38,6 +38,12 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+
+  --color-switch-background-checked: var(--switch-background-checked);
+  --color-switch-thumb-checked: var(--switch-thumb-checked);
+  --color-switch-background-unchecked: var(--switch-background-unchecked);
+  --color-switch-thumb-unchecked: var(--switch-thumb-unchecked);
+
   --radius-sm: var(--radius);
   --radius-md: var(--radius);
   --radius-lg: var(--radius);
@@ -126,10 +132,10 @@
   --card: var(--surface-bg01);
   --card-foreground: var(--text-primary);
 
-  --popover: var(--surface-bg01);
+  --popover: var(--surface-bg02);
   --popover-foreground: var(--text-primary);
 
-  --primary: var(--text-primary); /* Kept as text-primary to match original */
+  --primary: var(--text-primary);
   --primary-foreground: var(--surface-bg01);
 
   --secondary: var(--surface-bg02);
@@ -154,6 +160,10 @@
   --chart-4: var(--datavis-04-red);
   --chart-5: var(--datavis-05-teal);
 
+  /* ------------------------- */
+  /*      Component Tokens     */
+  /* ------------------------- */
+
   --sidebar: var(--surface-bg01);
   --sidebar-foreground: var(--text-secondary);
   --sidebar-primary: var(--text-primary);
@@ -162,6 +172,11 @@
   --sidebar-accent-foreground: var(--text-primary);
   --sidebar-border: var(--border-subtle-alpha01);
   --sidebar-ring: var(--border-selected);
+
+  --switch-background-checked: var(--primary);
+  --switch-thumb-checked: var(--primary-foreground);
+  --switch-background-unchecked: var(--border-subtle-alpha01);
+  --switch-thumb-unchecked: var(--muted-foreground);
 }
 
 .dark {
@@ -244,10 +259,10 @@
   --card: var(--surface-bg03);
   --card-foreground: var(--text-primary);
 
-  --popover: var(--surface-bg01); /* Was bg01 in previous .dark */
+  --popover: var(--surface-bg02);
   --popover-foreground: var(--text-primary);
 
-  --primary: var(--text-primary); /* Previous .dark primary was white text */
+  --primary: var(--text-primary);
   --primary-foreground: var(--surface-bg03);
 
   --secondary: var(--surface-bg02);
@@ -272,6 +287,10 @@
   --chart-4: var(--datavis-04-red);
   --chart-5: var(--datavis-05-teal);
 
+  /* ------------------------- */
+  /*      Component Tokens     */
+  /* ------------------------- */
+
   --sidebar: var(--surface-bg03);
   --sidebar-foreground: var(--text-secondary);
   --sidebar-primary: var(--text-primary);
@@ -280,6 +299,11 @@
   --sidebar-accent-foreground: var(--text-primary);
   --sidebar-border: var(--border-subtle-alpha01);
   --sidebar-ring: var(--border-selected);
+
+  --switch-background-checked: var(--primary);
+  --switch-thumb-checked: var(--primary-foreground);
+  --switch-background-unchecked: var(--border-subtle-alpha01);
+  --switch-thumb-unchecked: var(--muted-foreground);
 }
 
 @layer base {

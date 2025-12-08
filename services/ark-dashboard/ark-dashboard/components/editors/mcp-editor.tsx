@@ -36,8 +36,8 @@ import type { MCPServer, Secret } from '@/lib/services';
 import { mcpServersService, secretsService } from '@/lib/services';
 import type {
   DirectHeader,
-  Header,
-  MCPServerConfiguration,
+  MCPHeader,
+  MCPServerCreateRequest,
   SecretHeader,
 } from '@/lib/services/mcp-servers';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
@@ -48,7 +48,7 @@ interface McpEditorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mcpServer: MCPServer | null;
-  onSave: (mcpSever: MCPServerConfiguration, edit: boolean) => void;
+  onSave: (mcpSever: MCPServerCreateRequest, edit: boolean) => void;
   namespace: string;
 }
 type HeaderData = {
@@ -120,12 +120,16 @@ export function McpEditor({
 
   const getMpcServerDetails = useCallback(async () => {
     const mcpServerData = await mcpServersService.get(mcpServer?.name ?? '');
-    form.setValue('baseUrl', mcpServerData?.spec?.address?.value ?? '');
-    form.setValue('transport', mcpServerData?.spec?.transport ?? 'http');
+    form.setValue('baseUrl', mcpServerData?.address ?? '');
+    form.setValue(
+      'transport',
+      (mcpServerData?.transport as 'http' | 'sse') ?? 'http',
+    );
+    form.setValue('description', mcpServerData?.description ?? '');
 
-    if (mcpServerData?.spec?.headers) {
-      const transformedHeaders: HeaderData[] =
-        mcpServerData?.spec?.headers?.map((header: Header) => {
+    if (mcpServerData?.headers) {
+      const transformedHeaders: HeaderData[] = mcpServerData?.headers?.map(
+        (header: MCPHeader) => {
           const isSecret = 'valueFrom' in header.value;
 
           return {
@@ -136,7 +140,8 @@ export function McpEditor({
               ? (header as SecretHeader).value.valueFrom.secretKeyRef.name
               : (header as DirectHeader).value.value || '',
           };
-        });
+        },
+      );
       setHeaders(transformedHeaders);
     }
   }, [mcpServer?.name, form]);
@@ -145,7 +150,7 @@ export function McpEditor({
     if (mcpServer && open) {
       form.reset({
         name: mcpServer.name,
-        description: mcpServer.description ?? '',
+        description: '',
         baseUrl: '',
         transport: 'http',
       });
@@ -162,7 +167,7 @@ export function McpEditor({
     }
   }, [open, namespace]);
 
-  const returnHeaderObj = (header: HeaderData): Header => {
+  const returnHeaderObj = (header: HeaderData): MCPHeader => {
     if (header.type === 'direct') {
       return {
         name: header.name,
@@ -198,10 +203,10 @@ export function McpEditor({
       return;
     }
 
-    const modifiedHeaders: Header[] = headers.map(header => {
+    const modifiedHeaders: MCPHeader[] = headers.map(header => {
       return returnHeaderObj(header);
     });
-    const createData: MCPServerConfiguration = {
+    const createData: MCPServerCreateRequest = {
       name: values.name,
       namespace,
       spec: {

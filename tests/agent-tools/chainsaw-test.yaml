@@ -24,7 +24,55 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
     - apply:
-        file: manifests/*.yaml
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: weather-tool
+          spec:
+            type: http
+            inputSchema:
+              type: object
+              properties:
+                latitude:
+                  type: number
+                  description: Latitude coordinate
+                longitude:
+                  type: number
+                  description: Longitude coordinate
+                current_weather:
+                  type: boolean
+                  description: Include current weather data
+                  default: true
+              required: ["latitude", "longitude"]
+            description: "Fetches current weather data for given coordinates"
+            http:
+              url: https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current_weather=true
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: weather-agent
+          spec:
+            prompt: |
+              You are a Weather Agent. Use the weather-tool to get current weather information.
+            modelRef:
+              name: test-model
+            tools:
+            - type: custom
+              name: weather-tool
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: weather-query
+          spec:
+            input: What's the current weather like in New York City?
+            targets:
+            - type: agent
+              name: weather-agent
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

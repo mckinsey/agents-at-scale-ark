@@ -104,7 +104,9 @@ func CreateA2AClient(ctx context.Context, k8sClient client.Client, rpcURL string
 	if len(headers) > 0 {
 		resolvedHeaders, err := resolveA2AHeaders(ctx, k8sClient, headers, namespace)
 		if err != nil {
-			a2aRecorder.A2AHeaderResolutionFailed(ctx, fmt.Sprintf("failed to resolve A2A headers: %v", err))
+			if a2aRecorder != nil {
+				a2aRecorder.A2AHeaderResolutionFailed(ctx, fmt.Sprintf("failed to resolve A2A headers: %v", err))
+			}
 			return nil, err
 		}
 
@@ -153,13 +155,17 @@ func executeA2AAgentMessage(ctx context.Context, k8sClient client.Client, a2aCli
 
 	result, err := a2aClient.SendMessage(ctx, params)
 	if err != nil {
-		a2aRecorder.A2AMessageFailed(ctx, fmt.Sprintf("A2A SendMessage failed: %v", err))
+		if a2aRecorder != nil {
+			a2aRecorder.A2AMessageFailed(ctx, fmt.Sprintf("A2A SendMessage failed: %v", err))
+		}
 		return nil, fmt.Errorf("A2A server call failed: %w", err)
 	}
 
 	response, err := extractResponseFromMessageResult(ctx, k8sClient, result, agentName, namespace, queryName, obj)
 	if err != nil {
-		a2aRecorder.A2AResponseParseError(ctx, fmt.Sprintf("Failed to parse A2A response: %v", err))
+		if a2aRecorder != nil {
+			a2aRecorder.A2AResponseParseError(ctx, fmt.Sprintf("Failed to parse A2A response: %v", err))
+		}
 		return nil, err
 	}
 
@@ -336,7 +342,9 @@ func executeA2ARequest(ctx context.Context, req *http.Request, a2aRecorder event
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		a2aRecorder.A2AConnectionFailed(ctx, fmt.Sprintf("failed to connect to A2A server: %v", err))
+		if a2aRecorder != nil {
+			a2aRecorder.A2AConnectionFailed(ctx, fmt.Sprintf("failed to connect to A2A server: %v", err))
+		}
 		return nil, fmt.Errorf("failed to connect to A2A server: %w", err)
 	}
 	defer func() {

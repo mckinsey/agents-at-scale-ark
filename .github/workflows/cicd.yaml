@@ -110,7 +110,7 @@ jobs:
         shell: bash
         run: |
           GITHUB_REPOSITORY="${{ github.repository }}"
-          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&status=completed&per_page=50" | jq -c '.workflow_runs[] | select(.name == "CI/CD") | .id' | head -n 1)
+          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&status=success&per_page=50" | jq -c '.workflow_runs[] | select(.name == "CI/CD") | .id' | head -n 1)
           
           echo "Downloading artifacts from run ID: $LAST_RUN_ID"
           gh run download "$LAST_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern "xray-scan-results-agents-at-scale-*" --dir ./artifacts
@@ -121,6 +121,8 @@ jobs:
         if: always()
         shell: bash
         run: |
+          WHITELIST=".github/actions/jfrog-xray-scan/tolerated_violations.txt"
+
           echo "Comparing with last scan file: ./last-main-scan.json"
 
           echo "New violations since last scan:"
@@ -128,14 +130,30 @@ jobs:
           jq -r '.[].violations[]?.issue_id' "$SCAN_JSON" > new.txt
 
           NEW_VIOLATIONS=$(comm -13 <(sort old.txt) <(sort new.txt))
+          REMOVED_VIOLATIONS=$(comm -13 <(sort new.txt) <(sort old.txt))
+
+          FAIL=0
 
           if [ -n "$NEW_VIOLATIONS" ]; then
             echo "New violations found:"
             echo "$NEW_VIOLATIONS"
-            exit 1
+            echo "Checking new violations against whitelist..."
+              while read -r violation; do
+                if ! grep -q "$violation" "$WHITELIST"; then
+                  echo "New violation not whitelisted: $violation"
+                  FAIL=1
+                fi
+              done <<< "$NEW_VIOLATIONS"
+
+              if [ "$FAIL" -eq 1 ]; then
+                echo "❌ Failing due to unwhitelisted new violations."
+                exit 1
+              fi
+          elif [ -n "$REMOVED_VIOLATIONS" ]; then
+            echo "The following violations were eliminated: $REMOVED_VIOLATIONS."
           else
             echo "No new violations found."
-          fi
+          fi  
 
   # Build and test Ark itself.
   build-and-test-ark:
@@ -144,7 +162,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: "1.24.11"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -186,7 +204,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: "1.24.11"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -291,7 +309,6 @@ jobs:
           platforms: linux/amd64
           push: true
           prebuild: ${{ matrix.prebuild }}
-
 
   build-libs:
     runs-on: ubuntu-24.04
@@ -788,7 +805,7 @@ jobs:
       - name: Setup Go for coverage tools
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: "1.24.11"
 
       - name: Install Python coverage tools
         run: |
@@ -997,7 +1014,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.24.11'
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6

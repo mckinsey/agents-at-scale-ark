@@ -36,6 +36,14 @@ spec:
               value: {{ .Values.memory.port | quote }}
             - name: MAX_MESSAGE_SIZE
               value: {{ .Values.memory.maxMessageSize | quote }}
+            {{- if .Values.memory.maxMemoryDb }}
+            - name: MAX_MEMORY_DB
+              value: {{ .Values.memory.maxMemoryDb | quote }}
+            {{- end }}
+            {{- if .Values.memory.maxItemAge }}
+            - name: MAX_ITEM_AGE
+              value: {{ .Values.memory.maxItemAge | quote }}
+            {{- end }}
             {{- if .Values.persistence.enabled }}
             - name: MEMORY_FILE_PATH
               value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.memoryFileName }}"
