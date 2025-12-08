@@ -47,7 +47,7 @@ class SecretsPage(BasePage):
             pytest.skip("Secrets tab not visible")
         
         self.page.locator(dashboard.SECRETS_TAB).first.click()
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
     
     def is_secret_in_table(self, secret_name: str) -> bool:
         try:
@@ -63,7 +63,7 @@ class SecretsPage(BasePage):
         logger.info(f"Secret value length: {len(secret_value)}")
         
         self.page.locator(self.ADD_SECRET_BUTTON).first.click()
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         self.wait_for_timeout(1000)
         
         inputs = self.page.locator("[role='dialog'] input:visible, [data-slot='dialog-content'] input:visible")
@@ -86,7 +86,7 @@ class SecretsPage(BasePage):
         save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
         save_button.evaluate("el => el.click()")
         
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
@@ -126,7 +126,7 @@ class SecretsPage(BasePage):
         if confirm_button_visible:
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         popup_visible = self._check_success_popup()
         self.wait_for_timeout(3000)
         deleted_from_table = not self.is_secret_in_table(secret_name)

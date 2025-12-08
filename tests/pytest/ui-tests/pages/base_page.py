@@ -51,6 +51,12 @@ class BasePage:
         except:
             self.wait_for_timeout(1000)
     
+    def wait_for_modal_open(self, timeout: int = 10000) -> None:
+        try:
+            self.page.locator("[data-slot='dialog-overlay'], [role='dialog'], [data-slot='dialog-content']").first.wait_for(state="visible", timeout=timeout)
+        except:
+            self.wait_for_timeout(1000)
+    
     def wait_for_modal_close(self, timeout: int = 10000) -> None:
         try:
             self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=timeout)

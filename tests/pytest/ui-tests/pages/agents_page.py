@@ -38,7 +38,7 @@ class AgentsPage(BasePage):
             pytest.skip("Agents tab not visible")
         
         self.page.locator(dashboard.AGENTS_TAB).first.click()
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         self.wait_for_timeout(2000)
     
     def generate_agent_name(self, prefix: str = "agent") -> str:
@@ -142,7 +142,7 @@ class AgentsPage(BasePage):
     
     def create_agent_with_verification(self, agent_name: str, description: str, model_name: str, execution_engine: str = "langchain-executor", tools: list = None) -> dict:        
         self.page.locator(self.ADD_AGENT_BUTTON).first.click()
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         self.wait_for_timeout(2000)
         
         name_input = self.page.locator("input#name, input[name='name']").first
@@ -198,7 +198,7 @@ class AgentsPage(BasePage):
         save_button.scroll_into_view_if_needed()
         save_button.evaluate("el => el.click()")
         
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         self.wait_for_timeout(2000)
         
         error_banner = self.check_for_error_banner()
@@ -228,7 +228,7 @@ class AgentsPage(BasePage):
         
         if not in_table:
             self.page.reload()
-            self.wait_for_load_state("networkidle")
+            self.wait_for_load_state("domcontentloaded")
             self.wait_for_timeout(2000)
             in_table = self.is_agent_in_table(agent_name)
         
@@ -262,7 +262,7 @@ class AgentsPage(BasePage):
         if confirm_button_visible:
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         popup_visible = self._check_success_popup()
         self.wait_for_timeout(3000)
         deleted_from_table = not self.is_agent_in_table(agent_name)
