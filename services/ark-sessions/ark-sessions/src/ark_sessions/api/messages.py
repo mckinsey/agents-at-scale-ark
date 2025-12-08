@@ -36,21 +36,19 @@ async def get_messages(
     session_id: Optional[str] = Query(None, description="Filter by session ID"),
     query_id: Optional[str] = Query(None, description="Filter by query ID"),
     session: AsyncSession = Depends(get_session),
-) -> dict[str, list[dict[str, Any]]]:
+) -> list[dict[str, Any]]:
     """Get messages, optionally filtered by session_id or query_id."""
     storage = MessageStorage(session)
     messages = await storage.get_messages(session_id=session_id, query_id=query_id)
     
-    return {
-        "messages": [
-            {
-                "id": msg.id,
-                "session_id": msg.session_id,
-                "query_id": msg.query_id,
-                "message_data": msg.message_data,
-                "created_at": msg.created_at.isoformat() if msg.created_at else None,
-            }
-            for msg in messages
-        ]
-    }
+    return [
+        {
+            "id": msg.id,
+            "session_id": msg.session_id,
+            "query_id": msg.query_id,
+            "message_data": msg.message_data,
+            "created_at": msg.created_at.isoformat() if msg.created_at else None,
+        }
+        for msg in messages
+    ]
 
