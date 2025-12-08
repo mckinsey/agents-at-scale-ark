@@ -324,11 +324,26 @@ spec:
                 - mcpServerRef
                 - toolName
                 type: object
+              team:
+                description: |-
+                  Team-specific configuration for team tools.
+                  This field is required only if Type = "team".
+                properties:
+                  name:
+                    description: |-
+                      Name of the Team being referenced.
+                      This must be a non-empty string.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
               type:
                 enum:
                 - http
                 - mcp
                 - agent
+                - team
                 - builtin
                 type: string
             required:

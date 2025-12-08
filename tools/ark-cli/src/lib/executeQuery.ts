@@ -9,6 +9,7 @@ import type {Query, QueryTarget} from './types.js';
 import {ExitCodes} from './errors.js';
 import {ArkApiProxy} from './arkApiProxy.js';
 import {ChatClient, ToolCall, ArkMetadata} from './chatClient.js';
+import {watchEventsLive} from './kubectl.js';
 
 export interface QueryOptions {
   targetType: string;
@@ -54,13 +55,12 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
     let headerShown = false;
     let firstOutput = true;
 
-    // Get sessionId from option or environment variable
     const sessionId = options.sessionId || process.env.ARK_SESSION_ID;
 
     await chatClient.sendMessage(
       targetId,
       messages,
-      {streamingEnabled: true, sessionId},
+      {streamingEnabled: true, sessionId, queryTimeout: options.timeout},
       (chunk: string, toolCalls?: ToolCall[], arkMetadata?: ArkMetadata) => {
         if (firstOutput) {
           spinner.stop();
@@ -146,12 +146,12 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
     metadata: {
       name: queryName,
     },
-      spec: {
-        input: options.message,
-        ...(options.timeout && {timeout: options.timeout}),
-        ...((options.sessionId || process.env.ARK_SESSION_ID) && {
-          sessionId: options.sessionId || process.env.ARK_SESSION_ID,
-        }),
+    spec: {
+      input: options.message,
+      ...(options.timeout && {timeout: options.timeout}),
+      ...((options.sessionId || process.env.ARK_SESSION_ID) && {
+        sessionId: options.sessionId || process.env.ARK_SESSION_ID,
+      }),
       targets: [
         {
           type: options.targetType,
@@ -166,6 +166,14 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
       input: JSON.stringify(queryManifest),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+
+    // Give Kubernetes a moment to process the resource before watching
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    if (options.outputFormat === 'events') {
+      await watchEventsLive(queryName);
+      return;
+    }
 
     const timeoutSeconds = 300;
     await execa(
@@ -194,7 +202,7 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
     } else {
       console.error(
         chalk.red(
-          `Invalid output format: ${options.outputFormat}. Use: yaml, json, or name`
+          `Invalid output format: ${options.outputFormat}. Use: yaml, json, name, or events`
         )
       );
       process.exit(ExitCodes.CliError);

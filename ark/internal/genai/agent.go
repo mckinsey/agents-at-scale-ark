@@ -2,7 +2,6 @@ package genai
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/openai/openai-go"
@@ -14,23 +13,25 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
 type Agent struct {
-	Name            string
-	Namespace       string
-	Prompt          string
-	Description     string
-	Parameters      []arkv1alpha1.Parameter
-	Model           *Model
-	Tools           *ToolRegistry
-	Recorder        EventEmitter
-	AgentRecorder   telemetry.AgentRecorder
-	ExecutionEngine *arkv1alpha1.ExecutionEngineRef
-	Annotations     map[string]string
-	OutputSchema    *runtime.RawExtension
-	client          client.Client
+	Name              string
+	Namespace         string
+	Prompt            string
+	Description       string
+	Parameters        []arkv1alpha1.Parameter
+	Model             *Model
+	Tools             *ToolRegistry
+	telemetryRecorder telemetry.AgentRecorder
+	eventingRecorder  eventing.AgentRecorder
+	eventing          eventing.Provider
+	ExecutionEngine   *arkv1alpha1.ExecutionEngineRef
+	Annotations       map[string]string
+	OutputSchema      *runtime.RawExtension
+	client            client.Client
 }
 
 // FullName returns the namespace/name format for the agent
@@ -40,40 +41,31 @@ func (a *Agent) FullName() string {
 
 // Execute executes the agent with optional event emission for tool calls
 func (a *Agent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	modelName := ""
-	if a.Model != nil {
-		modelName = a.Model.Model
-	}
-
-	agentTracker := NewOperationTracker(a.Recorder, ctx, "AgentExecution", a.FullName(), map[string]string{
-		"model":     modelName,
-		"queryId":   getQueryID(ctx),
-		"sessionId": getSessionID(ctx),
-		"agentName": a.FullName(),
-		"namespace": a.Namespace,
-	})
-	defer agentTracker.Complete("")
-
-	ctx, span := a.AgentRecorder.StartAgentExecution(ctx, a.Name, a.Namespace)
+	ctx, span := a.telemetryRecorder.StartAgentExecution(ctx, a.Name, a.Namespace)
 	defer span.End()
+
+	operationData := map[string]string{
+		"agent": a.FullName(),
+	}
+	ctx = a.eventingRecorder.Start(ctx, "AgentExecution", fmt.Sprintf("Executing agent %s", a.FullName()), operationData)
 
 	result, err := a.executeAgent(ctx, userInput, history, memory, eventStream)
 	if err != nil {
-		a.AgentRecorder.RecordError(span, err)
+		a.telemetryRecorder.RecordError(span, err)
+		if !IsTerminateTeam(err) {
+			a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
+		}
 		return nil, err
 	}
 
-	a.AgentRecorder.RecordSuccess(span)
+	a.telemetryRecorder.RecordSuccess(span)
+	a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution completed successfully", operationData)
 	return result, nil
 }
 
 func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	if a.ExecutionEngine != nil {
 		return a.executeWithExecutionEngineRouter(ctx, userInput, history, eventStream)
-	}
-
-	if a.Model == nil {
-		return nil, fmt.Errorf("agent %s has no model configured", a.FullName())
 	}
 
 	messages, err := a.executeLocally(ctx, userInput, history, memory, eventStream)
@@ -96,7 +88,7 @@ func (a *Agent) executeWithExecutionEngineRouter(ctx context.Context, userInput 
 }
 
 func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
-	engineClient := NewExecutionEngineClient(a.client)
+	engineClient := NewExecutionEngineClient(a.client, a.eventing.ExecutionEngineRecorder())
 
 	agentConfig, err := buildAgentConfig(a)
 	if err != nil {
@@ -111,11 +103,11 @@ func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Messag
 
 	toolDefinitions := buildToolDefinitions(a.Tools)
 
-	return engineClient.Execute(ctx, a.ExecutionEngine, agentConfig, userInput, history, toolDefinitions, a.Recorder)
+	return engineClient.Execute(ctx, a.ExecutionEngine, agentConfig, userInput, history, toolDefinitions)
 }
 
 func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	a2aEngine := NewA2AExecutionEngine(a.client, a.Recorder)
+	a2aEngine := NewA2AExecutionEngine(a.client, a.eventing.A2aRecorder())
 	contextID := GetA2AContextID(ctx)
 	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, contextID, userInput, eventStream)
 }
@@ -134,11 +126,6 @@ func (a *Agent) prepareMessages(ctx context.Context, userInput Message, history 
 
 // executeModelCall executes a single model call with optional streaming support.
 func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, tools []openai.ChatCompletionToolParam, eventStream EventStreamInterface) (*openai.ChatCompletion, error) {
-	llmTracker := NewOperationTracker(a.Recorder, ctx, "LLMCall", a.Model.Model, map[string]string{
-		"agent": a.FullName(),
-		"model": a.Model.Model,
-	})
-
 	// Set schema information on the model
 	a.Model.OutputSchema = a.OutputSchema
 	// Truncate schema name to 64 chars for OpenAI API compatibility - name is purely an identifier
@@ -146,16 +133,8 @@ func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, t
 
 	response, err := a.Model.ChatCompletion(ctx, agentMessages, eventStream, 1, tools)
 	if err != nil {
-		llmTracker.Fail(err)
 		return nil, fmt.Errorf("agent %s execution failed: %w", a.FullName(), err)
 	}
-
-	tokenUsage := TokenUsage{
-		PromptTokens:     response.Usage.PromptTokens,
-		CompletionTokens: response.Usage.CompletionTokens,
-		TotalTokens:      response.Usage.TotalTokens,
-	}
-	llmTracker.CompleteWithTokens(tokenUsage)
 
 	if len(response.Choices) == 0 {
 		return nil, fmt.Errorf("agent %s received empty response", a.FullName())
@@ -175,39 +154,13 @@ func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Mess
 }
 
 func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (Message, error) {
-	var params map[string]interface{}
-	if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &params); err != nil {
-		params = map[string]interface{}{"_raw": toolCall.Function.Arguments}
-	}
-
-	toolTracker := NewOperationTracker(a.Recorder, ctx, "ToolCall", toolCall.Function.Name, map[string]string{
-		"toolId":     toolCall.ID,
-		"toolName":   toolCall.Function.Name,
-		"agentName":  a.FullName(),
-		"queryId":    getQueryID(ctx),
-		"sessionId":  getSessionID(ctx),
-		"parameters": toolCall.Function.Arguments,
-		"paramCount": fmt.Sprintf("%d", len(params)),
-		"toolType":   a.Tools.GetToolType(toolCall.Function.Name),
-	})
-
-	result, err := a.Tools.ExecuteTool(ctx, ToolCall(toolCall), a.Recorder)
+	result, err := a.Tools.ExecuteTool(ctx, ToolCall(toolCall))
 	toolMessage := ToolMessage(result.Content, result.ID)
 
 	if err != nil {
-		if IsTerminateTeam(err) {
-			toolTracker.CompleteWithTermination(err.Error())
-		} else {
-			toolTracker.Fail(err)
-		}
 		return toolMessage, err
 	}
 
-	toolTracker.CompleteWithMetadata(result.Content, map[string]string{
-		"resultLength": fmt.Sprintf("%d", len(result.Content)),
-		"hasError":     "false",
-		"resultId":     result.ID,
-	})
 	return toolMessage, nil
 }
 
@@ -240,6 +193,10 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 		return nil, err
 	}
 
+	if a.Model == nil {
+		return nil, fmt.Errorf("agent %s has no model configured", a.FullName())
+	}
+
 	newMessages := []Message{}
 
 	for {
@@ -264,7 +221,9 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 
 		if err := a.executeToolCalls(ctx, choice.Message.ToolCalls, &agentMessages, &newMessages); err != nil {
 			logger := logf.FromContext(ctx)
-			logger.Error(err, "Tool execution failed", "agent", a.FullName())
+			if !IsTerminateTeam(err) {
+				logger.Error(err, "Tool execution failed", "agent", a.FullName())
+			}
 			return newMessages, err
 		}
 	}
@@ -374,7 +333,7 @@ func resolveMCPSettingsForAgent(ctx context.Context, k8sClient client.Client, ag
 	return mcpSettings, nil
 }
 
-func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Agent, eventRecorder EventEmitter, telemetryProvider telemetry.Provider) (*Agent, error) {
+func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Agent, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) (*Agent, error) {
 	queryCrd, ok := ctx.Value(QueryContextKey).(*arkv1alpha1.Query)
 	if !ok {
 		return nil, fmt.Errorf("missing query context for agent %s/%s", crd.Namespace, crd.Name)
@@ -390,7 +349,7 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 	// A2A agents don't need models - they delegate to external A2A servers
 	if crd.Spec.ExecutionEngine == nil || crd.Spec.ExecutionEngine.Name != ExecutionEngineA2A {
 		var err error
-		resolvedModel, err = LoadModel(ctx, k8sClient, crd.Spec.ModelRef, crd.Namespace, modelHeaders, telemetryProvider.ModelRecorder())
+		resolvedModel, err = LoadModel(ctx, k8sClient, crd.Spec.ModelRef, crd.Namespace, modelHeaders, telemetryProvider.ModelRecorder(), eventingProvider.ModelRecorder())
 		if err != nil {
 			return nil, fmt.Errorf("failed to load model for agent %s/%s: %w", crd.Namespace, crd.Name, err)
 		}
@@ -414,25 +373,26 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		return nil, err
 	}
 
-	tools := NewToolRegistry(mcpSettings, telemetryProvider.ToolRecorder())
+	tools := NewToolRegistry(mcpSettings, telemetryProvider.ToolRecorder(), eventingProvider.ToolRecorder())
 
-	if err := tools.registerTools(ctx, k8sClient, crd, telemetryProvider); err != nil {
+	if err := tools.registerTools(ctx, k8sClient, crd, telemetryProvider, eventingProvider); err != nil {
 		return nil, err
 	}
 
 	return &Agent{
-		Name:            crd.Name,
-		Namespace:       crd.Namespace,
-		Prompt:          crd.Spec.Prompt,
-		Description:     crd.Spec.Description,
-		Parameters:      crd.Spec.Parameters,
-		Model:           resolvedModel,
-		Tools:           tools,
-		Recorder:        eventRecorder,
-		AgentRecorder:   telemetryProvider.AgentRecorder(),
-		ExecutionEngine: crd.Spec.ExecutionEngine,
-		Annotations:     crd.Annotations,
-		OutputSchema:    crd.Spec.OutputSchema,
-		client:          k8sClient,
+		Name:              crd.Name,
+		Namespace:         crd.Namespace,
+		Prompt:            crd.Spec.Prompt,
+		Description:       crd.Spec.Description,
+		Parameters:        crd.Spec.Parameters,
+		Model:             resolvedModel,
+		Tools:             tools,
+		telemetryRecorder: telemetryProvider.AgentRecorder(),
+		eventingRecorder:  eventingProvider.AgentRecorder(),
+		eventing:          eventingProvider,
+		ExecutionEngine:   crd.Spec.ExecutionEngine,
+		Annotations:       crd.Annotations,
+		OutputSchema:      crd.Spec.OutputSchema,
+		client:            k8sClient,
 	}, nil
 }

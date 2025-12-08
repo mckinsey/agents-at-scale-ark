@@ -11,23 +11,24 @@ import (
 
 	"github.com/openai/openai-go"
 	"mckinsey.com/ark/internal/common"
+	"mckinsey.com/ark/internal/eventing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // HTTPMemory handles memory operations for ARK queries
 type HTTPMemory struct {
-	client     client.Client
-	httpClient *http.Client
-	baseURL    string
-	sessionId  string
-	name       string
-	namespace  string
-	recorder   EventEmitter
+	client           client.Client
+	httpClient       *http.Client
+	baseURL          string
+	sessionId        string
+	name             string
+	namespace        string
+	eventingRecorder eventing.MemoryRecorder
 }
 
 // NewHTTPMemory creates a new HTTP-based memory implementation
-func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, namespace string, recorder EventEmitter, config Config) (MemoryInterface, error) {
+func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, namespace string, config Config, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
 	if k8sClient == nil || memoryName == "" || namespace == "" {
 		return nil, fmt.Errorf("invalid parameters")
 	}
@@ -54,13 +55,13 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 	}
 
 	return &HTTPMemory{
-		client:     k8sClient,
-		httpClient: httpClient,
-		baseURL:    strings.TrimSuffix(*memory.Status.LastResolvedAddress, "/"),
-		sessionId:  sessionId,
-		name:       memoryName,
-		namespace:  namespace,
-		recorder:   recorder,
+		client:           k8sClient,
+		httpClient:       httpClient,
+		baseURL:          strings.TrimSuffix(*memory.Status.LastResolvedAddress, "/"),
+		sessionId:        sessionId,
+		name:             memoryName,
+		namespace:        namespace,
+		eventingRecorder: memoryRecorder,
 	}, nil
 }
 
@@ -105,17 +106,14 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 		return nil
 	}
 
+	ctx = m.eventingRecorder.Start(ctx, "MemoryAddMessages", "Adding messages to memory", nil)
+
 	// Resolve address dynamically
 	if err := m.resolveAndUpdateAddress(ctx); err != nil {
+		operationData := map[string]string{"result": fmt.Sprintf("Failed to resolve memory address: %v", err)}
+		m.eventingRecorder.Fail(ctx, "MemoryAddMessages", operationData["result"], err, operationData)
 		return err
 	}
-
-	tracker := NewOperationTracker(m.recorder, ctx, "MemoryAddMessages", m.name, map[string]string{
-		"namespace": m.namespace,
-		"sessionId": m.sessionId,
-		"queryId":   queryID,
-		"messages":  fmt.Sprintf("%d", len(messages)),
-	})
 
 	// Convert messages to the request format
 	openaiMessages := make([]openai.ChatCompletionMessageParamUnion, len(messages))
@@ -129,14 +127,16 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 		Messages:  openaiMessages,
 	})
 	if err != nil {
-		tracker.Fail(fmt.Errorf("failed to serialize messages: %w", err))
+		operationData := map[string]string{"result": fmt.Sprintf("Failed to serialize messages: %v", err)}
+		m.eventingRecorder.Fail(ctx, "MemoryAddMessages", operationData["result"], err, operationData)
 		return fmt.Errorf("failed to serialize messages: %w", err)
 	}
 
 	requestURL := fmt.Sprintf("%s%s", m.baseURL, MessagesEndpoint)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(reqBody))
 	if err != nil {
-		tracker.Fail(fmt.Errorf("failed to create request: %w", err))
+		operationData := map[string]string{"result": fmt.Sprintf("Failed to create request: %v", err)}
+		m.eventingRecorder.Fail(ctx, "MemoryAddMessages", operationData["result"], err, operationData)
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
@@ -145,37 +145,43 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
-		tracker.Fail(fmt.Errorf("HTTP request failed: %w", err))
+		operationData := map[string]string{"result": fmt.Sprintf("HTTP request failed: %v", err)}
+		m.eventingRecorder.Fail(ctx, "MemoryAddMessages", operationData["result"], err, operationData)
 		return fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		err := fmt.Errorf("HTTP status %d", resp.StatusCode)
-		tracker.Fail(err)
+		operationData := map[string]string{"result": err.Error()}
+		m.eventingRecorder.Fail(ctx, "MemoryAddMessages", operationData["result"], err, operationData)
 		return err
 	}
 
-	tracker.Complete("messages added")
+	operationData := map[string]string{
+		"messages": fmt.Sprintf("%d", len(messages)),
+		"result":   "Memory add messages completed successfully",
+	}
+	m.eventingRecorder.Complete(ctx, "MemoryAddMessages", operationData["result"], operationData)
 	return nil
 }
 
 // GetMessages retrieves messages from the memory backend
 func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
+	ctx = m.eventingRecorder.Start(ctx, "MemoryGetMessages", "Getting messages from memory", nil)
+
 	// Resolve address dynamically
 	if err := m.resolveAndUpdateAddress(ctx); err != nil {
+		operationData := map[string]string{"result": fmt.Sprintf("Failed to resolve memory address: %v", err)}
+		m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], err, operationData)
 		return nil, err
 	}
-
-	tracker := NewOperationTracker(m.recorder, ctx, "MemoryGetMessages", m.name, map[string]string{
-		"namespace": m.namespace,
-		"sessionId": m.sessionId,
-	})
 
 	requestURL := fmt.Sprintf("%s%s?session_id=%s", m.baseURL, MessagesEndpoint, url.QueryEscape(m.sessionId))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
-		tracker.Fail(fmt.Errorf("failed to create request: %w", err))
+		operationData := map[string]string{"result": fmt.Sprintf("Failed to create request: %v", err)}
+		m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], err, operationData)
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
@@ -184,20 +190,23 @@ func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
-		tracker.Fail(fmt.Errorf("HTTP request failed: %w", err))
+		operationData := map[string]string{"result": fmt.Sprintf("HTTP request failed: %v", err)}
+		m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], err, operationData)
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		err := fmt.Errorf("HTTP status %d", resp.StatusCode)
-		tracker.Fail(err)
+		operationData := map[string]string{"result": err.Error()}
+		m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], err, operationData)
 		return nil, err
 	}
 
 	var response MessagesResponse
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		tracker.Fail(fmt.Errorf("failed to decode response: %w", err))
+		operationData := map[string]string{"result": fmt.Sprintf("Failed to decode response: %v", err)}
+		m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], err, operationData)
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
@@ -205,16 +214,18 @@ func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 	for i, record := range response.Messages {
 		openaiMessage, err := unmarshalMessageRobust(record.Message)
 		if err != nil {
-			err := fmt.Errorf("failed to unmarshal message at index %d: %w", i, err)
-			tracker.Fail(err)
-			return nil, err
+			operationData := map[string]string{"result": fmt.Sprintf("Failed to unmarshal message at index %d: %v", i, err)}
+			m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], err, operationData)
+			return nil, fmt.Errorf("failed to unmarshal message at index %d: %w", i, err)
 		}
 		messages = append(messages, Message(openaiMessage))
 	}
 
-	// Update metadata with message count
-	tracker.metadata["messages"] = fmt.Sprintf("%d", len(messages))
-	tracker.Complete("retrieved")
+	operationData := map[string]string{
+		"messages": fmt.Sprintf("%d", len(messages)),
+		"result":   "Memory get messages completed successfully",
+	}
+	m.eventingRecorder.Complete(ctx, "MemoryGetMessages", operationData["result"], operationData)
 	return messages, nil
 }
 

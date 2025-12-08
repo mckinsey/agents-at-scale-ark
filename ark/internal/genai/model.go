@@ -11,6 +11,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
+	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
@@ -22,6 +23,9 @@ func ResolveModelSpec(modelSpec any, defaultNamespace string) (string, string, e
 	}
 	switch spec := modelSpec.(type) {
 	case *arkv1alpha1.AgentModelRef:
+		if spec == nil {
+			return "", "", fmt.Errorf("AgentModelRef pointer is nil")
+		}
 		modelName := spec.Name
 		namespace := spec.Namespace
 		if namespace == "" {
@@ -42,7 +46,7 @@ func ResolveModelSpec(modelSpec any, defaultNamespace string) (string, string, e
 }
 
 // LoadModel loads a model by resolving modelSpec and defaultNamespace
-func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface{}, defaultNamespace string, additionalHeaders map[string]string, modelRecorder telemetry.ModelRecorder) (*Model, error) {
+func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface{}, defaultNamespace string, additionalHeaders map[string]string, telemetryRecorder telemetry.ModelRecorder, eventingRecorder eventing.ModelRecorder) (*Model, error) {
 	modelName, namespace, err := ResolveModelSpec(modelSpec, defaultNamespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve model spec: %w", err)
@@ -59,9 +63,10 @@ func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface
 	}
 
 	modelInstance := &Model{
-		Model:         model,
-		Type:          modelCRD.Spec.Type,
-		ModelRecorder: modelRecorder,
+		Model:             model,
+		Type:              modelCRD.Spec.Type,
+		telemetryRecorder: telemetryRecorder,
+		eventingRecorder:  eventingRecorder,
 	}
 
 	switch modelCRD.Spec.Type {

@@ -208,6 +208,26 @@ Work in progress to fix the issue. Until it is fixed, you can install agents-at-
 
 This ensures the required charts are locally available for Ark to reference.
 
+#### 403 Denied When Pulling Helm Charts from GHCR
+
+**Error Message**
+
+```bash
+Error: GET "https://ghcr.io/v2/.../tags/list": response status code 403: denied: denied
+```
+
+**Cause**
+
+Your GitHub Personal Access Token (PAT) has expired.
+
+**Fix**
+
+Re-authenticate with a valid PAT:
+
+```bash
+docker login ghcr.io
+```
+
 #### 'Field is immutable' errors on install or upgrade
 
 When installing or upgrading Ark, if a previous installation exists that was _not_ installed with the expected installation name, or has only been partly uninstalled then you may encounter errors like:

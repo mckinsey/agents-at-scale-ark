@@ -592,7 +592,18 @@ export interface paths {
          */
         get: operations["list_mcp_servers_v1_mcp_servers_get"];
         put?: never;
-        post?: never;
+        /**
+         * Create Mcp Server
+         * @description Create a new MCPServer CR.
+         *
+         *     Args:
+         *         namespace: The namespace to create the MCP server in
+         *         body: The MCP server creation request
+         *
+         *     Returns:
+         *         MCPServerDetailResponse: The created MCP server details
+         */
+        post: operations["create_mcp_server_v1_mcp_servers_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -690,6 +701,67 @@ export interface paths {
          *         a2a_server_name: The name of the A2A server
          */
         delete: operations["delete_a2a_server_v1_a2a_servers__a2a_server_name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/a2a-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List A2A Tasks
+         * @description List all A2ATask CRs in a namespace.
+         *
+         *     Args:
+         *         namespace: The namespace to list A2A tasks from
+         *
+         *     Returns:
+         *         A2ATaskListResponse: List of all A2A tasks in the namespace
+         */
+        get: operations["list_a2a_tasks_v1_a2a_tasks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/a2a-tasks/{task_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get A2A Task
+         * @description Get a specific A2ATask CR by name.
+         *
+         *     Args:
+         *         namespace: The namespace to get the A2A task from
+         *         task_name: The name of the A2A task
+         *
+         *     Returns:
+         *         A2ATaskDetailResponse: The A2A task details
+         */
+        get: operations["get_a2a_task_v1_a2a_tasks__task_name__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete A2A Task
+         * @description Delete an A2ATask CR by name.
+         *
+         *     Args:
+         *         namespace: The namespace containing the A2A task
+         *         task_name: The name of the A2A task
+         */
+        delete: operations["delete_a2a_task_v1_a2a_tasks__task_name__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1236,6 +1308,16 @@ export interface components {
             /** Total */
             total: number;
         };
+        /**
+         * A2AServerRef
+         * @description Reference to an A2AServer.
+         */
+        A2AServerRef: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace?: string | null;
+        };
         /** A2AServerResponse */
         A2AServerResponse: {
             /** Name */
@@ -1260,6 +1342,163 @@ export interface components {
             discovering?: boolean | null;
             /** Status Message */
             status_message?: string | null;
+        };
+        /**
+         * A2ATaskArtifact
+         * @description Artifact produced during task execution.
+         */
+        A2ATaskArtifact: {
+            /** Artifactid */
+            artifactId: string;
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Parts */
+            parts: components["schemas"]["A2ATaskPart"][];
+            /** Metadata */
+            metadata?: {
+                [key: string]: string;
+            } | null;
+        };
+        /**
+         * A2ATaskDetailResponse
+         * @description Detailed A2ATask response model.
+         */
+        A2ATaskDetailResponse: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace: string;
+            /** Taskid */
+            taskId: string;
+            a2aServerRef: components["schemas"]["A2AServerRef"];
+            agentRef: components["schemas"]["AgentRef"];
+            queryRef: components["schemas"]["ark_api__models__a2a_tasks__QueryRef"];
+            /** Contextid */
+            contextId?: string | null;
+            /** Input */
+            input?: string | null;
+            /** Parameters */
+            parameters?: {
+                [key: string]: string;
+            } | null;
+            /** Pollinterval */
+            pollInterval?: string | null;
+            /** Priority */
+            priority?: number | null;
+            /** Timeout */
+            timeout?: string | null;
+            /** Ttl */
+            ttl?: string | null;
+            status?: components["schemas"]["A2ATaskStatus"] | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * A2ATaskListResponse
+         * @description List of A2ATasks response model.
+         */
+        A2ATaskListResponse: {
+            /** Items */
+            items: components["schemas"]["A2ATaskResponse"][];
+            /** Count */
+            count: number;
+        };
+        /**
+         * A2ATaskMessage
+         * @description Message in the conversation history.
+         */
+        A2ATaskMessage: {
+            /** Messageid */
+            messageId?: string | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "agent" | "system";
+            /** Parts */
+            parts: components["schemas"]["A2ATaskPart"][];
+            /** Metadata */
+            metadata?: {
+                [key: string]: string;
+            } | null;
+        };
+        /**
+         * A2ATaskPart
+         * @description Content part of an artifact or message.
+         */
+        A2ATaskPart: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "text" | "file" | "data";
+            /** Text */
+            text?: string | null;
+            /** Data */
+            data?: string | null;
+            /** Uri */
+            uri?: string | null;
+            /** Mimetype */
+            mimeType?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: string;
+            } | null;
+        };
+        /**
+         * A2ATaskResponse
+         * @description A2ATask resource response model.
+         */
+        A2ATaskResponse: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace: string;
+            /** Taskid */
+            taskId: string;
+            /** Phase */
+            phase?: string | null;
+            agentRef?: components["schemas"]["AgentRef"] | null;
+            queryRef?: components["schemas"]["ark_api__models__a2a_tasks__QueryRef"] | null;
+            /** Creationtimestamp */
+            creationTimestamp?: string | null;
+        };
+        /**
+         * A2ATaskStatus
+         * @description Status of the A2ATask.
+         */
+        A2ATaskStatus: {
+            /** Phase */
+            phase?: string | null;
+            /** Protocolstate */
+            protocolState?: string | null;
+            /** Protocolmetadata */
+            protocolMetadata?: {
+                [key: string]: string;
+            } | null;
+            /** Starttime */
+            startTime?: string | null;
+            /** Completiontime */
+            completionTime?: string | null;
+            /** Laststatustimestamp */
+            lastStatusTimestamp?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Contextid */
+            contextId?: string | null;
+            /** Artifacts */
+            artifacts?: components["schemas"]["A2ATaskArtifact"][] | null;
+            /** History */
+            history?: components["schemas"]["A2ATaskMessage"][] | null;
+            lastStatusMessage?: components["schemas"]["A2ATaskMessage"] | null;
+            /** Conditions */
+            conditions?: {
+                [key: string]: unknown;
+            }[] | null;
         };
         /**
          * APIKeyCreateRequest
@@ -1457,6 +1696,16 @@ export interface components {
             count: number;
         };
         /**
+         * AgentRef
+         * @description Reference to an Agent.
+         */
+        AgentRef: {
+            /** Name */
+            name?: string | null;
+            /** Namespace */
+            namespace?: string | null;
+        };
+        /**
          * AgentResponse
          * @description Agent resource response model.
          */
@@ -1591,7 +1840,7 @@ export interface components {
             /** Apiversion */
             apiVersion?: string | components["schemas"]["ark_api__models__models__ValueSource"] | null;
             /** Headers */
-            headers?: components["schemas"]["Header-Input"][] | null;
+            headers?: components["schemas"]["ark_api__models__agents__Header-Input"][] | null;
         };
         /**
          * BaselineEvaluationMetadata
@@ -2181,7 +2430,7 @@ export interface components {
             input?: string | null;
             /** Output */
             output?: string | null;
-            queryRef?: components["schemas"]["QueryRef"] | null;
+            queryRef?: components["schemas"]["ark_api__models__evaluations__QueryRef"] | null;
             /** Evaluations */
             evaluations?: components["schemas"]["EvaluationRef"][] | null;
             /** Rules */
@@ -2570,24 +2819,6 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
-         * Header
-         * @description HTTP header configuration.
-         */
-        "Header-Input": {
-            /** Name */
-            name: string;
-            value: components["schemas"]["HeaderValue-Input"];
-        };
-        /**
-         * Header
-         * @description HTTP header configuration.
-         */
-        "Header-Output": {
-            /** Name */
-            name: string;
-            value: components["schemas"]["HeaderValue-Output"];
-        };
-        /**
          * HeaderValue
          * @description Value configuration for a header.
          */
@@ -2649,6 +2880,22 @@ export interface components {
          * @enum {string}
          */
         InputType: "user" | "messages";
+        /** MCPServerCreateRequest */
+        MCPServerCreateRequest: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace: string;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
+            } | null;
+            spec: components["schemas"]["MCPServerSpec"];
+        };
         /** MCPServerDetailResponse */
         MCPServerDetailResponse: {
             /** Name */
@@ -2665,14 +2912,15 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
-            /** Spec */
-            spec?: {
-                [key: string]: unknown;
-            } | null;
-            /** Status */
-            status?: {
-                [key: string]: unknown;
-            } | null;
+            available?: components["schemas"]["AvailabilityStatus"] | null;
+            /** Address */
+            address?: string | null;
+            /** Transport */
+            transport?: string | null;
+            /** Headers */
+            headers: components["schemas"]["ark_api__models__mcp_servers__Header-Output"][] | null;
+            /** Tool Count */
+            tool_count?: number | null;
         };
         /** MCPServerListResponse */
         MCPServerListResponse: {
@@ -2687,12 +2935,6 @@ export interface components {
             name: string;
             /** Namespace */
             namespace: string;
-            /** Description */
-            description?: string | null;
-            /** Labels */
-            labels?: {
-                [key: string]: string;
-            } | null;
             /** Address */
             address?: string | null;
             /** Annotations */
@@ -2701,14 +2943,23 @@ export interface components {
             } | null;
             /** Transport */
             transport?: string | null;
-            /** Ready */
-            ready?: boolean | null;
-            /** Discovering */
-            discovering?: boolean | null;
+            available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Status Message */
             status_message?: string | null;
             /** Tool Count */
             tool_count?: number | null;
+        };
+        /** MCPServerSpec */
+        MCPServerSpec: {
+            /** Transport */
+            transport: string;
+            /** Description */
+            description?: string | null;
+            /** Tools */
+            tools?: string[] | null;
+            address: components["schemas"]["ark_api__models__mcp_servers__ValueSource-Input"];
+            /** Headers */
+            headers?: components["schemas"]["ark_api__models__mcp_servers__Header-Input"][] | null;
         };
         /**
          * Memory
@@ -2962,7 +3213,7 @@ export interface components {
             /** Baseurl */
             baseUrl: string | components["schemas"]["ark_api__models__models__ValueSource"];
             /** Headers */
-            headers?: components["schemas"]["Header-Input"][] | null;
+            headers?: components["schemas"]["ark_api__models__agents__Header-Input"][] | null;
         };
         /**
          * Override
@@ -2970,7 +3221,7 @@ export interface components {
          */
         "Override-Input": {
             /** Headers */
-            headers: components["schemas"]["Header-Input"][];
+            headers: components["schemas"]["ark_api__models__agents__Header-Input"][];
             /** Resourcetype */
             resourceType: string;
             labelSelector?: components["schemas"]["ark_api__models__agents__LabelSelector"] | null;
@@ -2981,7 +3232,7 @@ export interface components {
          */
         "Override-Output": {
             /** Headers */
-            headers: components["schemas"]["Header-Output"][];
+            headers: components["schemas"]["ark_api__models__agents__Header-Output"][];
             /** Resourcetype */
             resourceType: string;
             labelSelector?: components["schemas"]["ark_api__models__agents__LabelSelector"] | null;
@@ -3101,18 +3352,6 @@ export interface components {
             items: components["schemas"]["QueryResponse"][];
             /** Count */
             count: number;
-        };
-        /**
-         * QueryRef
-         * @description Reference to a query for evaluation.
-         */
-        QueryRef: {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace?: string | null;
-            /** Responsetarget */
-            responseTarget?: string | null;
         };
         /**
          * QueryResponse
@@ -3276,6 +3515,17 @@ export interface components {
             /** Selectorprompt */
             selectorPrompt?: string | null;
         };
+        /** ServiceRef */
+        ServiceRef: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace?: string | null;
+            /** Port */
+            port?: string | null;
+            /** Path */
+            path?: string | null;
+        };
         /**
          * SessionListResponse
          * @description Response model for listing sessions.
@@ -3370,6 +3620,7 @@ export interface components {
             /** Maxturns */
             maxTurns?: number | null;
             selector?: components["schemas"]["Selector"] | null;
+            available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Status */
             status?: {
                 [key: string]: unknown;
@@ -3554,6 +3805,18 @@ export interface components {
             type: string;
         };
         /**
+         * QueryRef
+         * @description Reference to a Query.
+         */
+        ark_api__models__a2a_tasks__QueryRef: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace?: string | null;
+            /** Responsetarget */
+            responseTarget?: string | null;
+        };
+        /**
          * ConfigMapKeyRef
          * @description Reference to a key in a ConfigMap.
          */
@@ -3564,6 +3827,24 @@ export interface components {
             name: string;
             /** Optional */
             optional?: boolean | null;
+        };
+        /**
+         * Header
+         * @description HTTP header configuration.
+         */
+        "ark_api__models__agents__Header-Input": {
+            /** Name */
+            name: string;
+            value: components["schemas"]["HeaderValue-Input"];
+        };
+        /**
+         * Header
+         * @description HTTP header configuration.
+         */
+        "ark_api__models__agents__Header-Output": {
+            /** Name */
+            name: string;
+            value: components["schemas"]["HeaderValue-Output"];
         };
         /**
          * LabelSelector
@@ -3630,6 +3911,20 @@ export interface components {
         ark_api__models__agents__ValueFrom: {
             configMapKeyRef?: components["schemas"]["ark_api__models__agents__ConfigMapKeyRef"] | null;
             secretKeyRef?: components["schemas"]["ark_api__models__agents__SecretKeyRef"] | null;
+            serviceRef?: components["schemas"]["ServiceRef"] | null;
+            queryParameterRef?: components["schemas"]["ark_api__models__mcp_servers__QueryParameterRef"] | null;
+        };
+        /**
+         * QueryRef
+         * @description Reference to a query for evaluation.
+         */
+        ark_api__models__evaluations__QueryRef: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace?: string | null;
+            /** Responsetarget */
+            responseTarget?: string | null;
         };
         /**
          * ConfigMapKeyRef
@@ -3712,6 +4007,66 @@ export interface components {
             /** Value */
             value?: string | null;
             valueFrom?: components["schemas"]["ark_api__models__evaluators__ValueFrom"] | null;
+        };
+        /** ConfigMapKeyRef */
+        ark_api__models__mcp_servers__ConfigMapKeyRef: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Optional */
+            optional?: boolean | null;
+        };
+        /** Header */
+        "ark_api__models__mcp_servers__Header-Input": {
+            /** Name */
+            name: string;
+            value: components["schemas"]["ark_api__models__mcp_servers__ValueSource-Input"];
+        };
+        /** Header */
+        "ark_api__models__mcp_servers__Header-Output": {
+            /** Name */
+            name: string;
+            value: components["schemas"]["ark_api__models__mcp_servers__ValueSource"];
+        };
+        /** QueryParameterRef */
+        ark_api__models__mcp_servers__QueryParameterRef: {
+            /** Name */
+            name: string;
+        };
+        /** SecretKeyRef */
+        ark_api__models__mcp_servers__SecretKeyRef: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Optional */
+            optional?: boolean | null;
+        };
+        /** ValueFrom */
+        ark_api__models__mcp_servers__ValueFrom: {
+            configMapKeyRef?: components["schemas"]["ark_api__models__mcp_servers__ConfigMapKeyRef"] | null;
+            secretKeyRef?: components["schemas"]["ark_api__models__mcp_servers__SecretKeyRef"] | null;
+            serviceRef?: components["schemas"]["ServiceRef"] | null;
+            queryParameterRef?: components["schemas"]["ark_api__models__mcp_servers__QueryParameterRef"] | null;
+        };
+        /**
+         * ValueSource
+         * @description ValueSource for configuration (supports direct value or valueFrom).
+         */
+        ark_api__models__mcp_servers__ValueSource: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["ark_api__models__mcp_servers__ValueFrom"] | null;
+        };
+        /**
+         * ValueSource
+         * @description ValueSource for configuration (supports direct value or valueFrom).
+         */
+        "ark_api__models__mcp_servers__ValueSource-Input": {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["ark_api__models__mcp_servers__ValueFrom"] | null;
         };
         /**
          * ValueSource
@@ -5002,6 +5357,42 @@ export interface operations {
             };
         };
     };
+    create_mcp_server_v1_mcp_servers_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MCPServerCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPServerDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_mcp_server_v1_mcp_servers__mcp_server_name__get: {
         parameters: {
             query?: {
@@ -5143,6 +5534,104 @@ export interface operations {
             header?: never;
             path: {
                 a2a_server_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_a2a_tasks_v1_a2a_tasks_get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["A2ATaskListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_a2a_task_v1_a2a_tasks__task_name__get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                task_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["A2ATaskDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_a2a_task_v1_a2a_tasks__task_name__delete: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                task_name: string;
             };
             cookie?: never;
         };

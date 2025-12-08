@@ -1,0 +1,47 @@
+# ARK Sessions chart values
+
+global:
+  annotations:
+    ark.mckinsey.com/service: ark-sessions
+
+app:
+  name: ark-sessions
+  image:
+    repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-sessions
+    tag: ""
+    pullPolicy: IfNotPresent
+  
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  
+  env:
+    - name: PORT
+      value: "8080"
+    - name: DATABASE_URL
+      value: "postgresql://postgres:postgres@postgres:5432/ark_sessions?sslmode=disable"
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+serviceAccount:
+  name: ark-sessions
+
+# Memory CRD configuration
+memory:
+  createMemoryCRD: true
+  setAsDefault: false
+
+# PostgreSQL dependency (if using subchart)
+postgresql:
+  enabled: false
+  auth:
+    postgresPassword: postgres
+    database: ark_sessions
+

@@ -43,6 +43,7 @@ $(ARK_SDK_OPENAPI): $(ARK_SDK_CRD_FILES) | $(OUT)
 # Build Python wheel in $(OUT) directory
 $(ARK_SDK_WHL): $(ARK_SDK_OPENAPI) $(ARK_SDK_LIB_DIR)/generate_ark_clients.py $(ARK_SDK_LIB_DIR)/pyproject.toml $(ARK_SDK_OVERLAY_FILES) | $(OUT)
 	@mkdir -p $(ARK_SDK_OUT)/py-sdk
+	cd $(ARK_SDK_LIB_DIR) && python3 -m pip install --upgrade "pip==25.3" || true
 	cd $(ARK_SDK_LIB_DIR) && PATH="$(BUILD_EXTRA_PATH)" npx --yes @openapitools/openapi-generator-cli generate -i $(ARK_SDK_OPENAPI) -g python -o $(ARK_SDK_OUT)/py-sdk --package-name ark_sdk
 	cd $(ARK_SDK_LIB_DIR) && tar -cf - -C gen_sdk/overlay/python . | tar -xf - -C $(ARK_SDK_OUT)/py-sdk
 	cd $(ARK_SDK_LIB_DIR) && uv run python generate_ark_clients.py -v $(ARK_SDK_OPENAPI) > $(ARK_SDK_OUT)/py-sdk/ark_sdk/versions.py

@@ -13,9 +13,9 @@ import {
 } from '../../arkServices.js';
 import {
   isMarketplaceService,
-  extractMarketplaceServiceName,
-  getMarketplaceService,
+  getMarketplaceItem,
   getAllMarketplaceServices,
+  getAllMarketplaceAgents,
 } from '../../marketplaceServices.js';
 import {printNextSteps} from '../../lib/nextSteps.js';
 import ora from 'ora';
@@ -69,24 +69,34 @@ export async function installArk(
 
   // If a specific service is requested, install only that service
   if (serviceName) {
-    // Check if it's a marketplace service
+    // Check if it's a marketplace item
     if (isMarketplaceService(serviceName)) {
-      const marketplaceServiceName = extractMarketplaceServiceName(serviceName);
-      const service = getMarketplaceService(marketplaceServiceName);
+      const service = await getMarketplaceItem(serviceName);
 
       if (!service) {
         output.error(
-          `marketplace service '${marketplaceServiceName}' not found`
+          `marketplace item '${serviceName}' not found`
         );
-        output.info('available marketplace services:');
-        const marketplaceServices = getAllMarketplaceServices();
-        for (const serviceName of Object.keys(marketplaceServices)) {
-          output.info(`  marketplace/services/${serviceName}`);
+        output.info('available marketplace items:');
+        const marketplaceServices = await getAllMarketplaceServices();
+        if (marketplaceServices) {
+          for (const name of Object.keys(marketplaceServices)) {
+            output.info(`  marketplace/services/${name}`);
+          }
+        }
+        const marketplaceAgents = await getAllMarketplaceAgents();
+        if (marketplaceAgents) {
+          for (const name of Object.keys(marketplaceAgents)) {
+            output.info(`  marketplace/agents/${name}`);
+          }
+        }
+        if (!marketplaceServices && !marketplaceAgents) {
+          output.warning('Marketplace unavailable');
         }
         process.exit(1);
       }
 
-      output.info(`installing marketplace service ${service.name}...`);
+      output.info(`installing marketplace item ${service.name}...`);
       try {
         await installService(service, options.verbose);
         output.success(`${service.name} installed successfully`);

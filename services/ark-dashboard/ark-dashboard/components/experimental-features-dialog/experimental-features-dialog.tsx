@@ -1,6 +1,5 @@
 import { useAtom } from 'jotai';
-import { RESET } from 'jotai/utils';
-import React, { Fragment, useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 
 import {
   Dialog,
@@ -10,7 +9,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 
 import { experimentalFeatureGroups } from './experimental-features';
@@ -27,9 +25,12 @@ function ExperimentalFeatureToggle({
 }: ExperimentalFeatureToggleProps) {
   const [atomValue, setAtom] = useAtom(feature.atom);
 
-  const toggleAtomValue = useCallback(() => {
-    setAtom(prev => (prev ? RESET : true));
-  }, [setAtom]);
+  const toggleAtomValue = useCallback(
+    (checked: boolean) => {
+      setAtom(checked);
+    },
+    [setAtom],
+  );
 
   return (
     <div className="flex flex-row items-center justify-between">
@@ -84,12 +85,12 @@ export function ExperimentalFeaturesDialog() {
                 {groupLabel && (
                   <Label className="text-base font-bold">{groupLabel}</Label>
                 )}
-                <div>
-                  {features.map((feature, index) => (
-                    <Fragment key={feature.feature}>
-                      {index !== 0 && <Separator />}
-                      <ExperimentalFeatureToggle feature={feature} />
-                    </Fragment>
+                <div className="space-y-4">
+                  {features.map(feature => (
+                    <ExperimentalFeatureToggle
+                      key={feature.feature}
+                      feature={feature}
+                    />
                   ))}
                 </div>
               </section>

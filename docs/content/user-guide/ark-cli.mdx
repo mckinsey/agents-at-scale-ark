@@ -47,6 +47,27 @@ Then query any agent:
 
 That's it! The CLI maintains conversation context and lets you interact with any deployed ARK agents.
 
+## Marketplace
+
+The ARK CLI supports dynamic marketplace service enumeration from a `marketplace.json` file hosted in the marketplace repository.
+
+```bash
+# List available marketplace services and agents
+ark marketplace list
+
+# Install a marketplace service
+ark install marketplace/services/<service-name>
+
+# Install a marketplace agent
+ark install marketplace/agents/<agent-name>
+
+# Uninstall a marketplace service or agent
+ark uninstall marketplace/services/<service-name>
+ark uninstall marketplace/agents/<agent-name>
+```
+
+The marketplace fetches services and agents from `https://github.com/mckinsey/agents-at-scale-marketplace/raw/main/marketplace.json` using the Anthropic Marketplace JSON format. If the fetch fails, an unavailable message is displayed.
+
 ## Local Development
 
 ```bash

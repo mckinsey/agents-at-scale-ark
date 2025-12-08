@@ -11,6 +11,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
@@ -59,23 +60,25 @@ func (p *MCPClientPool) Close() error {
 	return lastErr
 }
 
-func (r *ToolRegistry) registerTools(ctx context.Context, k8sClient client.Client, agent *arkv1alpha1.Agent, telemetryProvider telemetry.Provider) error {
+func (r *ToolRegistry) registerTools(ctx context.Context, k8sClient client.Client, agent *arkv1alpha1.Agent, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) error {
 	for _, agentTool := range agent.Spec.Tools {
-		if err := r.registerTool(ctx, k8sClient, agentTool, agent.Namespace, telemetryProvider); err != nil {
+		if err := r.registerTool(ctx, k8sClient, agentTool, agent.Namespace, telemetryProvider, eventingProvider); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *MCPClientPool, mcpSettings map[string]MCPSettings, telemetryProvider telemetry.Provider) (ToolExecutor, error) {
+func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *MCPClientPool, mcpSettings map[string]MCPSettings, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) (ToolExecutor, error) {
 	switch tool.Spec.Type {
 	case ToolTypeHTTP:
 		return createHTTPExecutor(k8sClient, tool, namespace)
 	case ToolTypeMCP:
 		return createMCPExecutor(ctx, k8sClient, tool, namespace, mcpPool, mcpSettings)
 	case ToolTypeAgent:
-		return createAgentExecutor(ctx, k8sClient, tool, namespace, telemetryProvider)
+		return createAgentExecutor(ctx, k8sClient, tool, namespace, telemetryProvider, eventingProvider)
+	case ToolTypeTeam:
+		return createTeamExecutor(ctx, k8sClient, tool, namespace, telemetryProvider, eventingProvider)
 	case ToolTypeBuiltin:
 		return createBuiltinExecutor(tool)
 	default:
@@ -83,7 +86,7 @@ func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv
 	}
 }
 
-func createAgentExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, telemetryProvider telemetry.Provider) (ToolExecutor, error) {
+func createAgentExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) (ToolExecutor, error) {
 	if tool.Spec.Agent.Name == "" {
 		return nil, fmt.Errorf("agent spec is required for tool %s", tool.Name)
 	}
@@ -95,11 +98,33 @@ func createAgentExecutor(ctx context.Context, k8sClient client.Client, tool *ark
 	}
 
 	return &AgentToolExecutor{
-		AgentName:         tool.Spec.Agent.Name,
+		AgentName: tool.Spec.Agent.Name,
+		Namespace: namespace,
+		AgentCRD:  agentCRD,
+		k8sClient: k8sClient,
+		telemetry: telemetryProvider,
+		eventing:  eventingProvider,
+	}, nil
+}
+
+func createTeamExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) (ToolExecutor, error) {
+	if tool.Spec.Team.Name == "" {
+		return nil, fmt.Errorf("team spec is required for tool %s", tool.Name)
+	}
+
+	teamCRD := &arkv1alpha1.Team{}
+	key := types.NamespacedName{Name: tool.Spec.Team.Name, Namespace: namespace}
+	if err := k8sClient.Get(ctx, key, teamCRD); err != nil {
+		return nil, fmt.Errorf("failed to get team %v: %w", key, err)
+	}
+
+	return &TeamToolExecutor{
+		TeamName:          tool.Spec.Team.Name,
 		Namespace:         namespace,
-		AgentCRD:          agentCRD,
+		TeamCRD:           teamCRD,
 		k8sClient:         k8sClient,
 		telemetryProvider: telemetryProvider,
+		eventingProvider:  eventingProvider,
 	}, nil
 }
 
@@ -189,25 +214,39 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 	}, nil
 }
 
-func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client, agentTool arkv1alpha1.AgentTool, namespace string, telemetryProvider telemetry.Provider) error {
+func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client, agentTool arkv1alpha1.AgentTool, namespace string, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) error {
 	tool := &arkv1alpha1.Tool{}
-	key := client.ObjectKey{Name: agentTool.Name, Namespace: namespace}
+
+	toolName := agentTool.GetToolCRDName()
+
+	key := client.ObjectKey{Name: toolName, Namespace: namespace}
 
 	if err := k8sClient.Get(ctx, key, tool); err != nil {
-		return fmt.Errorf("failed to get tool %s: %w", agentTool.Name, err)
+		return fmt.Errorf("failed to get tool %s: %w", toolName, err)
 	}
 
 	toolDef := CreateToolFromCRD(tool)
-	executor, err := CreateToolExecutor(ctx, k8sClient, tool, namespace, r.mcpPool, r.mcpSettings, telemetryProvider)
+
+	// Set the exposed name (the name the agent will see)
+	// For partial tools, this is agentTool.Name, not the actual CRD name
+	toolDef.Name = agentTool.Name
+
+	executor, err := CreateToolExecutor(ctx, k8sClient, tool, namespace, r.mcpPool, r.mcpSettings, telemetryProvider, eventingProvider)
 	if err != nil {
-		return fmt.Errorf("failed to create executor for tool %s: %w", agentTool.Name, err)
+		return fmt.Errorf("failed to create executor for tool %s: %w", toolDef.Name, err)
 	}
 
+	// Override description if provided at the agent tool level
+	if agentTool.Description != "" {
+		toolDef.Description = agentTool.Description
+	}
+
+	// Apply partial modifications (parameter injection only - name already set above)
 	if agentTool.Partial != nil {
 		var err error
 		toolDef, err = CreatePartialToolDefinition(toolDef, agentTool.Partial)
 		if err != nil {
-			return fmt.Errorf("failed to create partial tool definition for tool %s: %w", agentTool.Name, err)
+			return fmt.Errorf("failed to create partial tool definition for tool %s: %w", toolName, err)
 		}
 		// Wrap with PartialToolExecutor if partial is specified
 		executor = &PartialToolExecutor{
@@ -230,14 +269,15 @@ func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client
 
 // AgentToolExecutor executes agent tools by calling other agents via MCP
 type AgentToolExecutor struct {
-	AgentName         string
-	Namespace         string
-	AgentCRD          *arkv1alpha1.Agent
-	k8sClient         client.Client
-	telemetryProvider telemetry.Provider
+	AgentName string
+	Namespace string
+	AgentCRD  *arkv1alpha1.Agent
+	k8sClient client.Client
+	telemetry telemetry.Provider
+	eventing  eventing.Provider
 }
 
-func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall, recorder EventEmitter) (ToolResult, error) {
+func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
 	var arguments map[string]any
 	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
 		log := logf.FromContext(ctx)
@@ -267,12 +307,8 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall, recorder
 		}, fmt.Errorf("input parameter must be a string for agent tool %s", a.AgentName)
 	}
 
-	// Log the agent execution
-	log := logf.FromContext(ctx)
-	log.Info("calling agent directly", "agent", a.AgentName, "namespace", a.Namespace, "input", inputStr)
-
-	// Create the Agent object using the Agent CRD and recorder
-	agent, err := MakeAgent(ctx, a.k8sClient, a.AgentCRD, recorder, a.telemetryProvider)
+	// Create the Agent object using the Agent CRD
+	agent, err := MakeAgent(ctx, a.k8sClient, a.AgentCRD, a.telemetry, a.eventing)
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
@@ -281,16 +317,15 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall, recorder
 		}, err
 	}
 
-	// Prepare user input and history
-	userInput := NewSystemMessage(inputStr)
-	history := []Message{} // Provide history if applicable
+	// Prepare user input. No conversation history is ever provided
+	userInput := NewUserMessage(inputStr)
+	history := []Message{}
 
 	// Call the agent's Execute function
 	// Pass nil for memory and eventStream (agents-as-tools don't use memory or streaming)
 	// See ARKQB-137 for discussion on streaming support for agents as tools
 	result, err := agent.Execute(ctx, userInput, history, nil, nil)
 	if err != nil {
-		log.Info("agent execution error", "agent", a.AgentName, "error", err)
 		return ToolResult{
 			ID:    call.ID,
 			Name:  call.Function.Name,
@@ -298,13 +333,105 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall, recorder
 		}, err
 	}
 
-	lastMessage := result.Messages[len(result.Messages)-1]
-
-	log.Info("agent direct call response", "agent", a.AgentName, "response", lastMessage.OfAssistant.Content.OfString.Value)
+	content := ExtractLastAssistantMessageContent(result.Messages)
+	if content == "" {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: "agent execution returned no assistant message content",
+		}, fmt.Errorf("agent %s execution returned no assistant message content", a.AgentName)
+	}
 
 	return ToolResult{
 		ID:      call.ID,
 		Name:    call.Function.Name,
-		Content: lastMessage.OfAssistant.Content.OfString.Value,
+		Content: content,
+	}, nil
+}
+
+// TeamToolExecutor executes team tools by calling teams
+type TeamToolExecutor struct {
+	TeamName          string
+	Namespace         string
+	TeamCRD           *arkv1alpha1.Team
+	k8sClient         client.Client
+	telemetryProvider telemetry.Provider
+	eventingProvider  eventing.Provider
+}
+
+func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
+	var arguments map[string]any
+	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
+		log := logf.FromContext(ctx)
+		log.Error(err, "Error parsing tool arguments", "ToolCall")
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: "Failed to parse tool arguments",
+		}, fmt.Errorf("failed to parse tool arguments: %v", err)
+	}
+
+	input, exists := arguments["input"]
+	if !exists {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: "input parameter is required",
+		}, fmt.Errorf("input parameter is required for team tool %s", t.TeamName)
+	}
+
+	inputStr, ok := input.(string)
+	if !ok {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: "input parameter must be a string",
+		}, fmt.Errorf("input parameter must be a string for team tool %s", t.TeamName)
+	}
+
+	// Create the Team object using the Team CRD and providers
+	team, err := MakeTeam(ctx, t.k8sClient, t.TeamCRD, t.telemetryProvider, t.eventingProvider)
+	if err != nil {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: fmt.Sprintf("failed to create team %s: %v", t.TeamName, err),
+		}, err
+	}
+
+	// Prepare user input. No conversation history is ever provided
+	userInput := NewUserMessage(inputStr)
+	history := []Message{}
+
+	result, err := team.Execute(ctx, userInput, history, nil, nil)
+	if err != nil {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: fmt.Sprintf("failed to execute team %s: %v", t.TeamName, err),
+		}, err
+	}
+
+	if len(result.Messages) == 0 {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: "team execution returned no messages",
+		}, fmt.Errorf("team %s execution returned no messages", t.TeamName)
+	}
+
+	content := ExtractLastAssistantMessageContent(result.Messages)
+	if content == "" {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: "team execution returned no assistant message content",
+		}, fmt.Errorf("team %s execution returned no assistant message content", t.TeamName)
+	}
+
+	return ToolResult{
+		ID:      call.ID,
+		Name:    call.Function.Name,
+		Content: content,
 	}, nil
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { useAtomValue } from 'jotai';
 import {
   AlertCircle,
   Check,
@@ -14,6 +15,11 @@ import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import {
+  A2A_TASKS_FEATURE_KEY,
+  isA2ATasksEnabledAtom,
+  isExperimentalDarkModeEnabledAtom,
+} from '@/atoms/experimental-features';
 import { NamespaceEditor } from '@/components/editors';
 import {
   Collapsible,
@@ -51,12 +57,18 @@ import { type SystemInfo, systemInfoService } from '@/lib/services';
 import { useNamespace } from '@/providers/NamespaceProvider';
 import { useUser } from '@/providers/UserProvider';
 
+import qbLogoDark from '../app/img/qb-logo-dark.svg';
+import qbLogoLight from '../app/img/qb-logo-light.svg';
 import { UserDetails } from './user';
 
 export function AppSidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useUser();
+  const isA2ATasksEnabled = useAtomValue(isA2ATasksEnabledAtom);
+  const isExperimentalDarkModeEnabled = useAtomValue(
+    isExperimentalDarkModeEnabledAtom,
+  );
 
   const {
     availableNamespaces,
@@ -105,6 +117,15 @@ export function AppSidebar() {
     return pathname.split('/')[1];
   };
 
+  const enabledOperationSections = OPERATION_SECTIONS.filter(item => {
+    switch (item.enablerFeature) {
+      case A2A_TASKS_FEATURE_KEY:
+        return isA2ATasksEnabled;
+      default:
+        return true;
+    }
+  });
+
   return (
     <>
       <Sidebar>
@@ -116,13 +137,16 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     size="lg"
                     className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-white">
+                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
                       <Image
-                        src="/favicon.ico"
+                        src={
+                          isExperimentalDarkModeEnabled
+                            ? qbLogoDark
+                            : qbLogoLight
+                        }
                         alt="ARK"
-                        width={16}
-                        height={16}
-                        className="h-4 w-4"
+                        width={32}
+                        height={32}
                       />
                     </div>
                     <div className="flex flex-col gap-0.5 leading-none">
@@ -283,7 +307,7 @@ export function AppSidebar() {
               <CollapsibleContent>
                 <SidebarGroupContent>
                   <SidebarMenu>
-                    {OPERATION_SECTIONS.map(item => {
+                    {enabledOperationSections.map(item => {
                       const isPlaceholder = isPlaceholderSection(item.key);
                       const isDisabled =
                         !isNamespaceResolved || loading || isPlaceholder;

@@ -3,6 +3,8 @@ from typing import List, Dict, Optional, Any
 
 from pydantic import BaseModel, Field
 
+from .common import AvailabilityStatus
+
 
 class TeamMember(BaseModel):
     """Team member configuration."""
@@ -78,4 +80,5 @@ class TeamDetailResponse(BaseModel):
     graph: Optional[Graph] = None
     maxTurns: Optional[int] = None
     selector: Optional[Selector] = None
+    available: Optional[AvailabilityStatus] = None
     status: Optional[Dict[str, Any]] = None

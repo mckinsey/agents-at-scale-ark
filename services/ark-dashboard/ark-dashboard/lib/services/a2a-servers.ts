@@ -64,14 +64,20 @@ export const A2AServersService = {
     const response =
       await apiClient.get<A2AServerListResponse>(`/api/v1/a2a-servers`);
     console.log('A2A Servers:', response.items);
-    return response.items;
+    return response.items.map(item => ({
+      ...item,
+      id: item.name,
+    }));
   },
 
   async get(A2AServerName: string): Promise<A2AServer> {
     const response = await apiClient.get<A2AServer>(
       `/api/v1/a2a-servers/${A2AServerName}`,
     );
-    return response;
+    return {
+      ...response,
+      id: response.name,
+    };
   },
 
   // Delete an A2A server
@@ -84,7 +90,10 @@ export const A2AServersService = {
       `/api/v1/a2a-servers`,
       A2ASever,
     );
-    return response;
+    return {
+      ...response,
+      id: response.name,
+    };
   },
 
   async update(
@@ -95,6 +104,9 @@ export const A2AServersService = {
       `/api/v1/a2a-servers/${A2AServerName}`,
       spec,
     );
-    return response;
+    return {
+      ...response,
+      id: response.name,
+    };
   },
 };
