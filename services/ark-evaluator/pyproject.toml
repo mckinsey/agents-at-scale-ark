@@ -22,8 +22,8 @@ dependencies = [
     "pandas>=2.0.0",
     "nest-asyncio>=1.5.0",
     "Pillow>=10.0.0",
-    "ark-sdk",
     "urllib3>=2.6.0",
+    "ark-sdk",
 ]
 
 [tool.uv]
