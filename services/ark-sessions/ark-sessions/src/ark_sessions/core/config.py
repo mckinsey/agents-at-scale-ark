@@ -2,7 +2,6 @@
 
 import logging
 import os
-from typing import Optional
 
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
@@ -26,7 +25,7 @@ class Settings(BaseSettings):
         case_sensitive = False
 
 
-def setup_logging(logger_name: Optional[str] = None) -> logging.Logger:
+def setup_logging(logger_name: str | None = None) -> logging.Logger:
     """Set up logging configuration."""
     logging.basicConfig(
         level=getattr(logging, Settings().log_level.upper()),

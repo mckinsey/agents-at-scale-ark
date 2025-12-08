@@ -1,7 +1,6 @@
 """Session storage operations."""
 
 from datetime import datetime
-from typing import Optional
 
 from sqlmodel import select
 from sqlmodel.ext.asyncio import AsyncSession
@@ -36,7 +35,7 @@ class SessionStorage:
         await self.session.refresh(session)
         return session
     
-    async def get_session(self, session_id: str) -> Optional[Session]:
+    async def get_session(self, session_id: str) -> Session | None:
         """Get session by ID."""
         statement = select(Session).where(Session.id == session_id)
         result = await self.session.exec(statement)

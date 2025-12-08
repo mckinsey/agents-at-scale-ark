@@ -1,6 +1,6 @@
 """Message storage operations."""
 
-from typing import Any, Optional
+from typing import Any
 
 from sqlmodel import select
 from sqlmodel.ext.asyncio import AsyncSession
@@ -20,7 +20,7 @@ class MessageStorage:
         self,
         session_id: str,
         messages: list[dict[str, Any]],
-        query_id: Optional[str] = None,
+        query_id: str | None = None,
     ) -> None:
         """Add messages to a session."""
         # Ensure session exists
@@ -39,17 +39,19 @@ class MessageStorage:
     
     async def get_messages(
         self,
-        session_id: Optional[str] = None,
-        query_id: Optional[str] = None,
+        session_id: str | None = None,
+        query_id: str | None = None,
     ) -> list[Message]:
         """Get messages, optionally filtered by session_id or query_id."""
-        statement = select(Message)
-        
+        conditions = []
         if session_id:
-            statement = statement.where(Message.session_id == session_id)
+            conditions.append(Message.session_id == session_id)
         if query_id:
-            statement = statement.where(Message.query_id == query_id)
+            conditions.append(Message.query_id == query_id)
         
+        statement = select(Message)
+        if conditions:
+            statement = statement.where(*conditions)
         statement = statement.order_by(Message.created_at)
         
         result = await self.session.exec(statement)
