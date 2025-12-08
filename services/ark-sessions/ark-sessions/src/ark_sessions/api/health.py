@@ -1,11 +1,6 @@
-"""Health check endpoint."""
-
-from fastapi import APIRouter
-
-router = APIRouter()
+"""Health check handlers."""
 
 
-@router.get("/health")
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "service": "ark-sessions"}

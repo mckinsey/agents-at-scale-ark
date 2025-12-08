@@ -1,8 +1,8 @@
-"""Session API endpoints."""
+"""Session API handlers."""
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import Depends, Path
 from sqlmodel.ext.asyncio import AsyncSession
 
 from ark_sessions.core.database import get_session
@@ -10,10 +10,7 @@ from ark_sessions.storage.messages import MessageStorage
 from ark_sessions.storage.sessions import SessionStorage
 from ark_sessions.storage.traces import TraceStorage
 
-router = APIRouter(prefix="/sessions", tags=["sessions"])
 
-
-@router.get("")
 async def list_sessions(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, list[str]]:
@@ -23,7 +20,6 @@ async def list_sessions(
     return {"sessions": sessions}
 
 
-@router.get("/{session_id}")
 async def get_session_by_id(
     session_id: str = Path(..., description="Session ID"),
     session: AsyncSession = Depends(get_session),
@@ -162,6 +158,4 @@ async def get_session_by_id(
         ],
         "timeline": timeline,
     }
-
-__all__ = ["router"]
 

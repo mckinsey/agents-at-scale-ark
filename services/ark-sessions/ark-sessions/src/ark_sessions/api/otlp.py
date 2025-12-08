@@ -1,10 +1,10 @@
-"""OTLP trace ingestion endpoint."""
+"""OTLP trace ingestion handlers."""
 
 import json
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import Depends, Request, Response, status
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
 from sqlmodel.ext.asyncio import AsyncSession
 
@@ -12,8 +12,6 @@ from ark_sessions.core.config import logger
 from ark_sessions.core.database import get_session
 from ark_sessions.models import Span, SpanEvent, Trace
 from ark_sessions.storage.traces import TraceStorage
-
-router = APIRouter(prefix="/v1", tags=["telemetry"])
 
 
 def extract_session_id_from_attributes(attributes: dict[str, Any]) -> str | None:
@@ -279,7 +277,6 @@ async def _process_all_traces(
     return total_processed
 
 
-@router.post("/traces")
 async def receive_otlp_traces(
     request: Request,
     session: AsyncSession = Depends(get_session),
@@ -306,4 +303,3 @@ async def receive_otlp_traces(
         logger.error(f"Failed to process OTLP traces: {e}", exc_info=True)
         return _create_error_response("Invalid OTLP format", status.HTTP_400_BAD_REQUEST)
 
-__all__ = ["router"]

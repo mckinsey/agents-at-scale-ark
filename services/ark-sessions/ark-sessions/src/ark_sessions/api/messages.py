@@ -1,15 +1,13 @@
-"""Message API endpoints."""
+"""Message API handlers."""
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import Depends, Query
 from pydantic import BaseModel
 from sqlmodel.ext.asyncio import AsyncSession
 
 from ark_sessions.core.database import get_session
 from ark_sessions.storage.messages import MessageStorage
-
-router = APIRouter(prefix="/messages", tags=["memory"])
 
 
 class AddMessageRequest(BaseModel):
@@ -20,7 +18,6 @@ class AddMessageRequest(BaseModel):
     messages: list[dict[str, Any]]
 
 
-@router.post("")
 async def add_messages(
     request: AddMessageRequest,
     session: AsyncSession = Depends(get_session),
@@ -35,7 +32,6 @@ async def add_messages(
     return {"status": "ok"}
 
 
-@router.get("")
 async def get_messages(
     session_id: Optional[str] = Query(None, description="Filter by session ID"),
     query_id: Optional[str] = Query(None, description="Filter by query ID"),
@@ -57,6 +53,4 @@ async def get_messages(
             for msg in messages
         ]
     }
-
-__all__ = ["router"]
 
