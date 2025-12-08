@@ -80,15 +80,17 @@ class ToolsPage(BasePage):
         url_input.wait_for(state="visible", timeout=5000)
         url_input.fill(url)
         
-        save_button = self.page.locator("button").filter(has_text="Create").first
+        save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
         if not save_button.is_visible():
-            save_button = self.page.locator("button").filter(has_text="Save").first
+            save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
         
-        save_button.wait_for(state="visible", timeout=5000)
-        save_button.click()
+        save_button.scroll_into_view_if_needed()
+        save_button.evaluate("el => el.click()")
         self.wait_for_navigation_complete()
         
         popup_visible = self._check_success_popup()
+        
+        self.wait_for_modal_close()
         
         logger.info(f"Navigating back to tools list...")
         self.navigate_to_tools_tab()

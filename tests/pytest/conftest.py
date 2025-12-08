@@ -12,9 +12,18 @@ logger = logging.getLogger(__name__)
 
 
 def pytest_addoption(parser):
-    parser.addoption("--visible", action="store_true", default=False)
-    parser.addoption("--browser-type", default="chromium", choices=["chromium", "firefox", "webkit", "gecko"])
-    parser.addoption("--skip-install", action="store_true", default=False)
+    try:
+        parser.addoption("--visible", action="store_true", default=False)
+    except ValueError:
+        pass
+    try:
+        parser.addoption("--browser-type", default="chromium", choices=["chromium", "firefox", "webkit", "gecko"])
+    except ValueError:
+        pass
+    try:
+        parser.addoption("--skip-install", action="store_true", default=False)
+    except ValueError:
+        pass
 
 
 def get_ark_pods():
@@ -29,7 +38,16 @@ def get_ark_pods():
     for pod in pods_data.get('items', []):
         pod_name = pod['metadata']['name']
         if any(name in pod_name for name in ['ark-dashboard', 'ark-api', 'ark-mcp']):
-            ark_pods.append({'name': pod_name, 'status': pod['status']['phase']})
+            ready = False
+            for condition in pod.get('status', {}).get('conditions', []):
+                if condition.get('type') == 'Ready' and condition.get('status') == 'True':
+                    ready = True
+                    break
+            ark_pods.append({
+                'name': pod_name,
+                'status': pod['status']['phase'],
+                'ready': ready
+            })
     
     return ark_pods
 
@@ -38,11 +56,11 @@ def is_ark_running():
     pods = get_ark_pods()
     if not pods:
         return False
-    # Check that at least one pod of each required type is running
-    required = ['ark-dashboard', 'ark-api', 'ark-mcp']
-    for req in required:
-        running_pods = [p for p in pods if req in p['name'] and p['status'] == 'Running']
-        if not running_pods:
+    
+    required_services = ['ark-dashboard', 'ark-api', 'ark-mcp']
+    for service in required_services:
+        service_pods = [p for p in pods if service in p['name']]
+        if not any(p['status'] == 'Running' and p['ready'] for p in service_pods):
             return False
     return True
 
@@ -57,21 +75,28 @@ def install_ark():
 
 def wait_for_pods_ready():
     logger.info("Waiting for ARK pods to be ready...")
-    required = ['ark-dashboard', 'ark-api', 'ark-mcp']
+    required_services = ['ark-dashboard', 'ark-api', 'ark-mcp']
+    
     for attempt in range(60):
         pods = get_ark_pods()
+        if not pods:
+            time.sleep(5)
+            continue
+            
         all_ready = True
-        for req in required:
-            running_pods = [p for p in pods if req in p['name'] and p['status'] == 'Running']
-            if not running_pods:
+        for service in required_services:
+            service_pods = [p for p in pods if service in p['name']]
+            if not any(p['status'] == 'Running' and p['ready'] for p in service_pods):
                 all_ready = False
                 break
+        
         if all_ready:
-            running = [p for p in pods if p['status'] == 'Running']
-            pod_statuses = [f"{p['name']}: {p['status']}" for p in running]
+            ready_pods = [p for p in pods if p['status'] == 'Running' and p['ready']]
+            pod_statuses = [f"{p['name']}: {p['status']}" for p in ready_pods]
             logger.info(f"Attempt {attempt + 1}/60: {', '.join(pod_statuses)}")
-            logger.info("Required ARK pods are running")
+            logger.info("All required ARK services have at least one ready pod")
             return
+        
         time.sleep(5)
     pytest.exit("ARK pods not ready", returncode=1)
 
@@ -111,27 +136,8 @@ def ark_setup(request):
         wait_for_pods_ready()
         cleanup_port_forwarding()
         
-        # Find a running dashboard pod
-        result = subprocess.run(
-            ['kubectl', 'get', 'pods', '-n', 'default', '-l', 'app=ark-dashboard', '-o', 'jsonpath={.items[?(@.status.phase=="Running")].metadata.name}'],
-            capture_output=True, text=True, timeout=30
-        )
-        dashboard_pod = result.stdout.strip().split()[0] if result.stdout.strip() else None
-        
-        # Fallback to devspace pod or service
-        if not dashboard_pod:
-            result = subprocess.run(
-                ['kubectl', 'get', 'pods', '-n', 'default', '-o', 'jsonpath={.items[?(@.metadata.name contains "ark-dashboard")].metadata.name}'],
-                capture_output=True, text=True, timeout=30
-            )
-            pods = [p for p in result.stdout.strip().split() if 'devspace' in p]
-            dashboard_pod = pods[0] if pods else None
-        
-        target = f'pod/{dashboard_pod}' if dashboard_pod else 'service/ark-dashboard'
-        logger.info(f"Port-forwarding to {target}")
-        
         port_forward = subprocess.Popen(
-            ['kubectl', 'port-forward', '-n', 'default', target, '3274:3000'],
+            ['kubectl', 'port-forward', '-n', 'default', 'service/ark-dashboard', '3274:3000'],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         time.sleep(5)
