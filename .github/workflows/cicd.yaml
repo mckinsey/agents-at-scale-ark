@@ -110,7 +110,7 @@ jobs:
         shell: bash
         run: |
           GITHUB_REPOSITORY="${{ github.repository }}"
-          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&status=success&per_page=50" | jq -c '.workflow_runs[] | select(.name == "CI/CD") | .id' | head -n 1)
+          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&status=completed&per_page=50" | jq -c '.workflow_runs[] | select(.name == "CI/CD") | .id' | head -n 1)
           
           echo "Downloading artifacts from run ID: $LAST_RUN_ID"
           gh run download "$LAST_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern "xray-scan-results-agents-at-scale-*" --dir ./artifacts
@@ -236,6 +236,12 @@ jobs:
           source-path: services/ark-api/ark-api/coverage/
           artifact-folder: ark-api/unit-tests
           artifact-suffix: ark-api-unit
+
+      - uses: ./.github/actions/collect-coverage
+        with:
+          source-path: services/ark-dashboard/ark-dashboard/coverage/
+          artifact-folder: ark-dashboard/unit-tests
+          artifact-suffix: ark-dashboard-unit
 
   build-containers:
     needs: [setup-container-cache-registry, build-libs]
@@ -720,35 +726,32 @@ jobs:
       - name: Install UI test dependencies
         run: |
           cd tests/pytest/ui-tests
-          pip install -r requirements.txt 2>/dev/null || pip install pytest playwright python-dotenv
+          pip install -r requirements.txt
           playwright install chromium
           playwright install-deps chromium
 
-      - name: Create test secrets
+      - name: Create test environment
         env:
-          OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY || 'test-api-key' }}
-          AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY || 'test-azure-key' }}
-          OPENAI_ENDPOINT: ${{ secrets.CICD_OPENAI_BASE_URL || 'http://mock-llm.default.svc.cluster.local/v1' }}
+          CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
+          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL }}
         run: |
           cd tests/pytest/ui-tests
           cat > .env << EOF
-          OPENAI_API_KEY=${OPENAI_API_KEY}
-          AZURE_OPENAI_KEY=${AZURE_OPENAI_KEY}
-          OPENAI_ENDPOINT=${OPENAI_ENDPOINT}
+          CICD_OPENAI_API_KEY=${CICD_OPENAI_API_KEY}
+          CICD_OPENAI_BASE_URL=${CICD_OPENAI_BASE_URL}
           EOF
 
       - name: Start port-forwarding
         run: |
           kubectl port-forward svc/ark-dashboard 3274:3000 &
           sleep 5
-          curl -s -o /dev/null -w "%{http_code}" http://localhost:3274 || echo "Dashboard check"
+          curl -s -o /dev/null -w "%{http_code}" http://localhost:3274 || echo "Dashboard connectivity check"
 
       - name: Run UI tests
         run: |
           cd tests/pytest/ui-tests
           mkdir -p screenshots
-          pytest tests/ -v --tb=short 2>&1 | tee /tmp/ui-test-results.log
-        continue-on-error: true
+          pytest tests/ -v --tb=short
 
       - name: Upload test screenshots
         if: always()
@@ -756,14 +759,6 @@ jobs:
         with:
           name: ui-test-screenshots-${{ github.sha }}
           path: tests/pytest/ui-tests/screenshots/
-          retention-days: 7
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-test-results-${{ github.sha }}
-          path: /tmp/ui-test-results.log
           retention-days: 7
 
   build-charts:

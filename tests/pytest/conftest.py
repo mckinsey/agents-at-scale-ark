@@ -1,41 +1,212 @@
+import json
+import logging
 import os
 import pytest
+import subprocess
+import time
+import urllib.request
+from pathlib import Path
+from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
+
+logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="session")
-def kube_client():
-    """Load kube config and return CoreV1Api and CustomObjectsApi clients."""
-    try:
-        from kubernetes import config, client
-    except ImportError:
-        pytest.skip("kubernetes module not available - run tests with virtual environment")
+def pytest_addoption(parser):
+    parser.addoption("--visible", action="store_true", default=False)
+    parser.addoption("--browser-type", default="chromium", choices=["chromium", "firefox", "webkit", "gecko"])
+    parser.addoption("--skip-install", action="store_true", default=False)
+
+
+def get_ark_pods():
+    result = subprocess.run(['kubectl', 'get', 'pods', '--all-namespaces', '-o', 'json'],
+                          capture_output=True, text=True, timeout=30)
+    if result.returncode != 0:
+        return []
     
-    # Try in-cluster, fall back to local kubeconfig
+    pods_data = json.loads(result.stdout)
+    ark_pods = []
+    
+    for pod in pods_data.get('items', []):
+        pod_name = pod['metadata']['name']
+        if any(name in pod_name for name in ['ark-dashboard', 'ark-api', 'ark-mcp']):
+            ark_pods.append({'name': pod_name, 'status': pod['status']['phase']})
+    
+    return ark_pods
+
+
+def is_ark_running():
+    pods = get_ark_pods()
+    if not pods:
+        return False
+    # Check that at least one pod of each required type is running
+    required = ['ark-dashboard', 'ark-api', 'ark-mcp']
+    for req in required:
+        running_pods = [p for p in pods if req in p['name'] and p['status'] == 'Running']
+        if not running_pods:
+            return False
+    return True
+
+
+def install_ark():
+    logger.info("Installing ARK...")
+    result = subprocess.run(['ark', 'install', '-y'], capture_output=True, text=True, timeout=600)
+    if result.returncode != 0:
+        pytest.exit(f"ARK installation failed: {result.stderr}", returncode=1)
+    logger.info("ARK installation successful")
+
+
+def wait_for_pods_ready():
+    logger.info("Waiting for ARK pods to be ready...")
+    required = ['ark-dashboard', 'ark-api', 'ark-mcp']
+    for attempt in range(60):
+        pods = get_ark_pods()
+        all_ready = True
+        for req in required:
+            running_pods = [p for p in pods if req in p['name'] and p['status'] == 'Running']
+            if not running_pods:
+                all_ready = False
+                break
+        if all_ready:
+            running = [p for p in pods if p['status'] == 'Running']
+            pod_statuses = [f"{p['name']}: {p['status']}" for p in running]
+            logger.info(f"Attempt {attempt + 1}/60: {', '.join(pod_statuses)}")
+            logger.info("Required ARK pods are running")
+            return
+        time.sleep(5)
+    pytest.exit("ARK pods not ready", returncode=1)
+
+
+def wait_for_dashboard():
+    logger.info("Waiting for dashboard to be accessible...")
+    for attempt in range(12):
+        try:
+            urllib.request.urlopen('http://localhost:3274', timeout=2)
+            return
+        except Exception:
+            time.sleep(5)
+
+
+def cleanup_port_forwarding():
+    """Clean up port forwarding with graceful shutdown first"""
+    # Try graceful shutdown first (SIGTERM)
+    subprocess.run(['bash', '-c', 'lsof -ti :3274 | xargs kill -15 2>/dev/null || true'], 
+                  capture_output=True)
+    time.sleep(2)
+    # Force kill if still running (SIGKILL)
+    subprocess.run(['bash', '-c', 'lsof -ti :3274 | xargs kill -9 2>/dev/null || true'], 
+                  capture_output=True)
+    time.sleep(1)
+
+
+@pytest.fixture(scope="session")
+def ark_setup(request):
+    skip_install = request.config.getoption("--skip-install")
+    port_forward = None
+    
     try:
-        config.load_incluster_config()
-    except Exception:
-        config.load_kube_config()
-
-    return client.CoreV1Api(), client.CustomObjectsApi()
+        if not skip_install and not is_ark_running():
+            install_ark()
+            time.sleep(30)
+        
+        wait_for_pods_ready()
+        cleanup_port_forwarding()
+        
+        # Find a running dashboard pod
+        result = subprocess.run(
+            ['kubectl', 'get', 'pods', '-n', 'default', '-l', 'app=ark-dashboard', '-o', 'jsonpath={.items[?(@.status.phase=="Running")].metadata.name}'],
+            capture_output=True, text=True, timeout=30
+        )
+        dashboard_pod = result.stdout.strip().split()[0] if result.stdout.strip() else None
+        
+        # Fallback to devspace pod or service
+        if not dashboard_pod:
+            result = subprocess.run(
+                ['kubectl', 'get', 'pods', '-n', 'default', '-o', 'jsonpath={.items[?(@.metadata.name contains "ark-dashboard")].metadata.name}'],
+                capture_output=True, text=True, timeout=30
+            )
+            pods = [p for p in result.stdout.strip().split() if 'devspace' in p]
+            dashboard_pod = pods[0] if pods else None
+        
+        target = f'pod/{dashboard_pod}' if dashboard_pod else 'service/ark-dashboard'
+        logger.info(f"Port-forwarding to {target}")
+        
+        port_forward = subprocess.Popen(
+            ['kubectl', 'port-forward', '-n', 'default', target, '3274:3000'],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        time.sleep(5)
+        
+        if port_forward.poll() is not None:
+            pytest.exit("Port forwarding failed", returncode=1)
+        
+        wait_for_dashboard()
+        
+        yield
+    finally:
+        if port_forward:
+            port_forward.terminate()
+            port_forward.wait(timeout=5)
 
 
 @pytest.fixture(scope="session")
-def namespaces():
-    return {
-        "work": os.getenv("ARK_NAMESPACE", "default"),
-        "controller": os.getenv("ARK_CONTROLLER_NAMESPACE", "ark-system"),
-    }
+def playwright():
+    with sync_playwright() as p:
+        yield p
 
 
 @pytest.fixture(scope="session")
-def ark_gvr():
-    """Group/Version/Resources for ARK CRDs used in tests."""
-    return {
-        "group": "ark.mckinsey.com",
-        "version": "v1alpha1",
-        "agents": "agents",
-        "models": "models",
+def browser(playwright, ark_setup, request):
+    visible = request.config.getoption("--visible")
+    browser_type = request.config.getoption("--browser-type")
+    
+    if browser_type == "gecko":
+        browser_type = "firefox"
+    
+    launch_args = {
+        "headless": not visible,
+        "slow_mo": 500 if visible else 0,
+        "args": ["--start-maximized"] if visible else []
     }
+    
+    browser = getattr(playwright, browser_type).launch(**launch_args)
+    yield browser
+    browser.close()
 
 
+@pytest.fixture(scope="session")
+def context(browser, request):
+    visible = request.config.getoption("--visible")
+    context_args = {
+        "viewport": None if visible else {"width": 1920, "height": 1080},
+        "ignore_https_errors": True
+    }
+    context = browser.new_context(**context_args)
+    yield context
+    context.close()
 
+
+@pytest.fixture(scope="session")
+def page(context):
+    page = context.new_page()
+    yield page
+    page.close()
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    rep = outcome.get_result()
+    
+    if rep.when == "call" and rep.failed:
+        page = item.funcargs.get("page")
+        if page:
+            try:
+                # Ensure screenshots directory exists
+                screenshots_dir = Path("screenshots")
+                screenshots_dir.mkdir(exist_ok=True)
+                
+                screenshot_path = screenshots_dir / f"{item.name}.png"
+                page.screenshot(path=str(screenshot_path))
+                logger.info(f"Screenshot saved: {screenshot_path}")
+            except Exception as e:
+                logger.error(f"Failed to save screenshot: {e}")

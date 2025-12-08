@@ -27,17 +27,20 @@ class DashboardPage(BasePage):
         self.base_url = "http://localhost:3274"
     
     def navigate_to_dashboard(self) -> None:
-        self.navigate(self.base_url)
-        self.wait_for_navigation_complete()
-        
-        # Wait for main content or sidebar to appear
-        self.wait_for_element(f"{self.MAIN_CONTENT}, {self.SIDEBAR}", timeout=10000)
+        if self.base_url not in self.page.url:
+            self.page.goto(self.base_url)
+        self.wait_for_load_state("domcontentloaded")
+        self.wait_for_timeout(1000)
     
     def is_dashboard_loaded(self) -> bool:
-        """Check if dashboard has loaded by verifying main content or sidebar is visible"""
         try:
-            # Wait for either main content or sidebar to be visible
-            self.page.wait_for_selector(f"{self.MAIN_CONTENT}, {self.SIDEBAR}", timeout=10000)
-            return True
+            return self.page.locator(self.MAIN_CONTENT).first.is_visible(timeout=5000)
         except:
             return False
+    
+    def get_dashboard_title(self) -> str:
+        try:
+            return self.page.locator(self.DASHBOARD_TITLE).first.inner_text()
+        except:
+            return ""
+

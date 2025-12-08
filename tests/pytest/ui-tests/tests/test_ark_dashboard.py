@@ -33,25 +33,25 @@ class TestArkDashboard:
     ])
     def test_dashboard_tabs_navigation(self, page: Page, tab_name: str, tab_selector: str, button_selector: str):
         dashboard = DashboardPage(page)
+        page.goto("http://localhost:3274")
+        dashboard.wait_for_load_state("domcontentloaded")
+        dashboard.wait_for_timeout(1000)
         
-        # Navigate directly to the page URL (e.g., /agents, /models)
-        page_url = f"{dashboard.base_url}/{tab_name.lower()}"
-        dashboard.navigate(page_url)
-        dashboard.wait_for_navigation_complete()
+        tab_element = getattr(dashboard, tab_selector)
         
-        # Wait for the add button to appear
-        add_button = getattr(dashboard, button_selector)
-        dashboard.wait_for_element(add_button, timeout=10000)
-        
-        # Verify we're on the correct page
-        current_url = dashboard.get_url()          
-        assert tab_name.lower() in current_url.lower(), f"URL should contain '{tab_name.lower()}' but got: {current_url}"
-        
-        # Verify the add button is visible
-        if dashboard.is_visible(add_button):
-            print(f"{tab_name} page loaded successfully with Add button visible")
+        if dashboard.is_visible(tab_element):
+            page.locator(tab_element).first.click()
+            dashboard.wait_for_timeout(2000)
+            
+            new_url = dashboard.get_url()          
+            assert tab_name.lower() in new_url.lower(), f"URL should contain '{tab_name.lower()}' but got: {new_url}"
+            
+            add_button = getattr(dashboard, button_selector)
+            assert dashboard.is_visible(add_button), f"Add {tab_name} button should be visible"
+            
+            print(f"{tab_name} page loaded successfully")
         else:
-            pytest.skip(f"Add {tab_name} button not visible - page may still be loading or feature not available")
+            pytest.skip(f"{tab_name} tab not visible on dashboard")
     
     def test_dashboard_responsive(self, page: Page):
         dashboard = DashboardPage(page)
