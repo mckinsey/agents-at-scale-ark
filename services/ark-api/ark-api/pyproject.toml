@@ -24,6 +24,7 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.41b0",
     "opentelemetry-instrumentation-httpx>=0.41b0",
     "opentelemetry-exporter-otlp>=1.20.0",
+    "urllib3>=2.6.0",
     "ark-sdk",
 ]
 
