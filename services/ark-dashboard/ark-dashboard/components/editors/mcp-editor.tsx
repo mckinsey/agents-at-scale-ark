@@ -25,8 +25,8 @@ import type { MCPServer, Secret } from '@/lib/services';
 import { mcpServersService, secretsService } from '@/lib/services';
 import type {
   DirectHeader,
-  Header,
-  MCPServerConfiguration,
+  MCPHeader,
+  MCPServerCreateRequest,
   SecretHeader,
 } from '@/lib/services/mcp-servers';
 import { getKubernetesNameError } from '@/lib/utils/kubernetes-validation';
@@ -37,7 +37,7 @@ interface McpEditorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mcpServer: MCPServer | null;
-  onSave: (mcpSever: MCPServerConfiguration, edit: boolean) => void;
+  onSave: (mcpSever: MCPServerCreateRequest, edit: boolean) => void;
   namespace: string;
 }
 type HeaderData = {
@@ -58,7 +58,7 @@ export function McpEditor({
   const [description, setDescription] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [nameError, setNameError] = useState<string | null>(null);
-  const [transport, setTransport] = useState<'http' | 'sse'>('http');
+  const [transport, setTransport] = useState<string>('http');
   const [headers, setHeaders] = useState<HeaderData[]>([
     { key: 'row-1', name: '', type: 'direct', value: '' },
   ]);
@@ -93,12 +93,12 @@ export function McpEditor({
 
   const getMpcServerDetails = useCallback(async () => {
     const mcpServerData = await mcpServersService.get(mcpServer?.name ?? '');
-    setBaseUrl(mcpServerData?.spec?.address?.value ?? '');
-    setTransport(mcpServerData?.spec?.transport ?? 'http');
-
-    if (mcpServerData?.spec?.headers) {
-      const transformedHeaders: HeaderData[] =
-        mcpServerData?.spec?.headers?.map((header: Header) => {
+    setBaseUrl(mcpServerData?.address ?? '');
+    setTransport(mcpServerData?.transport ?? 'http');
+    setDescription(mcpServerData?.description ?? '');
+    if (mcpServerData?.headers) {
+      const transformedHeaders: HeaderData[] = mcpServerData?.headers?.map(
+        (header: MCPHeader) => {
           const isSecret = 'valueFrom' in header.value;
 
           return {
@@ -109,7 +109,8 @@ export function McpEditor({
               ? (header as SecretHeader).value.valueFrom.secretKeyRef.name
               : (header as DirectHeader).value.value || '',
           };
-        });
+        },
+      );
       setHeaders(transformedHeaders);
     }
   }, [mcpServer?.name]);
@@ -117,7 +118,7 @@ export function McpEditor({
   useEffect(() => {
     if (mcpServer && open) {
       setName(mcpServer.name);
-      setDescription(mcpServer.description ?? '');
+      //setDescription(mcpServer.description ?? '');
       getMpcServerDetails();
     } else {
       setName('');
@@ -126,7 +127,7 @@ export function McpEditor({
     }
   }, [mcpServer, open, getMpcServerDetails]);
 
-  const returnHeaderObj = (header: HeaderData): Header => {
+  const returnHeaderObj = (header: HeaderData): MCPHeader => {
     if (header.type === 'direct') {
       return {
         name: header.name,
@@ -150,10 +151,10 @@ export function McpEditor({
   };
 
   const handleSave = () => {
-    const modifiedHeaders: Header[] = headers.map(header => {
+    const modifiedHeaders: MCPHeader[] = headers.map(header => {
       return returnHeaderObj(header);
     });
-    const createData: MCPServerConfiguration = {
+    const createData: MCPServerCreateRequest = {
       name,
       namespace,
       spec: {

@@ -4,9 +4,7 @@ metadata:
   name: researcher
 spec:
   prompt: |
-    You are a research agent. Your role is to gather information and provide facts.
-    When given a topic, provide 3-4 key facts or insights about it.
-    Start your response with "RESEARCH: " to clearly identify your contribution.
-    Be concise and factual.
+    You are a Researcher Agent. Gather information and provide facts.
+    Start your response with "RESEARCH:" to identify your contribution.
   modelRef:
     name: test-model
