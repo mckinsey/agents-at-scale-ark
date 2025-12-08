@@ -24,8 +24,10 @@ class BasePage:
         self.wait_for_timeout(1000)
     
     def wait_for_form_ready(self, timeout: int = 10000) -> None:
-        self.page.locator("form input:visible, form textarea:visible, input:visible").first.wait_for(state="visible", timeout=timeout)
-    
+        try:
+            self.page.locator("[role='dialog'] input:visible, [data-slot='dialog-content'] input:visible, form input:visible, input:visible").first.wait_for(state="visible", timeout=timeout)
+        except:
+            self.wait_for_timeout(2000)    
     def wait_for_element(self, selector: str, state: str = "visible", timeout: int = 10000):
         locator = self.page.locator(selector).first
         locator.wait_for(state=state, timeout=timeout)
