@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from ark_sessions.api import health, messages, otlp, sessions
+from ark_sessions.api import health, messages, otlp, sessions, sessions_sse
 
 router = APIRouter()
 
@@ -16,6 +16,8 @@ router.add_api_route("/messages", messages.get_messages, methods=["GET"])
 # Sessions
 router.add_api_route("/sessions", sessions.list_sessions, methods=["GET"])
 router.add_api_route("/sessions/{session_id}", sessions.get_session_by_id, methods=["GET"])
+router.add_api_route("/sessions/{session_id}/events", sessions_sse.stream_session_events, methods=["GET"])
+router.add_api_route("/sessions/{session_id}/queries", sessions_sse.stream_session_queries, methods=["GET"])
 
 # OTLP
 router.add_api_route("/v1/traces", otlp.receive_otlp_traces, methods=["POST"])

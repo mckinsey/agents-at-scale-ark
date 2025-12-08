@@ -1,7 +1,15 @@
 """Health check handlers."""
 
+from pydantic import BaseModel
 
-async def health_check():
+
+class HealthResponse(BaseModel):
+    """Health check response."""
+    status: str
+    service: str
+
+
+async def health_check() -> HealthResponse:
     """Health check endpoint."""
-    return {"status": "healthy", "service": "ark-sessions"}
+    return HealthResponse(status="healthy", service="ark-sessions")
 

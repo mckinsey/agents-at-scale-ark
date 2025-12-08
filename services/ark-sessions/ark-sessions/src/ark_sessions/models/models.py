@@ -72,6 +72,25 @@ class Message(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     session_id: str = Field(index=True, description="Session ID")
     query_id: str | None = Field(default=None, index=True, description="Query ID")
+    conversation_id: str | None = Field(default=None, index=True, description="Conversation ID")
     message_data: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON), description="Message data")
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class SessionEvent(SQLModel, table=True):
+    """Session event model - event sourcing pattern for session state."""
+    
+    __tablename__ = "session_events"
+    
+    id: int | None = Field(default=None, primary_key=True)
+    session_id: str = Field(index=True, description="Session ID")
+    query_id: str | None = Field(default=None, index=True, description="Query ID")
+    conversation_id: str | None = Field(default=None, index=True, description="Conversation ID")
+    reason: str = Field(description="Event reason (QueryStart, QueryComplete, etc.)")
+    query_name: str | None = Field(default=None, description="Query name")
+    query_namespace: str | None = Field(default=None, description="Query namespace")
+    duration_ms: float | None = Field(default=None, description="Duration in milliseconds (for QueryComplete)")
+    timestamp: datetime = Field(index=True, description="Event timestamp")
+    payload: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON), description="Additional event data")
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
 

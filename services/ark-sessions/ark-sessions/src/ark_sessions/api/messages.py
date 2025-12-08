@@ -19,10 +19,15 @@ class AddMessageRequest(BaseModel):
     messages: list[dict[str, Any]]
 
 
+class StatusResponse(BaseModel):
+    """Standard status response."""
+    status: str
+
+
 async def add_messages(
     request: AddMessageRequest,
     session: AsyncSession = Depends(get_session),
-) -> dict[str, str]:
+) -> StatusResponse:
     """Add messages to a session."""
     storage = MessageStorage(session)
     await storage.add_messages(
@@ -30,7 +35,7 @@ async def add_messages(
         messages=request.messages,
         query_id=request.query_id,
     )
-    return {"status": "ok"}
+    return StatusResponse(status="ok")
 
 
 async def get_messages(
