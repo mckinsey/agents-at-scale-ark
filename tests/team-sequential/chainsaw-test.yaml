@@ -4,17 +4,23 @@ metadata:
   name: team-sequential
 spec:
   description: Test sequential team execution with researcher, analyst, and summarizer
+  timeouts:
+    apply: 30s
+    assert: 60s
+    exec: 120s
   steps:
   - name: step-1
     try:
     - script:
-        skipLogOutput: true
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.25 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - script:
         content: |
           helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
@@ -39,24 +45,40 @@ spec:
           kind: Agent
           metadata:
             name: researcher
+          status:
+            conditions:
+            - type: Available
+              status: "True"
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Agent
           metadata:
             name: analyst
+          status:
+            conditions:
+            - type: Available
+              status: "True"
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Agent
           metadata:
             name: summarizer
+          status:
+            conditions:
+            - type: Available
+              status: "True"
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Team
           metadata:
             name: sequential-research-team
+          status:
+            conditions:
+            - type: Available
+              status: "True"
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -64,7 +86,8 @@ spec:
           metadata:
             name: sequential-team-query
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -73,12 +96,29 @@ spec:
             name: sequential-team-query
           status:
             (length(responses)): 1
-            (contains(responses[*].target.name, 'sequential-research-team')): true
-            (length(join('', responses[*].content)) > `200`): true
             (contains(responses[0].content, 'SUMMARY:')): true
-            (contains(responses[0].content, 'artificial intelligence') || contains(responses[0].content, 'AI')): true
     catch:
     - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+        name: researcher
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+        name: analyst
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+        name: summarizer
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Team
+        name: sequential-research-team
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query

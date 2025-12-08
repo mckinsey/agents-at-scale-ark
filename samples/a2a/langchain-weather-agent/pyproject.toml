@@ -17,6 +17,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "httpx>=0.25.0",
     "click>=8.0.0",
+    "urllib3>=2.6.0",
 ]
 
 [tool.setuptools.packages.find]
