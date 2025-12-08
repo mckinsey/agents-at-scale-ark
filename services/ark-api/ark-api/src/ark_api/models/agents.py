@@ -33,10 +33,12 @@ class SecretKeyRef(BaseModel):
 
 
 class QueryParameterRef(BaseModel):
+    """Reference to a parameter in a query."""
     name: str
 
 
 class ServiceRef(BaseModel):
+    """Reference to a service."""
     name: str
     namespace: Optional[str] = None
     port: Optional[str] = None
