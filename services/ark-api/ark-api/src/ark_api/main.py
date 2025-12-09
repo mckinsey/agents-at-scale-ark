@@ -23,6 +23,7 @@ from .core.config import setup_logging
 from .auth.middleware import AuthMiddleware
 from .auth.constants import AuthMode
 from .auth.config import get_public_routes
+from .openapi.security import add_security_to_openapi
 from .api.v1.a2a_gateway import get_a2a_manager
 from ark_sdk.k8s import init_k8s
 
@@ -150,48 +151,11 @@ async def custom_openapi(request: Request):
     
     # Inject auth security schemes based on AUTH_MODE so that generated SDKs include auth
     auth_mode = os.getenv("AUTH_MODE", "").lower() or AuthMode.OPEN
-    components: Dict[str, Any] = openapi_schema.setdefault("components", {})
-    security_schemes: Dict[str, Any] = {}
-    global_security: list = []
-    
-    if auth_mode in [AuthMode.SSO, AuthMode.HYBRID]:
-        # HTTP Bearer JWT
-        security_schemes["bearerAuth"] = {
-            "type": "http",
-            "scheme": "bearer",
-            "bearerFormat": "JWT",
-            "description": "Provide a valid OIDC/JWT bearer token.",
-        }
-        global_security.append({"bearerAuth": []})
-    
-    if auth_mode in [AuthMode.BASIC, AuthMode.HYBRID]:
-        # HTTP Basic for API keys (public:secret base64)
-        security_schemes["basicAuth"] = {
-            "type": "http",
-            "scheme": "basic",
-            "description": "Use API key pair as Basic auth: public_key:secret_key.",
-        }
-        # For HYBRID we want OR semantics, so keep as another item
-        if {"basicAuth": []} not in global_security:
-            global_security.append({"basicAuth": []})
-    
-    # In OPEN mode, do not set any global security
-    if security_schemes:
-        components["securitySchemes"] = security_schemes
-        openapi_schema["components"] = components
-        openapi_schema["security"] = global_security
-    else:
-        # Ensure no security for fully open mode
-        openapi_schema.pop("security", None)
-    
-    # Clear security on explicitly public routes so they show unlocked in docs
-    public_routes = get_public_routes()
-    paths = openapi_schema.get("paths", {})
-    for path, path_item in paths.items():
-        if path in public_routes:
-            for method, operation in list(path_item.items()):
-                if method.lower() in ["get", "post", "put", "patch", "delete", "options", "head"]:
-                    operation["security"] = []
+    openapi_schema = add_security_to_openapi(
+        openapi_schema,
+        auth_mode=auth_mode,
+        public_routes=get_public_routes(),
+    )
     
     # Check if we have X-Forwarded-Prefix header indicating external path prefix
     forwarded_prefix = request.headers.get("x-forwarded-prefix", "")
