@@ -284,8 +284,8 @@ describe('FloatingChat', () => {
       vi.mocked(useAtomValue).mockReturnValue(true);
     });
 
-    describe('floating state (default)', () => {
-      it('should start in floating state with visible content', () => {
+    describe('default state', () => {
+      it('should start in default state with visible content', () => {
         render(<FloatingChat {...defaultProps} />);
 
         expect(
@@ -296,7 +296,7 @@ describe('FloatingChat', () => {
         ).toBeInTheDocument();
       });
 
-      it('should show minimize button in floating state', () => {
+      it('should show minimize button in default state', () => {
         render(<FloatingChat {...defaultProps} />);
 
         const minimizeButton = screen.getByRole('button', {
@@ -305,7 +305,7 @@ describe('FloatingChat', () => {
         expect(minimizeButton).toBeInTheDocument();
       });
 
-      it('should show maximize button in floating state', () => {
+      it('should show maximize button in default state', () => {
         render(<FloatingChat {...defaultProps} />);
 
         const maximizeButton = screen.getByRole('button', {

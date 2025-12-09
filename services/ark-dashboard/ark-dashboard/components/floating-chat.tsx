@@ -32,7 +32,7 @@ import {
 import { chatService } from '@/lib/services';
 
 type ChatType = 'model' | 'team' | 'agent';
-type WindowState = 'floating' | 'minimized' | 'maximized';
+type WindowState = 'default' | 'minimized' | 'maximized';
 
 interface FloatingChatProps {
   id: string;
@@ -54,7 +54,7 @@ export default function FloatingChat({
   const [currentMessage, setCurrentMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [windowState, setWindowState] = useState<WindowState>('floating');
+  const [windowState, setWindowState] = useState<WindowState>('default');
   const [viewMode, setViewMode] = useState<'text' | 'markdown'>('markdown');
   const [sessionId] = useState(() => `session-${Date.now()}`);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -247,7 +247,7 @@ export default function FloatingChat({
         return 'fixed inset-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 transition-all duration-300';
       case 'minimized':
         return 'fixed bottom-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 w-[400px] h-auto min-h-0 transition-all duration-300';
-      case 'floating':
+      case 'default':
       default:
         return 'fixed bottom-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 w-[400px] h-[500px] transition-all duration-300';
     }
@@ -285,7 +285,7 @@ export default function FloatingChat({
                 variant="ghost"
                 size="sm"
                 onClick={() =>
-                  setWindowState(isMinimized ? 'floating' : 'minimized')
+                  setWindowState(isMinimized ? 'default' : 'minimized')
                 }
                 className="h-6 w-6 p-0"
                 aria-label={isMinimized ? 'Restore chat' : 'Minimize chat'}>
@@ -299,7 +299,7 @@ export default function FloatingChat({
                 variant="ghost"
                 size="sm"
                 onClick={() =>
-                  setWindowState(isMaximized ? 'floating' : 'maximized')
+                  setWindowState(isMaximized ? 'default' : 'maximized')
                 }
                 className="h-6 w-6 p-0"
                 aria-label={isMaximized ? 'Restore size' : 'Maximize chat'}>
@@ -371,12 +371,10 @@ export default function FloatingChat({
                 )}
 
                 {chatMessages.map((message, index) => {
-                  // Extract string content from message
                   let content = '';
                   if (typeof message.content === 'string') {
                     content = message.content;
                   } else if (Array.isArray(message.content)) {
-                    // For multimodal content, extract text parts
                     content = message.content
                       .filter(
                         part =>
