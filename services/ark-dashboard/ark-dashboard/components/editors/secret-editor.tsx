@@ -1,4 +1,7 @@
-import { useEffect, useState } from 'react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import * as z from 'zod';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -9,8 +12,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import type { Secret } from '@/lib/services/secrets';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 
@@ -29,135 +39,131 @@ export function SecretEditor({
   onSave,
   existingSecrets = [],
 }: SecretEditorProps) {
-  const [name, setName] = useState(secret?.name || '');
-  const [password, setPassword] = useState('');
-  const [nameError, setNameError] = useState('');
+  const formSchema = z.object({
+    name: z
+      .string()
+      .min(1, 'Name is required')
+      .refine(val => kubernetesNameSchema.safeParse(val).success, {
+        message:
+          "Name must consist of lowercase alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character (max 253 chars)",
+      })
+      .refine(
+        val => {
+          if (secret) return true;
+          return !existingSecrets.some(s => s.name === val);
+        },
+        {
+          message: 'A secret with this name already exists',
+        },
+      ),
+    password: z.string().min(1, 'Password is required'),
+  });
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: '',
+      password: '',
+    },
+  });
 
   useEffect(() => {
     if (open) {
-      setName(secret?.name || '');
-      setPassword('');
-      setNameError('');
+      form.reset({
+        name: secret?.name || '',
+        password: '',
+      });
     }
-  }, [open, secret]);
+  }, [open, secret, form]);
 
-  const validateName = (value: string) => {
-    // Check if name is empty
-    if (!value.trim()) {
-      setNameError('Name is required');
-      return false;
-    }
-
-    // Check Kubernetes naming rules
-    if (!kubernetesNameSchema.safeParse(value).success) {
-      setNameError(
-        "Name must consist of lowercase alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character (max 253 chars)",
-      );
-      return false;
-    }
-
-    // Check uniqueness (only for new secrets)
-    if (!secret && existingSecrets.some(s => s.name === value)) {
-      setNameError('A secret with this name already exists');
-      return false;
-    }
-
-    setNameError('');
-    return true;
-  };
-
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setName(value);
-    if (value) {
-      validateName(value);
-    } else {
-      setNameError('');
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    // Validate name before submitting
-    if (!secret && !validateName(name)) {
-      return;
-    }
-
-    if (!password.trim()) {
-      return;
-    }
-
-    onSave(name, password);
+  const onSubmit = (values: z.infer<typeof formSchema>) => {
+    onSave(values.name, values.password);
     onOpenChange(false);
-    setName('');
-    setPassword('');
-    setNameError('');
   };
-
-  const isValid = (secret || (name && !nameError)) && password.trim();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>{secret ? 'Edit Secret' : 'Add Secret'}</DialogTitle>
-            <DialogDescription>
-              {secret
-                ? 'Update the password for this secret. The name cannot be changed.'
-                : 'Enter the details for the new secret.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="name" className="text-right">
-                  Name
-                </Label>
-                <div className="col-span-3 space-y-1">
-                  <Input
-                    id="name"
-                    value={name}
-                    onChange={handleNameChange}
-                    placeholder="e.g. api-key-production"
-                    required
-                    disabled={!!secret}
-                    className={nameError ? 'border-red-500' : ''}
-                  />
-                  {nameError && (
-                    <p className="text-xs text-red-500">{nameError}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="password" className="text-right">
-                Password
-              </Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                className="col-span-3"
-                placeholder="Enter the secret password"
-                required
+        <DialogHeader>
+          <DialogTitle>{secret ? 'Edit Secret' : 'Add Secret'}</DialogTitle>
+          <DialogDescription>
+            {secret
+              ? 'Update the password for this secret. The name cannot be changed.'
+              : 'Enter the details for the new secret.'}
+          </DialogDescription>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid gap-4 py-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <FormLabel className="text-right">
+                        Name <span className="text-red-500">*</span>
+                      </FormLabel>
+                      <div className="col-span-3 space-y-1">
+                        <FormControl>
+                          <Input
+                            placeholder="e.g. api-key-production"
+                            disabled={!!secret || form.formState.isSubmitting}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </div>
+                    </div>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <FormLabel className="text-right">
+                        Password <span className="text-red-500">*</span>
+                      </FormLabel>
+                      <div className="col-span-3">
+                        <FormControl>
+                          <Input
+                            type="password"
+                            placeholder="Enter the secret password"
+                            disabled={form.formState.isSubmitting}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </div>
+                    </div>
+                  </FormItem>
+                )}
               />
             </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={!isValid}>
-              {secret ? 'Update Secret' : 'Add Secret'}
-            </Button>
-          </DialogFooter>
-        </form>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={form.formState.isSubmitting}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={form.formState.isSubmitting}>
+                {form.formState.isSubmitting
+                  ? 'Saving...'
+                  : secret
+                    ? 'Update Secret'
+                    : 'Add Secret'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
