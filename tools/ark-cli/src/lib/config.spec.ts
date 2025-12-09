@@ -99,6 +99,15 @@ describe('config', () => {
     expect(config.queryTimeout).toBe('30m');
   });
 
+  it('loads defaultExportTypes from config file', () => {
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.readFileSync.mockReturnValue('yaml');
+    mockYaml.parse.mockReturnValue({defaultExportTypes: ['agents', 'teams']});
+
+    const config = loadConfig();
+    expect(config.defaultExportTypes).toEqual(['agents', 'teams']);
+  });
+
   it('ARK_QUERY_TIMEOUT environment variable overrides config', () => {
     mockFs.existsSync.mockReturnValue(true);
     mockFs.readFileSync.mockReturnValue('yaml');

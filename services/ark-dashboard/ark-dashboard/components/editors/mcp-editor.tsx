@@ -1,7 +1,10 @@
 'use client';
 
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Plus } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import * as z from 'zod';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -12,6 +15,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -29,7 +40,7 @@ import type {
   MCPServerCreateRequest,
   SecretHeader,
 } from '@/lib/services/mcp-servers';
-import { getKubernetesNameError } from '@/lib/utils/kubernetes-validation';
+import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 
 import { ConditionalInputRow } from '../ui/conditionalInputRow';
 
@@ -47,6 +58,15 @@ type HeaderData = {
   value: string;
 };
 
+const formSchema = z.object({
+  name: kubernetesNameSchema,
+  description: z.string().min(1, 'Description is required'),
+  baseUrl: z.string().min(1, 'URL is required'),
+  transport: z.enum(['http', 'sse'], {
+    message: 'Transport is required',
+  }),
+});
+
 export function McpEditor({
   open,
   onOpenChange,
@@ -54,20 +74,27 @@ export function McpEditor({
   onSave,
   namespace,
 }: McpEditorProps) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [baseUrl, setBaseUrl] = useState('');
-  const [nameError, setNameError] = useState<string | null>(null);
-  const [transport, setTransport] = useState<string>('http');
   const [headers, setHeaders] = useState<HeaderData[]>([
     { key: 'row-1', name: '', type: 'direct', value: '' },
   ]);
+  const [secrets, setSecrets] = useState<Secret[]>([]);
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: '',
+      description: '',
+      baseUrl: '',
+      transport: 'http',
+    },
+  });
 
   const updateRow = (index: number, updated: Partial<HeaderData>) => {
     setHeaders(prev =>
       prev.map((row, i) => (i === index ? { ...row, ...updated } : row)),
     );
   };
+
   const generateUniqueKey = () => {
     const randomValue = window.crypto.getRandomValues(new Uint32Array(1))[0];
     const generatedSuffix = randomValue % 100000;
@@ -93,9 +120,13 @@ export function McpEditor({
 
   const getMpcServerDetails = useCallback(async () => {
     const mcpServerData = await mcpServersService.get(mcpServer?.name ?? '');
-    setBaseUrl(mcpServerData?.address ?? '');
-    setTransport(mcpServerData?.transport ?? 'http');
-    setDescription(mcpServerData?.description ?? '');
+    form.setValue('baseUrl', mcpServerData?.address ?? '');
+    form.setValue(
+      'transport',
+      (mcpServerData?.transport as 'http' | 'sse') ?? 'http',
+    );
+    form.setValue('description', mcpServerData?.description ?? '');
+
     if (mcpServerData?.headers) {
       const transformedHeaders: HeaderData[] = mcpServerData?.headers?.map(
         (header: MCPHeader) => {
@@ -113,19 +144,28 @@ export function McpEditor({
       );
       setHeaders(transformedHeaders);
     }
-  }, [mcpServer?.name]);
+  }, [mcpServer?.name, form]);
 
   useEffect(() => {
     if (mcpServer && open) {
-      setName(mcpServer.name);
-      //setDescription(mcpServer.description ?? '');
+      form.reset({
+        name: mcpServer.name,
+        description: '',
+        baseUrl: '',
+        transport: 'http',
+      });
       getMpcServerDetails();
     } else {
-      setName('');
-      setDescription('');
-      setBaseUrl('');
+      form.reset();
+      setHeaders([{ key: 'row-1', name: '', type: 'direct', value: '' }]);
     }
-  }, [mcpServer, open, getMpcServerDetails]);
+  }, [mcpServer, open, getMpcServerDetails, form]);
+
+  useEffect(() => {
+    if (open && namespace) {
+      secretsService.getAll().then(setSecrets).catch(console.error);
+    }
+  }, [open, namespace]);
 
   const returnHeaderObj = (header: HeaderData): MCPHeader => {
     if (header.type === 'direct') {
@@ -150,18 +190,30 @@ export function McpEditor({
     }
   };
 
-  const handleSave = () => {
+  const onSubmit = (values: z.infer<typeof formSchema>) => {
+    // Validate headers
+    const allFieldsFilled = headers.every(
+      row => row.name.trim() !== '' && row.value.trim() !== '',
+    );
+
+    if (!allFieldsFilled) {
+      form.setError('name', {
+        message: 'All header fields must be filled in',
+      });
+      return;
+    }
+
     const modifiedHeaders: MCPHeader[] = headers.map(header => {
       return returnHeaderObj(header);
     });
     const createData: MCPServerCreateRequest = {
-      name,
+      name: values.name,
       namespace,
       spec: {
-        description: description,
-        transport,
+        description: values.description,
+        transport: values.transport,
         address: {
-          value: baseUrl,
+          value: values.baseUrl,
         },
         headers: modifiedHeaders,
       },
@@ -169,36 +221,6 @@ export function McpEditor({
     onSave(createData, !!mcpServer);
     onOpenChange(false);
   };
-
-  const handleNameChange = (value: string) => {
-    setName(value);
-    if (value) {
-      const error = getKubernetesNameError(value);
-      setNameError(error);
-    } else {
-      setNameError(null);
-    }
-  };
-  const [secrets, setSecrets] = useState<Secret[]>([]);
-
-  // Fetch secrets when dialog opens
-  useEffect(() => {
-    if (open && namespace) {
-      secretsService.getAll().then(setSecrets).catch(console.error);
-    }
-  }, [open, namespace]);
-
-  const allFieldsFilled = headers.every(
-    row => row.name.trim() !== '' && row.value.trim() !== '',
-  );
-
-  const isValid =
-    name.trim() &&
-    !nameError &&
-    description.trim() &&
-    baseUrl.trim() &&
-    transport?.trim() &&
-    allFieldsFilled;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -213,79 +235,132 @@ export function McpEditor({
               : 'Fill in the information for the new mcp server.'}
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="name">Name</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={e => handleNameChange(e.target.value)}
-              placeholder="e.g., gpt-4-turbo"
-              disabled={!!mcpServer}
-              className={nameError ? 'border-red-500' : ''}
-            />
-            {nameError && (
-              <p className="mt-1 text-sm text-red-500">{nameError}</p>
-            )}
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="description">Description</Label>
-            <Input
-              id="description"
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="e.g., This is a remote github mcp server"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="base-url">URL</Label>
-            <Input
-              id="base-url"
-              value={baseUrl}
-              onChange={e => setBaseUrl(e.target.value)}
-              placeholder="https:/github.com/v1"
-              disabled={!!mcpServer}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="transport">Transport</Label>
-            <Select
-              value={transport}
-              onValueChange={value => setTransport(value as 'http' | 'sse')}
-              disabled={!!mcpServer}>
-              <SelectTrigger id="transport">
-                <SelectValue placeholder="Select a transport" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="http">http</SelectItem>
-                <SelectItem value="sse">sse</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="base-url">Headers</Label>
-            {headers.map((row, index) => (
-              <ConditionalInputRow
-                key={row.key}
-                data={row}
-                onChange={updated => updateRow(index, updated)}
-                secrets={secrets}
-                deleteRow={deleteRow}
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid gap-4 py-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Name <span className="text-red-500">*</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g., gpt-4-turbo"
+                        disabled={!!mcpServer || form.formState.isSubmitting}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            ))}
-            <Button onClick={() => addRow()} variant="outline" size="icon">
-              <Plus className="h-2 w-2" />
-            </Button>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={!isValid}>
-            {mcpServer ? 'Update' : 'Create'}
-          </Button>
-        </DialogFooter>
+
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Description <span className="text-red-500">*</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g., This is a remote github mcp server"
+                        disabled={form.formState.isSubmitting}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="baseUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      URL <span className="text-red-500">*</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="https:/github.com/v1"
+                        disabled={!!mcpServer || form.formState.isSubmitting}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="transport"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Transport <span className="text-red-500">*</span>
+                    </FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={!!mcpServer || form.formState.isSubmitting}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a transport" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="http">http</SelectItem>
+                        <SelectItem value="sse">sse</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid gap-2">
+                <Label htmlFor="base-url">Headers</Label>
+                {headers.map((row, index) => (
+                  <ConditionalInputRow
+                    key={row.key}
+                    data={row}
+                    onChange={updated => updateRow(index, updated)}
+                    secrets={secrets}
+                    deleteRow={deleteRow}
+                  />
+                ))}
+                <Button onClick={() => addRow()} variant="outline" size="icon">
+                  <Plus className="h-2 w-2" />
+                </Button>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={form.formState.isSubmitting}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={form.formState.isSubmitting}>
+                {form.formState.isSubmitting
+                  ? 'Saving...'
+                  : mcpServer
+                    ? 'Update'
+                    : 'Create'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );

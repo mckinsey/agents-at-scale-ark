@@ -3515,17 +3515,6 @@ export interface components {
             /** Selectorprompt */
             selectorPrompt?: string | null;
         };
-        /** ServiceRef */
-        ServiceRef: {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace?: string | null;
-            /** Port */
-            port?: string | null;
-            /** Path */
-            path?: string | null;
-        };
         /**
          * SessionListResponse
          * @description Response model for listing sessions.
@@ -3892,7 +3881,10 @@ export interface components {
             value?: string | null;
             valueFrom?: components["schemas"]["ark_api__models__agents__ValueFrom"] | null;
         };
-        /** QueryParameterRef */
+        /**
+         * QueryParameterRef
+         * @description Reference to a parameter in a query.
+         */
         ark_api__models__agents__QueryParameterRef: {
             /** Name */
             name: string;
@@ -3910,13 +3902,27 @@ export interface components {
             optional?: boolean | null;
         };
         /**
+         * ServiceRef
+         * @description Reference to a service.
+         */
+        ark_api__models__agents__ServiceRef: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace?: string | null;
+            /** Port */
+            port?: string | null;
+            /** Path */
+            path?: string | null;
+        };
+        /**
          * ValueFrom
          * @description Reference to external sources for parameter values.
          */
         ark_api__models__agents__ValueFrom: {
             configMapKeyRef?: components["schemas"]["ark_api__models__agents__ConfigMapKeyRef"] | null;
             secretKeyRef?: components["schemas"]["ark_api__models__agents__SecretKeyRef"] | null;
-            serviceRef?: components["schemas"]["ServiceRef"] | null;
+            serviceRef?: components["schemas"]["ark_api__models__agents__ServiceRef"] | null;
             queryParameterRef?: components["schemas"]["ark_api__models__agents__QueryParameterRef"] | null;
         };
         /**
@@ -4034,6 +4040,11 @@ export interface components {
             name: string;
             value: components["schemas"]["ark_api__models__mcp_servers__ValueSource"];
         };
+        /** QueryParameterRef */
+        ark_api__models__mcp_servers__QueryParameterRef: {
+            /** Name */
+            name: string;
+        };
         /** SecretKeyRef */
         ark_api__models__mcp_servers__SecretKeyRef: {
             /** Key */
@@ -4043,12 +4054,23 @@ export interface components {
             /** Optional */
             optional?: boolean | null;
         };
+        /** ServiceRef */
+        ark_api__models__mcp_servers__ServiceRef: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace?: string | null;
+            /** Port */
+            port?: string | null;
+            /** Path */
+            path?: string | null;
+        };
         /** ValueFrom */
         ark_api__models__mcp_servers__ValueFrom: {
             configMapKeyRef?: components["schemas"]["ark_api__models__mcp_servers__ConfigMapKeyRef"] | null;
             secretKeyRef?: components["schemas"]["ark_api__models__mcp_servers__SecretKeyRef"] | null;
-            serviceRef?: components["schemas"]["ServiceRef"] | null;
-            queryParameterRef?: components["schemas"]["ark_api__models__agents__QueryParameterRef"] | null;
+            serviceRef?: components["schemas"]["ark_api__models__mcp_servers__ServiceRef"] | null;
+            queryParameterRef?: components["schemas"]["ark_api__models__mcp_servers__QueryParameterRef"] | null;
         };
         /**
          * ValueSource

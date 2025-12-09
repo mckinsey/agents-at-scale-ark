@@ -24,6 +24,7 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.41b0",
     "opentelemetry-instrumentation-httpx>=0.41b0",
     "opentelemetry-exporter-otlp>=1.20.0",
+    "urllib3>=2.6.0",
     "ark-sdk",
 ]
 
@@ -31,7 +32,7 @@ dependencies = [
 package = true
 
 [tool.uv.sources]
-ark-sdk = { path = "../../../out/ark-sdk/py-sdk/dist/ark_sdk-0.1.46-py3-none-any.whl" }
+ark-sdk = { path = "../../../out/ark-sdk/py-sdk/dist/ark_sdk-0.1.47-py3-none-any.whl" }
 
 [tool.coverage.run]
 data_file = "coverage/.coverage"
