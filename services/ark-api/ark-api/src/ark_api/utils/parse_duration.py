@@ -29,4 +29,4 @@ def parse_duration_to_seconds(duration_str: str | None) -> int | None:
     minutes = int(match.group(2) or 0)
     seconds = int(match.group(3) or 0)
     milliseconds = int(match.group(4) or 0)
-    return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000
+    return int(hours * 3600 + minutes * 60 + seconds + milliseconds / 1000)
