@@ -20,6 +20,7 @@ export interface ArkConfig {
   marketplace?: MarketplaceConfig;
   services?: {[serviceName: string]: Partial<ArkService>};
   queryTimeout?: string;
+  defaultExportTypes?: string[];
   // Cluster info - populated during startup if context exists
   clusterInfo?: ClusterInfo;
 }
@@ -139,6 +140,10 @@ function mergeConfig(target: ArkConfig, source: ArkConfig): void {
 
   if (source.queryTimeout !== undefined) {
     target.queryTimeout = source.queryTimeout;
+  }
+
+  if (source.defaultExportTypes) {
+    target.defaultExportTypes = source.defaultExportTypes
   }
 }
 

@@ -1,27 +1,29 @@
+from __future__ import annotations
+
 import json
 import logging
 import time
 import uuid
 
-from ark_sdk import QueryV1alpha1Spec
-from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
-from ark_sdk.streaming_config import get_streaming_config, get_streaming_base_url
-from ark_sdk.k8s import get_namespace
-from fastapi import APIRouter
-from fastapi.responses import StreamingResponse, JSONResponse
-from openai.types.chat import ChatCompletion, ChatCompletionMessageParam
-from openai.types import Model
-from pydantic import BaseModel, ValidationError
 import httpx
-from kubernetes_asyncio import client as k8s_client
-
+from ark_sdk import QueryV1alpha1Spec
 from ark_sdk.client import with_ark_client
+from ark_sdk.k8s import get_namespace
+from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
+from ark_sdk.streaming_config import get_streaming_base_url, get_streaming_config
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse, StreamingResponse
+from kubernetes_asyncio import client as k8s_client
+from openai.types import Model
+from openai.types.chat import ChatCompletion, ChatCompletionMessageParam
+from pydantic import BaseModel, ValidationError
+
+from ...constants.annotations import STREAMING_ENABLED_ANNOTATION
 from ...models.queries import ArkOpenAICompletionsMetadata
+from ...utils.parse_duration import parse_duration_to_seconds
 from ...utils.query_targets import parse_model_to_query_target
 from ...utils.query_watch import watch_query_completion
 from ...utils.streaming import StreamingErrorResponse, create_single_chunk_sse_response
-from ...utils.parse_duration import parse_duration_to_seconds
-from ...constants.annotations import STREAMING_ENABLED_ANNOTATION
 
 router = APIRouter(prefix="/openai/v1", tags=["OpenAI"])
 logger = logging.getLogger(__name__)
@@ -56,7 +58,9 @@ class ChatCompletionRequest(BaseModel):
     temperature: float = 1.0
     max_tokens: int | None = None
     stream: bool = False
-    metadata: dict | None = None  # Supports queryAnnotations: JSON string of K8s annotations
+    metadata: dict | None = (
+        None  # Supports queryAnnotations: JSON string of K8s annotations
+    )
 
 
 def process_request_metadata(
@@ -107,21 +111,28 @@ async def proxy_streaming_response(streaming_url: str):
                 try:
                     response_text = await response.aread()
                     response_json = json.loads(response_text.decode("utf-8"))
-                    
+
                     # Expected structure: {"error": {"message": "...", "type": "...", "code": "..."}}
-                    if not isinstance(response_json, dict) or "error" not in response_json:
+                    if (
+                        not isinstance(response_json, dict)
+                        or "error" not in response_json
+                    ):
                         raise ValueError("Response missing 'error' field")
-                    
+
                     error_obj = response_json["error"]
                     if not isinstance(error_obj, dict):
                         raise ValueError("'error' field must be an object")
-                    
-                    if "message" not in error_obj or not isinstance(error_obj["message"], str):
+
+                    if "message" not in error_obj or not isinstance(
+                        error_obj["message"], str
+                    ):
                         raise ValueError("'error.message' field missing or invalid")
-                    
-                    if "type" not in error_obj or not isinstance(error_obj["type"], str):
+
+                    if "type" not in error_obj or not isinstance(
+                        error_obj["type"], str
+                    ):
                         raise ValueError("'error.type' field missing or invalid")
-                    
+
                     # Use the error structure from response, with status code added
                     error_data: StreamingErrorResponse = {
                         "error": {
@@ -133,7 +144,9 @@ async def proxy_streaming_response(streaming_url: str):
                     }
                 except (json.JSONDecodeError, ValueError, KeyError) as e:
                     # If we can't parse the expected structure, create a default error
-                    logger.warning(f"Failed to parse error response structure: {e}, using default error format")
+                    logger.warning(
+                        f"Failed to parse error response structure: {e}, using default error format"
+                    )
                     error_data: StreamingErrorResponse = {
                         "error": {
                             "status": response.status_code,
@@ -200,7 +213,7 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             query_spec_dict["sessionId"] = session_id
         if timeout:
             query_spec_dict["timeout"] = timeout
-        
+
         # Create the QueryV1alpha1 object with type="messages"
         # Pass messages directly without json.dumps() - SDK handles serialization
         query_resource = QueryV1alpha1(
@@ -249,9 +262,7 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
 
             # Streaming is enabled - get the base URL and construct full URL
             base_url = await get_streaming_base_url(streaming_config, namespace, v1)
-            streaming_url = (
-                f"{base_url}/stream/{query_name}?from-beginning=true&wait-for-query={timeout_seconds}"
-            )
+            streaming_url = f"{base_url}/stream/{query_name}?from-beginning=true&wait-for-query={timeout_seconds}"
 
             # Proxy to the streaming endpoint
             logger.info(f"Streaming available for query: {query_name}")

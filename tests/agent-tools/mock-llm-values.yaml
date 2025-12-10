@@ -9,16 +9,20 @@ ark:
 
 config:
   rules:
-    # First request: trigger weather-tool call
+    # Catch-all - matches everything but gets overridden by more specific rules.
+    # This catches model probes which don't match the agent-specific rules below.
     - path: "/v1/chat/completions"
-      sequence: 0
+      response:
+        status: 200
+        content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
+
+    # Weather Agent - first call (no tool results yet) → returns tool_calls
+    - path: "/v1/chat/completions"
+      match: "contains(body.messages[0].content || '', 'Weather Agent')"
       response:
         status: 200
         content: |
           {
-            "id": "mock-{{timestamp}}",
-            "object": "chat.completion",
-            "model": "{{jmes request body.model}}",
             "choices": [{
               "message": {
                 "role": "assistant",
@@ -35,21 +39,9 @@ config:
             }]
           }
 
-    # Second request: return final answer after tool result
+    # Weather Agent - second call (has tool result) → returns final answer
     - path: "/v1/chat/completions"
-      sequence: 1
+      match: "body.messages[?role=='tool']"
       response:
         status: 200
-        content: |
-          {
-            "id": "mock-{{timestamp}}",
-            "object": "chat.completion",
-            "model": "{{jmes request body.model}}",
-            "choices": [{
-              "message": {
-                "role": "assistant",
-                "content": "The current weather in New York City is 68°F (20°C) with partly cloudy skies and winds from the west at 12 mph."
-              },
-              "finish_reason": "stop"
-            }]
-          }
+        content: '{"choices":[{"message":{"role":"assistant","content":"NYC weather: 68°F, partly cloudy."},"finish_reason":"stop"}]}'

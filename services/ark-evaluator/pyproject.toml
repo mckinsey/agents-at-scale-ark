@@ -22,6 +22,7 @@ dependencies = [
     "pandas>=2.0.0",
     "nest-asyncio>=1.5.0",
     "Pillow>=10.0.0",
+    "urllib3>=2.6.0",
     "ark-sdk",
 ]
 
@@ -29,7 +30,7 @@ dependencies = [
 package = true
 
 [tool.uv.sources]
-ark-sdk = { path = "ark_sdk-0.1.44-py3-none-any.whl" }
+ark-sdk = { path = "ark_sdk-0.1.47-py3-none-any.whl" }
 
 # ark-sdk dependency is managed by the build system
 # uv add $(ARK_SDK_WHL) is called in build.mk
