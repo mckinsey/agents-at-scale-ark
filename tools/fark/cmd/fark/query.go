@@ -14,14 +14,15 @@ import (
 	"mckinsey.com/ark/internal/annotations"
 )
 
-func createQuery(input string, targets []arkv1alpha1.QueryTarget, namespace string, params []arkv1alpha1.Parameter, sessionId string, timeout *time.Duration) (*arkv1alpha1.Query, error) {
+func createQuery(input string, targets []arkv1alpha1.QueryTarget, namespace string, params []arkv1alpha1.Parameter, sessionId string, conversationId string, timeout *time.Duration) (*arkv1alpha1.Query, error) {
 	queryName := fmt.Sprintf("cli-query-%d", time.Now().Unix())
 
 	spec := &arkv1alpha1.QuerySpec{
-		Input:      runtime.RawExtension{Raw: []byte(input)},
-		Targets:    targets,
-		Parameters: params,
-		SessionId:  sessionId,
+		Input:          runtime.RawExtension{Raw: []byte(input)},
+		Targets:        targets,
+		Parameters:     params,
+		SessionId:      sessionId,
+		ConversationId: conversationId,
 	}
 
 	// Set timeout if provided
@@ -166,7 +167,14 @@ func getSessionId(provided, existing string) string {
 	return existing
 }
 
-func createTriggerQuery(existingQuery *arkv1alpha1.Query, input runtime.RawExtension, params []arkv1alpha1.Parameter, sessionId string, timeout *time.Duration) (*arkv1alpha1.Query, error) {
+func getConversationId(provided, existing string) string {
+	if provided != "" {
+		return provided
+	}
+	return existing
+}
+
+func createTriggerQuery(existingQuery *arkv1alpha1.Query, input runtime.RawExtension, params []arkv1alpha1.Parameter, sessionId string, conversationId string, timeout *time.Duration) (*arkv1alpha1.Query, error) {
 	queryName := fmt.Sprintf("cli-trigger-%d", time.Now().Unix())
 
 	spec := &arkv1alpha1.QuerySpec{
@@ -177,6 +185,7 @@ func createTriggerQuery(existingQuery *arkv1alpha1.Query, input runtime.RawExten
 		Memory:         existingQuery.Spec.Memory,
 		ServiceAccount: existingQuery.Spec.ServiceAccount,
 		SessionId:      getSessionId(sessionId, existingQuery.Spec.SessionId),
+		ConversationId: getConversationId(conversationId, existingQuery.Spec.ConversationId),
 	}
 
 	// Set timeout - use provided timeout or inherit from existing query
