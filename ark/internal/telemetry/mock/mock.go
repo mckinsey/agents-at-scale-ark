@@ -248,6 +248,12 @@ func (r *MockQueryRecorder) RecordSessionID(span telemetry.Span, sessionID strin
 	}
 }
 
+func (r *MockQueryRecorder) RecordConversationID(span telemetry.Span, conversationID string) {
+	if conversationID != "" {
+		span.SetAttributes(telemetry.String(telemetry.AttrConversationID, conversationID))
+	}
+}
+
 func (r *MockQueryRecorder) RecordSuccess(span telemetry.Span) {
 	span.SetStatus(telemetry.StatusOk, "success")
 }

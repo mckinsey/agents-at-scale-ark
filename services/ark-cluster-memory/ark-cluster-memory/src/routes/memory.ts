@@ -322,5 +322,45 @@ export function createMemoryRouter(memory: MemoryStore): Router {
     res.json({ status: 'success', message: 'All conversations deleted' });
   });
 
+  /**
+   * @swagger
+   * /conversations/init:
+   *   post:
+   *     summary: Initialize or get a conversation ID
+   *     description: Returns an existing conversation ID if provided, or generates a new one
+   *     tags:
+   *       - Memory
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               conversation_id:
+   *                 type: string
+   *                 description: Optional conversation ID to use. If not provided, a new one will be generated.
+   *     responses:
+   *       200:
+   *         description: Conversation ID returned
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 conversation_id:
+   *                   type: string
+   *                   description: The conversation ID (provided or generated)
+   */
+  router.post('/conversations/init', (req, res) => {
+    let conversation_id = req.body?.conversation_id;
+
+    if (!conversation_id) {
+      conversation_id = `conv-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    }
+
+    res.json({ conversation_id });
+  });
+
   return router;
 }
