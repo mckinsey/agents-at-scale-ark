@@ -98,10 +98,15 @@ ark-tenant:
 minio:
   enabled: false
   tenant:
+    certificate:
+      requestAutoCert: false
     configSecret:
       name: myminio-env-configuration
       accessKey: minio
       secretKey: minio123
+    env:
+      - name: CONSOLE_SECURE_TLS_REDIRECT
+        value: "off"
     buckets:
       - name: argo-artifacts
 

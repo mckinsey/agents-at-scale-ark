@@ -9,6 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from kubernetes_asyncio import client
 from dotenv import load_dotenv
+from typing import Dict, Any
 from opentelemetry import baggage, propagate, trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -20,6 +21,9 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from .api import router
 from .core.config import setup_logging
 from .auth.middleware import AuthMiddleware
+from .auth.constants import AuthMode
+from .auth.config import get_public_routes
+from .openapi.security import add_security_to_openapi
 from .api.v1.a2a_gateway import get_a2a_manager
 from ark_sdk.k8s import init_k8s
 
@@ -144,6 +148,14 @@ async def custom_swagger_ui_html(request: Request):
 async def custom_openapi(request: Request):
     # Get the default OpenAPI spec
     openapi_schema = app.openapi()
+    
+    # Inject auth security schemes based on AUTH_MODE so that generated SDKs include auth
+    auth_mode = os.getenv("AUTH_MODE", "").lower() or AuthMode.OPEN
+    openapi_schema = add_security_to_openapi(
+        openapi_schema,
+        auth_mode=auth_mode,
+        public_routes=get_public_routes(),
+    )
     
     # Check if we have X-Forwarded-Prefix header indicating external path prefix
     forwarded_prefix = request.headers.get("x-forwarded-prefix", "")
