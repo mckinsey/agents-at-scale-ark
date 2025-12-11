@@ -49,7 +49,8 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    */
   router.post('/messages', (req, res) => {
     try {
-      let { conversation_id, query_id, messages } = req.body;
+      let conversation_id = req.body.conversation_id;
+      const { query_id, messages } = req.body;
 
       // Generate conversation_id if not provided
       if (!conversation_id) {
