@@ -43,25 +43,25 @@ type MemoryInterface interface {
 }
 
 type Config struct {
-	Timeout    time.Duration
-	MaxRetries int
-	RetryDelay time.Duration
-	SessionId  string
-	QueryName  string
+	Timeout        time.Duration
+	MaxRetries     int
+	RetryDelay     time.Duration
+	ConversationId string
+	QueryName      string
 }
 
 type MessagesRequest struct {
-	SessionID string                                   `json:"session_id"`
-	QueryID   string                                   `json:"query_id"`
-	Messages  []openai.ChatCompletionMessageParamUnion `json:"messages"`
+	ConversationID string                                   `json:"conversation_id,omitempty"`
+	QueryID        string                                   `json:"query_id"`
+	Messages       []openai.ChatCompletionMessageParamUnion `json:"messages"`
 }
 
 type MessageRecord struct {
-	ID        int64           `json:"id"`
-	SessionID string          `json:"session_id"`
-	QueryID   string          `json:"query_id"`
-	Message   json.RawMessage `json:"message"`
-	CreatedAt string          `json:"created_at"`
+	ID             int64           `json:"id"`
+	ConversationID string          `json:"conversation_id"`
+	QueryID        string          `json:"query_id"`
+	Message        json.RawMessage `json:"message"`
+	CreatedAt      string          `json:"created_at"`
 }
 
 type MessagesResponse struct {
@@ -87,9 +87,9 @@ func NewMemoryWithConfig(ctx context.Context, k8sClient client.Client, memoryNam
 	return NewHTTPMemory(ctx, k8sClient, memoryName, namespace, config, memoryRecorder)
 }
 
-func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *arkv1alpha1.MemoryRef, namespace, sessionId, queryName string, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
+func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *arkv1alpha1.MemoryRef, namespace, conversationId, queryName string, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
 	config := DefaultConfig()
-	config.SessionId = sessionId
+	config.ConversationId = conversationId
 	config.QueryName = queryName
 
 	var memoryName, memoryNamespace string
