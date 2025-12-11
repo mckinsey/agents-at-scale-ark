@@ -87,7 +87,8 @@ export function createMemoryRouter(memory: MemoryStore): Router {
       const query_id = req.query.query_id as string;
 
       const allMessages = memory.getAllMessages();
-      let filteredMessages = allMessages;
+      // Filter out messages with null conversation_id (legacy data)
+      let filteredMessages = allMessages.filter(m => m.conversation_id != null);
 
       // Apply filters if provided
       if (conversation_id) {

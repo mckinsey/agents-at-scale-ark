@@ -181,8 +181,12 @@ export class MemoryStore<TMessage extends Message = Message> {
   }
 
   getConversations(): string[] {
-    // Get unique conversation IDs from the flat list
-    const conversationSet = new Set(this.messages.map(m => m.conversation_id));
+    // Get unique conversation IDs from the flat list, filtering out null/undefined
+    const conversationSet = new Set(
+      this.messages
+        .map(m => m.conversation_id)
+        .filter(id => id != null)
+    );
     return Array.from(conversationSet);
   }
 
