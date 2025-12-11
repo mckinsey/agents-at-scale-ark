@@ -9,43 +9,43 @@ describe('MemoryStore', () => {
     store = new MemoryStore();
   });
 
-  describe('Session Management', () => {
-    test('should add message to session', () => {
-      store.addMessage('test-session', { content: 'Hello, world!' });
+  describe('Conversation Management', () => {
+    test('should add message to conversation', () => {
+      store.addMessage('test-conversation', { content: 'Hello, world!' });
 
-      const messages = store.getMessages('test-session');
+      const messages = store.getMessages('test-conversation');
       expect(messages).toHaveLength(1);
       expect(messages[0]).toEqual({ content: 'Hello, world!' });
     });
 
-    test('should add multiple messages to session', () => {
+    test('should add multiple messages to conversation', () => {
       const messages = [
         { role: 'user', content: 'First message' },
         { role: 'assistant', content: 'Second message' }
       ];
 
-      store.addMessages('test-session', messages);
+      store.addMessages('test-conversation', messages);
 
-      const retrieved = store.getMessages('test-session');
+      const retrieved = store.getMessages('test-conversation');
       expect(retrieved).toHaveLength(2);
       expect(retrieved).toEqual(messages);
     });
 
-    test('should return empty array for non-existent session', () => {
+    test('should return empty array for non-existent conversation', () => {
       const messages = store.getMessages('non-existent');
       expect(messages).toEqual([]);
     });
 
-    test('should validate session ID', () => {
-      expect(() => store.addMessage('', 'message')).toThrow('Session ID cannot be empty');
+    test('should validate conversation ID', () => {
+      expect(() => store.addMessage('', 'message')).toThrow('Conversation ID cannot be empty');
     });
 
-    test('should track multiple sessions independently', () => {
-      store.addMessage('session1', 'message1');
-      store.addMessage('session2', 'message2');
+    test('should track multiple conversations independently', () => {
+      store.addMessage('conversation1', 'message1');
+      store.addMessage('conversation2', 'message2');
 
-      expect(store.getMessages('session1')).toEqual(['message1']);
-      expect(store.getMessages('session2')).toEqual(['message2']);
+      expect(store.getMessages('conversation1')).toEqual(['message1']);
+      expect(store.getMessages('conversation2')).toEqual(['message2']);
     });
   });
 
@@ -94,8 +94,8 @@ describe('MemoryStore', () => {
 
   describe('Sequence Numbers', () => {
     test('should assign sequential numbers to messages', () => {
-      store.addMessage('test-session', { content: 'First message' });
-      store.addMessage('test-session', { content: 'Second message' });
+      store.addMessage('test-conversation', { content: 'First message' });
+      store.addMessage('test-conversation', { content: 'Second message' });
 
       const allMessages = store.getAllMessages();
       expect(allMessages).toHaveLength(2);
@@ -109,7 +109,7 @@ describe('MemoryStore', () => {
         { role: 'assistant', content: 'Second message' }
       ];
 
-      store.addMessages('test-session', messages);
+      store.addMessages('test-conversation', messages);
 
       const allMessages = store.getAllMessages();
       expect(allMessages).toHaveLength(2);
@@ -123,7 +123,7 @@ describe('MemoryStore', () => {
         { role: 'assistant', content: 'Second message' }
       ];
 
-      store.addMessagesWithMetadata('test-session', 'query1', messages);
+      store.addMessagesWithMetadata('test-conversation', 'query1', messages);
 
       const allMessages = store.getAllMessages();
       expect(allMessages).toHaveLength(2);
@@ -131,10 +131,10 @@ describe('MemoryStore', () => {
       expect(allMessages[1].sequence).toBe(2);
     });
 
-    test('should maintain sequence order across different sessions', () => {
-      store.addMessage('session1', { content: 'Message 1' });
-      store.addMessage('session2', { content: 'Message 2' });
-      store.addMessage('session1', { content: 'Message 3' });
+    test('should maintain sequence order across different conversations', () => {
+      store.addMessage('conversation1', { content: 'Message 1' });
+      store.addMessage('conversation2', { content: 'Message 2' });
+      store.addMessage('conversation1', { content: 'Message 3' });
 
       const allMessages = store.getAllMessages();
       expect(allMessages).toHaveLength(3);
@@ -146,13 +146,13 @@ describe('MemoryStore', () => {
 
   describe('Stats and Health', () => {
     test('should return service stats', () => {
-      store.addMessage('session1', 'message1');
-      store.addMessage('session1', 'message2');
-      store.addMessage('session2', 'message3');
+      store.addMessage('conversation1', 'message1');
+      store.addMessage('conversation1', 'message2');
+      store.addMessage('conversation2', 'message3');
 
       const stats = store.getStats();
 
-      expect(stats.sessions).toBe(2);
+      expect(stats.conversations).toBe(2);
       expect(stats.totalMessages).toBe(3);
     });
 
@@ -175,7 +175,7 @@ describe('MemoryStore', () => {
       const unlimitedStore = new MemoryStore<TestMessage>();
 
       for (let i = 0; i < 100; i++) {
-        unlimitedStore.addMessage('session1', { content: `Message ${i}` });
+        unlimitedStore.addMessage('conversation1', { content: `Message ${i}` });
       }
 
       expect(unlimitedStore.getAllMessages()).toHaveLength(100);
@@ -186,7 +186,7 @@ describe('MemoryStore', () => {
       const limitedStore = new MemoryStore<TestMessage>();
 
       for (let i = 0; i < 10; i++) {
-        limitedStore.addMessage('session1', { content: `Message ${i}` });
+        limitedStore.addMessage('conversation1', { content: `Message ${i}` });
       }
 
       const allMessages = limitedStore.getAllMessages();
@@ -200,7 +200,7 @@ describe('MemoryStore', () => {
       const limitedStore = new MemoryStore<TestMessage>();
 
       for (let i = 0; i < 5; i++) {
-        limitedStore.addMessage('session1', { content: `Message ${i}` });
+        limitedStore.addMessage('conversation1', { content: `Message ${i}` });
       }
 
       const allMessages = limitedStore.getAllMessages();
@@ -210,15 +210,15 @@ describe('MemoryStore', () => {
       expect(allMessages[2].sequence).toBe(3);
     });
 
-    test('should cleanup across multiple sessions when limit reached', () => {
+    test('should cleanup across multiple conversations when limit reached', () => {
       process.env.MAX_MEMORY_DB = '4';
       const limitedStore = new MemoryStore<TestMessage>();
 
-      limitedStore.addMessage('session1', { content: 'Session1-Message1' });
-      limitedStore.addMessage('session2', { content: 'Session2-Message1' });
-      limitedStore.addMessage('session1', { content: 'Session1-Message2' });
-      limitedStore.addMessage('session2', { content: 'Session2-Message2' });
-      limitedStore.addMessage('session1', { content: 'Session1-Message3' });
+      limitedStore.addMessage('conversation1', { content: 'Conversation1-Message1' });
+      limitedStore.addMessage('conversation2', { content: 'Conversation2-Message1' });
+      limitedStore.addMessage('conversation1', { content: 'Conversation1-Message2' });
+      limitedStore.addMessage('conversation2', { content: 'Conversation2-Message2' });
+      limitedStore.addMessage('conversation1', { content: 'Conversation1-Message3' });
 
       const allMessages = limitedStore.getAllMessages();
       expect(allMessages).toHaveLength(4);
@@ -228,9 +228,9 @@ describe('MemoryStore', () => {
       process.env.MAX_MEMORY_DB = '3';
       const limitedStore = new MemoryStore<TestMessage>();
 
-      limitedStore.addMessage('session1', { content: 'Message1' });
-      limitedStore.addMessage('session1', { content: 'Message2' });
-      limitedStore.addMessages('session1', [
+      limitedStore.addMessage('conversation1', { content: 'Message1' });
+      limitedStore.addMessage('conversation1', { content: 'Message2' });
+      limitedStore.addMessages('conversation1', [
         { content: 'Message3' },
         { content: 'Message4' },
         { content: 'Message5' }
@@ -254,7 +254,7 @@ describe('MemoryStore', () => {
       delete process.env.MAX_ITEM_AGE;
       const unlimitedStore = new MemoryStore<TestMessage>();
 
-      unlimitedStore.addMessage('session1', { content: 'Message1' });
+      unlimitedStore.addMessage('conversation1', { content: 'Message1' });
 
       expect(unlimitedStore.getAllMessages()).toHaveLength(1);
     });
@@ -263,12 +263,12 @@ describe('MemoryStore', () => {
       process.env.MAX_ITEM_AGE = '1';
       const ageLimitedStore = new MemoryStore<TestMessage>();
 
-      ageLimitedStore.addMessage('session1', { content: 'Message1' });
+      ageLimitedStore.addMessage('conversation1', { content: 'Message1' });
 
       const oldMessage = ageLimitedStore.getAllMessages()[0];
       oldMessage.timestamp = new Date(Date.now() - 2000).toISOString();
 
-      ageLimitedStore.addMessage('session1', { content: 'Message2' });
+      ageLimitedStore.addMessage('conversation1', { content: 'Message2' });
 
       const allMessages = ageLimitedStore.getAllMessages();
       expect(allMessages).toHaveLength(1);
@@ -279,8 +279,8 @@ describe('MemoryStore', () => {
       process.env.MAX_ITEM_AGE = '10';
       const ageLimitedStore = new MemoryStore<TestMessage>();
 
-      ageLimitedStore.addMessage('session1', { content: 'Message1' });
-      ageLimitedStore.addMessage('session1', { content: 'Message2' });
+      ageLimitedStore.addMessage('conversation1', { content: 'Message1' });
+      ageLimitedStore.addMessage('conversation1', { content: 'Message2' });
 
       const allMessages = ageLimitedStore.getAllMessages();
       expect(allMessages).toHaveLength(2);
@@ -290,11 +290,11 @@ describe('MemoryStore', () => {
       process.env.MAX_ITEM_AGE = '1';
       const ageLimitedStore = new MemoryStore<TestMessage>();
 
-      ageLimitedStore.addMessage('session1', { content: 'Message1' });
+      ageLimitedStore.addMessage('conversation1', { content: 'Message1' });
       const messages = ageLimitedStore.getAllMessages();
       messages[0].timestamp = new Date(Date.now() - 2000).toISOString();
 
-      ageLimitedStore.addMessage('session1', { content: 'Message2' });
+      ageLimitedStore.addMessage('conversation1', { content: 'Message2' });
 
       const allMessages = ageLimitedStore.getAllMessages();
       expect(allMessages.length).toBeLessThanOrEqual(1);
@@ -323,13 +323,13 @@ describe('MemoryStore', () => {
       process.env.MAX_MEMORY_DB = '3';
       const combinedStore = new MemoryStore<{ content: string }>();
 
-      combinedStore.addMessage('session1', { content: 'Message1' });
+      combinedStore.addMessage('conversation1', { content: 'Message1' });
       const oldMessage = combinedStore.getAllMessages()[0];
       oldMessage.timestamp = new Date(Date.now() - 20000).toISOString();
 
-      combinedStore.addMessage('session1', { content: 'Message2' });
-      combinedStore.addMessage('session1', { content: 'Message3' });
-      combinedStore.addMessage('session1', { content: 'Message4' });
+      combinedStore.addMessage('conversation1', { content: 'Message2' });
+      combinedStore.addMessage('conversation1', { content: 'Message3' });
+      combinedStore.addMessage('conversation1', { content: 'Message4' });
 
       const allMessages = combinedStore.getAllMessages();
       expect(allMessages.length).toBeLessThanOrEqual(3);
@@ -342,7 +342,7 @@ describe('MemoryStore', () => {
       const combinedStore = new MemoryStore<TestMessage>();
 
       for (let i = 0; i < 8; i++) {
-        combinedStore.addMessage('session1', { content: `Message ${i}` });
+        combinedStore.addMessage('conversation1', { content: `Message ${i}` });
       }
 
       const allMessages = combinedStore.getAllMessages();
@@ -358,7 +358,7 @@ describe('MemoryStore', () => {
       const emptyStore = new MemoryStore<TestMessage>();
 
       expect(emptyStore.getAllMessages()).toHaveLength(0);
-      emptyStore.addMessage('session1', { content: 'Message1' });
+      emptyStore.addMessage('conversation1', { content: 'Message1' });
       expect(emptyStore.getAllMessages()).toHaveLength(1);
     });
 
@@ -366,12 +366,12 @@ describe('MemoryStore', () => {
       process.env.MAX_MEMORY_DB = '3';
       const store = new MemoryStore<TestMessage>();
 
-      store.addMessage('session1', { content: 'Message1' });
-      store.addMessage('session1', { content: 'Message2' });
-      store.addMessage('session1', { content: 'Message3' });
+      store.addMessage('conversation1', { content: 'Message1' });
+      store.addMessage('conversation1', { content: 'Message2' });
+      store.addMessage('conversation1', { content: 'Message3' });
 
       expect(store.getAllMessages()).toHaveLength(3);
-      store.addMessage('session1', { content: 'Message4' });
+      store.addMessage('conversation1', { content: 'Message4' });
       expect(store.getAllMessages()).toHaveLength(3);
     });
 
@@ -381,10 +381,10 @@ describe('MemoryStore', () => {
         content: string;
       }>();
 
-      store.addMessage('session1', { content: 'Message1' });
-      store.addMessage('session1', { content: 'Message2' });
-      store.addMessage('session1', { content: 'Message3' });
-      store.addMessage('session1', { content: 'Message4' });
+      store.addMessage('conversation1', { content: 'Message1' });
+      store.addMessage('conversation1', { content: 'Message2' });
+      store.addMessage('conversation1', { content: 'Message3' });
+      store.addMessage('conversation1', { content: 'Message4' });
 
       const allMessages = store.getAllMessages();
       expect(allMessages[0].message.content).toBe('Message2');

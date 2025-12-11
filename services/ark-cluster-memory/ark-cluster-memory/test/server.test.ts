@@ -19,7 +19,7 @@ describe('ARK Cluster Memory API', () => {
 
   describe('Single Message Endpoints', () => {
     test('should initially have no messages', async () => {
-      const response = await request(app).get('/messages?session_id=test-session');
+      const response = await request(app).get('/messages?conversation_id=test-conversation');
 
       expect(response.status).toBe(200);
       expect(response.body.messages).toEqual([]);
@@ -31,12 +31,13 @@ describe('ARK Cluster Memory API', () => {
       // Add message
       const addResponse = await request(app)
         .post('/messages')
-        .send({ session_id: 'test-session-single', query_id: 'query1', messages: [message] });
+        .send({ conversation_id: 'test-conversation-single', query_id: 'query1', messages: [message] });
 
       expect(addResponse.status).toBe(200);
+      expect(addResponse.body.conversation_id).toBe('test-conversation-single');
 
       // Retrieve messages
-      const getResponse = await request(app).get('/messages?session_id=test-session-single');
+      const getResponse = await request(app).get('/messages?conversation_id=test-conversation-single');
 
       expect(getResponse.status).toBe(200);
       expect(getResponse.body.messages).toHaveLength(1);
@@ -50,13 +51,13 @@ describe('ARK Cluster Memory API', () => {
 
       await request(app)
         .post('/messages')
-        .send({ session_id: 'test-session-2', query_id: 'query2', messages: [message1] });
+        .send({ conversation_id: 'test-conversation-2', query_id: 'query2', messages: [message1] });
 
       await request(app)
         .post('/messages')
-        .send({ session_id: 'test-session-2', query_id: 'query2', messages: [message2] });
+        .send({ conversation_id: 'test-conversation-2', query_id: 'query2', messages: [message2] });
 
-      const response = await request(app).get('/messages?session_id=test-session-2');
+      const response = await request(app).get('/messages?conversation_id=test-conversation-2');
 
       expect(response.status).toBe(200);
       expect(response.body.messages).toHaveLength(2);
@@ -66,13 +67,25 @@ describe('ARK Cluster Memory API', () => {
       expect(response.body.messages[1].sequence).toBe(2);
     });
 
-    test('should return error for missing message', async () => {
+    test('should return error for missing query_id', async () => {
       const response = await request(app)
         .post('/messages')
         .send({});
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('session_id is required');
+      expect(response.body.error).toBe('query_id is required');
+    });
+
+    test('should generate conversation_id if not provided', async () => {
+      const message = { role: 'user', content: 'Test message' };
+
+      const addResponse = await request(app)
+        .post('/messages')
+        .send({ query_id: 'query1', messages: [message] });
+
+      expect(addResponse.status).toBe(200);
+      expect(addResponse.body.conversation_id).toBeDefined();
+      expect(addResponse.body.conversation_id).toMatch(/^conv-\d+-[a-z0-9]+$/);
     });
   });
 
@@ -86,12 +99,12 @@ describe('ARK Cluster Memory API', () => {
       // Add messages
       const addResponse = await request(app)
         .post('/messages')
-        .send({ session_id: 'batch-session', query_id: 'batch-query', messages });
+        .send({ conversation_id: 'batch-conversation', query_id: 'batch-query', messages });
 
       expect(addResponse.status).toBe(200);
 
       // Retrieve messages
-      const getResponse = await request(app).get('/messages?session_id=batch-session');
+      const getResponse = await request(app).get('/messages?conversation_id=batch-conversation');
 
       expect(getResponse.status).toBe(200);
       expect(getResponse.body.messages).toHaveLength(2);
@@ -104,63 +117,63 @@ describe('ARK Cluster Memory API', () => {
     test('should return error for invalid messages array', async () => {
       const response = await request(app)
         .post('/messages')
-        .send({ session_id: 'test-session', query_id: 'query1', messages: 'not-an-array' });
+        .send({ conversation_id: 'test-conversation', query_id: 'query1', messages: 'not-an-array' });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe('messages array is required');
     });
   });
 
-  describe('Session Isolation', () => {
-    test('should keep different sessions separate', async () => {
-      const message1 = { role: 'user', content: 'Message for session 1' };
-      const message2 = { role: 'user', content: 'Message for session 2' };
+  describe('Conversation Isolation', () => {
+    test('should keep different conversations separate', async () => {
+      const message1 = { role: 'user', content: 'Message for conversation 1' };
+      const message2 = { role: 'user', content: 'Message for conversation 2' };
 
       await request(app)
         .post('/messages')
-        .send({ session_id: 'session1', query_id: 'q1', messages: [message1] });
+        .send({ conversation_id: 'conversation1', query_id: 'q1', messages: [message1] });
 
       await request(app)
         .post('/messages')
-        .send({ session_id: 'session2', query_id: 'q2', messages: [message2] });
+        .send({ conversation_id: 'conversation2', query_id: 'q2', messages: [message2] });
 
-      // Check session1
-      const response1 = await request(app).get('/messages?session_id=session1');
+      // Check conversation1
+      const response1 = await request(app).get('/messages?conversation_id=conversation1');
       expect(response1.body.messages).toHaveLength(1);
       expect(response1.body.messages[0].message).toEqual(message1);
 
-      // Check session2
-      const response2 = await request(app).get('/messages?session_id=session2');
+      // Check conversation2
+      const response2 = await request(app).get('/messages?conversation_id=conversation2');
       expect(response2.body.messages).toHaveLength(1);
       expect(response2.body.messages[0].message).toEqual(message2);
     });
   });
 
   describe('Sequence Number Ordering', () => {
-    test('should maintain correct sequence order across sessions', async () => {
+    test('should maintain correct sequence order across conversations', async () => {
       const message1 = { role: 'user', content: 'First message' };
       const message2 = { role: 'user', content: 'Second message' };
       const message3 = { role: 'user', content: 'Third message' };
 
-      // Add messages in different sessions
+      // Add messages in different conversations
       await request(app)
         .post('/messages')
-        .send({ session_id: 'session1', query_id: 'q1', messages: [message1] });
+        .send({ conversation_id: 'conversation1', query_id: 'q1', messages: [message1] });
 
       await request(app)
         .post('/messages')
-        .send({ session_id: 'session2', query_id: 'q2', messages: [message2] });
+        .send({ conversation_id: 'conversation2', query_id: 'q2', messages: [message2] });
 
       await request(app)
         .post('/messages')
-        .send({ session_id: 'session1', query_id: 'q1', messages: [message3] });
+        .send({ conversation_id: 'conversation1', query_id: 'q1', messages: [message3] });
 
-      // Get all messages (no session filter)
+      // Get all messages (no conversation filter)
       const response = await request(app).get('/messages');
 
       expect(response.status).toBe(200);
       expect(response.body.messages).toHaveLength(3);
-      
+
       // Messages should be in sequence order (1, 2, 3)
       expect(response.body.messages[0].sequence).toBe(1);
       expect(response.body.messages[1].sequence).toBe(2);
@@ -171,18 +184,18 @@ describe('ARK Cluster Memory API', () => {
   describe('Error Handling', () => {
     test('should return 404 for unknown routes', async () => {
       const response = await request(app).get('/unknown');
-      
+
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Not found');
     });
 
-    test('should handle empty session ID', async () => {
+    test('should handle missing query_id', async () => {
       const response = await request(app)
         .post('/messages')
-        .send({ query_id: 'query1', messages: ['test'] });
+        .send({ messages: ['test'] });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('session_id is required');
+      expect(response.body.error).toBe('query_id is required');
     });
   });
 });
