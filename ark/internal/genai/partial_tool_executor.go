@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
 )
@@ -12,10 +14,11 @@ import (
 type PartialToolExecutor struct {
 	BaseExecutor ToolExecutor
 	Partial      *arkv1alpha1.ToolPartial
+	K8sClient    client.Client
+	Namespace    string
 }
 
 func (p *PartialToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
-	// Parse agent-provided arguments
 	var agentParams map[string]any
 	if call.Function.Arguments != "" {
 		if err := json.Unmarshal([]byte(call.Function.Arguments), &agentParams); err != nil {
@@ -42,20 +45,19 @@ func (p *PartialToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolR
 			}, fmt.Errorf("failed to resolve query context for partial parameter template")
 		}
 
-		// Prepare template data as {"Query": {paramName: paramValue, ...}}
 		data := map[string]any{"Query": map[string]any{}}
-		for _, p := range query.Spec.Parameters {
-			data["Query"].(map[string]any)[p.Name] = p.Value
+		for _, qp := range query.Spec.Parameters {
+			data["Query"].(map[string]any)[qp.Name] = qp.Value
 		}
 
 		for _, param := range p.Partial.Parameters {
-			resolved, err := common.ResolveTemplate(param.Value, data)
+			resolved, err := p.resolveParameter(ctx, param, query, data)
 			if err != nil {
 				return ToolResult{
 					ID:    call.ID,
 					Name:  call.Function.Name,
-					Error: fmt.Sprintf("failed to resolve template for partial parameter '%s': %v", param.Name, err),
-				}, fmt.Errorf("failed to resolve template for partial parameter '%s': %w", param.Name, err)
+					Error: fmt.Sprintf("failed to resolve partial parameter '%s': %v", param.Name, err),
+				}, fmt.Errorf("failed to resolve partial parameter '%s': %w", param.Name, err)
 			}
 			partialParams[param.Name] = resolved
 		}
@@ -69,7 +71,6 @@ func (p *PartialToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolR
 		mergedParams[k] = v
 	}
 
-	// Marshal merged params back to JSON
 	argsBytes, err := json.Marshal(mergedParams)
 	if err != nil {
 		return ToolResult{
@@ -80,4 +81,11 @@ func (p *PartialToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolR
 	}
 	call.Function.Arguments = string(argsBytes)
 	return p.BaseExecutor.Execute(ctx, call)
+}
+
+func (p *PartialToolExecutor) resolveParameter(ctx context.Context, param arkv1alpha1.ToolFunction, query *arkv1alpha1.Query, templateData map[string]any) (string, error) {
+	if param.ValueFrom != nil {
+		return resolveValueFromWithQuery(ctx, p.K8sClient, p.Namespace, param.ValueFrom, query)
+	}
+	return common.ResolveTemplate(param.Value, templateData)
 }

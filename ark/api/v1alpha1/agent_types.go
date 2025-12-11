@@ -13,6 +13,8 @@ type ToolFunction struct {
 	Name string `json:"name"`
 	// +kubebuilder:validation:Optional
 	Value string `json:"value,omitempty"`
+	// +kubebuilder:validation:Optional
+	ValueFrom *ValueFromSource `json:"valueFrom,omitempty"`
 }
 
 type ToolPartial struct {

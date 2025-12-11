@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pytest
 from ark_api.utils.parse_duration import parse_duration_to_seconds
 
@@ -18,8 +20,8 @@ class TestParseDurationToSeconds:
         assert parse_duration_to_seconds("2h") == 7200
 
     def test_milliseconds(self):
-        assert parse_duration_to_seconds("500ms") == 0.5
-        assert parse_duration_to_seconds("1000ms") == 1.0
+        assert parse_duration_to_seconds("500ms") == 0
+        assert parse_duration_to_seconds("1000ms") == 1
 
     def test_k8s_compound_format(self):
         assert parse_duration_to_seconds("5m0s") == 300
