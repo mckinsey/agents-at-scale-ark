@@ -93,7 +93,9 @@ describe('AppSidebar - Experimental Features Menu Item', () => {
       expect(screen.getByText('Experimental Features')).toBeInTheDocument();
     });
 
-    const settingsItem = screen.getByText('Experimental Features');
+    const settingsItem = screen.getByRole('menuitem', {
+      name: 'Experimental Features',
+    });
     await user.click(settingsItem);
 
     await waitFor(() => {
