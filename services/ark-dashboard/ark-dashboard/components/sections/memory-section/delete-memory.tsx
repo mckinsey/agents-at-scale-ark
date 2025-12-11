@@ -21,15 +21,15 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  useDeleteConversationMemory,
   useDeleteQueryMemory,
-  useDeleteSessionMemory,
   useResetMemory,
 } from '@/lib/services/memory-hooks';
 
-type DeleteConfirmationType = 'session' | 'query' | 'reset' | null;
+type DeleteConfirmationType = 'conversation' | 'query' | 'reset' | null;
 
 type Query = {
-  sessionId: string;
+  conversationId: string;
   queryId: string;
 };
 
@@ -76,20 +76,20 @@ function DeleteQueryConfirmationDialog({
   );
 }
 
-type DeleteSessionConfirmationDialogProps = {
+type DeleteConversationConfirmationDialogProps = {
   onSuccess?: () => void;
-  sessionId?: string | null;
+  conversationId?: string | null;
 };
 
-function DeleteSessionConfirmationDialog({
+function DeleteConversationConfirmationDialog({
   onSuccess,
-  sessionId,
-}: DeleteSessionConfirmationDialogProps) {
-  const deleteSessionMemory = useDeleteSessionMemory();
+  conversationId,
+}: DeleteConversationConfirmationDialogProps) {
+  const deleteConversationMemory = useDeleteConversationMemory();
 
   const handleConfirmation = async () => {
-    if (sessionId) {
-      deleteSessionMemory.mutate(sessionId, {
+    if (conversationId) {
+      deleteConversationMemory.mutate(conversationId, {
         onSuccess,
       });
     }
@@ -103,14 +103,15 @@ function DeleteSessionConfirmationDialog({
           This action cannot be undone.
           <br />
           This will <span className="font-bold">permanently delete </span>
-          Session: <span className="font-bold">{sessionId}</span> from Memory.
+          Conversation: <span className="font-bold">{conversationId}</span> from
+          Memory.
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
         <AlertDialogCancel>Cancel</AlertDialogCancel>
         <Button variant="destructive" asChild>
           <AlertDialogAction onClick={handleConfirmation}>
-            Delete Session
+            Delete Conversation
           </AlertDialogAction>
         </Button>
       </AlertDialogFooter>
@@ -157,14 +158,14 @@ function ResetMemoryConfirmationDialog({
 type DeleteMemoryDropdownMenuProps = {
   className?: string;
   selectedQuery?: Query;
-  selectedSession?: string | null;
+  selectedConversation?: string | null;
   onSuccess?: () => void;
 };
 
 export function DeleteMemoryDropdownMenu({
   className,
   selectedQuery,
-  selectedSession,
+  selectedConversation,
   onSuccess,
 }: DeleteMemoryDropdownMenuProps) {
   const [
@@ -181,10 +182,10 @@ export function DeleteMemoryDropdownMenu({
             onSuccess={onSuccess}
           />
         );
-      case 'session':
+      case 'conversation':
         return (
-          <DeleteSessionConfirmationDialog
-            sessionId={selectedSession}
+          <DeleteConversationConfirmationDialog
+            conversationId={selectedConversation}
             onSuccess={onSuccess}
           />
         );
@@ -197,7 +198,7 @@ export function DeleteMemoryDropdownMenu({
     deleteConfirmationDialogToRender,
     onSuccess,
     selectedQuery,
-    selectedSession,
+    selectedConversation,
   ]);
 
   const onSelectHandlerFactory = useCallback((type: DeleteConfirmationType) => {
@@ -230,13 +231,13 @@ export function DeleteMemoryDropdownMenu({
           </AlertDialogTrigger>
           <AlertDialogTrigger asChild>
             <DropdownMenuItem
-              disabled={!selectedSession}
-              onSelect={onSelectHandlerFactory('session')}>
+              disabled={!selectedConversation}
+              onSelect={onSelectHandlerFactory('conversation')}>
               <Trash className="h-4 w-4" />
               <div className="min-w-0">
-                <div>Delete selected Session</div>
+                <div>Delete selected Conversation</div>
                 <span className="text-muted-foreground block truncate text-xs">
-                  {selectedSession}
+                  {selectedConversation}
                 </span>
               </div>
             </DropdownMenuItem>
