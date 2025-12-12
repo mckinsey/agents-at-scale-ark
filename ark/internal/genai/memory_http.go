@@ -96,7 +96,7 @@ func initializeConversationID(ctx context.Context, httpClient *http.Client, base
 	if err != nil {
 		return "", fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", fmt.Errorf("HTTP status %d", resp.StatusCode)
