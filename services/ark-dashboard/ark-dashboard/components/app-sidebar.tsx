@@ -1,6 +1,6 @@
 'use client';
 
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import {
   AlertCircle,
   Check,
@@ -17,8 +17,10 @@ import { useEffect, useState } from 'react';
 
 import {
   A2A_TASKS_FEATURE_KEY,
+  FILES_BROWSER_FEATURE_KEY,
   isA2ATasksEnabledAtom,
   isExperimentalDarkModeEnabledAtom,
+  isFilesBrowserAvailableAtom,
 } from '@/atoms/experimental-features';
 import { NamespaceEditor } from '@/components/editors';
 import {
@@ -53,6 +55,7 @@ import {
   RUNTIME_SECTIONS,
   SERVICE_SECTIONS,
 } from '@/lib/constants/dashboard-icons';
+import { filesService } from '@/lib/services/files';
 import { type SystemInfo, systemInfoService } from '@/lib/services';
 import { useNamespace } from '@/providers/NamespaceProvider';
 import { useUser } from '@/providers/UserProvider';
@@ -69,6 +72,8 @@ export function AppSidebar() {
   const isExperimentalDarkModeEnabled = useAtomValue(
     isExperimentalDarkModeEnabledAtom,
   );
+  const isFilesBrowserAvailable = useAtomValue(isFilesBrowserAvailableAtom);
+  const setIsFilesBrowserAvailable = useSetAtom(isFilesBrowserAvailableAtom);
 
   const {
     availableNamespaces,
@@ -102,8 +107,18 @@ export function AppSidebar() {
       }
     };
 
+    const checkFilesAPIHealth = async () => {
+      try {
+        await filesService.list({ max_keys: 1 });
+        setIsFilesBrowserAvailable(true);
+      } catch (error) {
+        setIsFilesBrowserAvailable(false);
+      }
+    };
+
     loadInitialData();
-  }, [router, pathname]);
+    checkFilesAPIHealth();
+  }, [router, pathname, setIsFilesBrowserAvailable]);
 
   const handleCreateNamespace = (name: string) => {
     createNamespace(name);
@@ -121,6 +136,8 @@ export function AppSidebar() {
     switch (item.enablerFeature) {
       case A2A_TASKS_FEATURE_KEY:
         return isA2ATasksEnabled;
+      case FILES_BROWSER_FEATURE_KEY:
+        return isFilesBrowserAvailable;
       default:
         return true;
     }

@@ -15,6 +15,8 @@ async function middleware(request: NextRequest) {
   const apiPath = `${basePath}/api/`;
 
   if (request.nextUrl.pathname.startsWith(apiPath)) {
+    console.log('[middleware] Intercepted API request:', request.nextUrl.pathname);
+
     const token = await getToken({
       req: request,
       secret: process.env.AUTH_SECRET,
@@ -25,12 +27,16 @@ async function middleware(request: NextRequest) {
     const port = process.env.ARK_API_SERVICE_PORT || '8000';
     const protocol = process.env.ARK_API_SERVICE_PROTOCOL || 'http';
 
+    console.log('[middleware] Backend config:', { protocol, host, port });
+
     // Remove the base path and /api prefix to get the backend path
     let backendPath = request.nextUrl.pathname.replace(basePath, '');
     backendPath = backendPath.replace('/api', '');
 
     // Construct the target URL
     const targetUrl = `${protocol}://${host}:${port}${backendPath}${request.nextUrl.search}`;
+
+    console.log('[middleware] Proxying to:', targetUrl);
 
     // Rewrite the request to the backend with standard HTTP forwarding headers
     // These X-Forwarded-* headers help the backend understand the external request context:
@@ -59,6 +65,8 @@ async function middleware(request: NextRequest) {
       fetchOptions.body = request.body;
     }
     const backendResponse = await fetch(targetUrl, fetchOptions);
+
+    console.log('[middleware] Backend response:', backendResponse.status, backendResponse.statusText);
 
     return new Response(backendResponse.body, {
       status: backendResponse.status,

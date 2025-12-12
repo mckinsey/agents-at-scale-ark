@@ -65,3 +65,6 @@ export const storedIsChatStreamingEnabledAtom = atomWithStorage<boolean>(
 export const isChatStreamingEnabledAtom = atom(get => {
   return get(storedIsChatStreamingEnabledAtom);
 });
+
+export const FILES_BROWSER_FEATURE_KEY = 'files-browser-available';
+export const isFilesBrowserAvailableAtom = atom<boolean>(false);
