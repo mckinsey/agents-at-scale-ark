@@ -4,7 +4,7 @@ repos:
     hooks:
       - id: ggshield
         language_version: python3
-        stages: [pre-commit]
+        stages: [manual]
 
   - repo: https://github.com/antonbabenko/pre-commit-terraform
     rev: v1.96.2

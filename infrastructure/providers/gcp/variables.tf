@@ -5,7 +5,7 @@ variable "gcp_region" {
 
 variable "gcp_project_id" {
   description = "Target GCP project ID"
-  type    = string
+  type        = string
 }
 
 variable "cluster_name" {

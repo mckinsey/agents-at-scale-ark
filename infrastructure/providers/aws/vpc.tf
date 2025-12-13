@@ -10,7 +10,7 @@ module "vpc" {
   public_subnets  = [for k, v in local.aws_azs : cidrsubnet(local.aws_vpc_cidr, 8, k + 48)]
   intra_subnets   = [for k, v in local.aws_azs : cidrsubnet(local.aws_vpc_cidr, 8, k + 52)]
 
-  create_igw = true
+  create_igw         = true
   enable_nat_gateway = true
   single_nat_gateway = true
 
