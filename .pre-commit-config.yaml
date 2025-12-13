@@ -4,7 +4,7 @@ repos:
     hooks:
       - id: ggshield
         language_version: python3
-        stages: [commit]
+        stages: [pre-commit]
 
   - repo: https://github.com/antonbabenko/pre-commit-terraform
     rev: v1.96.2
@@ -19,3 +19,12 @@ repos:
           - --hook-config=--create-file-if-not-exist=true
           - --args=--config=.terraform-docs.yml
 
+
+  - repo: local
+    hooks:
+      - id: update-dashboard-types
+        name: Update Dashboard Types
+        entry: tools/update-dashboard-types.sh
+        language: script
+        pass_filenames: false
+        files: ^(services/ark-dashboard/|services/ark-api/)
