@@ -161,9 +161,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - name: Check for non-deterministic LLM tests
-        run: |
-          uv pip install --system pyyaml
-          python3 tools/test-report.py --fail-on-llm
+        run: uv run --with PyYAML python tools/test-report.py --fail-on-llm
 
   # Build and test Ark itself.
   build-and-test-ark:
