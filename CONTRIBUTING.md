@@ -91,3 +91,10 @@ In order to preview the docs locally, you can run `make docs` in the root of the
 ## Guidelines for contributing developers
 
 Note that any contributions you make will be under the Agents At Scale [license](./LICENSE).
+
+## CI/CD and Secrets
+
+If you are running CI/CD in a fork, some workflows require specific secrets.
+
+- **GCP Workflows**: `terraform_plan_gcp.yml` requires `GCP_WORKLOAD_IDENTITY_PROVIDER`. If this secret is missing, the plan step will be skipped with a warning.
+- **AWS Workflows**: `terraform_plan_aws.yml` uses `AWS_REGION`. If this input is missing (e.g., `vars.AWS_REGION` is unset), it defaults to `us-east-1` to prevent failures.

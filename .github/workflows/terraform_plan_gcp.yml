@@ -22,12 +22,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Authenticate to GCP (Workload Identity)
+        if: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' }}
         uses: google-github-actions/auth@v1
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SA_EMAIL }}
 
       - name: Terraform Validate & Plan (GCS backend)
+        if: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' }}
         uses: ./.github/actions/terraform-validate-and-plan
         with:
           working_directory: ./infrastructure/providers/gcp
@@ -38,3 +40,9 @@ jobs:
           gcs_project: ${{ vars.GCP_PROJECT_ID }}
           vars: -var="gcp_region=${{ vars.GCP_REGION }}" -var="gcp_project_id=${{ secrets.GCP_PROJECT_ID }}" -var="cluster_name=${{ vars.GCP_GKE_CLUSTER_NAME }}"
           github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for missing secrets
+        if: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER == '' }}
+        run: |
+          echo "::warning::GCP secrets are missing. Skipping Terraform plan."
+          echo "::notice::Please add GCP_WORKLOAD_IDENTITY_PROVIDER to repository secrets to enable GCP tests."
