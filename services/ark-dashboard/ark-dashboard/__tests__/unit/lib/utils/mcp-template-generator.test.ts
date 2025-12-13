@@ -6,7 +6,7 @@ describe('generateMcpProxyYaml', () => {
     const yaml = generateMcpProxyYaml({
       name: 'test-server',
       namespace: 'test-ns',
-      image: 'node:18',
+      image: 'node:lts-alpine',
       command: ['npx'],
       args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
       env: {
