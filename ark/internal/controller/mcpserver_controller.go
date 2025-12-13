@@ -29,7 +29,7 @@ import (
 
 const (
 	// Condition types
-	MCPServerReady       = "Ready"
+	MCPServerAvailable   = "Available"
 	MCPServerDiscovering = "Discovering"
 )
 
@@ -63,6 +63,7 @@ func (r *MCPServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	// Initialize conditions if empty
 	if len(mcpServer.Status.Conditions) == 0 {
 		if err := r.reconcileConditionsInitializing(ctx, &mcpServer); err != nil {
 			return ctrl.Result{}, err
@@ -159,7 +160,7 @@ func (r *MCPServerReconciler) reconcileCondition(mcpServer *arkv1alpha1.MCPServe
 
 // reconcileConditionsInitializing sets initial conditions for a new MCPServer
 func (r *MCPServerReconciler) reconcileConditionsInitializing(ctx context.Context, mcpServer *arkv1alpha1.MCPServer) error {
-	changed1 := r.reconcileCondition(mcpServer, MCPServerReady, metav1.ConditionFalse, "Initializing", "MCPServer is being initialized")
+	changed1 := r.reconcileCondition(mcpServer, MCPServerAvailable, metav1.ConditionUnknown, "Initializing", "MCPServer is being initialized")
 	changed2 := r.reconcileCondition(mcpServer, MCPServerDiscovering, metav1.ConditionTrue, "Starting", "Starting tool discovery process")
 	if changed1 || changed2 {
 		return r.updateStatus(ctx, mcpServer)
@@ -170,7 +171,7 @@ func (r *MCPServerReconciler) reconcileConditionsInitializing(ctx context.Contex
 // reconcileConditionsAddressResolutionFailed updates conditions when address resolution fails
 func (r *MCPServerReconciler) reconcileConditionsAddressResolutionFailed(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, err error) error {
 	log := logf.FromContext(ctx)
-	changed1 := r.reconcileCondition(mcpServer, MCPServerReady, metav1.ConditionFalse, "AddressResolutionFailed", "Server not ready due to address resolution failure")
+	changed1 := r.reconcileCondition(mcpServer, MCPServerAvailable, metav1.ConditionFalse, "AddressResolutionFailed", "Server not ready due to address resolution failure")
 	changed2 := r.reconcileCondition(mcpServer, MCPServerDiscovering, metav1.ConditionFalse, "AddressResolutionFailed", "Cannot attempt discovery due to address resolution failure")
 	if changed1 || changed2 {
 		log.Error(err, "failed to resolve MCPServer address", "server", mcpServer.Name)
@@ -184,7 +185,7 @@ func (r *MCPServerReconciler) reconcileConditionsAddressResolutionFailed(ctx con
 func (r *MCPServerReconciler) reconcileConditionsClientCreationFailed(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, err error) error {
 	log := logf.FromContext(ctx)
 	mcpServer.Status.ToolCount = 0
-	changed1 := r.reconcileCondition(mcpServer, MCPServerReady, metav1.ConditionFalse, "ClientCreationFailed", "Server not ready due to client creation failure")
+	changed1 := r.reconcileCondition(mcpServer, MCPServerAvailable, metav1.ConditionFalse, "ClientCreationFailed", "Server not ready due to client creation failure")
 	changed2 := r.reconcileCondition(mcpServer, MCPServerDiscovering, metav1.ConditionFalse, "ClientCreationFailed", "Cannot attempt discovery due to client creation failure")
 	if changed1 || changed2 {
 		log.Error(err, "mcp client creation failed", "server", mcpServer.Name)
@@ -198,7 +199,7 @@ func (r *MCPServerReconciler) reconcileConditionsClientCreationFailed(ctx contex
 func (r *MCPServerReconciler) reconcileConditionsToolListingFailed(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, err error) error {
 	log := logf.FromContext(ctx)
 	changed1 := r.reconcileCondition(mcpServer, MCPServerDiscovering, metav1.ConditionTrue, "ServerConnectedAndToolListingFailed", err.Error())
-	changed2 := r.reconcileCondition(mcpServer, MCPServerReady, metav1.ConditionFalse, "ToolListingFailed", "Server not ready due to tool listing failure")
+	changed2 := r.reconcileCondition(mcpServer, MCPServerAvailable, metav1.ConditionFalse, "ToolListingFailed", "Server not ready due to tool listing failure")
 	if changed1 || changed2 {
 		log.Error(err, "tool listing failed", "server", mcpServer.Name)
 		r.Eventing.MCPServerRecorder().ToolListingFailed(ctx, mcpServer, fmt.Sprintf("Failed to list tools: %v", err))
@@ -211,7 +212,7 @@ func (r *MCPServerReconciler) reconcileConditionsToolListingFailed(ctx context.C
 func (r *MCPServerReconciler) reconcileConditionsToolCreationFailed(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, err error) error {
 	log := logf.FromContext(ctx)
 	errorMsg := fmt.Sprintf("Failed to create tools: %v", err)
-	changed := r.reconcileCondition(mcpServer, MCPServerReady, metav1.ConditionFalse, "ToolCreationFailed", errorMsg)
+	changed := r.reconcileCondition(mcpServer, MCPServerAvailable, metav1.ConditionFalse, "ToolCreationFailed", errorMsg)
 	if changed {
 		log.Error(err, "tool creation failed", "server", mcpServer.Name)
 		r.Eventing.MCPServerRecorder().ToolCreationFailed(ctx, mcpServer, errorMsg)
@@ -224,7 +225,7 @@ func (r *MCPServerReconciler) reconcileConditionsToolCreationFailed(ctx context.
 func (r *MCPServerReconciler) reconcileConditionsReady(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, toolCount int, toolsChanged bool) error {
 	mcpServer.Status.ToolCount = toolCount
 	changed1 := r.reconcileCondition(mcpServer, MCPServerDiscovering, metav1.ConditionFalse, "DiscoveryComplete", "Tool discovery completed")
-	changed2 := r.reconcileCondition(mcpServer, MCPServerReady, metav1.ConditionTrue, "ToolsDiscovered", fmt.Sprintf("Successfully discovered %d tools", toolCount))
+	changed2 := r.reconcileCondition(mcpServer, MCPServerAvailable, metav1.ConditionTrue, "ToolsDiscovered", fmt.Sprintf("Successfully discovered %d tools", toolCount))
 
 	if changed1 || changed2 || toolsChanged {
 		if changed1 || changed2 {

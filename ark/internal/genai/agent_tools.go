@@ -252,6 +252,8 @@ func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client
 		executor = &PartialToolExecutor{
 			BaseExecutor: executor,
 			Partial:      agentTool.Partial,
+			K8sClient:    k8sClient,
+			Namespace:    namespace,
 		}
 	}
 

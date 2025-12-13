@@ -15,9 +15,8 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Ready status
-      jsonPath: .status.conditions[?(@.type=='Ready')].status
-      name: Ready
+    - jsonPath: .status.conditions[?(@.type=='Available')].status
+      name: Available
       type: string
     - description: Discovery status
       jsonPath: .status.conditions[?(@.type=='Discovering')].status

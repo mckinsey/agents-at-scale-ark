@@ -18,6 +18,7 @@ dependencies = [
     "faiss-cpu>=1.7.4", # vector search
     "tiktoken>=0.5.0",
     "ark-sdk",
+    "urllib3>=2.6.0",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -83,3 +84,6 @@ pythonpath = [
 testpaths = [
     "tests"
 ]
+
+[tool.uv.sources]
+ark-sdk = { path = "../../out/ark-sdk/py-sdk/dist/ark_sdk-0.1.47-py3-none-any.whl" }

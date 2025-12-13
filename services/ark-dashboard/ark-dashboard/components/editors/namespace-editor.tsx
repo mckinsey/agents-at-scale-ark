@@ -1,6 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import * as z from 'zod';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -11,9 +14,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { getKubernetesNameError } from '@/lib/utils/kubernetes-validation';
+import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 
 interface NamespaceEditorProps {
   open: boolean;
@@ -21,48 +31,37 @@ interface NamespaceEditorProps {
   onSave: (name: string) => void;
 }
 
+const formSchema = z.object({
+  name: kubernetesNameSchema,
+});
+
 export function NamespaceEditor({
   open,
   onOpenChange,
   onSave,
 }: NamespaceEditorProps) {
-  const [name, setName] = useState('');
-  const [nameError, setNameError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: '',
+    },
+  });
 
   useEffect(() => {
     if (open) {
-      setName('');
-      setNameError(null);
-      setSaving(false);
+      form.reset();
     }
-  }, [open]);
+  }, [open, form]);
 
-  useEffect(() => {
-    const error = getKubernetesNameError(name);
-    setNameError(error);
-  }, [name]);
-
-  const handleSave = async () => {
-    if (nameError || !name.trim()) {
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await onSave(name.trim());
-      onOpenChange(false);
-    } catch (error) {
-      console.error('Failed to create namespace:', error);
-    } finally {
-      setSaving(false);
-    }
+  const onSubmit = (values: z.infer<typeof formSchema>) => {
+    onSave(values.name.trim());
+    form.reset();
+    onOpenChange(false);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !nameError && name.trim() && !saving) {
-      handleSave();
-    }
+  const handleCancel = () => {
+    form.reset();
+    onOpenChange(false);
   };
 
   return (
@@ -75,40 +74,49 @@ export function NamespaceEditor({
             must be a valid DNS label.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="name" className="text-right">
-              Name
-            </Label>
-            <div className="col-span-3">
-              <Input
-                id="name"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="my-namespace"
-                className={nameError ? 'border-red-500' : ''}
-                disabled={saving}
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid gap-4 py-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <FormLabel className="text-right">
+                        Name <span className="text-red-500">*</span>
+                      </FormLabel>
+                      <div className="col-span-3">
+                        <FormControl>
+                          <Input
+                            placeholder="my-namespace"
+                            disabled={form.formState.isSubmitting}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </div>
+                    </div>
+                  </FormItem>
+                )}
               />
-              {nameError && (
-                <p className="mt-1 text-sm text-red-500">{nameError}</p>
-              )}
             </div>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={saving}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={!!nameError || !name.trim() || saving}>
-            {saving ? 'Creating...' : 'Create'}
-          </Button>
-        </DialogFooter>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCancel}
+                disabled={form.formState.isSubmitting}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={form.formState.isSubmitting}>
+                {form.formState.isSubmitting ? 'Creating...' : 'Create'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );

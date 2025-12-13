@@ -5,8 +5,10 @@ import {
   AlertCircle,
   Expand,
   MessageCircle,
+  Minus,
   Send,
   Shrink,
+  Square,
   X,
 } from 'lucide-react';
 import type {
@@ -30,6 +32,7 @@ import {
 import { chatService } from '@/lib/services';
 
 type ChatType = 'model' | 'team' | 'agent';
+type WindowState = 'default' | 'minimized' | 'maximized';
 
 interface FloatingChatProps {
   id: string;
@@ -51,7 +54,7 @@ export default function FloatingChat({
   const [currentMessage, setCurrentMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isMaximized, setIsMaximized] = useState(false);
+  const [windowState, setWindowState] = useState<WindowState>('default');
   const [viewMode, setViewMode] = useState<'text' | 'markdown'>('markdown');
   const [sessionId] = useState(() => `session-${Date.now()}`);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -237,10 +240,22 @@ export default function FloatingChat({
   // Calculate position - each window is 420px wide (400px + 20px gap)
   const rightPosition = 16 + position * 420;
 
-  // Handle maximize/minimize styling
-  const cardStyles = isMaximized
-    ? 'fixed inset-4 shadow-2xl z-50 transition-all duration-300'
-    : 'fixed bottom-4 shadow-2xl z-50 w-[400px] h-[500px] transition-all duration-300';
+  // Handle window state styling
+  const getCardStyles = () => {
+    switch (windowState) {
+      case 'maximized':
+        return 'fixed inset-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 transition-all duration-300';
+      case 'minimized':
+        return 'fixed bottom-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 w-[400px] h-auto min-h-0 transition-all duration-300';
+      case 'default':
+      default:
+        return 'fixed bottom-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 w-[400px] h-[500px] transition-all duration-300';
+    }
+  };
+
+  const isMinimized = windowState === 'minimized';
+  const isMaximized = windowState === 'maximized';
+  const cardStyles = getCardStyles();
 
   return (
     <Card
@@ -269,9 +284,25 @@ export default function FloatingChat({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setIsMaximized(!isMaximized)}
+                onClick={() =>
+                  setWindowState(isMinimized ? 'default' : 'minimized')
+                }
                 className="h-6 w-6 p-0"
-                title={isMaximized ? 'Minimize chat' : 'Maximize chat'}>
+                aria-label={isMinimized ? 'Restore chat' : 'Minimize chat'}>
+                {isMinimized ? (
+                  <Square className="h-3 w-3" />
+                ) : (
+                  <Minus className="h-3 w-3" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  setWindowState(isMaximized ? 'default' : 'maximized')
+                }
+                className="h-6 w-6 p-0"
+                aria-label={isMaximized ? 'Restore size' : 'Maximize chat'}>
                 {isMaximized ? (
                   <Shrink className="h-3 w-3" />
                 ) : (
@@ -283,129 +314,139 @@ export default function FloatingChat({
                 size="sm"
                 onClick={onClose}
                 className="h-6 w-6 p-0"
-                title="Close chat">
+                aria-label="Close chat">
                 <X className="h-3 w-3" />
               </Button>
             </div>
           </div>
 
-          <Separator />
+          {!isMinimized && (
+            <>
+              <Separator />
 
-          {/* Controls Row */}
-          <div className="flex justify-end px-3 py-1.5">
-            <div className="flex items-center gap-1 text-xs">
-              <button
-                className={`rounded px-2 py-1 transition-colors ${
-                  viewMode === 'text'
-                    ? 'bg-secondary text-secondary-foreground font-medium'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                }`}
-                onClick={() => setViewMode('text')}>
-                Text
-              </button>
-              <button
-                className={`rounded px-2 py-1 transition-colors ${
-                  viewMode === 'markdown'
-                    ? 'bg-secondary text-secondary-foreground font-medium'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                }`}
-                onClick={() => setViewMode('markdown')}>
-                Markdown
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4" style={{ minHeight: 0 }}>
-          <div className="space-y-4">
-            {error && (
-              <div className="text-destructive bg-destructive/10 flex items-center gap-2 rounded-md p-3 text-sm">
-                <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            {chatMessages.length === 0 && !error && (
-              <div className="text-muted-foreground py-8 text-center">
-                Start a conversation with the {type}
-              </div>
-            )}
-
-            {chatMessages.map((message, index) => {
-              // Extract string content from message
-              let content = '';
-              if (typeof message.content === 'string') {
-                content = message.content;
-              } else if (Array.isArray(message.content)) {
-                // For multimodal content, extract text parts
-                content = message.content
-                  .filter(
-                    part =>
-                      typeof part === 'object' &&
-                      part !== null &&
-                      'type' in part &&
-                      part.type === 'text',
-                  )
-                  .map(part =>
-                    typeof part === 'object' && part !== null && 'text' in part
-                      ? part.text
-                      : '',
-                  )
-                  .join('\n');
-              }
-
-              return content ? (
-                <ChatMessage
-                  key={index}
-                  role={message.role as 'user' | 'assistant' | 'system'}
-                  content={content}
-                  viewMode={viewMode}
-                />
-              ) : null;
-            })}
-
-            {/* Show typing indicator when processing */}
-            {isProcessing && (
-              <div className="flex justify-start">
-                <div className="bg-muted max-w-[80%] rounded-lg px-3 py-2">
-                  <div className="flex space-x-1">
-                    <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400"></div>
-                    <div
-                      className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
-                      style={{ animationDelay: '0.1s' }}></div>
-                    <div
-                      className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
-                      style={{ animationDelay: '0.2s' }}></div>
-                  </div>
+              {/* Controls Row */}
+              <div className="flex justify-end px-3 py-1.5">
+                <div className="flex items-center gap-1 text-xs">
+                  <button
+                    className={`rounded px-2 py-1 transition-colors ${
+                      viewMode === 'text'
+                        ? 'bg-secondary text-secondary-foreground font-medium'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    }`}
+                    onClick={() => setViewMode('text')}>
+                    Text
+                  </button>
+                  <button
+                    className={`rounded px-2 py-1 transition-colors ${
+                      viewMode === 'markdown'
+                        ? 'bg-secondary text-secondary-foreground font-medium'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    }`}
+                    onClick={() => setViewMode('markdown')}>
+                    Markdown
+                  </button>
                 </div>
               </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
+            </>
+          )}
         </div>
 
-        <div className="flex flex-shrink-0 gap-2 border-t p-4">
-          <div className="relative flex-1">
-            <Input
-              ref={inputRef}
-              placeholder={
-                isProcessing ? 'Processing...' : 'Type your message...'
-              }
-              value={currentMessage}
-              onChange={e => setCurrentMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              disabled={isProcessing}
-            />
-          </div>
-          <Button
-            onClick={handleSendMessage}
-            disabled={!currentMessage.trim() || isProcessing}
-            size="sm"
-            variant="default"
-            aria-label="Send message">
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
+        {!isMinimized && (
+          <>
+            <div
+              className="flex-1 overflow-y-auto p-4"
+              style={{ minHeight: 0 }}>
+              <div className="space-y-4">
+                {error && (
+                  <div className="text-destructive bg-destructive/10 flex items-center gap-2 rounded-md p-3 text-sm">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                {chatMessages.length === 0 && !error && (
+                  <div className="text-muted-foreground py-8 text-center">
+                    Start a conversation with the {type}
+                  </div>
+                )}
+
+                {chatMessages.map((message, index) => {
+                  let content = '';
+                  if (typeof message.content === 'string') {
+                    content = message.content;
+                  } else if (Array.isArray(message.content)) {
+                    content = message.content
+                      .filter(
+                        part =>
+                          typeof part === 'object' &&
+                          part !== null &&
+                          'type' in part &&
+                          part.type === 'text',
+                      )
+                      .map(part =>
+                        typeof part === 'object' &&
+                        part !== null &&
+                        'text' in part
+                          ? part.text
+                          : '',
+                      )
+                      .join('\n');
+                  }
+
+                  return content ? (
+                    <ChatMessage
+                      key={index}
+                      role={message.role as 'user' | 'assistant' | 'system'}
+                      content={content}
+                      viewMode={viewMode}
+                    />
+                  ) : null;
+                })}
+
+                {/* Show typing indicator when processing */}
+                {isProcessing && (
+                  <div className="flex justify-start">
+                    <div className="bg-muted max-w-[80%] rounded-lg px-3 py-2">
+                      <div className="flex space-x-1">
+                        <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400"></div>
+                        <div
+                          className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                          style={{ animationDelay: '0.1s' }}></div>
+                        <div
+                          className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                          style={{ animationDelay: '0.2s' }}></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+            </div>
+
+            <div className="flex flex-shrink-0 gap-2 border-t p-4">
+              <div className="relative flex-1">
+                <Input
+                  ref={inputRef}
+                  placeholder={
+                    isProcessing ? 'Processing...' : 'Type your message...'
+                  }
+                  value={currentMessage}
+                  onChange={e => setCurrentMessage(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  disabled={isProcessing}
+                />
+              </div>
+              <Button
+                onClick={handleSendMessage}
+                disabled={!currentMessage.trim() || isProcessing}
+                size="sm"
+                variant="default"
+                aria-label="Send message">
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </Card>
   );

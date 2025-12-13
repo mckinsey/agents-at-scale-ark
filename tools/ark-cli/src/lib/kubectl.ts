@@ -49,6 +49,8 @@ export async function getResource<T extends K8sResource>(
 export async function listResources<T extends K8sResource>(
   resourceType: string,
   options?: {
+    namespace?: string,
+    labels?: string,
     sortBy?: string;
   }
 ): Promise<T[]> {
@@ -58,10 +60,17 @@ export async function listResources<T extends K8sResource>(
     args.push(`--sort-by=${options.sortBy}`);
   }
 
+  if (options?.namespace) {
+    args.push('-n', options.namespace);
+  }
+
+  if (options?.labels) {
+    args.push('-l', options.labels);
+  }
+
   args.push('-o', 'json');
 
   const result = await execa('kubectl', args, {stdio: 'pipe'});
-
   const data = JSON.parse(result.stdout) as K8sListResource<T>;
   return data.items || [];
 }
@@ -138,6 +147,7 @@ export async function watchEventsLive(queryName: string): Promise<void> {
           }
         }
       }
+      // eslint-disable-next-line no-empty, @typescript-eslint/no-unused-vars
     } catch (error) {}
   };
 
@@ -161,7 +171,7 @@ export async function watchEventsLive(queryName: string): Promise<void> {
   try {
     await waitProcess;
     await pollEvents();
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
     await pollEvents();
   } catch (error) {
     console.error(

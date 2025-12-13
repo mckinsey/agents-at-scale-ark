@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.1.47](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.46...v0.1.47) (2025-12-05)
+
+
+### Features
+
+* **a2a:** add delete functionality / event links ([#436](https://github.com/mckinsey/agents-at-scale-ark/issues/436)) ([477b6f5](https://github.com/mckinsey/agents-at-scale-ark/commit/477b6f5689eef23037799865066a6d679bc5b550)), closes [#222](https://github.com/mckinsey/agents-at-scale-ark/issues/222)
+* add configurable query timeout for CLI and OpenAI API ([#537](https://github.com/mckinsey/agents-at-scale-ark/issues/537)) ([7dd99d6](https://github.com/mckinsey/agents-at-scale-ark/commit/7dd99d6adb6921a1e9feaf2bda106646d4630f17))
+* add default 30m timeout for ark status --wait-for-ready ([#474](https://github.com/mckinsey/agents-at-scale-ark/issues/474)) ([03a68ba](https://github.com/mckinsey/agents-at-scale-ark/commit/03a68bae88915b745594551297cb3cc0cfb99b44))
+* add marketplace/agents path for noah installation ([#539](https://github.com/mckinsey/agents-at-scale-ark/issues/539)) ([9c67715](https://github.com/mckinsey/agents-at-scale-ark/commit/9c6771566ce4543b06e0243a3bc56378be1cc3de))
+* add noah as installation option to ark install ([#538](https://github.com/mckinsey/agents-at-scale-ark/issues/538)) ([0e0f6cb](https://github.com/mckinsey/agents-at-scale-ark/commit/0e0f6cbd19a8c6a031c683c1a41690bd1fe5d54f))
+* add noah to cli marketplace options ([#534](https://github.com/mckinsey/agents-at-scale-ark/issues/534)) ([3a66fae](https://github.com/mckinsey/agents-at-scale-ark/commit/3a66fae118b277404c811ace4d7059140409b34d))
+* Add status and availability badge for teams ([#518](https://github.com/mckinsey/agents-at-scale-ark/issues/518)) ([8215f9a](https://github.com/mckinsey/agents-at-scale-ark/commit/8215f9a6bb75d42a19ff005597c10701fc855b22))
+* ark dashboard design looks more similar to QB design system ([#521](https://github.com/mckinsey/agents-at-scale-ark/issues/521)) ([53c7d8c](https://github.com/mckinsey/agents-at-scale-ark/commit/53c7d8c95ff004d21db5d508f4fe7853d44df2ff))
+* design alignment iteration 2 ([#541](https://github.com/mckinsey/agents-at-scale-ark/issues/541)) ([4ede406](https://github.com/mckinsey/agents-at-scale-ark/commit/4ede406ba4079a888c3fb0fd18d04eeafcceaa9e))
+* enabled chat streaming by default ([#540](https://github.com/mckinsey/agents-at-scale-ark/issues/540)) ([82d6267](https://github.com/mckinsey/agents-at-scale-ark/commit/82d62679584a57b0254000e9a5a2d5bd903c9a8f))
+* structured eventing ([#477](https://github.com/mckinsey/agents-at-scale-ark/issues/477)) ([7d6f356](https://github.com/mckinsey/agents-at-scale-ark/commit/7d6f35671deb6507de1a5eb8f334470a436c3baa))
+* team as a tool ([#511](https://github.com/mckinsey/agents-at-scale-ark/issues/511)) ([f068aa7](https://github.com/mckinsey/agents-at-scale-ark/commit/f068aa7c17404a0207b0e2206c69ac18380e1f06))
+* Use Anthropic Marketplace JSON in Marketplace Repo [#438](https://github.com/mckinsey/agents-at-scale-ark/issues/438) ([#454](https://github.com/mckinsey/agents-at-scale-ark/issues/454)) ([#463](https://github.com/mckinsey/agents-at-scale-ark/issues/463)) ([60b3bf3](https://github.com/mckinsey/agents-at-scale-ark/commit/60b3bf326c18ea6388e25f172bb236ee379e8645))
+
+
+### Bug Fixes
+
+* api openai endpoint switch from polling -&gt; watch ([#525](https://github.com/mckinsey/agents-at-scale-ark/issues/525)) ([7b32cf8](https://github.com/mckinsey/agents-at-scale-ark/commit/7b32cf8eeefdd5408588771f53623b3eea85c988))
+* Bump golang version to fix jfrog violation ([#563](https://github.com/mckinsey/agents-at-scale-ark/issues/563)) ([78386a0](https://github.com/mckinsey/agents-at-scale-ark/commit/78386a01ffab7b04b8d5b2acf3ddaa685488b258))
+* deleted agents cannot be removed by team ([#531](https://github.com/mckinsey/agents-at-scale-ark/issues/531)) ([c772de2](https://github.com/mckinsey/agents-at-scale-ark/commit/c772de24a8665851dc1abd559285d8b28d6f6cf7))
+* enable token usage tracking in OpenAI streaming responses ([#524](https://github.com/mckinsey/agents-at-scale-ark/issues/524)) ([18a1e6e](https://github.com/mckinsey/agents-at-scale-ark/commit/18a1e6efd9fc4b47a1a5d756f3d7204daea489f7))
+* Merge all components from repeated violations in the report, introduce tolerated list with reasoning ([#533](https://github.com/mckinsey/agents-at-scale-ark/issues/533)) ([c7e52f3](https://github.com/mckinsey/agents-at-scale-ark/commit/c7e52f36761878de5aa028171f29f23c37ec33c8))
+* parse K8s duration strings correctly for streaming timeout ([#547](https://github.com/mckinsey/agents-at-scale-ark/issues/547)) ([12908cc](https://github.com/mckinsey/agents-at-scale-ark/commit/12908cc00bead7b762ef9e43bcfa2de55e02ac5b))
+* remove explanatory text from team selector strategy option ([#542](https://github.com/mckinsey/agents-at-scale-ark/issues/542)) ([0730ca7](https://github.com/mckinsey/agents-at-scale-ark/commit/0730ca7cdb12e635d11f59d6e323b49ac61f418d))
+* send proper SSE error event on streaming timeout ([#506](https://github.com/mckinsey/agents-at-scale-ark/issues/506)) ([78895ef](https://github.com/mckinsey/agents-at-scale-ark/commit/78895ef5395fec3242f8558b906b53d5571b94f3)), closes [#504](https://github.com/mckinsey/agents-at-scale-ark/issues/504)
+* update Next.js to 15.5.7 to address CVE-2025-66478 ([#551](https://github.com/mckinsey/agents-at-scale-ark/issues/551)) ([b830a22](https://github.com/mckinsey/agents-at-scale-ark/commit/b830a225da70f7a98f27d4ca75c1b01fc7a6480a))
+* Use boolean for ENABLE_MINIO flag ([#523](https://github.com/mckinsey/agents-at-scale-ark/issues/523)) ([2606045](https://github.com/mckinsey/agents-at-scale-ark/commit/260604595ef2c4cb9f0a0b36f8fe9940859e982e))
+
 ## [0.1.46](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.45...v0.1.46) (2025-11-27)
 
 

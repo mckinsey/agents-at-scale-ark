@@ -25,8 +25,8 @@ class TestOpenAIChatCompletions(unittest.TestCase):
     @patch('ark_api.api.v1.openai.get_namespace')
     @patch('ark_api.api.v1.openai.parse_model_to_query_target')
     @patch('ark_api.api.v1.openai.watch_query_completion')
-    def test_chat_completions_with_session_id(self, mock_watch, mock_parse_target, mock_get_namespace, mock_with_ark_client):
-        """Test chat completions with session ID in queryAnnotations."""
+    def test_chat_completions_with_metadata(self, mock_watch, mock_parse_target, mock_get_namespace, mock_with_ark_client):
+        """Test chat completions with metadata fields (sessionId, timeout)."""
         # Setup mocks
         mock_get_namespace.return_value = "default"
         mock_parse_target.return_value = {"name": "test-agent", "type": "agent"}
@@ -56,26 +56,25 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         )
         mock_watch.return_value = mock_completion
         
-        # Make the request with session ID directly in metadata
         request_data = {
             "model": "agent/test-agent",
             "messages": [{"role": "user", "content": "Hello"}],
             "metadata": {
-                "sessionId": "test-session-123"
+                "sessionId": "test-session-123",
+                "timeout": "1h"
             }
         }
         response = self.client.post("/openai/v1/chat/completions", json=request_data)
-        
-        # Assert response
+
         self.assertEqual(response.status_code, 200)
-        
-        # Verify that a_create was called with a query that has sessionId in spec
+
         mock_client.queries.a_create.assert_called_once()
         query_resource = mock_client.queries.a_create.call_args[0][0]
-        # Access spec - check both attribute access and dictionary representation
         spec_dict = query_resource.spec.to_dict() if hasattr(query_resource.spec, 'to_dict') else query_resource.spec.__dict__
         session_id = spec_dict.get('sessionId') or spec_dict.get('session_id') or getattr(query_resource.spec, 'session_id', None) or getattr(query_resource.spec, 'sessionId', None)
         self.assertEqual(session_id, "test-session-123")
+        timeout = spec_dict.get('timeout') or getattr(query_resource.spec, 'timeout', None)
+        self.assertEqual(timeout, "1h")
     
     @patch('ark_api.api.v1.openai.with_ark_client')
     @patch('ark_api.api.v1.openai.get_namespace')

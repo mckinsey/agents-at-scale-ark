@@ -4,8 +4,8 @@ description: >-
   Holistic Evaluator for Ark - AI-powered query evaluation service inc.
   LLM-as-a-Judge
 type: application
-version: 0.1.46
-appVersion: 0.1.36
+version: 0.1.47
+appVersion: 0.1.47
 keywords:
   - evaluator
   - llm
