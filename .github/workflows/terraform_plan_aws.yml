@@ -23,6 +23,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure AWS credentials
+        if: ${{ secrets.AWS_GH_OIDC_ROLE_ARN != '' }}
         uses: aws-actions/configure-aws-credentials@v2
         with:
           role-to-assume: ${{ secrets.AWS_GH_OIDC_ROLE_ARN }}
@@ -32,10 +33,12 @@ jobs:
       # compute OIDC role name for terraform var 
       - name: Extract OIDC role name
         id: get_role_name
+        if: ${{ secrets.AWS_GH_OIDC_ROLE_ARN != '' }}
         run: |
           echo "oidc_role_name=$(cut -d'/' -f2 <<< '${{ secrets.AWS_GH_OIDC_ROLE_ARN }}')" >> $GITHUB_OUTPUT
 
       - name: Terraform Validate & Plan (S3 backend)
+        if: ${{ secrets.AWS_GH_OIDC_ROLE_ARN != '' }}
         uses: ./.github/actions/terraform-validate-and-plan
         with:
           working_directory: ./infrastructure/providers/aws
@@ -47,3 +50,9 @@ jobs:
           s3_dynamodb_table: ${{ secrets.AWS_TF_STATE_DYNAMODB_TABLE }}
           vars: -var="cluster_name=${{ vars.AWS_EKS_CLUSTER_NAME }}" -var="aws_region=${{ vars.AWS_REGION }}" -var="github_oidc_role_name=${{ steps.get_role_name.outputs.oidc_role_name }}"
           github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for missing secrets
+        if: ${{ secrets.AWS_GH_OIDC_ROLE_ARN == '' }}
+        run: |
+          echo "::warning::AWS secrets are missing. Skipping Terraform plan."
+          echo "::notice::Please add AWS_GH_OIDC_ROLE_ARN to repository secrets to enable AWS tests."

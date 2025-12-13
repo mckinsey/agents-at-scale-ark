@@ -97,4 +97,4 @@ Note that any contributions you make will be under the Agents At Scale [license]
 If you are running CI/CD in a fork, some workflows require specific secrets.
 
 - **GCP Workflows**: `terraform_plan_gcp.yml` requires `GCP_WORKLOAD_IDENTITY_PROVIDER`. If this secret is missing, the plan step will be skipped with a warning.
-- **AWS Workflows**: `terraform_plan_aws.yml` uses `AWS_REGION`. If this input is missing (e.g., `vars.AWS_REGION` is unset), it defaults to `us-east-1` to prevent failures.
+- **AWS Workflows**: `terraform_plan_aws.yml` uses `AWS_REGION` (defaults to `us-east-1` if missing) and requires `AWS_GH_OIDC_ROLE_ARN` for authentication. If the role ARN is missing, the plan step will be skipped with a warning.
