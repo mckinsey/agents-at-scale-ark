@@ -3,18 +3,14 @@ kind: Model
 metadata:
   name: default
 spec:
-  type: azure
+  type: openai
   model:
     value: gpt-4.1-mini
+  pollInterval: 3s
   config:
-    azure:
+    openai:
       baseUrl:
-        value: ($azure.url)
+        value: http://mock-llm.($namespace).svc.cluster.local:8080/v1
       apiKey:
-        valueFrom:
-          secretKeyRef:
-            name: default-model-token
-            key: token
-      apiVersion:
-        value: "2024-12-01-preview"
+        value: mock-api-key
 

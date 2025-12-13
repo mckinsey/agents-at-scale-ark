@@ -3,14 +3,13 @@ kind: Model
 metadata:
   name: test-model-failing-auth
 spec:
-  type: azure
+  type: openai
   model:
-    value: gpt-4.1-mini
+    value: gpt-fail
+  pollInterval: 3s
   config:
-    azure:
+    openai:
       baseUrl:
-        value: ($azure.url)
-      apiKey: 
-        value: invalid-token
-      apiVersion:
-        value: "2024-12-01-preview"
+        value: http://mock-llm.($namespace).svc.cluster.local:8080/v1
+      apiKey:
+        value: mock-api-key

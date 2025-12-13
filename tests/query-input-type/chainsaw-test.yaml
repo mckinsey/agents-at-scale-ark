@@ -8,13 +8,15 @@ spec:
   - name: test-query-converstation-input-default
     try:
     - script:
-        skipLogOutput: true
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.25 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - script:
         content: |
           helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
@@ -85,13 +87,15 @@ spec:
   - name: test-query-converstation-input-type-user
     try:
     - script:
-        skipLogOutput: true
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.25 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - script:
         content: |
           helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
@@ -162,13 +166,15 @@ spec:
   - name: test-query-converstation-input-type-messages
     try:
     - script:
-        skipLogOutput: true
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.25 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - script:
         content: |
           helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
@@ -239,13 +245,15 @@ spec:
   - name: test-query-input-type-default-invalid-input
     try:
     - script:
-        skipLogOutput: true
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.25 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - script:
         content: |
           helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
@@ -306,13 +314,15 @@ spec:
   - name: test-query-input-type-user-invalid-input
     try:
     - script:
-        skipLogOutput: true
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.25 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - script:
         content: |
           helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
@@ -373,13 +383,15 @@ spec:
   - name: test-query-input-type-messages-invalid-input
     try:
     - script:
-        skipLogOutput: true
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.25 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - script:
         content: |
           helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait

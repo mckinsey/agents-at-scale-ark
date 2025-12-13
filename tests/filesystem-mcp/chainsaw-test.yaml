@@ -32,13 +32,15 @@ spec:
   - name: setup-ark-resources
     try:
     - script:
-        skipLogOutput: true
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.25 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - apply:
         file: manifests/a00-rbac.yaml
     - apply:

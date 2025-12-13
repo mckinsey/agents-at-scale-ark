@@ -1,0 +1,12 @@
+
+ark:
+  model:
+    enabled: false
+
+config:
+  rules:
+    - path: "/v1/chat/completions"
+      match: "@"
+      response:
+        status: 200
+        content: '{"choices":[{"message":{"role":"assistant","content":"I am a mock response."},"finish_reason":"stop"}]}'
