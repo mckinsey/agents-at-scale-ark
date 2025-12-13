@@ -1,4 +1,3 @@
-
 import { generateMcpProxyYaml } from '@/lib/utils/mcp-template-generator';
 import { describe, expect, it } from 'vitest';
 
@@ -19,10 +18,12 @@ describe('generateMcpProxyYaml', () => {
     expect(yaml).toContain('name: test-server');
     expect(yaml).toContain('namespace: test-ns');
     expect(yaml).toContain('ghcr.io/anthropics/mcpproxy:latest');
-    expect(yaml).toContain('image: node:18');
+    expect(yaml).toContain('image: node:lts-alpine');
     expect(yaml).toContain('/mcp-bin/mcpproxy');
     expect(yaml).toContain('--stdio');
-    expect(yaml).toContain('npx -y @modelcontextprotocol/server-filesystem /tmp');
+    expect(yaml).toContain(
+      'npx -y @modelcontextprotocol/server-filesystem /tmp',
+    );
     expect(yaml).toContain('name: DEBUG');
     expect(yaml).toContain('value: "true"');
     expect(yaml).toContain('transport: sse');

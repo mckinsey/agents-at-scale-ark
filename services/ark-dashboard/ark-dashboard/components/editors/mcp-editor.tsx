@@ -104,7 +104,7 @@ export function McpEditor({
       description: '',
       transport: 'http',
       baseUrl: '',
-    } as FormValues,
+    },
   });
 
   const transportType = form.watch('transport');
@@ -143,7 +143,6 @@ export function McpEditor({
   const deleteRow = (key: string) => {
     const updatedHeaders = headers.filter(header => header.key !== key);
     setHeaders(updatedHeaders);
-    // Clear errors for the deleted row
     const newErrors = { ...headerErrors };
     delete newErrors[key];
     setHeaderErrors(newErrors);
@@ -185,7 +184,7 @@ export function McpEditor({
         description: '',
         transport: 'http',
         baseUrl: '',
-      } as z.infer<typeof formSchema>);
+      });
       getMpcServerDetails();
     } else {
       form.reset({
@@ -317,12 +316,9 @@ export function McpEditor({
       return;
     }
 
-    // Clear any existing header errors if validation passes
     setHeaderErrors({});
 
-    const modifiedHeaders: MCPHeader[] = nonEmptyHeaders.map(header => {
-      return returnHeaderObj(header);
-    });
+    const modifiedHeaders: MCPHeader[] = nonEmptyHeaders.map(returnHeaderObj);
     const createData: MCPServerCreateRequest = {
       name: values.name,
       namespace,
