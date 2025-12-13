@@ -2,6 +2,8 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: ark-mcp-integration
+  labels:
+    type: standard
 spec:
   # Skip test due to Gateway API CRD dependency issues in test environment
   skip: true

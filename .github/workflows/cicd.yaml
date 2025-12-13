@@ -155,6 +155,19 @@ jobs:
             echo "No new violations found."
           fi  
 
+  check-e2e-inventory:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install PyYAML
+        run: pip install pyyaml
+      - name: Check for non-deterministic LLM tests
+        run: python3 tools/test-report.py --fail-on-llm
+
   # Build and test Ark itself.
   build-and-test-ark:
     runs-on: ubuntu-24.04

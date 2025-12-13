@@ -46,6 +46,10 @@ def analyze_test(test_dir):
             category = 'metric_error'
             if is_evaluated:
                 category = 'evaluated'
+            elif labels.get('type') == 'standard':
+                category = 'standard'
+            elif uses_mock_llm_chart:
+                category = 'standard' # definitive standard
             elif uses_mock_llm_chart:
                 category = 'standard' # definitive standard
             elif uses_mock_openai:
@@ -76,8 +80,17 @@ def analyze_test(test_dir):
         print(f"Error processing {test_dir}: {e}")
         return None
 
+import argparse
+import sys
+
 def main():
-    root_tests_dir = 'tests'
+    parser = argparse.ArgumentParser(description='Generate e2e test inventory report')
+    parser.add_argument('--fail-on-llm', action='store_true', help='Fail if any tests are categorized as LLM')
+    args = parser.parse_args()
+
+    # Assume script is in tools/ and tests/ is in the parent directory
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    root_tests_dir = os.path.join(repo_root, 'tests')
     results = []
     
     # Iterate over immediate subdirectories
@@ -91,19 +104,22 @@ def main():
     # Sort by category then name
     results.sort(key=lambda x: (x['category'], x['name']))
     
-    print(f"{'CATEGORY':<15} {'NAME':<40} {'LOC':<10}")
-    print("-" * 65)
+    print(f"| {'Category':<15} | {'Name':<40} | {'LoC':<10} | {'Path':<50} |")
+    print(f"|{'-' * 17}|{'-' * 42}|{'-' * 12}|{'-' * 52}|")
     
     counts = {'evaluated': 0, 'standard': 0, 'llm': 0, 'metric_error': 0}
     
     for r in results:
         counts[r['category']] = counts.get(r['category'], 0) + 1
-        print(f"{r['category']:<15} {r['name']:<40} {r['loc']:<10}")
+        print(f"| {r['category']:<15} | {r['name']:<40} | {r['loc']:<10} | {r['path']:<50} |")
         
-    print("-" * 65)
-    print("Summary:")
+    print("\n## Summary")
     for k, v in counts.items():
-        print(f"{k}: {v}")
+        print(f"- **{k}**: {v}")
+
+    if args.fail_on_llm and counts['llm'] > 0:
+        print(f"\nERROR: Found {counts['llm']} tests categorized as 'llm'. Please migrate them to use mock-llm or label them correctly.")
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()

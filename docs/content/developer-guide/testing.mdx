@@ -352,17 +352,74 @@ Services typically combine HTTP API testing with ARK integration testing:
 
 This validates both the service's HTTP API functionality and its integration with ARK resources.
 
+## Testing with mock-llm
+
+For tests that require LLM interactions, we strongly recommend using `mock-llm` to ensure determinism and speed. This pattern allows you to define exact responses for specific prompt patterns.
+
+### Installation
+
+`mock-llm` is installed as a Helm chart within your test:
+
+```yaml
+- script:
+    content: |
+      helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+        --version 0.1.25 \
+        --namespace $NAMESPACE \
+        --values mock-llm-values.yaml \
+        --wait --timeout=120s
+    env:
+    - name: NAMESPACE
+      value: ($namespace)
+```
+
+### Configuration (mock-llm-values.yaml)
+
+Define your expected prompts and responses in a values file:
+
+```yaml
+config:
+  rules:
+    - path: "/v1/chat/completions"
+      match: "weather in Chicago"
+      response:
+        status: 200
+        content: |
+          {
+            "choices": [
+              {
+                "message": {
+                  "role": "assistant",
+                  "content": "The weather in Chicago is sunny and 75F."
+                },
+                "finish_reason": "stop"
+              }
+            ]
+          }
+```
+
+### Model Manifest Update
+
+Update your Model manifest to point to the mock service:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+spec:
+  type: openai
+  source: openai
+  model: gpt-mock
+  config:
+    openai:
+      baseUrl: http://mock-llm.($namespace).svc.cluster.local:8080/v1
+      apiKey: mock-key
+```
+
 ## Testing Completions API Calls
 
+(Deprecated: Use `mock-llm` pattern above for new tests)
+
 If you need to validate or verify the values of parameters sent to an LLM endpoint, a simple echo server or similar can be set up as a model. This can be used as 'deterministic' LLM that gives predicatable output.
-
-As an example, this test at:
-
-```
-https://github.com/mckinsey/agents-at-scale-ark/tree/main/tests/query-parameter-ref
-```
-
-Is used to check whether the parameters provided via a query to an agent are expanded correctly. Rather than asking the LLM to give back a response in a prompt, which is brittle, a mock LLM server is used which echos back the response - this can then be validated deterministically by checking the `query.Responses` field. The mock server is defined in `a00-mock-server.yaml`.
 
 ## Next Steps
 

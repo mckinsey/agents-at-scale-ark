@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: tools-mock-model
+spec:
+  type: openai
+  source: openai
+  model: gpt-mock
+  config:
+    openai:
+      baseUrl: http://mock-llm.($namespace).svc.cluster.local:8080/v1
+      apiKey: mock-key

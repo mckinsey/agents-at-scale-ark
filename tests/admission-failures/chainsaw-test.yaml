@@ -1,7 +1,9 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  name: admission-failures  
+  name: admission-failures
+  labels:
+    type: standard  
 spec:
   description: Comprehensive test of admission controller validation failures for invalid ARK resources
   steps:
