@@ -2,10 +2,12 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Plus } from 'lucide-react';
+import { InfoIcon } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import * as z from 'zod';
+import { z } from 'zod/v4';
 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -35,12 +37,11 @@ import {
 import type { MCPServer, Secret } from '@/lib/services';
 import { mcpServersService, secretsService } from '@/lib/services';
 import type {
-  DirectHeader,
   MCPHeader,
   MCPServerCreateRequest,
-  SecretHeader,
 } from '@/lib/services/mcp-servers';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
+import { generateMcpProxyYaml } from '@/lib/utils/mcp-template-generator';
 
 import { ConditionalInputRow } from '../ui/conditionalInputRow';
 
@@ -58,14 +59,27 @@ type HeaderData = {
   value: string;
 };
 
-const formSchema = z.object({
+const baseSchema = z.object({
   name: kubernetesNameSchema,
   description: z.string().min(1, 'Description is required'),
-  baseUrl: z.string().min(1, 'URL is required'),
-  transport: z.enum(['http', 'sse'], {
-    message: 'Transport is required',
-  }),
 });
+
+const httpSseSchema = baseSchema.extend({
+  transport: z.enum(['http', 'sse']),
+  baseUrl: z.string().min(1, 'URL is required'),
+});
+
+const stdioSchema = baseSchema.extend({
+  transport: z.enum(['stdio']),
+  image: z.string().min(1, 'Container Image is required'),
+  command: z.string().min(1, 'Command is required'),
+  args: z.string().optional(),
+});
+
+const formSchema = z.discriminatedUnion('transport', [
+  httpSseSchema,
+  stdioSchema,
+]);
 
 export function McpEditor({
   open,
@@ -82,15 +96,25 @@ export function McpEditor({
     Record<string, { nameError?: string; valueError?: string }>
   >({});
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  type FormValues = z.infer<typeof formSchema>;
+  const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: '',
       description: '',
-      baseUrl: '',
       transport: 'http',
-    },
+      baseUrl: '',
+    } as FormValues,
   });
+
+  const transportType = form.watch('transport');
+
+  useEffect(() => {
+    if (transportType === 'stdio' && !form.getValues('image')) {
+      form.setValue('image', 'node:lts-alpine');
+      form.setValue('command', 'npx');
+    }
+  }, [transportType, form]);
 
   const updateRow = (index: number, updated: Partial<HeaderData>) => {
     setHeaders(prev =>
@@ -98,11 +122,11 @@ export function McpEditor({
     );
   };
 
-  const generateUniqueKey = () => {
+  const generateUniqueKey = useCallback(() => {
     const randomValue = window.crypto.getRandomValues(new Uint32Array(1))[0];
     const generatedSuffix = randomValue % 100000;
     return `row-${Date.now()}-${generatedSuffix}`;
-  };
+  }, []);
 
   const addRow = () => {
     setHeaders(prev => [
@@ -128,42 +152,48 @@ export function McpEditor({
   const getMpcServerDetails = useCallback(async () => {
     const mcpServerData = await mcpServersService.get(mcpServer?.name ?? '');
     form.setValue('baseUrl', mcpServerData?.address ?? '');
-    form.setValue(
-      'transport',
-      (mcpServerData?.transport as 'http' | 'sse') ?? 'http',
-    );
+    const transport = mcpServerData?.transport ?? 'http';
+    if (transport === 'http' || transport === 'sse' || transport === 'stdio') {
+      form.setValue('transport', transport);
+    } else {
+      form.setValue('transport', 'http');
+    }
     form.setValue('description', mcpServerData?.description ?? '');
 
     if (mcpServerData?.headers) {
-      const transformedHeaders: HeaderData[] = mcpServerData?.headers?.map(
-        (header: MCPHeader) => {
+      setHeaders(
+        mcpServerData.headers.map(header => {
           const isSecret = 'valueFrom' in header.value;
-
           return {
             key: generateUniqueKey(),
             name: header.name,
             type: isSecret ? 'secret' : 'direct',
-            value: isSecret
-              ? (header as SecretHeader).value.valueFrom.secretKeyRef.name
-              : (header as DirectHeader).value.value || '',
+            value:
+              (isSecret && header.value.valueFrom?.secretKeyRef?.name) ||
+              header.value.value ||
+              '',
           };
-        },
+        }),
       );
-      setHeaders(transformedHeaders);
     }
-  }, [mcpServer?.name, form]);
+  }, [mcpServer?.name, form, generateUniqueKey]);
 
   useEffect(() => {
     if (mcpServer && open) {
       form.reset({
         name: mcpServer.name,
         description: '',
-        baseUrl: '',
         transport: 'http',
-      });
+        baseUrl: '',
+      } as z.infer<typeof formSchema>);
       getMpcServerDetails();
     } else {
-      form.reset();
+      form.reset({
+        name: '',
+        description: '',
+        transport: 'http',
+        baseUrl: '',
+      });
       setHeaders([{ key: 'row-1', name: '', type: 'direct', value: '' }]);
     }
   }, [mcpServer, open, getMpcServerDetails, form]);
@@ -197,13 +227,42 @@ export function McpEditor({
     }
   };
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
-    // Validate headers individually
+  const onSubmit = (values: FormValues) => {
+    if (values.transport === 'stdio') {
+      const env: Record<string, string> = {};
+      headers.forEach(h => {
+        if (h.name && h.value) {
+          env[h.name] = h.value;
+        }
+      });
+
+      const yaml = generateMcpProxyYaml({
+        name: values.name,
+        namespace,
+        image: values.image,
+        command: values.command.split(' '),
+        args: (values.args || '').split(' '),
+        env,
+      });
+
+      const blob = new Blob([yaml], { type: 'text/yaml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${values.name}-mcp.yaml`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      onOpenChange(false);
+      return;
+    }
+
     const errors: Record<string, { nameError?: string; valueError?: string }> =
       {};
     let hasErrors = false;
 
-    // Filter out completely empty rows
     const nonEmptyHeaders = headers.filter(
       row => row.name.trim() !== '' || row.value.trim() !== '',
     );
@@ -311,26 +370,96 @@ export function McpEditor({
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="baseUrl"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      URL <span className="text-red-500">*</span>
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="https:/github.com/v1"
-                        disabled={form.formState.isSubmitting}
-                        {...field}
-                        onChange={e => field.onChange(e.target.value.trim())}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {(transportType === 'http' || transportType === 'sse') && (
+                <FormField
+                  control={form.control}
+                  name="baseUrl"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        URL <span className="text-red-500">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="https:/github.com/v1"
+                          disabled={form.formState.isSubmitting}
+                          {...field}
+                          onChange={e => field.onChange(e.target.value.trim())}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {transportType === 'stdio' && (
+                <>
+                  <Alert className="border-blue-200 bg-blue-50">
+                    <InfoIcon className="h-4 w-4 text-blue-500" />
+                    <AlertTitle>Manual Deployment Required</AlertTitle>
+                    <AlertDescription>
+                      Stdio servers require a proxy sidecar. This option will
+                      generate a Kubernetes manifest (YAML) that you must
+                      manually apply to your cluster.
+                    </AlertDescription>
+                  </Alert>
+
+                  <FormField
+                    control={form.control}
+                    name="image"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          Container Image{' '}
+                          <span className="text-red-500">*</span>
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="e.g., node:lts-alpine"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="command"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>
+                            Command <span className="text-red-500">*</span>
+                          </FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., npx" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="args"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Args</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="e.g., -y @auth/mcp-server"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </>
+              )}
 
               <FormField
                 control={form.control}
@@ -352,6 +481,9 @@ export function McpEditor({
                       <SelectContent>
                         <SelectItem value="http">http</SelectItem>
                         <SelectItem value="sse">sse</SelectItem>
+                        <SelectItem value="stdio">
+                          stdio (Generate YAML)
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -360,7 +492,11 @@ export function McpEditor({
               />
 
               <div className="grid gap-2">
-                <Label htmlFor="base-url">Headers</Label>
+                <Label htmlFor="base-url">
+                  {transportType === 'stdio'
+                    ? 'Environment Variables (Optional)'
+                    : 'Headers'}
+                </Label>
                 {headers.map((row, index) => (
                   <ConditionalInputRow
                     key={row.key}
@@ -420,7 +556,9 @@ export function McpEditor({
                   ? 'Saving...'
                   : mcpServer
                     ? 'Update'
-                    : 'Create'}
+                    : transportType === 'stdio'
+                      ? 'Download YAML'
+                      : 'Create'}
               </Button>
             </DialogFooter>
           </form>
