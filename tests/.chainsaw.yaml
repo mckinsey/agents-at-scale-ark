@@ -9,13 +9,13 @@ metadata:
 spec:
   reportFormat: JSON                     # Output test reports in JSON format
   reportName: /tmp/chainsaw-report/chainsaw-report.json  # Path where the test report will be saved
-  delayBeforeCleanup: 15s  # Increased delay before cleanup for stability
+  delayBeforeCleanup: 5s   # Reduced delay before cleanup for faster tests
   timeouts:
-    apply: 60s                           # Increased timeout for 'apply' operations
-    assert: 240s                         # Increased timeout for assertion checks (LLM calls can be slow)
-    cleanup: 180s                        # Increased timeout for cleanup steps
-    delete: 120s                         # Increased timeout for resource deletion
-    error: 60s                           # Increased timeout for error handling
-    exec: 90s                            # Increased timeout for command execution (some tests run long scripts)
+    apply: 30s                           # Reduced timeout for 'apply' operations
+    assert: 60s                          # Reduced timeout for assertion checks (Mock LLM is fast)
+    cleanup: 60s                         # Reduced timeout for cleanup steps
+    delete: 60s                          # Reduced timeout for resource deletion
+    error: 30s                           # Reduced timeout for error handling
+    exec: 60s                            # Reduced timeout for command execution
   failFast: false                        # If false, Chainsaw will continue running tests even after failures
-  parallel: 6                            # augment parallelism
+  parallel: 12                           # augment parallelism for faster execution

@@ -159,14 +159,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - name: Install PyYAML
-        run: pip install pyyaml
+      - uses: astral-sh/setup-uv@v6
       - name: Check for non-deterministic LLM tests
-        run: python3 tools/test-report.py --fail-on-llm
+        run: |
+          uv pip install --system pyyaml
+          python3 tools/test-report.py --fail-on-llm
 
   # Build and test Ark itself.
   build-and-test-ark:
@@ -190,7 +187,9 @@ jobs:
         run: go install github.com/jandelgado/gcov2lcov@latest
 
       - name: Run tests
-        run: cd ark && make test
+        run: |
+          cd ark && make test
+          make fark-test
 
       - name: Run linting
         run: cd ark && make lint
@@ -215,13 +214,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.24.11"
-          cache: true
-          cache-dependency-path: |
-            ark/go.sum
-            tools/fark/go.sum
+      - uses: actions/checkout@v4
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -232,7 +225,7 @@ jobs:
           version: "0.12.2"
           args: "--version"
 
-      - run: make -j24 build-all
+      - run: make -j24 libs-build-all ark-dashboard-deps
 
       - name: Check generated types are unchanged
         run: |
@@ -242,7 +235,7 @@ jobs:
             exit 1
           fi
 
-      - run: make -j24 services-test-all
+      - run: make -j24 libs-test-all services-test-all
       
       - uses: ./.github/actions/collect-coverage
         with:

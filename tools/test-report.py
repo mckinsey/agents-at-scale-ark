@@ -50,8 +50,6 @@ def analyze_test(test_dir):
                 category = 'standard'
             elif uses_mock_llm_chart:
                 category = 'standard' # definitive standard
-            elif uses_mock_llm_chart:
-                category = 'standard' # definitive standard
             elif uses_mock_openai:
                 category = 'standard' # older standard
             else:
