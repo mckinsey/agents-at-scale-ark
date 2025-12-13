@@ -227,7 +227,7 @@ export function McpEditor({
     }
   };
 
-  const onSubmit = (values: FormValues) => {
+  const onSubmit = async (values: FormValues) => {
     if (values.transport === 'stdio') {
       const env: Record<string, string> = {};
       headers.forEach(h => {
@@ -246,14 +246,40 @@ export function McpEditor({
       });
 
       const blob = new Blob([yaml], { type: 'text/yaml' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${values.name}-mcp.yaml`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const fileName = `${values.name}-mcp.yaml`;
+
+      if (
+        'showSaveFilePicker' in window &&
+        typeof window.showSaveFilePicker === 'function'
+      ) {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: fileName,
+            types: [
+              {
+                description: 'YAML Files',
+                accept: { 'text/yaml': ['.yaml', '.yml'] },
+              },
+            ],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+        } catch (err) {
+          if ((err as Error).name !== 'AbortError') {
+            console.error('Error saving file:', err);
+          }
+        }
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
 
       onOpenChange(false);
       return;
