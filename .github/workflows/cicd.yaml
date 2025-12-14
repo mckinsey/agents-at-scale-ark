@@ -32,10 +32,78 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  # Detect which paths have changed to conditionally run jobs
+  check-changed-paths:
+    runs-on: ubuntu-latest
+    outputs:
+      docs-only: ${{ steps.filter.outputs.docs-only }}
+      code-changed: ${{ steps.filter.outputs.code-changed }}
+      ark-changed: ${{ steps.filter.outputs.ark-changed }}
+      services-changed: ${{ steps.filter.outputs.services-changed }}
+      tests-changed: ${{ steps.filter.outputs.tests-changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for git diff
+      
+      - name: Detect changed paths
+        id: filter
+        run: |
+          # Get the list of changed files
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          else
+            # For push events, compare with previous commit
+            CHANGED_FILES=$(git diff --name-only HEAD^..HEAD)
+          fi
+          
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          
+          # Check if only docs changed
+          DOCS_ONLY="false"
+          CODE_CHANGED="false"
+          ARK_CHANGED="false"
+          SERVICES_CHANGED="false"
+          TESTS_CHANGED="false"
+          
+          # Check for code changes
+          if echo "$CHANGED_FILES" | grep -qE '^(ark/|services/|tools/|mcp/|libs/|images/)'; then
+            CODE_CHANGED="true"
+          fi
+          
+          # Check for ark changes
+          if echo "$CHANGED_FILES" | grep -qE '^ark/'; then
+            ARK_CHANGED="true"
+          fi
+          
+          # Check for services changes
+          if echo "$CHANGED_FILES" | grep -qE '^services/'; then
+            SERVICES_CHANGED="true"
+          fi
+          
+          # Check for test changes
+          if echo "$CHANGED_FILES" | grep -qE '^tests/'; then
+            TESTS_CHANGED="true"
+          fi
+          
+          # If only docs changed and no code changed
+          if echo "$CHANGED_FILES" | grep -qE '^docs/' && [ "$CODE_CHANGED" == "false" ] && [ "$TESTS_CHANGED" == "false" ]; then
+            DOCS_ONLY="true"
+          fi
+          
+          echo "docs-only=$DOCS_ONLY" >> $GITHUB_OUTPUT
+          echo "code-changed=$CODE_CHANGED" >> $GITHUB_OUTPUT
+          echo "ark-changed=$ARK_CHANGED" >> $GITHUB_OUTPUT
+          echo "services-changed=$SERVICES_CHANGED" >> $GITHUB_OUTPUT
+          echo "tests-changed=$TESTS_CHANGED" >> $GITHUB_OUTPUT
+          
+          echo "Summary: docs-only=$DOCS_ONLY, code-changed=$CODE_CHANGED, ark-changed=$ARK_CHANGED, services-changed=$SERVICES_CHANGED, tests-changed=$TESTS_CHANGED"
+
   # Setup job to determine container cache registry
   setup-container-cache-registry:
     needs: [jfrog-xray-scan]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     outputs:
       ci-cache-registry: ${{ steps.setup-registry.outputs.ci-cache-registry }}
       ci-cache-registry-hostname: ${{ steps.setup-registry.outputs.ci-cache-registry-hostname }}
@@ -157,7 +225,9 @@ jobs:
 
   # Build and test Ark itself.
   build-and-test-ark:
-    runs-on: ubuntu-24.04
+    needs: [check-changed-paths]
+    if: needs.check-changed-paths.outputs.docs-only != 'true' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -198,7 +268,9 @@ jobs:
           artifact-suffix: ark-unit
 
   build-and-test-services:
-    runs-on: ubuntu-24.04
+    needs: [check-changed-paths]
+    if: needs.check-changed-paths.outputs.docs-only != 'true' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -212,6 +284,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
       - name: Install ruff
         uses: astral-sh/ruff-action@v3
@@ -244,10 +318,12 @@ jobs:
           artifact-suffix: ark-dashboard-unit
 
   build-containers:
-    needs: [setup-container-cache-registry, build-libs]
-    runs-on: ubuntu-24.04
+    needs: [check-changed-paths, setup-container-cache-registry, build-libs]
+    if: needs.check-changed-paths.outputs.docs-only != 'true' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
         include:
           - path: ark
@@ -291,6 +367,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
       - name: Login to Docker Registry
         if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
@@ -311,12 +389,16 @@ jobs:
           prebuild: ${{ matrix.prebuild }}
 
   build-libs:
-    runs-on: ubuntu-24.04
+    needs: [check-changed-paths]
+    if: needs.check-changed-paths.outputs.docs-only != 'true' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
       - name: Build libraries
         run: make libs-build-all
@@ -329,13 +411,18 @@ jobs:
           retention-days: 30
 
   e2e-quickstart:
-    needs: [setup-container-cache-registry, build-containers]
-    runs-on: ubuntu-24.04
+    needs: [check-changed-paths, setup-container-cache-registry, build-containers]
+    if: |
+      (needs.check-changed-paths.outputs.docs-only != 'true' || github.ref == 'refs/heads/main') &&
+      (github.event.pull_request.draft == false || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Free up some disk space for ARK installation
+      # Free up disk space for ARK installation
+      # Note: This cleanup is necessary as K3s + ARK images require significant disk space (~15GB)
+      # Without this, the runner may run out of disk during installation
       - name: Clean up disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
@@ -361,14 +448,12 @@ jobs:
           curl -sS https://webinstall.dev/k9s | bash
           export PATH="$HOME/.local/bin:$PATH"
 
-          # Install chainsaw
-          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/v0.2.12/chainsaw_linux_amd64.tar.gz" | \
-            tar xz -C /tmp
-          sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
-          sudo chmod +x /usr/local/bin/chainsaw
+          # Chainsaw will be installed via composite action below
 
           # Install gettext for envsubst
           sudo apt-get update && sudo apt-get install -y gettext
+
+      - uses: ./.github/actions/install-chainsaw
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -449,7 +534,7 @@ jobs:
 
   e2e-ark-cli:
     needs: [build-ark-cli]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -464,8 +549,9 @@ jobs:
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
   e2e-smoke-test:
-    needs: [setup-container-cache-registry, build-containers]
-    runs-on: ubuntu-24.04
+    needs: [check-changed-paths, setup-container-cache-registry, build-containers]
+    if: needs.check-changed-paths.outputs.docs-only != 'true' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -568,9 +654,12 @@ jobs:
 
 
   e2e-tests-standard:
-    needs: [setup-container-cache-registry, build-containers]
-    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }} # Remove skipping these tests once chainsaw can be run with mock-llm
-    runs-on: ubuntu-24.04
+    needs: [check-changed-paths, setup-container-cache-registry, build-containers]
+    if: |
+      needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' &&
+      (needs.check-changed-paths.outputs.docs-only != 'true' || github.ref == 'refs/heads/main') &&
+      (github.event.pull_request.draft == false || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -583,12 +672,7 @@ jobs:
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
-      - name: Install chainsaw
-        run: |
-          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/v0.2.12/chainsaw_linux_amd64.tar.gz" | \
-            tar xz -C /tmp
-          sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
-          sudo chmod +x /usr/local/bin/chainsaw
+      - uses: ./.github/actions/install-chainsaw
 
       - name: Run standard E2E tests
         env:
@@ -610,9 +694,12 @@ jobs:
           artifact-name: coverage-reports-standard
 
   e2e-tests-evaluated:
-    needs: [setup-container-cache-registry, build-containers]
-    runs-on: ubuntu-24.04
-    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }} # Remove skipping these tests once chainsaw can be run with mock-llm
+    needs: [check-changed-paths, setup-container-cache-registry, build-containers]
+    if: |
+      needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' &&
+      (needs.check-changed-paths.outputs.docs-only != 'true' || github.ref == 'refs/heads/main') &&
+      (github.event.pull_request.draft == false || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -627,12 +714,8 @@ jobs:
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
-      - name: Install chainsaw
-        run: |
-          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/v0.2.12/chainsaw_linux_amd64.tar.gz" | \
-            tar xz -C /tmp
-          sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
-          sudo chmod +x /usr/local/bin/chainsaw
+      - uses: ./.github/actions/install-chainsaw
+
       - name: Run evaluated E2E tests
         env:
           E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY != '' && secrets.CICD_AZURE_OPENAI_KEY || 'xxxxxxxxxxx' }}
@@ -664,8 +747,11 @@ jobs:
           artifact-name: coverage-reports-evaluated
 
   build-charts:
-    runs-on: ubuntu-24.04
+    needs: [check-changed-paths]
+    if: needs.check-changed-paths.outputs.docs-only != 'true' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
     strategy:
+      max-parallel: 6
       matrix:
         chart:
           # Package only the essential charts.
@@ -701,7 +787,12 @@ jobs:
           retention-days: 30
 
   build-docs:
-    runs-on: ubuntu-24.04
+    needs: [check-changed-paths]
+    # Always run on main, or run on PRs if docs or code changed
+    if: |
+      github.ref == 'refs/heads/main' ||
+      (needs.check-changed-paths.outputs.docs-only == 'true' || needs.check-changed-paths.outputs.code-changed == 'true')
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -709,6 +800,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22.x"
+          cache: 'npm'
+          cache-dependency-path: 'docs/package-lock.json'
 
       - name: Build Docs
         run: |
@@ -734,7 +827,9 @@ jobs:
           path: docs/out
 
   build-ark-cli:
-    runs-on: ubuntu-24.04
+    needs: [check-changed-paths]
+    if: needs.check-changed-paths.outputs.docs-only != 'true' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -742,6 +837,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22.x"
+          cache: 'npm'
+          cache-dependency-path: 'tools/ark-cli/package-lock.json'
 
       - name: Build ARK CLI
         run: |
@@ -798,7 +895,7 @@ jobs:
         build-charts,
         build-ark-cli,
       ]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -868,7 +965,7 @@ jobs:
         build-charts,
         build-ark-cli,
       ]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     outputs:
       released: ${{ steps.release-please.outputs.release_created }}
       tag: ${{ steps.release-please.outputs.tag_name }}
@@ -888,7 +985,7 @@ jobs:
 
   release-docs:
     needs: [check-release]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     concurrency:
       group: "pages"
@@ -904,7 +1001,7 @@ jobs:
 
   release-libs:
     needs: [check-release]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v4
@@ -938,7 +1035,7 @@ jobs:
 
   release-charts:
     needs: [check-release]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     strategy:
       matrix:
@@ -970,7 +1067,7 @@ jobs:
 
   release-ark-cli:
     needs: [check-release]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v4
@@ -1004,7 +1101,7 @@ jobs:
 
   release-fark:
     needs: [check-release]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v4
@@ -1047,7 +1144,7 @@ jobs:
 
   run-deploy-workflow:
     needs: [check-release]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v4
