@@ -186,7 +186,7 @@ jobs:
 
       - name: Run tests
         run: |
-          cd ark && make test
+          (cd ark && make test)
           make fark-test
 
       - name: Run linting
