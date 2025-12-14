@@ -223,6 +223,51 @@ jobs:
             echo "No new violations found."
           fi  
 
+  # Quick security and quality checks
+  quick-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Validate GitHub Actions workflows
+      - name: Lint workflows with actionlint
+        uses: reviewdog/action-actionlint@v1
+        with:
+          reporter: github-check
+          fail_on_error: false
+
+      # Security scanning with Trivy
+      - name: Run Trivy security scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      # Label PR by size
+      - name: Label PR size
+        uses: codelytv/pr-size-labeler@v1
+        if: github.event_name == 'pull_request'
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          xs_label: 'size/xs'
+          xs_max_size: 10
+          s_label: 'size/s'
+          s_max_size: 100
+          m_label: 'size/m'
+          m_max_size: 500
+          l_label: 'size/l'
+          l_max_size: 1000
+          xl_label: 'size/xl'
+
   # Build and test Ark itself.
   build-and-test-ark:
     needs: [check-changed-paths]
@@ -386,6 +431,23 @@ jobs:
           platforms: linux/amd64
           push: true
           prebuild: ${{ matrix.prebuild }}
+
+      # Scan container for vulnerabilities
+      - name: Scan container image with Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/${{ matrix.image }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-${{ matrix.image }}-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-${{ matrix.image }}-results.sarif'
+          category: 'container-${{ matrix.image }}'
+
 
   build-libs:
     needs: [check-changed-paths]
@@ -855,7 +917,10 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: ${{ github.repository }}
           directory: tools/ark-cli/artifacts/coverage
+          flags: ark-cli,unit
           name: ark-cli
+          fail_ci_if_error: true
+          verbose: true
 
       - name: Create NPM package tarball
         run: |
@@ -946,6 +1011,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           directory: ./coverage-artifacts
+          flags: integration,e2e
           fail_ci_if_error: false
           verbose: true
 

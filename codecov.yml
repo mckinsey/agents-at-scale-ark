@@ -1,0 +1,37 @@
+# codecov.yml - Codecov Configuration
+# https://docs.codecov.com/docs/codecov-yaml
+
+codecov:
+  require_ci_to_pass: yes
+  notify:
+    wait_for_ci: yes
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+        informational: false
+    patch:
+      default:
+        target: auto
+        threshold: 1%
+        informational: false
+
+comment:
+  layout: "header, diff, flags, components, footer"
+  behavior: default
+  require_changes: false
+
+flags:
+  ark-cli:
+    paths:
+      - tools/ark-cli/
+    carryforward: true
+  unit:
+    carryforward: true
+  integration:
+    carryforward: true
+  e2e:
+    carryforward: true
