@@ -1,0 +1,149 @@
+name-template: 'v$RESOLVED_VERSION 🚀'
+tag-template: 'v$RESOLVED_VERSION'
+
+categories:
+  - title: '💥 Breaking Changes'
+    labels:
+      - 'breaking'
+      - 'major'
+    collapse-after: 0
+  - title: '🚀 New Features'
+    labels:
+      - 'feature'
+      - 'enhancement'
+      - 'feat'
+    collapse-after: 10
+  - title: '🐛 Bug Fixes'
+    labels:
+      - 'fix'
+      - 'bugfix'
+      - 'bug'
+    collapse-after: 10
+  - title: '🔒 Security Fixes'
+    labels:
+      - 'security'
+      - 'vulnerability'
+    collapse-after: 0
+  - title: '⚡ Performance Improvements'
+    labels:
+      - 'performance'
+      - 'optimization'
+      - 'perf'
+    collapse-after: 5
+  - title: '📚 Documentation'
+    labels:
+      - 'documentation'
+      - 'docs'
+    collapse-after: 5
+  - title: '⚙️ CI/CD & Tooling'
+    labels:
+      - 'ci'
+      - 'cd'
+      - 'tooling'
+    collapse-after: 5
+  - title: '🔧 Dependency Updates'
+    labels:
+      - 'dependencies'
+      - 'renovate'
+    collapse-after: 10
+  - title: '🧰 Maintenance & Refactoring'
+    labels:
+      - 'chore'
+      - 'maintenance'
+      - 'refactor'
+    collapse-after: 10
+
+change-template: '- $TITLE by @$AUTHOR in #$NUMBER'
+change-title-escapes: '\<*_&'
+
+version-resolver:
+  major:
+    labels:
+      - 'major'
+      - 'breaking'
+  minor:
+    labels:
+      - 'minor'
+      - 'feature'
+      - 'feat'
+  patch:
+    labels:
+      - 'patch'
+      - 'fix'
+      - 'bugfix'
+      - 'chore'
+  default: patch
+
+autolabeler:
+  - label: 'documentation'
+    files:
+      - '*.md'
+      - 'docs/**/*'
+  - label: 'ci'
+    files:
+      - '.github/**/*'
+  - label: 'dependencies'
+    files:
+      - 'go.sum'
+      - 'go.mod'
+      - 'package-lock.json'
+      - 'package.json'
+      - 'requirements.txt'
+  - label: 'security'
+    branch:
+      - '/security\/.+/'
+
+template: |
+  ## What's New in v$RESOLVED_VERSION
+
+  $CHANGES
+
+  ---
+
+  ## 📊 Statistics
+
+  **Total Changes**: $NUMBER_OF_CHANGES  
+  **Contributors**: $NUMBER_OF_CONTRIBUTORS  
+
+  ## 👥 Contributors
+
+  We'd like to thank the following contributors for their work on this release:
+
+  $CONTRIBUTORS
+
+  ---
+
+  ## 🔗 Full Changelog
+
+  **Full Changelog**: https://github.com/mckinsey/agents-at-scale-ark/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+
+  ---
+
+  ## 📦 Installation & Upgrade
+
+  ### Helm Chart
+  ```bash
+  helm repo add agents-at-scale https://mckinsey.github.io/agents-at-scale-ark
+  helm repo update
+  helm upgrade ark agents-at-scale/ark-controller --version $RESOLVED_VERSION
+  ```
+
+  ### Docker Images
+  ```bash
+  docker pull ghcr.io/mckinsey/agents-at-scale-ark/ark-controller:v$RESOLVED_VERSION
+  ```
+
+  ### ARK CLI
+  ```bash
+  npm install -g @agents-at-scale/ark-cli@$RESOLVED_VERSION
+  ```
+
+  ---
+
+  ## 🆘 Need Help?
+
+  - 📖 [Documentation](https://mckinsey.github.io/agents-at-scale-ark)
+  - 💬 [Discussions](https://github.com/mckinsey/agents-at-scale-ark/discussions)
+  - 🐛 [Report a Bug](https://github.com/mckinsey/agents-at-scale-ark/issues/new?template=bug_report.md)
+  - 💡 [Request a Feature](https://github.com/mckinsey/agents-at-scale-ark/issues/new?template=feature_request.md)
+

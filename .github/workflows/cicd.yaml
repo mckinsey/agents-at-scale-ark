@@ -300,6 +300,24 @@ jobs:
       - name: Build binary
         run: cd ark && make build
       
+      - name: Run benchmarks
+        run: |
+          cd ark
+          go test -bench=. -benchmem -run=^$ ./... | tee bench.txt
+      
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          tool: 'go'
+          output-file-path: ark/bench.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          alert-threshold: '150%'
+          comment-on-alert: true
+          fail-on-alert: false
+          alert-comment-cc-users: '@iliassjabali'
+
       - name: Generate LCOV from Go coverage
         run: |
           mkdir -p ark/unit-tests
@@ -428,7 +446,7 @@ jobs:
           image: ${{ matrix.image }}
           tag: ${{ github.sha }}
           registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
           prebuild: ${{ matrix.prebuild }}
 
