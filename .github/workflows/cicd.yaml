@@ -316,7 +316,7 @@ jobs:
           alert-threshold: '150%'
           comment-on-alert: true
           fail-on-alert: false
-          alert-comment-cc-users: '@iliassjabali'
+          alert-comment-cc-users: '@mckinsey/agents-at-scale-ark-maintainers'
 
       - name: Generate LCOV from Go coverage
         run: |
