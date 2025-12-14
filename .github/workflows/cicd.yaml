@@ -323,7 +323,6 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 4
       matrix:
         include:
           - path: ark
@@ -751,7 +750,6 @@ jobs:
     if: needs.check-changed-paths.outputs.docs-only != 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     strategy:
-      max-parallel: 6
       matrix:
         chart:
           # Package only the essential charts.
