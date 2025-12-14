@@ -578,8 +578,6 @@ export function EvaluatorEditor({
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="Query">Query</SelectItem>
-                            <SelectItem value="Agent">Agent</SelectItem>
-                            <SelectItem value="Model">Model</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

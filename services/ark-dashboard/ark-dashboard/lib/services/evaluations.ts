@@ -105,8 +105,7 @@ export interface EnhancedEvaluationResponse extends EvaluationResponse {
   enhanced_metadata?: EnhancedEvaluationMetadata;
 }
 
-export interface EnhancedEvaluationDetailResponse
-  extends EvaluationDetailResponse {
+export interface EnhancedEvaluationDetailResponse extends EvaluationDetailResponse {
   enhanced_metadata?: EnhancedEvaluationMetadata;
 }
 
