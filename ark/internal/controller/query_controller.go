@@ -207,6 +207,7 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	// Set conversation ID in status if we have one (from memory or spec)
 	if conversationId != "" {
 		obj.Status.ConversationId = conversationId
+		_ = r.updateStatus(opCtx, &obj, obj.Status.Phase)
 		r.Telemetry.QueryRecorder().RecordConversationID(span, conversationId)
 	}
 
