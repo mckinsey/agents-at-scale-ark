@@ -51,10 +51,10 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 
 	baseURL := strings.TrimSuffix(*memory.Status.LastResolvedAddress, "/")
 
-	// Initialize conversation ID by calling cluster-memory
-	conversationId, err := initializeConversationID(ctx, httpClient, baseURL, config.ConversationId)
+	// Create conversation or use provided ID
+	conversationId, err := createConversation(ctx, httpClient, baseURL, config.ConversationId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize conversation ID: %w", err)
+		return nil, fmt.Errorf("failed to create conversation: %w", err)
 	}
 
 	return &HTTPMemory{
@@ -68,23 +68,19 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 	}, nil
 }
 
-// initializeConversationID calls cluster-memory to initialize or get a conversation ID
-func initializeConversationID(ctx context.Context, httpClient *http.Client, baseURL, conversationID string) (string, error) {
-	type initRequest struct {
-		ConversationID string `json:"conversation_id,omitempty"`
+// createConversation calls cluster-memory to create a new conversation and get its ID.
+// If conversationID is already provided (non-empty), it returns that ID without making an HTTP call.
+func createConversation(ctx context.Context, httpClient *http.Client, baseURL, conversationID string) (string, error) {
+	if conversationID != "" {
+		return conversationID, nil
 	}
 
-	type initResponse struct {
+	type createResponse struct {
 		ConversationID string `json:"conversation_id"`
 	}
 
-	reqBody, err := json.Marshal(initRequest{ConversationID: conversationID})
-	if err != nil {
-		return "", fmt.Errorf("failed to serialize request: %w", err)
-	}
-
-	requestURL := fmt.Sprintf("%s/conversations/init", baseURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(reqBody))
+	requestURL := fmt.Sprintf("%s/conversations", baseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
@@ -96,13 +92,13 @@ func initializeConversationID(ctx context.Context, httpClient *http.Client, base
 	if err != nil {
 		return "", fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", fmt.Errorf("HTTP status %d", resp.StatusCode)
 	}
 
-	var response initResponse
+	var response createResponse
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return "", fmt.Errorf("failed to decode response: %w", err)
 	}

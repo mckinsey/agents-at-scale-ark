@@ -71,22 +71,36 @@ Memory is implemented as a simple HTTP server:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/messages` | Store multiple messages |
-| GET | `/messages` | Retrieve messages with optional filtering |
-| POST | `/conversations/init` | Initialize or get a conversation ID |
+| POST | `/conversations` | Create a new conversation |
 | GET | `/conversations` | List all conversation IDs |
-| DELETE | `/conversations/{conversationId}` | Delete a specific conversation |
+| GET | `/conversations/{id}` | Get conversation details and messages |
+| DELETE | `/conversations/{id}` | Delete a specific conversation |
+| POST | `/messages` | Store messages (requires conversation_id) |
+| GET | `/messages` | Retrieve messages with optional filtering |
 | GET | `/health` | Health check |
+
+### Create Conversation
+
+**POST** `/conversations`
+
+Creates a new conversation and returns its ID. This must be called before storing messages.
+
+Response:
+```json
+{
+  "conversation_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
 
 ### Store Messages
 
 **POST** `/messages`
 
-Request body includes conversation/query context and message array:
+Stores messages for an existing conversation. The `conversation_id` is required.
 
 ```json
 {
-  "conversation_id": "conv-abc123",
+  "conversation_id": "550e8400-e29b-41d4-a716-446655440000",
   "query_id": "query-uuid",
   "messages": [
     {
@@ -101,24 +115,24 @@ Request body includes conversation/query context and message array:
 }
 ```
 
-If `conversation_id` is not provided, a new one will be generated and returned in the response.
+### Get Conversation
 
-### Initialize Conversation
+**GET** `/conversations/{id}`
 
-**POST** `/conversations/init`
-
-Returns an existing conversation ID if provided, or generates a new one:
+Returns conversation details including all messages:
 
 ```json
 {
-  "conversation_id": "conv-existing"
-}
-```
-
-Response:
-```json
-{
-  "conversation_id": "conv-existing"
+  "conversation_id": "550e8400-e29b-41d4-a716-446655440000",
+  "messages": [
+    {
+      "timestamp": "2024-01-01T12:00:00Z",
+      "conversation_id": "550e8400-e29b-41d4-a716-446655440000",
+      "query_id": "query-uuid",
+      "message": { "role": "user", "content": "Hello" },
+      "sequence": 1
+    }
+  ]
 }
 ```
 

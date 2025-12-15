@@ -34,7 +34,6 @@ describe('ARK Cluster Memory API', () => {
         .send({ conversation_id: 'test-conversation-single', query_id: 'query1', messages: [message] });
 
       expect(addResponse.status).toBe(200);
-      expect(addResponse.body.conversation_id).toBe('test-conversation-single');
 
       // Retrieve messages
       const getResponse = await request(app).get('/messages?conversation_id=test-conversation-single');
@@ -67,25 +66,82 @@ describe('ARK Cluster Memory API', () => {
       expect(response.body.messages[1].sequence).toBe(2);
     });
 
+    test('should return error for missing conversation_id', async () => {
+      const response = await request(app)
+        .post('/messages')
+        .send({ query_id: 'query1', messages: [{ role: 'user', content: 'test' }] });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('conversation_id is required');
+    });
+
     test('should return error for missing query_id', async () => {
       const response = await request(app)
         .post('/messages')
-        .send({});
+        .send({ conversation_id: 'test-conv' });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe('query_id is required');
     });
+  });
 
-    test('should generate conversation_id if not provided', async () => {
-      const message = { role: 'user', content: 'Test message' };
+  describe('Conversation Endpoints', () => {
+    test('POST /conversations should create a new conversation with UUID', async () => {
+      const response = await request(app).post('/conversations');
 
-      const addResponse = await request(app)
+      expect(response.status).toBe(201);
+      expect(response.body.conversation_id).toBeDefined();
+      expect(response.body.conversation_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    });
+
+    test('GET /conversations/:id should return conversation details', async () => {
+      const message = { role: 'user', content: 'Hello' };
+
+      await request(app)
         .post('/messages')
-        .send({ query_id: 'query1', messages: [message] });
+        .send({ conversation_id: 'get-test-conv', query_id: 'q1', messages: [message] });
 
-      expect(addResponse.status).toBe(200);
-      expect(addResponse.body.conversation_id).toBeDefined();
-      expect(addResponse.body.conversation_id).toMatch(/^conv-\d+-[a-z0-9]+$/);
+      const response = await request(app).get('/conversations/get-test-conv');
+
+      expect(response.status).toBe(200);
+      expect(response.body.conversation_id).toBe('get-test-conv');
+      expect(response.body.messages).toHaveLength(1);
+      expect(response.body.messages[0].message).toEqual(message);
+    });
+
+    test('GET /conversations/:id should return 404 for non-existent conversation', async () => {
+      const response = await request(app).get('/conversations/non-existent');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Conversation not found');
+    });
+
+    test('GET /conversations should list all conversations', async () => {
+      await request(app)
+        .post('/messages')
+        .send({ conversation_id: 'list-conv-1', query_id: 'q1', messages: [{ role: 'user', content: 'test' }] });
+
+      await request(app)
+        .post('/messages')
+        .send({ conversation_id: 'list-conv-2', query_id: 'q2', messages: [{ role: 'user', content: 'test' }] });
+
+      const response = await request(app).get('/conversations');
+
+      expect(response.status).toBe(200);
+      expect(response.body.conversations).toContain('list-conv-1');
+      expect(response.body.conversations).toContain('list-conv-2');
+    });
+
+    test('DELETE /conversations/:id should delete conversation', async () => {
+      await request(app)
+        .post('/messages')
+        .send({ conversation_id: 'delete-conv', query_id: 'q1', messages: [{ role: 'user', content: 'test' }] });
+
+      const deleteResponse = await request(app).delete('/conversations/delete-conv');
+      expect(deleteResponse.status).toBe(200);
+
+      const getResponse = await request(app).get('/conversations/delete-conv');
+      expect(getResponse.status).toBe(404);
     });
   });
 
@@ -189,13 +245,13 @@ describe('ARK Cluster Memory API', () => {
       expect(response.body.error).toBe('Not found');
     });
 
-    test('should handle missing query_id', async () => {
+    test('should handle missing conversation_id', async () => {
       const response = await request(app)
         .post('/messages')
-        .send({ messages: ['test'] });
+        .send({ query_id: 'q1', messages: [{ role: 'user', content: 'test' }] });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('query_id is required');
+      expect(response.body.error).toBe('conversation_id is required');
     });
   });
 });

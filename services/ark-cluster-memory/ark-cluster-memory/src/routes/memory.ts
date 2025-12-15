@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { randomUUID } from 'crypto';
 import { MemoryStore } from '../memory-store.js';
 
 export function createMemoryRouter(memory: MemoryStore): Router {
@@ -9,7 +10,7 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    * /messages:
    *   post:
    *     summary: Store messages in memory
-   *     description: Stores chat messages for a specific conversation and query. If conversation_id is not provided, a new one will be generated.
+   *     description: Stores chat messages for a specific conversation and query. Requires a conversation_id obtained from POST /conversations.
    *     tags:
    *       - Memory
    *     requestBody:
@@ -19,12 +20,13 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    *           schema:
    *             type: object
    *             required:
+   *               - conversation_id
    *               - query_id
    *               - messages
    *             properties:
    *               conversation_id:
    *                 type: string
-   *                 description: Conversation identifier (optional, will be generated if not provided)
+   *                 description: Conversation identifier (required, obtain from POST /conversations)
    *               query_id:
    *                 type: string
    *                 description: Query identifier
@@ -36,28 +38,17 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    *     responses:
    *       200:
    *         description: Messages stored successfully
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 conversation_id:
-   *                   type: string
-   *                   description: The conversation ID (generated if not provided in request)
    *       400:
    *         description: Invalid request parameters
    */
   router.post('/messages', (req, res) => {
     try {
-      let conversation_id = req.body.conversation_id;
-      const { query_id, messages } = req.body;
+      const { conversation_id, query_id, messages } = req.body;
 
-      // Generate conversation_id if not provided
       if (!conversation_id) {
-        conversation_id = `conv-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+        res.status(400).json({ error: 'conversation_id is required' });
+        return;
       }
-
-      console.log(`POST /messages - conversation_id: ${conversation_id}, query_id: ${query_id}, messages: ${messages?.length}`);
 
       if (!query_id) {
         res.status(400).json({ error: 'query_id is required' });
@@ -69,11 +60,11 @@ export function createMemoryRouter(memory: MemoryStore): Router {
         return;
       }
 
-      // Store messages with full metadata
+      console.log(`POST /messages - conversation_id: ${conversation_id}, query_id: ${query_id}, messages: ${messages?.length}`);
+
       memory.addMessagesWithMetadata(conversation_id, query_id, messages);
 
-      // Return the conversation_id in the response
-      res.status(200).json({ conversation_id });
+      res.status(200).send();
     } catch (error) {
       console.error('Failed to add messages:', error);
       const err = error as Error;
@@ -185,7 +176,7 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    *       500:
    *         description: Failed to purge memory
    */
-  router.delete('/messages', (req, res) => {
+  router.delete('/messages', (_req, res) => {
     memory.purge();
     res.json({ status: 'success', message: 'Memory purged' });
   });
@@ -318,32 +309,22 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    *       500:
    *         description: Failed to delete conversations
    */
-  router.delete('/conversations', (req, res) => {
+  router.delete('/conversations', (_req, res) => {
     memory.purge();
     res.json({ status: 'success', message: 'All conversations deleted' });
   });
 
   /**
    * @swagger
-   * /conversations/init:
+   * /conversations:
    *   post:
-   *     summary: Initialize or get a conversation ID
-   *     description: Returns an existing conversation ID if provided, or generates a new one
+   *     summary: Create a new conversation
+   *     description: Creates a new conversation and returns its ID. Use this ID for subsequent POST /messages calls.
    *     tags:
    *       - Memory
-   *     requestBody:
-   *       required: false
-   *       content:
-   *         application/json:
-   *           schema:
-   *             type: object
-   *             properties:
-   *               conversation_id:
-   *                 type: string
-   *                 description: Optional conversation ID to use. If not provided, a new one will be generated.
    *     responses:
-   *       200:
-   *         description: Conversation ID returned
+   *       201:
+   *         description: Conversation created successfully
    *         content:
    *           application/json:
    *             schema:
@@ -351,16 +332,62 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    *               properties:
    *                 conversation_id:
    *                   type: string
-   *                   description: The conversation ID (provided or generated)
+   *                   description: The generated conversation ID (UUID v4)
    */
-  router.post('/conversations/init', (req, res) => {
-    let conversation_id = req.body?.conversation_id;
+  router.post('/conversations', (_req, res) => {
+    const conversation_id = randomUUID();
+    res.status(201).json({ conversation_id });
+  });
 
-    if (!conversation_id) {
-      conversation_id = `conv-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+  /**
+   * @swagger
+   * /conversations/{conversationId}:
+   *   get:
+   *     summary: Get conversation details
+   *     description: Returns messages and metadata for a specific conversation
+   *     tags:
+   *       - Memory
+   *     parameters:
+   *       - in: path
+   *         name: conversationId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Conversation ID
+   *     responses:
+   *       200:
+   *         description: Conversation details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 conversation_id:
+   *                   type: string
+   *                 messages:
+   *                   type: array
+   *       404:
+   *         description: Conversation not found
+   */
+  router.get('/conversations/:conversationId', (req, res) => {
+    const { conversationId } = req.params;
+
+    if (!conversationId) {
+      res.status(400).json({ error: 'Conversation ID is required' });
+      return;
     }
 
-    res.json({ conversation_id });
+    const messages = memory.getMessagesWithMetadata(conversationId);
+
+    if (messages.length === 0) {
+      res.status(404).json({ error: 'Conversation not found' });
+      return;
+    }
+
+    res.json({
+      conversation_id: conversationId,
+      messages
+    });
   });
 
   return router;
