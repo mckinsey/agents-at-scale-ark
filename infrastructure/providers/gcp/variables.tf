@@ -19,3 +19,9 @@ variable "cluster_version" {
   type        = string
   default     = "1.33"
 }
+
+variable "github_repository" {
+  description = "GitHub repository in format owner/repo"
+  type        = string
+  default     = "eggai-tech/agents-at-scale-ark"
+}
