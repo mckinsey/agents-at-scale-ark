@@ -1,9 +1,9 @@
 export default {
   index: 'Introduction',
   quickstart: 'Quickstart',
-  'user-guide': 'User Guide',
-  'developer-guide': "Developer Guide",
-  'operations-guide': 'Operations Guide',
+  tutorials: 'Tutorials',
+  'how-to-guides': 'How-to Guides',
+  'core-concepts': 'Core Concepts',
   reference: 'Reference',
   marketplace: {
     title: 'Marketplace',
