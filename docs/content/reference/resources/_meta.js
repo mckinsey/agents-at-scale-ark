@@ -1,11 +1,11 @@
 export default {
   a2aserver: 'A2AServers',
-  agents: 'Agents',
-  mcpservers: 'MCPServers',
-  memories: 'Memories',
+  agent: 'Agents',
+  mcpserver: 'MCPServers',
+  memory: 'Memories',
   models: 'Models',
   query: 'Queries',
-  teams: 'Teams',
+  team: 'Teams',
   tools: 'Tools',
   a2atask: 'A2ATask'
 }
