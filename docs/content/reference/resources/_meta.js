@@ -1,5 +1,5 @@
 export default {
-  a2aservers: 'A2AServers',
+  a2aserver: 'A2AServers',
   agents: 'Agents',
   mcpservers: 'MCPServers',
   memories: 'Memories',
