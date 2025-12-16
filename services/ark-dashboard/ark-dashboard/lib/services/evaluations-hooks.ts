@@ -12,13 +12,7 @@ export const useGetAllEvaluationsWithDetails = ({
   return useQuery({
     queryKey: ['get-all-evaluations-with-details', enhanced],
     queryFn: async () => {
-      try {
-        // Try enhanced fetch first
-        return await evaluationsService.getAllWithDetails(enhanced);
-      } catch {
-        // Fallback to basic fetch
-        return await evaluationsService.getAll();
-      }
+      return await evaluationsService.getAll(enhanced);
     },
   });
 };

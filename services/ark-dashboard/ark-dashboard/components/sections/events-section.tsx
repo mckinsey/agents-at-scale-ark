@@ -259,7 +259,7 @@ export function EventsSection({
   }
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="mb-5 flex flex-1 flex-col space-y-4 p-4">
       <div className="flex flex-wrap items-center gap-2 border-b pb-4">
         <Select
           value={type || 'all'}
@@ -331,8 +331,8 @@ export function EventsSection({
       </div>
 
       {/* Events Table */}
-      <div className="overflow-hidden rounded-lg border">
-        <div className="overflow-x-auto">
+      <div className="flex-1 overflow-hidden rounded-lg">
+        <div className="overflow-x-auto border">
           <table className="w-full min-w-[1200px]">
             <thead className="bg-gray-50 dark:bg-gray-900/50">
               <tr>
@@ -443,13 +443,15 @@ export function EventsSection({
       </div>
 
       {/* Pagination */}
-      <Pagination
-        currentPage={page}
-        totalPages={totalPages}
-        itemsPerPage={limit}
-        onPageChange={handlePageChange}
-        onItemsPerPageChange={handleItemsPerPageChange}
-      />
+      <div className="mt-2 border-t">
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          itemsPerPage={limit}
+          onPageChange={handlePageChange}
+          onItemsPerPageChange={handleItemsPerPageChange}
+        />
+      </div>
     </div>
   );
 }

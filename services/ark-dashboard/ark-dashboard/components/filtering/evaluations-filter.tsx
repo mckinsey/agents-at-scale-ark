@@ -106,6 +106,10 @@ export function EvaluationFilter({
     onFiltersChange({ ...filters, [key]: value });
   };
 
+  const clearScoreFilter = () => {
+    onFiltersChange({ ...filters, ['scoreMin']: '', ['scoreMax']: '' });
+  };
+
   const toggleArrayFilter = (
     key: 'status' | 'evaluator' | 'mode' | 'evaluationType',
     value: string,
@@ -140,6 +144,7 @@ export function EvaluationFilter({
   };
 
   const removeLabelFilter = (index: number) => {
+    console.log('removeLabelFilter', index);
     const newLabelFilters = filters.labelFilters.filter((_, i) => i !== index);
     updateFilter('labelFilters', newLabelFilters);
   };
@@ -392,84 +397,96 @@ export function EvaluationFilter({
       {activeFilterCount > 0 && (
         <div className="flex flex-wrap items-center gap-1">
           {filters.search && (
-            <Badge variant="secondary" className="gap-1">
-              Search: {filters.search}
+            <div className="bg-secondary flex items-center gap-1 rounded-md p-1 text-xs">
+              <p>Search: {filters.search}</p>
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() => updateFilter('search', '')}
               />
-            </Badge>
+            </div>
           )}
           {filters.status.map(status => (
-            <Badge key={status} variant="secondary" className="gap-1">
-              {status}
+            <div
+              className="bg-secondary flex items-center gap-1 rounded-md p-1 text-xs"
+              key={status}>
+              <p>Status: {status}</p>
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() => toggleArrayFilter('status', status)}
               />
-            </Badge>
+            </div>
           ))}
           {filters.evaluator.map(evaluator => (
-            <Badge
-              key={evaluator}
-              variant="secondary"
-              className="gap-1 text-xs">
-              {evaluator}
+            <div
+              className="bg-secondary flex items-center gap-1 rounded-md p-1 text-xs"
+              key={evaluator}>
+              <p>Evaluator: {evaluator}</p>
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() => toggleArrayFilter('evaluator', evaluator)}
               />
-            </Badge>
+            </div>
           ))}
           {filters.mode.map(mode => (
-            <Badge key={mode} variant="secondary" className="gap-1">
-              {mode}
+            <div
+              className="bg-secondary flex items-center gap-1 rounded-md p-1 text-xs"
+              key={mode}>
+              <p>Mode: {mode}</p>
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() => toggleArrayFilter('mode', mode)}
               />
-            </Badge>
+            </div>
           ))}
           {filters.evaluationType.map(type => (
-            <Badge key={type} variant="secondary" className="gap-1">
-              Type: {type}
+            <div
+              className="bg-secondary flex items-center gap-1 rounded-md p-1 text-xs"
+              key={type}>
+              <p>Type: {type}</p>
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() => toggleArrayFilter('evaluationType', type)}
               />
-            </Badge>
+            </div>
           ))}
           {filters.passed !== 'all' && (
-            <Badge variant="secondary" className="gap-1">
-              {filters.passed}
+            <div className="bg-secondary flex items-center gap-1 rounded-md p-1 text-xs">
+              <p>Pass Status: {filters.passed}</p>
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() => updateFilter('passed', 'all')}
               />
-            </Badge>
+            </div>
           )}
           {(filters.scoreMin || filters.scoreMax) && (
-            <Badge variant="secondary" className="gap-1">
-              Score: {filters.scoreMin || '0'}-{filters.scoreMax || '1'}
+            <div className="bg-secondary flex items-center gap-1 rounded-md p-1 text-xs">
+              <p>
+                Score: {filters.scoreMin || '0'}-{filters.scoreMax || '1'}
+              </p>
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() => {
-                  updateFilter('scoreMin', '');
-                  updateFilter('scoreMax', '');
+                  clearScoreFilter();
                 }}
               />
-            </Badge>
+            </div>
           )}
           {filters.labelFilters.map((labelFilter, index) => {
             if (!labelFilter.key || !labelFilter.value) return null;
             return (
-              <Badge key={index} variant="secondary" className="gap-1 text-xs">
-                Label - {labelFilter.key} : {labelFilter.value}
+              <div
+                className="bg-secondary flex items-center gap-1 rounded-md p-1 text-xs"
+                key={labelFilter.key}>
+                <p>
+                  Label - {labelFilter.key} : {labelFilter.value}
+                </p>
                 <X
                   className="h-3 w-3 cursor-pointer"
-                  onClick={() => removeLabelFilter(index)}
+                  onClick={() => {
+                    removeLabelFilter(index);
+                  }}
                 />
-              </Badge>
+              </div>
             );
           })}
         </div>

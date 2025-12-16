@@ -17,8 +17,6 @@ export type EvaluationCreateRequest =
 export type EvaluationUpdateRequest =
   components['schemas']['EvaluationUpdateRequest'];
 
-export type Evaluation = EvaluationResponse;
-
 // Enhanced evaluation metadata types
 export interface EventEvaluationMetadata {
   total_rules?: number;
@@ -140,9 +138,10 @@ export const evaluationsService = {
   /**
    * Get all evaluations in a namespace with optional filtering
    */
-  async getAll(): Promise<Evaluation[]> {
-    const response =
-      await apiClient.get<EvaluationListResponse>(`/api/v1/evaluations`);
+  async getAll(enhanced: boolean = false): Promise<EvaluationResponse[]> {
+    const response = await apiClient.get<EvaluationListResponse>(
+      `/api/v1/evaluations?enhanced=${enhanced}`,
+    );
 
     // For now, just use the response items directly
     // TODO: Implement proper filtering once we have real spec data
@@ -150,79 +149,9 @@ export const evaluationsService = {
   },
 
   /**
-   * Get all evaluations with full details including spec
-   */
-  async getAllWithDetails(
-    enhanced: boolean = false,
-  ): Promise<
-    (
-      | Evaluation
-      | EvaluationDetailResponse
-      | EnhancedEvaluationResponse
-      | EnhancedEvaluationDetailResponse
-    )[]
-  > {
-    const url = enhanced
-      ? `/api/v1/evaluations?enhanced=true`
-      : `/api/v1/evaluations`;
-
-    const response = enhanced
-      ? await apiClient.get<EnhancedEvaluationListResponse>(url)
-      : await apiClient.get<EvaluationListResponse>(url);
-
-    // Debug: log evaluation count for troubleshooting
-    if (process.env.NODE_ENV === 'development') {
-      console.log(
-        `Found ${response.items?.length || 0} evaluations:`,
-        response.items?.map(e => `${e.name} (${e.type})`) || [],
-      );
-    }
-
-    if (!response.items || response.items.length === 0) {
-      return [];
-    }
-
-    // Fetch details for each evaluation in parallel
-    const detailPromises = response.items.map(async evaluation => {
-      try {
-        const detailed = enhanced
-          ? await this.getEnhancedDetailsByName(evaluation.name)
-          : await this.getDetailsByName(evaluation.name);
-        return { success: true, data: detailed, fallback: evaluation };
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn(
-            `Failed to get details for evaluation ${evaluation.name}:`,
-            error,
-          );
-        }
-        return { success: false, data: null, fallback: evaluation };
-      }
-    });
-
-    const results = await Promise.allSettled(detailPromises);
-
-    // Return detailed data where available, fallback to basic data otherwise
-    return results
-      .filter(
-        (
-          result,
-        ): result is PromiseFulfilledResult<{
-          success: boolean;
-          data: EvaluationDetailResponse | null;
-          fallback: Evaluation;
-        }> => result.status === 'fulfilled',
-      )
-      .map(result => {
-        const { success, data, fallback } = result.value;
-        return success && data ? data : fallback;
-      });
-  },
-
-  /**
    * Get a single evaluation by name
    */
-  async getByName(name: string): Promise<Evaluation | null> {
+  async getByName(name: string): Promise<EvaluationResponse | null> {
     try {
       const response = await apiClient.get<EvaluationResponse>(
         `/api/v1/evaluations/${name}`,
@@ -277,7 +206,9 @@ export const evaluationsService = {
   /**
    * Create a new evaluation
    */
-  async create(evaluation: EvaluationCreateRequest): Promise<Evaluation> {
+  async create(
+    evaluation: EvaluationCreateRequest,
+  ): Promise<EvaluationResponse> {
     const response = await apiClient.post<EvaluationResponse>(
       `/api/v1/evaluations`,
       evaluation,
@@ -292,7 +223,7 @@ export const evaluationsService = {
   async update(
     name: string,
     updates: EvaluationUpdateRequest,
-  ): Promise<Evaluation | null> {
+  ): Promise<EvaluationResponse | null> {
     try {
       const response = await apiClient.put<EvaluationResponse>(
         `/api/v1/evaluations/${name}`,
@@ -325,7 +256,7 @@ export const evaluationsService = {
   /**
    * Cancel a running evaluation
    */
-  async cancel(name: string): Promise<Evaluation | null> {
+  async cancel(name: string): Promise<EvaluationResponse | null> {
     try {
       const response = await apiClient.patch<EvaluationResponse>(
         `/api/v1/evaluations/${name}/cancel`,
@@ -345,7 +276,7 @@ export const evaluationsService = {
   async getByQueryRef(
     queryName: string,
     enhanced: boolean = false,
-  ): Promise<Evaluation[] | EnhancedEvaluationResponse[]> {
+  ): Promise<EvaluationResponse[] | EnhancedEvaluationResponse[]> {
     // Use the backend filter to efficiently get evaluations for a specific query
     const url = enhanced
       ? `/api/v1/evaluations?enhanced=true&query_ref=${encodeURIComponent(queryName)}`

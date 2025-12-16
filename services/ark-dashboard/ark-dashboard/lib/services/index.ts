@@ -28,8 +28,9 @@ export {
 export { namespacesService, type Namespace } from './namespaces';
 export {
   evaluationsService,
-  type Evaluation,
+  type EvaluationResponse,
   type EvaluationDetailResponse,
+  type EnhancedEvaluationResponse,
   type EvaluationFilter,
   type QueryEvaluationSummary,
 } from './evaluations';

@@ -2475,6 +2475,14 @@ export interface components {
             type: string;
             /** Phase */
             phase?: string | null;
+            /** Spec */
+            spec: {
+                [key: string]: unknown;
+            };
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
             /** Conditions */
             conditions?: {
                 [key: string]: unknown;
@@ -2585,6 +2593,14 @@ export interface components {
             type: string;
             /** Phase */
             phase?: string | null;
+            /** Spec */
+            spec: {
+                [key: string]: unknown;
+            };
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
             /** Conditions */
             conditions?: {
                 [key: string]: unknown;
