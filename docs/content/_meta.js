@@ -1,6 +1,6 @@
 export default {
-  index: 'Introduction',
   quickstart: 'Quickstart',
+  index: 'Introduction',
   tutorials: 'Tutorials',
   'how-to-guides': 'How-to Guides',
   'core-concepts': 'Core Concepts',
@@ -11,7 +11,7 @@ export default {
   'developer-guide': { display: 'hidden' },
   'operations-guide': { display: 'hidden' },
 
-  
+
   marketplace: {
     title: 'Marketplace',
     href: 'https://mckinsey.github.io/agents-at-scale-marketplace'
