@@ -20,6 +20,7 @@ export interface QueryOptions {
   verbose?: boolean;
   outputFormat?: string;
   sessionId?: string;
+  conversationId?: string;
 }
 
 interface StreamState {
@@ -56,11 +57,18 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
     let firstOutput = true;
 
     const sessionId = options.sessionId || process.env.ARK_SESSION_ID;
+    const conversationId =
+      options.conversationId || process.env.ARK_CONVERSATION_ID;
 
     await chatClient.sendMessage(
       targetId,
       messages,
-      {streamingEnabled: true, sessionId, queryTimeout: options.timeout},
+      {
+        streamingEnabled: true,
+        sessionId,
+        conversationId,
+        queryTimeout: options.timeout,
+      },
       (chunk: string, toolCalls?: ToolCall[], arkMetadata?: ArkMetadata) => {
         if (firstOutput) {
           spinner.stop();
@@ -151,6 +159,10 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
       ...(options.timeout && {timeout: options.timeout}),
       ...((options.sessionId || process.env.ARK_SESSION_ID) && {
         sessionId: options.sessionId || process.env.ARK_SESSION_ID,
+      }),
+      ...((options.conversationId || process.env.ARK_CONVERSATION_ID) && {
+        conversationId:
+          options.conversationId || process.env.ARK_CONVERSATION_ID,
       }),
       targets: [
         {

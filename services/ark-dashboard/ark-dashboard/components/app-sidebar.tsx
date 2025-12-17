@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ChevronsUpDown,
   ChevronsUpDownIcon,
+  FlaskConical,
   Home,
   LogOut,
   Plus,
@@ -22,6 +23,7 @@ import {
   isExperimentalDarkModeEnabledAtom,
   isFilesBrowserAvailableAtom,
 } from '@/atoms/experimental-features';
+import { experimentalFeaturesDialogOpenAtom } from '@/atoms/internal-states';
 import { NamespaceEditor } from '@/components/editors';
 import {
   Collapsible,
@@ -71,6 +73,9 @@ export function AppSidebar() {
   const isA2ATasksEnabled = useAtomValue(isA2ATasksEnabledAtom);
   const isExperimentalDarkModeEnabled = useAtomValue(
     isExperimentalDarkModeEnabledAtom,
+  );
+  const setExperimentalFeaturesDialogOpen = useSetAtom(
+    experimentalFeaturesDialogOpenAtom,
   );
   const isFilesBrowserAvailable = useAtomValue(isFilesBrowserAvailableAtom);
   const setIsFilesBrowserAvailable = useSetAtom(isFilesBrowserAvailableAtom);
@@ -215,6 +220,11 @@ export function AppSidebar() {
                     onSelect={() => setNamespaceEditorOpen(true)}>
                     <Plus className="mr-2 h-4 w-4" />
                     Add Namespace
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => setExperimentalFeaturesDialogOpen(true)}>
+                    <FlaskConical className="mr-2 h-4 w-4" />
+                    Experimental Features
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

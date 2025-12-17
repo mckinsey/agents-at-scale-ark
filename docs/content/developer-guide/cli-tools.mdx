@@ -61,9 +61,9 @@ fark agent location "Where is Paris?"
 # Query with file input
 fark agent weather -f input.txt "Analyze this weather data"
 
-# Query with session management (requires memory service)
-fark agent weather "What's the weather in NYC?" --session-id weather-session
-fark agent weather "How about tomorrow?" --session-id weather-session
+# Query with session and conversation management (requires memory service)
+fark agent weather "What's the weather in NYC?" --session-id weather-session --conversation-id weather-conv
+fark agent weather "How about tomorrow?" --session-id weather-session --conversation-id weather-conv
 ```
 
 #### Team Queries

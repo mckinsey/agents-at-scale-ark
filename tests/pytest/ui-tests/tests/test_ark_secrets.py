@@ -9,8 +9,7 @@ class TestArkSecrets:
     created_secrets = {}
     
     @pytest.mark.parametrize("prefix,env_key", [
-        ("openai", "OPENAI_API_KEY"),
-        ("azureopenai", "AZURE_OPENAI_KEY"),
+        ("openai", "CICD_OPENAI_API_KEY"),
     ])
     @pytest.mark.dependency(name="create_{prefix}")
     def test_create_secret(self, page: Page, prefix: str, env_key: str):
@@ -30,7 +29,6 @@ class TestArkSecrets:
     
     @pytest.mark.parametrize("prefix", [
         "openai",
-        "azureopenai",
     ])
     @pytest.mark.dependency(depends=["create_{prefix}"])
     def test_delete_secret(self, page: Page, prefix: str):

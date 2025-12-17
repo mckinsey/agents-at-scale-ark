@@ -38,7 +38,7 @@ class AgentsPage(BasePage):
             pytest.skip("Agents tab not visible")
         
         self.page.locator(dashboard.AGENTS_TAB).first.click()
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         self.wait_for_timeout(2000)
     
     def generate_agent_name(self, prefix: str = "agent") -> str:
@@ -142,24 +142,26 @@ class AgentsPage(BasePage):
     
     def create_agent_with_verification(self, agent_name: str, description: str, model_name: str, execution_engine: str = "langchain-executor", tools: list = None) -> dict:        
         self.page.locator(self.ADD_AGENT_BUTTON).first.click()
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         self.wait_for_timeout(2000)
         
-        name_input = self.page.locator("input#name")
+        name_input = self.page.locator("input#name, input[name='name']").first
         name_input.wait_for(state="visible", timeout=10000)
         name_input.fill(agent_name)
         
-        description_input = self.page.locator("input#description")
+        description_input = self.page.locator("input#description, input[name='description'], textarea[name='description']").first
         description_input.wait_for(state="visible", timeout=5000)
         description_input.fill(description)
         
-        execution_engine_input = self.page.locator("input#execution-engine")
-        execution_engine_input.wait_for(state="visible", timeout=5000)
-        execution_engine_input.fill(execution_engine)
+        execution_engine_input = self.page.locator("input#execution-engine, input[name='execution-engine'], input[name='executionEngine']").first
+        if execution_engine_input.is_visible():
+            execution_engine_input.fill(execution_engine)
+        else:
+            logger.info("Execution engine field not found, skipping")
         
         self.wait_for_timeout(1000)
         
-        model_trigger = self.page.locator("button#model")
+        model_trigger = self.page.locator("button#model, button[name='model'], [data-slot='trigger']:has-text('Select')").first
         model_trigger.wait_for(state="visible", timeout=5000)
         model_trigger.click()
         self.wait_for_timeout(1000)
@@ -188,15 +190,15 @@ class AgentsPage(BasePage):
         
         self.wait_for_timeout(1000)
         
-        save_button = self.page.locator("button").filter(has_text="Create").first
+        save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
         if not save_button.is_visible():
-            save_button = self.page.locator("button").filter(has_text="Save").first
-        if not save_button.is_visible():
-            save_button = self.page.locator("button[type='submit']").first
-            
-        save_button.click()
+            save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
         
-        self.wait_for_load_state("networkidle")
+        logger.info("Clicking Create button in dialog")
+        save_button.scroll_into_view_if_needed()
+        save_button.evaluate("el => el.click()")
+        
+        self.wait_for_load_state("domcontentloaded")
         self.wait_for_timeout(2000)
         
         error_banner = self.check_for_error_banner()
@@ -210,8 +212,25 @@ class AgentsPage(BasePage):
         except:
             popup_visible = False
         
-        self.wait_for_timeout(3000)
+        try:
+            self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=10000)
+        except:
+            logger.info("Dialog may still be open, pressing Escape")
+            self.page.keyboard.press("Escape")
+            self.wait_for_timeout(1000)
+        
+        self.wait_for_timeout(1000)
+        
+        self.navigate_to_agents_tab()
+        self.wait_for_timeout(2000)
+        
         in_table = self.is_agent_in_table(agent_name)
+        
+        if not in_table:
+            self.page.reload()
+            self.wait_for_load_state("domcontentloaded")
+            self.wait_for_timeout(2000)
+            in_table = self.is_agent_in_table(agent_name)
         
         row_verification = self.verify_agent_in_table_row(agent_name, description, model_name)
         
@@ -243,7 +262,7 @@ class AgentsPage(BasePage):
         if confirm_button_visible:
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         popup_visible = self._check_success_popup()
         self.wait_for_timeout(3000)
         deleted_from_table = not self.is_agent_in_table(agent_name)

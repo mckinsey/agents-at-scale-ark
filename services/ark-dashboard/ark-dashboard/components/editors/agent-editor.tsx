@@ -1,5 +1,6 @@
 'use client';
 
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useAtomValue } from 'jotai';
 import {
   ChevronRight,
@@ -9,6 +10,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import * as z from 'zod';
 
 import { isExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
 import { Button } from '@/components/ui/button';
@@ -21,6 +24,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -49,7 +60,7 @@ import type {
 } from '@/lib/services';
 import { toolsService } from '@/lib/services';
 import { groupToolsByLabel } from '@/lib/utils/groupToolsByLabels';
-import { getKubernetesNameError } from '@/lib/utils/kubernetes-validation';
+import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 
 import {
   Collapsible,
@@ -68,6 +79,15 @@ interface AgentEditorProps {
   ) => void;
 }
 
+const formSchema = z.object({
+  name: kubernetesNameSchema,
+  description: z.string().optional(),
+  selectedModelName: z.string().optional(),
+  selectedModelNamespace: z.string().optional(),
+  executionEngineName: z.string().optional(),
+  prompt: z.string().optional(),
+});
+
 export function AgentEditor({
   open,
   onOpenChange,
@@ -75,24 +95,26 @@ export function AgentEditor({
   models,
   onSave,
 }: Readonly<AgentEditorProps>) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [selectedModelName, setSelectedModelName] =
-    useState<string>('__none__');
-  const [selectedModelNamespace, setSelectedModelNamespace] =
-    useState<string>('');
-  const [executionEngineName, setExecutionEngineName] = useState<string>('');
-  const [prompt, setPrompt] = useState<string>('');
-  const [nameError, setNameError] = useState<string | null>(null);
-  const [isPromptExpanded, setIsPromptExpanded] = useState(false);
-
-  const [availableTools, setAvailableTools] = useState<Tool[]>([]);
   const [selectedTools, setSelectedTools] = useState<AgentTool[]>([]);
+  const [isPromptExpanded, setIsPromptExpanded] = useState(false);
+  const [availableTools, setAvailableTools] = useState<Tool[]>([]);
   const [toolsLoading, setToolsLoading] = useState(false);
   const [unavailableTools, setUnavailableTools] = useState<Tool[]>([]);
   const isExperimentalExecutionEngineEnabled = useAtomValue(
     isExperimentalExecutionEngineEnabledAtom,
   );
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: '',
+      description: '',
+      selectedModelName: '__none__',
+      selectedModelNamespace: '',
+      executionEngineName: '',
+      prompt: '',
+    },
+  });
 
   useEffect(() => {
     if (open) {
@@ -119,87 +141,71 @@ export function AgentEditor({
 
   useEffect(() => {
     if (agent) {
-      setName(agent.name);
-      setDescription(agent.description || '');
-      setSelectedModelName(agent.modelRef?.name || '__none__');
-      setSelectedModelNamespace(agent.modelRef?.namespace || '');
-      setExecutionEngineName(agent.executionEngine?.name || '');
-      setPrompt(agent.prompt || '');
+      form.reset({
+        name: agent.name,
+        description: agent.description || '',
+        selectedModelName: agent.modelRef?.name || '__none__',
+        selectedModelNamespace: agent.modelRef?.namespace || '',
+        executionEngineName: agent.executionEngine?.name || '',
+        prompt: agent.prompt || '',
+      });
       setSelectedTools(agent.tools || []);
     } else {
-      setName('');
-      setDescription('');
-      setSelectedModelName('__none__');
-      setSelectedModelNamespace('');
-      setExecutionEngineName('');
-      setPrompt('');
+      form.reset();
       setSelectedTools([]);
       setIsPromptExpanded(false);
     }
-  }, [open, agent, agent?.tools]);
+  }, [open, agent, form]);
 
-  const handleSave = () => {
+  const onSubmit = (values: z.infer<typeof formSchema>) => {
     if (agent) {
-      // Update existing agent - don't include name in update request
       const updateData: AgentUpdateRequest & { id: string } = {
-        description: description || undefined,
-        // Only include model, execution engine, prompt, and tools for non-A2A agents
+        description: values.description || undefined,
         modelRef:
           !agent.isA2A &&
-          selectedModelName &&
-          selectedModelName !== '' &&
-          selectedModelName !== '__none__'
+          values.selectedModelName &&
+          values.selectedModelName !== '' &&
+          values.selectedModelName !== '__none__'
             ? {
-                name: selectedModelName,
-                namespace: selectedModelNamespace || undefined,
+                name: values.selectedModelName,
+                namespace: values.selectedModelNamespace || undefined,
               }
             : undefined,
         executionEngine:
-          !agent.isA2A && executionEngineName
+          !agent.isA2A && values.executionEngineName
             ? {
-                name: executionEngineName,
+                name: values.executionEngineName,
               }
             : undefined,
-        prompt: !agent.isA2A ? prompt || undefined : undefined,
+        prompt: !agent.isA2A ? values.prompt || undefined : undefined,
         tools: agent.isA2A ? undefined : selectedTools,
         id: agent.id,
       };
       onSave(updateData);
     } else {
-      // Create new agent - assumes non-A2A since A2A agents are not created via this editor
       const createData: AgentCreateRequest = {
-        name,
-        description: description || undefined,
+        name: values.name,
+        description: values.description || undefined,
         modelRef:
-          selectedModelName &&
-          selectedModelName !== '' &&
-          selectedModelName !== '__none__'
+          values.selectedModelName &&
+          values.selectedModelName !== '' &&
+          values.selectedModelName !== '__none__'
             ? {
-                name: selectedModelName,
-                namespace: selectedModelNamespace || undefined,
+                name: values.selectedModelName,
+                namespace: values.selectedModelNamespace || undefined,
               }
             : undefined,
-        executionEngine: executionEngineName
+        executionEngine: values.executionEngineName
           ? {
-              name: executionEngineName,
+              name: values.executionEngineName,
             }
           : undefined,
-        prompt: prompt || undefined,
+        prompt: values.prompt || undefined,
         tools: selectedTools,
       };
       onSave(createData);
     }
     onOpenChange(false);
-  };
-
-  const handleNameChange = (value: string) => {
-    setName(value);
-    if (value) {
-      const error = getKubernetesNameError(value);
-      setNameError(error);
-    } else {
-      setNameError(null);
-    }
   };
 
   const handleToolToggle = (tool: Tool, checked: boolean) => {
@@ -224,8 +230,6 @@ export function AgentEditor({
     return selectedTools.some(t => t.name === toolName);
   };
 
-  const isValid = name.trim() && !nameError;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
@@ -237,156 +241,217 @@ export function AgentEditor({
               : 'Fill in the information for the new agent.'}
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="name">Name</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={e => handleNameChange(e.target.value)}
-              placeholder="e.g., customer-support-agent"
-              disabled={!!agent}
-              className={nameError ? 'border-red-500' : ''}
-            />
-            {nameError && (
-              <p className="mt-1 text-sm text-red-500">{nameError}</p>
-            )}
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="description">Description</Label>
-            <Input
-              id="description"
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="e.g., Handles customer inquiries and support tickets"
-            />
-          </div>
-          {!agent?.isA2A && (
-            <>
-              <div className="grid gap-2">
-                <Label htmlFor="model">Model</Label>
-                <Select
-                  value={selectedModelName}
-                  onValueChange={setSelectedModelName}>
-                  <SelectTrigger id="model">
-                    <SelectValue placeholder="Select a model (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">
-                      <span className="text-muted-foreground">
-                        None (Unset)
-                      </span>
-                    </SelectItem>
-                    {models.map(model => (
-                      <SelectItem key={model.name} value={model.name}>
-                        {model.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {isExperimentalExecutionEngineEnabled && (
-                <div className="grid gap-2">
-                  <Label htmlFor="execution-engine">Execution Engine</Label>
-                  <Input
-                    id="execution-engine"
-                    value={executionEngineName}
-                    onChange={e => setExecutionEngineName(e.target.value)}
-                    placeholder="e.g., langchain-executor"
-                  />
-                </div>
-              )}
-              <div className="grid gap-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="prompt">Prompt</Label>
-                  <div className="flex items-center gap-2">
-                    {prompt.length > 0 && (
-                      <span className="text-muted-foreground text-xs">
-                        {prompt.length} characters
-                      </span>
-                    )}
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setIsPromptExpanded(!isPromptExpanded)}
-                      className="h-8 px-2">
-                      {isPromptExpanded ? (
-                        <>
-                          <Minimize2 className="mr-1 h-4 w-4" />
-                          Collapse
-                        </>
-                      ) : (
-                        <>
-                          <Maximize2 className="mr-1 h-4 w-4" />
-                          Expand
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-                <Textarea
-                  id="prompt"
-                  value={prompt}
-                  onChange={e => setPrompt(e.target.value)}
-                  placeholder="Enter the agent's prompt or instructions..."
-                  className={`resize-none transition-all duration-200 ${
-                    isPromptExpanded
-                      ? 'max-h-[500px] min-h-[400px] overflow-y-auto'
-                      : 'max-h-[150px] min-h-[100px]'
-                  }`}
-                  style={{
-                    whiteSpace: 'pre-wrap',
-                    wordWrap: 'break-word',
-                  }}
-                />
-                {isPromptExpanded && prompt.length > 0 && (
-                  <div className="text-muted-foreground text-xs">
-                    {prompt.split('\n').length} lines
-                  </div>
-                )}
-              </div>
-            </>
-          )}
 
-          {agent?.isA2A ? (
-            <SkillsDisplaySection skills={agent.skills || []} />
-          ) : (
-            <ToolSelectionSection
-              availableTools={availableTools}
-              toolsLoading={toolsLoading}
-              onToolToggle={handleToolToggle}
-              isToolSelected={isToolSelected}
-              unavailableTools={unavailableTools}
-              onDeleteClick={onDeleteClick}
-            />
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger className="text-left" tabIndex={-1} asChild>
-                <span className="inline-block">
-                  <Button
-                    onClick={handleSave}
-                    disabled={!isValid || unavailableTools.length > 0}>
-                    {agent ? 'Update' : 'Create'}
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>
-                  {unavailableTools.length > 0
-                    ? 'Delete all unavailable tools to proceed'
-                    : ''}{' '}
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </DialogFooter>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid gap-4 py-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Name <span className="text-red-500">*</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g., customer-support-agent"
+                        disabled={!!agent || form.formState.isSubmitting}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g., Handles customer inquiries and support tickets"
+                        disabled={form.formState.isSubmitting}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {!agent?.isA2A && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="selectedModelName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Model</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
+                          disabled={form.formState.isSubmitting}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a model (optional)" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">
+                              <span className="text-muted-foreground">
+                                None (Unset)
+                              </span>
+                            </SelectItem>
+                            {models.map(model => (
+                              <SelectItem key={model.name} value={model.name}>
+                                {model.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  {isExperimentalExecutionEngineEnabled && (
+                    <FormField
+                      control={form.control}
+                      name="executionEngineName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Execution Engine</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="e.g., langchain-executor"
+                              disabled={form.formState.isSubmitting}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                  <FormField
+                    control={form.control}
+                    name="prompt"
+                    render={({ field }) => (
+                      <FormItem>
+                        <div className="flex items-center justify-between">
+                          <FormLabel>Prompt</FormLabel>
+                          <div className="flex items-center gap-2">
+                            {field.value && field.value.length > 0 && (
+                              <span className="text-muted-foreground text-xs">
+                                {field.value.length} characters
+                              </span>
+                            )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setIsPromptExpanded(!isPromptExpanded)
+                              }
+                              className="h-8 px-2">
+                              {isPromptExpanded ? (
+                                <>
+                                  <Minimize2 className="mr-1 h-4 w-4" />
+                                  Collapse
+                                </>
+                              ) : (
+                                <>
+                                  <Maximize2 className="mr-1 h-4 w-4" />
+                                  Expand
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Enter the agent's prompt or instructions..."
+                            disabled={form.formState.isSubmitting}
+                            className={`resize-none transition-all duration-200 ${
+                              isPromptExpanded
+                                ? 'max-h-[500px] min-h-[400px] overflow-y-auto'
+                                : 'max-h-[150px] min-h-[100px]'
+                            }`}
+                            style={{
+                              whiteSpace: 'pre-wrap',
+                              wordWrap: 'break-word',
+                            }}
+                            {...field}
+                          />
+                        </FormControl>
+                        {isPromptExpanded &&
+                          field.value &&
+                          field.value.length > 0 && (
+                            <div className="text-muted-foreground text-xs">
+                              {field.value.split('\n').length} lines
+                            </div>
+                          )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </>
+              )}
+
+              {agent?.isA2A ? (
+                <SkillsDisplaySection skills={agent.skills || []} />
+              ) : (
+                <ToolSelectionSection
+                  availableTools={availableTools}
+                  toolsLoading={toolsLoading}
+                  onToolToggle={handleToolToggle}
+                  isToolSelected={isToolSelected}
+                  unavailableTools={unavailableTools}
+                  onDeleteClick={onDeleteClick}
+                />
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={form.formState.isSubmitting}>
+                Cancel
+              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger className="text-left" tabIndex={-1} asChild>
+                    <span className="inline-block">
+                      <Button
+                        type="submit"
+                        disabled={
+                          form.formState.isSubmitting ||
+                          unavailableTools.length > 0
+                        }>
+                        {form.formState.isSubmitting
+                          ? 'Saving...'
+                          : agent
+                            ? 'Update'
+                            : 'Create'}
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>
+                      {unavailableTools.length > 0
+                        ? 'Delete all unavailable tools to proceed'
+                        : ''}{' '}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );

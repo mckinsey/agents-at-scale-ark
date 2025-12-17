@@ -10,6 +10,7 @@ export interface ChatConfig {
   currentTarget?: QueryTarget;
   a2aContextId?: string;
   sessionId?: string;
+  conversationId?: string;
   queryTimeout?: string;
 }
 
@@ -65,11 +66,20 @@ export class ChatClient {
     };
 
     // Build metadata object - only add if we have something to include
-    if (config.sessionId || config.a2aContextId || config.queryTimeout) {
+    if (
+      config.sessionId ||
+      config.conversationId ||
+      config.a2aContextId ||
+      config.queryTimeout
+    ) {
       params.metadata = {};
 
       if (config.sessionId) {
         params.metadata.sessionId = config.sessionId;
+      }
+
+      if (config.conversationId) {
+        params.metadata.conversationId = config.conversationId;
       }
 
       if (config.queryTimeout) {

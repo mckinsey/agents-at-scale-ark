@@ -102,7 +102,7 @@ export function QueryEvaluationActions({
   }, [queryName]);
 
   const handleViewEvaluations = () => {
-    router.push(`/evaluations&query=${encodeURIComponent(queryName)}`);
+    router.push(`/evaluations?query=${encodeURIComponent(queryName)}`);
   };
 
   const handleCreateEvaluation = (evaluatorName?: string) => {

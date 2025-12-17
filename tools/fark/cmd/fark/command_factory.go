@@ -109,12 +109,13 @@ func (cf *CommandFactory) createTargetCommand(targetType ResourceType, targetNam
 	singularType := string(targetType)[:len(targetType)-1] // Remove 's' from end
 
 	return &TargetCommand{
-		TargetType: singularType,
-		TargetName: targetName,
-		Input:      inputOverride,
-		Timeout:    f.timeout,
-		Parameters: f.parameters,
-		SessionId:  f.sessionId,
+		TargetType:     singularType,
+		TargetName:     targetName,
+		Input:          inputOverride,
+		Timeout:        f.timeout,
+		Parameters:     f.parameters,
+		SessionId:      f.sessionId,
+		ConversationId: f.conversationId,
 		ExecutionContext: ExecutionContext{
 			Config:     cf.config,
 			Namespace:  ns,

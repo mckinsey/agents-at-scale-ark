@@ -154,6 +154,7 @@ export interface Query {
     input: string;
     targets: QueryTarget[];
     sessionId?: string;
+    conversationId?: string;
     timeout?: string;
   };
   status?: QueryStatus;

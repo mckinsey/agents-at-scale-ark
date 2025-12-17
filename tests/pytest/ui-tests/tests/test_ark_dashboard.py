@@ -33,15 +33,15 @@ class TestArkDashboard:
     ])
     def test_dashboard_tabs_navigation(self, page: Page, tab_name: str, tab_selector: str, button_selector: str):
         dashboard = DashboardPage(page)
-        dashboard.navigate_to_dashboard()
+        page.goto("http://localhost:3274")
+        dashboard.wait_for_load_state("domcontentloaded")
+        dashboard.wait_for_timeout(1000)
         
-        initial_url = dashboard.get_url()
         tab_element = getattr(dashboard, tab_selector)
         
         if dashboard.is_visible(tab_element):
-            dashboard.click(tab_element)
-            dashboard.wait_for_load_state("networkidle")
-            dashboard.wait_for_timeout(1000)
+            page.locator(tab_element).first.click()
+            dashboard.wait_for_timeout(2000)
             
             new_url = dashboard.get_url()          
             assert tab_name.lower() in new_url.lower(), f"URL should contain '{tab_name.lower()}' but got: {new_url}"

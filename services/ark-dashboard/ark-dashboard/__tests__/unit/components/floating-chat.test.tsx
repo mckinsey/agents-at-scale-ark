@@ -279,6 +279,202 @@ describe('FloatingChat', () => {
     });
   });
 
+  describe('window state management', () => {
+    beforeEach(() => {
+      vi.mocked(useAtomValue).mockReturnValue(true);
+    });
+
+    describe('default state', () => {
+      it('should start in default state with visible content', () => {
+        render(<FloatingChat {...defaultProps} />);
+
+        expect(
+          screen.getByPlaceholderText('Type your message...'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText(/start a conversation with the agent/i),
+        ).toBeInTheDocument();
+      });
+
+      it('should show minimize button in default state', () => {
+        render(<FloatingChat {...defaultProps} />);
+
+        const minimizeButton = screen.getByRole('button', {
+          name: /minimize chat/i,
+        });
+        expect(minimizeButton).toBeInTheDocument();
+      });
+
+      it('should show maximize button in default state', () => {
+        render(<FloatingChat {...defaultProps} />);
+
+        const maximizeButton = screen.getByRole('button', {
+          name: /maximize chat/i,
+        });
+        expect(maximizeButton).toBeInTheDocument();
+      });
+    });
+
+    describe('minimized state', () => {
+      it('should hide chat content when minimized', async () => {
+        const user = userEvent.setup();
+        render(<FloatingChat {...defaultProps} />);
+
+        const minimizeButton = screen.getByRole('button', {
+          name: /minimize chat/i,
+        });
+        await user.click(minimizeButton);
+
+        expect(
+          screen.queryByPlaceholderText('Type your message...'),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByText(/start a conversation with the agent/i),
+        ).not.toBeInTheDocument();
+      });
+
+      it('should keep the chat name visible when minimized', async () => {
+        const user = userEvent.setup();
+        render(<FloatingChat {...defaultProps} />);
+
+        const minimizeButton = screen.getByRole('button', {
+          name: /minimize chat/i,
+        });
+        await user.click(minimizeButton);
+
+        expect(screen.getByText('Test Agent')).toBeInTheDocument();
+      });
+
+      it('should keep close button visible when minimized', async () => {
+        const user = userEvent.setup();
+        render(<FloatingChat {...defaultProps} />);
+
+        const minimizeButton = screen.getByRole('button', {
+          name: /minimize chat/i,
+        });
+        await user.click(minimizeButton);
+
+        const closeButton = screen.getByRole('button', { name: /close chat/i });
+        expect(closeButton).toBeInTheDocument();
+      });
+
+      it('should allow normalizing from minimized state', async () => {
+        const user = userEvent.setup();
+        render(<FloatingChat {...defaultProps} />);
+
+        const minimizeButton = screen.getByRole('button', {
+          name: /minimize chat/i,
+        });
+        await user.click(minimizeButton);
+
+        const restoreButton = screen.getByRole('button', {
+          name: /restore chat/i,
+        });
+        await user.click(restoreButton);
+
+        expect(
+          screen.getByPlaceholderText('Type your message...'),
+        ).toBeInTheDocument();
+      });
+
+      it('should allow maximizing from minimized state', async () => {
+        const user = userEvent.setup();
+        render(<FloatingChat {...defaultProps} />);
+
+        const minimizeButton = screen.getByRole('button', {
+          name: /minimize chat/i,
+        });
+        await user.click(minimizeButton);
+
+        const maximizeButton = screen.getByRole('button', {
+          name: /maximize chat/i,
+        });
+        await user.click(maximizeButton);
+
+        expect(
+          screen.getByPlaceholderText('Type your message...'),
+        ).toBeInTheDocument();
+        const restoreSizeButton = screen.getByRole('button', {
+          name: /restore size/i,
+        });
+        expect(restoreSizeButton).toBeInTheDocument();
+      });
+    });
+
+    describe('maximized state', () => {
+      it('should show restore size button when maximized', async () => {
+        const user = userEvent.setup();
+        render(<FloatingChat {...defaultProps} />);
+
+        const maximizeButton = screen.getByRole('button', {
+          name: /maximize chat/i,
+        });
+        await user.click(maximizeButton);
+
+        const restoreSizeButton = screen.getByRole('button', {
+          name: /restore size/i,
+        });
+        expect(restoreSizeButton).toBeInTheDocument();
+      });
+
+      it('should allow normalizing from maximized state', async () => {
+        const user = userEvent.setup();
+        render(<FloatingChat {...defaultProps} />);
+
+        const maximizeButton = screen.getByRole('button', {
+          name: /maximize chat/i,
+        });
+        await user.click(maximizeButton);
+
+        const restoreSizeButton = screen.getByRole('button', {
+          name: /restore size/i,
+        });
+        await user.click(restoreSizeButton);
+
+        const maximizeAgainButton = screen.getByRole('button', {
+          name: /maximize chat/i,
+        });
+        expect(maximizeAgainButton).toBeInTheDocument();
+      });
+
+      it('should allow minimizing from maximized state', async () => {
+        const user = userEvent.setup();
+        render(<FloatingChat {...defaultProps} />);
+
+        const maximizeButton = screen.getByRole('button', {
+          name: /maximize chat/i,
+        });
+        await user.click(maximizeButton);
+
+        const minimizeButton = screen.getByRole('button', {
+          name: /minimize chat/i,
+        });
+        await user.click(minimizeButton);
+
+        expect(
+          screen.queryByPlaceholderText('Type your message...'),
+        ).not.toBeInTheDocument();
+        const restoreButton = screen.getByRole('button', {
+          name: /restore chat/i,
+        });
+        expect(restoreButton).toBeInTheDocument();
+      });
+
+      it('should keep close button visible when maximized', async () => {
+        const user = userEvent.setup();
+        render(<FloatingChat {...defaultProps} />);
+
+        const maximizeButton = screen.getByRole('button', {
+          name: /maximize chat/i,
+        });
+        await user.click(maximizeButton);
+
+        const closeButton = screen.getByRole('button', { name: /close chat/i });
+        expect(closeButton).toBeInTheDocument();
+      });
+    });
+  });
+
   describe('streaming disabled', () => {
     it('should poll for response when feature flag is disabled', async () => {
       // Mock feature flag to false
