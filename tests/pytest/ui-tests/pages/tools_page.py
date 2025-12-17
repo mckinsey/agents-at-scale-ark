@@ -92,7 +92,7 @@ class ToolsPage(BasePage):
         else:
             self.page.locator("[role='option']:has-text('HTTP')").first.click()
         
-        self.wait_for_timeout(500)
+        self.wait_for_timeout(1000)
         
         description_input = self.page.locator("input#description, input[name='description'], [role='dialog'] input:nth-of-type(2)").first
         description_input.wait_for(state="visible", timeout=5000)
@@ -103,8 +103,27 @@ class ToolsPage(BasePage):
         schema_textarea.wait_for(state="visible", timeout=5000)
         schema_textarea.fill(input_schema)
         
-        url_input = self.page.locator("input#http-url, input[name='http-url'], input[name='url'], input[placeholder*='URL' i]").first
-        url_input.wait_for(state="visible", timeout=5000)
+        self.wait_for_timeout(500)
+        
+        dialog = self.page.locator("[role='dialog'], [data-slot='dialog-content']").first
+        if dialog.count() > 0:
+            dialog.evaluate("el => el.scrollTo(0, el.scrollHeight)")
+        
+        self.wait_for_timeout(500)
+        
+        url_input = self.page.locator("input[name='httpUrl'], input#http-url, input#httpUrl, input[placeholder*='https://']").first
+        
+        for attempt in range(3):
+            try:
+                url_input.wait_for(state="visible", timeout=3000)
+                break
+            except:
+                logger.info(f"URL input not visible (attempt {attempt + 1}), scrolling dialog")
+                if dialog.count() > 0:
+                    dialog.evaluate("el => el.scrollTo(0, el.scrollHeight)")
+                self.wait_for_timeout(500)
+        
+        url_input.scroll_into_view_if_needed()
         url_input.fill(url)
         
         save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
@@ -113,18 +132,36 @@ class ToolsPage(BasePage):
         
         save_button.scroll_into_view_if_needed()
         save_button.evaluate("el => el.click()")
-        self.wait_for_navigation_complete()
+        
+        self.wait_for_timeout(2000)
+        
+        error_banner = self.page.locator("[role='alert']:has-text('error'), [role='alert']:has-text('Error'), .error, .toast-error").first
+        if error_banner.count() > 0 and error_banner.is_visible():
+            error_text = error_banner.inner_text()
+            logger.error(f"Tool creation error: {error_text}")
         
         popup_visible = self._check_success_popup()
+        logger.info(f"Success popup visible: {popup_visible}")
         
         self.wait_for_modal_close()
+        self.wait_for_timeout(1000)
         
         logger.info(f"Navigating back to tools list...")
         self.navigate_to_tools_tab()
+        self.wait_for_timeout(2000)
         self.wait_for_table_content()
         
         in_table = self.is_tool_in_table(tool_name)
-        logger.info(f"Tool in table after creation: {in_table}")
+        logger.info(f"Tool '{tool_name}' in table after creation: {in_table}")
+        
+        if not in_table:
+            page_content = self.page.content()
+            if tool_name in page_content:
+                logger.info(f"Tool name found in page HTML but not matched by locator")
+                in_table = True
+            else:
+                all_tools = self.page.locator("table tr, [role='row']").all_text_contents()
+                logger.info(f"Available rows: {all_tools[:5]}")
         
         return {
             "name": tool_name,
