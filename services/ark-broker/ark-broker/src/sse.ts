@@ -12,11 +12,12 @@ export const writeSSEEvent = (res: Response, data: unknown): boolean => {
 
 const SSE_HEARTBEAT_INTERVAL_MS = 30000;
 
-export const startSSEHeartbeat = (res: Response): NodeJS.Timeout => {
+export const startSSEHeartbeat = (res: Response): ReturnType<typeof setInterval> => {
   return setInterval(() => {
     try {
       res.write(': heartbeat\n\n');
     } catch {
+      // Ignore write errors - client may have disconnected
     }
   }, SSE_HEARTBEAT_INTERVAL_MS);
 };
@@ -84,7 +85,7 @@ export const streamSSE = (options: SSEStreamOptions): void => {
     unsubscribe();
   });
 
-  req.on('error', (error: NodeJS.ErrnoException) => {
+  req.on('error', (error: Error & { code?: string }) => {
     if (error.code === 'ECONNRESET') {
       console.log(`[${tag}-OUT]${idStr}: Client connection reset`);
     } else {

@@ -2,11 +2,7 @@ import { Router } from 'express';
 import express from 'express';
 import { TraceStore, OTELSpan } from '../trace-store.js';
 import protobuf from 'protobufjs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { join } from 'path';
 
 let ExportTraceServiceRequest: protobuf.Type | null = null;
 
@@ -14,7 +10,9 @@ async function loadProtoDefinitions() {
   if (ExportTraceServiceRequest) return;
 
   try {
-    const protoRootDir = join(__dirname, '../../proto');
+    // Proto files are in the project root's proto directory
+    // This works whether running from src/ or dist/
+    const protoRootDir = join(process.cwd(), 'proto');
     const protoPath = join(protoRootDir, 'opentelemetry/proto/collector/trace/v1/trace_service.proto');
 
     const root = new protobuf.Root();

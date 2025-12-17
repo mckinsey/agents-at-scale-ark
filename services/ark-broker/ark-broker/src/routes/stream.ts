@@ -174,11 +174,16 @@ export function createStreamRouter(stream: StreamStore): Router {
       
       const unsubscribeChunks = stream.subscribeToChunks(query_name, (chunk: any) => {
         hasReceivedChunks = true;
-        
+
         // Clear timeout on first chunk
         if (timeoutHandle) {
           clearTimeout(timeoutHandle);
           timeoutHandle = undefined;
+        }
+
+        // Skip [DONE] marker - it will be sent by the complete handler
+        if (chunk === '[DONE]') {
+          return;
         }
 
         // Check for errors and send as SSE event (not JSON response)
