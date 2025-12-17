@@ -38,16 +38,42 @@ class SecretsPage(BasePage):
         return f"{prefix}-{date_str}"
     
     def navigate_to_secrets_tab(self) -> None:
+        self._close_dialog_if_open()
+        
         from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
         dashboard.navigate_to_dashboard()
         
-        if not self.page.locator(dashboard.SECRETS_TAB).first.is_visible():
-            import pytest
-            pytest.skip("Secrets tab not visible")
+        self._close_dialog_if_open()
         
-        self.page.locator(dashboard.SECRETS_TAB).first.click()
+        try:
+            secrets_tab = self.page.locator(dashboard.SECRETS_TAB).first
+            if not secrets_tab.is_visible(timeout=5000):
+                import pytest
+                pytest.skip("Secrets tab not visible")
+            
+            secrets_tab.click(force=True)
+        except Exception as e:
+            logger.warning(f"Click failed, trying with force: {e}")
+            self.page.locator(dashboard.SECRETS_TAB).first.click(force=True)
+        
         self.wait_for_load_state("domcontentloaded")
+        self.wait_for_timeout(1000)
+    
+    def _close_dialog_if_open(self) -> None:
+        for attempt in range(3):
+            try:
+                dialog_overlay = self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first
+                if dialog_overlay.is_visible(timeout=1000):
+                    logger.info(f"Dialog still open, attempting to close (attempt {attempt + 1})")
+                    self.page.keyboard.press("Escape")
+                    self.wait_for_timeout(500)
+                else:
+                    return
+            except:
+                pass
+        self.page.keyboard.press("Escape")
+        self.wait_for_timeout(300)
     
     def is_secret_in_table(self, secret_name: str) -> bool:
         try:

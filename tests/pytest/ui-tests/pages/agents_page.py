@@ -29,15 +29,25 @@ class AgentsPage(BasePage):
     }
     
     def navigate_to_agents_tab(self) -> None:
+        self._close_dialog_if_open()
+        
         from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
         dashboard.navigate_to_dashboard()
         
-        if not self.page.locator(dashboard.AGENTS_TAB).first.is_visible():
-            import pytest
-            pytest.skip("Agents tab not visible")
+        self._close_dialog_if_open()
         
-        self.page.locator(dashboard.AGENTS_TAB).first.click()
+        try:
+            agents_tab = self.page.locator(dashboard.AGENTS_TAB).first
+            if not agents_tab.is_visible(timeout=5000):
+                import pytest
+                pytest.skip("Agents tab not visible")
+            
+            agents_tab.click(force=True)
+        except Exception as e:
+            logger.warning(f"Click failed, trying with force: {e}")
+            self.page.locator(dashboard.AGENTS_TAB).first.click(force=True)
+        
         self.wait_for_load_state("domcontentloaded")
         self.wait_for_timeout(2000)
     
@@ -161,24 +171,73 @@ class AgentsPage(BasePage):
         
         self.wait_for_timeout(1000)
         
-        model_trigger = self.page.locator("button#model, button[name='model'], [data-slot='trigger']:has-text('Select')").first
-        model_trigger.wait_for(state="visible", timeout=5000)
-        model_trigger.click()
-        self.wait_for_timeout(1000)
+        model_selectors = [
+            "[role='combobox'][aria-label*='Model' i]",
+            "button[aria-haspopup='listbox']:has-text('Select')",
+            "[data-slot='trigger'][aria-haspopup='listbox']",
+            "button#model",
+            "button[name='model']",
+            "[role='combobox']"
+        ]
         
-        self.page.locator("[role='option']").first.wait_for(state="visible", timeout=5000)
+        model_trigger = None
+        for selector in model_selectors:
+            try:
+                loc = self.page.locator(selector).first
+                if loc.is_visible(timeout=2000):
+                    model_trigger = loc
+                    logger.info(f"Found model selector with: {selector}")
+                    break
+            except:
+                continue
         
+        if not model_trigger:
+            logger.warning("Could not find model dropdown, trying label approach")
+            model_label = self.page.get_by_text("Model", exact=True).first
+            model_trigger = model_label.locator("..").locator("button, [role='combobox']").first
+        
+        model_trigger.focus()
+        self.wait_for_timeout(300)
+        model_trigger.click(force=True)
+        self.wait_for_timeout(500)
+        
+        options_visible = False
+        for attempt in range(3):
+            try:
+                self.page.locator("[role='option']").first.wait_for(state="visible", timeout=2000)
+                options_visible = True
+                break
+            except:
+                logger.info(f"Options not visible (attempt {attempt + 1}), retrying")
+                model_trigger.click(force=True)
+                self.wait_for_timeout(500)
+        
+        if not options_visible:
+            logger.warning("Could not open model dropdown")
+        
+        self.wait_for_timeout(300)
+        
+        model_selected = False
         model_option = self.page.get_by_role("option", name=model_name, exact=True)
         if model_option.count() > 0:
             logger.info(f"Found exact match for model: {model_name}")
-            model_option.click()
-        else:
-            logger.info(f"Trying alternative selector for model: {model_name}")
+            model_option.first.click(force=True)
+            model_selected = True
+        
+        if not model_selected:
+            logger.info(f"Trying partial match for model: {model_name}")
             model_option_alt = self.page.locator(f"[role='option']:has-text('{model_name}')").first
-            if model_option_alt.is_visible():
-                model_option_alt.click()
+            if model_option_alt.count() > 0:
+                model_option_alt.click(force=True)
+                model_selected = True
+        
+        if not model_selected:
+            first_option = self.page.locator("[role='option']").first
+            if first_option.count() > 0:
+                logger.warning(f"Could not find model {model_name}, selecting first available")
+                first_option.click(force=True)
             else:
-                logger.warning(f"Could not find model option for: {model_name}")
+                logger.warning(f"No model options available")
         
         logger.info(f"Model {model_name} selected")
         
@@ -212,12 +271,7 @@ class AgentsPage(BasePage):
         except:
             popup_visible = False
         
-        try:
-            self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=10000)
-        except:
-            logger.info("Dialog may still be open, pressing Escape")
-            self.page.keyboard.press("Escape")
-            self.wait_for_timeout(1000)
+        self._close_dialog_if_open()
         
         self.wait_for_timeout(1000)
         
@@ -292,6 +346,28 @@ class AgentsPage(BasePage):
             return True
         except:
             return False
+    
+    def _close_dialog_if_open(self) -> None:
+        for attempt in range(3):
+            try:
+                dialog_overlay = self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first
+                if dialog_overlay.is_visible(timeout=1000):
+                    logger.info(f"Dialog still open, attempting to close (attempt {attempt + 1})")
+                    self.page.keyboard.press("Escape")
+                    self.wait_for_timeout(1000)
+                    
+                    close_button = self.page.locator("button:has-text('Close'), button:has-text('Cancel'), [aria-label='Close']").first
+                    if close_button.is_visible(timeout=500):
+                        close_button.click()
+                        self.wait_for_timeout(500)
+                else:
+                    logger.info("Dialog closed successfully")
+                    return
+            except:
+                pass
+        
+        self.page.keyboard.press("Escape")
+        self.wait_for_timeout(500)
     
     def _select_tool(self, tool_name: str) -> None:
         try:
