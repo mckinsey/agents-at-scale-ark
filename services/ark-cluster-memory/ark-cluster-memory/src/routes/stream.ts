@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { StreamStore } from '../stream-store.js';
 import { StreamError } from '../types.js';
-import { writeSSEEvent, startSSEHeartbeat } from '../sse.js';
+import { streamSSE, writeSSEEvent } from '../sse.js';
 
 const parseTimeout = (timeoutStr: string | undefined, defaultTimeout: number): number => {
   if (!timeoutStr) return defaultTimeout;
@@ -52,47 +52,12 @@ export function createStreamRouter(stream: StreamStore): Router {
 
     if (watch) {
       console.log('[STREAM] GET /stream?watch=true - starting SSE stream for all chunks');
-
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-
-      const heartbeat = startSSEHeartbeat(res);
-
-      let chunkCount = 0;
-      let lastLogTime = Date.now();
-
-      const unsubscribe = stream.subscribeToAllChunks((data) => {
-        if (!writeSSEEvent(res, data)) {
-          console.log('[STREAM-OUT] Client disconnected (write failed)');
-          clearInterval(heartbeat);
-          unsubscribe();
-          return;
-        }
-
-        chunkCount++;
-        const now = Date.now();
-        if (now - lastLogTime >= 1000) {
-          console.log(`[STREAM-OUT] Streamed ${chunkCount} chunks`);
-          lastLogTime = now;
-        }
-      });
-
-      req.on('close', () => {
-        console.log(`[STREAM-OUT] Client disconnected after ${chunkCount} chunks`);
-        clearInterval(heartbeat);
-        unsubscribe();
-      });
-
-      req.on('error', (error: NodeJS.ErrnoException) => {
-        if (error.code === 'ECONNRESET') {
-          console.log('[STREAM-OUT] Client connection reset');
-        } else {
-          console.error('[STREAM-OUT] Client connection error:', error);
-        }
-        clearInterval(heartbeat);
-        unsubscribe();
+      streamSSE({
+        res,
+        req,
+        tag: 'STREAM',
+        itemName: 'chunks',
+        subscribe: (callback) => stream.subscribeToAllChunks(callback)
       });
     } else {
       try {
@@ -613,7 +578,7 @@ export function createStreamRouter(stream: StreamStore): Router {
    *       500:
    *         description: Failed to purge streams
    */
-  router.delete('/', (req, res) => {
+  router.delete('/', (_req, res) => {
     try {
       stream.purge();
       res.json({ status: 'success', message: 'Stream data purged' });

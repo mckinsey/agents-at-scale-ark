@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { MemoryStore } from '../memory-store.js';
-import { writeSSEEvent, startSSEHeartbeat } from '../sse.js';
+import { streamSSE } from '../sse.js';
 
 export function createMemoryRouter(memory: MemoryStore): Router {
   const router = Router();
@@ -80,51 +80,13 @@ export function createMemoryRouter(memory: MemoryStore): Router {
 
     if (watch) {
       console.log('[MESSAGES] GET /messages?watch=true - starting SSE stream for all messages');
-
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-
-      const heartbeat = startSSEHeartbeat(res);
-
-      let messageCount = 0;
-      let lastLogTime = Date.now();
-
-      const unsubscribe = memory.subscribeToAllMessages((storedMessage) => {
-        if (conversation_id && storedMessage.conversation_id !== conversation_id) {
-          return;
-        }
-
-        if (!writeSSEEvent(res, storedMessage)) {
-          console.log('[MESSAGES-OUT] Client disconnected (write failed)');
-          clearInterval(heartbeat);
-          unsubscribe();
-          return;
-        }
-
-        messageCount++;
-        const now = Date.now();
-        if (now - lastLogTime >= 1000) {
-          console.log(`[MESSAGES-OUT] Streamed ${messageCount} messages`);
-          lastLogTime = now;
-        }
-      });
-
-      req.on('close', () => {
-        console.log(`[MESSAGES-OUT] Client disconnected after ${messageCount} messages`);
-        clearInterval(heartbeat);
-        unsubscribe();
-      });
-
-      req.on('error', (error: NodeJS.ErrnoException) => {
-        if (error.code === 'ECONNRESET') {
-          console.log('[MESSAGES-OUT] Client connection reset');
-        } else {
-          console.error('[MESSAGES-OUT] Client connection error:', error);
-        }
-        clearInterval(heartbeat);
-        unsubscribe();
+      streamSSE({
+        res,
+        req,
+        tag: 'MESSAGES',
+        itemName: 'messages',
+        subscribe: (callback) => memory.subscribeToAllMessages(callback),
+        filter: conversation_id ? (msg) => msg.conversation_id === conversation_id : undefined
       });
     } else {
       try {
@@ -151,7 +113,7 @@ export function createMemoryRouter(memory: MemoryStore): Router {
   });
 
   // GET /memory-status - returns memory statistics summary
-  router.get('/memory-status', (req, res) => {
+  router.get('/memory-status', (_req, res) => {
     try {
       const conversations = memory.getAllConversations();
       const allMessages = memory.getAllMessages();
