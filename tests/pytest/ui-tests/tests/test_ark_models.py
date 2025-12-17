@@ -10,7 +10,7 @@ class TestArkModels:
     created_models = {}
     
     @pytest.mark.parametrize("prefix,env_key,model_type,model_name,base_url_key", [
-        ("openai", "OPENAI_API_KEY", "OpenAI", "gpt-3.5-turbo", "OPENAI_ENDPOINT"),
+        ("openai", "CICD_OPENAI_API_KEY", "openai", "gpt-4o-mini", "CICD_OPENAI_BASE_URL"),
     ])
     @pytest.mark.dependency(name="create_model_{prefix}")
     def test_create_model_with_secret(self, page: Page, prefix: str, env_key: str, model_type: str, model_name: str, base_url_key: str):
