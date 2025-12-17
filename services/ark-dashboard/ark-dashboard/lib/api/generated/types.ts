@@ -1090,7 +1090,11 @@ export interface paths {
          * @description Create a new evaluation.
          */
         post: operations["create_evaluation_v1_evaluations_post"];
-        delete?: never;
+        /**
+         * Bulk Delete Evaluations
+         * @description Bulk delete evaluations.
+         */
+        delete: operations["bulk_delete_evaluations_v1_evaluations_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2494,6 +2498,28 @@ export interface components {
             /** Message */
             message?: string | null;
             enhanced_metadata?: components["schemas"]["UnifiedEvaluationMetadata"] | null;
+        };
+        /**
+         * EvaluationBulkDeleteRequest
+         * @description Request body for bulk deleting evaluations.
+         */
+        EvaluationBulkDeleteRequest: {
+            /** Names */
+            names: string[];
+        };
+        /**
+         * EvaluationBulkDeleteResponse
+         * @description Response for bulk deleting evaluations.
+         */
+        EvaluationBulkDeleteResponse: {
+            /** Message */
+            message: string;
+            /** Deleted */
+            deleted: number;
+            /** Failed */
+            failed: number;
+            /** Errors */
+            errors?: string[] | null;
         };
         /**
          * EvaluationConfig
@@ -6425,6 +6451,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EvaluationDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_delete_evaluations_v1_evaluations_delete: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvaluationBulkDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationBulkDeleteResponse"];
                 };
             };
             /** @description Validation Error */

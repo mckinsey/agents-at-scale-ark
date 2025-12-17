@@ -1,5 +1,6 @@
 """API routes for Evaluation resources."""
 
+import asyncio
 from fastapi import APIRouter, Query
 from ark_sdk.models.evaluation_v1alpha1 import EvaluationV1alpha1
 from ...core.constants import GROUP
@@ -7,6 +8,8 @@ from ark_sdk.client import with_ark_client
 from typing import Union, Optional
 
 from ...models.evaluations import (
+    EvaluationBulkDeleteRequest,
+    EvaluationBulkDeleteResponse,
     EvaluationListResponse,
     EnhancedEvaluationListResponse,
     EvaluationCreateRequest,
@@ -136,6 +139,50 @@ async def create_evaluation(
         result = await ark_client.evaluations.a_create(evaluation_obj)
         return evaluation_to_detail_response(result.to_dict())
 
+@router.delete("")
+@handle_k8s_errors(operation="bulkDelete", resource_type="evaluation")
+async def bulk_delete_evaluations(
+    evaluations: EvaluationBulkDeleteRequest,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+) -> EvaluationBulkDeleteResponse:
+    """Bulk delete evaluations."""
+    if not evaluations.names:
+        return EvaluationBulkDeleteResponse(
+            message="No evaluations to delete",
+            deleted=0,
+            failed=0
+        )
+    
+    async with with_ark_client(namespace, VERSION) as ark_client:
+        # Delete all evaluations in parallel
+        delete_tasks = [
+            ark_client.evaluations.a_delete(name) 
+            for name in evaluations.names
+        ]
+        
+        # Gather all delete operations and handle errors
+        results = await asyncio.gather(*delete_tasks, return_exceptions=True)
+        
+        # Count successes and failures
+        deleted_count = sum(1 for result in results if not isinstance(result, Exception))
+        failed_count = len(results) - deleted_count
+        
+        # Collect error messages if any
+        errors = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                errors.append(f"{evaluations.names[i]}: {str(result)}")
+        
+        message = f"Deleted {deleted_count} evaluation(s)"
+        if failed_count > 0:
+            message += f", {failed_count} failed"
+        
+        return EvaluationBulkDeleteResponse(
+            message=message,
+            deleted=deleted_count,
+            failed=failed_count,
+            errors=errors if errors else None
+        )
 
 @router.get("/{name}")
 @handle_k8s_errors(operation="get", resource_type="evaluation")
@@ -237,7 +284,7 @@ async def delete_evaluation(name: str, namespace: Optional[str] = Query(None, de
     """Delete an evaluation."""
     async with with_ark_client(namespace, VERSION) as ark_client:
         await ark_client.evaluations.a_delete(name)
-        return {"message": f"Evaluation '{name}' deleted successfully"}
+        return {"message": f"Evaluation '{name}' has been deleted successfully"}
 
 
 @router.patch("/{name}/cancel")

@@ -51,6 +51,8 @@ import { evaluationsService } from '@/lib/services/evaluations';
 import { useGetAllEvaluationsWithDetails } from '@/lib/services/evaluations-hooks';
 import { formatAge } from '@/lib/utils/time';
 
+import { Checkbox } from '../ui/checkbox';
+
 type EvaluationCreateRequest = components['schemas']['EvaluationCreateRequest'];
 type EvaluationUpdateRequest = components['schemas']['EvaluationUpdateRequest'];
 
@@ -58,7 +60,7 @@ interface EvaluationsSectionProps {
   initialQueryFilter?: string | null;
 }
 
-type SortField = 'name' | 'score' | 'status';
+type SortField = 'name' | 'score' | 'status' | 'age';
 type SortDirection = 'asc' | 'desc';
 
 const StatusDot = ({
@@ -107,8 +109,10 @@ export const EvaluationsSection = forwardRef<
   { openAddEditor: () => void },
   EvaluationsSectionProps
 >(function EvaluationsSection({ initialQueryFilter }, ref) {
+  // Hooks
   const router = useRouter();
 
+  // States
   const [evaluations, setEvaluations] = useState<
     (EvaluationResponse | EnhancedEvaluationResponse)[]
   >([]);
@@ -129,10 +133,24 @@ export const EvaluationsSection = forwardRef<
     evaluationType: [],
     labelFilters: [],
   });
+  const [selectedBulkDeleteEvaluations, setSelectedBulkDeleteEvaluations] =
+    useState<Set<string>>(new Set());
 
   const handleOpenAddEditor = useCallback(() => {
     setEditingEvaluation(null);
     setEditorOpen(true);
+  }, []);
+
+  const handleSelectBulkDelete = useCallback((evaluationName: string) => {
+    setSelectedBulkDeleteEvaluations(prev => {
+      const newSet = new Set(prev);
+      if (prev.has(evaluationName)) {
+        newSet.delete(evaluationName);
+      } else {
+        newSet.add(evaluationName);
+      }
+      return newSet;
+    });
   }, []);
 
   useImperativeHandle(ref, () => ({
@@ -151,6 +169,7 @@ export const EvaluationsSection = forwardRef<
   useEffect(() => {
     if (listEvaluationsData && !listEvaluationsError) {
       setEvaluations(listEvaluationsData);
+      setSelectedBulkDeleteEvaluations(new Set());
     }
 
     if (listEvaluationsError) {
@@ -491,6 +510,16 @@ export const EvaluationsSection = forwardRef<
       return sortDirection === 'desc'
         ? bStatus.localeCompare(aStatus)
         : aStatus.localeCompare(bStatus);
+    } else if (sortField === 'age') {
+      const aAge = a.metadata?.creationTimestamp || null;
+      const bAge = b.metadata?.creationTimestamp || null;
+
+      if (typeof aAge === 'string' && typeof bAge === 'string') {
+        return sortDirection === 'desc'
+          ? bAge.localeCompare(aAge)
+          : aAge.localeCompare(bAge);
+      }
+      return 0;
     }
     return 0;
   });
@@ -531,6 +560,37 @@ export const EvaluationsSection = forwardRef<
       await loadEvaluations();
     } catch (error) {
       toast.error('Failed to Delete Evaluation', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred',
+      });
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    try {
+      const response = await evaluationsService.bulkDeleteEvaluations(
+        Array.from(selectedBulkDeleteEvaluations),
+      );
+
+      if (response.deleted > 0 && response.failed === 0) {
+        toast.success('Evaluations Bulk Deleted', {
+          description: 'Successfully deleted evaluations',
+        });
+      } else if (response.deleted > 0 && response.failed > 0) {
+        toast.warning('Some Evaluations Failed to Delete', {
+          description: 'Some evaluations failed to delete',
+        });
+      } else {
+        toast.error('Failed to Bulk Delete Evaluations', {
+          description: response.message,
+        });
+      }
+      // Reload evaluations
+      await loadEvaluations();
+    } catch (error) {
+      toast.error('Failed to Bulk Delete Evaluations', {
         description:
           error instanceof Error
             ? error.message
@@ -612,6 +672,7 @@ export const EvaluationsSection = forwardRef<
         <table className="w-full min-w-[800px]">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/50">
+              <th></th>
               <th
                 className="cursor-pointer px-3 py-2 text-left text-sm font-medium text-gray-900 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-800"
                 onClick={() => handleSort('name')}>
@@ -625,8 +686,18 @@ export const EvaluationsSection = forwardRef<
                     ))}
                 </div>
               </th>
-              <th className="cursor-pointer px-3 py-2 text-left text-sm font-medium text-gray-900 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-800">
-                <div className="flex items-center">Age</div>
+              <th
+                className="cursor-pointer px-3 py-2 text-left text-sm font-medium text-gray-900 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-800"
+                onClick={() => handleSort('age')}>
+                <div className="flex items-center">
+                  Age
+                  {sortField === 'age' &&
+                    (sortDirection === 'desc' ? (
+                      <ChevronDown className="ml-1 h-4 w-4" />
+                    ) : (
+                      <ChevronUp className="ml-1 h-4 w-4" />
+                    ))}
+                </div>
               </th>
               <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
                 Evaluator
@@ -720,6 +791,25 @@ export const EvaluationsSection = forwardRef<
                     onClick={() => {
                       router.push(`/evaluation/${evaluation.name}`);
                     }}>
+                    <td className="text-center text-sm text-gray-900 dark:text-gray-100">
+                      <div className="flex items-center justify-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-5 p-0"
+                          onClick={e => {
+                            e.stopPropagation();
+                            handleSelectBulkDelete(evaluation.name);
+                          }}>
+                          {' '}
+                          <Checkbox
+                            checked={selectedBulkDeleteEvaluations.has(
+                              evaluation.name,
+                            )}
+                          />
+                        </Button>
+                      </div>
+                    </td>
                     <td className="px-3 py-3 font-mono text-sm text-gray-900 dark:text-gray-100">
                       {evaluation.name}
                     </td>
@@ -797,7 +887,7 @@ export const EvaluationsSection = forwardRef<
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-8 w-8 p-0"
+                                className="hover:bg-destructive/10 hover:text-destructive h-8 w-8 p-0"
                                 onClick={e => {
                                   e.stopPropagation();
                                   handleDelete(evaluation.name);
@@ -856,16 +946,28 @@ export const EvaluationsSection = forwardRef<
               />
             </div>
 
-            <Button
-              onClick={() => loadEvaluations()}
-              disabled={listEvaluationsFetching}>
-              <RefreshCw
-                className={`h-4 w-4 ${
-                  listEvaluationsFetching ? 'animate-spin' : ''
-                }`}
-              />
-              Refresh
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                className="bg-destructive hover:bg-destructive/10 hover:text-destructive text-white"
+                disabled={selectedBulkDeleteEvaluations.size === 0}
+                onClick={() => handleBulkDelete()}>
+                <Trash2 className={`h-4 w-4`} />
+                Bulk Delete{' '}
+                {selectedBulkDeleteEvaluations.size > 0 &&
+                  `(${selectedBulkDeleteEvaluations.size})`}
+              </Button>
+              <Button
+                onClick={() => loadEvaluations()}
+                disabled={listEvaluationsFetching}>
+                <RefreshCw
+                  className={`h-4 w-4 ${
+                    listEvaluationsFetching ? 'animate-spin' : ''
+                  }`}
+                />
+                Refresh
+              </Button>
+            </div>
           </div>
         </div>
 

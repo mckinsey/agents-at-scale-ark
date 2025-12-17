@@ -16,6 +16,10 @@ export type EvaluationCreateRequest =
   components['schemas']['EvaluationCreateRequest'];
 export type EvaluationUpdateRequest =
   components['schemas']['EvaluationUpdateRequest'];
+export type EvaluationBulkDeleteRequest =
+  components['schemas']['EvaluationBulkDeleteRequest'];
+export type EvaluationBulkDeleteResponse =
+  components['schemas']['EvaluationBulkDeleteResponse'];
 
 // Enhanced evaluation metadata types
 export interface EventEvaluationMetadata {
@@ -200,6 +204,25 @@ export const evaluationsService = {
         return null;
       }
       throw new Error(`Failed to fetch enhanced evaluation details: ${error}`);
+    }
+  },
+
+  /**
+   * Delete an evaluation
+   */
+  async bulkDeleteEvaluations(
+    evaluationNames: string[],
+  ): Promise<EvaluationBulkDeleteResponse> {
+    try {
+      const response = await apiClient.delete<EvaluationBulkDeleteResponse>(
+        `/api/v1/evaluations`,
+        {
+          names: evaluationNames,
+        },
+      );
+      return response;
+    } catch (error) {
+      throw new Error(`Failed to bulk delete evaluations: ${error}`);
     }
   },
 

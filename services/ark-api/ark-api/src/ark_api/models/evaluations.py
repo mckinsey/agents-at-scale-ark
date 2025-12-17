@@ -153,6 +153,19 @@ class EvaluationCreateRequest(BaseModel):
     timeout: Optional[str] = "5m"
 
 
+class EvaluationBulkDeleteRequest(BaseModel):
+    """Request body for bulk deleting evaluations."""
+    names: List[str]
+
+
+class EvaluationBulkDeleteResponse(BaseModel):
+    """Response for bulk deleting evaluations."""
+    message: str
+    deleted: int
+    failed: int
+    errors: Optional[List[str]] = None
+
+
 class EvaluationUpdateRequest(BaseModel):
     """Request body for updating an evaluation."""
     type: Optional[EvaluationType] = None
