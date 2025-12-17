@@ -270,13 +270,13 @@ jsonpath "$.success" == true
 
 ### Real-World Examples
 
-#### ARK Cluster Memory Service
+#### ARK Broker Service
 
-From `services/ark-cluster-memory/test/test.hurl`:
+From `services/ark-broker/test/test.hurl`:
 
 ```hurl
 # Check stream exists in global status
-GET http://ark-cluster-memory/stream-statistics
+GET http://ark-broker/stream-statistics
 HTTP 200
 [Asserts]
 jsonpath "$.queries.test-hurl-basic.total_chunks" == 4
@@ -285,7 +285,7 @@ jsonpath "$.queries.test-hurl-basic.chunk_types.content" == 3
 jsonpath "$.queries.test-hurl-basic.chunk_types.finish_reason" == 1
 
 # Complete the stream
-POST http://ark-cluster-memory/stream/test-hurl-basic/complete
+POST http://ark-broker/stream/test-hurl-basic/complete
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "completed"

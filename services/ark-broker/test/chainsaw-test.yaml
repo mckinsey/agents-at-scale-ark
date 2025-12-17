@@ -1,0 +1,130 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: ark-broker-streaming
+spec:
+  timeouts:
+    exec: 120s
+  description: Test ARK Broker Streaming Service (Direct HTTP Tests Only)
+  steps:
+  - name: setup
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          set -u
+          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+        outputs:
+        - name: azure
+          value: (json_parse($stdout))
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a01-secret.yaml
+    - apply:
+        file: manifests/a02-model.yaml
+    - script:
+        skipLogOutput: true
+        content: cat test.hurl
+        outputs:
+        - name: test_script
+          value: ($stdout)
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: hurl-test-files
+          data:
+            test.hurl: ($test_script)
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: streaming-test-client
+          spec:
+            containers:
+            - name: hurl
+              image: ghcr.io/orange-opensource/hurl:6.1.1
+              command: ["sleep", "600"]
+              volumeMounts:
+              - name: test-files
+                mountPath: /tests
+            volumes:
+            - name: test-files
+              configMap:
+                name: hurl-test-files
+            restartPolicy: Never
+            terminationGracePeriodSeconds: 0
+    - script:
+        content: |
+          helm install ark-broker ../chart --wait --timeout=90s \
+            --namespace $NAMESPACE \
+            --set app.image.repository=${ARK_BROKER_IMAGE:-ark-broker} \
+            --set app.image.tag=${ARK_BROKER_IMAGE_TAG:-latest}
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-broker --namespace $NAMESPACE --wait --timeout=30s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-resources
+    try:
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: ark-broker
+          status:
+            readyReplicas: 1
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-model
+          status:
+            phase: ready
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Memory
+          metadata:
+            name: ark-broker
+          status:
+            phase: ready
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: streaming-test-client
+          status:
+            phase: Running
+
+  # Test basic Hurl HTTP streaming operations
+  # These tests validate the streaming endpoints work correctly
+  # when data is sent directly to them (without needing the controller)
+  - name: run-hurl-tests
+    try:
+    - script:
+        content: |
+          kubectl exec streaming-test-client -c hurl -n $NAMESPACE -- hurl --test /tests/test.hurl
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        timeout: 60s
+
+  # NOTE: Query-based streaming tests are disabled until controller supports streaming
+  # The following test scenarios require the ARK controller to stream data to the memory service:
+  # - test-wait-for-stream: Consumer waits for query to start
+  # - test-join-stream: Connect to an already streaming query
+  # - test-completed-stream: Replay a finished query's chunks
+  # These will be enabled once the controller's streaming implementation is integrated.

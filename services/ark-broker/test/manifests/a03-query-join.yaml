@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: streaming-test-join
+  annotations:
+    ark.mckinsey.com/streaming-enabled: "true"
+spec:
+  input: "Tell me a long story about a developer testing streaming APIs. Make it at least 3 paragraphs."
+  memory: ark-broker
+  targets:
+    - name: test-model
+      type: model

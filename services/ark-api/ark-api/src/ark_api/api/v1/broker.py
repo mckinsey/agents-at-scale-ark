@@ -18,8 +18,8 @@ router = APIRouter(prefix="/broker", tags=["broker"])
 VERSION = "v1alpha1"
 
 
-async def get_cluster_memory_url(memory_name: str) -> Optional[str]:
-    """Get the cluster memory URL from a Memory resource."""
+async def get_broker_url(memory_name: str) -> Optional[str]:
+    """Get the broker URL from a Memory resource."""
     try:
         async with with_ark_client(None, VERSION) as client:
             memory_dicts = await get_all_memory_resources(client, memory_name)
@@ -33,7 +33,7 @@ async def get_cluster_memory_url(memory_name: str) -> Optional[str]:
 
 
 async def proxy_sse_stream(url: str):
-    """Proxy SSE stream from cluster-memory service."""
+    """Proxy SSE stream from broker service."""
     timeout = httpx.Timeout(10.0, read=None)
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -51,8 +51,8 @@ async def proxy_sse_stream(url: str):
                     if line.strip():
                         yield line + "\n\n"
     except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to cluster-memory at {url}: {e}")
-        yield f"data: {json.dumps({'error': {'message': 'Failed to connect to cluster-memory service', 'type': 'connection_error'}})}\n\n"
+        logger.error(f"Failed to connect to broker at {url}: {e}")
+        yield f"data: {json.dumps({'error': {'message': 'Failed to connect to broker service', 'type': 'connection_error'}})}\n\n"
     except Exception as e:
         logger.error(f"Error proxying SSE stream: {e}")
         yield f"data: {json.dumps({'error': {'message': str(e), 'type': 'server_error'}})}\n\n"
@@ -70,15 +70,15 @@ async def get_traces(
     memory: str = Query("default", description="Memory resource name"),
 ):
     """Get or stream OTEL traces from the broker."""
-    cluster_memory_url = await get_cluster_memory_url(memory)
-    if not cluster_memory_url:
+    broker_url = await get_broker_url(memory)
+    if not broker_url:
         return JSONResponse(
             content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
             status_code=503,
         )
 
     if watch:
-        url = f"{cluster_memory_url}/traces?watch=true"
+        url = f"{broker_url}/traces?watch=true"
         logger.info(f"Proxying trace SSE stream from {url}")
         return StreamingResponse(
             proxy_sse_stream(url),
@@ -88,12 +88,12 @@ async def get_traces(
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{cluster_memory_url}/traces")
+            response = await client.get(f"{broker_url}/traces")
             return JSONResponse(content=response.json(), status_code=response.status_code)
     except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to cluster-memory: {e}")
+        logger.error(f"Failed to connect to broker: {e}")
         return JSONResponse(
-            content={"error": {"message": "Failed to connect to cluster-memory service", "type": "connection_error"}},
+            content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
             status_code=503,
         )
     except Exception as e:
@@ -112,15 +112,15 @@ async def get_trace(
     memory: str = Query("default", description="Memory resource name"),
 ):
     """Get or stream a specific trace from the broker."""
-    cluster_memory_url = await get_cluster_memory_url(memory)
-    if not cluster_memory_url:
+    broker_url = await get_broker_url(memory)
+    if not broker_url:
         return JSONResponse(
             content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
             status_code=503,
         )
 
     if watch:
-        url = f"{cluster_memory_url}/traces/{trace_id}?watch=true"
+        url = f"{broker_url}/traces/{trace_id}?watch=true"
         if from_beginning:
             url += "&from-beginning=true"
         logger.info(f"Proxying trace SSE stream from {url}")
@@ -132,12 +132,12 @@ async def get_trace(
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{cluster_memory_url}/traces/{trace_id}")
+            response = await client.get(f"{broker_url}/traces/{trace_id}")
             return JSONResponse(content=response.json(), status_code=response.status_code)
     except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to cluster-memory: {e}")
+        logger.error(f"Failed to connect to broker: {e}")
         return JSONResponse(
-            content={"error": {"message": "Failed to connect to cluster-memory service", "type": "connection_error"}},
+            content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
             status_code=503,
         )
     except Exception as e:
@@ -155,15 +155,15 @@ async def get_messages(
     memory: str = Query("default", description="Memory resource name"),
 ):
     """Get or stream messages from the broker."""
-    cluster_memory_url = await get_cluster_memory_url(memory)
-    if not cluster_memory_url:
+    broker_url = await get_broker_url(memory)
+    if not broker_url:
         return JSONResponse(
             content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
             status_code=503,
         )
 
     if watch:
-        url = f"{cluster_memory_url}/messages?watch=true"
+        url = f"{broker_url}/messages?watch=true"
         if conversation_id:
             url += f"&conversation_id={conversation_id}"
         logger.info(f"Proxying messages SSE stream from {url}")
@@ -175,15 +175,15 @@ async def get_messages(
 
     try:
         async with httpx.AsyncClient() as client:
-            url = f"{cluster_memory_url}/messages"
+            url = f"{broker_url}/messages"
             if conversation_id:
                 url += f"?conversation_id={conversation_id}"
             response = await client.get(url)
             return JSONResponse(content=response.json(), status_code=response.status_code)
     except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to cluster-memory: {e}")
+        logger.error(f"Failed to connect to broker: {e}")
         return JSONResponse(
-            content={"error": {"message": "Failed to connect to cluster-memory service", "type": "connection_error"}},
+            content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
             status_code=503,
         )
     except Exception as e:
@@ -201,8 +201,8 @@ async def get_chunks(
     memory: str = Query("default", description="Memory resource name"),
 ):
     """Get or stream LLM chunks from the broker."""
-    cluster_memory_url = await get_cluster_memory_url(memory)
-    if not cluster_memory_url:
+    broker_url = await get_broker_url(memory)
+    if not broker_url:
         return JSONResponse(
             content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
             status_code=503,
@@ -210,9 +210,9 @@ async def get_chunks(
 
     if watch:
         if query_id:
-            url = f"{cluster_memory_url}/stream/{query_id}?from-beginning=true"
+            url = f"{broker_url}/stream/{query_id}?from-beginning=true"
         else:
-            url = f"{cluster_memory_url}/stream?watch=true"
+            url = f"{broker_url}/stream?watch=true"
 
         logger.info(f"Proxying chunks SSE stream from {url}")
         return StreamingResponse(
@@ -223,12 +223,12 @@ async def get_chunks(
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{cluster_memory_url}/stream-statistics")
+            response = await client.get(f"{broker_url}/stream-statistics")
             return JSONResponse(content=response.json(), status_code=response.status_code)
     except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to cluster-memory: {e}")
+        logger.error(f"Failed to connect to broker: {e}")
         return JSONResponse(
-            content={"error": {"message": "Failed to connect to cluster-memory service", "type": "connection_error"}},
+            content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
             status_code=503,
         )
     except Exception as e:
@@ -244,8 +244,8 @@ async def purge_traces(
     memory: str = Query("default", description="Memory resource name"),
 ):
     """Purge all traces from the broker."""
-    cluster_memory_url = await get_cluster_memory_url(memory)
-    if not cluster_memory_url:
+    broker_url = await get_broker_url(memory)
+    if not broker_url:
         return JSONResponse(
             content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
             status_code=503,
@@ -253,12 +253,12 @@ async def purge_traces(
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.delete(f"{cluster_memory_url}/traces")
+            response = await client.delete(f"{broker_url}/traces")
             return JSONResponse(content=response.json(), status_code=response.status_code)
     except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to cluster-memory: {e}")
+        logger.error(f"Failed to connect to broker: {e}")
         return JSONResponse(
-            content={"error": {"message": "Failed to connect to cluster-memory service", "type": "connection_error"}},
+            content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
             status_code=503,
         )
     except Exception as e:

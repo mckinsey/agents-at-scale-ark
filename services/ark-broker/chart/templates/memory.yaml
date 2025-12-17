@@ -1,0 +1,19 @@
+{{- if .Values.memory.createMemoryCRD }}
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Memory
+metadata:
+  {{- if .Values.memory.setAsDefault }}
+  name: default
+  {{- else }}
+  name: {{ include "ark-broker.fullname" . }}
+  {{- end }}
+  labels:
+    {{- include "ark-broker.labels" . | nindent 4 }}
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: {{ include "ark-broker.fullname" . }}
+        namespace: {{ .Release.Namespace }}
+        port: http
+{{- end }}

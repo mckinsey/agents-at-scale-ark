@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: streaming-test-wait
+  annotations:
+    ark.mckinsey.com/streaming-enabled: "true"
+spec:
+  input: "Write a haiku about streaming data through the internet"
+  memory: ark-broker
+  targets:
+    - name: test-model
+      type: model
