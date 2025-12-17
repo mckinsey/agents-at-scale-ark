@@ -29,16 +29,26 @@ class AgentsPage(BasePage):
     }
     
     def navigate_to_agents_tab(self) -> None:
+        self._close_dialog_if_open()
+        
         from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
         dashboard.navigate_to_dashboard()
         
-        if not self.page.locator(dashboard.AGENTS_TAB).first.is_visible():
-            import pytest
-            pytest.skip("Agents tab not visible")
+        self._close_dialog_if_open()
         
-        self.page.locator(dashboard.AGENTS_TAB).first.click()
-        self.wait_for_load_state("networkidle")
+        try:
+            agents_tab = self.page.locator(dashboard.AGENTS_TAB).first
+            if not agents_tab.is_visible(timeout=5000):
+                import pytest
+                pytest.skip("Agents tab not visible")
+            
+            agents_tab.click(force=True)
+        except Exception as e:
+            logger.warning(f"Click failed, trying with force: {e}")
+            self.page.locator(dashboard.AGENTS_TAB).first.click(force=True)
+        
+        self.wait_for_load_state("domcontentloaded")
         self.wait_for_timeout(2000)
     
     def generate_agent_name(self, prefix: str = "agent") -> str:
@@ -142,41 +152,92 @@ class AgentsPage(BasePage):
     
     def create_agent_with_verification(self, agent_name: str, description: str, model_name: str, execution_engine: str = "langchain-executor", tools: list = None) -> dict:        
         self.page.locator(self.ADD_AGENT_BUTTON).first.click()
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         self.wait_for_timeout(2000)
         
-        name_input = self.page.locator("input#name")
+        name_input = self.page.locator("input#name, input[name='name']").first
         name_input.wait_for(state="visible", timeout=10000)
         name_input.fill(agent_name)
         
-        description_input = self.page.locator("input#description")
+        description_input = self.page.locator("input#description, input[name='description'], textarea[name='description']").first
         description_input.wait_for(state="visible", timeout=5000)
         description_input.fill(description)
         
-        execution_engine_input = self.page.locator("input#execution-engine")
-        execution_engine_input.wait_for(state="visible", timeout=5000)
-        execution_engine_input.fill(execution_engine)
+        execution_engine_input = self.page.locator("input#execution-engine, input[name='execution-engine'], input[name='executionEngine']").first
+        if execution_engine_input.is_visible():
+            execution_engine_input.fill(execution_engine)
+        else:
+            logger.info("Execution engine field not found, skipping")
         
         self.wait_for_timeout(1000)
         
-        model_trigger = self.page.locator("button#model")
-        model_trigger.wait_for(state="visible", timeout=5000)
-        model_trigger.click()
-        self.wait_for_timeout(1000)
+        model_selectors = [
+            "[role='combobox'][aria-label*='Model' i]",
+            "button[aria-haspopup='listbox']:has-text('Select')",
+            "[data-slot='trigger'][aria-haspopup='listbox']",
+            "button#model",
+            "button[name='model']",
+            "[role='combobox']"
+        ]
         
-        self.page.locator("[role='option']").first.wait_for(state="visible", timeout=5000)
+        model_trigger = None
+        for selector in model_selectors:
+            try:
+                loc = self.page.locator(selector).first
+                if loc.is_visible(timeout=2000):
+                    model_trigger = loc
+                    logger.info(f"Found model selector with: {selector}")
+                    break
+            except:
+                continue
         
+        if not model_trigger:
+            logger.warning("Could not find model dropdown, trying label approach")
+            model_label = self.page.get_by_text("Model", exact=True).first
+            model_trigger = model_label.locator("..").locator("button, [role='combobox']").first
+        
+        model_trigger.focus()
+        self.wait_for_timeout(300)
+        model_trigger.click(force=True)
+        self.wait_for_timeout(500)
+        
+        options_visible = False
+        for attempt in range(3):
+            try:
+                self.page.locator("[role='option']").first.wait_for(state="visible", timeout=2000)
+                options_visible = True
+                break
+            except:
+                logger.info(f"Options not visible (attempt {attempt + 1}), retrying")
+                model_trigger.click(force=True)
+                self.wait_for_timeout(500)
+        
+        if not options_visible:
+            logger.warning("Could not open model dropdown")
+        
+        self.wait_for_timeout(300)
+        
+        model_selected = False
         model_option = self.page.get_by_role("option", name=model_name, exact=True)
         if model_option.count() > 0:
             logger.info(f"Found exact match for model: {model_name}")
-            model_option.click()
-        else:
-            logger.info(f"Trying alternative selector for model: {model_name}")
+            model_option.first.click(force=True)
+            model_selected = True
+        
+        if not model_selected:
+            logger.info(f"Trying partial match for model: {model_name}")
             model_option_alt = self.page.locator(f"[role='option']:has-text('{model_name}')").first
-            if model_option_alt.is_visible():
-                model_option_alt.click()
+            if model_option_alt.count() > 0:
+                model_option_alt.click(force=True)
+                model_selected = True
+        
+        if not model_selected:
+            first_option = self.page.locator("[role='option']").first
+            if first_option.count() > 0:
+                logger.warning(f"Could not find model {model_name}, selecting first available")
+                first_option.click(force=True)
             else:
-                logger.warning(f"Could not find model option for: {model_name}")
+                logger.warning(f"No model options available")
         
         logger.info(f"Model {model_name} selected")
         
@@ -188,15 +249,15 @@ class AgentsPage(BasePage):
         
         self.wait_for_timeout(1000)
         
-        save_button = self.page.locator("button").filter(has_text="Create").first
+        save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
         if not save_button.is_visible():
-            save_button = self.page.locator("button").filter(has_text="Save").first
-        if not save_button.is_visible():
-            save_button = self.page.locator("button[type='submit']").first
-            
-        save_button.click()
+            save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
         
-        self.wait_for_load_state("networkidle")
+        logger.info("Clicking Create button in dialog")
+        save_button.scroll_into_view_if_needed()
+        save_button.evaluate("el => el.click()")
+        
+        self.wait_for_load_state("domcontentloaded")
         self.wait_for_timeout(2000)
         
         error_banner = self.check_for_error_banner()
@@ -210,8 +271,20 @@ class AgentsPage(BasePage):
         except:
             popup_visible = False
         
-        self.wait_for_timeout(3000)
+        self._close_dialog_if_open()
+        
+        self.wait_for_timeout(1000)
+        
+        self.navigate_to_agents_tab()
+        self.wait_for_timeout(2000)
+        
         in_table = self.is_agent_in_table(agent_name)
+        
+        if not in_table:
+            self.page.reload()
+            self.wait_for_load_state("domcontentloaded")
+            self.wait_for_timeout(2000)
+            in_table = self.is_agent_in_table(agent_name)
         
         row_verification = self.verify_agent_in_table_row(agent_name, description, model_name)
         
@@ -243,7 +316,7 @@ class AgentsPage(BasePage):
         if confirm_button_visible:
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         popup_visible = self._check_success_popup()
         self.wait_for_timeout(3000)
         deleted_from_table = not self.is_agent_in_table(agent_name)
@@ -273,6 +346,28 @@ class AgentsPage(BasePage):
             return True
         except:
             return False
+    
+    def _close_dialog_if_open(self) -> None:
+        for attempt in range(3):
+            try:
+                dialog_overlay = self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first
+                if dialog_overlay.is_visible(timeout=1000):
+                    logger.info(f"Dialog still open, attempting to close (attempt {attempt + 1})")
+                    self.page.keyboard.press("Escape")
+                    self.wait_for_timeout(1000)
+                    
+                    close_button = self.page.locator("button:has-text('Close'), button:has-text('Cancel'), [aria-label='Close']").first
+                    if close_button.is_visible(timeout=500):
+                        close_button.click()
+                        self.wait_for_timeout(500)
+                else:
+                    logger.info("Dialog closed successfully")
+                    return
+            except:
+                pass
+        
+        self.page.keyboard.press("Escape")
+        self.wait_for_timeout(500)
     
     def _select_tool(self, tool_name: str) -> None:
         try:

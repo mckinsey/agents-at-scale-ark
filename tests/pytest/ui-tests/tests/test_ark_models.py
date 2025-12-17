@@ -10,9 +10,9 @@ class TestArkModels:
     created_models = {}
     
     @pytest.mark.parametrize("prefix,env_key,model_type,model_name,base_url_key", [
-        ("openai", "OPENAI_API_KEY", "OpenAI", "gpt-3.5-turbo", "OPENAI_ENDPOINT"),
+        ("openai", "CICD_OPENAI_API_KEY", "openai", "gpt-4o-mini", "CICD_OPENAI_BASE_URL"),
     ])
-    @pytest.mark.dependency(name="create_model_{prefix}")
+    @pytest.mark.dependency(name="create_model_openai")
     def test_create_model_with_secret(self, page: Page, prefix: str, env_key: str, model_type: str, model_name: str, base_url_key: str):
         secrets = SecretsPage(page)
         models = ModelsPage(page)
@@ -55,7 +55,7 @@ class TestArkModels:
     @pytest.mark.parametrize("prefix", [
         "openai",
     ])
-    @pytest.mark.dependency(depends=["create_model_{prefix}"])
+    @pytest.mark.dependency(depends=["create_model_openai"])
     def test_delete_model(self, page: Page, prefix: str):
         models = ModelsPage(page)
         models.navigate_to_models_tab()

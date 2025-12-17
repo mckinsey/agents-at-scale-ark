@@ -31,9 +31,9 @@ export class MemoryStore<TMessage extends Message = Message> {
     }
   }
 
-  private validateSessionID(sessionID: string): void {
-    if (!sessionID || typeof sessionID !== 'string') {
-      throw new Error('Session ID cannot be empty');
+  private validateConversationID(conversationID: string): void {
+    if (!conversationID || typeof conversationID !== 'string') {
+      throw new Error('Conversation ID cannot be empty');
     }
   }
 
@@ -44,105 +44,105 @@ export class MemoryStore<TMessage extends Message = Message> {
     }
   }
 
-  addMessage(sessionID: string, message: TMessage): void {
-    this.validateSessionID(sessionID);
+  addMessage(conversationID: string, message: TMessage): void {
+    this.validateConversationID(conversationID);
     this.validateMessage(message);
 
-    // Check if this is a new session for event emission
-    const isNewSession = !this.messages.some(m => m.session_id === sessionID);
-    
+    // Check if this is a new conversation for event emission
+    const isNewConversation = !this.messages.some(m => m.conversation_id === conversationID);
+
     const storedMessage: Omit<StoredMessage, 'message'> & { message: TMessage } = {
       timestamp: new Date().toISOString(),
-      session_id: sessionID,
+      conversation_id: conversationID,
       query_id: '', // Legacy method without query_id
       message,
       sequence: this.messages.length + 1
     };
-    
+
     this.messages.push(storedMessage);
     this.cleanup();
     this.saveToFile();
-    
+
     // Emit events for streaming
-    if (isNewSession) {
-      this.emitSessionCreated(sessionID);
+    if (isNewConversation) {
+      this.emitConversationCreated(conversationID);
     }
-    this.eventEmitter.emit(`message:${sessionID}`, message);
+    this.eventEmitter.emit(`message:${conversationID}`, message);
   }
 
-  addMessages(sessionID: string, messages: TMessage[]): void {
-    this.validateSessionID(sessionID);
-    
+  addMessages(conversationID: string, messages: TMessage[]): void {
+    this.validateConversationID(conversationID);
+
     for (const message of messages) {
       this.validateMessage(message);
     }
 
-    // Check if this is a new session for event emission
-    const isNewSession = !this.messages.some(m => m.session_id === sessionID);
+    // Check if this is a new conversation for event emission
+    const isNewConversation = !this.messages.some(m => m.conversation_id === conversationID);
 
     const timestamp = new Date().toISOString();
     const storedMessages = messages.map((msg, index) => ({
       timestamp,
-      session_id: sessionID,
+      conversation_id: conversationID,
       query_id: '', // Legacy method without query_id
       message: msg,
       sequence: this.messages.length + index + 1
     }));
-    
+
     this.messages.push(...storedMessages);
     this.cleanup();
     this.saveToFile();
-    
+
     // Emit events for streaming
-    if (isNewSession) {
-      this.emitSessionCreated(sessionID);
+    if (isNewConversation) {
+      this.emitConversationCreated(conversationID);
     }
     for (const message of messages) {
-      this.eventEmitter.emit(`message:${sessionID}`, message);
+      this.eventEmitter.emit(`message:${conversationID}`, message);
     }
   }
 
-  addMessagesWithMetadata(sessionID: string, queryID: string, messages: TMessage[]): void {
-    this.validateSessionID(sessionID);
-    
+  addMessagesWithMetadata(conversationID: string, queryID: string, messages: TMessage[]): void {
+    this.validateConversationID(conversationID);
+
     if (!queryID) {
       throw new Error('Query ID cannot be empty');
     }
-    
+
     for (const message of messages) {
       this.validateMessage(message);
     }
 
-    // Check if this is a new session for event emission
-    const isNewSession = !this.messages.some(m => m.session_id === sessionID);
+    // Check if this is a new conversation for event emission
+    const isNewConversation = !this.messages.some(m => m.conversation_id === conversationID);
 
     const timestamp = new Date().toISOString();
     const storedMessages = messages.map((msg, index) => ({
       timestamp,
-      session_id: sessionID,
+      conversation_id: conversationID,
       query_id: queryID,
       message: msg,
       sequence: this.messages.length + index + 1
     }));
-    
+
     this.messages.push(...storedMessages);
     this.cleanup();
     this.saveToFile();
-    
+
     // Emit events for streaming
-    if (isNewSession) {
-      this.emitSessionCreated(sessionID);
+    if (isNewConversation) {
+      this.emitConversationCreated(conversationID);
     }
     for (const message of messages) {
-      this.eventEmitter.emit(`message:${sessionID}`, message);
+      this.eventEmitter.emit(`message:${conversationID}`, message);
     }
   }
 
-  getMessages(sessionID: string): TMessage[] {
-    this.validateSessionID(sessionID);
+  getMessages(conversationID: string): TMessage[] {
+    this.validateConversationID(conversationID);
     // Return just the message content for backward compatibility
     return this.messages
-      .filter(m => m.session_id === sessionID)
+      .filter(m => m.conversation_id === conversationID)
       .map(m => m.message);
   }
 
@@ -156,39 +156,43 @@ export class MemoryStore<TMessage extends Message = Message> {
       .map(m => m.message);
   }
 
-  getMessagesWithMetadata(sessionID: string, queryID?: string): Array<Omit<StoredMessage, 'message'> & { message: TMessage }> {
-    this.validateSessionID(sessionID);
-    let filtered = this.messages.filter(m => m.session_id === sessionID);
+  getMessagesWithMetadata(conversationID: string, queryID?: string): Array<Omit<StoredMessage, 'message'> & { message: TMessage }> {
+    this.validateConversationID(conversationID);
+    let filtered = this.messages.filter(m => m.conversation_id === conversationID);
     if (queryID) {
       filtered = filtered.filter(m => m.query_id === queryID);
     }
     return filtered;
   }
 
-  clearSession(sessionID: string): void {
-    this.validateSessionID(sessionID);
-    this.messages = this.messages.filter(m => m.session_id !== sessionID);
+  clearConversation(conversationID: string): void {
+    this.validateConversationID(conversationID);
+    this.messages = this.messages.filter(m => m.conversation_id !== conversationID);
     this.saveToFile();
   }
 
-  clearQuery(sessionID: string, queryID: string): void {
-    this.validateSessionID(sessionID);
+  clearQuery(conversationID: string, queryID: string): void {
+    this.validateConversationID(conversationID);
     if (!queryID) {
       throw new Error('Query ID cannot be empty');
     }
-    this.messages = this.messages.filter(m => !(m.session_id === sessionID && m.query_id === queryID));
+    this.messages = this.messages.filter(m => !(m.conversation_id === conversationID && m.query_id === queryID));
     this.saveToFile();
   }
 
-  getSessions(): string[] {
-    // Get unique session IDs from the flat list
-    const sessionSet = new Set(this.messages.map(m => m.session_id));
-    return Array.from(sessionSet);
+  getConversations(): string[] {
+    // Get unique conversation IDs from the flat list, filtering out null/undefined
+    const conversationSet = new Set(
+      this.messages
+        .map(m => m.conversation_id)
+        .filter(id => id != null)
+    );
+    return Array.from(conversationSet);
   }
 
-  getAllSessions(): string[] {
-    // Alias for getSessions() for clarity
-    return this.getSessions();
+  getAllConversations(): string[] {
+    // Alias for getConversations() for clarity
+    return this.getConversations();
   }
 
   getAllMessages(): Array<Omit<StoredMessage, 'message'> & { message: TMessage }> {
@@ -196,11 +200,11 @@ export class MemoryStore<TMessage extends Message = Message> {
     return this.messages;
   }
 
-  getStats(): { sessions: number; totalMessages: number } {
-    const uniqueSessions = new Set(this.messages.map(m => m.session_id));
-    
+  getStats(): { conversations: number; totalMessages: number } {
+    const uniqueConversations = new Set(this.messages.map(m => m.conversation_id));
+
     return {
-      sessions: uniqueSessions.size,
+      conversations: uniqueConversations.size,
       totalMessages: this.messages.length
     };
   }
@@ -268,16 +272,16 @@ export class MemoryStore<TMessage extends Message = Message> {
       console.log('[MEMORY LOAD] File persistence disabled - memory will not be saved');
       return;
     }
-    
+
     try {
       if (existsSync(this.memoryFilePath)) {
         const data = readFileSync(this.memoryFilePath, 'utf-8');
         const parsed = JSON.parse(data);
-        
+
         if (Array.isArray(parsed)) {
           this.messages = parsed as Array<Omit<StoredMessage, 'message'> & { message: TMessage }>;
-          const sessions = new Set(this.messages.map(m => m.session_id)).size;
-          console.log(`[MEMORY LOAD] Loaded ${this.messages.length} messages from ${sessions} sessions from ${this.memoryFilePath}`);
+          const conversations = new Set(this.messages.map(m => m.conversation_id)).size;
+          console.log(`[MEMORY LOAD] Loaded ${this.messages.length} messages from ${conversations} conversations from ${this.memoryFilePath}`);
         } else {
           console.warn('Invalid data format in memory file, starting fresh');
         }
@@ -291,16 +295,16 @@ export class MemoryStore<TMessage extends Message = Message> {
 
   private saveToFile(): void {
     if (!this.memoryFilePath) return;
-    
+
     try {
       const dir = dirname(this.memoryFilePath);
       if (!existsSync(dir)) {
         mkdirSync(dir, { recursive: true });
       }
-      
+
       writeFileSync(this.memoryFilePath, JSON.stringify(this.messages, null, 2), 'utf-8');
-      const sessions = new Set(this.messages.map(m => m.session_id)).size;
-      console.log(`[MEMORY SAVE] Saved ${this.messages.length} messages from ${sessions} sessions to ${this.memoryFilePath}`);
+      const conversations = new Set(this.messages.map(m => m.conversation_id)).size;
+      console.log(`[MEMORY SAVE] Saved ${this.messages.length} messages from ${conversations} conversations to ${this.memoryFilePath}`);
     } catch (error) {
       console.error(`[MEMORY SAVE] Failed to save memory to file: ${error}`);
     }
@@ -315,33 +319,33 @@ export class MemoryStore<TMessage extends Message = Message> {
   }
 
   // Streaming support methods
-  sessionExists(sessionID: string): boolean {
-    return this.messages.some(m => m.session_id === sessionID);
+  conversationExists(conversationID: string): boolean {
+    return this.messages.some(m => m.conversation_id === conversationID);
   }
 
-  subscribe(sessionID: string, callback: (message: TMessage) => void): () => void {
-    this.eventEmitter.on(`message:${sessionID}`, callback);
+  subscribe(conversationID: string, callback: (message: TMessage) => void): () => void {
+    this.eventEmitter.on(`message:${conversationID}`, callback);
     return () => {
-      this.eventEmitter.off(`message:${sessionID}`, callback);
+      this.eventEmitter.off(`message:${conversationID}`, callback);
     };
   }
 
-  subscribeToMessages(sessionID: string, callback: (chunk: TMessage) => void): () => void {
-    this.eventEmitter.on(`chunk:${sessionID}`, callback);
+  subscribeToMessages(conversationID: string, callback: (chunk: TMessage) => void): () => void {
+    this.eventEmitter.on(`chunk:${conversationID}`, callback);
     return () => {
-      this.eventEmitter.off(`chunk:${sessionID}`, callback);
+      this.eventEmitter.off(`chunk:${conversationID}`, callback);
     };
   }
 
-  waitForSession(sessionID: string, timeout: number): Promise<boolean> {
+  waitForConversation(conversationID: string, timeout: number): Promise<boolean> {
     return new Promise((resolve) => {
-      if (this.sessionExists(sessionID)) {
+      if (this.conversationExists(conversationID)) {
         resolve(true);
         return;
       }
 
       const timer = setTimeout(() => {
-        this.eventEmitter.off(`session:${sessionID}:created`, onCreated);
+        this.eventEmitter.off(`conversation:${conversationID}:created`, onCreated);
         resolve(false);
       }, timeout);
 
@@ -350,12 +354,12 @@ export class MemoryStore<TMessage extends Message = Message> {
         resolve(true);
       };
 
-      this.eventEmitter.once(`session:${sessionID}:created`, onCreated);
+      this.eventEmitter.once(`conversation:${conversationID}:created`, onCreated);
     });
   }
 
-  private emitSessionCreated(sessionID: string): void {
-    this.eventEmitter.emit(`session:${sessionID}:created`);
+  private emitConversationCreated(conversationID: string): void {
+    this.eventEmitter.emit(`conversation:${conversationID}:created`);
   }
 
 }

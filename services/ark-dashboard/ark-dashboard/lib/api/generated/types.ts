@@ -819,7 +819,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/memories/{name}/sessions/{session_id}/messages": {
+    "/v1/memories/{name}/conversations/{conversation_id}/messages": {
         parameters: {
             query?: never;
             header?: never;
@@ -828,9 +828,9 @@ export interface paths {
         };
         /**
          * Get Memory Messages
-         * @description Get messages for a specific session from a memory resource.
+         * @description Get messages for a specific conversation from a memory resource.
          */
-        get: operations["get_memory_messages_v1_memories__name__sessions__session_id__messages_get"];
+        get: operations["get_memory_messages_v1_memories__name__conversations__conversation_id__messages_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -859,7 +859,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/sessions": {
+    "/v1/conversations": {
         parameters: {
             query?: never;
             header?: never;
@@ -867,23 +867,23 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Sessions
-         * @description List all sessions in a namespace, optionally filtered by memory.
+         * List Conversations
+         * @description List all conversations in a namespace, optionally filtered by memory.
          */
-        get: operations["list_sessions_v1_sessions_get"];
+        get: operations["list_conversations_v1_conversations_get"];
         put?: never;
         post?: never;
         /**
-         * Delete All Sessions
-         * @description Delete all sessions and their messages.
+         * Delete All Conversations
+         * @description Delete all conversations and their messages.
          */
-        delete: operations["delete_all_sessions_v1_sessions_delete"];
+        delete: operations["delete_all_conversations_v1_conversations_delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/sessions/{session_id}": {
+    "/v1/conversations/{conversation_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -894,16 +894,16 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Delete Session
-         * @description Delete a specific session and all its messages.
+         * Delete Conversation
+         * @description Delete a specific conversation and all its messages.
          */
-        delete: operations["delete_session_v1_sessions__session_id__delete"];
+        delete: operations["delete_conversation_v1_conversations__conversation_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/sessions/{session_id}/queries/{query_id}/messages": {
+    "/v1/conversations/{conversation_id}/queries/{query_id}/messages": {
         parameters: {
             query?: never;
             header?: never;
@@ -915,9 +915,9 @@ export interface paths {
         post?: never;
         /**
          * Delete Query Messages
-         * @description Delete messages for a specific query within a session.
+         * @description Delete messages for a specific query within a conversation.
          */
-        delete: operations["delete_query_messages_v1_sessions__session_id__queries__query_id__messages_delete"];
+        delete: operations["delete_query_messages_v1_conversations__conversation_id__queries__query_id__messages_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1744,7 +1744,10 @@ export interface components {
             /** Overrides */
             overrides?: components["schemas"]["Override-Input"][] | null;
         };
-        /** Annotation */
+        /**
+         * Annotation
+         * @description A URL citation when using web search.
+         */
         Annotation: {
             /**
              * Type
@@ -1755,7 +1758,10 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** AnnotationURLCitation */
+        /**
+         * AnnotationURLCitation
+         * @description A URL citation when using web search.
+         */
         AnnotationURLCitation: {
             /** End Index */
             end_index: number;
@@ -1817,7 +1823,11 @@ export interface components {
             /** Count */
             count: number;
         };
-        /** Audio */
+        /**
+         * Audio
+         * @description Data about a previous audio response from the model.
+         *     [Learn more](https://platform.openai.com/docs/guides/audio).
+         */
         Audio: {
             /** Id */
             id: string;
@@ -1944,7 +1954,10 @@ export interface components {
             /** Description */
             description?: string | null;
         };
-        /** ChatCompletion */
+        /**
+         * ChatCompletion
+         * @description Represents a chat completion response returned by model, based on the provided input.
+         */
         ChatCompletion: {
             /** Id */
             id: string;
@@ -1967,7 +1980,10 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** ChatCompletionAssistantMessageParam */
+        /**
+         * ChatCompletionAssistantMessageParam
+         * @description Messages sent by the model in response to user messages.
+         */
         "ChatCompletionAssistantMessageParam-Input": {
             /**
              * Role
@@ -1985,7 +2001,10 @@ export interface components {
             /** Tool Calls */
             tool_calls?: (components["schemas"]["ChatCompletionMessageFunctionToolCallParam-Input"] | components["schemas"]["ChatCompletionMessageCustomToolCallParam-Input"])[];
         };
-        /** ChatCompletionAssistantMessageParam */
+        /**
+         * ChatCompletionAssistantMessageParam
+         * @description Messages sent by the model in response to user messages.
+         */
         "ChatCompletionAssistantMessageParam-Output": {
             /**
              * Role
@@ -2003,7 +2022,11 @@ export interface components {
             /** Tool Calls */
             tool_calls?: (components["schemas"]["ChatCompletionMessageFunctionToolCallParam-Output"] | components["schemas"]["ChatCompletionMessageCustomToolCallParam-Output"])[];
         };
-        /** ChatCompletionAudio */
+        /**
+         * ChatCompletionAudio
+         * @description If the audio output modality is requested, this object contains data
+         *     about the audio response from the model. [Learn more](https://platform.openai.com/docs/guides/audio).
+         */
         ChatCompletionAudio: {
             /** Id */
             id: string;
@@ -2016,7 +2039,10 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** ChatCompletionContentPartImageParam */
+        /**
+         * ChatCompletionContentPartImageParam
+         * @description Learn about [image inputs](https://platform.openai.com/docs/guides/vision).
+         */
         ChatCompletionContentPartImageParam: {
             image_url: components["schemas"]["ImageURL"];
             /**
@@ -2025,7 +2051,10 @@ export interface components {
              */
             type: "image_url";
         };
-        /** ChatCompletionContentPartInputAudioParam */
+        /**
+         * ChatCompletionContentPartInputAudioParam
+         * @description Learn about [audio inputs](https://platform.openai.com/docs/guides/audio).
+         */
         ChatCompletionContentPartInputAudioParam: {
             input_audio: components["schemas"]["InputAudio"];
             /**
@@ -2044,7 +2073,10 @@ export interface components {
              */
             type: "refusal";
         };
-        /** ChatCompletionContentPartTextParam */
+        /**
+         * ChatCompletionContentPartTextParam
+         * @description Learn about [text inputs](https://platform.openai.com/docs/guides/text-generation).
+         */
         ChatCompletionContentPartTextParam: {
             /** Text */
             text: string;
@@ -2054,7 +2086,12 @@ export interface components {
              */
             type: "text";
         };
-        /** ChatCompletionDeveloperMessageParam */
+        /**
+         * ChatCompletionDeveloperMessageParam
+         * @description Developer-provided instructions that the model should follow, regardless of
+         *     messages sent by the user. With o1 models and newer, `developer` messages
+         *     replace the previous `system` messages.
+         */
         ChatCompletionDeveloperMessageParam: {
             /** Content */
             content: string | components["schemas"]["ChatCompletionContentPartTextParam"][];
@@ -2078,7 +2115,10 @@ export interface components {
              */
             role: "function";
         };
-        /** ChatCompletionMessage */
+        /**
+         * ChatCompletionMessage
+         * @description A chat completion message generated by the model.
+         */
         ChatCompletionMessage: {
             /** Content */
             content?: string | null;
@@ -2098,7 +2138,10 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** ChatCompletionMessageCustomToolCall */
+        /**
+         * ChatCompletionMessageCustomToolCall
+         * @description A call to a custom tool created by the model.
+         */
         ChatCompletionMessageCustomToolCall: {
             /** Id */
             id: string;
@@ -2111,7 +2154,10 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** ChatCompletionMessageCustomToolCallParam */
+        /**
+         * ChatCompletionMessageCustomToolCallParam
+         * @description A call to a custom tool created by the model.
+         */
         "ChatCompletionMessageCustomToolCallParam-Input": {
             /** Id */
             id: string;
@@ -2122,7 +2168,10 @@ export interface components {
              */
             type: "custom";
         };
-        /** ChatCompletionMessageCustomToolCallParam */
+        /**
+         * ChatCompletionMessageCustomToolCallParam
+         * @description A call to a custom tool created by the model.
+         */
         "ChatCompletionMessageCustomToolCallParam-Output": {
             /** Id */
             id: string;
@@ -2133,7 +2182,10 @@ export interface components {
              */
             type: "custom";
         };
-        /** ChatCompletionMessageFunctionToolCall */
+        /**
+         * ChatCompletionMessageFunctionToolCall
+         * @description A call to a function tool created by the model.
+         */
         ChatCompletionMessageFunctionToolCall: {
             /** Id */
             id: string;
@@ -2146,7 +2198,10 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** ChatCompletionMessageFunctionToolCallParam */
+        /**
+         * ChatCompletionMessageFunctionToolCallParam
+         * @description A call to a function tool created by the model.
+         */
         "ChatCompletionMessageFunctionToolCallParam-Input": {
             /** Id */
             id: string;
@@ -2157,7 +2212,10 @@ export interface components {
              */
             type: "function";
         };
-        /** ChatCompletionMessageFunctionToolCallParam */
+        /**
+         * ChatCompletionMessageFunctionToolCallParam
+         * @description A call to a function tool created by the model.
+         */
         "ChatCompletionMessageFunctionToolCallParam-Output": {
             /** Id */
             id: string;
@@ -2191,7 +2249,12 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
-        /** ChatCompletionSystemMessageParam */
+        /**
+         * ChatCompletionSystemMessageParam
+         * @description Developer-provided instructions that the model should follow, regardless of
+         *     messages sent by the user. With o1 models and newer, use `developer` messages
+         *     for this purpose instead.
+         */
         ChatCompletionSystemMessageParam: {
             /** Content */
             content: string | components["schemas"]["ChatCompletionContentPartTextParam"][];
@@ -2228,7 +2291,11 @@ export interface components {
             /** Tool Call Id */
             tool_call_id: string;
         };
-        /** ChatCompletionUserMessageParam */
+        /**
+         * ChatCompletionUserMessageParam
+         * @description Messages sent by an end user, containing prompts or additional context
+         *     information.
+         */
         "ChatCompletionUserMessageParam-Input": {
             /** Content */
             content: string | (components["schemas"]["ChatCompletionContentPartTextParam"] | components["schemas"]["ChatCompletionContentPartImageParam"] | components["schemas"]["ChatCompletionContentPartInputAudioParam"] | components["schemas"]["File"])[];
@@ -2240,7 +2307,11 @@ export interface components {
             /** Name */
             name?: string;
         };
-        /** ChatCompletionUserMessageParam */
+        /**
+         * ChatCompletionUserMessageParam
+         * @description Messages sent by an end user, containing prompts or additional context
+         *     information.
+         */
         "ChatCompletionUserMessageParam-Output": {
             /** Content */
             content: string | (components["schemas"]["ChatCompletionContentPartTextParam"] | components["schemas"]["ChatCompletionContentPartImageParam"] | components["schemas"]["ChatCompletionContentPartInputAudioParam"] | components["schemas"]["File"])[];
@@ -2280,7 +2351,10 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** ChoiceLogprobs */
+        /**
+         * ChoiceLogprobs
+         * @description Log probability information for the choice.
+         */
         ChoiceLogprobs: {
             /** Content */
             content?: components["schemas"]["ChatCompletionTokenLogprob"][] | null;
@@ -2289,7 +2363,10 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** CompletionTokensDetails */
+        /**
+         * CompletionTokensDetails
+         * @description Breakdown of tokens used in a completion.
+         */
         CompletionTokensDetails: {
             /** Accepted Prediction Tokens */
             accepted_prediction_tokens?: number | null;
@@ -2302,7 +2379,10 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** CompletionUsage */
+        /**
+         * CompletionUsage
+         * @description Usage statistics for the completion request.
+         */
         CompletionUsage: {
             /** Completion Tokens */
             completion_tokens: number;
@@ -2325,7 +2405,10 @@ export interface components {
             /** Cluster */
             cluster: string | null;
         };
-        /** Custom */
+        /**
+         * Custom
+         * @description The custom tool that the model called.
+         */
         Custom: {
             /** Input */
             input: string;
@@ -2334,7 +2417,10 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** Custom */
+        /**
+         * Custom
+         * @description The custom tool that the model called.
+         */
         "Custom-Input": {
             /** Input */
             input: string;
@@ -2731,7 +2817,10 @@ export interface components {
             /** Namespace */
             namespace?: string | null;
         };
-        /** File */
+        /**
+         * File
+         * @description Learn about [file inputs](https://platform.openai.com/docs/guides/text) for text generation.
+         */
         File: {
             file: components["schemas"]["FileFile"];
             /**
@@ -2749,7 +2838,10 @@ export interface components {
             /** Filename */
             filename?: string;
         };
-        /** Function */
+        /**
+         * Function
+         * @description The function that the model called.
+         */
         Function: {
             /** Arguments */
             arguments: string;
@@ -2758,14 +2850,22 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** Function */
+        /**
+         * Function
+         * @description The function that the model called.
+         */
         "Function-Input": {
             /** Arguments */
             arguments: string;
             /** Name */
             name: string;
         };
-        /** FunctionCall */
+        /**
+         * FunctionCall
+         * @description Deprecated and replaced by `tool_calls`.
+         *
+         *     The name and arguments of a function that should be called, as generated by the model.
+         */
         FunctionCall: {
             /** Arguments */
             arguments: string;
@@ -2774,7 +2874,12 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** FunctionCall */
+        /**
+         * FunctionCall
+         * @description Deprecated and replaced by `tool_calls`.
+         *
+         *     The name and arguments of a function that should be called, as generated by the model.
+         */
         "FunctionCall-Input": {
             /** Arguments */
             arguments: string;
@@ -3032,8 +3137,8 @@ export interface components {
             timestamp?: string | null;
             /** Memoryname */
             memoryName: string;
-            /** Sessionid */
-            sessionId: string;
+            /** Conversationid */
+            conversationId: string;
             /** Queryid */
             queryId?: string | null;
             /** Message */
@@ -3237,7 +3342,10 @@ export interface components {
             resourceType: string;
             labelSelector?: components["schemas"]["ark_api__models__agents__LabelSelector"] | null;
         };
-        /** PromptTokensDetails */
+        /**
+         * PromptTokensDetails
+         * @description Breakdown of tokens used in the prompt.
+         */
         PromptTokensDetails: {
             /** Audio Tokens */
             audio_tokens?: number | null;
@@ -3527,11 +3635,11 @@ export interface components {
         };
         /**
          * SessionResponse
-         * @description Response model for a session.
+         * @description Response model for a conversation.
          */
         SessionResponse: {
-            /** Sessionid */
-            sessionId: string;
+            /** Conversationid */
+            conversationId: string;
             /** Memoryname */
             memoryName: string;
             /** Queries */
@@ -4188,21 +4296,32 @@ export interface components {
             configMapKeyRef?: components["schemas"]["ark_api__models__queries__ConfigMapKeyRef"] | null;
             secretKeyRef?: components["schemas"]["ark_api__models__queries__SecretKeyRef"] | null;
         };
-        /** FunctionCall */
+        /**
+         * FunctionCall
+         * @description Deprecated and replaced by `tool_calls`.
+         *
+         *     The name and arguments of a function that should be called, as generated by the model.
+         */
         openai__types__chat__chat_completion_assistant_message_param__FunctionCall: {
             /** Arguments */
             arguments: string;
             /** Name */
             name: string;
         };
-        /** Custom */
+        /**
+         * Custom
+         * @description The custom tool that the model called.
+         */
         openai__types__chat__chat_completion_message_custom_tool_call_param__Custom: {
             /** Input */
             input: string;
             /** Name */
             name: string;
         };
-        /** Function */
+        /**
+         * Function
+         * @description The function that the model called.
+         */
         openai__types__chat__chat_completion_message_function_tool_call_param__Function: {
             /** Arguments */
             arguments: string;
@@ -5853,7 +5972,7 @@ export interface operations {
             };
         };
     };
-    get_memory_messages_v1_memories__name__sessions__session_id__messages_get: {
+    get_memory_messages_v1_memories__name__conversations__conversation_id__messages_get: {
         parameters: {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
@@ -5862,7 +5981,7 @@ export interface operations {
             header?: never;
             path: {
                 name: string;
-                session_id: string;
+                conversation_id: string;
             };
             cookie?: never;
         };
@@ -5897,8 +6016,8 @@ export interface operations {
                 namespace?: string | null;
                 /** @description Filter by memory name */
                 memory?: string | null;
-                /** @description Filter by session ID */
-                session?: string | null;
+                /** @description Filter by conversation ID */
+                conversation?: string | null;
                 /** @description Filter by query ID */
                 query?: string | null;
             };
@@ -5928,7 +6047,7 @@ export interface operations {
             };
         };
     };
-    list_sessions_v1_sessions_get: {
+    list_conversations_v1_conversations_get: {
         parameters: {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
@@ -5962,7 +6081,7 @@ export interface operations {
             };
         };
     };
-    delete_all_sessions_v1_sessions_delete: {
+    delete_all_conversations_v1_conversations_delete: {
         parameters: {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
@@ -5996,7 +6115,7 @@ export interface operations {
             };
         };
     };
-    delete_session_v1_sessions__session_id__delete: {
+    delete_conversation_v1_conversations__conversation_id__delete: {
         parameters: {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
@@ -6004,7 +6123,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                session_id: string;
+                conversation_id: string;
             };
             cookie?: never;
         };
@@ -6032,7 +6151,7 @@ export interface operations {
             };
         };
     };
-    delete_query_messages_v1_sessions__session_id__queries__query_id__messages_delete: {
+    delete_query_messages_v1_conversations__conversation_id__queries__query_id__messages_delete: {
         parameters: {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
@@ -6040,7 +6159,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                session_id: string;
+                conversation_id: string;
                 query_id: string;
             };
             cookie?: never;

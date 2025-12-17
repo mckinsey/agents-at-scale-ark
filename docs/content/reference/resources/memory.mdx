@@ -42,16 +42,26 @@ spec:
     - name: my-agent
   memory:
     name: ark-cluster-memory
-  # Optional: specify session ID to group related queries
-  # If not provided, the query UID is used as the session identifier
-  sessionId: "my-conversation-session"
+  # Optional: specify session ID to group related queries for tracking
+  sessionId: "my-session"
+  # Optional: specify conversation ID for memory continuity
+  # If not provided, a new conversation ID will be generated
+  conversationId: "my-conversation"
 ```
 
-Memory can also be specified via the `fark` CLI:
+Memory can also be specified via the CLIs:
 
 ```bash
-fark query --input "Continue our conversation" --session-id "my-conversation-session" my-agent
+# Using fark
+fark query --input "Continue our conversation" --session-id "my-session" --conversation-id "my-conversation" my-agent
+
+# Using ark
+ark query agent/my-agent "Continue our conversation" --session-id "my-session" --conversation-id "my-conversation"
 ```
+
+**Session ID vs Conversation ID:**
+- **sessionId**: Groups related queries for tracking and telemetry purposes
+- **conversationId**: Associates queries with a specific memory/conversation thread for context continuity
 
 When creating a query in the dashboard it is also possible to specify the memory resource. Note that in the dashbhoard 'chat' window, no memory is used, messages are simply stored client-side as is common for chat applications.
 
@@ -61,29 +71,66 @@ Memory is implemented as a simple HTTP server:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/messages` | Store multiple messages |
+| POST | `/conversations` | Create a new conversation |
+| GET | `/conversations` | List all conversation IDs |
+| GET | `/conversations/{id}` | Get conversation details and messages |
+| DELETE | `/conversations/{id}` | Delete a specific conversation |
+| POST | `/messages` | Store messages (requires conversation_id) |
 | GET | `/messages` | Retrieve messages with optional filtering |
-| GET | `/sessions` | List all session IDs |
 | GET | `/health` | Health check |
+
+### Create Conversation
+
+**POST** `/conversations`
+
+Creates a new conversation and returns its ID. This must be called before storing messages.
+
+Response:
+```json
+{
+  "conversation_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
 
 ### Store Messages
 
 **POST** `/messages`
 
-Request body includes session/query context and message array:
+Stores messages for an existing conversation. The `conversation_id` is required.
 
 ```json
 {
-  "session_id": "uuid-string",
-  "query_id": "query-uuid", 
+  "conversation_id": "550e8400-e29b-41d4-a716-446655440000",
+  "query_id": "query-uuid",
   "messages": [
     {
       "role": "user",
       "content": "What is the weather like?"
     },
     {
-      "role": "assistant", 
+      "role": "assistant",
       "content": "I don't have access to real-time weather data."
+    }
+  ]
+}
+```
+
+### Get Conversation
+
+**GET** `/conversations/{id}`
+
+Returns conversation details including all messages:
+
+```json
+{
+  "conversation_id": "550e8400-e29b-41d4-a716-446655440000",
+  "messages": [
+    {
+      "timestamp": "2024-01-01T12:00:00Z",
+      "conversation_id": "550e8400-e29b-41d4-a716-446655440000",
+      "query_id": "query-uuid",
+      "message": { "role": "user", "content": "Hello" },
+      "sequence": 1
     }
   ]
 }
@@ -91,10 +138,10 @@ Request body includes session/query context and message array:
 
 ### Retrieve Messages
 
-**GET** `/messages?session_id={id}&query_id={id}&limit={n}&offset={n}`
+**GET** `/messages?conversation_id={id}&query_id={id}&limit={n}&offset={n}`
 
 Retrieves stored conversation messages:
-- `session_id` (optional) - Filter by session
+- `conversation_id` (optional) - Filter by conversation
 - `query_id` (optional) - Filter by query
 - `limit` (optional, default: 100) - Max messages to return
 - `offset` (optional, default: 0) - Skip messages for pagination
@@ -106,7 +153,7 @@ Returns timestamped message records:
   "messages": [
     {
       "timestamp": "2024-01-01T12:00:00Z",
-      "session_id": "uuid-string",
+      "conversation_id": "conv-abc123",
       "query_id": "query-uuid",
       "message": {
         "role": "user",
@@ -120,12 +167,12 @@ Returns timestamped message records:
 }
 ```
 
-### List Sessions
+### List Conversations
 
-**GET** `/sessions`
+**GET** `/conversations`
 
-Returns object with session IDs:
+Returns object with conversation IDs:
 
 ```json
-{"sessions": ["session-1", "session-2", "session-3"]}
+{"conversations": ["conv-1", "conv-2", "conv-3"]}
 ```

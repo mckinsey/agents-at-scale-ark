@@ -11,7 +11,7 @@ from .tools import router as tools_router
 from .mcp_servers import router as mcp_servers_router
 from .a2a_servers import router as a2a_servers_router
 from .memories import router as memories_router, memory_messages_router
-from .sessions import router as sessions_router
+from .conversations import router as conversations_router
 from .system_info import router as system_info_router
 from .ark_services import router as ark_services_router
 from .events import router as events_router
@@ -35,7 +35,7 @@ router.include_router(a2a_servers_router)
 router.include_router(a2a_tasks_router)
 router.include_router(memories_router)
 router.include_router(memory_messages_router)
-router.include_router(sessions_router)
+router.include_router(conversations_router)
 router.include_router(system_info_router)
 router.include_router(ark_services_router)
 router.include_router(events_router)

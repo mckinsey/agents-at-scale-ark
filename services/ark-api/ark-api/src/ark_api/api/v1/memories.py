@@ -144,20 +144,20 @@ async def delete_memory(name: str, namespace: Optional[str] = Query(None, descri
         return {"message": f"Memory {name} deleted successfully"}
 
 
-@router.get("/{name}/sessions/{session_id}/messages")
+@router.get("/{name}/conversations/{conversation_id}/messages")
 @handle_k8s_errors(operation="get", resource_type="memory")
-async def get_memory_messages(name: str, session_id: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> dict:
-    """Get messages for a specific session from a memory resource."""
+async def get_memory_messages(name: str, conversation_id: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> dict:
+    """Get messages for a specific conversation from a memory resource."""
     async with with_ark_client(namespace, VERSION) as client:
         memory = await client.memories.a_get(name)
         memory_dict = memory.to_dict()
-        
+
         service_url = get_memory_service_address(memory_dict)
-        
+
         return await fetch_memory_service_data(
-            service_url, 
+            service_url,
             "/messages",
-            params={"session_id": session_id},
+            params={"conversation_id": conversation_id},
             memory_name=name
         )
 
@@ -171,7 +171,7 @@ memory_messages_router = APIRouter(prefix="/memory-messages", tags=["memory-mess
 async def list_memory_messages(
     namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
     memory: Optional[str] = Query(None, description="Filter by memory name"),
-    session: Optional[str] = Query(None, description="Filter by session ID"),
+    conversation: Optional[str] = Query(None, description="Filter by conversation ID"),
     query: Optional[str] = Query(None, description="Filter by query ID")
 ) -> MemoryMessageListResponse:
     """List all memory messages with context, optionally filtered."""
@@ -188,8 +188,8 @@ async def list_memory_messages(
                 
                 # Build query parameters
                 params = {}
-                if session:
-                    params["session_id"] = session
+                if conversation:
+                    params["conversation_id"] = conversation
                 if query:
                     params["query_id"] = query
                 
@@ -207,7 +207,7 @@ async def list_memory_messages(
                     all_messages.append(MemoryMessageResponse(
                         timestamp=msg_record.get("timestamp"),
                         memoryName=memory_name,
-                        sessionId=msg_record.get("session_id"),
+                        conversationId=msg_record.get("conversation_id"),
                         queryId=msg_record.get("query_id"),
                         message=msg_record.get("message"),
                         sequence=msg_record.get("sequence")

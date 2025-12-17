@@ -38,16 +38,42 @@ class SecretsPage(BasePage):
         return f"{prefix}-{date_str}"
     
     def navigate_to_secrets_tab(self) -> None:
+        self._close_dialog_if_open()
+        
         from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
         dashboard.navigate_to_dashboard()
         
-        if not self.page.locator(dashboard.SECRETS_TAB).first.is_visible():
-            import pytest
-            pytest.skip("Secrets tab not visible")
+        self._close_dialog_if_open()
         
-        self.page.locator(dashboard.SECRETS_TAB).first.click()
-        self.wait_for_load_state("networkidle")
+        try:
+            secrets_tab = self.page.locator(dashboard.SECRETS_TAB).first
+            if not secrets_tab.is_visible(timeout=5000):
+                import pytest
+                pytest.skip("Secrets tab not visible")
+            
+            secrets_tab.click(force=True)
+        except Exception as e:
+            logger.warning(f"Click failed, trying with force: {e}")
+            self.page.locator(dashboard.SECRETS_TAB).first.click(force=True)
+        
+        self.wait_for_load_state("domcontentloaded")
+        self.wait_for_timeout(1000)
+    
+    def _close_dialog_if_open(self) -> None:
+        for attempt in range(3):
+            try:
+                dialog_overlay = self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first
+                if dialog_overlay.is_visible(timeout=1000):
+                    logger.info(f"Dialog still open, attempting to close (attempt {attempt + 1})")
+                    self.page.keyboard.press("Escape")
+                    self.wait_for_timeout(500)
+                else:
+                    return
+            except:
+                pass
+        self.page.keyboard.press("Escape")
+        self.wait_for_timeout(300)
     
     def is_secret_in_table(self, secret_name: str) -> bool:
         try:
@@ -59,15 +85,34 @@ class SecretsPage(BasePage):
         secret_name = self.generate_secret_name(prefix)
         secret_value = self.get_password_from_env(env_key)
         
+        logger.info(f"Creating secret: {secret_name} with key: {env_key}")
+        logger.info(f"Secret value length: {len(secret_value)}")
         
-        self.page.locator(self.ADD_SECRET_BUTTON).click()
-        self.page.locator(self.SECRET_NAME_INPUT).wait_for(state="visible")
-        self.page.locator(self.SECRET_NAME_INPUT).fill(secret_name)
-        self.page.locator(self.SECRET_VALUE_INPUT).fill(secret_value)
-        self.page.locator(f"{self.SAVE_BUTTON}:not([disabled])").wait_for(state="visible", timeout=10000)
-        self.page.locator(self.SAVE_BUTTON).click()
+        self.page.locator(self.ADD_SECRET_BUTTON).first.click()
+        self.wait_for_load_state("domcontentloaded")
+        self.wait_for_timeout(1000)
         
-        self.wait_for_load_state("networkidle")
+        inputs = self.page.locator("[role='dialog'] input:visible, [data-slot='dialog-content'] input:visible")
+        inputs.first.wait_for(state="visible", timeout=10000)
+        
+        input_count = inputs.count()
+        logger.info(f"Found {input_count} inputs in dialog")
+        
+        if input_count >= 2:
+            inputs.nth(0).fill(secret_name)
+            inputs.nth(1).fill(secret_value)
+        else:
+            inputs.first.fill(secret_name)
+            textarea = self.page.locator("[role='dialog'] textarea:visible").first
+            if textarea.is_visible():
+                textarea.fill(secret_value)
+        
+        self.wait_for_timeout(1000)
+        
+        save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
+        save_button.evaluate("el => el.click()")
+        
+        self.wait_for_load_state("domcontentloaded")
         
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
@@ -107,7 +152,7 @@ class SecretsPage(BasePage):
         if confirm_button_visible:
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         popup_visible = self._check_success_popup()
         self.wait_for_timeout(3000)
         deleted_from_table = not self.is_secret_in_table(secret_name)

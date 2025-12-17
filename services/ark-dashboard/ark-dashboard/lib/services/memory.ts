@@ -4,7 +4,7 @@ import { apiClient } from '@/lib/api/client';
 export interface MemoryMessage {
   queryName: string;
   queryNamespace: string;
-  sessionId: string;
+  conversationId: string;
   memoryName: string;
   input: string;
   response?: string;
@@ -20,9 +20,9 @@ export interface StoredMessage {
   name?: string;
 }
 
-// Session conversation data
-export interface SessionConversation {
-  sessionId: string;
+// Conversation data
+export interface Conversation {
+  conversationId: string;
   memoryName: string;
   messages: StoredMessage[];
   lastUpdated?: string;
@@ -39,7 +39,7 @@ export interface MemoryResource {
 // Memory filters
 export interface MemoryFilters {
   memoryName?: string;
-  sessionId?: string;
+  conversationId?: string;
   queryId?: string;
   limit?: number;
   page?: number;
@@ -53,7 +53,7 @@ interface MemoryListResponse {
 
 export type MemoryMessagesFilters = {
   memory?: string;
-  session?: string;
+  conversation?: string;
   query?: string;
 };
 
@@ -71,44 +71,43 @@ export const memoryService = {
     }
   },
 
-  // Get all sessions across all memories
-  async getSessions(): Promise<{ sessionId: string; memoryName: string }[]> {
+  // Get all conversations across all memories
+  async getConversations(): Promise<
+    { conversationId: string; memoryName: string }[]
+  > {
     try {
-      const url = `/api/v1/sessions`;
+      const url = `/api/v1/conversations`;
       const response = await apiClient.get<{
-        items: { sessionId: string; memoryName: string }[];
+        items: { conversationId: string; memoryName: string }[];
       }>(url);
 
       return response?.items || [];
     } catch (error) {
-      console.error('Failed to fetch sessions:', error);
+      console.error('Failed to fetch conversations:', error);
       return [];
     }
   },
 
-  // Get stored conversation messages for a specific session
-  async getSessionConversation(
+  // Get stored conversation messages for a specific conversation
+  async getConversation(
     memoryName: string,
-    sessionId: string,
-  ): Promise<SessionConversation | null> {
+    conversationId: string,
+  ): Promise<Conversation | null> {
     try {
       // Use the new ARK API endpoint for memory messages
-      const apiUrl = `/api/v1/memories/${memoryName}/sessions/${sessionId}/messages`;
+      const apiUrl = `/api/v1/memories/${memoryName}/conversations/${conversationId}/messages`;
       const response = await apiClient.get<{ messages: StoredMessage[] }>(
         apiUrl,
       );
 
       return {
-        sessionId,
+        conversationId,
         memoryName,
         messages: response?.messages || [],
         lastUpdated: new Date().toISOString(),
       };
     } catch (error) {
-      console.error(
-        `Failed to fetch conversation for session ${sessionId}:`,
-        error,
-      );
+      console.error(`Failed to fetch conversation ${conversationId}:`, error);
       return null;
     }
   },
@@ -118,7 +117,7 @@ export const memoryService = {
     {
       timestamp: string;
       memoryName: string;
-      sessionId: string;
+      conversationId: string;
       queryId: string;
       message: { role: string; content: string; name?: string };
       sequence?: number;
@@ -129,7 +128,8 @@ export const memoryService = {
       const params = new URLSearchParams();
 
       if (filters?.memory) params.append('memory', filters.memory);
-      if (filters?.session) params.append('session', filters.session);
+      if (filters?.conversation)
+        params.append('conversation', filters.conversation);
       if (filters?.query) params.append('query', filters.query);
 
       if (params.toString()) {
@@ -140,7 +140,7 @@ export const memoryService = {
         items: {
           timestamp: string;
           memoryName: string;
-          sessionId: string;
+          conversationId: string;
           queryId: string;
           message: { role: string; content: string; name?: string };
         }[];
@@ -152,23 +152,23 @@ export const memoryService = {
     }
   },
 
-  async deleteSession(sessionId: string) {
-    apiClient.delete(`/api/v1/sessions/${sessionId}`);
+  async deleteConversation(conversationId: string) {
+    apiClient.delete(`/api/v1/conversations/${conversationId}`);
   },
 
   async deleteQuery({
-    sessionId,
+    conversationId,
     queryId,
   }: {
-    sessionId: string;
+    conversationId: string;
     queryId: string;
   }) {
     apiClient.delete(
-      `/api/v1/sessions/${sessionId}/queries/${queryId}/messages`,
+      `/api/v1/conversations/${conversationId}/queries/${queryId}/messages`,
     );
   },
 
   async resetMemory() {
-    apiClient.delete('/api/v1/sessions');
+    apiClient.delete('/api/v1/conversations');
   },
 };

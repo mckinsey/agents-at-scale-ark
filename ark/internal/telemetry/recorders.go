@@ -33,6 +33,9 @@ type QueryRecorder interface {
 	// RecordSessionID associates a span with a session for multi-query tracking.
 	RecordSessionID(span Span, sessionID string)
 
+	// RecordConversationID associates a span with a conversation for multi-query tracking.
+	RecordConversationID(span Span, conversationID string)
+
 	// RecordSuccess marks a span as successfully completed.
 	RecordSuccess(span Span)
 
@@ -171,6 +174,9 @@ const (
 
 	// Session tracking
 	AttrSessionID = "session.id"
+
+	// Conversation tracking
+	AttrConversationID = "conversation.id"
 
 	// Tool attributes
 	AttrToolName        = "tool.name"

@@ -20,6 +20,10 @@ export function createQueryCommand(config: ArkConfig): Command {
       '--session-id <sessionId>',
       'Session ID to associate with the query for conversation continuity'
     )
+    .option(
+      '--conversation-id <conversationId>',
+      'Conversation ID to associate with the query for memory continuity'
+    )
     .action(
       async (
         target: string,
@@ -28,6 +32,7 @@ export function createQueryCommand(config: ArkConfig): Command {
           output?: string;
           timeout?: string;
           sessionId?: string;
+          conversationId?: string;
         }
       ) => {
         const parsed = parseTarget(target);
@@ -47,6 +52,7 @@ export function createQueryCommand(config: ArkConfig): Command {
           outputFormat: options.output,
           timeout: options.timeout || config.queryTimeout,
           sessionId: options.sessionId,
+          conversationId: options.conversationId,
         });
       }
     );

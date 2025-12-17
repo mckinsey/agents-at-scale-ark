@@ -115,7 +115,7 @@ export function EvaluationStatusIndicator({
     // Navigate to evaluations page with query filter
     const enhancedParam = enhanced ? '&enhanced=true' : '';
     router.push(
-      `/evaluations&query=${encodeURIComponent(queryName)}${enhancedParam}`,
+      `/evaluations?query=${encodeURIComponent(queryName)}${enhancedParam}`,
     );
   };
 

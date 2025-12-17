@@ -28,12 +28,13 @@ func (c *ExecutionContext) getLogger() *zap.Logger {
 }
 
 type TargetCommand struct {
-	TargetType string
-	TargetName string
-	Input      string
-	Timeout    time.Duration
-	Parameters []string
-	SessionId  string
+	TargetType     string
+	TargetName     string
+	Input          string
+	Timeout        time.Duration
+	Parameters     []string
+	SessionId      string
+	ConversationId string
 	ExecutionContext
 }
 
@@ -50,7 +51,7 @@ func (c *TargetCommand) Run() error {
 	}
 
 	targets := []arkv1alpha1.QueryTarget{{Type: c.TargetType, Name: c.TargetName}}
-	query, err := createQuery(c.Input, targets, c.Namespace, params, c.SessionId, &c.Timeout)
+	query, err := createQuery(c.Input, targets, c.Namespace, params, c.SessionId, c.ConversationId, &c.Timeout)
 	if err != nil {
 		return fmt.Errorf("failed to create query: %v", err)
 	}
@@ -82,12 +83,13 @@ func (c *TargetCommand) Run() error {
 }
 
 type TriggerCommand struct {
-	QueryName     string
-	InputOverride string
-	InputFile     string
-	Timeout       time.Duration
-	Parameters    []string
-	SessionId     string
+	QueryName      string
+	InputOverride  string
+	InputFile      string
+	Timeout        time.Duration
+	Parameters     []string
+	SessionId      string
+	ConversationId string
 	ExecutionContext
 }
 
@@ -123,7 +125,7 @@ func (c *TriggerCommand) Run() error {
 		params = parsedParams
 	}
 
-	newQuery, err := createTriggerQuery(existingQuery, queryInput, params, c.SessionId, &c.Timeout)
+	newQuery, err := createTriggerQuery(existingQuery, queryInput, params, c.SessionId, c.ConversationId, &c.Timeout)
 	if err != nil {
 		return fmt.Errorf("failed to create triggered query: %v", err)
 	}
