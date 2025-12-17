@@ -10,6 +10,10 @@ import (
 type MemorySpec struct {
 	// +kubebuilder:validation:Required
 	Address ValueSource `json:"address"`
+
+	// +kubebuilder:validation:Optional
+	// Headers contains HTTP headers to include in memory API requests
+	Headers []Header `json:"headers,omitempty"`
 }
 
 // MemoryStatus defines the observed state of Memory.
@@ -17,6 +21,10 @@ type MemoryStatus struct {
 	// +kubebuilder:validation:Optional
 	// LastResolvedAddress contains the last resolved address value for reference
 	LastResolvedAddress *string `json:"lastResolvedAddress,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// ResolvedHeaders contains the resolved header values
+	ResolvedHeaders map[string]string `json:"resolvedHeaders,omitempty"`
 
 	// Phase represents the current state of the memory
 	// +kubebuilder:validation:Optional

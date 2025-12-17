@@ -24,6 +24,7 @@ type HTTPMemory struct {
 	conversationId   string
 	name             string
 	namespace        string
+	headers          map[string]string
 	eventingRecorder eventing.MemoryRecorder
 }
 
@@ -49,6 +50,12 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 		httpClient.Timeout = config.Timeout
 	}
 
+	// Load resolved headers
+	headers := make(map[string]string)
+	if memory.Status.ResolvedHeaders != nil {
+		headers = memory.Status.ResolvedHeaders
+	}
+
 	baseURL := strings.TrimSuffix(*memory.Status.LastResolvedAddress, "/")
 
 	// Create conversation or use provided ID
@@ -64,6 +71,7 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 		conversationId:   conversationId,
 		name:             memoryName,
 		namespace:        namespace,
+		headers:          headers,
 		eventingRecorder: memoryRecorder,
 	}, nil
 }
@@ -138,6 +146,11 @@ func (m *HTTPMemory) resolveAndUpdateAddress(ctx context.Context) error {
 
 	// Update the baseURL
 	m.baseURL = strings.TrimSuffix(resolvedAddress, "/")
+
+	// Update headers from status
+	if memory.Status.ResolvedHeaders != nil {
+		m.headers = memory.Status.ResolvedHeaders
+	}
 	return nil
 }
 
@@ -184,6 +197,11 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 	req.Header.Set("Content-Type", ContentTypeJSON)
 	req.Header.Set("User-Agent", UserAgent)
 
+	// Apply resolved headers
+	for name, value := range m.headers {
+		req.Header.Set(name, value)
+	}
+
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		operationData := map[string]string{"result": fmt.Sprintf("HTTP request failed: %v", err)}
@@ -229,6 +247,11 @@ func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 
 	req.Header.Set("Accept", ContentTypeJSON)
 	req.Header.Set("User-Agent", UserAgent)
+
+	// Add custom headers
+	for name, value := range m.headers {
+		req.Header.Set(name, value)
+	}
 
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
