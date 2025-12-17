@@ -81,27 +81,29 @@ class ToolsPage(BasePage):
         
         name_input.fill(tool_name)
         
-        type_trigger = self.page.locator("button#type")
+        type_trigger = self.page.locator("button#type, button[name='type'], [role='combobox']:has-text('Select'), [data-slot='trigger']").first
         type_trigger.wait_for(state="visible", timeout=5000)
         type_trigger.click()
         
-        # Wait for dropdown options
         self.wait_for_dropdown_options()
-        self.page.get_by_role("option", name="HTTP", exact=True).click()
+        http_option = self.page.get_by_role("option", name="HTTP", exact=True)
+        if http_option.count() > 0:
+            http_option.click()
+        else:
+            self.page.locator("[role='option']:has-text('HTTP')").first.click()
         
-        # Wait for dropdown to close
-        self.wait_for_element_hidden("[role='listbox']", timeout=5000)
+        self.wait_for_timeout(500)
         
-        description_input = self.page.locator("input#description")
+        description_input = self.page.locator("input#description, input[name='description'], [role='dialog'] input:nth-of-type(2)").first
         description_input.wait_for(state="visible", timeout=5000)
         description_input.fill(description)
         
         input_schema = '{"type": "object", "properties": {"city": {"type": "string", "description": "City name to get coordinates for"}}, "required": ["city"]}'
-        schema_textarea = self.page.locator("textarea#inputSchema")
+        schema_textarea = self.page.locator("textarea#inputSchema, textarea[name='inputSchema'], [role='dialog'] textarea").first
         schema_textarea.wait_for(state="visible", timeout=5000)
         schema_textarea.fill(input_schema)
         
-        url_input = self.page.locator("input#http-url")
+        url_input = self.page.locator("input#http-url, input[name='http-url'], input[name='url'], input[placeholder*='URL' i]").first
         url_input.wait_for(state="visible", timeout=5000)
         url_input.fill(url)
         
