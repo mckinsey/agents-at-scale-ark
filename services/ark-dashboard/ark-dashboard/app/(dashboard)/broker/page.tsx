@@ -119,6 +119,7 @@ function StreamView({
   onClear,
 }: StreamViewProps) {
   const [autoScroll, setAutoScroll] = useState(true);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -126,6 +127,18 @@ function StreamView({
       containerRef.current.scrollTop = 0;
     }
   }, [entries, autoScroll]);
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   return (
     <Card className="flex h-full flex-col">
@@ -162,18 +175,27 @@ function StreamView({
               Waiting for data...
             </div>
           ) : (
-            entries.map(entry => (
-              <div
-                key={entry.id}
-                className="border-border mb-1 border-b pb-1 last:border-b-0">
-                <div className="text-muted-foreground mb-0.5 text-[10px]">
-                  {entry.timestamp}
+            entries.map(entry => {
+              const isExpanded = expandedIds.has(entry.id);
+              return (
+                <div
+                  key={entry.id}
+                  className="border-border mb-1 cursor-pointer border-b pb-1 last:border-b-0"
+                  onClick={() => toggleExpanded(entry.id)}>
+                  <div className="text-muted-foreground hover:text-foreground mb-0.5 flex items-center gap-1 text-[10px]">
+                    <span className="inline-block w-2 text-center">
+                      {isExpanded ? '▼' : '▶'}
+                    </span>
+                    <span>{entry.timestamp}</span>
+                  </div>
+                  {isExpanded && (
+                    <pre className="break-all whitespace-pre-wrap">
+                      {JSON.stringify(entry.data, null, 2)}
+                    </pre>
+                  )}
                 </div>
-                <pre className="break-all whitespace-pre-wrap">
-                  {JSON.stringify(entry.data, null, 2)}
-                </pre>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </CardContent>
