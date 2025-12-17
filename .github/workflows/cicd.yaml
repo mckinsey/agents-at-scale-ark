@@ -110,7 +110,7 @@ jobs:
         shell: bash
         run: |
           GITHUB_REPOSITORY="${{ github.repository }}"
-          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&status=success&per_page=50" | jq -c '.workflow_runs[] | select(.name == "CI/CD") | .id' | head -n 1)
+          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&status=completed&per_page=50" | jq -c '.workflow_runs[] | select(.name == "CI/CD") | .id' | head -n 1)
           
           echo "Downloading artifacts from run ID: $LAST_RUN_ID"
           gh run download "$LAST_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern "xray-scan-results-agents-at-scale-*" --dir ./artifacts
@@ -663,6 +663,104 @@ jobs:
         with:
           artifact-name: coverage-reports-evaluated
 
+  e2e-ui-tests:
+    needs: [setup-container-cache-registry, build-containers]
+    runs-on: ubuntu-24.04
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-e2e
+        with:
+          ark-image-tag: ${{ github.sha }}
+          install-coverage: "false"
+          install-evaluator: "false"
+          ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
+          ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
+          ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - name: Deploy ark-api
+        run: |
+          helm upgrade --install ark-api services/ark-api/chart \
+            --namespace default \
+            --create-namespace \
+            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-api" \
+            --set app.image.tag="${{ github.sha }}" \
+            --set app.image.pullPolicy="Always" \
+            --wait \
+            --timeout=5m
+
+      - name: Deploy ark-dashboard
+        run: |
+          helm upgrade --install ark-dashboard services/ark-dashboard/chart \
+            --namespace default \
+            --create-namespace \
+            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-dashboard" \
+            --set app.image.tag="${{ github.sha }}" \
+            --set app.image.pullPolicy="Always" \
+            --wait \
+            --timeout=5m
+
+      - name: Deploy ark-mcp
+        run: |
+          helm upgrade --install ark-mcp services/ark-mcp/chart \
+            --namespace default \
+            --create-namespace \
+            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-mcp" \
+            --set app.image.tag="${{ github.sha }}" \
+            --set app.image.pullPolicy="Always" \
+            --wait \
+            --timeout=5m
+
+      - name: Wait for services to be ready
+        run: |
+          kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
+          kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
+          kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install UI test dependencies
+        run: |
+          cd tests/pytest/ui-tests
+          pip install -r requirements.txt
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Create test environment
+        env:
+          CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
+          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL }}
+        run: |
+          cd tests/pytest/ui-tests
+          cat > .env << EOF
+          CICD_OPENAI_API_KEY=${CICD_OPENAI_API_KEY}
+          CICD_OPENAI_BASE_URL=${CICD_OPENAI_BASE_URL}
+          EOF
+
+      - name: Start port-forwarding
+        run: |
+          kubectl port-forward svc/ark-dashboard 3274:3000 &
+          sleep 5
+          curl -s -o /dev/null -w "%{http_code}" http://localhost:3274 || echo "Dashboard connectivity check"
+
+      - name: Run UI tests
+        run: |
+          cd tests/pytest/ui-tests
+          mkdir -p screenshots
+          pytest tests/ -v --tb=short
+
+      - name: Upload test screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-screenshots-${{ github.sha }}
+          path: tests/pytest/ui-tests/screenshots/
+          retention-days: 7
+
   build-charts:
     runs-on: ubuntu-24.04
     strategy:
@@ -792,6 +890,7 @@ jobs:
         e2e-smoke-test,
         e2e-tests-standard,
         e2e-tests-evaluated,
+        e2e-ui-tests,
         build-and-test-ark,
         build-and-test-services,
         build-docs,
@@ -862,6 +961,7 @@ jobs:
         e2e-smoke-test,
         e2e-tests-standard,
         e2e-tests-evaluated,
+        e2e-ui-tests,
         build-and-test-ark,
         build-and-test-services,
         build-docs,
