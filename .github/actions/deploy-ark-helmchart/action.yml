@@ -120,23 +120,6 @@ runs:
       run: |
         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
 
-    - name: Install ARK CustomResourceDefinitions
-      shell: bash
-      run: |
-        kubectl apply -f ark/config/crd/bases
-
-        echo "Waiting for CRDs to be established..."
-        kubectl wait --for=condition=established --timeout=60s crd/agents.ark.mckinsey.com
-        kubectl wait --for=condition=established --timeout=60s crd/models.ark.mckinsey.com
-        kubectl wait --for=condition=established --timeout=60s crd/tools.ark.mckinsey.com
-        kubectl wait --for=condition=established --timeout=60s crd/teams.ark.mckinsey.com
-        kubectl wait --for=condition=established --timeout=60s crd/queries.ark.mckinsey.com
-        kubectl wait --for=condition=established --timeout=60s crd/memories.ark.mckinsey.com
-        kubectl wait --for=condition=established --timeout=60s crd/evaluators.ark.mckinsey.com
-        kubectl wait --for=condition=established --timeout=60s crd/mcpservers.ark.mckinsey.com
-        kubectl wait --for=condition=established --timeout=60s crd/a2aservers.ark.mckinsey.com
-        kubectl wait --for=condition=established --timeout=60s crd/executionengines.ark.mckinsey.com
-
     - name: Deploy ARK-controller chart
       shell: bash
       run: |

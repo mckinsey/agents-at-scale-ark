@@ -10,9 +10,17 @@ export interface ChatConfig {
   outputFormat?: 'text' | 'markdown';
 }
 
+export interface MarketplaceConfig {
+  repoUrl?: string;
+  registry?: string;
+}
+
 export interface ArkConfig {
   chat?: ChatConfig;
+  marketplace?: MarketplaceConfig;
   services?: {[serviceName: string]: Partial<ArkService>};
+  queryTimeout?: string;
+  defaultExportTypes?: string[];
   // Cluster info - populated during startup if context exists
   clusterInfo?: ClusterInfo;
 }
@@ -30,6 +38,10 @@ export function loadConfig(): ArkConfig {
     chat: {
       streaming: true,
       outputFormat: 'text',
+    },
+    marketplace: {
+      repoUrl: 'https://github.com/mckinsey/agents-at-scale-marketplace',
+      registry: 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts',
     },
   };
 
@@ -75,6 +87,20 @@ export function loadConfig(): ArkConfig {
     }
   }
 
+  if (process.env.ARK_QUERY_TIMEOUT !== undefined) {
+    config.queryTimeout = process.env.ARK_QUERY_TIMEOUT;
+  }
+
+  if (process.env.ARK_MARKETPLACE_REPO_URL !== undefined) {
+    config.marketplace = config.marketplace || {};
+    config.marketplace.repoUrl = process.env.ARK_MARKETPLACE_REPO_URL;
+  }
+
+  if (process.env.ARK_MARKETPLACE_REGISTRY !== undefined) {
+    config.marketplace = config.marketplace || {};
+    config.marketplace.registry = process.env.ARK_MARKETPLACE_REGISTRY;
+  }
+
   return config;
 }
 
@@ -92,6 +118,16 @@ function mergeConfig(target: ArkConfig, source: ArkConfig): void {
     }
   }
 
+  if (source.marketplace) {
+    target.marketplace = target.marketplace || {};
+    if (source.marketplace.repoUrl !== undefined) {
+      target.marketplace.repoUrl = source.marketplace.repoUrl;
+    }
+    if (source.marketplace.registry !== undefined) {
+      target.marketplace.registry = source.marketplace.registry;
+    }
+  }
+
   if (source.services) {
     target.services = target.services || {};
     for (const [serviceName, overrides] of Object.entries(source.services)) {
@@ -100,6 +136,14 @@ function mergeConfig(target: ArkConfig, source: ArkConfig): void {
         ...overrides,
       };
     }
+  }
+
+  if (source.queryTimeout !== undefined) {
+    target.queryTimeout = source.queryTimeout;
+  }
+
+  if (source.defaultExportTypes) {
+    target.defaultExportTypes = source.defaultExportTypes
   }
 }
 
@@ -118,4 +162,20 @@ export function getConfigPaths(): {user: string; project: string} {
  */
 export function formatConfig(config: ArkConfig): string {
   return yaml.stringify(config);
+}
+
+/**
+ * Get marketplace repository URL from config
+ */
+export function getMarketplaceRepoUrl(): string {
+  const config = loadConfig();
+  return config.marketplace!.repoUrl!;
+}
+
+/**
+ * Get marketplace registry from config
+ */
+export function getMarketplaceRegistry(): string {
+  const config = loadConfig();
+  return config.marketplace!.registry!;
 }

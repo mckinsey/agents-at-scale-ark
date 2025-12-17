@@ -1,7 +1,9 @@
-import { useAtom } from 'jotai';
-import { RESET } from 'jotai/utils';
-import React, { useCallback, useEffect, useState } from 'react';
+'use client';
 
+import { useAtom } from 'jotai';
+import React, { useCallback, useEffect } from 'react';
+
+import { experimentalFeaturesDialogOpenAtom } from '@/atoms/internal-states';
 import {
   Dialog,
   DialogContent,
@@ -26,9 +28,12 @@ function ExperimentalFeatureToggle({
 }: ExperimentalFeatureToggleProps) {
   const [atomValue, setAtom] = useAtom(feature.atom);
 
-  const toggleAtomValue = useCallback(() => {
-    setAtom(prev => (prev ? RESET : true));
-  }, [setAtom]);
+  const toggleAtomValue = useCallback(
+    (checked: boolean) => {
+      setAtom(checked);
+    },
+    [setAtom],
+  );
 
   return (
     <div className="flex flex-row items-center justify-between">
@@ -46,11 +51,13 @@ function ExperimentalFeatureToggle({
 }
 
 export function ExperimentalFeaturesDialog() {
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useAtom(
+    experimentalFeaturesDialogOpenAtom,
+  );
 
   const toggleModal = useCallback(() => {
     setIsDialogOpen(prev => !prev);
-  }, []);
+  }, [setIsDialogOpen]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

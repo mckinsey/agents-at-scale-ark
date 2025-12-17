@@ -4,6 +4,10 @@ metadata:
   name: team-sequential
 spec:
   description: Test sequential team execution with researcher, analyst, and summarizer
+  timeouts:
+    apply: 30s
+    assert: 60s
+    exec: 120s
   steps:
   - name: step-1
     try:
@@ -38,6 +42,46 @@ spec:
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: researcher
+          status:
+            conditions:
+            - type: Available
+              status: "True"
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: analyst
+          status:
+            conditions:
+            - type: Available
+              status: "True"
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: summarizer
+          status:
+            conditions:
+            - type: Available
+              status: "True"
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Team
+          metadata:
+            name: sequential-research-team
+          status:
+            conditions:
+            - type: Available
+              status: "True"
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
           metadata:
             name: sequential-team-query
@@ -51,9 +95,30 @@ spec:
           metadata:
             name: sequential-team-query
           status:
+            (length(responses)): 1
             (contains(responses[0].content, 'SUMMARY:')): true
     catch:
     - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+        name: researcher
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+        name: analyst
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+        name: summarizer
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Team
+        name: sequential-research-team
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query

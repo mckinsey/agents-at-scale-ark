@@ -2,7 +2,7 @@
  * Centralized ARK service definitions used by both install and status commands
  */
 
-import {loadConfig} from './lib/config.js';
+import {loadConfig, getMarketplaceRegistry} from './lib/config.js';
 import type {
   ArkService,
   ServiceCollection,
@@ -147,7 +147,8 @@ const defaultArkServices: ServiceCollection = {
   'ark-cluster-memory': {
     name: 'ark-cluster-memory',
     helmReleaseName: 'ark-cluster-memory',
-    description: 'In-memory storage service with streaming support for Ark queries',
+    description:
+      'In-memory storage service with streaming support for Ark queries',
     enabled: true,
     category: 'service',
     // namespace: undefined - uses current context namespace
@@ -179,6 +180,19 @@ const defaultArkServices: ServiceCollection = {
     namespace: 'ark-system',
     chartPath: `${REGISTRY_BASE}/localhost-gateway`,
     installArgs: [],
+  },
+
+  'noah': {
+    name: 'noah',
+    helmReleaseName: 'noah',
+    description: 'Runtime administration agent with cluster privileges',
+    enabled: true,
+    category: 'service',
+    chartPath: `${getMarketplaceRegistry()}/noah`,
+    installArgs: [],
+    k8sServiceName: 'noah-mcp',
+    k8sServicePort: 8639,
+    k8sDeploymentName: 'noah-mcp',
   },
 };
 

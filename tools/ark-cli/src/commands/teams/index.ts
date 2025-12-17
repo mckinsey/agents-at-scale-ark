@@ -37,7 +37,7 @@ async function listTeams(options: {output?: string}) {
   }
 }
 
-export function createTeamsCommand(_: ArkConfig): Command {
+export function createTeamsCommand(config: ArkConfig): Command {
   const teamsCommand = new Command('teams');
 
   teamsCommand
@@ -64,13 +64,17 @@ export function createTeamsCommand(_: ArkConfig): Command {
     .description('Query a team')
     .argument('<name>', 'Team name')
     .argument('<message>', 'Message to send')
-    .action(async (name: string, message: string) => {
-      await executeQuery({
-        targetType: 'team',
-        targetName: name,
-        message,
-      });
-    });
+    .option('--timeout <timeout>', 'Query timeout (e.g., 30s, 5m, 1h)')
+    .action(
+      async (name: string, message: string, options: {timeout?: string}) => {
+        await executeQuery({
+          targetType: 'team',
+          targetName: name,
+          message,
+          timeout: options.timeout || config.queryTimeout,
+        });
+      }
+    );
 
   teamsCommand.addCommand(queryCommand);
 

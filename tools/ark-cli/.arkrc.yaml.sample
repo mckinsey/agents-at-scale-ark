@@ -1,0 +1,51 @@
+# Ark CLI Configuration
+# Copy to ~/.arkrc.yaml (user config) or .arkrc.yaml (project config)
+# Project config overrides user config, CLI flags override both
+
+# Query timeout for all query operations (ark query, ark agents query, etc.)
+# Also applies to chat completions via the OpenAI-compatible API
+# Can be overridden per-command with --timeout flag
+# Environment variable: ARK_QUERY_TIMEOUT
+queryTimeout: 5m
+
+# Chat settings
+chat:
+  # Enable streaming output (default: true)
+  # Environment variable: ARK_CHAT_STREAMING
+  streaming: true
+
+  # Output format: 'text' or 'markdown' (default: text)
+  # Environment variable: ARK_CHAT_OUTPUT_FORMAT
+  outputFormat: text
+
+# Service overrides for ark install
+services:
+  # Enable localhost-gateway for local development
+  localhost-gateway:
+    enabled: true
+
+  # Override namespace for a service
+  ark-controller:
+    namespace: custom-namespace
+
+  # Pass additional Helm install arguments
+  agents-at-scale:
+    enabled: true
+    installArgs:
+      - --set
+      - containerRegistry.enabled=true
+      - --set
+      - containerRegistry.username=YOUR_USERNAME
+      - --set
+      - containerRegistry.password=YOUR_PASSWORD
+
+# Which resources ark export should export if not otherwise specified
+defaultExportTypes:
+  - secrets
+  - tools
+  - models
+  - agents
+  - teams
+  - evaluators
+  - mcpservers
+  - a2aservers

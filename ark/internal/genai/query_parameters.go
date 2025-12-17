@@ -53,35 +53,61 @@ func resolveQueryParameters(ctx context.Context, k8sClient client.Client, namesp
 }
 
 func resolveQueryValueFrom(ctx context.Context, k8sClient client.Client, namespace string, valueFrom *arkv1alpha1.ValueFromSource) (string, error) {
+	return resolveValueFromWithQuery(ctx, k8sClient, namespace, valueFrom, nil)
+}
+
+func resolveValueFromWithQuery(ctx context.Context, k8sClient client.Client, namespace string, valueFrom *arkv1alpha1.ValueFromSource, query *arkv1alpha1.Query) (string, error) {
 	if valueFrom.ConfigMapKeyRef != nil {
-		configMap := &corev1.ConfigMap{}
-		key := types.NamespacedName{Name: valueFrom.ConfigMapKeyRef.Name, Namespace: namespace}
-		if err := k8sClient.Get(ctx, key, configMap); err != nil {
-			return "", fmt.Errorf("failed to get ConfigMap %s: %w", valueFrom.ConfigMapKeyRef.Name, err)
-		}
-
-		value, exists := configMap.Data[valueFrom.ConfigMapKeyRef.Key]
-		if !exists {
-			return "", fmt.Errorf("key %s not found in ConfigMap %s", valueFrom.ConfigMapKeyRef.Key, valueFrom.ConfigMapKeyRef.Name)
-		}
-		return value, nil
+		return resolveConfigMapKeyRef(ctx, k8sClient, namespace, valueFrom.ConfigMapKeyRef)
 	}
-
 	if valueFrom.SecretKeyRef != nil {
-		secret := &corev1.Secret{}
-		key := types.NamespacedName{Name: valueFrom.SecretKeyRef.Name, Namespace: namespace}
-		if err := k8sClient.Get(ctx, key, secret); err != nil {
-			return "", fmt.Errorf("failed to get Secret %s: %w", valueFrom.SecretKeyRef.Name, err)
-		}
-
-		value, exists := secret.Data[valueFrom.SecretKeyRef.Key]
-		if !exists {
-			return "", fmt.Errorf("key %s not found in Secret %s", valueFrom.SecretKeyRef.Key, valueFrom.SecretKeyRef.Name)
-		}
-		return string(value), nil
+		return resolveSecretKeyRef(ctx, k8sClient, namespace, valueFrom.SecretKeyRef)
 	}
-
+	if valueFrom.QueryParameterRef != nil {
+		return resolveQueryParameterRef(valueFrom.QueryParameterRef, query)
+	}
 	return "", fmt.Errorf("no supported valueFrom source specified")
+}
+
+func resolveConfigMapKeyRef(ctx context.Context, k8sClient client.Client, namespace string, ref *corev1.ConfigMapKeySelector) (string, error) {
+	configMap := &corev1.ConfigMap{}
+	key := types.NamespacedName{Name: ref.Name, Namespace: namespace}
+	if err := k8sClient.Get(ctx, key, configMap); err != nil {
+		return "", fmt.Errorf("failed to get ConfigMap %s: %w", ref.Name, err)
+	}
+	value, exists := configMap.Data[ref.Key]
+	if !exists {
+		return "", fmt.Errorf("key %s not found in ConfigMap %s", ref.Key, ref.Name)
+	}
+	return value, nil
+}
+
+func resolveSecretKeyRef(ctx context.Context, k8sClient client.Client, namespace string, ref *corev1.SecretKeySelector) (string, error) {
+	secret := &corev1.Secret{}
+	key := types.NamespacedName{Name: ref.Name, Namespace: namespace}
+	if err := k8sClient.Get(ctx, key, secret); err != nil {
+		return "", fmt.Errorf("failed to get Secret %s: %w", ref.Name, err)
+	}
+	value, exists := secret.Data[ref.Key]
+	if !exists {
+		return "", fmt.Errorf("key %s not found in Secret %s", ref.Key, ref.Name)
+	}
+	return string(value), nil
+}
+
+func resolveQueryParameterRef(ref *arkv1alpha1.QueryParameterReference, query *arkv1alpha1.Query) (string, error) {
+	if query == nil {
+		return "", fmt.Errorf("queryParameterRef requires query context")
+	}
+	for _, param := range query.Spec.Parameters {
+		if param.Name == ref.Name {
+			if param.Value != "" {
+				return param.Value, nil
+			}
+			return "", fmt.Errorf("query parameter '%s' has no value", param.Name)
+		}
+	}
+	return "", fmt.Errorf("query parameter '%s' not found", ref.Name)
 }
 
 // ResolveBodyTemplate resolves body template with parameters and input data

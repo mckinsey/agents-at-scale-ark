@@ -41,7 +41,7 @@ spec:
           metadata:
             name: mock-llm-mcp
           status:
-            (contains(conditions[?type == 'Ready'].status, 'True')): true
+            (contains(conditions[?type == 'Available'].status, 'True')): true
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

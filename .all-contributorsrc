@@ -435,7 +435,28 @@
       "profile": "https://www.csacco.eu/",
       "contributions": [
         "code",
-        "bug"
+        "bug",
+        "doc"
+      ]
+    },
+    {
+      "login": "johndemic",
+      "name": "John D'Emic",
+      "avatar_url": "https://avatars.githubusercontent.com/u/344677?v=4",
+      "profile": "https://www.hypercurrent.io/",
+      "contributions": [
+        "bug",
+        "code"
+      ]
+    },
+    {
+      "login": "NeerajMalhotra-QB",
+      "name": "Neeraj Malhotra",
+      "avatar_url": "https://avatars.githubusercontent.com/u/52220398?v=4",
+      "profile": "https://github.com/NeerajMalhotra-QB",
+      "contributions": [
+        "bug",
+        "code"
       ]
     }
   ],

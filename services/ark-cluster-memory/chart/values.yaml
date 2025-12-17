@@ -38,6 +38,12 @@ memory:
   port: 8080
   # Maximum message size in bytes (10MB)
   maxMessageSize: 10485760
+  # Maximum number of messages/chunks to keep (0 = unlimited)
+  # Defaults to 50000 messages to prevent unbounded growth while staying well within the 1GB memory limit
+  maxMemoryDb: 50000
+  # Maximum age of items in seconds (0 = no age limit)
+  # Examples: 86400 = 1 day, 604800 = 7 days, 2592000 = 30 days
+  maxItemAge: 0
 
 # Streaming configuration
 streaming:

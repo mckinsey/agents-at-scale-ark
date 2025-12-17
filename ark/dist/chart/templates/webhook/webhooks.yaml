@@ -12,6 +12,11 @@ metadata:
     {{- include "chart.labels" . | nindent 4 }}
 webhooks:
   - name: magent-v1.kb.io
+    objectSelector:
+      matchExpressions:
+      - key: "ark.mckinsey.com/skip-webhook-validation"
+        operator: "NotIn"
+        values: ["true"]
     clientConfig:
       service:
         name: ark-webhook-service
@@ -46,6 +51,11 @@ metadata:
     {{- include "chart.labels" . | nindent 4 }}
 webhooks:
   - name: vagent-v1.kb.io
+    objectSelector:
+      matchExpressions:
+      - key: "ark.mckinsey.com/skip-webhook-validation"
+        operator: "NotIn"
+        values: ["true"]
     clientConfig:
       service:
         name: ark-webhook-service

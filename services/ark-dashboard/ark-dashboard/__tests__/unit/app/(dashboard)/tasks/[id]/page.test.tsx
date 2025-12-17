@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { render, screen } from '@testing-library/react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { describe, expect, it, vi } from 'vitest';
 
 import A2ATaskPage from '@/app/(dashboard)/tasks/[id]/page';
-import { A2ATaskDetailResponse } from '@/lib/api/a2a-tasks-types';
+import type { A2ATaskDetailResponse } from '@/lib/api/a2a-tasks-types';
 import { useA2ATask } from '@/lib/services/a2a-tasks-hooks';
 
 // Mock next/navigation
@@ -303,8 +304,6 @@ describe('A2ATaskPage', () => {
     // Verify both timestamps are displayed
     const expectedCreationDate = new Date(creationTime).toLocaleString();
     const expectedCompletionDate = new Date(completionTime).toLocaleString();
-
-    screen.logTestingPlaygroundURL();
 
     expect(screen.getByText(expectedCreationDate)).toBeInTheDocument();
     expect(screen.getByText(expectedCompletionDate)).toBeInTheDocument();

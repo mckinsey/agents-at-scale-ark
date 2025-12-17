@@ -69,6 +69,9 @@ type QuerySpec struct {
 	// +kubebuilder:validation:MinLength=1
 	SessionId string `json:"sessionId,omitempty"`
 	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MinLength=1
+	ConversationId string `json:"conversationId,omitempty"`
+	// +kubebuilder:validation:Optional
 	// +kubebuilder:default="720h"
 	TTL *metav1.Duration `json:"ttl,omitempty"`
 	// +kubebuilder:default="5m"
@@ -132,6 +135,9 @@ type QueryStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 	Responses  []Response         `json:"responses,omitempty"`
 	TokenUsage TokenUsage         `json:"tokenUsage,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MinLength=1
+	ConversationId string `json:"conversationId,omitempty"`
 	// +kubebuilder:validation:Optional
 	Duration *metav1.Duration `json:"duration,omitempty"`
 }

@@ -5,8 +5,8 @@ from pydantic import BaseModel
 
 
 class SessionResponse(BaseModel):
-    """Response model for a session."""
-    sessionId: str
+    """Response model for a conversation."""
+    conversationId: str
     memoryName: str
     queries: Optional[List[str]] = None
     messageCount: Optional[int] = None
@@ -23,7 +23,7 @@ class MemoryMessageResponse(BaseModel):
     """Response model for a memory message with context."""
     timestamp: Optional[datetime] = None
     memoryName: str
-    sessionId: str
+    conversationId: str
     queryId: Optional[str] = None
     message: dict  # Raw JSON message object
     sequence: Optional[int] = None
