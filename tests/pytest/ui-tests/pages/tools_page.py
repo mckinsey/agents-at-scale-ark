@@ -22,19 +22,32 @@ class ToolsPage(BasePage):
     }
     
     def navigate_to_tools_tab(self) -> None:
+        self._close_any_dialog()
+        
         from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
         dashboard.navigate_to_dashboard()
         
-        if not self.page.locator(dashboard.TOOLS_TAB).first.is_visible():
+        self._close_any_dialog()
+        
+        tools_tab = self.page.locator(dashboard.TOOLS_TAB).first
+        if not tools_tab.is_visible(timeout=5000):
             import pytest
             pytest.skip("Tools tab not visible")
         
-        self.page.locator(dashboard.TOOLS_TAB).first.click()
+        tools_tab.click()
         self.wait_for_navigation_complete()
         
-        # Wait for Add Tool button to appear
         self.wait_for_element(self.ADD_TOOL_BUTTON, timeout=10000)
+    
+    def _close_any_dialog(self) -> None:
+        try:
+            dialog = self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first
+            if dialog.is_visible(timeout=1000):
+                self.page.keyboard.press("Escape")
+                self.wait_for_timeout(500)
+        except:
+            pass
     
     def generate_tool_name(self, prefix: str = "tool") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
@@ -48,12 +61,24 @@ class ToolsPage(BasePage):
     
     def create_http_tool_with_verification(self, tool_name: str, description: str, url: str) -> dict:
         
-        self.page.locator(self.ADD_TOOL_BUTTON).first.click()
+        self._close_any_dialog()
+        
+        add_button = self.page.locator(self.ADD_TOOL_BUTTON).first
+        add_button.click()
         self.wait_for_navigation_complete()
         self.wait_for_form_ready()
         
-        name_input = self.page.locator("input#name")
-        name_input.wait_for(state="visible", timeout=10000)
+        name_input = self.page.locator("input#name, input[name='name'], [role='dialog'] input:first-of-type").first
+        
+        for attempt in range(3):
+            try:
+                name_input.wait_for(state="visible", timeout=5000)
+                break
+            except:
+                logger.info(f"Name input not visible (attempt {attempt + 1}), retrying click")
+                add_button.click()
+                self.wait_for_timeout(1000)
+        
         name_input.fill(tool_name)
         
         type_trigger = self.page.locator("button#type")
