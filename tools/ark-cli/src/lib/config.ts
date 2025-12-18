@@ -18,7 +18,10 @@ export interface MarketplaceConfig {
 export interface ArkConfig {
   chat?: ChatConfig;
   marketplace?: MarketplaceConfig;
-  services?: {[serviceName: string]: Partial<ArkService>};
+  services?: {
+    reusePortForwards?: boolean;
+    [serviceName: string]: Partial<ArkService> | boolean | undefined;
+  };
   queryTimeout?: string;
   defaultExportTypes?: string[];
   // Cluster info - populated during startup if context exists
@@ -42,6 +45,9 @@ export function loadConfig(): ArkConfig {
     marketplace: {
       repoUrl: 'https://github.com/mckinsey/agents-at-scale-marketplace',
       registry: 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts',
+    },
+    services: {
+      reusePortForwards: false,
     },
   };
 
@@ -74,9 +80,7 @@ export function loadConfig(): ArkConfig {
   // Apply environment variable overrides
   if (process.env.ARK_CHAT_STREAMING !== undefined) {
     config.chat = config.chat || {};
-    config.chat.streaming =
-      process.env.ARK_CHAT_STREAMING === '1' ||
-      process.env.ARK_CHAT_STREAMING === 'true';
+    config.chat.streaming = process.env.ARK_CHAT_STREAMING === '1';
   }
 
   if (process.env.ARK_CHAT_OUTPUT_FORMAT !== undefined) {
@@ -99,6 +103,12 @@ export function loadConfig(): ArkConfig {
   if (process.env.ARK_MARKETPLACE_REGISTRY !== undefined) {
     config.marketplace = config.marketplace || {};
     config.marketplace.registry = process.env.ARK_MARKETPLACE_REGISTRY;
+  }
+
+  if (process.env.ARK_SERVICES_REUSE_PORT_FORWARDS !== undefined) {
+    config.services = config.services || {};
+    config.services.reusePortForwards =
+      process.env.ARK_SERVICES_REUSE_PORT_FORWARDS === '1';
   }
 
   return config;
@@ -130,11 +140,16 @@ function mergeConfig(target: ArkConfig, source: ArkConfig): void {
 
   if (source.services) {
     target.services = target.services || {};
+    if (source.services.reusePortForwards !== undefined) {
+      target.services.reusePortForwards = source.services.reusePortForwards;
+    }
     for (const [serviceName, overrides] of Object.entries(source.services)) {
-      target.services[serviceName] = {
-        ...target.services[serviceName],
-        ...overrides,
-      };
+      if (serviceName !== 'reusePortForwards' && typeof overrides === 'object') {
+        target.services[serviceName] = {
+          ...(target.services[serviceName] as Partial<ArkService>),
+          ...overrides,
+        };
+      }
     }
   }
 

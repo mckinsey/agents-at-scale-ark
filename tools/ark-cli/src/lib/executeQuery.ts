@@ -10,6 +10,7 @@ import {ExitCodes} from './errors.js';
 import {ArkApiProxy} from './arkApiProxy.js';
 import {ChatClient, ToolCall, ArkMetadata} from './chatClient.js';
 import {watchEventsLive} from './kubectl.js';
+import {loadConfig} from './config.js';
 
 export interface QueryOptions {
   targetType: string;
@@ -38,7 +39,11 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
   const spinner = ora('Connecting to Ark API...').start();
 
   try {
-    arkApiProxy = new ArkApiProxy();
+    const config = loadConfig();
+    arkApiProxy = new ArkApiProxy(
+      undefined,
+      config.services?.reusePortForwards ?? false
+    );
     const arkApiClient = await arkApiProxy.start();
     const chatClient = new ChatClient(arkApiClient);
 

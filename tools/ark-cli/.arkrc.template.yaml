@@ -1,0 +1,51 @@
+# Ark CLI Configuration Template
+# Copy this to ~/.arkrc.yaml (user config) or .arkrc.yaml (project config)
+# All fields are optional - only include what you want to override
+
+# Chat configuration
+chat:
+  # Enable/disable streaming for chat responses (default: true)
+  # streaming: true
+
+  # Output format: 'text' or 'markdown' (default: text)
+  # outputFormat: text
+
+# Service configuration
+services:
+  # Reuse existing kubectl port-forward processes instead of failing (default: false)
+  # reusePortForwards: false
+
+  # Service overrides - customize specific Ark services
+  # Example: Enable localhost-gateway
+  # localhost-gateway:
+  #   enabled: true
+
+  # Example: Change namespace
+  # ark-controller:
+  #   namespace: custom-namespace
+
+  # Example: Add custom install arguments
+  # ark-api:
+  #   installArgs:
+  #     - --set
+  #     - replicas=3
+
+  # Example: Configure Agents @ Scale with container registry
+  # agents-at-scale:
+  #   enabled: true
+  #   installArgs:
+  #     - --set
+  #     - containerRegistry.enabled=true
+  #     - --set
+  #     - containerRegistry.username=YOUR_USERNAME
+  #     - --set
+  #     - containerRegistry.password=YOUR_PASSWORD
+
+# Available service properties:
+#   enabled: boolean           - Enable/disable service installation
+#   namespace: string          - Kubernetes namespace
+#   chartPath: string          - Custom Helm chart path
+#   installArgs: string[]      - Additional Helm install arguments
+#   k8sServiceName: string     - Kubernetes service name for port forwarding
+#   k8sServicePort: number     - Kubernetes service port for port forwarding
+#   k8sPortForwardLocalPort: number - Local port for port forwarding
