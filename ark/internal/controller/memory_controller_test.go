@@ -399,5 +399,65 @@ var _ = Describe("Memory Controller", func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
 			Expect(updatedMemory.Status.Phase).To(Equal("ready"))
 		})
+
+		It("should accept headers with queryParameterRef in spec", func() {
+			memoryName := "memory-with-query-param-ref"
+
+			By("Creating memory with queryParameterRef header")
+			memory := &arkv1alpha1.Memory{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      memoryName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.MemorySpec{
+					Address: arkv1alpha1.ValueSource{
+						Value: "http://test-memory-service:8080",
+					},
+					Headers: []arkv1alpha1.Header{
+						{
+							Name: "X-User-ID",
+							Value: arkv1alpha1.HeaderValue{
+								ValueFrom: &arkv1alpha1.HeaderValueSource{
+									QueryParameterRef: &arkv1alpha1.QueryParameterReference{
+										Name: "userId",
+									},
+								},
+							},
+						},
+						{
+							Name: "X-Direct-Header",
+							Value: arkv1alpha1.HeaderValue{
+								Value: "direct-value",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, memory)).To(Succeed())
+
+			controllerReconciler := &MemoryReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			By("First reconcile to set running state")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Second reconcile to validate and reach ready state")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying memory reached ready state with queryParameterRef in spec")
+			updatedMemory := &arkv1alpha1.Memory{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
+			Expect(updatedMemory.Status.Phase).To(Equal("ready"))
+			Expect(updatedMemory.Spec.Headers).To(HaveLen(2))
+			Expect(updatedMemory.Spec.Headers[0].Value.ValueFrom.QueryParameterRef.Name).To(Equal("userId"))
+		})
 	})
 })

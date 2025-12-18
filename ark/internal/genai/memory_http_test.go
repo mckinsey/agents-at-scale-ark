@@ -583,3 +583,146 @@ func TestHTTPMemoryEmptyHeaders(t *testing.T) {
 	err := httpMemory.AddMessages(ctx, "query-id", []Message{Message(openai.UserMessage("test"))})
 	require.NoError(t, err)
 }
+
+func TestHTTPMemoryWithQueryParameterRefHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/conversations" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{"conversation_id": "test-conv-id"})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	resolvedAddress := server.URL
+	memory := &arkv1alpha1.Memory{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "query-param-ref-memory",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.MemorySpec{
+			Address: arkv1alpha1.ValueSource{
+				Value: server.URL,
+			},
+			Headers: []arkv1alpha1.Header{
+				{
+					Name: "X-User-ID",
+					Value: arkv1alpha1.HeaderValue{
+						ValueFrom: &arkv1alpha1.HeaderValueSource{
+							QueryParameterRef: &arkv1alpha1.QueryParameterReference{
+								Name: "userId",
+							},
+						},
+					},
+				},
+			},
+		},
+		Status: arkv1alpha1.MemoryStatus{
+			LastResolvedAddress: &resolvedAddress,
+			Phase:               "ready",
+		},
+	}
+
+	fakeClient := setupMemoryTestClient([]client.Object{memory})
+
+	ctx := context.Background()
+	_, err := NewHTTPMemory(ctx, fakeClient, "query-param-ref-memory", "default", Config{}, &noOpMemoryRecorder{})
+
+	require.Error(t, err, "Should fail when queryParameterRef is used without query context")
+	require.Contains(t, err.Error(), "queryParameterRef requires query context")
+}
+
+func TestNewHTTPMemoryWithMixedHeaderSources(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/conversations" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{"conversation_id": "test-conv-id"})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "api-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"token": []byte("Bearer secret-token-123"),
+		},
+	}
+
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "api-config",
+			Namespace: "default",
+		},
+		Data: map[string]string{
+			"api-key": "config-api-key-456",
+		},
+	}
+
+	resolvedAddress := server.URL
+	memory := &arkv1alpha1.Memory{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mixed-headers-memory",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.MemorySpec{
+			Address: arkv1alpha1.ValueSource{
+				Value: server.URL,
+			},
+			Headers: []arkv1alpha1.Header{
+				{
+					Name: "X-Direct",
+					Value: arkv1alpha1.HeaderValue{
+						Value: "direct-value",
+					},
+				},
+				{
+					Name: "Authorization",
+					Value: arkv1alpha1.HeaderValue{
+						ValueFrom: &arkv1alpha1.HeaderValueSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "api-secret",
+								},
+								Key: "token",
+							},
+						},
+					},
+				},
+				{
+					Name: "X-API-Key",
+					Value: arkv1alpha1.HeaderValue{
+						ValueFrom: &arkv1alpha1.HeaderValueSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "api-config",
+								},
+								Key: "api-key",
+							},
+						},
+					},
+				},
+			},
+		},
+		Status: arkv1alpha1.MemoryStatus{
+			LastResolvedAddress: &resolvedAddress,
+			Phase:               "ready",
+		},
+	}
+
+	fakeClient := setupMemoryTestClient([]client.Object{memory, secret, configMap})
+
+	ctx := context.Background()
+	httpMemory, err := NewHTTPMemory(ctx, fakeClient, "mixed-headers-memory", "default", Config{}, &noOpMemoryRecorder{})
+	require.NoError(t, err)
+
+	mem := httpMemory.(*HTTPMemory)
+	require.Equal(t, "direct-value", mem.headers["X-Direct"])
+	require.Equal(t, "Bearer secret-token-123", mem.headers["Authorization"])
+	require.Equal(t, "config-api-key-456", mem.headers["X-API-Key"])
+}
