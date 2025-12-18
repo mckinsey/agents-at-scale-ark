@@ -415,7 +415,7 @@ func TestHTTPMemoryGetMessagesWithHeaders(t *testing.T) {
 
 func TestHTTPMemoryHeadersLoadedFromStatus(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/conversations" {
+		if r.URL.Path == ConversationsEndpoint {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]string{"conversation_id": "new-conv-id"})
 			return
@@ -586,7 +586,7 @@ func TestHTTPMemoryEmptyHeaders(t *testing.T) {
 
 func TestHTTPMemoryWithQueryParameterRefHeaders(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/conversations" {
+		if r.URL.Path == ConversationsEndpoint {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]string{"conversation_id": "test-conv-id"})
 			return
@@ -635,7 +635,7 @@ func TestHTTPMemoryWithQueryParameterRefHeaders(t *testing.T) {
 
 func TestNewHTTPMemoryWithMixedHeaderSources(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/conversations" {
+		if r.URL.Path == ConversationsEndpoint {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]string{"conversation_id": "test-conv-id"})
 			return
