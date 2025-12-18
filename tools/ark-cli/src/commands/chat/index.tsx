@@ -20,7 +20,10 @@ export function createChatCommand(config: ArkConfig): Command {
       // Config is passed from main
 
       try {
-        const proxy = new ArkApiProxy();
+        const proxy = new ArkApiProxy(
+          undefined,
+          config.services?.reusePortForwards ?? false
+        );
         const arkApiClient = await proxy.start();
 
         render(

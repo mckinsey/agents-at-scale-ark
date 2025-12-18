@@ -202,7 +202,9 @@ function applyConfigOverrides(defaults: ServiceCollection): ServiceCollection {
   const result: ServiceCollection = {};
 
   for (const [key, service] of Object.entries(defaults)) {
-    result[key] = overrides[key] ? {...service, ...overrides[key]} : service;
+    const override = overrides[key];
+    result[key] =
+      override && typeof override === 'object' ? {...service, ...override} : service;
   }
 
   return result;
