@@ -255,15 +255,6 @@ func (r *MockQueryRecorder) RecordConversationID(span telemetry.Span, conversati
 	}
 }
 
-func (r *MockQueryRecorder) RecordMemoryEndpoint(span telemetry.Span, endpoint, memoryName string) {
-	if endpoint != "" {
-		span.SetAttributes(telemetry.String(telemetry.AttrMemoryEndpoint, endpoint))
-	}
-	if memoryName != "" {
-		span.SetAttributes(telemetry.String(telemetry.AttrMemoryName, memoryName))
-	}
-}
-
 func (r *MockQueryRecorder) RecordSuccess(span telemetry.Span) {
 	span.SetStatus(telemetry.StatusOk, "success")
 }

@@ -93,15 +93,6 @@ func (r *queryRecorder) RecordConversationID(span telemetry.Span, conversationID
 	}
 }
 
-func (r *queryRecorder) RecordMemoryEndpoint(span telemetry.Span, endpoint, memoryName string) {
-	if endpoint != "" {
-		span.SetAttributes(telemetry.String(telemetry.AttrMemoryEndpoint, endpoint))
-	}
-	if memoryName != "" {
-		span.SetAttributes(telemetry.String(telemetry.AttrMemoryName, memoryName))
-	}
-}
-
 func (r *queryRecorder) RecordSuccess(span telemetry.Span) {
 	span.SetStatus(telemetry.StatusOk, "success")
 }

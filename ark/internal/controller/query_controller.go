@@ -197,11 +197,10 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		return
 	}
 
-	// Get conversation ID and memory endpoint from memory if attached
+	// Get conversation ID from memory if attached
 	if memory != nil {
 		if httpMemory, ok := memory.(*genai.HTTPMemory); ok {
 			conversationId = httpMemory.GetConversationID()
-			r.Telemetry.QueryRecorder().RecordMemoryEndpoint(span, httpMemory.GetBaseURL(), httpMemory.GetName())
 		}
 	}
 

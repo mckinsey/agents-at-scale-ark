@@ -38,9 +38,6 @@ type QueryRecorder interface {
 	// RecordConversationID associates a span with a conversation for multi-query tracking.
 	RecordConversationID(span Span, conversationID string)
 
-	// RecordMemoryEndpoint records the memory service endpoint for trace routing.
-	RecordMemoryEndpoint(span Span, endpoint, memoryName string)
-
 	// RecordSuccess marks a span as successfully completed.
 	RecordSuccess(span Span)
 
@@ -182,10 +179,6 @@ const (
 
 	// Conversation tracking
 	AttrConversationID = "conversation.id"
-
-	// Memory tracking
-	AttrMemoryEndpoint = "memory.endpoint"
-	AttrMemoryName     = "memory.name"
 
 	// Tool attributes
 	AttrToolName        = "tool.name"
