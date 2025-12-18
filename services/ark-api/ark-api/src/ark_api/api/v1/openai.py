@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 import uuid
 
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 # Constants
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+BROKER_CONNECT_TIMEOUT = float(os.getenv('BROKER_CONNECT_TIMEOUT', '10.0'))
 
 
 def _parse_timestamp(metadata: dict) -> int:
@@ -102,7 +104,7 @@ def process_request_metadata(
 # Start streaming first, wait for the first chunk/response, and use the status code of that to respond with
 async def proxy_streaming_response(streaming_url: str):
     """Proxy streaming chunks from memory service."""
-    timeout = httpx.Timeout(10.0, read=None)  # 10s connect, infinite read
+    timeout = httpx.Timeout(BROKER_CONNECT_TIMEOUT, read=None)
     async with httpx.AsyncClient(timeout=timeout) as client:
         async with client.stream("GET", streaming_url) as response:
             if response.status_code != 200:

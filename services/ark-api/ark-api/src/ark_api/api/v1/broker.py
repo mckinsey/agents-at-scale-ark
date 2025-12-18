@@ -1,6 +1,7 @@
 """Broker API endpoints for real-time streaming of traces, messages, and chunks."""
 import json
 import logging
+import os
 from typing import Optional
 
 import httpx
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/broker", tags=["broker"])
 
 VERSION = "v1alpha1"
+BROKER_CONNECT_TIMEOUT = float(os.getenv('BROKER_CONNECT_TIMEOUT', '10.0'))
 
 
 async def get_broker_url(memory_name: str) -> Optional[str]:
@@ -32,19 +34,29 @@ async def get_broker_url(memory_name: str) -> Optional[str]:
         return None
 
 
+def format_error_response(response_text: str, status_code: int, reason_phrase: str) -> dict:
+    """Format error response from broker, trying to parse JSON first."""
+    try:
+        error_data = json.loads(response_text)
+        return {'error': error_data}
+    except (json.JSONDecodeError, ValueError):
+        return {'error': {'message': f'{status_code} {reason_phrase}', 'type': 'server_error'}}
+
+
 async def proxy_sse_stream(url: str):
     """Proxy SSE stream from broker service."""
-    timeout = httpx.Timeout(10.0, read=None)
+    timeout = httpx.Timeout(BROKER_CONNECT_TIMEOUT, read=None)
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream("GET", url) as response:
                 if response.status_code != 200:
-                    try:
-                        response_text = await response.aread()
-                        error_data = json.loads(response_text.decode("utf-8"))
-                        yield f"data: {json.dumps({'error': error_data})}\n\n"
-                    except (json.JSONDecodeError, ValueError):
-                        yield f"data: {json.dumps({'error': {'message': f'{response.status_code} {response.reason_phrase}', 'type': 'server_error'}})}\n\n"
+                    response_text = await response.aread()
+                    error = format_error_response(
+                        response_text.decode("utf-8"),
+                        response.status_code,
+                        response.reason_phrase
+                    )
+                    yield f"data: {json.dumps(error)}\n\n"
                     return
 
                 async for line in response.aiter_lines():
