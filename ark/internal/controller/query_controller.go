@@ -187,7 +187,7 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	conversationId := obj.Spec.ConversationId
 
-	opCtx, span := r.Telemetry.QueryRecorder().StartQuery(opCtx, obj.Name, obj.Namespace, "execute")
+	opCtx, span := r.Telemetry.QueryRecorder().StartQuery(opCtx, &obj, "execute")
 	r.Telemetry.QueryRecorder().RecordSessionID(span, sessionId)
 	defer span.End()
 
