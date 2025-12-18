@@ -1,7 +1,7 @@
 export default {
   index: 'Overview',
   
-  '---what': { type: 'separator', title: 'What ARK is and how it works' },
+  '---what': { type: 'separator', title: 'What is ARK?' },
   introduction: {
     title: 'Introduction',
     href: '/'
@@ -15,7 +15,7 @@ export default {
     href: '/reference/query-execution'
   },
   
-  '---design': { type: 'separator', title: 'Designing effective agentic systems' },
+  '---design': { type: 'separator', title: 'Design effective agentic systems' },
   'tips': {
     title: 'Tips on Building Agentic Use Cases',
     href: '/user-guide/tips-on-building-agentic-use-cases'
