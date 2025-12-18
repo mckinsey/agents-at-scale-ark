@@ -37,7 +37,7 @@ class TeamsPage(BasePage):
             pytest.skip("Teams tab not visible")
         
         self.page.locator(dashboard.TEAMS_TAB).first.click()
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         self.wait_for_timeout(3000)
     
     def generate_team_name(self, prefix: str = "team") -> str:
@@ -54,7 +54,7 @@ class TeamsPage(BasePage):
         logger.info(f"Creating team: {team_name}")
         
         self.page.locator(self.ADD_TEAM_BUTTON).first.click()
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         
         self.page.locator("input").first.wait_for(state="visible", timeout=10000)
         self.page.locator("input").first.fill(team_name)
@@ -75,27 +75,47 @@ class TeamsPage(BasePage):
         
         logger.info(f"Selecting member: {member_name}")
         self.wait_for_timeout(1000)
-        member_checkboxes = self.page.locator("input[type='checkbox']")
-        if member_checkboxes.count() > 0:
-            agent_row = self.page.get_by_text(member_name).first
-            agent_row.locator("..").locator("input[type='checkbox']").first.check()
         
-        self.wait_for_timeout(3000)
-        save_button = self.page.locator("button").filter(has_text="Create").first
-        if not save_button.is_visible():
-            save_button = self.page.locator("button").filter(has_text="Save").first
-        if not save_button.is_visible():
-            save_button = self.page.locator("button[type='submit']").first
-            
-        save_button.click()
+        try:
+            checkbox = self.page.locator(f"tr:has-text('{member_name}') input[type='checkbox'], div:has-text('{member_name}') input[type='checkbox'], label:has-text('{member_name}') input[type='checkbox']").first
+            if checkbox.is_visible():
+                checkbox.check()
+            else:
+                all_checkboxes = self.page.locator("[role='dialog'] input[type='checkbox']")
+                if all_checkboxes.count() > 0:
+                    all_checkboxes.first.check()
+        except Exception as e:
+            logger.warning(f"Could not select member checkbox: {e}")
         
-        self.wait_for_load_state("networkidle")
+        self.wait_for_timeout(1000)
+        
+        save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
+        if not save_button.is_visible():
+            save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
+        
+        logger.info("Clicking Create button in team dialog")
+        save_button.scroll_into_view_if_needed()
+        save_button.evaluate("el => el.click()")
+        
+        self.wait_for_load_state("domcontentloaded")
+        self.wait_for_timeout(2000)
         
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             popup_visible = True
         except:
             popup_visible = False
+        
+        try:
+            self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=10000)
+        except:
+            logger.info("Dialog may still be open, pressing Escape")
+            self.page.keyboard.press("Escape")
+            self.wait_for_timeout(1000)
+        
+        self.wait_for_timeout(1000)
+        self.navigate_to_teams_tab()
+        self.wait_for_timeout(2000)
         
         in_table = self.is_team_in_table(team_name)
         
@@ -127,7 +147,7 @@ class TeamsPage(BasePage):
         if confirm_button_visible:
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         popup_visible = self._check_success_popup()
         self.wait_for_timeout(3000)
         deleted_from_table = not self.is_team_in_table(team_name)

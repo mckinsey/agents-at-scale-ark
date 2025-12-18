@@ -21,35 +21,42 @@ class ModelsPage(BasePage):
     
     TEST_DATA = {
         "openai": {
-            "model_type": "OpenAI",
-            "model_name": "gpt-3.5-turbo",
-            "env_key": "OPENAI_API_KEY",
-            "base_url_key": "OPENAI_ENDPOINT"
+            "model_type": "openai",
+            "model_name": "gpt-4o-mini",
+            "env_key": "CICD_OPENAI_API_KEY",
+            "base_url_key": "CICD_OPENAI_BASE_URL"
         }
     }
     
     def navigate_to_models_tab(self) -> None:
         from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
-        dashboard.navigate_to_dashboard()
         
-        if not self.page.locator(dashboard.MODELS_TAB).first.is_visible():
-            import pytest
-            pytest.skip("Models tab not visible")
+        # Navigate directly to /models URL instead of clicking tabs
+        self.page.goto(f"{dashboard.base_url}/models")
+        self.wait_for_navigation_complete()
         
-        self.page.locator(dashboard.MODELS_TAB).first.click()
-        self.wait_for_load_state("networkidle")
-        self.wait_for_timeout(2000)
+        # Wait for Add Model button to appear
+        self.wait_for_element(self.ADD_MODEL_BUTTON, timeout=10000)
     
     def generate_model_name(self, prefix: str = "model") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
         return f"{prefix}-{date_str}"
     
-    def is_model_in_table(self, model_name: str) -> bool:
-        try:
-            return self.page.get_by_text(model_name, exact=False).count() > 0
-        except:
-            return False
+    def is_model_in_table(self, model_name: str, retries: int = 3) -> bool:
+        """Check if model is in table with retry logic"""
+        for attempt in range(retries):
+            try:
+                if self.page.get_by_text(model_name, exact=False).count() > 0:
+                    return True
+                if attempt < retries - 1:
+                    logger.info(f"Model {model_name} not found, retrying... ({attempt + 1}/{retries})")
+                    self.page.reload()
+                    self.wait_for_navigation_complete()
+                    self.wait_for_element(self.ADD_MODEL_BUTTON, timeout=10000)
+            except Exception as e:
+                logger.warning(f"Error checking model in table: {e}")
+        return False
     
     def is_model_available(self, model_name: str) -> bool:
         try:
@@ -67,18 +74,19 @@ class ModelsPage(BasePage):
     def create_model_with_verification(self, model_name: str, model_type: str, model: str, secret_name: str, base_url: str) -> dict:
         logger.info(f"Creating {model_type} model: {model_name}")
         
-        self.page.locator(self.ADD_MODEL_BUTTON).click()
-        self.page.locator(self.MODEL_NAME_INPUT).wait_for(state="visible")
-        self.page.locator(self.MODEL_NAME_INPUT).fill(model_name)
-        self.page.locator("select").first.select_option(value=model_type.lower().replace(" ", ""))
-        self.page.locator(self.MODEL_INPUT).fill(model)
-        self.page.locator("select").nth(1).select_option(value=secret_name)
-        self.page.locator(self.BASE_URL_INPUT).fill(base_url)
-        self.page.locator(self.SAVE_BUTTON).wait_for(state="visible")
-        self.page.locator(self.SAVE_BUTTON).click()
+        self.page.locator(self.ADD_MODEL_BUTTON).first.click()
+        self.wait_for_form_ready()
         
-        self.wait_for_load_state("networkidle")
-        self.wait_for_timeout(2000)
+        self.page.locator(self.MODEL_NAME_INPUT).first.wait_for(state="visible")
+        self.page.locator(self.MODEL_NAME_INPUT).first.fill(model_name)
+        self.page.locator("select").first.select_option(value=model_type.lower().replace(" ", ""))
+        self.page.locator(self.MODEL_INPUT).first.fill(model)
+        self.page.locator("select").nth(1).select_option(value=secret_name)
+        self.page.locator(self.BASE_URL_INPUT).first.fill(base_url)
+        self.page.locator(self.SAVE_BUTTON).first.wait_for(state="visible")
+        self.page.locator(self.SAVE_BUTTON).first.click()
+        
+        self.wait_for_navigation_complete()
         
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
@@ -88,7 +96,7 @@ class ModelsPage(BasePage):
         
         logger.info(f"Navigating back to models list...")
         self.navigate_to_models_tab()
-        self.wait_for_timeout(2000)
+        self.wait_for_table_content()
         
         in_table = self.is_model_in_table(model_name)
         
@@ -104,10 +112,9 @@ class ModelsPage(BasePage):
             if is_available:
                 break
             logger.warning(f"Model not yet available, retry {retry + 1}/2...")
-            self.wait_for_timeout(5000)
             self.reload()
-            self.wait_for_load_state("networkidle")
-            self.wait_for_timeout(2000)
+            self.wait_for_navigation_complete()
+            self.wait_for_table_content()
             is_available = self.is_model_available(model_name)
         
         return {
@@ -132,16 +139,19 @@ class ModelsPage(BasePage):
         except:
             return self._delete_not_available(model_name)
         
-        self.wait_for_timeout(1000)
+        # Wait for confirmation dialog to appear
+        self.wait_for_modal_open()
         confirm_dialog_visible = self.page.locator(self.CONFIRM_DELETE_DIALOG).first.is_visible()
         confirm_button_visible = self.page.locator(self.CONFIRM_DELETE_BUTTON).first.is_visible()
         
         if confirm_button_visible:
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
-        self.wait_for_load_state("networkidle")
+        self.wait_for_navigation_complete()
         popup_visible = self._check_success_popup()
-        self.wait_for_timeout(3000)
+        
+        # Wait for table to refresh
+        self.wait_for_table_content()
         deleted_from_table = not self.is_model_in_table(model_name)
         
         return {
@@ -194,4 +204,3 @@ class ModelsPage(BasePage):
         logger.info(f"Model created and available: {result['name']}")
         
         return result
-

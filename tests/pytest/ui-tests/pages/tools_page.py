@@ -31,8 +31,10 @@ class ToolsPage(BasePage):
             pytest.skip("Tools tab not visible")
         
         self.page.locator(dashboard.TOOLS_TAB).first.click()
-        self.wait_for_load_state("networkidle")
-        self.wait_for_timeout(2000)
+        self.wait_for_navigation_complete()
+        
+        # Wait for Add Tool button to appear
+        self.wait_for_element(self.ADD_TOOL_BUTTON, timeout=10000)
     
     def generate_tool_name(self, prefix: str = "tool") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
@@ -47,8 +49,8 @@ class ToolsPage(BasePage):
     def create_http_tool_with_verification(self, tool_name: str, description: str, url: str) -> dict:
         
         self.page.locator(self.ADD_TOOL_BUTTON).first.click()
-        self.wait_for_load_state("networkidle")
-        self.wait_for_timeout(500)
+        self.wait_for_navigation_complete()
+        self.wait_for_form_ready()
         
         name_input = self.page.locator("input#name")
         name_input.wait_for(state="visible", timeout=10000)
@@ -57,8 +59,13 @@ class ToolsPage(BasePage):
         type_trigger = self.page.locator("button#type")
         type_trigger.wait_for(state="visible", timeout=5000)
         type_trigger.click()
+        
+        # Wait for dropdown options
+        self.wait_for_dropdown_options()
         self.page.get_by_role("option", name="HTTP", exact=True).click()
-        self.wait_for_timeout(1000)
+        
+        # Wait for dropdown to close
+        self.wait_for_element_hidden("[role='listbox']", timeout=5000)
         
         description_input = self.page.locator("input#description")
         description_input.wait_for(state="visible", timeout=5000)
@@ -69,25 +76,25 @@ class ToolsPage(BasePage):
         schema_textarea.wait_for(state="visible", timeout=5000)
         schema_textarea.fill(input_schema)
         
-        self.wait_for_timeout(1000)
         url_input = self.page.locator("input#http-url")
         url_input.wait_for(state="visible", timeout=5000)
         url_input.fill(url)
         
-        self.wait_for_timeout(1000)
-        save_button = self.page.locator("button").filter(has_text="Create").first
+        save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
         if not save_button.is_visible():
-            save_button = self.page.locator("button").filter(has_text="Save").first
+            save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
         
-        save_button.click()
-        self.wait_for_load_state("networkidle")
-        self.wait_for_timeout(2000)
+        save_button.scroll_into_view_if_needed()
+        save_button.evaluate("el => el.click()")
+        self.wait_for_navigation_complete()
         
         popup_visible = self._check_success_popup()
         
+        self.wait_for_modal_close()
+        
         logger.info(f"Navigating back to tools list...")
         self.navigate_to_tools_tab()
-        self.wait_for_timeout(2000)
+        self.wait_for_table_content()
         
         in_table = self.is_tool_in_table(tool_name)
         logger.info(f"Tool in table after creation: {in_table}")
@@ -114,16 +121,19 @@ class ToolsPage(BasePage):
         except:
             return self._delete_not_available(tool_name)
         
-        self.wait_for_timeout(1000)
+        # Wait for confirmation dialog to appear
+        self.wait_for_modal_open()
         confirm_dialog_visible = self.page.locator(self.CONFIRM_DELETE_DIALOG).first.is_visible()
         confirm_button_visible = self.page.locator(self.CONFIRM_DELETE_BUTTON).first.is_visible()
         
         if confirm_button_visible:
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
-        self.wait_for_load_state("networkidle")
+        self.wait_for_navigation_complete()
         popup_visible = self._check_success_popup()
-        self.wait_for_timeout(3000)
+        
+        # Wait for table to refresh
+        self.wait_for_table_content()
         deleted_from_table = not self.is_tool_in_table(tool_name)
         
         return {
