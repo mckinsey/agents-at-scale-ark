@@ -23,11 +23,12 @@ var (
 )
 
 type QueryDetails struct {
-	Query     *arkv1alpha1.Query
-	QueryID   string
-	QueryName string
-	Namespace string
-	SessionID string
+	Query          *arkv1alpha1.Query
+	QueryID        string
+	QueryName      string
+	Namespace      string
+	SessionID      string
+	ConversationID string
 }
 
 type OperationTracker struct {
@@ -46,12 +47,15 @@ func (ot *OperationTracker) InitializeQueryContext(ctx context.Context, query *a
 		sessionID = string(query.UID)
 	}
 
+	conversationID := query.Status.ConversationId
+
 	qd := &QueryDetails{
-		Query:     query,
-		QueryID:   string(query.UID),
-		QueryName: query.Name,
-		Namespace: query.Namespace,
-		SessionID: sessionID,
+		Query:          query,
+		QueryID:        string(query.UID),
+		QueryName:      query.Name,
+		Namespace:      query.Namespace,
+		SessionID:      sessionID,
+		ConversationID: conversationID,
 	}
 
 	return context.WithValue(ctx, queryDetailsKey, qd)
@@ -104,6 +108,9 @@ func (ot *OperationTracker) buildOperationData(ctx context.Context, additionalDa
 	result["queryName"] = qd.QueryName
 	result["queryNamespace"] = qd.Namespace
 	result["sessionId"] = qd.SessionID
+	if qd.ConversationID != "" {
+		result["conversationId"] = qd.ConversationID
+	}
 
 	opDetails := ot.getOperationDetails(ctx)
 	for k, v := range opDetails {

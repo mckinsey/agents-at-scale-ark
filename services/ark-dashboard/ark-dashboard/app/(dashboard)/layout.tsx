@@ -1,8 +1,5 @@
 'use client';
 
-import { useAtomValue } from 'jotai';
-
-import { isExperimentalFeaturesEnabledAtom } from '@/atoms/experimental-features';
 import { AppSidebar } from '@/components/app-sidebar';
 import ChatManager from '@/components/chat-manager';
 import { ExperimentalFeaturesDialog } from '@/components/experimental-features-dialog';
@@ -16,9 +13,6 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }>) {
   const { isNamespaceResolved } = useNamespace();
-  const isExperimentalFeaturesEnabled = useAtomValue(
-    isExperimentalFeaturesEnabledAtom,
-  );
 
   if (!isNamespaceResolved) {
     return (
@@ -37,7 +31,7 @@ export default function DashboardLayout({
         <AppSidebar />
         <SidebarInset>{children}</SidebarInset>
       </SidebarProvider>
-      {isExperimentalFeaturesEnabled && <ExperimentalFeaturesDialog />}
+      <ExperimentalFeaturesDialog />
       <ChatManager />
     </>
   );

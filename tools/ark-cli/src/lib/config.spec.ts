@@ -50,6 +50,9 @@ describe('config', () => {
         repoUrl: 'https://github.com/mckinsey/agents-at-scale-marketplace',
         registry: 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts',
       },
+      services: {
+        reusePortForwards: false,
+      },
     });
   });
 
@@ -97,6 +100,15 @@ describe('config', () => {
     const config = loadConfig();
 
     expect(config.queryTimeout).toBe('30m');
+  });
+
+  it('loads defaultExportTypes from config file', () => {
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.readFileSync.mockReturnValue('yaml');
+    mockYaml.parse.mockReturnValue({defaultExportTypes: ['agents', 'teams']});
+
+    const config = loadConfig();
+    expect(config.defaultExportTypes).toEqual(['agents', 'teams']);
   });
 
   it('ARK_QUERY_TIMEOUT environment variable overrides config', () => {

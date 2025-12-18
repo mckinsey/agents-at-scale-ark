@@ -185,20 +185,35 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		sessionId = string(obj.UID)
 	}
 
+	conversationId := obj.Spec.ConversationId
+
 	opCtx, span := r.Telemetry.QueryRecorder().StartQuery(opCtx, obj.Name, obj.Namespace, "execute")
 	r.Telemetry.QueryRecorder().RecordSessionID(span, sessionId)
 	defer span.End()
 
+	impersonatedClient, memory, err := r.setupQueryExecution(opCtx, obj, conversationId)
+	if err != nil {
+		r.Telemetry.QueryRecorder().RecordError(span, err)
+		return
+	}
+
+	// Get conversation ID from memory if attached, otherwise use spec value
+	if memory != nil {
+		if httpMemory, ok := memory.(*genai.HTTPMemory); ok {
+			conversationId = httpMemory.GetConversationID()
+		}
+	}
+
+	// Set conversation ID in status if we have one (from memory or spec)
+	if conversationId != "" {
+		obj.Status.ConversationId = conversationId
+		_ = r.updateStatus(opCtx, &obj, obj.Status.Phase)
+		r.Telemetry.QueryRecorder().RecordConversationID(span, conversationId)
+	}
+
 	opCtx = r.Eventing.QueryRecorder().InitializeQueryContext(opCtx, &obj)
 	opCtx = r.Eventing.QueryRecorder().StartTokenCollection(opCtx)
 	opCtx = r.Eventing.QueryRecorder().Start(opCtx, "QueryExecution", fmt.Sprintf("Executing query %s", obj.Name), nil)
-
-	impersonatedClient, memory, err := r.setupQueryExecution(opCtx, obj, sessionId)
-	if err != nil {
-		r.Telemetry.QueryRecorder().RecordError(span, err)
-		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Query execution failed: %v", err), err, nil)
-		return
-	}
 
 	inputMessages, err := genai.GetQueryInputMessages(opCtx, obj, impersonatedClient)
 	if err == nil {
@@ -276,14 +291,14 @@ func (r *QueryReconciler) finalizeEventStream(ctx context.Context, eventStream g
 	}
 }
 
-func (r *QueryReconciler) setupQueryExecution(opCtx context.Context, obj arkv1alpha1.Query, sessionId string) (client.Client, genai.MemoryInterface, error) {
+func (r *QueryReconciler) setupQueryExecution(opCtx context.Context, obj arkv1alpha1.Query, conversationId string) (client.Client, genai.MemoryInterface, error) {
 	impersonatedClient, err := r.getClientForQuery(obj)
 	if err != nil {
 		_ = r.updateStatus(opCtx, &obj, statusError)
 		return nil, nil, fmt.Errorf("failed to create impersonated client: %w", err)
 	}
 
-	memory, err := genai.NewMemoryForQuery(opCtx, impersonatedClient, obj.Spec.Memory, obj.Namespace, sessionId, obj.Name, r.Eventing.MemoryRecorder())
+	memory, err := genai.NewMemoryForQuery(opCtx, impersonatedClient, obj.Spec.Memory, obj.Namespace, conversationId, obj.Name, r.Eventing.MemoryRecorder())
 	if err != nil {
 		_ = r.updateStatus(opCtx, &obj, statusError)
 		return nil, nil, fmt.Errorf("failed to create memory client: %w", err)

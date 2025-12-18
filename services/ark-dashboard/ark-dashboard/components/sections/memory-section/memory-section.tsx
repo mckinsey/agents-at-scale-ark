@@ -30,8 +30,8 @@ import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import type { MemoryFilters } from '@/lib/services/memory';
 import {
   useGetAllMemoryMessages,
+  useGetConversations,
   useGetMemoryResources,
-  useGetSessions,
 } from '@/lib/services/memory-hooks';
 import { cn } from '@/lib/utils';
 
@@ -43,27 +43,27 @@ export function MemorySection() {
   const searchParams = useSearchParams();
 
   const [memoryFilter, setMemoryFilter] = useState('');
-  const [sessionFilter, setSessionFilter] = useState('');
+  const [conversationFilter, setConversationFilter] = useState('');
   const [queryFilter, setQueryFilter] = useState('');
 
   const filters = {
     page: parseInt(searchParams.get('page') || '1', 10),
     limit: parseInt(searchParams.get('limit') || '10', 10),
     memoryName: searchParams.get('memory') || undefined,
-    sessionId: searchParams.get('sessionId') || undefined,
+    conversationId: searchParams.get('conversationId') || undefined,
     queryId: searchParams.get('queryId') || undefined,
   };
 
   const memoryResources = useGetMemoryResources();
-  const sessions = useGetSessions();
+  const conversations = useGetConversations();
   const memoryMessages = useGetAllMemoryMessages({
     memory:
       filters.memoryName && filters.memoryName !== 'all'
         ? filters.memoryName
         : undefined,
-    session:
-      filters.sessionId && filters.sessionId !== 'all'
-        ? filters.sessionId
+    conversation:
+      filters.conversationId && filters.conversationId !== 'all'
+        ? filters.conversationId
         : undefined,
     query:
       filters.queryId && filters.queryId !== 'all'
@@ -79,16 +79,16 @@ export function MemorySection() {
     );
   }, [memoryResources.data, memoryFilter]);
 
-  const filteredSessions = useMemo(() => {
+  const filteredConversations = useMemo(() => {
     return Array.from(
-      // Extract unique session IDs for filtering
-      new Set(sessions.data?.map(s => s.sessionId)),
+      // Extract unique conversation IDs for filtering
+      new Set(conversations.data?.map(c => c.conversationId)),
     )
       .sort()
-      .filter(session =>
-        session.toLowerCase().includes(sessionFilter.toLowerCase()),
+      .filter(conversation =>
+        conversation.toLowerCase().includes(conversationFilter.toLowerCase()),
       );
-  }, [sessions, sessionFilter]);
+  }, [conversations, conversationFilter]);
 
   const sortedMessages = useMemo(() => {
     // Sort by sequence number descending (newest first) to maintain proper chronological order
@@ -105,14 +105,14 @@ export function MemorySection() {
   }, [sortedMessages]);
 
   const availableQueries = useMemo(() => {
-    // Extract unique queryID - sessionID pairs
+    // Extract unique queryID - conversationID pairs
     return Array.from(
       new Map(
         sortedMessages?.map(m => [
-          `${m.sessionId}-${m.queryId}`,
+          `${m.conversationId}-${m.queryId}`,
           {
             queryId: m.queryId,
-            sessionId: m.sessionId,
+            conversationId: m.conversationId,
           },
         ]),
       ).values(),
@@ -169,7 +169,7 @@ export function MemorySection() {
       page: 1,
       limit: filters.limit,
       memoryName: undefined,
-      sessionId: undefined,
+      conversationId: undefined,
       queryId: undefined,
     });
   };
@@ -205,7 +205,7 @@ export function MemorySection() {
 
   if (
     memoryResources.isPending ||
-    sessions.isPending ||
+    conversations.isPending ||
     memoryMessages.isPending
   ) {
     return (
@@ -284,13 +284,13 @@ export function MemorySection() {
               <span
                 className={cn('min-w-0 truncate', {
                   'text-muted-foreground':
-                    !searchParams.get('sessionId') ||
-                    searchParams.get('sessionId') === 'all',
+                    !searchParams.get('conversationId') ||
+                    searchParams.get('conversationId') === 'all',
                 })}>
-                {!searchParams.get('sessionId') ||
-                searchParams.get('sessionId') === 'all'
-                  ? 'All Sessions'
-                  : filters.sessionId}
+                {!searchParams.get('conversationId') ||
+                searchParams.get('conversationId') === 'all'
+                  ? 'All Conversations'
+                  : filters.conversationId}
               </span>
               <ChevronDown className="ml-1 h-4 w-4 flex-shrink-0" />
             </Button>
@@ -299,9 +299,9 @@ export function MemorySection() {
             <div className="p-2">
               <Input
                 autoFocus
-                placeholder="Filter sessions..."
-                value={sessionFilter}
-                onChange={e => setSessionFilter(e.target.value)}
+                placeholder="Filter conversations..."
+                value={conversationFilter}
+                onChange={e => setConversationFilter(e.target.value)}
                 className="h-8 text-sm"
               />
             </div>
@@ -309,24 +309,24 @@ export function MemorySection() {
             <div className="max-h-64 overflow-auto">
               <DropdownMenuItem
                 onClick={() => {
-                  handleFilterChange('sessionId', 'all');
+                  handleFilterChange('conversationId', 'all');
                 }}>
-                All Sessions
+                All Conversations
               </DropdownMenuItem>
-              {filteredSessions.map(sessionId => (
+              {filteredConversations.map(conversationId => (
                 <DropdownMenuItem
-                  key={sessionId}
+                  key={conversationId}
                   onClick={() => {
-                    handleFilterChange('sessionId', sessionId);
+                    handleFilterChange('conversationId', conversationId);
                   }}>
-                  {sessionId.length > 30
-                    ? `${sessionId.substring(0, 30)}...`
-                    : sessionId}
+                  {conversationId.length > 30
+                    ? `${conversationId.substring(0, 30)}...`
+                    : conversationId}
                 </DropdownMenuItem>
               ))}
-              {filteredSessions.length === 0 && sessionFilter && (
+              {filteredConversations.length === 0 && conversationFilter && (
                 <div className="p-3 text-sm text-gray-500">
-                  No sessions match your filter
+                  No conversations match your filter
                 </div>
               )}
             </div>
@@ -397,7 +397,7 @@ export function MemorySection() {
           disabled={
             !(
               (filters.memoryName && filters.memoryName !== 'all') ||
-              (filters.sessionId && filters.sessionId !== 'all') ||
+              (filters.conversationId && filters.conversationId !== 'all') ||
               (filters.queryId && filters.queryId !== 'all')
             )
           }>
@@ -412,7 +412,7 @@ export function MemorySection() {
                 )
               : undefined
           }
-          selectedSession={searchParams.get('sessionId')}
+          selectedConversation={searchParams.get('conversationId')}
           onSuccess={clearFilters}
         />
       </div>
@@ -430,7 +430,7 @@ export function MemorySection() {
                   Memory
                 </th>
                 <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
-                  Session
+                  Conversation
                 </th>
                 <th className="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-400">
                   Query
@@ -459,7 +459,7 @@ export function MemorySection() {
               ) : (
                 paginatedMessages.map((messageRecord, index) => (
                   <tr
-                    key={`${messageRecord.sessionId}-${messageRecord.queryId}-${index}`}
+                    key={`${messageRecord.conversationId}-${messageRecord.queryId}-${index}`}
                     className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/30">
                     <td className="px-3 py-3 font-mono text-xs text-gray-600 dark:text-gray-300">
                       {formatTimestamp(messageRecord.timestamp)}
@@ -474,12 +474,12 @@ export function MemorySection() {
                         <Tooltip>
                           <TooltipTrigger className="text-left">
                             <div className="max-w-24 truncate">
-                              {messageRecord.sessionId}
+                              {messageRecord.conversationId}
                             </div>
                           </TooltipTrigger>
                           <TooltipContent>
                             <p className="font-mono text-xs">
-                              {messageRecord.sessionId}
+                              {messageRecord.conversationId}
                             </p>
                           </TooltipContent>
                         </Tooltip>

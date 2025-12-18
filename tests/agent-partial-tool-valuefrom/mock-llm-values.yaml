@@ -1,0 +1,12 @@
+terminationGracePeriodSeconds: 3
+
+ark:
+  model:
+    enabled: true
+    name: test-model
+    type: openai
+    model: gpt-4o-mini
+    pollInterval: 3s
+    config:
+      openai:
+        apiKey: mock-api-key
