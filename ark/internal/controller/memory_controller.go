@@ -14,7 +14,6 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
-	"mckinsey.com/ark/internal/genai"
 )
 
 // MemoryReconciler reconciles a Memory object
@@ -84,23 +83,6 @@ func (r *MemoryReconciler) processMemory(ctx context.Context, memory arkv1alpha1
 
 	// Update last resolved address in status
 	memory.Status.LastResolvedAddress = &resolvedAddress
-
-	// Resolve headers
-	resolvedHeaders := make(map[string]string)
-	for _, header := range memory.Spec.Headers {
-		headerValue, err := genai.ResolveHeaderValue(ctx, r.Client, header, memory.Namespace)
-		if err != nil {
-			log.Error(err, "failed to resolve header", "memory", memory.Name, "header", header.Name)
-			if err := r.updateStatus(ctx, memory, statusError, fmt.Sprintf("Failed to resolve header %s: %v", header.Name, err)); err != nil {
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, nil
-		}
-		resolvedHeaders[header.Name] = headerValue
-	}
-
-	// Store resolved headers in status
-	memory.Status.ResolvedHeaders = resolvedHeaders
 
 	// Validate the resolved address (basic validation)
 	if err := r.validateMemoryAddress(resolvedAddress); err != nil {

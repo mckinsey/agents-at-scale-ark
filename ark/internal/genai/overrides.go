@@ -22,9 +22,13 @@ const (
 )
 
 func ResolveHeaders(ctx context.Context, k8sClient client.Client, headers []arkv1alpha1.Header, namespace string) (map[string]string, error) {
+	return ResolveHeadersWithQuery(ctx, k8sClient, headers, namespace, nil)
+}
+
+func ResolveHeadersWithQuery(ctx context.Context, k8sClient client.Client, headers []arkv1alpha1.Header, namespace string, query *arkv1alpha1.Query) (map[string]string, error) {
 	resolvedHeaders := make(map[string]string)
 	for _, header := range headers {
-		value, err := ResolveHeaderValue(ctx, k8sClient, header, namespace)
+		value, err := ResolveHeaderValueWithQuery(ctx, k8sClient, header, namespace, query)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve header %s: %w", header.Name, err)
 		}
@@ -35,12 +39,16 @@ func ResolveHeaders(ctx context.Context, k8sClient client.Client, headers []arkv
 }
 
 func ResolveHeaderValue(ctx context.Context, k8sClient client.Client, header arkv1alpha1.Header, namespace string) (string, error) {
+	return ResolveHeaderValueWithQuery(ctx, k8sClient, header, namespace, nil)
+}
+
+func ResolveHeaderValueWithQuery(ctx context.Context, k8sClient client.Client, header arkv1alpha1.Header, namespace string, query *arkv1alpha1.Query) (string, error) {
 	if header.Value.Value != "" {
 		return header.Value.Value, nil
 	}
 
 	if header.Value.ValueFrom == nil {
-		return "", fmt.Errorf("header value must specify either value or valueFrom.secretKeyRef or valueFrom.configMapKeyRef")
+		return "", fmt.Errorf("header value must specify either value or valueFrom")
 	}
 
 	if header.Value.ValueFrom.SecretKeyRef != nil {
@@ -51,7 +59,11 @@ func ResolveHeaderValue(ctx context.Context, k8sClient client.Client, header ark
 		return resolveHeaderFromConfigMap(ctx, k8sClient, header.Value.ValueFrom.ConfigMapKeyRef, namespace)
 	}
 
-	return "", fmt.Errorf("header value must specify either value or valueFrom.secretKeyRef or valueFrom.configMapKeyRef")
+	if header.Value.ValueFrom.QueryParameterRef != nil {
+		return resolveQueryParameterRef(header.Value.ValueFrom.QueryParameterRef, query)
+	}
+
+	return "", fmt.Errorf("header value must specify either value or valueFrom with a valid source")
 }
 
 func resolveHeaderFromSecret(ctx context.Context, k8sClient client.Client, secretRef *corev1.SecretKeySelector, namespace string) (string, error) {

@@ -72,6 +72,8 @@ type HeaderValueSource struct {
 	SecretKeyRef *corev1.SecretKeySelector `json:"secretKeyRef,omitempty"`
 	// +kubebuilder:validation:Optional
 	ConfigMapKeyRef *corev1.ConfigMapKeySelector `json:"configMapKeyRef,omitempty"`
+	// +kubebuilder:validation:Optional
+	QueryParameterRef *QueryParameterReference `json:"queryParameterRef,omitempty"`
 }
 
 type Header struct {

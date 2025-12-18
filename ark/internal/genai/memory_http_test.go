@@ -175,11 +175,14 @@ type noOpMemoryRecorder struct{}
 func (n *noOpMemoryRecorder) InitializeQueryContext(ctx context.Context, query *arkv1alpha1.Query) context.Context {
 	return ctx
 }
+
 func (n *noOpMemoryRecorder) Start(ctx context.Context, operation, description string, data map[string]string) context.Context {
 	return ctx
 }
+
 func (n *noOpMemoryRecorder) Complete(ctx context.Context, operation, result string, data map[string]string) {
 }
+
 func (n *noOpMemoryRecorder) Fail(ctx context.Context, operation, result string, err error, data map[string]string) {
 }
 
@@ -236,7 +239,7 @@ func TestHTTPMemoryAddMessagesWithHeaders(t *testing.T) {
 			receivedHeaders := make(http.Header)
 
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path == "/messages" && r.Method == http.MethodPost {
+				if r.URL.Path == MessagesEndpoint && r.Method == http.MethodPost {
 					for name := range tt.expectedHeaders {
 						receivedHeaders.Set(name, r.Header.Get(name))
 					}
@@ -248,6 +251,18 @@ func TestHTTPMemoryAddMessagesWithHeaders(t *testing.T) {
 			defer server.Close()
 
 			resolvedAddress := server.URL
+
+			// Convert headers map to Header slice for Memory spec
+			headers := make([]arkv1alpha1.Header, 0, len(tt.headers))
+			for name, value := range tt.headers {
+				headers = append(headers, arkv1alpha1.Header{
+					Name: name,
+					Value: arkv1alpha1.HeaderValue{
+						Value: value,
+					},
+				})
+			}
+
 			memory := &arkv1alpha1.Memory{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-memory",
@@ -257,10 +272,10 @@ func TestHTTPMemoryAddMessagesWithHeaders(t *testing.T) {
 					Address: arkv1alpha1.ValueSource{
 						Value: server.URL,
 					},
+					Headers: headers,
 				},
 				Status: arkv1alpha1.MemoryStatus{
 					LastResolvedAddress: &resolvedAddress,
-					ResolvedHeaders:     tt.headers,
 					Phase:               "ready",
 				},
 			}
@@ -274,7 +289,7 @@ func TestHTTPMemoryAddMessagesWithHeaders(t *testing.T) {
 				conversationId:   "test-conv-id",
 				name:             "test-memory",
 				namespace:        "default",
-				headers:          tt.headers,
+				headers:          make(map[string]string),
 				eventingRecorder: &noOpMemoryRecorder{},
 			}
 
@@ -323,7 +338,7 @@ func TestHTTPMemoryGetMessagesWithHeaders(t *testing.T) {
 			receivedHeaders := make(http.Header)
 
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path == "/messages" && r.Method == http.MethodGet {
+				if r.URL.Path == MessagesEndpoint && r.Method == http.MethodGet {
 					for name := range tt.expectedHeaders {
 						receivedHeaders.Set(name, r.Header.Get(name))
 					}
@@ -343,6 +358,18 @@ func TestHTTPMemoryGetMessagesWithHeaders(t *testing.T) {
 			defer server.Close()
 
 			resolvedAddress := server.URL
+
+			// Convert headers map to Header slice for Memory spec
+			headers := make([]arkv1alpha1.Header, 0, len(tt.headers))
+			for name, value := range tt.headers {
+				headers = append(headers, arkv1alpha1.Header{
+					Name: name,
+					Value: arkv1alpha1.HeaderValue{
+						Value: value,
+					},
+				})
+			}
+
 			memory := &arkv1alpha1.Memory{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-memory",
@@ -352,10 +379,10 @@ func TestHTTPMemoryGetMessagesWithHeaders(t *testing.T) {
 					Address: arkv1alpha1.ValueSource{
 						Value: server.URL,
 					},
+					Headers: headers,
 				},
 				Status: arkv1alpha1.MemoryStatus{
 					LastResolvedAddress: &resolvedAddress,
-					ResolvedHeaders:     tt.headers,
 					Phase:               "ready",
 				},
 			}
@@ -369,7 +396,7 @@ func TestHTTPMemoryGetMessagesWithHeaders(t *testing.T) {
 				conversationId:   "test-conv-id",
 				name:             "test-memory",
 				namespace:        "default",
-				headers:          tt.headers,
+				headers:          make(map[string]string),
 				eventingRecorder: &noOpMemoryRecorder{},
 			}
 
@@ -412,10 +439,23 @@ func TestHTTPMemoryHeadersLoadedFromStatus(t *testing.T) {
 			Address: arkv1alpha1.ValueSource{
 				Value: server.URL,
 			},
+			Headers: []arkv1alpha1.Header{
+				{
+					Name: "Authorization",
+					Value: arkv1alpha1.HeaderValue{
+						Value: "Bearer status-token",
+					},
+				},
+				{
+					Name: "X-Custom-Header",
+					Value: arkv1alpha1.HeaderValue{
+						Value: "status-value",
+					},
+				},
+			},
 		},
 		Status: arkv1alpha1.MemoryStatus{
 			LastResolvedAddress: &resolvedAddress,
-			ResolvedHeaders:     expectedHeaders,
 			Phase:               "ready",
 		},
 	}
@@ -427,7 +467,7 @@ func TestHTTPMemoryHeadersLoadedFromStatus(t *testing.T) {
 	require.NoError(t, err)
 
 	mem := httpMemory.(*HTTPMemory)
-	require.Equal(t, expectedHeaders, mem.headers, "Headers should be loaded from Memory status")
+	require.Equal(t, expectedHeaders, mem.headers, "Headers should be resolved from Memory spec on-demand")
 }
 
 func TestHTTPMemoryHeadersUpdatedOnResolve(t *testing.T) {
@@ -435,7 +475,7 @@ func TestHTTPMemoryHeadersUpdatedOnResolve(t *testing.T) {
 	receivedHeaders := make(http.Header)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/messages" && r.Method == http.MethodPost {
+		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodPost {
 			callCount++
 			receivedHeaders = r.Header.Clone()
 			w.WriteHeader(http.StatusOK)
@@ -444,15 +484,6 @@ func TestHTTPMemoryHeadersUpdatedOnResolve(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer server.Close()
-
-	initialHeaders := map[string]string{
-		"Authorization": "Bearer initial-token",
-	}
-
-	updatedHeaders := map[string]string{
-		"Authorization": "Bearer updated-token",
-		"X-New-Header":  "new-value",
-	}
 
 	resolvedAddress := server.URL
 	memory := &arkv1alpha1.Memory{
@@ -464,10 +495,23 @@ func TestHTTPMemoryHeadersUpdatedOnResolve(t *testing.T) {
 			Address: arkv1alpha1.ValueSource{
 				Value: server.URL,
 			},
+			Headers: []arkv1alpha1.Header{
+				{
+					Name: "Authorization",
+					Value: arkv1alpha1.HeaderValue{
+						Value: "Bearer updated-token",
+					},
+				},
+				{
+					Name: "X-New-Header",
+					Value: arkv1alpha1.HeaderValue{
+						Value: "new-value",
+					},
+				},
+			},
 		},
 		Status: arkv1alpha1.MemoryStatus{
 			LastResolvedAddress: &resolvedAddress,
-			ResolvedHeaders:     updatedHeaders,
 			Phase:               "ready",
 		},
 	}
@@ -481,7 +525,7 @@ func TestHTTPMemoryHeadersUpdatedOnResolve(t *testing.T) {
 		conversationId:   "test-conv-id",
 		name:             "updating-memory",
 		namespace:        "default",
-		headers:          initialHeaders,
+		headers:          map[string]string{},
 		eventingRecorder: &noOpMemoryRecorder{},
 	}
 
@@ -497,7 +541,7 @@ func TestHTTPMemoryHeadersUpdatedOnResolve(t *testing.T) {
 
 func TestHTTPMemoryEmptyHeaders(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/messages" && r.Method == http.MethodPost {
+		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -518,7 +562,6 @@ func TestHTTPMemoryEmptyHeaders(t *testing.T) {
 		},
 		Status: arkv1alpha1.MemoryStatus{
 			LastResolvedAddress: &resolvedAddress,
-			ResolvedHeaders:     nil,
 			Phase:               "ready",
 		},
 	}

@@ -22,10 +22,6 @@ type MemoryStatus struct {
 	// LastResolvedAddress contains the last resolved address value for reference
 	LastResolvedAddress *string `json:"lastResolvedAddress,omitempty"`
 
-	// +kubebuilder:validation:Optional
-	// ResolvedHeaders contains the resolved header values
-	ResolvedHeaders map[string]string `json:"resolvedHeaders,omitempty"`
-
 	// Phase represents the current state of the memory
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Enum=running;ready;error

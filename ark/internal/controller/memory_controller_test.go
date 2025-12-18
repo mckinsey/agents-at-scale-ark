@@ -25,7 +25,7 @@ var _ = Describe("Memory Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default",  // TODO(user):Modify as needed
+			Namespace: "default", // TODO(user):Modify as needed
 		}
 		memory := &arkv1alpha1.Memory{}
 
@@ -101,7 +101,7 @@ var _ = Describe("Memory Controller", func() {
 			}
 		})
 
-		It("should resolve direct header values and store in status", func() {
+		It("should accept direct header values and reach ready status", func() {
 			memoryName := "memory-direct-headers"
 			memory := &arkv1alpha1.Memory{
 				ObjectMeta: metav1.ObjectMeta{
@@ -141,21 +141,19 @@ var _ = Describe("Memory Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Second reconcile to process headers")
+			By("Second reconcile to validate and reach ready state")
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Verifying resolved headers in status")
+			By("Verifying memory reached ready state")
 			updatedMemory := &arkv1alpha1.Memory{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
 			Expect(updatedMemory.Status.Phase).To(Equal("ready"))
-			Expect(updatedMemory.Status.ResolvedHeaders).To(HaveKeyWithValue("X-Custom-Header", "custom-value"))
-			Expect(updatedMemory.Status.ResolvedHeaders).To(HaveKeyWithValue("Authorization", "Bearer static-token"))
 		})
 
-		It("should resolve header from secret and store in status", func() {
+		It("should accept header from secret and reach ready status", func() {
 			memoryName := "memory-secret-headers"
 
 			By("Creating a secret with the token")
@@ -210,20 +208,19 @@ var _ = Describe("Memory Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Second reconcile to process headers")
+			By("Second reconcile to validate and reach ready state")
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Verifying resolved headers in status")
+			By("Verifying memory reached ready state")
 			updatedMemory := &arkv1alpha1.Memory{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
 			Expect(updatedMemory.Status.Phase).To(Equal("ready"))
-			Expect(updatedMemory.Status.ResolvedHeaders).To(HaveKeyWithValue("Authorization", "secret-bearer-token"))
 		})
 
-		It("should resolve header from configmap and store in status", func() {
+		It("should accept header from configmap and reach ready status", func() {
 			memoryName := "memory-configmap-headers"
 
 			By("Creating a configmap with the api key")
@@ -278,132 +275,19 @@ var _ = Describe("Memory Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Second reconcile to process headers")
+			By("Second reconcile to validate and reach ready state")
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Verifying resolved headers in status")
+			By("Verifying memory reached ready state")
 			updatedMemory := &arkv1alpha1.Memory{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
 			Expect(updatedMemory.Status.Phase).To(Equal("ready"))
-			Expect(updatedMemory.Status.ResolvedHeaders).To(HaveKeyWithValue("X-API-Key", "configmap-api-key-value"))
 		})
 
-		It("should set error status when secret is missing", func() {
-			memoryName := "memory-missing-secret"
-
-			By("Creating memory with header from non-existent secret")
-			memory := &arkv1alpha1.Memory{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      memoryName,
-					Namespace: "default",
-				},
-				Spec: arkv1alpha1.MemorySpec{
-					Address: arkv1alpha1.ValueSource{
-						Value: "http://test-memory-service:8080",
-					},
-					Headers: []arkv1alpha1.Header{
-						{
-							Name: "Authorization",
-							Value: arkv1alpha1.HeaderValue{
-								ValueFrom: &arkv1alpha1.HeaderValueSource{
-									SecretKeyRef: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "non-existent-secret",
-										},
-										Key: "token",
-									},
-								},
-							},
-						},
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, memory)).To(Succeed())
-
-			controllerReconciler := &MemoryReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			By("First reconcile to set running state")
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Second reconcile to process headers (should fail)")
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Verifying error status")
-			updatedMemory := &arkv1alpha1.Memory{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
-			Expect(updatedMemory.Status.Phase).To(Equal("error"))
-			Expect(updatedMemory.Status.Message).To(ContainSubstring("Failed to resolve header"))
-		})
-
-		It("should set error status when configmap is missing", func() {
-			memoryName := "memory-missing-configmap"
-
-			By("Creating memory with header from non-existent configmap")
-			memory := &arkv1alpha1.Memory{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      memoryName,
-					Namespace: "default",
-				},
-				Spec: arkv1alpha1.MemorySpec{
-					Address: arkv1alpha1.ValueSource{
-						Value: "http://test-memory-service:8080",
-					},
-					Headers: []arkv1alpha1.Header{
-						{
-							Name: "X-API-Key",
-							Value: arkv1alpha1.HeaderValue{
-								ValueFrom: &arkv1alpha1.HeaderValueSource{
-									ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "non-existent-configmap",
-										},
-										Key: "api-key",
-									},
-								},
-							},
-						},
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, memory)).To(Succeed())
-
-			controllerReconciler := &MemoryReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			By("First reconcile to set running state")
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Second reconcile to process headers (should fail)")
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Verifying error status")
-			updatedMemory := &arkv1alpha1.Memory{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
-			Expect(updatedMemory.Status.Phase).To(Equal("error"))
-			Expect(updatedMemory.Status.Message).To(ContainSubstring("Failed to resolve header"))
-		})
-
-		It("should resolve mixed direct and referenced headers", func() {
+		It("should accept mixed direct and referenced headers", func() {
 			memoryName := "memory-mixed-headers"
 
 			By("Creating a secret for one header")
@@ -464,19 +348,16 @@ var _ = Describe("Memory Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Second reconcile to process headers")
+			By("Second reconcile to validate and reach ready state")
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Verifying resolved headers in status")
+			By("Verifying memory reached ready state")
 			updatedMemory := &arkv1alpha1.Memory{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
 			Expect(updatedMemory.Status.Phase).To(Equal("ready"))
-			Expect(updatedMemory.Status.ResolvedHeaders).To(HaveLen(2))
-			Expect(updatedMemory.Status.ResolvedHeaders).To(HaveKeyWithValue("X-Direct-Header", "direct-value"))
-			Expect(updatedMemory.Status.ResolvedHeaders).To(HaveKeyWithValue("Authorization", "secret-token-value"))
 		})
 
 		It("should work with empty headers", func() {
@@ -507,17 +388,16 @@ var _ = Describe("Memory Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Second reconcile to process")
+			By("Second reconcile to validate and reach ready state")
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: memoryName, Namespace: "default"},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Verifying status with empty headers")
+			By("Verifying memory reached ready state")
 			updatedMemory := &arkv1alpha1.Memory{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: memoryName, Namespace: "default"}, updatedMemory)).To(Succeed())
 			Expect(updatedMemory.Status.Phase).To(Equal("ready"))
-			Expect(updatedMemory.Status.ResolvedHeaders).To(BeEmpty())
 		})
 	})
 })

@@ -50,10 +50,10 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 		httpClient.Timeout = config.Timeout
 	}
 
-	// Load resolved headers
-	headers := make(map[string]string)
-	if memory.Status.ResolvedHeaders != nil {
-		headers = memory.Status.ResolvedHeaders
+	// Resolve headers on-demand
+	headers, err := ResolveHeaders(ctx, k8sClient, memory.Spec.Headers, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve headers: %w", err)
 	}
 
 	baseURL := strings.TrimSuffix(*memory.Status.LastResolvedAddress, "/")
@@ -147,10 +147,13 @@ func (m *HTTPMemory) resolveAndUpdateAddress(ctx context.Context) error {
 	// Update the baseURL
 	m.baseURL = strings.TrimSuffix(resolvedAddress, "/")
 
-	// Update headers from status
-	if memory.Status.ResolvedHeaders != nil {
-		m.headers = memory.Status.ResolvedHeaders
+	// Resolve headers on-demand
+	headers, err := ResolveHeaders(ctx, m.client, memory.Spec.Headers, m.namespace)
+	if err != nil {
+		return fmt.Errorf("failed to resolve headers: %w", err)
 	}
+	m.headers = headers
+
 	return nil
 }
 
