@@ -1,6 +1,4 @@
 export default {
-  index: 'Overview',
-
   '---interfaces': { type: 'separator', title: 'Interfaces' },
   'ark-apis': 'Ark APIs',
 
