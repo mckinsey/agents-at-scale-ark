@@ -42,7 +42,7 @@ export default async function RootLayout({ children }) {
           footer={footer}
           sidebar={{
             defaultMenuCollapseLevel: 1,
-            autoCollapse: true
+            autoCollapse: false
           }}
           // ... Your additional layout options
         >
