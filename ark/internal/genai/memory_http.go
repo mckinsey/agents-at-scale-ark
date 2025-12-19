@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/openai/openai-go"
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -50,8 +51,9 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 		httpClient.Timeout = config.Timeout
 	}
 
-	// Resolve headers on-demand
-	headers, err := ResolveHeaders(ctx, k8sClient, memory.Spec.Headers, namespace)
+	// Resolve headers on-demand (extract Query from context if available for queryParameterRef support)
+	query, _ := ctx.Value(QueryContextKey).(*arkv1alpha1.Query)
+	headers, err := ResolveHeadersWithQuery(ctx, k8sClient, memory.Spec.Headers, namespace, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve headers: %w", err)
 	}
@@ -147,8 +149,9 @@ func (m *HTTPMemory) resolveAndUpdateAddress(ctx context.Context) error {
 	// Update the baseURL
 	m.baseURL = strings.TrimSuffix(resolvedAddress, "/")
 
-	// Resolve headers on-demand
-	headers, err := ResolveHeaders(ctx, m.client, memory.Spec.Headers, m.namespace)
+	// Resolve headers on-demand (extract Query from context if available for queryParameterRef support)
+	query, _ := ctx.Value(QueryContextKey).(*arkv1alpha1.Query)
+	headers, err := ResolveHeadersWithQuery(ctx, m.client, memory.Spec.Headers, m.namespace, query)
 	if err != nil {
 		return fmt.Errorf("failed to resolve headers: %w", err)
 	}

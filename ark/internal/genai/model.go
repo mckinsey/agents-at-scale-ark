@@ -101,7 +101,8 @@ func loadModelCRD(ctx context.Context, k8sClient client.Client, name, namespace 
 }
 
 func resolveModelHeaders(ctx context.Context, k8sClient client.Client, headers []arkv1alpha1.Header, namespace string) (map[string]string, error) {
-	resolvedHeaders, err := ResolveHeaders(ctx, k8sClient, headers, namespace)
+	query, _ := ctx.Value(QueryContextKey).(*arkv1alpha1.Query)
+	resolvedHeaders, err := ResolveHeadersWithQuery(ctx, k8sClient, headers, namespace, query)
 	if err != nil {
 		return nil, err
 	}

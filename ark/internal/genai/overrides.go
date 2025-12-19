@@ -155,13 +155,14 @@ func listResourcesByLabels(ctx context.Context, k8sClient client.Client, namespa
 
 func ResolveHeadersFromOverrides(ctx context.Context, k8sClient client.Client, overrides []arkv1alpha1.Override, namespace string, overrideType OverrideType) (map[string]map[string]string, error) {
 	resourceHeaders := make(map[string]map[string]string)
+	query, _ := ctx.Value(QueryContextKey).(*arkv1alpha1.Query)
 
 	for _, override := range overrides {
 		if override.ResourceType != string(overrideType) {
 			continue
 		}
 
-		resolvedHeaders, err := ResolveHeaders(ctx, k8sClient, override.Headers, namespace)
+		resolvedHeaders, err := ResolveHeadersWithQuery(ctx, k8sClient, override.Headers, namespace, query)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve headers for overrideType %s: %w", overrideType, err)
 		}
