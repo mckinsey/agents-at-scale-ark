@@ -652,7 +652,7 @@ func TestResolveHeadersFromOverrides(t *testing.T) {
 	}
 }
 
-func TestResolveHeadersWithQuery(t *testing.T) {
+func TestResolveHeadersWithQueryContext(t *testing.T) {
 	tests := []struct {
 		name           string
 		headers        []arkv1alpha1.Header
@@ -891,7 +891,10 @@ func TestResolveHeadersWithQuery(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeClient := setupTestClient(tt.objects)
 			ctx := context.Background()
-			got, err := ResolveHeadersWithQuery(ctx, fakeClient, tt.headers, tt.namespace, tt.query)
+			if tt.query != nil {
+				ctx = context.WithValue(ctx, QueryContextKey, tt.query)
+			}
+			got, err := ResolveHeaders(ctx, fakeClient, tt.headers, tt.namespace)
 
 			if tt.wantErr {
 				require.Error(t, err)

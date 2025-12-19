@@ -22,13 +22,9 @@ const (
 )
 
 func ResolveHeaders(ctx context.Context, k8sClient client.Client, headers []arkv1alpha1.Header, namespace string) (map[string]string, error) {
-	return ResolveHeadersWithQuery(ctx, k8sClient, headers, namespace, nil)
-}
-
-func ResolveHeadersWithQuery(ctx context.Context, k8sClient client.Client, headers []arkv1alpha1.Header, namespace string, query *arkv1alpha1.Query) (map[string]string, error) {
 	resolvedHeaders := make(map[string]string)
 	for _, header := range headers {
-		value, err := ResolveHeaderValueWithQuery(ctx, k8sClient, header, namespace, query)
+		value, err := ResolveHeaderValue(ctx, k8sClient, header, namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve header %s: %w", header.Name, err)
 		}
@@ -39,10 +35,6 @@ func ResolveHeadersWithQuery(ctx context.Context, k8sClient client.Client, heade
 }
 
 func ResolveHeaderValue(ctx context.Context, k8sClient client.Client, header arkv1alpha1.Header, namespace string) (string, error) {
-	return ResolveHeaderValueWithQuery(ctx, k8sClient, header, namespace, nil)
-}
-
-func ResolveHeaderValueWithQuery(ctx context.Context, k8sClient client.Client, header arkv1alpha1.Header, namespace string, query *arkv1alpha1.Query) (string, error) {
 	if header.Value.Value != "" {
 		return header.Value.Value, nil
 	}
@@ -60,7 +52,7 @@ func ResolveHeaderValueWithQuery(ctx context.Context, k8sClient client.Client, h
 	}
 
 	if header.Value.ValueFrom.QueryParameterRef != nil {
-		return resolveQueryParameterRef(header.Value.ValueFrom.QueryParameterRef, query)
+		return resolveQueryParameterRef(ctx, header.Value.ValueFrom.QueryParameterRef)
 	}
 
 	return "", fmt.Errorf("header value must specify either value or valueFrom with a valid source")
@@ -155,14 +147,13 @@ func listResourcesByLabels(ctx context.Context, k8sClient client.Client, namespa
 
 func ResolveHeadersFromOverrides(ctx context.Context, k8sClient client.Client, overrides []arkv1alpha1.Override, namespace string, overrideType OverrideType) (map[string]map[string]string, error) {
 	resourceHeaders := make(map[string]map[string]string)
-	query, _ := ctx.Value(QueryContextKey).(*arkv1alpha1.Query)
 
 	for _, override := range overrides {
 		if override.ResourceType != string(overrideType) {
 			continue
 		}
 
-		resolvedHeaders, err := ResolveHeadersWithQuery(ctx, k8sClient, override.Headers, namespace, query)
+		resolvedHeaders, err := ResolveHeaders(ctx, k8sClient, override.Headers, namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve headers for overrideType %s: %w", overrideType, err)
 		}
