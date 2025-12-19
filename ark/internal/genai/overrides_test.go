@@ -906,3 +906,68 @@ func TestResolveHeadersWithQuery(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveHeaderValue(t *testing.T) {
+	tests := []struct {
+		name           string
+		header         arkv1alpha1.Header
+		objects        []client.Object
+		namespace      string
+		want           string
+		wantErr        bool
+		wantErrContain string
+	}{
+		{
+			name: "direct value",
+			header: arkv1alpha1.Header{
+				Name: "X-Custom",
+				Value: arkv1alpha1.HeaderValue{
+					Value: "direct-value",
+				},
+			},
+			namespace: "default",
+			want:      "direct-value",
+		},
+		{
+			name: "value from secret",
+			header: arkv1alpha1.Header{
+				Name: "Authorization",
+				Value: arkv1alpha1.HeaderValue{
+					ValueFrom: &arkv1alpha1.HeaderValueSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "api-secret"},
+							Key:                  "token",
+						},
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: "api-secret", Namespace: "default"},
+					Data:       map[string][]byte{"token": []byte("secret-token")},
+				},
+			},
+			namespace: "default",
+			want:      "secret-token",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeClient := setupTestClient(tt.objects)
+			ctx := context.Background()
+			got, err := ResolveHeaderValue(ctx, fakeClient, tt.header, tt.namespace)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.wantErrContain != "" {
+					require.ErrorContains(t, err, tt.wantErrContain)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
