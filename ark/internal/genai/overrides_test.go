@@ -914,6 +914,7 @@ func TestResolveHeaderValue(t *testing.T) {
 	tests := []struct {
 		name           string
 		header         arkv1alpha1.Header
+		query          *arkv1alpha1.Query
 		objects        []client.Object
 		namespace      string
 		want           string
@@ -953,12 +954,60 @@ func TestResolveHeaderValue(t *testing.T) {
 			namespace: "default",
 			want:      "secret-token",
 		},
+		{
+			name: "missing value and valueFrom fails",
+			header: arkv1alpha1.Header{
+				Name:  "X-Empty",
+				Value: arkv1alpha1.HeaderValue{},
+			},
+			namespace:      "default",
+			wantErr:        true,
+			wantErrContain: "header value must specify either value or valueFrom",
+		},
+		{
+			name: "valueFrom with no valid source fails",
+			header: arkv1alpha1.Header{
+				Name: "X-Invalid",
+				Value: arkv1alpha1.HeaderValue{
+					ValueFrom: &arkv1alpha1.HeaderValueSource{},
+				},
+			},
+			namespace:      "default",
+			wantErr:        true,
+			wantErrContain: "header value must specify either value or valueFrom with a valid source",
+		},
+		{
+			name: "queryParameterRef with query context",
+			header: arkv1alpha1.Header{
+				Name: "X-User-ID",
+				Value: arkv1alpha1.HeaderValue{
+					ValueFrom: &arkv1alpha1.HeaderValueSource{
+						QueryParameterRef: &arkv1alpha1.QueryParameterReference{
+							Name: "userId",
+						},
+					},
+				},
+			},
+			query: &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-query", Namespace: "default"},
+				Spec: arkv1alpha1.QuerySpec{
+					Parameters: []arkv1alpha1.Parameter{
+						{Name: "userId", Value: "user-123"},
+					},
+				},
+			},
+			namespace: "default",
+			want:      "user-123",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeClient := setupTestClient(tt.objects)
 			ctx := context.Background()
+			if tt.query != nil {
+				ctx = context.WithValue(ctx, QueryContextKey, tt.query)
+			}
 			got, err := ResolveHeaderValue(ctx, fakeClient, tt.header, tt.namespace)
 
 			if tt.wantErr {
