@@ -53,10 +53,10 @@ func resolveQueryParameters(ctx context.Context, k8sClient client.Client, namesp
 }
 
 func resolveQueryValueFrom(ctx context.Context, k8sClient client.Client, namespace string, valueFrom *arkv1alpha1.ValueFromSource) (string, error) {
-	return resolveValueFromWithQuery(ctx, k8sClient, namespace, valueFrom, nil)
+	return resolveValueFrom(ctx, k8sClient, namespace, valueFrom)
 }
 
-func resolveValueFromWithQuery(ctx context.Context, k8sClient client.Client, namespace string, valueFrom *arkv1alpha1.ValueFromSource, query *arkv1alpha1.Query) (string, error) {
+func resolveValueFrom(ctx context.Context, k8sClient client.Client, namespace string, valueFrom *arkv1alpha1.ValueFromSource) (string, error) {
 	if valueFrom.ConfigMapKeyRef != nil {
 		return resolveConfigMapKeyRef(ctx, k8sClient, namespace, valueFrom.ConfigMapKeyRef)
 	}
@@ -64,7 +64,7 @@ func resolveValueFromWithQuery(ctx context.Context, k8sClient client.Client, nam
 		return resolveSecretKeyRef(ctx, k8sClient, namespace, valueFrom.SecretKeyRef)
 	}
 	if valueFrom.QueryParameterRef != nil {
-		return resolveQueryParameterRef(valueFrom.QueryParameterRef, query)
+		return resolveQueryParameterRef(ctx, valueFrom.QueryParameterRef)
 	}
 	return "", fmt.Errorf("no supported valueFrom source specified")
 }
@@ -95,7 +95,8 @@ func resolveSecretKeyRef(ctx context.Context, k8sClient client.Client, namespace
 	return string(value), nil
 }
 
-func resolveQueryParameterRef(ref *arkv1alpha1.QueryParameterReference, query *arkv1alpha1.Query) (string, error) {
+func resolveQueryParameterRef(ctx context.Context, ref *arkv1alpha1.QueryParameterReference) (string, error) {
+	query, _ := ctx.Value(QueryContextKey).(*arkv1alpha1.Query)
 	if query == nil {
 		return "", fmt.Errorf("queryParameterRef requires query context")
 	}

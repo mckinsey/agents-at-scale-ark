@@ -51,7 +51,7 @@ func (p *PartialToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolR
 		}
 
 		for _, param := range p.Partial.Parameters {
-			resolved, err := p.resolveParameter(ctx, param, query, data)
+			resolved, err := p.resolveParameter(ctx, param, data)
 			if err != nil {
 				return ToolResult{
 					ID:    call.ID,
@@ -83,9 +83,9 @@ func (p *PartialToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolR
 	return p.BaseExecutor.Execute(ctx, call)
 }
 
-func (p *PartialToolExecutor) resolveParameter(ctx context.Context, param arkv1alpha1.ToolFunction, query *arkv1alpha1.Query, templateData map[string]any) (string, error) {
+func (p *PartialToolExecutor) resolveParameter(ctx context.Context, param arkv1alpha1.ToolFunction, templateData map[string]any) (string, error) {
 	if param.ValueFrom != nil {
-		return resolveValueFromWithQuery(ctx, p.K8sClient, p.Namespace, param.ValueFrom, query)
+		return resolveValueFrom(ctx, p.K8sClient, p.Namespace, param.ValueFrom)
 	}
 	return common.ResolveTemplate(param.Value, templateData)
 }
