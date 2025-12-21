@@ -1,0 +1,34 @@
+/* Custom styles to reduce sidebar spacing */
+
+/* Reduce padding on sidebar links */
+.nextra-sidebar a {
+  padding-top: 0.1875rem !important;
+  padding-bottom: 0.1875rem !important;
+}
+
+/* Reduce padding on collapsible folder buttons */
+.nextra-sidebar button {
+  padding-top: 0.25rem !important;
+  padding-bottom: 0.25rem !important;
+}
+
+/* Reduce spacing for separator headings */
+.nextra-sidebar li[class*="mt-5"] {
+  margin-top: 0.5rem !important;
+}
+
+.nextra-sidebar li[class*="mb-2"] {
+  margin-bottom: 0.25rem !important;
+}
+
+/* Reduce gap between list items */
+.nextra-sidebar ul[class*="gap-1"] {
+  gap: 0.125rem !important;
+}
+
+/* Add minimal spacing to regular list items */
+.nextra-sidebar ul li:not([class*="mt-5"]) {
+  margin-top: 0.03125rem !important;
+  margin-bottom: 0.03125rem !important;
+}
+
