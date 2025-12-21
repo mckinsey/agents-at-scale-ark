@@ -10,6 +10,60 @@ Ark uses [Semantic Versioning](https://semver.org/). The technical details are i
 
 A detailed record of every change is documented in [`CHANGELOG.md`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/CHANGELOG.md).
 
+## v0.1.49
+
+### MCP Server Path Configuration
+
+Prior to `v0.1.49`, the Ark controller automatically appended `/mcp` or `/sse` to MCP server addresses based on the transport type. This prevented users from connecting to MCP servers with custom endpoint paths.
+
+From version `v0.1.49`, MCP server addresses are used exactly as specified. You must include the full path in your MCPServer configuration.
+
+This is a **breaking** change for existing MCPServer resources that rely on automatic path appending.
+
+**Symptoms after upgrade:**
+- MCPServer shows `Available=False`
+- Event: `Warning ClientCreationFailed Failed to create MCP client`
+- Condition reason: `ClientCreationFailed`
+
+**Migration:**
+
+Update your MCPServer resources to include the endpoint path:
+
+```yaml
+# Before (path auto-appended)
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: my-mcp-server
+        port: http
+  transport: http
+
+# After (explicit path required)
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: my-mcp-server
+        port: http
+        path: mcp    # Add this for HTTP transport
+  transport: http
+```
+
+For direct value addresses:
+
+```yaml
+# Before
+address:
+  value: "http://my-server:8080"
+
+# After
+address:
+  value: "http://my-server:8080/mcp"
+```
+
+Use `path: sse` for SSE transport.
+
 ## v0.1.34
 
 ### Agent Model References
