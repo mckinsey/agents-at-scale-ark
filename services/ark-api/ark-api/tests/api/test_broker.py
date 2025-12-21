@@ -311,6 +311,165 @@ class TestBrokerAPI(unittest.TestCase):
         self.assertIn("error", data)
         self.assertEqual(data["error"]["type"], "connection_error")
 
+    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
+    @patch('ark_api.api.v1.broker.httpx.AsyncClient')
+    def test_get_events_success(self, mock_async_client, mock_get_broker_url):
+        mock_get_broker_url.return_value = "http://broker:8080"
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"events": []}
+        mock_response.status_code = 200
+
+        mock_client_instance = AsyncMock()
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+
+        response = self.client.get("/v1/broker/events")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"events": []})
+
+    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
+    def test_get_events_memory_not_available(self, mock_get_broker_url):
+        mock_get_broker_url.return_value = None
+
+        response = self.client.get("/v1/broker/events?memory=unavailable")
+
+        self.assertEqual(response.status_code, 503)
+        data = response.json()
+        self.assertIn("error", data)
+        self.assertEqual(data["error"]["type"], "service_unavailable")
+
+    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
+    @patch('ark_api.api.v1.broker.httpx.AsyncClient')
+    def test_get_events_connection_error(self, mock_async_client, mock_get_broker_url):
+        mock_get_broker_url.return_value = "http://broker:8080"
+
+        mock_client_instance = AsyncMock()
+        mock_client_instance.get = AsyncMock(side_effect=httpx.ConnectError("Connection failed"))
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+
+        response = self.client.get("/v1/broker/events")
+
+        self.assertEqual(response.status_code, 503)
+        data = response.json()
+        self.assertIn("error", data)
+        self.assertEqual(data["error"]["type"], "connection_error")
+
+    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
+    @patch('ark_api.api.v1.broker.httpx.AsyncClient')
+    def test_get_events_generic_error(self, mock_async_client, mock_get_broker_url):
+        mock_get_broker_url.return_value = "http://broker:8080"
+
+        mock_client_instance = AsyncMock()
+        mock_client_instance.get = AsyncMock(side_effect=Exception("Generic error"))
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+
+        response = self.client.get("/v1/broker/events")
+
+        self.assertEqual(response.status_code, 500)
+        data = response.json()
+        self.assertIn("error", data)
+        self.assertEqual(data["error"]["type"], "server_error")
+
+    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
+    @patch('ark_api.api.v1.broker.proxy_sse_stream')
+    def test_get_events_watch(self, mock_proxy_sse, mock_get_broker_url):
+        mock_get_broker_url.return_value = "http://broker:8080"
+
+        async def mock_stream():
+            yield "data: event\n\n"
+
+        mock_proxy_sse.return_value = mock_stream()
+
+        response = self.client.get("/v1/broker/events?watch=true")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "text/event-stream; charset=utf-8")
+
+    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
+    @patch('ark_api.api.v1.broker.httpx.AsyncClient')
+    def test_get_events_with_query_id(self, mock_async_client, mock_get_broker_url):
+        mock_get_broker_url.return_value = "http://broker:8080"
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"events": [{"id": "1"}]}
+        mock_response.status_code = 200
+
+        mock_client_instance = AsyncMock()
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+
+        response = self.client.get("/v1/broker/events?query-id=query-123")
+
+        self.assertEqual(response.status_code, 200)
+        mock_client_instance.get.assert_called_once()
+        call_args = mock_client_instance.get.call_args[0][0]
+        self.assertIn("events/query-123", call_args)
+
+    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
+    @patch('ark_api.api.v1.broker.proxy_sse_stream')
+    def test_get_events_watch_with_query_id(self, mock_proxy_sse, mock_get_broker_url):
+        mock_get_broker_url.return_value = "http://broker:8080"
+
+        async def mock_stream():
+            yield "data: event\n\n"
+
+        mock_proxy_sse.return_value = mock_stream()
+
+        response = self.client.get("/v1/broker/events?watch=true&query-id=query-123")
+
+        self.assertEqual(response.status_code, 200)
+        mock_proxy_sse.assert_called_once()
+        call_args = mock_proxy_sse.call_args[0][0]
+        self.assertIn("events/query-123", call_args)
+        self.assertIn("watch=true", call_args)
+
+    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
+    @patch('ark_api.api.v1.broker.httpx.AsyncClient')
+    def test_purge_events_success(self, mock_async_client, mock_get_broker_url):
+        mock_get_broker_url.return_value = "http://broker:8080"
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"success": True}
+        mock_response.status_code = 200
+
+        mock_client_instance = AsyncMock()
+        mock_client_instance.delete = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+
+        response = self.client.delete("/v1/broker/events")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"success": True})
+
+    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
+    def test_purge_events_memory_not_available(self, mock_get_broker_url):
+        mock_get_broker_url.return_value = None
+
+        response = self.client.delete("/v1/broker/events?memory=unavailable")
+
+        self.assertEqual(response.status_code, 503)
+        data = response.json()
+        self.assertIn("error", data)
+        self.assertEqual(data["error"]["type"], "service_unavailable")
+
+    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
+    @patch('ark_api.api.v1.broker.httpx.AsyncClient')
+    def test_purge_events_connection_error(self, mock_async_client, mock_get_broker_url):
+        mock_get_broker_url.return_value = "http://broker:8080"
+
+        mock_client_instance = AsyncMock()
+        mock_client_instance.delete = AsyncMock(side_effect=httpx.ConnectError("Connection failed"))
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+
+        response = self.client.delete("/v1/broker/events")
+
+        self.assertEqual(response.status_code, 503)
+        data = response.json()
+        self.assertIn("error", data)
+        self.assertEqual(data["error"]["type"], "connection_error")
+
 
 class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
 
