@@ -173,11 +173,41 @@ Hub pages should:
 
 ## Writing Guidelines
 
-- Be concise and direct
-- Use simple language
-- Keep descriptions to 1-2 sentences
-- Use active voice: "Creates agent" not "Agent is created"
-- Write "Ark" not "ARK"
+### General Style
+- Be concise and direct.
+- Use simple language.
+- Keep descriptions to 1-2 sentences.
+- Use active voice: "Creates agent" not "Agent is created".
+- Write "Ark" not "ARK".
+- Use US English.
+- Use Oxford commas in lists.
+
+### Bullets
+- Capitalize the first word and end with a period.
+- Use numbered lists only for sequences of instructions or when referencing items later.
+
+### Capitalization
+- Capitalize only proper nouns (product names, tools, services).
+- Use sentence case for titles: "An introduction to data visualization" not "An Introduction to Data Visualization".
+- Don't capitalize: cloud, internet, machine learning, advanced analytics.
+
+### Headings
+- Avoid gerunds: "Get started" not "Getting started", "Customize a layout" not "Customizing a layout".
+- Keep titles short and descriptive for search discoverability.
+
+### Instructions
+- Use imperatives: "Complete the configuration steps."
+- Don't use "please".
+- Don't use passive tense: "Complete the steps" not "The steps should be completed."
+
+### Links
+- Make hyperlinks descriptive: `Learn how to [contribute to Ark](url).`
+- Don't write: `To contribute, see [here](url).`
+
+### Avoid
+- Gerunds in headings.
+- Colloquialisms (may not translate across regions/languages).
+- Business speak: "leverage", "utilize", "facilitate".
 
 ### What NOT to Mix
 
