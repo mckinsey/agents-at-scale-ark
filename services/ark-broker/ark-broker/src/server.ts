@@ -3,15 +3,18 @@ import cors from 'cors';
 import { MemoryStore } from './memory-store.js';
 import { StreamStore } from './stream-store.js';
 import { TraceStore } from './trace-store.js';
+import { EventStore } from './event-store.js';
 import { createMemoryRouter } from './routes/memory.js';
 import { createStreamRouter } from './routes/stream.js';
 import { createTracesRouter } from './routes/traces.js';
+import { createEventsRouter } from './routes/events.js';
 import { createOTLPRouter } from './routes/otlp.js';
 
 const app = express();
 const memory = new MemoryStore();
 const stream = new StreamStore();
 const traces = new TraceStore();
+const events = new EventStore();
 
 // Middleware
 app.use(cors());
@@ -119,6 +122,7 @@ app.get('/stream-statistics', (req, res) => {
 app.use('/', createMemoryRouter(memory));
 app.use('/stream', createStreamRouter(stream));
 app.use('/traces', createTracesRouter(traces));
+app.use('/events', createEventsRouter(events));
 app.use('/v1', createOTLPRouter(traces));
 
 // Error handling
@@ -133,4 +137,4 @@ app.use((req, res) => {
 });
 
 export default app;
-export { memory, stream, traces };
+export { memory, stream, traces, events };

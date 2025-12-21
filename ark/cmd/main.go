@@ -93,8 +93,8 @@ func main() {
 		}
 	}()
 
-	// Initialize eventing provider
-	eventingProvider := eventingconfig.NewProvider(mgr)
+	// Initialize eventing provider with direct client for broker discovery
+	eventingProvider := eventingconfig.NewProvider(mgr, directClient)
 
 	setupControllers(mgr, telemetryProvider, eventingProvider)
 	setupWebhooks(mgr)

@@ -14,10 +14,10 @@ type a2aRecorder struct {
 	operations.OperationTracker
 }
 
-func NewA2aRecorder(emitter eventing.EventEmitter) eventing.A2aRecorder {
+func NewA2aRecorder(emitter, operationEmitter eventing.EventEmitter) eventing.A2aRecorder {
 	return &a2aRecorder{
 		emitter:          emitter,
-		OperationTracker: operations.NewOperationTracker(emitter),
+		OperationTracker: operations.NewOperationTracker(operationEmitter),
 	}
 }
 

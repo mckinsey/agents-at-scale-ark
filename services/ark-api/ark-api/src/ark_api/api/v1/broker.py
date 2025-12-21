@@ -279,3 +279,79 @@ async def purge_traces(
             content={"error": {"message": str(e), "type": "server_error"}},
             status_code=500,
         )
+
+
+@router.get("/events")
+async def get_events(
+    watch: bool = Query(False, description="Stream events via SSE"),
+    query_id: str = Query(None, alias="query-id", description="Filter by query ID"),
+    memory: str = Query("default", description="Memory resource name"),
+):
+    """Get or stream operation events from the broker."""
+    broker_url = await get_broker_url(memory)
+    if not broker_url:
+        return JSONResponse(
+            content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
+            status_code=503,
+        )
+
+    if watch:
+        url = f"{broker_url}/events?watch=true"
+        if query_id:
+            url = f"{broker_url}/events/{query_id}?watch=true"
+        logger.info(f"Proxying events SSE stream from {url}")
+        return StreamingResponse(
+            proxy_sse_stream(url),
+            media_type="text/event-stream",
+            headers=sse_headers,
+        )
+
+    try:
+        async with httpx.AsyncClient() as client:
+            url = f"{broker_url}/events"
+            if query_id:
+                url = f"{broker_url}/events/{query_id}"
+            response = await client.get(url)
+            return JSONResponse(content=response.json(), status_code=response.status_code)
+    except httpx.ConnectError as e:
+        logger.error(f"Failed to connect to broker: {e}")
+        return JSONResponse(
+            content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
+            status_code=503,
+        )
+    except Exception as e:
+        logger.error(f"Error fetching events: {e}")
+        return JSONResponse(
+            content={"error": {"message": str(e), "type": "server_error"}},
+            status_code=500,
+        )
+
+
+@router.delete("/events")
+async def purge_events(
+    memory: str = Query("default", description="Memory resource name"),
+):
+    """Purge all events from the broker."""
+    broker_url = await get_broker_url(memory)
+    if not broker_url:
+        return JSONResponse(
+            content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
+            status_code=503,
+        )
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.delete(f"{broker_url}/events")
+            return JSONResponse(content=response.json(), status_code=response.status_code)
+    except httpx.ConnectError as e:
+        logger.error(f"Failed to connect to broker: {e}")
+        return JSONResponse(
+            content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
+            status_code=503,
+        )
+    except Exception as e:
+        logger.error(f"Error purging events: {e}")
+        return JSONResponse(
+            content={"error": {"message": str(e), "type": "server_error"}},
+            status_code=500,
+        )

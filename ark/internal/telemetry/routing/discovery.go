@@ -158,7 +158,7 @@ func buildEndpoint(namespace string, serviceRef ServiceRef) (string, error) {
 		port = "443"
 	}
 
-	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:%s/v1/traces",
+	endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:%s",
 		serviceRef.Name, namespace, port)
 
 	return endpoint, nil
