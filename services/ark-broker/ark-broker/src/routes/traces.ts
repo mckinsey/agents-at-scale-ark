@@ -19,12 +19,16 @@ export function createTracesRouter(traces: TraceStore): Router {
       });
     } else {
       try {
+        const limit = parseInt(req.query['limit'] as string) || 50;
+        const offset = parseInt(req.query['offset'] as string) || 0;
+
         const allTraces = traces.getAllTraces();
-        res.json({
-          total_traces: Object.keys(allTraces).length,
-          total_spans: traces.getAllSpans().length,
-          trace_ids: traces.getTraceIds()
-        });
+        const traceList = Object.entries(allTraces)
+          .map(([traceId, spans]) => ({ traceId, spans }))
+          .reverse()
+          .slice(offset, offset + limit);
+
+        res.json(traceList);
       } catch (error) {
         console.error('[TRACES] Failed to get traces:', error);
         const err = error as Error;
@@ -56,11 +60,7 @@ export function createTracesRouter(traces: TraceStore): Router {
           res.status(404).json({ error: 'Trace not found' });
           return;
         }
-        res.json({
-          trace_id,
-          span_count: spans.length,
-          spans
-        });
+        res.json({ traceId: trace_id, spans });
       } catch (error) {
         console.error(`[TRACES] Failed to get trace ${trace_id}:`, error);
         const err = error as Error;

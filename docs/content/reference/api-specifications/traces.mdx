@@ -1,0 +1,100 @@
+# Traces
+
+OTEL (OpenTelemetry) traces capture the execution flow of queries. A trace contains multiple spans - each span represents an operation like an LLM call or tool execution.
+
+When a query runs in a namespace with a configured broker, the Ark controller sends all trace data to the broker's OTLP endpoint. The [Ark Broker](/developer-guide/services/ark-broker) provides an implementation of these APIs.
+
+## Accessing the API
+
+Port-forward to the broker service, then access the OpenAPI spec at `/openapi.json` or Swagger UI at `/api-docs`.
+
+## Ingesting Traces
+
+The broker exposes a [standard OTLP/HTTP endpoint](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/) at `POST /v1/traces`, accepting both protobuf and JSON. gRPC is not yet implemented. The broker groups spans by their `traceId`.
+
+```
+POST /v1/traces
+
+{ "resourceSpans": [{ "scopeSpans": [{ "spans": [...] }] }] }
+```
+
+## Retrieving Traces
+
+Retrieve traces via the `traces` endpoint:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /traces` | List all traces (newest first) |
+| `GET /traces?limit=50` | List up to 50 traces |
+| `GET /traces?limit=50&offset=50` | List next 50 traces (page 2) |
+| `GET /traces/:traceId` | Get a single trace |
+
+```
+# List recent traces (default limit 50).
+GET /traces?limit=50
+
+[
+  { "traceId": "abc123", "spans": [
+    { "spanId": "span1", "name": "query.execute", ... },
+    { "spanId": "span2", "parentSpanId": "span1", "name": "llm.chat", ... }
+  ]},
+  { "traceId": "def456", "spans": [...] },
+  ...
+]
+
+# Get a single trace.
+GET /traces/abc123
+
+{ "traceId": "abc123", "spans": [
+  { "spanId": "span1", "name": "query.execute", ... },
+  { "spanId": "span2", "parentSpanId": "span1", "name": "llm.chat", ... }
+]}
+```
+
+Traces can be streamed via SSE with the `watch=true` parameter:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /traces?watch=true` | Stream all new spans |
+| `GET /traces/:traceId?watch=true&from-beginning=true` | Stream spans for a trace (including existing) |
+
+```
+# Stream all incoming traces/spans.
+GET /traces?watch=true
+
+data: {"traceId":"abc123","spanId":"span1","name":"llm.chat",...}
+data: {"traceId":"abc123","spanId":"span2","name":"tool.execute",...}
+data: {"traceId":"def456","spanId":"span1","name":"query.execute",...}
+```
+
+The `from_beginning` parameter can be used to return spans that have already
+been emitted for a trace before new spans come in, useful for a single view of
+all spans for a trace:
+
+```
+# Stream all incoming spans for a trace, and start the stream with each span
+# that had already been recordede.
+GET /traces/abc123?watch=true&from_beginning=true
+
+data: {"traceId":"abc123","spanId":"span0","name":"llm.chat",...}
+data: {"traceId":"abc123","spanId":"span1","name":"llm.chat",...}
+data: {"traceId":"abc123","spanId":"span2","name":"tool.execute",...}
+```
+
+## Loading and Streaming
+
+To display recent traces and keep up to date with new ones, use two calls:
+
+```
+# 1. Load recent traces.
+GET /traces?limit=50
+
+# 2. Stream new spans as they arrive.
+GET /traces?watch=true
+```
+
+Note: Streaming all spans without a trace ID filter (`GET /traces?watch=true`) is still experimental.
+
+## Purging
+
+`DELETE /traces` clears all trace data.

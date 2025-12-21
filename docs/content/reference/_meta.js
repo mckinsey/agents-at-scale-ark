@@ -1,4 +1,5 @@
 export default {
+  'api-specifications': 'API Specifications',
   'ark-apis': 'Ark APIs',
   contributors: 'Contributors',
   crds: 'Custom Resource Definitions',
