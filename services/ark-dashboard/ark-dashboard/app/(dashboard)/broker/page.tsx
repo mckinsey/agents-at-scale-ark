@@ -26,12 +26,55 @@ interface StreamEntry {
   data: unknown;
 }
 
-function useSSEStream(endpoint: string, memory: string) {
-  const [entries, setEntries] = useState<StreamEntry[]>([]);
+const PAGE_SIZE = 100;
+
+function useSSEStream(endpoint: string, memory: string, enableInitialFetch = false) {
+  const [streamedEntries, setStreamedEntries] = useState<StreamEntry[]>([]);
+  const [fetchedEntries, setFetchedEntries] = useState<StreamEntry[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(enableInitialFetch);
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const fetchedOffsetRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const fetchTraces = useCallback(async (offset: number) => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
+
+    setIsLoading(true);
+    try {
+      const url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=${PAGE_SIZE}&offset=${offset}`;
+      const response = await fetch(url, { signal: abortControllerRef.current.signal });
+      const data = await response.json();
+      if (data.error) {
+        setError(data.error.message || 'Fetch error');
+        return;
+      }
+      const newEntries: StreamEntry[] = (data as unknown[]).map((item, i) => ({
+        id: `fetched-${offset + i}-${Math.random().toString(36).substring(2, 11)}`,
+        timestamp: new Date().toISOString(),
+        data: item,
+      }));
+      setFetchedEntries(prev => [...prev, ...newEntries]);
+      setHasMore(newEntries.length === PAGE_SIZE);
+      fetchedOffsetRef.current = offset + newEntries.length;
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') {
+        setError('Failed to fetch traces');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [endpoint, memory]);
+
+  const loadMore = useCallback(() => {
+    if (!isLoading && hasMore) {
+      fetchTraces(fetchedOffsetRef.current);
+    }
+  }, [fetchTraces, isLoading, hasMore]);
 
   const connect = useCallback(() => {
     if (eventSourceRef.current) {
@@ -64,7 +107,7 @@ function useSSEStream(endpoint: string, memory: string) {
           timestamp: new Date().toISOString(),
           data,
         };
-        setEntries(prev => [entry, ...prev.slice(0, 99)]);
+        setStreamedEntries(prev => [entry, ...prev.slice(0, 499)]);
       } catch {
         console.error('Failed to parse SSE data:', event.data);
       }
@@ -92,31 +135,48 @@ function useSSEStream(endpoint: string, memory: string) {
   }, []);
 
   const clear = useCallback(() => {
-    setEntries([]);
+    setStreamedEntries([]);
+    setFetchedEntries([]);
+    fetchedOffsetRef.current = 0;
+    setHasMore(true);
   }, []);
 
   useEffect(() => {
+    if (enableInitialFetch) {
+      fetchTraces(0);
+    }
     connect();
-    return () => disconnect();
-  }, [connect, disconnect]);
+    return () => {
+      disconnect();
+      abortControllerRef.current?.abort();
+    };
+  }, [connect, disconnect, fetchTraces, enableInitialFetch]);
 
-  return { entries, isConnected, error, clear };
+  const entries = [...streamedEntries, ...fetchedEntries];
+
+  return { entries, isConnected, isLoading, hasMore, error, clear, loadMore };
 }
 
 interface StreamViewProps {
   title: string;
   entries: StreamEntry[];
   isConnected: boolean;
+  isLoading?: boolean;
+  hasMore?: boolean;
   error: string | null;
   onClear: () => void;
+  onLoadMore?: () => void;
 }
 
 function StreamView({
   title,
   entries,
   isConnected,
+  isLoading,
+  hasMore,
   error,
   onClear,
+  onLoadMore,
 }: StreamViewProps) {
   const [autoScroll, setAutoScroll] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -175,27 +235,36 @@ function StreamView({
               Waiting for data...
             </div>
           ) : (
-            entries.map(entry => {
-              const isExpanded = expandedIds.has(entry.id);
-              return (
-                <div
-                  key={entry.id}
-                  className="border-border mb-1 cursor-pointer border-b pb-1 last:border-b-0"
-                  onClick={() => toggleExpanded(entry.id)}>
-                  <div className="text-muted-foreground hover:text-foreground mb-0.5 flex items-center gap-1 text-[10px]">
-                    <span className="inline-block w-2 text-center">
-                      {isExpanded ? '▼' : '▶'}
-                    </span>
-                    <span>{entry.timestamp}</span>
+            <>
+              {entries.map(entry => {
+                const isExpanded = expandedIds.has(entry.id);
+                return (
+                  <div
+                    key={entry.id}
+                    className="border-border mb-1 cursor-pointer border-b pb-1 last:border-b-0"
+                    onClick={() => toggleExpanded(entry.id)}>
+                    <div className="text-muted-foreground hover:text-foreground mb-0.5 flex items-center gap-1 text-[10px]">
+                      <span className="inline-block w-2 text-center">
+                        {isExpanded ? '▼' : '▶'}
+                      </span>
+                      <span>{entry.timestamp}</span>
+                    </div>
+                    {isExpanded && (
+                      <pre className="break-all whitespace-pre-wrap">
+                        {JSON.stringify(entry.data, null, 2)}
+                      </pre>
+                    )}
                   </div>
-                  {isExpanded && (
-                    <pre className="break-all whitespace-pre-wrap">
-                      {JSON.stringify(entry.data, null, 2)}
-                    </pre>
-                  )}
+                );
+              })}
+              {onLoadMore && hasMore && (
+                <div className="flex justify-center py-2">
+                  <Button variant="outline" size="sm" onClick={onLoadMore} disabled={isLoading}>
+                    {isLoading ? 'Loading...' : 'Load more'}
+                  </Button>
                 </div>
-              );
-            })
+              )}
+            </>
           )}
         </div>
       </CardContent>
@@ -208,7 +277,7 @@ export default function BrokerPage() {
   const [selectedMemory, setSelectedMemory] = useState<string>('default');
   const [loading, setLoading] = useState(true);
 
-  const traces = useSSEStream('/v1/broker/traces', selectedMemory);
+  const traces = useSSEStream('/v1/broker/traces', selectedMemory, true);
   const messages = useSSEStream('/v1/broker/messages', selectedMemory);
   const chunks = useSSEStream('/v1/broker/chunks', selectedMemory);
 
@@ -266,8 +335,11 @@ export default function BrokerPage() {
               title="OTEL Traces"
               entries={traces.entries}
               isConnected={traces.isConnected}
+              isLoading={traces.isLoading}
+              hasMore={traces.hasMore}
               error={traces.error}
               onClear={traces.clear}
+              onLoadMore={traces.loadMore}
             />
           </TabsContent>
           <TabsContent value="messages" className="mt-4 flex-1">

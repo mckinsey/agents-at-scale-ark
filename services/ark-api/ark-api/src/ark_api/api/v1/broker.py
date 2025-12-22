@@ -80,6 +80,8 @@ sse_headers = {
 async def get_traces(
     watch: bool = Query(False, description="Stream traces via SSE"),
     memory: str = Query("default", description="Memory resource name"),
+    limit: int = Query(100, description="Max traces to return"),
+    offset: int = Query(0, description="Number of traces to skip"),
 ):
     """Get or stream OTEL traces from the broker."""
     broker_url = await get_broker_url(memory)
@@ -100,7 +102,7 @@ async def get_traces(
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{broker_url}/traces")
+            response = await client.get(f"{broker_url}/traces?limit={limit}&offset={offset}")
             return JSONResponse(content=response.json(), status_code=response.status_code)
     except httpx.ConnectError as e:
         logger.error(f"Failed to connect to broker: {e}")

@@ -1,16 +1,26 @@
 import { EventEmitter } from 'events';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { JsonFileStore } from './json-file-store';
+
+interface StoredChunk {
+  queryID: string;
+  chunk: any;
+  complete?: boolean;
+}
 
 export class StreamStore {
-  private streamChunks: Map<string, any[]> = new Map();
-  private completedStreams: Set<string> = new Set();
-  private readonly streamFilePath?: string;
+  private chunks: StoredChunk[] = [];
+  private fileStore: JsonFileStore<StoredChunk[]>;
   public eventEmitter: EventEmitter = new EventEmitter();
 
   constructor() {
-    this.streamFilePath = process.env.STREAM_FILE_PATH;
-    this.loadFromFile();
+    const maxChunks = process.env.MAX_CHUNKS ? parseInt(process.env.MAX_CHUNKS, 10) : 0;
+    this.fileStore = new JsonFileStore<StoredChunk[]>(
+      'Stream',
+      process.env.STREAM_FILE_PATH,
+      (d) => d.length,
+      maxChunks
+    );
+    this.chunks = this.fileStore.load() ?? [];
   }
 
   addStreamChunk(queryID: string, chunk: any): void {
@@ -35,16 +45,12 @@ export class StreamStore {
   }
 
   completeQueryStream(queryID: string): void {
-    // Mark query as complete
     this.completedStreams.add(queryID);
-    // Add a [DONE] marker to the chunks
     this.addStreamChunk(queryID, '[DONE]');
-    // Notify any active listeners
     this.eventEmitter.emit(`complete:${queryID}`);
-    // Save to file
-    this.saveToFile();
+    this.save();
   }
-  
+
   isStreamComplete(queryID: string): boolean {
     return this.completedStreams.has(queryID);
   }
@@ -68,64 +74,15 @@ export class StreamStore {
   purge(): void {
     this.streamChunks.clear();
     this.completedStreams.clear();
-    this.saveToFile();
-    console.log('[STREAM PURGE] Cleared all stream chunks and completion states');
+    this.save();
+    console.log('[Stream] purged');
   }
 
-  private loadFromFile(): void {
-    if (!this.streamFilePath) {
-      console.log('[STREAM LOAD] File persistence disabled - streams will not be saved');
-      return;
-    }
-
-    try {
-      if (existsSync(this.streamFilePath)) {
-        const data = readFileSync(this.streamFilePath, 'utf-8');
-        const parsed = JSON.parse(data);
-        
-        if (parsed && typeof parsed === 'object') {
-          // Load stream chunks
-          if (parsed.streams) {
-            this.streamChunks = new Map(Object.entries(parsed.streams));
-          }
-          // Load completed streams
-          if (parsed.completed && Array.isArray(parsed.completed)) {
-            this.completedStreams = new Set(parsed.completed);
-          }
-          console.log(`[STREAM LOAD] Loaded ${this.streamChunks.size} query streams (${this.completedStreams.size} completed) from ${this.streamFilePath}`);
-        } else {
-          console.warn('[STREAM LOAD] Invalid data format in stream file, starting fresh');
-        }
-      } else {
-        console.log(`[STREAM LOAD] Stream file not found at ${this.streamFilePath}, starting with 0 streams`);
-      }
-    } catch (error) {
-      console.error(`[STREAM LOAD] Failed to load streams from file: ${error}`);
-    }
-  }
-
-  private saveToFile(): void {
-    if (!this.streamFilePath) return;
-
-    try {
-      const dir = dirname(this.streamFilePath);
-      if (!existsSync(dir)) {
-        mkdirSync(dir, { recursive: true });
-      }
-
-      // Convert Map and Set to plain objects for JSON serialization
-      const dataToSave = {
-        streams: Object.fromEntries(this.streamChunks),
-        completed: Array.from(this.completedStreams)
-      };
-      writeFileSync(this.streamFilePath, JSON.stringify(dataToSave, null, 2));
-      console.log(`[STREAM SAVE] Saved ${this.streamChunks.size} query streams (${this.completedStreams.size} completed) to ${this.streamFilePath}`);
-    } catch (error) {
-      console.error(`[STREAM SAVE] Failed to save streams to file: ${error}`);
-    }
-  }
-
-  public saveStreams(): void {
-    this.saveToFile();
+  save(): void {
+    this.applyLimit();
+    this.fileStore.save({
+      streams: Object.fromEntries(this.streamChunks),
+      completed: Array.from(this.completedStreams)
+    });
   }
 }
