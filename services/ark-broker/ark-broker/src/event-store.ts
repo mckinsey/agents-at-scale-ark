@@ -1,17 +1,35 @@
+/**
+ * Operation event emitted by the Ark controller during query lifecycle.
+ * Events track operation start, completion, and failure states.
+ */
 export interface Event {
+  /** ISO 8601 timestamp when the event was created */
   timestamp: string;
+  /** Event type (Normal, Warning) */
   eventType: string;
+  /** Short reason code for the event (e.g., OperationStarted, OperationCompleted, OperationFailed) */
   reason: string;
+  /** Human-readable event message */
   message: string;
+  /** Structured event data containing context and metadata */
   data: {
+    /** Unique identifier for the query that generated this event */
     queryId: string;
+    /** Name of the query resource */
     queryName: string;
+    /** Kubernetes namespace containing the query */
     queryNamespace: string;
+    /** Session identifier for grouping related operations */
     sessionId: string;
+    /** Optional conversation identifier for multi-turn interactions */
     conversationId?: string;
+    /** Operation name being tracked (e.g., tool execution, model invocation) */
     operation?: string;
+    /** Duration of completed operations in milliseconds */
     durationMs?: string;
+    /** Error message for failed operations */
     error?: string;
+    /** Additional event-specific metadata */
     [key: string]: any;
   };
 }
