@@ -80,7 +80,6 @@ export function AppSidebar() {
   const setExperimentalFeaturesDialogOpen = useSetAtom(
     experimentalFeaturesDialogOpenAtom,
   );
-  const isFilesBrowserAvailable = useAtomValue(isFilesBrowserAvailableAtom);
   const setIsFilesBrowserAvailable = useSetAtom(isFilesBrowserAvailableAtom);
 
   const {
@@ -145,6 +144,8 @@ export function AppSidebar() {
     switch (item.enablerFeature) {
       case A2A_TASKS_FEATURE_KEY:
         return isA2ATasksEnabled;
+      case BROKER_FEATURE_KEY:
+        return isBrokerEnabled;
       case FILES_BROWSER_FEATURE_KEY:
         return true;
       default:

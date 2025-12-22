@@ -80,7 +80,7 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
     const {
       data: listFilesData,
       isLoading: listFilesLoading,
-      isFetching: listFilesFetching,
+      isFetching: _listFilesFetching,
       isError: listFilesError,
       error: listFilesErrorObject,
       refetch: loadFiles,
@@ -111,13 +111,6 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
         });
       }
     }, [listFilesError, listFilesData, listFilesErrorObject]);
-
-    const handlePrefixSearch = () => {
-      setPrefix(prefixInput);
-      setAllFiles([]);
-      setAllDirectories([]);
-      setNextToken(undefined);
-    };
 
     const handleNavigateToDirectory = (dirPrefix: string) => {
       setPrefix(dirPrefix);
