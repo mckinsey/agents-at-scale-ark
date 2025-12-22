@@ -1,14 +1,22 @@
 export default {
-  dashboard: "Running the Dashboard",
-  "starting-new-project": "Starting a New Agentic Project",
-  "starting-new-project-example": "  └─ Complete Worked Example",
-  models: " Creating and Managing Models",
-  agents: "Creating and Managing Agents",
-  teams: "Creating and Managing Teams",
-  queries: "Creating Queries",
-  tools: "Creating Tools and MCP Servers",
-  "ark-cli": "The Ark CLI",
-  "tips-on-building-agentic-use-cases": "Tips on Building Agentic Use Cases",
-  samples: "Samples",
-  "experimental-features": "⚠️ Experimental Features",
-};
+  '---getting-started': { type: 'separator', title: 'Getting started' },
+  dashboard: 'Running the Dashboard',
+  'starting-new-project': 'Starting a New Agentic Project',
+  'starting-new-project-example': 'Complete Worked Example',
+
+  '---build': { type: 'separator', title: 'Build with ARK' },
+  models: 'Creating and Managing Models',
+  agents: 'Creating and Managing Agents',
+  teams: 'Creating and Managing Teams',
+  queries: 'Creating Queries',
+  tools: 'Creating Tools and MCP Servers',
+  'ark-cli': 'The Ark CLI',
+
+  '---patterns': { type: 'separator', title: 'Patterns and guidance' },
+  'tips-on-building-agentic-use-cases': 'Tips on Building Agentic Use Cases',
+  samples: 'Samples',
+
+  '---advanced': { type: 'separator', title: 'Advanced' },
+  'experimental-features': '⚠️ Experimental Features',
+  overrides: 'Overrides'
+}
