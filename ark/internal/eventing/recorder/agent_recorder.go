@@ -14,10 +14,10 @@ type agentRecorder struct {
 	operations.OperationTracker
 }
 
-func NewAgentRecorder(emitter eventing.EventEmitter) eventing.AgentRecorder {
+func NewAgentRecorder(emitter, operationEmitter eventing.EventEmitter) eventing.AgentRecorder {
 	return &agentRecorder{
 		emitter:          emitter,
-		OperationTracker: operations.NewOperationTracker(emitter),
+		OperationTracker: operations.NewOperationTracker(operationEmitter),
 	}
 }
 

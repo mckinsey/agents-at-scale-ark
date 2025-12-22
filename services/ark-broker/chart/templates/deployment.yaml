@@ -46,6 +46,10 @@ spec:
             - name: MAX_SPANS
               value: {{ .Values.limits.maxSpans | quote }}
             {{- end }}
+            {{- if .Values.limits.maxEvents }}
+            - name: MAX_EVENTS
+              value: {{ .Values.limits.maxEvents | quote }}
+            {{- end }}
             {{- if .Values.persistence.enabled }}
             - name: MEMORY_FILE_PATH
               value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.memoryFileName }}"
@@ -53,6 +57,8 @@ spec:
               value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.streamFileName }}"
             - name: TRACE_FILE_PATH
               value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.traceFileName }}"
+            - name: EVENT_FILE_PATH
+              value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.eventFileName }}"
             {{- end }}
           {{- if .Values.persistence.enabled }}
           volumeMounts:

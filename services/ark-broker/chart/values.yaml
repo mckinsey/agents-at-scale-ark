@@ -12,7 +12,7 @@ app:
     repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-broker
     # tag defaults to .Chart.AppVersion if not specified
     pullPolicy: IfNotPresent
-  
+
   # Resource configuration
   resources:
     requests:
@@ -39,7 +39,7 @@ memory:
 
 # Store limits (0 = unlimited)
 # Each store persists to JSON. Limits prevent unbounded file growth.
-# Estimates: messages ~2KB, chunks ~500B, spans ~1KB each
+# Estimates: messages ~2KB, chunks ~500B, spans ~1KB, events ~500B each
 limits:
   # Max messages to persist (~100MB at 50k messages)
   maxMessages: 50000
@@ -47,6 +47,8 @@ limits:
   maxChunks: 200000
   # Max trace spans to persist (~100MB at 100k spans)
   maxSpans: 100000
+  # Max events to persist (~100MB at 200k events)
+  maxEvents: 200000
 
 # Streaming configuration
 streaming:
@@ -62,14 +64,16 @@ persistence:
   accessMode: ReadWriteOnce
   # Size of the persistent volume
   size: 1Gi
-  # Path where memory data will be stored
+  # Path where data will be stored
   mountPath: /data
   # Filename for the memory data
   memoryFileName: memory.json
   # Filename for the stream data
   streamFileName: stream.json
   # Filename for the trace data
-  traceFileName: trace.json
+  traceFileName: traces.json
+  # Filename for the event data
+  eventFileName: events.json
   # Use existing PVC instead of creating a new one
   existingClaim: ""
 

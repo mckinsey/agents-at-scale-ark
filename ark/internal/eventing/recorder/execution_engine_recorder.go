@@ -14,10 +14,10 @@ type executionEngineRecorder struct {
 	operations.OperationTracker
 }
 
-func NewExecutionEngineRecorder(emitter eventing.EventEmitter) eventing.ExecutionEngineRecorder {
+func NewExecutionEngineRecorder(emitter, operationEmitter eventing.EventEmitter) eventing.ExecutionEngineRecorder {
 	return &executionEngineRecorder{
 		emitter:          emitter,
-		OperationTracker: operations.NewOperationTracker(emitter),
+		OperationTracker: operations.NewOperationTracker(operationEmitter),
 	}
 }
 

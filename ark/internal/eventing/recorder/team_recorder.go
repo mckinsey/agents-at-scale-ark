@@ -12,10 +12,10 @@ type teamRecorder struct {
 	emitter eventing.EventEmitter
 }
 
-func NewTeamRecorder(emitter eventing.EventEmitter) eventing.TeamRecorder {
+func NewTeamRecorder(emitter, operationEmitter eventing.EventEmitter) eventing.TeamRecorder {
 	return &teamRecorder{
 		TokenCollector:   tokens.NewTokenCollector(),
-		OperationTracker: operations.NewOperationTracker(emitter),
+		OperationTracker: operations.NewOperationTracker(operationEmitter),
 		emitter:          emitter,
 	}
 }

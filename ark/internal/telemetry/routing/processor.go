@@ -28,11 +28,12 @@ func NewRoutingSpanProcessor(ctx context.Context, endpoints []BrokerEndpoint) (*
 	}
 
 	for _, endpoint := range endpoints {
-		exporter, err := createExporter(ctx, endpoint.Endpoint)
+		otlpEndpoint := endpoint.Endpoint + "/v1/traces"
+		exporter, err := createExporter(ctx, otlpEndpoint)
 		if err != nil {
 			log.Error(err, "failed to create exporter",
 				"namespace", endpoint.Namespace,
-				"endpoint", endpoint.Endpoint)
+				"endpoint", otlpEndpoint)
 			continue
 		}
 

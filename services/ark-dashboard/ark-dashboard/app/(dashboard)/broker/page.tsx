@@ -280,6 +280,7 @@ export default function BrokerPage() {
   const traces = useSSEStream('/v1/broker/traces', selectedMemory, true);
   const messages = useSSEStream('/v1/broker/messages', selectedMemory);
   const chunks = useSSEStream('/v1/broker/chunks', selectedMemory);
+  const events = useSSEStream('/v1/broker/events', selectedMemory);
 
   useEffect(() => {
     async function fetchMemories() {
@@ -328,6 +329,7 @@ export default function BrokerPage() {
               <TabsTrigger value="traces">OTEL Traces</TabsTrigger>
               <TabsTrigger value="messages">Messages</TabsTrigger>
               <TabsTrigger value="chunks">LLM Chunks</TabsTrigger>
+              <TabsTrigger value="events">Events</TabsTrigger>
             </TabsList>
           </div>
           <TabsContent value="traces" className="mt-4 flex-1">
@@ -358,6 +360,15 @@ export default function BrokerPage() {
               isConnected={chunks.isConnected}
               error={chunks.error}
               onClear={chunks.clear}
+            />
+          </TabsContent>
+          <TabsContent value="events" className="mt-4 flex-1">
+            <StreamView
+              title="Operation Events"
+              entries={events.entries}
+              isConnected={events.isConnected}
+              error={events.error}
+              onClear={events.clear}
             />
           </TabsContent>
         </Tabs>

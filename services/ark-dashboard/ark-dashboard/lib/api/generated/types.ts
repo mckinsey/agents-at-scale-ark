@@ -1319,6 +1319,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/broker/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Events
+         * @description Get or stream operation events from the broker.
+         */
+        get: operations["get_events_v1_broker_events_get"];
+        put?: never;
+        post?: never;
+        /**
+         * Purge Events
+         * @description Purge all events from the broker.
+         */
+        delete: operations["purge_events_v1_broker_events_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openai/v1/chat/completions": {
         parameters: {
             query?: never;
@@ -7057,6 +7081,74 @@ export interface operations {
                 watch?: boolean;
                 /** @description Filter by query ID */
                 "query-id"?: string;
+                /** @description Memory resource name */
+                memory?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_events_v1_broker_events_get: {
+        parameters: {
+            query?: {
+                /** @description Stream events via SSE */
+                watch?: boolean;
+                /** @description Filter by query ID */
+                "query-id"?: string;
+                /** @description Memory resource name */
+                memory?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    purge_events_v1_broker_events_delete: {
+        parameters: {
+            query?: {
                 /** @description Memory resource name */
                 memory?: string;
             };
