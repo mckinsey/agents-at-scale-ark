@@ -46,7 +46,7 @@ spec:
       serviceRef:
         name: my-mcp-server
         port: http
-        path: mcp    # Add this for HTTP transport
+        path: /mcp   # Add this for HTTP transport
   transport: http
 ```
 
@@ -62,7 +62,7 @@ address:
   value: "http://my-server:8080/mcp"
 ```
 
-Use `path: sse` for SSE transport.
+Use `path: /sse` for SSE transport.
 
 ## v0.1.34
 
