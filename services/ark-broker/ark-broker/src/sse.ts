@@ -42,6 +42,8 @@ export const streamSSE = (options: SSEStreamOptions): void => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('Access-Control-Allow-Origin', '*');
 
+  res.write(': connected\n\n');
+
   const heartbeat = startSSEHeartbeat(res);
 
   let itemCount = 0;
