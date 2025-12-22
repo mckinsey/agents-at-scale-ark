@@ -40,7 +40,9 @@ func NewProvider(mgr ctrl.Manager, k8sClient client.Client) *Provider {
 
 		switch {
 		case err != nil:
-			log.Error(err, "failed to discover broker endpoints, using Kubernetes events for operations")
+			log.Error(err, "failed to discover broker endpoints, using Kubernetes events for operations",
+				"troubleshooting", "check RBAC permissions for listing ConfigMaps",
+				"configmap", "ark-config-broker")
 		case len(endpoints) > 0:
 			namespaces := make([]string, 0, len(endpoints))
 			for _, ep := range endpoints {
