@@ -1,3 +1,6 @@
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { dirname } from 'path';
+
 /**
  * Operation event emitted by the Ark controller during query lifecycle.
  * Events track operation start, completion, and failure states.
@@ -39,6 +42,12 @@ export class EventStore {
   private subscribers: Map<string, Set<(event: Event) => void>> = new Map();
   private allSubscribers: Set<(event: Event) => void> = new Set();
   private maxEvents = 10000;
+  private readonly eventFilePath?: string;
+
+  constructor() {
+    this.eventFilePath = process.env.EVENT_FILE_PATH;
+    this.loadFromFile();
+  }
 
   addEvent(event: Event): void {
     this.events.push(event);
@@ -104,6 +113,54 @@ export class EventStore {
 
   purge(): void {
     this.events = [];
-    console.log('Event store purged');
+    this.saveToFile();
+    console.log('[EVENT PURGE] Cleared all events');
+  }
+
+  private loadFromFile(): void {
+    if (!this.eventFilePath) {
+      console.log('[EVENT LOAD] File persistence disabled - events will not be saved');
+      return;
+    }
+
+    try {
+      if (existsSync(this.eventFilePath)) {
+        const data = readFileSync(this.eventFilePath, 'utf-8');
+        const parsed = JSON.parse(data);
+
+        if (parsed && Array.isArray(parsed.events)) {
+          this.events = parsed.events;
+          console.log(`[EVENT LOAD] Loaded ${this.events.length} events from ${this.eventFilePath}`);
+        } else {
+          console.warn('[EVENT LOAD] Invalid data format in event file, starting fresh');
+        }
+      } else {
+        console.log(`[EVENT LOAD] Event file not found at ${this.eventFilePath}, starting with 0 events`);
+      }
+    } catch (error) {
+      console.error(`[EVENT LOAD] Failed to load events from file: ${error}`);
+    }
+  }
+
+  private saveToFile(): void {
+    if (!this.eventFilePath) return;
+
+    try {
+      const dir = dirname(this.eventFilePath);
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+
+      const dataToSave = {
+        events: this.events
+      };
+      writeFileSync(this.eventFilePath, JSON.stringify(dataToSave, null, 2));
+    } catch (error) {
+      console.error(`[EVENT SAVE] Failed to save events to file: ${error}`);
+    }
+  }
+
+  public saveEvents(): void {
+    this.saveToFile();
   }
 }

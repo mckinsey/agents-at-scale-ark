@@ -59,12 +59,16 @@ persistence:
   accessMode: ReadWriteOnce
   # Size of the persistent volume
   size: 1Gi
-  # Path where memory data will be stored
+  # Path where data will be stored
   mountPath: /data
   # Filename for the memory data
   memoryFileName: memory.json
   # Filename for the stream data
   streamFileName: stream.json
+  # Filename for the trace data
+  traceFileName: traces.json
+  # Filename for the event data
+  eventFileName: events.json
   # Use existing PVC instead of creating a new one
   existingClaim: ""
 

@@ -49,6 +49,10 @@ spec:
               value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.memoryFileName }}"
             - name: STREAM_FILE_PATH
               value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.streamFileName }}"
+            - name: TRACE_FILE_PATH
+              value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.traceFileName }}"
+            - name: EVENT_FILE_PATH
+              value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.eventFileName }}"
             {{- end }}
           {{- if .Values.persistence.enabled }}
           volumeMounts:

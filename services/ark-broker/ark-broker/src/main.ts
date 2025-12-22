@@ -1,5 +1,5 @@
 import { createRequire } from 'module';
-import app, { memory, stream } from './server.js';
+import app, { memory, stream, events } from './server.js';
 import { setupSwagger } from './swagger.js';
 
 // Get version from package.json
@@ -20,6 +20,9 @@ const server = app.listen(parseInt(PORT), HOST, () => {
   if (process.env.STREAM_FILE_PATH) {
     console.log(`Stream persistence enabled at: ${process.env.STREAM_FILE_PATH}`);
   }
+  if (process.env.EVENT_FILE_PATH) {
+    console.log(`Event persistence enabled at: ${process.env.EVENT_FILE_PATH}`);
+  }
 });
 
 // Memory will be saved on graceful shutdown only
@@ -33,9 +36,10 @@ const gracefulShutdown = (): void => {
     clearInterval(saveInterval);
   }
 
-  // Save memory and streams before exit
+  // Save memory, streams, and events before exit
   memory.saveMemory();
   stream.saveStreams();
+  events.saveEvents();
 
   server.close(() => {
     console.log('Process terminated');
