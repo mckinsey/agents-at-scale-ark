@@ -57,8 +57,8 @@ import {
   RUNTIME_SECTIONS,
   SERVICE_SECTIONS,
 } from '@/lib/constants/dashboard-icons';
-import { filesService } from '@/lib/services/files';
 import { type SystemInfo, systemInfoService } from '@/lib/services';
+import { filesService } from '@/lib/services/files';
 import { useNamespace } from '@/providers/NamespaceProvider';
 import { useUser } from '@/providers/UserProvider';
 
@@ -117,6 +117,7 @@ export function AppSidebar() {
         await filesService.list({ max_keys: 1 });
         setIsFilesBrowserAvailable(true);
       } catch (error) {
+        console.error('Failed to check files API health:', error);
         setIsFilesBrowserAvailable(false);
       }
     };
@@ -142,7 +143,7 @@ export function AppSidebar() {
       case A2A_TASKS_FEATURE_KEY:
         return isA2ATasksEnabled;
       case FILES_BROWSER_FEATURE_KEY:
-        return isFilesBrowserAvailable;
+        return true;
       default:
         return true;
     }

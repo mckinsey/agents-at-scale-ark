@@ -190,7 +190,9 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
       } catch (error) {
         toast.error('Failed to Upload File', {
           description:
-            error instanceof Error ? error.message : 'An unexpected error occurred',
+            error instanceof Error
+              ? error.message
+              : 'An unexpected error occurred',
         });
       } finally {
         setUploading(false);
@@ -204,7 +206,11 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
       setFilename('');
     };
 
-    const handleDelete = (type: 'file' | 'directory', key: string, name: string) => {
+    const handleDelete = (
+      type: 'file' | 'directory',
+      key: string,
+      name: string,
+    ) => {
       setDeleteTarget({ type, key, name });
       setDeleteDialogOpen(true);
     };
@@ -217,8 +223,9 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
           await deleteMutation.mutateAsync(deleteTarget.key);
           toast.success('File Deleted');
         } else {
-          const result =
-            await deleteDirectoryMutation.mutateAsync(deleteTarget.key);
+          const result = await deleteDirectoryMutation.mutateAsync(
+            deleteTarget.key,
+          );
           toast.success(`Directory Deleted (${result.deleted_count} files)`);
         }
 
@@ -227,10 +234,15 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
         setNextToken(undefined);
         loadFiles();
       } catch (error) {
-        toast.error(`Failed to Delete ${deleteTarget.type === 'file' ? 'File' : 'Directory'}`, {
-          description:
-            error instanceof Error ? error.message : 'An unexpected error occurred',
-        });
+        toast.error(
+          `Failed to Delete ${deleteTarget.type === 'file' ? 'File' : 'Directory'}`,
+          {
+            description:
+              error instanceof Error
+                ? error.message
+                : 'An unexpected error occurred',
+          },
+        );
       } finally {
         setDeleteDialogOpen(false);
         setDeleteTarget(null);
@@ -257,7 +269,9 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
       } catch (error) {
         toast.error('Failed to Load More Files', {
           description:
-            error instanceof Error ? error.message : 'An unexpected error occurred',
+            error instanceof Error
+              ? error.message
+              : 'An unexpected error occurred',
         });
       }
     };
@@ -285,7 +299,7 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
               <ChevronLeft className="h-4 w-4" />
               Go Up
             </Button>
-            <div className="text-muted-foreground flex items-center gap-1 text-sm font-mono">
+            <div className="text-muted-foreground flex items-center gap-1 font-mono text-sm">
               <span>/</span>
               {breadcrumbs.map((segment, index) => (
                 <span key={index}>
@@ -340,16 +354,22 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
                   {allDirectories.map(dir => (
                     <tr
                       key={dir.prefix}
-                      className="border-b border-gray-200 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/30 cursor-pointer"
+                      className="cursor-pointer border-b border-gray-200 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/30"
                       onClick={() => handleNavigateToDirectory(dir.prefix)}>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2">
                           <FolderIcon className="text-muted-foreground h-4 w-4" />
-                          <span>{dir.prefix.split('/').filter(Boolean).pop()}/</span>
+                          <span>
+                            {dir.prefix.split('/').filter(Boolean).pop()}/
+                          </span>
                         </div>
                       </td>
-                      <td className="text-muted-foreground px-3 py-3 text-sm">—</td>
-                      <td className="text-muted-foreground px-3 py-3 text-sm">—</td>
+                      <td className="text-muted-foreground px-3 py-3 text-sm">
+                        —
+                      </td>
+                      <td className="text-muted-foreground px-3 py-3 text-sm">
+                        —
+                      </td>
                       <td className="px-3 py-3 text-right">
                         <Button
                           variant="ghost"
@@ -359,7 +379,8 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
                             handleDelete(
                               'directory',
                               dir.prefix,
-                              dir.prefix.split('/').filter(Boolean).pop() || dir.prefix,
+                              dir.prefix.split('/').filter(Boolean).pop() ||
+                                dir.prefix,
                             );
                           }}>
                           <Trash2 className="h-4 w-4" />
@@ -459,7 +480,7 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
                 <Label htmlFor="filename">Filename</Label>
                 <div className="flex items-center gap-2">
                   {prefix && (
-                    <span className="text-muted-foreground text-sm font-mono">
+                    <span className="text-muted-foreground font-mono text-sm">
                       /{prefix}
                     </span>
                   )}
