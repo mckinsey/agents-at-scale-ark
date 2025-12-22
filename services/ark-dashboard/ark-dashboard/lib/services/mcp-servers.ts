@@ -26,14 +26,16 @@ export type DirectHeader = {
 export type SecretHeader = {
   name: string;
   value: {
-    valueFrom: {
-      secretKeyRef: {
-        name: string;
-        key: string;
-      };
-    };
+    valueFrom: ValueFrom
   };
 };
+
+export type ValueFrom = {
+  secretKeyRef: {
+    name: string;
+    key: string;
+  };
+}
 
 // Service for MCP server operations
 export const mcpServersService = {

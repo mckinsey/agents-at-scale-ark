@@ -1,0 +1,185 @@
+"""A2A Proxy routes for making agent to agent comunication accesible from outside """
+import logging
+from token import OP
+from ark_api.utils.ark_services import get_headers
+from ark_sdk.client import with_ark_client
+from datetime import datetime
+from posix import preadv
+from typing import Optional
+import httpx
+import resource
+
+from fastapi import APIRouter, Query, Request, Response, HTTPException
+
+from ..exceptions import handle_k8s_errors
+from .proxy_resources import Resource
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/proxy", tags=["proxy"])
+
+# CRD configuration
+VERSION_A2A = "v1prealpha1"
+VERSION_MCP = "v1alpha1"
+
+async def _get_a2a_server_address(a2a_server_name: str, 
+    namespace: Optional[str] = None) -> tuple[str, dict]:
+    """Get the resolved address for an A2A server."""
+    async with with_ark_client(namespace, VERSION_A2A) as ark_client:
+        a2a_server = await ark_client.a2aservers.a_get(a2a_server_name)
+        a2a_dict = a2a_server.to_dict()
+        status = a2a_dict.get("status", {})
+        resolved_address = status.get("lastResolvedAddress")
+        spec = a2a_dict.get("spec", {})
+        headers = {}
+        await get_headers(spec, headers, namespace)
+        if not resolved_address:
+            raise HTTPException(
+                status_code=500,
+                detail=f"A2A server '{a2a_server_name}' has no resolved address"
+            )
+        
+        return resolved_address, headers
+
+async def _get_mcp_server_address(mcp_server_name: str, 
+    namespace: Optional[str] = None) -> tuple[str, dict]:
+    async with with_ark_client(namespace, VERSION_MCP) as ark_client:
+        mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
+        mcp_dict = mcp_server.to_dict()
+        status = mcp_dict.get("status", {})
+        resolved_address = status.get("resolvedAddress")
+        spec = mcp_dict.get("spec", {})
+        headers = {}
+        await get_headers(spec, headers, namespace)
+          
+        if not resolved_address:
+            raise HTTPException(
+                status_code=500,
+                detail=f"MCP server '{mcp_server_name}' has no resolved address"
+            )
+        return resolved_address, headers
+
+async def _proxy_request(
+    target_url: str,
+    request: Request,
+    headers_to_forward: Optional[dict] = None
+) -> Response:
+    """Proxy an HTTP request to a target URL."""
+    # Prepare headers to forward (exclude hop-by-hop headers)
+    headers = {}
+    req_ignore_headers = ["host", "content-length", "authorization"]
+    hop_by_hop_headers = [
+        "connection", "keep-alive", "proxy-authenticate",
+        "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade"   
+    ]
+    
+    
+    for header_name, header_value in request.headers.items():
+        header_lower = header_name.lower()
+        if header_lower not in hop_by_hop_headers and header_lower not in req_ignore_headers:
+            headers[header_name] = header_value
+    
+    # Add any additional headers from server spec (e.g., auth headers)
+    if headers_to_forward:
+        headers.update(headers_to_forward)
+    
+    # Read request body if present
+    body = await request.body()
+    print(f"Req Body: {body}")
+    # Make the proxied request
+    #json_obj = await request.json()
+    #print(f"Req JSON: {json_obj}")
+    timeout = httpx.Timeout(10.0, read=None)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        try:
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=headers,
+                content=body if body else None,
+            )
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers={
+                    key: value for key, value in response.headers.items()
+                    if key.lower() not in hop_by_hop_headers
+                },
+                media_type=response.headers.get("content-type")
+            )
+        except httpx.RequestError as e:
+            logger.error(f"Proxy request failed: {e}")
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to proxy request to server: {str(e)}"
+            )
+
+@router.options("/{resource}/{server_name}")
+@router.post("/{resource}/{server_name}")
+@router.get("/{resource}/{server_name}")
+async def proxy_server(
+    resource: Resource,
+    server_name: str,
+    request: Request,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+) -> Response:
+    """
+    Proxy requests to a specific resource inside your agentic cluster.
+    The goal is to expose over public internet your agentic resources in
+    order to perform testing of the resource itself.
+    
+    Args:
+        server_name: Name of the agentic resource. Supported only a2a and mcp.
+        path: Remaining path after the server name (will be forwarded as-is)
+        request: The incoming FastAPI request
+        namespace: The namespace containing the agentic resource
+        
+    Returns:
+        Response: Proxied response from the agentic resource
+    """
+    # Get the A2A server's resolved address
+    if resource == Resource.A2A:
+        resource_url, additional_headers = await _get_a2a_server_address(server_name, namespace)
+    elif resource == Resource.MCP:
+        resource_url, additional_headers = await _get_mcp_server_address(server_name, namespace)
+    else:
+        raise HTTPException(status_code=400,
+            detail="Invalid resource type")
+    # Get A2A server spec for headers (e.g., auth headers)
+    #async with with_ark_client(namespace, VERSION) as ark_client:
+    #    a2a_server = await ark_client.a2aservers.a_get(a2a_server_name)
+    #    a2a_dict = a2a_server.to_dict()
+    #    spec = a2a_dict.get("spec", {})
+    #    headers = spec.get("headers", [])
+        
+        # Resolve headers from ValueSources (simplified - may need full resolution)
+        # headers_to_forward = {}
+        # TODO: Resolve headers from ValueSources if needed
+    logger.info(f"Forwarding at {request.method} {resource_url}")
+    return await _proxy_request(resource_url, request, additional_headers)
+        
+    
+    # Construct the target path
+    #target_path = f"/{path}" if path else "/"
+
+@router.options("/{resource}/{server_name}/{path:path}")
+@router.get("/{resource}/{server_name}/{path:path}")
+@router.post("/{resource}/{server_name}/{path:path}")  
+async def proxy_server_path(resource: Resource,
+    server_name: str,
+    request: Request, 
+    path: str,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")):
+
+    if resource == Resource.A2A:
+        resource_url, additional_headers = await _get_a2a_server_address(server_name, namespace)
+    elif resource == Resource.MCP:
+        resource_url, additional_headers = await _get_mcp_server_address(server_name, namespace)
+    else:
+        raise HTTPException(status_code=400,
+            detail="Invalid resource type")
+    
+    resource_url = f"{resource_url}/{path}" if resource_url[-1]!= "/" \
+        else f"{resource_url}{path}"
+    logger.info(f"Forwarding at {request.method} {resource_url}")
+    return await _proxy_request(resource_url, request, additional_headers)

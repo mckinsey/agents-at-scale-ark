@@ -40,6 +40,17 @@ class ValueSource(BaseModel):
     value: Optional[str] = None
     valueFrom: Optional[ValueFrom] = None
 
+    @model_serializer(mode='plain')  
+    def serialize_model(self) -> dict:  
+        if self.valueFrom:
+            return {
+                "valueFrom": self.valueFrom
+            }
+        else:
+            return {
+                "value": self.value
+            }
+
 
 class Header(BaseModel):
     name: str
