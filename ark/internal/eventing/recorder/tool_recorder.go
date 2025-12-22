@@ -10,9 +10,9 @@ type toolRecorder struct {
 	emitter eventing.EventEmitter
 }
 
-func NewToolRecorder(emitter eventing.EventEmitter) eventing.ToolRecorder {
+func NewToolRecorder(emitter, operationEmitter eventing.EventEmitter) eventing.ToolRecorder {
 	return &toolRecorder{
-		OperationTracker: operations.NewOperationTracker(emitter),
+		OperationTracker: operations.NewOperationTracker(operationEmitter),
 		emitter:          emitter,
 	}
 }

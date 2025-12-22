@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -74,18 +76,25 @@ func main() {
 
 	setupLog.Info("starting ark controller", "version", Version, "commit", GitCommit)
 
-	// Initialize telemetry provider
-	telemetryProvider := telemetryconfig.NewProvider()
+	mgr, metricsCertWatcher, webhookCertWatcher := setupManager(result.config)
+
+	// Initialize telemetry provider with direct (non-cached) client for broker discovery
+	ctx := context.Background()
+	restConfig := ctrl.GetConfigOrDie()
+	directClient, err := client.New(restConfig, client.Options{Scheme: scheme})
+	if err != nil {
+		setupLog.Error(err, "failed to create direct client for broker discovery")
+		directClient = nil
+	}
+	telemetryProvider := telemetryconfig.NewProvider(ctx, directClient)
 	defer func() {
 		if err := telemetryProvider.Shutdown(); err != nil {
 			setupLog.Error(err, "failed to shutdown telemetry provider")
 		}
 	}()
 
-	mgr, metricsCertWatcher, webhookCertWatcher := setupManager(result.config)
-
-	// Initialize eventing provider
-	eventingProvider := eventingconfig.NewProvider(mgr)
+	// Initialize eventing provider with direct client for broker discovery
+	eventingProvider := eventingconfig.NewProvider(mgr, directClient)
 
 	setupControllers(mgr, telemetryProvider, eventingProvider)
 	setupWebhooks(mgr)

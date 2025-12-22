@@ -16,7 +16,7 @@ class TestArkTeams:
     @pytest.mark.parametrize("prefix", [
         "team",
     ])
-    @pytest.mark.dependency(name="create_team_{prefix}")
+    @pytest.mark.dependency(name="create_team_team")
     def test_create_team_with_members(self, page: Page, prefix: str):
         secrets = SecretsPage(page)
         models = ModelsPage(page)
@@ -78,7 +78,7 @@ class TestArkTeams:
     @pytest.mark.parametrize("prefix", [
         "team",
     ])
-    @pytest.mark.dependency(depends=["create_team_{prefix}"])
+    @pytest.mark.dependency(depends=["create_team_team"])
     def test_delete_team(self, page: Page, prefix: str):
         teams = TeamsPage(page)
         teams.navigate_to_teams_tab()

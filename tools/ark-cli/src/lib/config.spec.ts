@@ -50,6 +50,9 @@ describe('config', () => {
         repoUrl: 'https://github.com/mckinsey/agents-at-scale-marketplace',
         registry: 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts',
       },
+      services: {
+        reusePortForwards: false,
+      },
     });
   });
 

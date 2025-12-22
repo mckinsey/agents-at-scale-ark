@@ -1,0 +1,94 @@
+# Core concepts
+
+This section explains **what ARK is**, how it is designed, and why key decisions were made. 
+
+## What is ARK?
+
+ARK is a platform designed to provide reliable, production-grade infrastructure for AI agents and multi-agent systems. The key features of ARK include:
+
+- [Platform-agnostic agent operations](../reference/query-execution).
+- [Standardized deployment patterns](../operations-guide/deploying-ark).
+- [Transparent orchestration](../developer-guide/observability).
+- [Built-in evaluation capabilities](../reference/evaluations/evaluations).
+- [Extensible tool integration](../reference/resources/tools).
+- [Multi-agent coordination](../user-guide/teams).
+- [Custom headers support](../user-guide/overrides) (e.g., request tracing, custom metadata).
+
+## ARK architecture
+
+The reason ARK uses Kubernetes as its foundation is to build upon battle-tested orchestration patterns for distributed systems. Review the following guides to learn more:
+
+- [How ARK resources relate to and interact with each other](/reference/relationships).
+- [How query execution flows through the system](/reference/query-execution).
+- [How the ARK gateway enables external access](/developer-guide/ark-gateway).
+- [How services work together](/developer-guide/services).
+- [How workflows coordinate agent interactions](/developer-guide/workflows).
+- [How observability provides system transparency](/developer-guide/observability).
+
+
+## Platform architecture concepts
+
+![High-level architecture diagram](../images/high-level-architecture.png)
+
+### Core resources
+
+ARK's core resources represent the fundamental abstractions for building agentic systems. These resources follow Kubernetes patterns, making them familiar to platform engineers while providing specialized capabilities for AI workloads:
+
+- [**Models**](../user-guide/models/): Configure and connect to AI models.
+- [**Agents**](../user-guide/agents/): Create autonomous AI agents with specific capabilities and tools.
+- [**Teams**](../user-guide/teams/): Orchestrate multiple agents working together with coordination strategies.
+- [**Queries**](../user-guide/queries/): Execute prompts and manage conversations with agents or teams.
+- [**Tools**](../user-guide/tools/): Define custom tools and MCP tool references for agents.
+- [**MCPServers**](../user-guide/tools/): Configure Model Context Protocol servers for external integrations.
+- **Memory**: Persistent storage for agent conversations and state.
+- **Evaluator**: Services for assessing and scoring agent performance.
+- **Evaluation**: Define evaluation configurations and results.
+- **ExecutionEngine**: Specialized runtimes for different agent frameworks.
+- **A2AServer**: Agent-to-agent communication services.
+
+
+### MCP servers
+
+Model Context Protocol (MCP) servers provide standardized interfaces for external tool integrations:
+
+- **filesystem-mcp**: File system operations and management.
+
+### Services
+
+ARK includes supporting services that extend the platform's capabilities:
+
+- **ark-api**: REST API for managing ARK resources (includes A2A Gateway for agent-to-agent communication).
+- **ark-dashboard**: Web-based management interface.
+- **ark-mcp**: MCP server integration service.
+- **ark-evaluator**: Holistic evaluation and scoring service.
+- **localhost-gateway**: Local development gateway (only on local).
+- **ark-broker**: Memory storage with streaming support.
+
+### Sample services
+
+Sample services demonstrate integration patterns and provide optional capabilities:
+
+- **langfuse**: Observability and tracing service.
+- **executor-langchain**: LangChain agent execution engine.
+
+
+### Design effective agentic systems
+
+The design of effective agentic systems requires understanding both technical patterns and practical constraints:
+
+- [Tips for building agentic use cases](/user-guide/tips-on-building-agentic-use-cases).
+- [Design principles](/developer-guide/design-principles).
+
+### Extensibility concepts
+
+ARK's extensibility model allows customization while maintaining system stability. The platform provides extension points through:
+
+- [CRD design guidelines](/developer-guide/crd-design-guide).
+- [RAG implementation](/developer-guide/rag-implementation).
+- [LangChain execution engine](/developer-guide/langchain-execution-engine).
+
+### Security and identity concepts
+
+Security in ARK is built on Kubernetes RBAC and service account patterns, providing isolation and access control:
+
+- [Authentication](/developer-guide/authentication).

@@ -1,0 +1,16 @@
+{{- if .Values.streaming.enabled }}
+# ConfigMap that enables real-time streaming of AI model responses through ark-broker.
+# When present, the ARK controller and SDK clients will stream chunks directly to connected
+# clients instead of waiting for the full response. The service reference points to the
+# streaming endpoint that handles Server-Sent Events (SSE) for OpenAI-compatible streaming.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ark-config-streaming
+  namespace: {{ .Release.Namespace }}
+data:
+  enabled: {{ .Values.streaming.enabled | quote }}
+  serviceRef: |
+    name: {{ include "ark-broker.fullname" . }}
+    port: "http"
+{{- end }}

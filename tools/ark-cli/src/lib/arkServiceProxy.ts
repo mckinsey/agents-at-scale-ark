@@ -1,5 +1,9 @@
 import {spawn, ChildProcess} from 'child_process';
+import find from 'find-process';
+import Debug from 'debug';
 import {ArkService} from '../arkServices.js';
+
+const debug = Debug('ark:service-proxy');
 
 export class ArkServiceProxy {
   private kubectlProcess?: ChildProcess;
@@ -7,7 +11,11 @@ export class ArkServiceProxy {
   private isReady: boolean = false;
   private service: ArkService;
 
-  constructor(service: ArkService, localPort?: number) {
+  constructor(
+    service: ArkService,
+    localPort?: number,
+    private reusePortForwards: boolean = false
+  ) {
     this.service = service;
     this.localPort =
       localPort || service.k8sPortForwardLocalPort || this.getRandomPort();
@@ -17,11 +25,52 @@ export class ArkServiceProxy {
     return Math.floor(Math.random() * (65535 - 1024) + 1024);
   }
 
+  private async checkExistingPortForward(): Promise<boolean> {
+    try {
+      const processes = await find('port', this.localPort);
+
+      if (processes.length === 0) {
+        return false;
+      }
+
+      const kubectlProcess = processes.find(
+        (proc) =>
+          proc.cmd?.includes('kubectl') && proc.cmd?.includes('port-forward')
+      );
+
+      if (kubectlProcess) {
+        debug(
+          `Reusing existing kubectl port-forward on port ${this.localPort} (PID: ${kubectlProcess.pid})`
+        );
+        this.isReady = true;
+        return true;
+      }
+
+      const processInfo = processes[0];
+      throw new Error(
+        `${this.service.name} port forward failed: port ${this.localPort} is already in use by ${processInfo.name} (PID: ${processInfo.pid})`
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('already in use')) {
+        throw error;
+      }
+      debug(`Error checking for existing port-forward: ${error}`);
+      return false;
+    }
+  }
+
   async start(): Promise<string> {
     if (!this.service.k8sServiceName || !this.service.k8sServicePort) {
       throw new Error(
         `${this.service.name} service configuration missing k8sServiceName or k8sServicePort`
       );
+    }
+
+    if (this.reusePortForwards) {
+      const isReused = await this.checkExistingPortForward();
+      if (isReused) {
+        return `http://localhost:${this.localPort}`;
+      }
     }
 
     return new Promise((resolve, reject) => {

@@ -10,6 +10,10 @@ import (
 type MemorySpec struct {
 	// +kubebuilder:validation:Required
 	Address ValueSource `json:"address"`
+
+	// +kubebuilder:validation:Optional
+	// Headers contains HTTP headers to include in memory API requests
+	Headers []Header `json:"headers,omitempty"`
 }
 
 // MemoryStatus defines the observed state of Memory.

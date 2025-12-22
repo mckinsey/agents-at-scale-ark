@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
@@ -67,6 +68,12 @@ func (t *tracer) Start(ctx context.Context, spanName string, opts ...telemetry.S
 			otelAttrs[i] = convertAttribute(attr)
 		}
 		otelOpts = append(otelOpts, trace.WithAttributes(otelAttrs...))
+	}
+
+	// Automatically add query.name and query.namespace from context
+	queryAttrs := extractQueryAttributesFromContext(ctx)
+	if len(queryAttrs) > 0 {
+		otelOpts = append(otelOpts, trace.WithAttributes(queryAttrs...))
 	}
 
 	// Start the span
@@ -190,4 +197,31 @@ func getOpenInferenceSpanKind(kind telemetry.SpanKind) string {
 	default:
 		return ""
 	}
+}
+
+type contextKey string
+
+const queryResourceKey contextKey = "ark.query.resource"
+
+func extractQueryAttributesFromContext(ctx context.Context) []attribute.KeyValue {
+	query := getQueryFromContext(ctx)
+	if query == nil {
+		return nil
+	}
+
+	return []attribute.KeyValue{
+		attribute.String(telemetry.AttrQueryName, query.Name),
+		attribute.String(telemetry.AttrQueryNamespace, query.Namespace),
+	}
+}
+
+func getQueryFromContext(ctx context.Context) *arkv1alpha1.Query {
+	if query, ok := ctx.Value(queryResourceKey).(*arkv1alpha1.Query); ok {
+		return query
+	}
+	return nil
+}
+
+func SetQueryInContext(ctx context.Context, query *arkv1alpha1.Query) context.Context {
+	return context.WithValue(ctx, queryResourceKey, query)
 }

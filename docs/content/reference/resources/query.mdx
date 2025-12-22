@@ -56,7 +56,7 @@ spec:
 
   # Optional: memory storage for conversation history
   memory:
-    name: cluster-memory
+    name: broker
 
   # Optional: timeout for query execution
   timeout: 5m
@@ -270,7 +270,7 @@ spec:
   conversationId: conv-abc123
   sessionId: user-session-123
   memory:
-    name: cluster-memory
+    name: broker
   input: "Hello, my name is Alice"
   targets:
     - type: agent
@@ -284,7 +284,7 @@ spec:
   conversationId: conv-abc123  # Same conversation
   sessionId: user-session-123  # Same session
   memory:
-    name: cluster-memory
+    name: broker
   input: "What's my name?"
   targets:
     - type: agent

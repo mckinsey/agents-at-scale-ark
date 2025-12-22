@@ -17,10 +17,10 @@ type queryRecorder struct {
 	emitter eventing.EventEmitter
 }
 
-func NewQueryRecorder(emitter eventing.EventEmitter) eventing.QueryRecorder {
+func NewQueryRecorder(emitter, operationEmitter eventing.EventEmitter) eventing.QueryRecorder {
 	return &queryRecorder{
 		TokenCollector:   tokens.NewTokenCollector(),
-		OperationTracker: operations.NewOperationTracker(emitter),
+		OperationTracker: operations.NewOperationTracker(operationEmitter),
 		emitter:          emitter,
 	}
 }

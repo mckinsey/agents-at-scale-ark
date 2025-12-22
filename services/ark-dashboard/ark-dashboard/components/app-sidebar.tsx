@@ -18,8 +18,10 @@ import { useEffect, useState } from 'react';
 
 import {
   A2A_TASKS_FEATURE_KEY,
+  BROKER_FEATURE_KEY,
   FILES_BROWSER_FEATURE_KEY,
   isA2ATasksEnabledAtom,
+  isBrokerEnabledAtom,
   isExperimentalDarkModeEnabledAtom,
   isFilesBrowserAvailableAtom,
 } from '@/atoms/experimental-features';
@@ -71,6 +73,7 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { user } = useUser();
   const isA2ATasksEnabled = useAtomValue(isA2ATasksEnabledAtom);
+  const isBrokerEnabled = useAtomValue(isBrokerEnabledAtom);
   const isExperimentalDarkModeEnabled = useAtomValue(
     isExperimentalDarkModeEnabledAtom,
   );

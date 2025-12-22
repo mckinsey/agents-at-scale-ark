@@ -72,6 +72,7 @@ describe('Dashboard Sections - enabledWhen', () => {
       expect(opKeys).toContain('memory');
       expect(opKeys).toContain('files');
       expect(opKeys).toContain('tasks');
+      expect(opKeys).toContain('broker');
     });
 
     it('should define enabler feature for a2a-tasks section', () => {
