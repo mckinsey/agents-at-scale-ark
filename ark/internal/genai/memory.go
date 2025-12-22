@@ -19,6 +19,7 @@ const (
 	DefaultTimeoutSeconds = 30 // Default timeout in seconds
 	ContentTypeJSON       = "application/json"
 	MessagesEndpoint      = "/messages"
+	ConversationsEndpoint = "/conversations"
 	CompletionEndpoint    = "/stream/%s/complete"
 	MaxRetries            = 3
 	RetryDelay            = 100 * time.Millisecond

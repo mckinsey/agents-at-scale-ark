@@ -52,3 +52,15 @@ export const storedIsChatStreamingEnabledAtom = atomWithStorage<boolean>(
 export const isChatStreamingEnabledAtom = atom(get => {
   return get(storedIsChatStreamingEnabledAtom);
 });
+
+export const BROKER_FEATURE_KEY = 'experimental-broker';
+export const storedIsBrokerEnabledAtom = atomWithStorage<boolean>(
+  BROKER_FEATURE_KEY,
+  false,
+  undefined,
+  { getOnInit: true },
+);
+
+export const isBrokerEnabledAtom = atom(get => {
+  return get(storedIsBrokerEnabledAtom);
+});

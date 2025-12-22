@@ -4,13 +4,15 @@ package telemetry
 
 import (
 	"context"
+
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
 // QueryRecorder provides domain-specific telemetry for query execution.
 // Encapsulates query lifecycle tracing with consistent attribute naming.
 type QueryRecorder interface {
-	// StartQuery begins tracing a query execution.
-	StartQuery(ctx context.Context, queryName, queryNamespace, phase string) (context.Context, Span)
+	// StartQuery begins tracing a query execution and sets the Query in context.
+	StartQuery(ctx context.Context, query *arkv1alpha1.Query, phase string) (context.Context, Span)
 
 	// StartTarget begins tracing a specific query target (agent, team, model, tool).
 	StartTarget(ctx context.Context, targetType, targetName string) (context.Context, Span)

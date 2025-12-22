@@ -10,9 +10,9 @@ type memoryRecorder struct {
 	emitter eventing.EventEmitter
 }
 
-func NewMemoryRecorder(emitter eventing.EventEmitter) eventing.MemoryRecorder {
+func NewMemoryRecorder(emitter, operationEmitter eventing.EventEmitter) eventing.MemoryRecorder {
 	return &memoryRecorder{
-		OperationTracker: operations.NewOperationTracker(emitter),
+		OperationTracker: operations.NewOperationTracker(operationEmitter),
 		emitter:          emitter,
 	}
 }

@@ -1,0 +1,15 @@
+{{- if .Values.otelEndpoint.enabled }}
+# ConfigMap that registers this ark-broker as an OTEL trace receiver.
+# When present, the ARK controller will send traces from queries in this namespace
+# to this broker's OTLP endpoint.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ark-config-broker
+  namespace: {{ .Release.Namespace }}
+data:
+  enabled: {{ .Values.otelEndpoint.enabled | quote }}
+  serviceRef: |
+    name: {{ include "ark-broker.fullname" . }}
+    port: "http"
+{{- end }}

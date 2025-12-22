@@ -196,14 +196,14 @@ metadata:
 data:
   enabled: "true"
   serviceRef: |
-    name: ark-cluster-memory  # Service that implements the Event Stream API
+    name: ark-broker  # Service that implements the Event Stream API
     port: "http"              # Port name from the service definition
     namespace: ""             # Optional: namespace (defaults to current namespace)
 ```
 
 When this ConfigMap is present and `enabled` is set to `"true"`, the Query Controller will use the specified service for event streaming. If the ConfigMap is not present or `enabled` is `"false"`, streaming is disabled. If a query is issued with the `streaming-enabled` annotation set to `true` and no event streaming service is available, a warning will be logged.
 
-The `ark-cluster-memory` service implements this API when deployed with streaming enabled. 
+The `ark-broker` service implements this API when deployed with streaming enabled. 
 
 ### Tool/Function Calling in Streams
 

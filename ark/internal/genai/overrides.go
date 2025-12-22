@@ -40,7 +40,7 @@ func ResolveHeaderValue(ctx context.Context, k8sClient client.Client, header ark
 	}
 
 	if header.Value.ValueFrom == nil {
-		return "", fmt.Errorf("header value must specify either value or valueFrom.secretKeyRef or valueFrom.configMapKeyRef")
+		return "", fmt.Errorf("header value must specify either value or valueFrom")
 	}
 
 	if header.Value.ValueFrom.SecretKeyRef != nil {
@@ -51,7 +51,11 @@ func ResolveHeaderValue(ctx context.Context, k8sClient client.Client, header ark
 		return resolveHeaderFromConfigMap(ctx, k8sClient, header.Value.ValueFrom.ConfigMapKeyRef, namespace)
 	}
 
-	return "", fmt.Errorf("header value must specify either value or valueFrom.secretKeyRef or valueFrom.configMapKeyRef")
+	if header.Value.ValueFrom.QueryParameterRef != nil {
+		return resolveQueryParameterRef(ctx, header.Value.ValueFrom.QueryParameterRef)
+	}
+
+	return "", fmt.Errorf("header value must specify either value or valueFrom with a valid source")
 }
 
 func resolveHeaderFromSecret(ctx context.Context, k8sClient client.Client, secretRef *corev1.SecretKeySelector, namespace string) (string, error) {

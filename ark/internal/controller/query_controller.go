@@ -187,7 +187,7 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	conversationId := obj.Spec.ConversationId
 
-	opCtx, span := r.Telemetry.QueryRecorder().StartQuery(opCtx, obj.Name, obj.Namespace, "execute")
+	opCtx, span := r.Telemetry.QueryRecorder().StartQuery(opCtx, &obj, "execute")
 	r.Telemetry.QueryRecorder().RecordSessionID(span, sessionId)
 	defer span.End()
 
@@ -197,7 +197,7 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		return
 	}
 
-	// Get conversation ID from memory if attached, otherwise use spec value
+	// Get conversation ID from memory if attached
 	if memory != nil {
 		if httpMemory, ok := memory.(*genai.HTTPMemory); ok {
 			conversationId = httpMemory.GetConversationID()

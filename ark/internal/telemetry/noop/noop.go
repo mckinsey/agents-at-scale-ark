@@ -5,6 +5,7 @@ package noop
 import (
 	"context"
 
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
@@ -41,7 +42,7 @@ func NewQueryRecorder() telemetry.QueryRecorder {
 	return &noopQueryRecorder{}
 }
 
-func (r *noopQueryRecorder) StartQuery(ctx context.Context, queryName, queryNamespace, phase string) (context.Context, telemetry.Span) {
+func (r *noopQueryRecorder) StartQuery(ctx context.Context, query *arkv1alpha1.Query, phase string) (context.Context, telemetry.Span) {
 	return ctx, &noopSpan{}
 }
 

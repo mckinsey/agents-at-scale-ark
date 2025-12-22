@@ -45,7 +45,7 @@ SAMPLE_DOCUMENTS = [
         "metadata": {"category": "features", "source": "ark-docs", "topic": "rag"}
     },
     {
-        "content": "ARK's architecture includes a controller (manages CRDs), API server (REST API), dashboard (web UI), and optional services like cluster memory, evaluators, and execution engines. All components run in Kubernetes pods.",
+        "content": "ARK's architecture includes a controller (manages CRDs), API server (REST API), dashboard (web UI), and optional services like broker, evaluators, and execution engines. All components run in Kubernetes pods.",
         "metadata": {"category": "architecture", "source": "ark-docs", "topic": "components"}
     },
     {
