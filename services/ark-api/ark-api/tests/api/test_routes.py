@@ -270,9 +270,9 @@ class TestSessionEndpoints(unittest.TestCase):
         from ark_api.main import app
         self.client = TestClient(app)
     
-    @patch('ark_api.api.v1.sessions.with_ark_client')
-    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
-    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    @patch('ark_api.api.v1.conversations.with_ark_client')
+    @patch('ark_api.api.v1.conversations.get_all_memory_resources')
+    @patch('ark_api.api.v1.conversations.httpx.AsyncClient')
     def test_delete_session_success(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
         """Test successful session deletion."""
         # Setup mocks
@@ -295,7 +295,7 @@ class TestSessionEndpoints(unittest.TestCase):
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
         
         # Make the request
-        response = self.client.delete("/v1/sessions/test-session")
+        response = self.client.delete("/v1/conversations/test-session")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
@@ -303,9 +303,9 @@ class TestSessionEndpoints(unittest.TestCase):
         self.assertIn("deleted successfully from", data["message"])
         self.assertIn("memory service(s)", data["message"])
     
-    @patch('ark_api.api.v1.sessions.with_ark_client')
-    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
-    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    @patch('ark_api.api.v1.conversations.with_ark_client')
+    @patch('ark_api.api.v1.conversations.get_all_memory_resources')
+    @patch('ark_api.api.v1.conversations.httpx.AsyncClient')
     def test_delete_all_sessions_success(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
         """Test successful deletion of all sessions."""
         # Setup mocks
@@ -328,17 +328,17 @@ class TestSessionEndpoints(unittest.TestCase):
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
         
         # Make the request
-        response = self.client.delete("/v1/sessions")
+        response = self.client.delete("/v1/conversations")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertIn("All sessions deleted successfully from", data["message"])
+        self.assertIn("All conversations deleted successfully from", data["message"])
         self.assertIn("memory service(s)", data["message"])
     
-    @patch('ark_api.api.v1.sessions.with_ark_client')
-    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
-    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    @patch('ark_api.api.v1.conversations.with_ark_client')
+    @patch('ark_api.api.v1.conversations.get_all_memory_resources')
+    @patch('ark_api.api.v1.conversations.httpx.AsyncClient')
     def test_delete_query_messages_success(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
         """Test successful query message deletion."""
         # Setup mocks
@@ -361,16 +361,16 @@ class TestSessionEndpoints(unittest.TestCase):
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
         
         # Make the request
-        response = self.client.delete("/v1/sessions/test-session/queries/test-query/messages")
+        response = self.client.delete("/v1/conversations/test-session/queries/test-query/messages")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("messages deleted successfully", data["message"])
     
-    @patch('ark_api.api.v1.sessions.with_ark_client')
-    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
-    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    @patch('ark_api.api.v1.conversations.with_ark_client')
+    @patch('ark_api.api.v1.conversations.get_all_memory_resources')
+    @patch('ark_api.api.v1.conversations.httpx.AsyncClient')
     def test_delete_session_all_services_unreachable(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
         """Test session deletion when all memory services are unreachable (503)."""
         # Setup mocks
@@ -391,16 +391,16 @@ class TestSessionEndpoints(unittest.TestCase):
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
         
         # Make the request
-        response = self.client.delete("/v1/sessions/test-session")
+        response = self.client.delete("/v1/conversations/test-session")
         
         # Assert response
         self.assertEqual(response.status_code, 503)
         data = response.json()
         self.assertIn("Could not reach any memory services", data["detail"])
     
-    @patch('ark_api.api.v1.sessions.with_ark_client')
-    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
-    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    @patch('ark_api.api.v1.conversations.with_ark_client')
+    @patch('ark_api.api.v1.conversations.get_all_memory_resources')
+    @patch('ark_api.api.v1.conversations.httpx.AsyncClient')
     def test_delete_session_multiple_services(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
         """Test session deletion across multiple memory services."""
         # Setup mocks
@@ -429,16 +429,16 @@ class TestSessionEndpoints(unittest.TestCase):
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
         
         # Make the request
-        response = self.client.delete("/v1/sessions/test-session")
+        response = self.client.delete("/v1/conversations/test-session")
         
         # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("deleted successfully from 2 memory service(s)", data["message"])
     
-    @patch('ark_api.api.v1.sessions.with_ark_client')
-    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
-    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    @patch('ark_api.api.v1.conversations.with_ark_client')
+    @patch('ark_api.api.v1.conversations.get_all_memory_resources')
+    @patch('ark_api.api.v1.conversations.httpx.AsyncClient')
     def test_delete_session_database_error_500(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
         """Test session deletion when database returns 500 error."""
         mock_client = AsyncMock()
@@ -459,16 +459,16 @@ class TestSessionEndpoints(unittest.TestCase):
         mock_http_client_instance.delete.return_value = mock_http_response
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
         
-        response = self.client.delete("/v1/sessions/test-session")
+        response = self.client.delete("/v1/conversations/test-session")
         
         self.assertEqual(response.status_code, 500)
         data = response.json()
-        self.assertIn("Failed to delete session", data["detail"])
+        self.assertIn("Failed to delete conversation", data["detail"])
         self.assertIn("database", data["detail"])
     
-    @patch('ark_api.api.v1.sessions.with_ark_client')
-    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
-    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    @patch('ark_api.api.v1.conversations.with_ark_client')
+    @patch('ark_api.api.v1.conversations.get_all_memory_resources')
+    @patch('ark_api.api.v1.conversations.httpx.AsyncClient')
     def test_delete_session_idempotent_404(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
         """Test session deletion when session is not found (404) - should succeed as idempotent."""
         mock_client = AsyncMock()
@@ -489,15 +489,15 @@ class TestSessionEndpoints(unittest.TestCase):
         mock_http_client_instance.delete.return_value = mock_http_response
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
         
-        response = self.client.delete("/v1/sessions/test-session")
+        response = self.client.delete("/v1/conversations/test-session")
         
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("deleted successfully", data["message"])
     
-    @patch('ark_api.api.v1.sessions.with_ark_client')
-    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
-    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    @patch('ark_api.api.v1.conversations.with_ark_client')
+    @patch('ark_api.api.v1.conversations.get_all_memory_resources')
+    @patch('ark_api.api.v1.conversations.httpx.AsyncClient')
     def test_delete_session_partial_failure(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
         """Test session deletion when some services succeed and some fail."""
         mock_client = AsyncMock()
@@ -531,14 +531,14 @@ class TestSessionEndpoints(unittest.TestCase):
         mock_http_client_instance.delete.side_effect = side_effect
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
         
-        response = self.client.delete("/v1/sessions/test-session")
+        response = self.client.delete("/v1/conversations/test-session")
         
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("deleted successfully from 1 memory service(s)", data["message"])
     
-    @patch('ark_api.api.v1.sessions.with_ark_client')
-    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
+    @patch('ark_api.api.v1.conversations.with_ark_client')
+    @patch('ark_api.api.v1.conversations.get_all_memory_resources')
     def test_delete_session_no_memory_services(self, mock_get_memory_resources, mock_with_ark_client):
         """Test session deletion when no memory services are configured."""
         mock_client = AsyncMock()
@@ -546,16 +546,16 @@ class TestSessionEndpoints(unittest.TestCase):
         
         mock_get_memory_resources.return_value = []
         
-        response = self.client.delete("/v1/sessions/test-session")
+        response = self.client.delete("/v1/conversations/test-session")
         
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("deleted successfully", data["message"])
         self.assertIn("0 memory service(s)", data["message"])
     
-    @patch('ark_api.api.v1.sessions.with_ark_client')
-    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
-    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    @patch('ark_api.api.v1.conversations.with_ark_client')
+    @patch('ark_api.api.v1.conversations.get_all_memory_resources')
+    @patch('ark_api.api.v1.conversations.httpx.AsyncClient')
     def test_delete_all_sessions_database_error_500(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
         """Test delete all sessions when database returns 500 error."""
         mock_client = AsyncMock()
@@ -576,15 +576,15 @@ class TestSessionEndpoints(unittest.TestCase):
         mock_http_client_instance.delete.return_value = mock_http_response
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
         
-        response = self.client.delete("/v1/sessions")
+        response = self.client.delete("/v1/conversations")
         
         self.assertEqual(response.status_code, 500)
         data = response.json()
-        self.assertIn("Failed to delete all sessions from database", data["detail"])
+        self.assertIn("Failed to delete all conversations from database", data["detail"])
     
-    @patch('ark_api.api.v1.sessions.with_ark_client')
-    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
-    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    @patch('ark_api.api.v1.conversations.with_ark_client')
+    @patch('ark_api.api.v1.conversations.get_all_memory_resources')
+    @patch('ark_api.api.v1.conversations.httpx.AsyncClient')
     def test_delete_all_sessions_all_unreachable(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
         """Test delete all sessions when all memory services are unreachable."""
         mock_client = AsyncMock()
@@ -607,7 +607,7 @@ class TestSessionEndpoints(unittest.TestCase):
         mock_http_client_instance.delete.side_effect = Exception("Connection refused")
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
         
-        response = self.client.delete("/v1/sessions")
+        response = self.client.delete("/v1/conversations")
         
         self.assertEqual(response.status_code, 503)
         data = response.json()
@@ -615,9 +615,9 @@ class TestSessionEndpoints(unittest.TestCase):
         self.assertIn("test-memory-1", data["detail"])
         self.assertIn("test-memory-2", data["detail"])
     
-    @patch('ark_api.api.v1.sessions.with_ark_client')
-    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
-    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    @patch('ark_api.api.v1.conversations.with_ark_client')
+    @patch('ark_api.api.v1.conversations.get_all_memory_resources')
+    @patch('ark_api.api.v1.conversations.httpx.AsyncClient')
     def test_delete_all_sessions_multiple_services(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
         """Test delete all sessions across multiple memory services."""
         mock_client = AsyncMock()
@@ -643,15 +643,15 @@ class TestSessionEndpoints(unittest.TestCase):
         mock_http_client_instance.delete.return_value = mock_http_response
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
         
-        response = self.client.delete("/v1/sessions")
+        response = self.client.delete("/v1/conversations")
         
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("deleted successfully from 2 memory service(s)", data["message"])
     
-    @patch('ark_api.api.v1.sessions.with_ark_client')
-    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
-    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    @patch('ark_api.api.v1.conversations.with_ark_client')
+    @patch('ark_api.api.v1.conversations.get_all_memory_resources')
+    @patch('ark_api.api.v1.conversations.httpx.AsyncClient')
     def test_delete_query_messages_database_error_500(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
         """Test query messages deletion when database returns 500 error."""
         mock_client = AsyncMock()
@@ -672,16 +672,16 @@ class TestSessionEndpoints(unittest.TestCase):
         mock_http_client_instance.delete.return_value = mock_http_response
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
         
-        response = self.client.delete("/v1/sessions/test-session/queries/test-query/messages")
+        response = self.client.delete("/v1/conversations/test-session/queries/test-query/messages")
         
         self.assertEqual(response.status_code, 500)
         data = response.json()
         self.assertIn("Failed to delete query", data["detail"])
         self.assertIn("database", data["detail"])
     
-    @patch('ark_api.api.v1.sessions.with_ark_client')
-    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
-    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    @patch('ark_api.api.v1.conversations.with_ark_client')
+    @patch('ark_api.api.v1.conversations.get_all_memory_resources')
+    @patch('ark_api.api.v1.conversations.httpx.AsyncClient')
     def test_delete_query_messages_all_unreachable(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
         """Test query messages deletion when all memory services are unreachable."""
         mock_client = AsyncMock()
@@ -699,15 +699,15 @@ class TestSessionEndpoints(unittest.TestCase):
         mock_http_client_instance.delete.side_effect = Exception("Connection refused")
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
         
-        response = self.client.delete("/v1/sessions/test-session/queries/test-query/messages")
+        response = self.client.delete("/v1/conversations/test-session/queries/test-query/messages")
         
         self.assertEqual(response.status_code, 503)
         data = response.json()
         self.assertIn("Could not reach any memory services", data["detail"])
     
-    @patch('ark_api.api.v1.sessions.with_ark_client')
-    @patch('ark_api.api.v1.sessions.get_all_memory_resources')
-    @patch('ark_api.api.v1.sessions.httpx.AsyncClient')
+    @patch('ark_api.api.v1.conversations.with_ark_client')
+    @patch('ark_api.api.v1.conversations.get_all_memory_resources')
+    @patch('ark_api.api.v1.conversations.httpx.AsyncClient')
     def test_delete_query_messages_multiple_services(self, mock_httpx_client, mock_get_memory_resources, mock_with_ark_client):
         """Test query messages deletion across multiple memory services."""
         mock_client = AsyncMock()
@@ -733,7 +733,7 @@ class TestSessionEndpoints(unittest.TestCase):
         mock_http_client_instance.delete.return_value = mock_http_response
         mock_httpx_client.return_value.__aenter__.return_value = mock_http_client_instance
         
-        response = self.client.delete("/v1/sessions/test-session/queries/test-query/messages")
+        response = self.client.delete("/v1/conversations/test-session/queries/test-query/messages")
         
         self.assertEqual(response.status_code, 200)
         data = response.json()

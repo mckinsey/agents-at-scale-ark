@@ -5,9 +5,13 @@ import {arkServices} from '../arkServices.js';
 export class ArkApiProxy {
   private serviceProxy: ArkServiceProxy;
 
-  constructor(localPort?: number) {
+  constructor(localPort?: number, reusePortForwards: boolean = false) {
     const arkApiService = arkServices['ark-api'];
-    this.serviceProxy = new ArkServiceProxy(arkApiService, localPort);
+    this.serviceProxy = new ArkServiceProxy(
+      arkApiService,
+      localPort,
+      reusePortForwards
+    );
   }
 
   async start(): Promise<ArkApiClient> {

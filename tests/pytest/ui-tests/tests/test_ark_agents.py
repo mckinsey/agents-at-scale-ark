@@ -16,7 +16,7 @@ class TestArkAgents:
     @pytest.mark.parametrize("prefix", [
         "agent",
     ])
-    @pytest.mark.dependency(name="create_agent_{prefix}")
+    @pytest.mark.dependency(name="create_agent_agent")
     def test_create_agent_with_model(self, page: Page, prefix: str):
         secrets = SecretsPage(page)
         models = ModelsPage(page)
@@ -54,7 +54,7 @@ class TestArkAgents:
     @pytest.mark.parametrize("prefix", [
         "agent",
     ])
-    @pytest.mark.dependency(depends=["create_agent_{prefix}"])
+    @pytest.mark.dependency(depends=["create_agent_agent"])
     def test_delete_agent(self, page: Page, prefix: str):
         agents = AgentsPage(page)
         agents.navigate_to_agents_tab()
@@ -88,7 +88,7 @@ class TestArkAgents:
     @pytest.mark.parametrize("prefix", [
         "agent-tool",
     ])
-    @pytest.mark.dependency(name="create_agent_with_tools_{prefix}")
+    @pytest.mark.dependency(name="create_agent_with_tools_agent_tool")
     def test_create_agent_with_tools(self, page: Page, prefix: str):
         secrets = SecretsPage(page)
         models = ModelsPage(page)
@@ -127,7 +127,7 @@ class TestArkAgents:
     @pytest.mark.parametrize("prefix", [
         "agent-tool",
     ])
-    @pytest.mark.dependency(depends=["create_agent_with_tools_{prefix}"])
+    @pytest.mark.dependency(depends=["create_agent_with_tools_agent_tool"])
     def test_delete_agent_with_tools(self, page: Page, prefix: str):
         agents = AgentsPage(page)
         agents.navigate_to_agents_tab()

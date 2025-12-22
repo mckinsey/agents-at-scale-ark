@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { randomUUID } from 'crypto';
 import { MemoryStore } from '../memory-store.js';
 
 export function createMemoryRouter(memory: MemoryStore): Router {
@@ -9,7 +10,7 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    * /messages:
    *   post:
    *     summary: Store messages in memory
-   *     description: Stores chat messages for a specific session and query
+   *     description: Stores chat messages for a specific conversation and query. Requires a conversation_id obtained from POST /conversations.
    *     tags:
    *       - Memory
    *     requestBody:
@@ -19,13 +20,13 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    *           schema:
    *             type: object
    *             required:
-   *               - session_id
+   *               - conversation_id
    *               - query_id
    *               - messages
    *             properties:
-   *               session_id:
+   *               conversation_id:
    *                 type: string
-   *                 description: Session identifier
+   *                 description: Conversation identifier (required, obtain from POST /conversations)
    *               query_id:
    *                 type: string
    *                 description: Query identifier
@@ -42,27 +43,27 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    */
   router.post('/messages', (req, res) => {
     try {
-      const { session_id, query_id, messages } = req.body;
-      
-      console.log(`POST /messages - session_id: ${session_id}, query_id: ${query_id}, messages: ${messages?.length}`);
-      
-      if (!session_id) {
-        res.status(400).json({ error: 'session_id is required' });
+      const { conversation_id, query_id, messages } = req.body;
+
+      if (!conversation_id) {
+        res.status(400).json({ error: 'conversation_id is required' });
         return;
       }
-      
+
       if (!query_id) {
         res.status(400).json({ error: 'query_id is required' });
         return;
       }
-      
+
       if (!messages || !Array.isArray(messages)) {
         res.status(400).json({ error: 'messages array is required' });
         return;
       }
-      
-      // Store messages with full metadata
-      memory.addMessagesWithMetadata(session_id, query_id, messages);
+
+      console.log(`POST /messages - conversation_id: ${conversation_id}, query_id: ${query_id}, messages: ${messages?.length}`);
+
+      memory.addMessagesWithMetadata(conversation_id, query_id, messages);
+
       res.status(200).send();
     } catch (error) {
       console.error('Failed to add messages:', error);
@@ -74,21 +75,22 @@ export function createMemoryRouter(memory: MemoryStore): Router {
   // GET /messages - returns messages
   router.get('/messages', (req, res) => {
     try {
-      const session_id = req.query.session_id as string;
+      const conversation_id = req.query.conversation_id as string;
       const query_id = req.query.query_id as string;
-      
+
       const allMessages = memory.getAllMessages();
-      let filteredMessages = allMessages;
-      
+      // Filter out messages with null conversation_id (legacy data)
+      let filteredMessages = allMessages.filter(m => m.conversation_id != null);
+
       // Apply filters if provided
-      if (session_id) {
-        filteredMessages = filteredMessages.filter(m => m.session_id === session_id);
+      if (conversation_id) {
+        filteredMessages = filteredMessages.filter(m => m.conversation_id === conversation_id);
       }
-      
+
       if (query_id) {
         filteredMessages = filteredMessages.filter(m => m.query_id === query_id);
       }
-      
+
       // Return messages in the expected format
       res.json({ messages: filteredMessages });
     } catch (error) {
@@ -101,32 +103,32 @@ export function createMemoryRouter(memory: MemoryStore): Router {
   // GET /memory-status - returns memory statistics summary
   router.get('/memory-status', (req, res) => {
     try {
-      const sessions = memory.getAllSessions();
+      const conversations = memory.getAllConversations();
       const allMessages = memory.getAllMessages();
-      
-      // Get per-session statistics
-      const sessionStats: any = {};
-      for (const sessionId of sessions) {
-        const messages = memory.getMessages(sessionId);
+
+      // Get per-conversation statistics
+      const conversationStats: any = {};
+      for (const conversationId of conversations) {
+        const messages = memory.getMessages(conversationId);
         const queries = new Set<string>();
-        
+
         // Extract unique query IDs from messages
         for (const msg of allMessages) {
-          if (msg.session_id === sessionId && msg.query_id) {
+          if (msg.conversation_id === conversationId && msg.query_id) {
             queries.add(msg.query_id);
           }
         }
-        
-        sessionStats[sessionId] = {
+
+        conversationStats[conversationId] = {
           message_count: messages.length,
           query_count: queries.size
         };
       }
-      
+
       res.json({
-        total_sessions: sessions.length,
+        total_conversations: conversations.length,
         total_messages: allMessages.length,
-        sessions: sessionStats
+        conversations: conversationStats
       });
     } catch (error) {
       console.error('Failed to get memory status:', error);
@@ -136,14 +138,14 @@ export function createMemoryRouter(memory: MemoryStore): Router {
   });
 
 
-  // List sessions - GET /sessions
-  router.get('/sessions', (req, res) => {
+  // List conversations - GET /conversations
+  router.get('/conversations', (req, res) => {
     try {
-      // Get all unique session IDs from the memory store
-      const sessions = memory.getAllSessions();
-      res.json({ sessions });
+      // Get all unique conversation IDs from the memory store
+      const conversations = memory.getAllConversations();
+      res.json({ conversations });
     } catch (error) {
-      console.error('Failed to get sessions:', error);
+      console.error('Failed to get conversations:', error);
       const err = error as Error;
       res.status(400).json({ error: err.message });
     }
@@ -174,29 +176,29 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    *       500:
    *         description: Failed to purge memory
    */
-  router.delete('/messages', (req, res) => {
+  router.delete('/messages', (_req, res) => {
     memory.purge();
     res.json({ status: 'success', message: 'Memory purged' });
   });
 
   /**
    * @swagger
-   * /sessions/{sessionId}:
+   * /conversations/{conversationId}:
    *   delete:
-   *     summary: Delete a specific session
-   *     description: Removes all messages for a specific session
+   *     summary: Delete a specific conversation
+   *     description: Removes all messages for a specific conversation
    *     tags:
    *       - Memory
    *     parameters:
    *       - in: path
-   *         name: sessionId
+   *         name: conversationId
    *         required: true
    *         schema:
    *           type: string
-   *         description: Session ID to delete
+   *         description: Conversation ID to delete
    *     responses:
    *       200:
-   *         description: Session deleted successfully
+   *         description: Conversation deleted successfully
    *         content:
    *           application/json:
    *             schema:
@@ -207,39 +209,39 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    *                   example: success
    *                 message:
    *                   type: string
-   *                   example: Session deleted
+   *                   example: Conversation deleted
    *       400:
-   *         description: Invalid session ID
+   *         description: Invalid conversation ID
    *       500:
-   *         description: Failed to delete session
+   *         description: Failed to delete conversation
    */
-  router.delete('/sessions/:sessionId', (req, res) => {
-    const { sessionId } = req.params;
-    
-    if (!sessionId) {
-      res.status(400).json({ error: 'Session ID is required' });
+  router.delete('/conversations/:conversationId', (req, res) => {
+    const { conversationId } = req.params;
+
+    if (!conversationId) {
+      res.status(400).json({ error: 'Conversation ID is required' });
       return;
     }
-    
-    memory.clearSession(sessionId);
-    res.json({ status: 'success', message: `Session ${sessionId} deleted` });
+
+    memory.clearConversation(conversationId);
+    res.json({ status: 'success', message: `Conversation ${conversationId} deleted` });
   });
 
   /**
    * @swagger
-   * /sessions/{sessionId}/queries/{queryId}/messages:
+   * /conversations/{conversationId}/queries/{queryId}/messages:
    *   delete:
    *     summary: Delete messages for a specific query
-   *     description: Removes all messages for a specific query within a session
+   *     description: Removes all messages for a specific query within a conversation
    *     tags:
    *       - Memory
    *     parameters:
    *       - in: path
-   *         name: sessionId
+   *         name: conversationId
    *         required: true
    *         schema:
    *           type: string
-   *         description: Session ID
+   *         description: Conversation ID
    *       - in: path
    *         name: queryId
    *         required: true
@@ -265,34 +267,34 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    *       500:
    *         description: Failed to delete query messages
    */
-  router.delete('/sessions/:sessionId/queries/:queryId/messages', (req, res) => {
-    const { sessionId, queryId } = req.params;
-    
-    if (!sessionId) {
-      res.status(400).json({ error: 'Session ID is required' });
+  router.delete('/conversations/:conversationId/queries/:queryId/messages', (req, res) => {
+    const { conversationId, queryId } = req.params;
+
+    if (!conversationId) {
+      res.status(400).json({ error: 'Conversation ID is required' });
       return;
     }
-    
+
     if (!queryId) {
       res.status(400).json({ error: 'Query ID is required' });
       return;
     }
-    
-    memory.clearQuery(sessionId, queryId);
-    res.json({ status: 'success', message: `Query ${queryId} messages deleted from session ${sessionId}` });
+
+    memory.clearQuery(conversationId, queryId);
+    res.json({ status: 'success', message: `Query ${queryId} messages deleted from conversation ${conversationId}` });
   });
 
   /**
    * @swagger
-   * /sessions:
+   * /conversations:
    *   delete:
-   *     summary: Delete all sessions
-   *     description: Removes all sessions and their messages (same as purging memory)
+   *     summary: Delete all conversations
+   *     description: Removes all conversations and their messages (same as purging memory)
    *     tags:
    *       - Memory
    *     responses:
    *       200:
-   *         description: All sessions deleted successfully
+   *         description: All conversations deleted successfully
    *         content:
    *           application/json:
    *             schema:
@@ -303,13 +305,89 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    *                   example: success
    *                 message:
    *                   type: string
-   *                   example: All sessions deleted
+   *                   example: All conversations deleted
    *       500:
-   *         description: Failed to delete sessions
+   *         description: Failed to delete conversations
    */
-  router.delete('/sessions', (req, res) => {
+  router.delete('/conversations', (_req, res) => {
     memory.purge();
-    res.json({ status: 'success', message: 'All sessions deleted' });
+    res.json({ status: 'success', message: 'All conversations deleted' });
+  });
+
+  /**
+   * @swagger
+   * /conversations:
+   *   post:
+   *     summary: Create a new conversation
+   *     description: Creates a new conversation and returns its ID. Use this ID for subsequent POST /messages calls.
+   *     tags:
+   *       - Memory
+   *     responses:
+   *       201:
+   *         description: Conversation created successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 conversation_id:
+   *                   type: string
+   *                   description: The generated conversation ID (UUID v4)
+   */
+  router.post('/conversations', (_req, res) => {
+    const conversation_id = randomUUID();
+    res.status(201).json({ conversation_id });
+  });
+
+  /**
+   * @swagger
+   * /conversations/{conversationId}:
+   *   get:
+   *     summary: Get conversation details
+   *     description: Returns messages and metadata for a specific conversation
+   *     tags:
+   *       - Memory
+   *     parameters:
+   *       - in: path
+   *         name: conversationId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Conversation ID
+   *     responses:
+   *       200:
+   *         description: Conversation details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 conversation_id:
+   *                   type: string
+   *                 messages:
+   *                   type: array
+   *       404:
+   *         description: Conversation not found
+   */
+  router.get('/conversations/:conversationId', (req, res) => {
+    const { conversationId } = req.params;
+
+    if (!conversationId) {
+      res.status(400).json({ error: 'Conversation ID is required' });
+      return;
+    }
+
+    const messages = memory.getMessagesWithMetadata(conversationId);
+
+    if (messages.length === 0) {
+      res.status(404).json({ error: 'Conversation not found' });
+      return;
+    }
+
+    res.json({
+      conversation_id: conversationId,
+      messages
+    });
   });
 
   return router;

@@ -21,7 +21,7 @@ type HTTPMemory struct {
 	client           client.Client
 	httpClient       *http.Client
 	baseURL          string
-	sessionId        string
+	conversationId   string
 	name             string
 	namespace        string
 	eventingRecorder eventing.MemoryRecorder
@@ -43,26 +43,67 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 		return nil, fmt.Errorf("memory has no lastResolvedAddress in status")
 	}
 
-	sessionId := config.SessionId
-	if sessionId == "" {
-		sessionId = string(memory.UID)
-	}
-
 	// Create HTTP client with timeout for memory operations
 	httpClient := common.NewHTTPClientWithLogging(ctx)
 	if config.Timeout > 0 {
 		httpClient.Timeout = config.Timeout
 	}
 
+	baseURL := strings.TrimSuffix(*memory.Status.LastResolvedAddress, "/")
+
+	// Create conversation or use provided ID
+	conversationId, err := createConversation(ctx, httpClient, baseURL, config.ConversationId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create conversation: %w", err)
+	}
+
 	return &HTTPMemory{
 		client:           k8sClient,
 		httpClient:       httpClient,
-		baseURL:          strings.TrimSuffix(*memory.Status.LastResolvedAddress, "/"),
-		sessionId:        sessionId,
+		baseURL:          baseURL,
+		conversationId:   conversationId,
 		name:             memoryName,
 		namespace:        namespace,
 		eventingRecorder: memoryRecorder,
 	}, nil
+}
+
+// createConversation calls cluster-memory to create a new conversation and get its ID.
+// If conversationID is already provided (non-empty), it returns that ID without making an HTTP call.
+func createConversation(ctx context.Context, httpClient *http.Client, baseURL, conversationID string) (string, error) {
+	if conversationID != "" {
+		return conversationID, nil
+	}
+
+	type createResponse struct {
+		ConversationID string `json:"conversation_id"`
+	}
+
+	requestURL := fmt.Sprintf("%s/conversations", baseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", ContentTypeJSON)
+	req.Header.Set("User-Agent", UserAgent)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("HTTP status %d", resp.StatusCode)
+	}
+
+	var response createResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return response.ConversationID, nil
 }
 
 // resolveAndUpdateAddress dynamically resolves the memory address and updates the status if it changed
@@ -122,9 +163,9 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 	}
 
 	reqBody, err := json.Marshal(MessagesRequest{
-		SessionID: m.sessionId,
-		QueryID:   queryID,
-		Messages:  openaiMessages,
+		ConversationID: m.conversationId,
+		QueryID:        queryID,
+		Messages:       openaiMessages,
 	})
 	if err != nil {
 		operationData := map[string]string{"result": fmt.Sprintf("Failed to serialize messages: %v", err)}
@@ -159,8 +200,9 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 	}
 
 	operationData := map[string]string{
-		"messages": fmt.Sprintf("%d", len(messages)),
-		"result":   "Memory add messages completed successfully",
+		"messages":       fmt.Sprintf("%d", len(messages)),
+		"conversationId": m.conversationId,
+		"result":         "Memory add messages completed successfully",
 	}
 	m.eventingRecorder.Complete(ctx, "MemoryAddMessages", operationData["result"], operationData)
 	return nil
@@ -177,7 +219,7 @@ func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 		return nil, err
 	}
 
-	requestURL := fmt.Sprintf("%s%s?session_id=%s", m.baseURL, MessagesEndpoint, url.QueryEscape(m.sessionId))
+	requestURL := fmt.Sprintf("%s%s?conversation_id=%s", m.baseURL, MessagesEndpoint, url.QueryEscape(m.conversationId))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		operationData := map[string]string{"result": fmt.Sprintf("Failed to create request: %v", err)}
@@ -227,6 +269,11 @@ func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 	}
 	m.eventingRecorder.Complete(ctx, "MemoryGetMessages", operationData["result"], operationData)
 	return messages, nil
+}
+
+// GetConversationID returns the current conversation ID
+func (m *HTTPMemory) GetConversationID() string {
+	return m.conversationId
 }
 
 // Close closes the HTTP client connections

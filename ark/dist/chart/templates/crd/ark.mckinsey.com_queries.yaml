@@ -59,6 +59,9 @@ spec:
               cancel:
                 description: When true, indicates intent to cancel the query
                 type: boolean
+              conversationId:
+                minLength: 1
+                type: string
               input:
                 description: Input can be a string (type=user) or []openai.ChatCompletionMessageParamUnion
                   (type=messages)
@@ -448,6 +451,9 @@ spec:
                   - type
                   type: object
                 type: array
+              conversationId:
+                minLength: 1
+                type: string
               duration:
                 type: string
               phase:

@@ -47,8 +47,12 @@ spec:
     - type: team
       name: forecast-team
 
-  # Optional: session identifier for conversation continuity
+  # Optional: session identifier for tracking and telemetry
   sessionId: user-session-123
+
+  # Optional: conversation identifier for memory continuity
+  # If not provided with memory, a new conversation ID will be generated
+  conversationId: conv-abc123
 
   # Optional: memory storage for conversation history
   memory:
@@ -246,9 +250,16 @@ spec:
       name: dynamic-agent
 ```
 
-## Session Management
+## Session and Conversation Management
 
-Group related queries using `sessionId` to maintain conversation context:
+Ark supports two identifiers for tracking and memory continuity:
+
+- **sessionId**: Groups related queries for tracking and telemetry purposes
+- **conversationId**: Associates queries with a specific memory/conversation thread for context continuity
+
+### Using Conversation ID for Memory
+
+Use `conversationId` with `memory` to maintain conversation context:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -256,6 +267,7 @@ kind: Query
 metadata:
   name: query-1
 spec:
+  conversationId: conv-abc123
   sessionId: user-session-123
   memory:
     name: cluster-memory
@@ -269,6 +281,7 @@ kind: Query
 metadata:
   name: query-2
 spec:
+  conversationId: conv-abc123  # Same conversation
   sessionId: user-session-123  # Same session
   memory:
     name: cluster-memory
@@ -278,7 +291,9 @@ spec:
       name: assistant
 ```
 
-The agent will remember "Alice" from the first query when processing the second.
+The agent will remember "Alice" from the first query when processing the second because they share the same `conversationId`.
+
+If `conversationId` is not provided when using memory, a new conversation ID will be automatically generated for each query.
 
 ## Timeout Configuration
 

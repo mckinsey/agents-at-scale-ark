@@ -199,10 +199,15 @@ const MainMenu: React.FC<MainMenuProps> = ({config}) => {
         // Import and start ChatUI in the same process
         const {render} = await import('ink');
         const {ArkApiProxy} = await import('../lib/arkApiProxy.js');
+        const {loadConfig} = await import('../lib/config.js');
         const ChatUI = (await import('../components/ChatUI.js')).default;
 
         try {
-          const proxy = new ArkApiProxy();
+          const config = loadConfig();
+          const proxy = new ArkApiProxy(
+            undefined,
+            config.services?.reusePortForwards ?? false
+          );
           const arkApiClient = await proxy.start();
 
           // Render ChatUI as a new Ink app
@@ -262,7 +267,9 @@ const MainMenu: React.FC<MainMenuProps> = ({config}) => {
         await unmountInkApp();
 
         const {openDashboard} = await import('../commands/dashboard/index.js');
-        await openDashboard();
+        const {loadConfig} = await import('../lib/config.js');
+        const config = loadConfig();
+        await openDashboard(config);
         break;
       }
 

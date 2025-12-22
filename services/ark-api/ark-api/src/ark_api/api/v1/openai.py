@@ -184,6 +184,10 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
     if request.metadata and "sessionId" in request.metadata:
         session_id = request.metadata["sessionId"]
 
+    conversation_id = None
+    if request.metadata and "conversationId" in request.metadata:
+        conversation_id = request.metadata["conversationId"]
+
     timeout = None
     if request.metadata and "timeout" in request.metadata:
         timeout = request.metadata["timeout"]
@@ -207,10 +211,12 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
         metadata["annotations"][STREAMING_ENABLED_ANNOTATION] = "true"
 
     try:
-        # Build query spec with optional sessionId and timeout
+        # Build query spec with optional sessionId, conversationId and timeout
         query_spec_dict = {"type": "messages", "input": messages, "targets": [target]}
         if session_id:
             query_spec_dict["sessionId"] = session_id
+        if conversation_id:
+            query_spec_dict["conversationId"] = conversation_id
         if timeout:
             query_spec_dict["timeout"] = timeout
 
