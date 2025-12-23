@@ -24,7 +24,16 @@ VERSION_MCP = "v1alpha1"
 
 async def _get_a2a_server_address(a2a_server_name: str, 
     namespace: Optional[str] = None) -> tuple[str, dict]:
-    """Get the resolved address for an A2A server."""
+    """Collect A2A Server details from ark resources. If A2A Server requires 
+        particular headers, they will be collected and provided back.
+    Args:
+        a2a_server_name: name of A2A Server inside ark
+        namespace: name of namespace where A2A server resource is located in. 
+            If no namespace is provided, default will be used
+
+    Returns:
+        (mcp_endpoint, headers_required_by_mcp)
+    """
     async with with_ark_client(namespace, VERSION_A2A) as ark_client:
         a2a_server = await ark_client.a2aservers.a_get(a2a_server_name)
         a2a_dict = a2a_server.to_dict()
@@ -43,6 +52,16 @@ async def _get_a2a_server_address(a2a_server_name: str,
 
 async def _get_mcp_server_address(mcp_server_name: str, 
     namespace: Optional[str] = None) -> tuple[str, dict]:
+    """Collect MCP Resource details from ark resources. If MCP Server requires 
+        particular headers, they will be collected and provided back.
+    Args:
+        mcp_server_name: name of MCP Server inside ark
+        namespace: name of namespace where MCP server resource is located in. 
+            If no namespace is provided, default will be used
+
+    Returns:
+        (mcp_endpoint, headers_required_by_mcp)
+    """
     async with with_ark_client(namespace, VERSION_MCP) as ark_client:
         mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
         mcp_dict = mcp_server.to_dict()
@@ -64,7 +83,16 @@ async def _proxy_request(
     request: Request,
     headers_to_forward: Optional[dict] = None
 ) -> Response:
-    """Proxy an HTTP request to a target URL."""
+    """Proxy an HTTP request to a target URL and provide back the response.
+    
+    Args:
+        target_url: endpoint where the request will be forwarded to 
+        request: the whole request to forward
+        headers_to_forward: dictionary of headers to add at the request's headers before forwarding it
+
+    Returns:
+        Response: Proxied response from the target endpoing
+    """
     # Prepare headers to forward (exclude hop-by-hop headers)
     headers = {}
     req_ignore_headers = ["host", "content-length", "authorization"]
@@ -85,10 +113,6 @@ async def _proxy_request(
     
     # Read request body if present
     body = await request.body()
-    print(f"Req Body: {body}")
-    # Make the proxied request
-    #json_obj = await request.json()
-    #print(f"Req JSON: {json_obj}")
     timeout = httpx.Timeout(10.0, read=None)
     async with httpx.AsyncClient(timeout=timeout) as client:
         try:

@@ -706,6 +706,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/proxy/{resource}/{server_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Proxy Server
+         * @description Proxy requests to a specific resource inside your agentic cluster.
+         *     The goal is to expose over public internet your agentic resources in
+         *     order to perform testing of the resource itself.
+         *
+         *     Args:
+         *         server_name: Name of the agentic resource. Supported only a2a and mcp.
+         *         path: Remaining path after the server name (will be forwarded as-is)
+         *         request: The incoming FastAPI request
+         *         namespace: The namespace containing the agentic resource
+         *
+         *     Returns:
+         *         Response: Proxied response from the agentic resource
+         */
+        get: operations["proxy_server_v1_proxy__resource___server_name__get"];
+        put?: never;
+        /**
+         * Proxy Server
+         * @description Proxy requests to a specific resource inside your agentic cluster.
+         *     The goal is to expose over public internet your agentic resources in
+         *     order to perform testing of the resource itself.
+         *
+         *     Args:
+         *         server_name: Name of the agentic resource. Supported only a2a and mcp.
+         *         path: Remaining path after the server name (will be forwarded as-is)
+         *         request: The incoming FastAPI request
+         *         namespace: The namespace containing the agentic resource
+         *
+         *     Returns:
+         *         Response: Proxied response from the agentic resource
+         */
+        post: operations["proxy_server_v1_proxy__resource___server_name__post"];
+        delete?: never;
+        /**
+         * Proxy Server
+         * @description Proxy requests to a specific resource inside your agentic cluster.
+         *     The goal is to expose over public internet your agentic resources in
+         *     order to perform testing of the resource itself.
+         *
+         *     Args:
+         *         server_name: Name of the agentic resource. Supported only a2a and mcp.
+         *         path: Remaining path after the server name (will be forwarded as-is)
+         *         request: The incoming FastAPI request
+         *         namespace: The namespace containing the agentic resource
+         *
+         *     Returns:
+         *         Response: Proxied response from the agentic resource
+         */
+        options: operations["proxy_server_v1_proxy__resource___server_name__options"];
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/proxy/{resource}/{server_name}/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Proxy Server Path */
+        get: operations["proxy_server_path_v1_proxy__resource___server_name___path__get"];
+        put?: never;
+        /** Proxy Server Path */
+        post: operations["proxy_server_path_v1_proxy__resource___server_name___path__post"];
+        delete?: never;
+        /** Proxy Server Path */
+        options: operations["proxy_server_path_v1_proxy__resource___server_name___path__options"];
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/a2a-tasks": {
         parameters: {
             query?: never;
@@ -3644,6 +3724,11 @@ export interface components {
             error?: string | null;
         };
         /**
+         * Resource
+         * @enum {string}
+         */
+        Resource: "a2a" | "mcp";
+        /**
          * ResourceSelector
          * @description Selector for automatic evaluation of resources.
          */
@@ -4288,14 +4373,8 @@ export interface components {
             serviceRef?: components["schemas"]["ark_api__models__mcp_servers__ServiceRef"] | null;
             queryParameterRef?: components["schemas"]["ark_api__models__mcp_servers__QueryParameterRef"] | null;
         };
-        /**
-         * ValueSource
-         * @description ValueSource for configuration (supports direct value or valueFrom).
-         */
         ark_api__models__mcp_servers__ValueSource: {
-            /** Value */
-            value?: string | null;
-            valueFrom?: components["schemas"]["ark_api__models__mcp_servers__ValueFrom"] | null;
+            [key: string]: unknown;
         };
         /**
          * ValueSource
@@ -5794,6 +5873,219 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_server_v1_proxy__resource___server_name__get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                resource: components["schemas"]["Resource"];
+                server_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_server_v1_proxy__resource___server_name__post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                resource: components["schemas"]["Resource"];
+                server_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_server_v1_proxy__resource___server_name__options: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                resource: components["schemas"]["Resource"];
+                server_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_server_path_v1_proxy__resource___server_name___path__get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                resource: components["schemas"]["Resource"];
+                server_name: string;
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_server_path_v1_proxy__resource___server_name___path__post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                resource: components["schemas"]["Resource"];
+                server_name: string;
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_server_path_v1_proxy__resource___server_name___path__options: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                resource: components["schemas"]["Resource"];
+                server_name: string;
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
             };
             /** @description Validation Error */
             422: {
