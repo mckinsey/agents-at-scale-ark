@@ -67,11 +67,11 @@ persistence:
   # Path where data will be stored
   mountPath: /data
   # Filename for the memory data
-  memoryFileName: memory.json
+  memoryFileName: messages.json
   # Filename for the stream data
-  streamFileName: stream.json
+  streamFileName: completionchunks.json
   # Filename for the trace data
-  traceFileName: traces.json
+  traceFileName: oteltraces.json
   # Filename for the event data
   eventFileName: events.json
   # Use existing PVC instead of creating a new one

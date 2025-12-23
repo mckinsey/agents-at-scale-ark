@@ -49,34 +49,45 @@ GET /traces
 GET /traces/{traceId}
 ```
 
-Retrieve traces.
+Retrieve traces. Returns a paginated list of traces grouped by trace ID.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `limit` | 30 | Maximum number of traces to return |
-| `offset` | 0 | Number of traces to skip |
+| `limit` | 100 | Maximum traces to return (max 1000) |
+| `cursor` | - | Sequence number to paginate from |
 | `watch` | - | Enable SSE streaming. See [Streaming Traces](#streaming-traces) |
 
-Get traces with paging request:
+List traces with pagination:
 
+```bash
+curl http://localhost:8080/traces?limit=10
 ```
-curl http://localhost:8080/traces?limit=10&offset=500
 
-[
-  { "traceId": "abc123", "spans": [
-    { "spanId": "span1", "name": "query.execute", ... },
-    { "spanId": "span2", "parentSpanId": "span1", "name": "llm.chat", ... }
-  ]},
-  { "traceId": "def456", "spans": [...] },
-  ...
-]
+```json
+{
+  "items": [
+    { "traceId": "abc123", "spans": [...] },
+    { "traceId": "def456", "spans": [...] }
+  ],
+  "total": 150,
+  "hasMore": true,
+  "nextCursor": 42
+}
+```
+
+Fetch the next page using `nextCursor`:
+
+```bash
+curl http://localhost:8080/traces?limit=10&cursor=42
 ```
 
 Get a single trace:
 
-```
+```bash
 curl http://localhost:8080/traces/abc123
+```
 
+```json
 { "traceId": "abc123", "spans": [
   { "spanId": "span1", "name": "query.execute", ... },
   { "spanId": "span2", "parentSpanId": "span1", "name": "llm.chat", ... }
@@ -95,31 +106,30 @@ Stream traces in real-time via SSE.
 | Parameter | Description |
 |-----------|-------------|
 | `watch` | Set to `true` to enable SSE streaming |
-| `from-beginning` | Replay existing spans before streaming new ones (single trace only) |
-| | |
-| `limit` | Ignored when streaming |
-| `offset` | Ignored when streaming |
+| `cursor` | Replay items after this sequence number, then stream new ones |
+| `from-beginning` | Replay all existing spans before streaming (single trace only). Overrides `cursor` if both provided |
 
-Example request:
+Stream all new spans:
 
-```
+```bash
 curl http://localhost:8080/traces?watch=true
-
-data: {"traceId":"abc123","spanId":"span1","name":"llm.chat",...}
-data: {"traceId":"abc123","spanId":"span2","name":"tool.execute",...}
-data: {"traceId":"def456","spanId":"span1","name":"query.execute",...}
 ```
 
-The `from-beginning` parameter can be used to return spans that have already
-been emitted for a trace before new spans come in, useful for a single view of
-all spans for a trace:
-
 ```
-curl http://localhost:8080/traces/abc123?watch=true&from-beginning=true
-
-data: {"traceId":"abc123","spanId":"span0","name":"llm.chat",...}
 data: {"traceId":"abc123","spanId":"span1","name":"llm.chat",...}
 data: {"traceId":"abc123","spanId":"span2","name":"tool.execute",...}
+```
+
+Resume from a cursor (useful after fetching initial list with `nextCursor`):
+
+```bash
+curl "http://localhost:8080/traces?watch=true&cursor=42"
+```
+
+Replay all existing spans for a single trace:
+
+```bash
+curl "http://localhost:8080/traces/abc123?watch=true&from-beginning=true"
 ```
 
 ## Purging Traces

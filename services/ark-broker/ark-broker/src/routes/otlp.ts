@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import express from 'express';
-import { TraceStore, OTELSpan } from '../trace-store.js';
+import { TraceBroker, OTELSpan } from '../trace-broker.js';
 import protobuf from 'protobufjs';
 import { join } from 'path';
 
@@ -57,7 +57,7 @@ interface OTLPRequest {
   }>;
 }
 
-export function createOTLPRouter(traces: TraceStore): Router {
+export function createOTLPRouter(traces: TraceBroker): Router {
   const router = Router();
 
   loadProtoDefinitions().catch(err => {

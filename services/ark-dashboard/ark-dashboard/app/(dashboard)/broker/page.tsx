@@ -26,101 +26,128 @@ interface StreamEntry {
   data: unknown;
 }
 
+interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  hasMore: boolean;
+  nextCursor?: number;
+}
+
 const PAGE_SIZE = 100;
 
-function useSSEStream(endpoint: string, memory: string, enableInitialFetch = false) {
+function useSSEStream(endpoint: string, memory: string) {
   const [streamedEntries, setStreamedEntries] = useState<StreamEntry[]>([]);
   const [fetchedEntries, setFetchedEntries] = useState<StreamEntry[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(enableInitialFetch);
+  const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const fetchedOffsetRef = useRef(0);
+  const nextCursorRef = useRef<number | undefined>(undefined);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const initialFetchDoneRef = useRef(false);
 
-  const fetchTraces = useCallback(async (offset: number) => {
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = new AbortController();
+  const connect = useCallback(
+    (cursor?: number) => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
 
-    setIsLoading(true);
-    try {
-      const url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=${PAGE_SIZE}&offset=${offset}`;
-      const response = await fetch(url, { signal: abortControllerRef.current.signal });
-      const data = await response.json();
-      if (data.error) {
-        setError(data.error.message || 'Fetch error');
-        return;
+      setError(null);
+      let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&watch=true`;
+      if (cursor !== undefined) {
+        url += `&cursor=${cursor}`;
       }
-      const newEntries: StreamEntry[] = (data as unknown[]).map((item, i) => ({
-        id: `fetched-${offset + i}-${Math.random().toString(36).substring(2, 11)}`,
-        timestamp: new Date().toISOString(),
-        data: item,
-      }));
-      setFetchedEntries(prev => [...prev, ...newEntries]);
-      setHasMore(newEntries.length === PAGE_SIZE);
-      fetchedOffsetRef.current = offset + newEntries.length;
-    } catch (e) {
-      if ((e as Error).name !== 'AbortError') {
-        setError('Failed to fetch traces');
+      const eventSource = new EventSource(url);
+      eventSourceRef.current = eventSource;
+
+      eventSource.onopen = () => {
+        setIsConnected(true);
+        setError(null);
+      };
+
+      eventSource.onmessage = event => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.error) {
+            setError(data.error.message || 'Stream error');
+            return;
+          }
+          const entry: StreamEntry = {
+            id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+            timestamp: new Date().toISOString(),
+            data,
+          };
+          setStreamedEntries(prev => [entry, ...prev.slice(0, 499)]);
+        } catch {
+          console.error('Failed to parse SSE data:', event.data);
+        }
+      };
+
+      eventSource.onerror = () => {
+        setIsConnected(false);
+        eventSource.close();
+        reconnectTimeoutRef.current = setTimeout(() => {
+          connect(nextCursorRef.current);
+        }, 3000);
+      };
+    },
+    [endpoint, memory],
+  );
+
+  const fetchPage = useCallback(
+    async (cursor?: number) => {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = new AbortController();
+
+      setIsLoading(true);
+      try {
+        let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=${PAGE_SIZE}`;
+        if (cursor !== undefined) {
+          url += `&cursor=${cursor}`;
+        }
+        const response = await fetch(url, {
+          signal: abortControllerRef.current.signal,
+        });
+        const data: PaginatedResponse<unknown> = await response.json();
+        if ((data as unknown as { error?: { message?: string } }).error) {
+          setError(
+            (data as unknown as { error: { message?: string } }).error
+              .message || 'Fetch error',
+          );
+          return null;
+        }
+        const newEntries: StreamEntry[] = data.items.map((item, i) => ({
+          id: `fetched-${cursor ?? 0}-${i}-${Math.random().toString(36).substring(2, 11)}`,
+          timestamp: new Date().toISOString(),
+          data: item,
+        }));
+        setFetchedEntries(prev => [...prev, ...newEntries]);
+        setHasMore(data.hasMore);
+        nextCursorRef.current = data.nextCursor;
+        return data;
+      } catch (e) {
+        if ((e as Error).name !== 'AbortError') {
+          setError('Failed to fetch data');
+        }
+        return null;
+      } finally {
+        setIsLoading(false);
       }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [endpoint, memory]);
+    },
+    [endpoint, memory],
+  );
 
   const loadMore = useCallback(() => {
-    if (!isLoading && hasMore) {
-      fetchTraces(fetchedOffsetRef.current);
+    if (!isLoading && hasMore && nextCursorRef.current !== undefined) {
+      fetchPage(nextCursorRef.current);
     }
-  }, [fetchTraces, isLoading, hasMore]);
-
-  const connect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-
-    setError(null);
-    const url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&watch=true`;
-    const eventSource = new EventSource(url);
-    eventSourceRef.current = eventSource;
-
-    eventSource.onopen = () => {
-      setIsConnected(true);
-      setError(null);
-    };
-
-    eventSource.onmessage = event => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.error) {
-          setError(data.error.message || 'Stream error');
-          return;
-        }
-        const entry: StreamEntry = {
-          id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-          timestamp: new Date().toISOString(),
-          data,
-        };
-        setStreamedEntries(prev => [entry, ...prev.slice(0, 499)]);
-      } catch {
-        console.error('Failed to parse SSE data:', event.data);
-      }
-    };
-
-    eventSource.onerror = () => {
-      setIsConnected(false);
-      eventSource.close();
-      reconnectTimeoutRef.current = setTimeout(() => {
-        connect();
-      }, 3000);
-    };
-  }, [endpoint, memory]);
+  }, [fetchPage, isLoading, hasMore]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -137,20 +164,26 @@ function useSSEStream(endpoint: string, memory: string, enableInitialFetch = fal
   const clear = useCallback(() => {
     setStreamedEntries([]);
     setFetchedEntries([]);
-    fetchedOffsetRef.current = 0;
+    nextCursorRef.current = undefined;
     setHasMore(true);
   }, []);
 
   useEffect(() => {
-    if (enableInitialFetch) {
-      fetchTraces(0);
+    if (initialFetchDoneRef.current) return;
+    initialFetchDoneRef.current = true;
+
+    async function init() {
+      const result = await fetchPage();
+      connect(result?.nextCursor);
     }
-    connect();
+    init();
+
     return () => {
       disconnect();
       abortControllerRef.current?.abort();
+      initialFetchDoneRef.current = false;
     };
-  }, [connect, disconnect, fetchTraces, enableInitialFetch]);
+  }, [connect, disconnect, fetchPage]);
 
   const entries = [...streamedEntries, ...fetchedEntries];
 
@@ -259,7 +292,11 @@ function StreamView({
               })}
               {onLoadMore && hasMore && (
                 <div className="flex justify-center py-2">
-                  <Button variant="outline" size="sm" onClick={onLoadMore} disabled={isLoading}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onLoadMore}
+                    disabled={isLoading}>
                     {isLoading ? 'Loading...' : 'Load more'}
                   </Button>
                 </div>
@@ -277,7 +314,7 @@ export default function BrokerPage() {
   const [selectedMemory, setSelectedMemory] = useState<string>('default');
   const [loading, setLoading] = useState(true);
 
-  const traces = useSSEStream('/v1/broker/traces', selectedMemory, true);
+  const traces = useSSEStream('/v1/broker/traces', selectedMemory);
   const messages = useSSEStream('/v1/broker/messages', selectedMemory);
   const chunks = useSSEStream('/v1/broker/chunks', selectedMemory);
   const events = useSSEStream('/v1/broker/events', selectedMemory);
@@ -349,8 +386,11 @@ export default function BrokerPage() {
               title="Messages"
               entries={messages.entries}
               isConnected={messages.isConnected}
+              isLoading={messages.isLoading}
+              hasMore={messages.hasMore}
               error={messages.error}
               onClear={messages.clear}
+              onLoadMore={messages.loadMore}
             />
           </TabsContent>
           <TabsContent value="chunks" className="mt-4 flex-1">
@@ -358,8 +398,11 @@ export default function BrokerPage() {
               title="LLM Chunks"
               entries={chunks.entries}
               isConnected={chunks.isConnected}
+              isLoading={chunks.isLoading}
+              hasMore={chunks.hasMore}
               error={chunks.error}
               onClear={chunks.clear}
+              onLoadMore={chunks.loadMore}
             />
           </TabsContent>
           <TabsContent value="events" className="mt-4 flex-1">
@@ -367,8 +410,11 @@ export default function BrokerPage() {
               title="Operation Events"
               entries={events.entries}
               isConnected={events.isConnected}
+              isLoading={events.isLoading}
+              hasMore={events.hasMore}
               error={events.error}
               onClear={events.clear}
+              onLoadMore={events.loadMore}
             />
           </TabsContent>
         </Tabs>

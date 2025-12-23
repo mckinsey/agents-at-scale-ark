@@ -1,5 +1,5 @@
 import { createRequire } from 'module';
-import app, { memory, stream, traces, events } from './server.js';
+import app, { memory, chunks, traces, events } from './server.js';
 import { setupSwagger } from './swagger.js';
 
 const require = createRequire(import.meta.url);
@@ -17,7 +17,7 @@ const server = app.listen(parseInt(PORT), HOST, () => {
 const gracefulShutdown = (): void => {
   console.log('Shutting down gracefully');
   memory.save();
-  stream.save();
+  chunks.save();
   traces.save();
   events.save();
   server.close(() => {
