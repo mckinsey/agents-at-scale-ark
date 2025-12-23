@@ -114,7 +114,7 @@ async def get_headers(resource_spec: dict,
                         secret_name = header["value"]["valueFrom"]["secretKeyRef"].get("name", "")
                         secret_key = header["value"]["valueFrom"]["secretKeyRef"].get("key", "")
                         output[header["name"]] = await get_secret(secret_name, secret_key, namespace)
-                        logger.info(f"Secret {header["name"]}: { output[header["name"]]}")
+                        logger.info(f"Secret {header['name']}: {output[header['name']]}")
                         
                     
     
