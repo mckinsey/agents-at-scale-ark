@@ -26,7 +26,7 @@ export type DirectHeader = {
 export type SecretHeader = {
   name: string;
   value: {
-    valueFrom: ValueFrom
+    valueFrom: ValueFrom;
   };
 };
 
@@ -35,7 +35,7 @@ export type ValueFrom = {
     name: string;
     key: string;
   };
-}
+};
 
 // Service for MCP server operations
 export const mcpServersService = {
