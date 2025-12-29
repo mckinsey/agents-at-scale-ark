@@ -11,7 +11,21 @@ export type MCPServerCreateRequest =
 export type MCPServerSpec = components['schemas']['MCPServerSpec'];
 export type MCPHeader = {
   name: string;
-  value: components['schemas']['ark_api__models__mcp_servers__ValueSource'];
+  value: {
+    value?: string | null;
+    valueFrom?: {
+      secretKeyRef?: {
+        key: string;
+        name: string;
+        optional?: boolean | null;
+      } | null;
+      configMapKeyRef?: {
+        key: string;
+        name: string;
+        optional?: boolean | null;
+      } | null;
+    } | null;
+  };
 };
 //export type MCPServerListResponse = components['schemas']['MCPServerListResponse']
 
