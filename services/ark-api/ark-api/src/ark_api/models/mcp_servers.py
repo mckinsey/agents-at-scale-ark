@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, model_serializer
+from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 from .common import AvailabilityStatus
 
@@ -42,6 +42,7 @@ class ValueSource(BaseModel):
 
 
 class Header(BaseModel):
+    model_config = ConfigDict(title='MCPServerHeader')
     name: str
     value: ValueSource
 

@@ -1,5 +1,5 @@
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class A2AServerResponse(BaseModel):
@@ -40,6 +40,7 @@ class HeaderValue(BaseModel):
 
 
 class Header(BaseModel):
+    model_config = ConfigDict(title='A2AServerHeader')
     name: str
     value: HeaderValue
 
