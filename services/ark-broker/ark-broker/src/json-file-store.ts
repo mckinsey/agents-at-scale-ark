@@ -5,7 +5,6 @@ export class JsonFileStore<T> {
   constructor(
     private name: string,
     private path?: string,
-    private getCount?: (data: T) => number,
     private maxItems?: number
   ) {
     if (path) {
@@ -13,13 +12,16 @@ export class JsonFileStore<T> {
     }
   }
 
-  load(): T | null {
+  load(): { items: T[]; nextSequence: number } | null {
     if (!this.path) return null;
     try {
       if (existsSync(this.path)) {
         const data = JSON.parse(readFileSync(this.path, 'utf-8'));
-        const count = this.getCount ? this.getCount(data) : null;
-        console.log(`[${this.name}] loaded${count !== null ? ` ${count} records` : ''}`);
+        if (!Array.isArray(data.items)) {
+          console.error(`[${this.name}] invalid data format`);
+          return null;
+        }
+        console.log(`[${this.name}] loaded ${data.items.length} records`);
         return data;
       } else {
         console.log(`[${this.name}] no existing data`);
@@ -30,26 +32,24 @@ export class JsonFileStore<T> {
     return null;
   }
 
-  save(data: T): void {
+  save(items: T[], nextSequence: number): void {
     if (!this.path) return;
     try {
       const dir = dirname(this.path);
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-      const limited = this.applyLimit(data);
-      writeFileSync(this.path, JSON.stringify(limited, null, 2));
-      const count = this.getCount ? this.getCount(limited) : null;
-      console.log(`[${this.name}] saved${count !== null ? ` ${count} records` : ''}`);
+      const limited = this.applyLimit(items);
+      writeFileSync(this.path, JSON.stringify({ items: limited, nextSequence }, null, 2));
+      console.log(`[${this.name}] saved ${limited.length} records`);
     } catch (e) {
       console.error(`[${this.name}] failed to save:`, e);
     }
   }
 
-  private applyLimit(data: T): T {
-    if (!this.maxItems || !Array.isArray(data)) return data;
-    if (data.length <= this.maxItems) return data;
-    const removed = data.length - this.maxItems;
+  private applyLimit(items: T[]): T[] {
+    if (!this.maxItems || items.length <= this.maxItems) return items;
+    const removed = items.length - this.maxItems;
     console.log(`[${this.name}] trimmed ${removed} items (limit: ${this.maxItems})`);
-    return data.slice(-this.maxItems) as T;
+    return items.slice(-this.maxItems);
   }
 
   get enabled(): boolean {

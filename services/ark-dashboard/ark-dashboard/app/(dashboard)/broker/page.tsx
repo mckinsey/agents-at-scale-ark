@@ -47,6 +47,7 @@ function useSSEStream(endpoint: string, memory: string) {
   const nextCursorRef = useRef<number | undefined>(undefined);
   const abortControllerRef = useRef<AbortController | null>(null);
   const initialFetchDoneRef = useRef(false);
+  const mountedRef = useRef(true);
 
   const connect = useCallback(
     (cursor?: number) => {
@@ -60,18 +61,20 @@ function useSSEStream(endpoint: string, memory: string) {
 
       setError(null);
       let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&watch=true`;
-      if (cursor !== undefined) {
+      if (cursor !== undefined && cursor !== null) {
         url += `&cursor=${cursor}`;
       }
       const eventSource = new EventSource(url);
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = () => {
+        if (!mountedRef.current) return;
         setIsConnected(true);
         setError(null);
       };
 
       eventSource.onmessage = event => {
+        if (!mountedRef.current) return;
         try {
           const data = JSON.parse(event.data);
           if (data.error) {
@@ -90,10 +93,13 @@ function useSSEStream(endpoint: string, memory: string) {
       };
 
       eventSource.onerror = () => {
+        if (!mountedRef.current) return;
         setIsConnected(false);
         eventSource.close();
         reconnectTimeoutRef.current = setTimeout(() => {
-          connect(nextCursorRef.current);
+          if (mountedRef.current) {
+            connect(nextCursorRef.current);
+          }
         }, 3000);
       };
     },
@@ -108,18 +114,21 @@ function useSSEStream(endpoint: string, memory: string) {
       setIsLoading(true);
       try {
         let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=${PAGE_SIZE}`;
-        if (cursor !== undefined) {
+        if (cursor !== undefined && cursor !== null) {
           url += `&cursor=${cursor}`;
         }
         const response = await fetch(url, {
           signal: abortControllerRef.current.signal,
         });
+        if (!mountedRef.current) return null;
         const data: PaginatedResponse<unknown> = await response.json();
         if ((data as unknown as { error?: { message?: string } }).error) {
-          setError(
-            (data as unknown as { error: { message?: string } }).error
-              .message || 'Fetch error',
-          );
+          if (mountedRef.current) {
+            setError(
+              (data as unknown as { error: { message?: string } }).error
+                .message || 'Fetch error',
+            );
+          }
           return null;
         }
         const newEntries: StreamEntry[] = data.items.map((item, i) => ({
@@ -127,24 +136,33 @@ function useSSEStream(endpoint: string, memory: string) {
           timestamp: new Date().toISOString(),
           data: item,
         }));
-        setFetchedEntries(prev => [...prev, ...newEntries]);
-        setHasMore(data.hasMore);
+        if (mountedRef.current) {
+          setFetchedEntries(prev => [...prev, ...newEntries]);
+          setHasMore(data.hasMore);
+        }
         nextCursorRef.current = data.nextCursor;
         return data;
       } catch (e) {
-        if ((e as Error).name !== 'AbortError') {
+        if ((e as Error).name !== 'AbortError' && mountedRef.current) {
           setError('Failed to fetch data');
         }
         return null;
       } finally {
-        setIsLoading(false);
+        if (mountedRef.current) {
+          setIsLoading(false);
+        }
       }
     },
     [endpoint, memory],
   );
 
   const loadMore = useCallback(() => {
-    if (!isLoading && hasMore && nextCursorRef.current !== undefined) {
+    if (
+      !isLoading &&
+      hasMore &&
+      nextCursorRef.current !== undefined &&
+      nextCursorRef.current !== null
+    ) {
       fetchPage(nextCursorRef.current);
     }
   }, [fetchPage, isLoading, hasMore]);
@@ -171,14 +189,18 @@ function useSSEStream(endpoint: string, memory: string) {
   useEffect(() => {
     if (initialFetchDoneRef.current) return;
     initialFetchDoneRef.current = true;
+    mountedRef.current = true;
 
     async function init() {
       const result = await fetchPage();
-      connect(result?.nextCursor);
+      if (mountedRef.current) {
+        connect(result?.nextCursor);
+      }
     }
     init();
 
     return () => {
+      mountedRef.current = false;
       disconnect();
       abortControllerRef.current?.abort();
       initialFetchDoneRef.current = false;

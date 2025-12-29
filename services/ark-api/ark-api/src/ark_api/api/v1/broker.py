@@ -205,23 +205,18 @@ async def get_chunks(
     watch: bool = Query(False, description="Stream chunks via SSE"),
     query_id: Optional[str] = Query(None, alias="query-id", description="Filter by query ID"),
     memory: str = Query("default", description="Memory resource name"),
+    limit: int = Query(100, description="Max chunks to return"),
+    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
 ):
-    """Get or stream LLM chunks from the broker.
-
-    Note: Chunks use a different endpoint structure - /stream for stats, /stream/{query_id} for streaming.
-    """
-    broker_url = await get_broker_url(memory)
-    if not broker_url:
-        return JSONResponse(
-            content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
-            status_code=503,
-        )
-
-    if watch:
-        if query_id:
-            url = f"{broker_url}/stream/{query_id}?from-beginning=true"
-        else:
-            url = f"{broker_url}/stream?watch=true"
+    """Get or stream LLM chunks from the broker."""
+    if watch and query_id:
+        broker_url = await get_broker_url(memory)
+        if not broker_url:
+            return JSONResponse(
+                content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
+                status_code=503,
+            )
+        url = f"{broker_url}/stream/{query_id}?from-beginning=true"
         logger.info(f"Proxying chunks SSE stream from {url}")
         return StreamingResponse(
             proxy_sse_stream(url),
@@ -229,22 +224,10 @@ async def get_chunks(
             headers=sse_headers,
         )
 
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{broker_url}/stream")
-            return JSONResponse(content=response.json(), status_code=response.status_code)
-    except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to broker: {e}")
-        return JSONResponse(
-            content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
-            status_code=503,
-        )
-    except Exception as e:
-        logger.error(f"Error fetching chunks: {e}")
-        return JSONResponse(
-            content={"error": {"message": str(e), "type": "server_error"}},
-            status_code=500,
-        )
+    return await proxy_broker_request(
+        memory, "/stream", watch,
+        {"limit": limit, "cursor": cursor}
+    )
 
 
 async def proxy_broker_delete(memory: str, path: str):

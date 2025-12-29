@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { CompletionChunkBroker } from '../completion-chunk-broker.js';
 import { StreamError } from '../types.js';
 import { streamSSE, writeSSEEvent } from '../sse.js';
+import { parsePaginationParams, PaginationError } from '../pagination.js';
 
 const parseTimeout = (timeoutStr: string | undefined, defaultTimeout: number): number => {
   if (!timeoutStr) return defaultTimeout;
@@ -17,35 +18,29 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
    * @swagger
    * /stream:
    *   get:
-   *     summary: Get stream statistics
-   *     description: Returns statistics about all stored streams including chunk counts and completion status
+   *     summary: Get paginated chunks or stream via SSE
+   *     description: Returns paginated list of chunks or streams them via SSE with watch=true
    *     tags:
    *       - Streaming
+   *     parameters:
+   *       - in: query
+   *         name: watch
+   *         schema:
+   *           type: boolean
+   *         description: Stream chunks via SSE
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *         description: Maximum items to return
+   *       - in: query
+   *         name: cursor
+   *         schema:
+   *           type: integer
+   *         description: Cursor for pagination
    *     responses:
    *       200:
-   *         description: Stream statistics retrieved successfully
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 total_queries:
-   *                   type: integer
-   *                   description: Total number of queries with streams
-   *                 queries:
-   *                   type: object
-   *                   description: Per-query statistics
-   *                   additionalProperties:
-   *                     type: object
-   *                     properties:
-   *                       total_chunks:
-   *                         type: integer
-   *                       completed:
-   *                         type: boolean
-   *                       has_done_marker:
-   *                         type: boolean
-   *                       chunk_types:
-   *                         type: object
+   *         description: Paginated chunks or SSE stream
    */
   router.get('/', (req, res) => {
     const watch = req.query['watch'] === 'true';
@@ -61,25 +56,15 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
       });
     } else {
       try {
-        const allItems = chunks.all();
-        const queryIds = [...new Set(allItems.map(item => item.data.queryId))];
-        const stats: Record<string, any> = {};
-
-        for (const queryId of queryIds) {
-          const queryChunks = chunks.getChunksByQuery(queryId);
-          stats[queryId] = {
-            total_chunks: queryChunks.length,
-            completed: chunks.isComplete(queryId),
-            has_done_marker: queryChunks.includes('[DONE]')
-          };
-        }
-
-        res.json({
-          total_queries: queryIds.length,
-          queries: stats
-        });
+        const params = parsePaginationParams(req.query as Record<string, unknown>);
+        const result = chunks.paginate(params);
+        res.json(result);
       } catch (error) {
-        console.error('[STREAM] Failed to get stream statistics:', error);
+        if (error instanceof PaginationError) {
+          res.status(400).json({ error: error.message });
+          return;
+        }
+        console.error('[STREAM] Failed to get chunks:', error);
         const err = error as Error;
         res.status(500).json({ error: err.message });
       }

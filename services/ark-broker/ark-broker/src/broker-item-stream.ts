@@ -12,24 +12,21 @@ import { PaginatedList, PaginationParams, DEFAULT_LIMIT } from './pagination.js'
 export class BrokerItemStream<T> {
   private items: BrokerItem<T>[] = [];
   private nextSequence = 1;
-  private fileStore: JsonFileStore<BrokerItem<T>[]>;
+  private fileStore: JsonFileStore<BrokerItem<T>>;
   public eventEmitter = new EventEmitter();
 
   constructor(name: string, path?: string, maxItems?: number) {
-    this.fileStore = new JsonFileStore<BrokerItem<T>[]>(
-      name,
-      path,
-      (d) => d.length,
-      maxItems
-    );
+    this.fileStore = new JsonFileStore<BrokerItem<T>>(name, path, maxItems);
     const loaded = this.fileStore.load();
     if (loaded) {
-      this.items = loaded.map(item => ({
-        ...item,
-        timestamp: new Date(item.timestamp as unknown as string)
-      }));
-      if (this.items.length > 0) {
-        this.nextSequence = Math.max(...this.items.map(i => i.sequenceNumber)) + 1;
+      if (!Array.isArray(loaded.items) || typeof loaded.nextSequence !== 'number') {
+        console.warn(`[${name}] data file has invalid structure or data, no data loaded`);
+      } else {
+        this.items = loaded.items.map(item => ({
+          ...item,
+          timestamp: new Date(item.timestamp as unknown as string)
+        }));
+        this.nextSequence = loaded.nextSequence;
       }
     }
   }
@@ -54,7 +51,7 @@ export class BrokerItemStream<T> {
   }
 
   save(): void {
-    this.fileStore.save(this.items);
+    this.fileStore.save(this.items, this.nextSequence);
   }
 
   delete(predicate?: (item: BrokerItem<T>) => boolean): void {

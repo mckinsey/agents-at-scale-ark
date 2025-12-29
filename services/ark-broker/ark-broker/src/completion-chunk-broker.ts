@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { BrokerItem } from './broker-item.js';
 import { BrokerItemStream } from './broker-item-stream.js';
+import { PaginatedList, PaginationParams } from './pagination.js';
 
 /** Data payload for OpenAI chat completion streaming chunks */
 export interface CompletionChunkData {
@@ -74,5 +75,16 @@ export class CompletionChunkBroker {
         callback(item);
       }
     });
+  }
+
+  paginate(params: PaginationParams, queryId?: string): PaginatedList<BrokerItem<CompletionChunkData>> {
+    const predicate = queryId
+      ? (item: BrokerItem<CompletionChunkData>) => item.data.queryId === queryId
+      : undefined;
+    return this.stream.paginate(params, predicate);
+  }
+
+  getCurrentSequence(): number {
+    return this.stream.getCurrentSequence();
   }
 }

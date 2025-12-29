@@ -12,14 +12,12 @@ Content-Type: application/x-ndjson
 
 HTTP 200
 
-# Test 2: Check stream exists in global status
-GET http://ark-broker/stream-statistics
+# Test 2: Check stream exists via paginated list
+GET http://ark-broker/stream
 HTTP 200
 [Asserts]
-jsonpath "$.queries.test-hurl-basic.total_chunks" == 4
-jsonpath "$.queries.test-hurl-basic.completed" == false
-jsonpath "$.queries.test-hurl-basic.chunk_types.content" == 3
-jsonpath "$.queries.test-hurl-basic.chunk_types.finish_reason" == 1
+jsonpath "$.items" count >= 4
+jsonpath "$.total" >= 4
 
 # Test 3: Complete the stream
 POST http://ark-broker/stream/test-hurl-basic/complete
@@ -28,14 +26,7 @@ HTTP 200
 jsonpath "$.status" == "completed"
 jsonpath "$.query" == "test-hurl-basic"
 
-# Test 4: Verify completion in status
-GET http://ark-broker/stream-statistics
-HTTP 200
-[Asserts]
-jsonpath "$.queries.test-hurl-basic.completed" == true
-jsonpath "$.queries.test-hurl-basic.has_done_marker" == true
-
-# Test 5: Test tool call chunks
+# Test 4: Test tool call chunks
 POST http://ark-broker/stream/test-hurl-tools
 Content-Type: application/x-ndjson
 ```
@@ -47,51 +38,43 @@ Content-Type: application/x-ndjson
 
 HTTP 200
 
-# Test 6: Verify tool call chunks in status
-GET http://ark-broker/stream-statistics
-HTTP 200
-[Asserts]
-jsonpath "$.queries.test-hurl-tools.total_chunks" == 4
-jsonpath "$.queries.test-hurl-tools.chunk_types.tool_calls" == 3
-jsonpath "$.queries.test-hurl-tools.chunk_types.finish_reason" == 1
-
-# Test 7: Complete tool stream
+# Test 5: Complete tool stream
 POST http://ark-broker/stream/test-hurl-tools/complete
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "completed"
 
-# Test 8: Test non-existent stream completion (error case)
+# Test 6: Test non-existent stream completion (error case)
 POST http://ark-broker/stream/non-existent/complete
 HTTP 404
 [Asserts]
 jsonpath "$.error" exists
 
-# Test 9: Clean up all streams at the end
+# Test 7: Clean up all streams at the end
 DELETE http://ark-broker/stream
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "success"
 jsonpath "$.message" == "Stream data purged"
 
-# Test 10: Verify cleanup
-GET http://ark-broker/stream-statistics
+# Test 8: Verify cleanup
+GET http://ark-broker/stream
 HTTP 200
 [Asserts]
-jsonpath "$.total_queries" == 0
-jsonpath "$.queries" isEmpty
+jsonpath "$.items" count == 0
+jsonpath "$.total" == 0
 
 # =============================================================================
 # Trace API Tests
 # =============================================================================
 
-# Test 11: List traces (initially empty)
+# Test 9: List traces (initially empty)
 GET http://ark-broker/traces
 HTTP 200
 [Asserts]
-jsonpath "$" count == 0
+jsonpath "$.items" count == 0
 
-# Test 12: Ingest trace data via OTLP
+# Test 10: Ingest trace data via OTLP
 POST http://ark-broker/v1/traces
 Content-Type: application/json
 ```
@@ -111,15 +94,15 @@ Content-Type: application/json
 ```
 HTTP 200
 
-# Test 13: List traces (should have one trace)
+# Test 11: List traces (should have one trace)
 GET http://ark-broker/traces
 HTTP 200
 [Asserts]
-jsonpath "$" count == 1
-jsonpath "$[0].traceId" == "test-trace-1"
-jsonpath "$[0].spans" count == 2
+jsonpath "$.items" count == 1
+jsonpath "$.items[0].traceId" == "test-trace-1"
+jsonpath "$.items[0].spans" count == 2
 
-# Test 14: Get single trace
+# Test 12: Get single trace
 GET http://ark-broker/traces/test-trace-1
 HTTP 200
 [Asserts]
@@ -128,13 +111,13 @@ jsonpath "$.spans" count == 2
 jsonpath "$.spans[0].spanId" == "span-1"
 jsonpath "$.spans[1].spanId" == "span-2"
 
-# Test 15: Get non-existent trace
+# Test 13: Get non-existent trace
 GET http://ark-broker/traces/non-existent
 HTTP 404
 [Asserts]
 jsonpath "$.error" == "Trace not found"
 
-# Test 16: Ingest second trace
+# Test 14: Ingest second trace
 POST http://ark-broker/v1/traces
 Content-Type: application/json
 ```
@@ -150,29 +133,21 @@ Content-Type: application/json
 ```
 HTTP 200
 
-# Test 17: List traces with limit
+# Test 15: List traces with limit
 GET http://ark-broker/traces?limit=1
 HTTP 200
 [Asserts]
-jsonpath "$" count == 1
-jsonpath "$[0].traceId" == "test-trace-2"
+jsonpath "$.items" count == 1
 
-# Test 18: List traces with offset
-GET http://ark-broker/traces?limit=1&offset=1
-HTTP 200
-[Asserts]
-jsonpath "$" count == 1
-jsonpath "$[0].traceId" == "test-trace-1"
-
-# Test 19: Purge traces
+# Test 16: Purge traces
 DELETE http://ark-broker/traces
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "success"
 jsonpath "$.message" == "Trace data purged"
 
-# Test 20: Verify traces purged
+# Test 17: Verify traces purged
 GET http://ark-broker/traces
 HTTP 200
 [Asserts]
-jsonpath "$" count == 0
+jsonpath "$.items" count == 0
