@@ -9,7 +9,25 @@ export type MCPServerListResponse =
 export type MCPServerCreateRequest =
   components['schemas']['MCPServerCreateRequest'];
 export type MCPServerSpec = components['schemas']['MCPServerSpec'];
-export type MCPHeader = components['schemas']['Header'];
+// Manually defined due to non-deterministic Pydantic schema naming (#656)
+export type MCPHeader = {
+  name: string;
+  value: {
+    value?: string | null;
+    valueFrom?: {
+      secretKeyRef?: {
+        key: string;
+        name: string;
+        optional?: boolean | null;
+      } | null;
+      configMapKeyRef?: {
+        key: string;
+        name: string;
+        optional?: boolean | null;
+      } | null;
+    } | null;
+  };
+};
 //export type MCPServerListResponse = components['schemas']['MCPServerListResponse']
 
 export type MCPServer = MCPServerResponse & { id: string };
