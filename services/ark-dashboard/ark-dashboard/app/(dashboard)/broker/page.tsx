@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { type Memory, memoriesService } from '@/lib/services/memories';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbElement[] = [
   { href: '/', label: 'ARK Dashboard' },
@@ -296,13 +297,18 @@ function StreamView({
                 return (
                   <div
                     key={entry.id}
-                    className="border-border mb-1 cursor-pointer overflow-hidden border-b pb-1 last:border-b-0"
-                    onClick={() => toggleExpanded(entry.id)}>
+                    className="border-border mb-1 overflow-hidden border-b pb-1 last:border-b-0">
                     <div className="flex min-w-0 items-center gap-1">
-                      <span className="text-muted-foreground inline-flex w-3 shrink-0 items-center justify-center">
-                        {isExpanded ? '▼' : '▶'}
+                      <span
+                        className="flex shrink-0 cursor-pointer items-center gap-1"
+                        onClick={() => toggleExpanded(entry.id)}>
+                        {isExpanded ? (
+                          <ChevronDown className="text-muted-foreground h-3 w-3 shrink-0" />
+                        ) : (
+                          <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
+                        )}
+                        <span>{entry.timestamp}</span>
                       </span>
-                      <span className="shrink-0">{entry.timestamp}</span>
                       {!isExpanded && (
                         <span className="text-muted-foreground w-0 flex-1 truncate">
                           {JSON.stringify(entry.data)}
