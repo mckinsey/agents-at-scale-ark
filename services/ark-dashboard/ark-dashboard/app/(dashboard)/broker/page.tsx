@@ -1,11 +1,12 @@
 'use client';
 
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
@@ -14,10 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { type Memory, memoriesService } from '@/lib/services/memories';
-import { ChevronDown, ChevronRight } from 'lucide-react';
-import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbElement[] = [
   { href: '/', label: 'ARK Dashboard' },
@@ -184,9 +184,12 @@ function useSSEStream(endpoint: string, memory: string) {
 
   const purge = useCallback(async () => {
     try {
-      const res = await fetch(`/api${endpoint}?memory=${encodeURIComponent(memory)}`, {
-        method: 'DELETE',
-      });
+      const res = await fetch(
+        `/api${endpoint}?memory=${encodeURIComponent(memory)}`,
+        {
+          method: 'DELETE',
+        },
+      );
       if (!res.ok) {
         throw new Error(`${res.status} ${res.statusText}`);
       }
@@ -297,7 +300,7 @@ function StreamView({
         )}
         <div
           ref={containerRef}
-          className="bg-muted h-[calc(100vh-280px)] overflow-y-auto overflow-x-hidden rounded-md p-2 font-mono text-xs">
+          className="bg-muted h-[calc(100vh-280px)] overflow-x-hidden overflow-y-auto rounded-md p-2 font-mono text-xs">
           {entries.length === 0 ? (
             <div className="text-muted-foreground flex h-full items-center justify-center">
               Waiting for data...
