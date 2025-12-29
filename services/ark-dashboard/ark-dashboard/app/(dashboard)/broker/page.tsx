@@ -284,7 +284,7 @@ function StreamView({
         )}
         <div
           ref={containerRef}
-          className="bg-muted h-[calc(100vh-320px)] overflow-auto rounded-md p-2 font-mono text-xs">
+          className="bg-muted h-[calc(100vh-320px)] overflow-y-auto overflow-x-hidden rounded-md p-2 font-mono text-xs">
           {entries.length === 0 ? (
             <div className="text-muted-foreground flex h-full items-center justify-center">
               Waiting for data...
@@ -296,16 +296,21 @@ function StreamView({
                 return (
                   <div
                     key={entry.id}
-                    className="border-border mb-1 cursor-pointer border-b pb-1 last:border-b-0"
+                    className="border-border mb-1 cursor-pointer overflow-hidden border-b pb-1 last:border-b-0"
                     onClick={() => toggleExpanded(entry.id)}>
-                    <div className="text-muted-foreground hover:text-foreground mb-0.5 flex items-center gap-1 text-[10px]">
-                      <span className="inline-block w-2 text-center">
+                    <div className="flex min-w-0 items-center gap-1">
+                      <span className="text-muted-foreground inline-flex w-3 shrink-0 items-center justify-center">
                         {isExpanded ? '▼' : '▶'}
                       </span>
-                      <span>{entry.timestamp}</span>
+                      <span className="shrink-0">{entry.timestamp}</span>
+                      {!isExpanded && (
+                        <span className="text-muted-foreground w-0 flex-1 truncate">
+                          {JSON.stringify(entry.data)}
+                        </span>
+                      )}
                     </div>
                     {isExpanded && (
-                      <pre className="break-all whitespace-pre-wrap">
+                      <pre className="mt-1 break-all whitespace-pre-wrap">
                         {JSON.stringify(entry.data, null, 2)}
                       </pre>
                     )}
