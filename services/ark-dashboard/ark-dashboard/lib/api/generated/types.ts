@@ -49,26 +49,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/a2a/agents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Agents
-         * @description List all available agents for A2A communication.
-         */
-        get: operations["list_agents_a2a_agents_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/namespaces": {
         parameters: {
             query?: never;
@@ -373,12 +353,6 @@ export interface paths {
          * Create Team
          * @description Create a new Team CR.
          *
-         *     Supports various execution strategies:
-         *     - sequential: Members execute in order
-         *     - round-robin: Members take turns
-         *     - graph: Custom workflow defined by graph edges
-         *     - selector: AI-powered member selection (can be combined with graph constraints)
-         *
          *     Args:
          *         namespace: The namespace to create the team in
          *         body: The team creation request
@@ -592,18 +566,7 @@ export interface paths {
          */
         get: operations["list_mcp_servers_v1_mcp_servers_get"];
         put?: never;
-        /**
-         * Create Mcp Server
-         * @description Create a new MCPServer CR.
-         *
-         *     Args:
-         *         namespace: The namespace to create the MCP server in
-         *         body: The MCP server creation request
-         *
-         *     Returns:
-         *         MCPServerDetailResponse: The created MCP server details
-         */
-        post: operations["create_mcp_server_v1_mcp_servers_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -706,67 +669,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/a2a-tasks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List A2A Tasks
-         * @description List all A2ATask CRs in a namespace.
-         *
-         *     Args:
-         *         namespace: The namespace to list A2A tasks from
-         *
-         *     Returns:
-         *         A2ATaskListResponse: List of all A2A tasks in the namespace
-         */
-        get: operations["list_a2a_tasks_v1_a2a_tasks_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/a2a-tasks/{task_name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get A2A Task
-         * @description Get a specific A2ATask CR by name.
-         *
-         *     Args:
-         *         namespace: The namespace to get the A2A task from
-         *         task_name: The name of the A2A task
-         *
-         *     Returns:
-         *         A2ATaskDetailResponse: The A2A task details
-         */
-        get: operations["get_a2a_task_v1_a2a_tasks__task_name__get"];
-        put?: never;
-        post?: never;
-        /**
-         * Delete A2A Task
-         * @description Delete an A2ATask CR by name.
-         *
-         *     Args:
-         *         namespace: The namespace containing the A2A task
-         *         task_name: The name of the A2A task
-         */
-        delete: operations["delete_a2a_task_v1_a2a_tasks__task_name__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/memories": {
         parameters: {
             query?: never;
@@ -819,7 +721,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/memories/{name}/conversations/{conversation_id}/messages": {
+    "/v1/memories/{name}/sessions/{session_id}/messages": {
         parameters: {
             query?: never;
             header?: never;
@@ -828,9 +730,9 @@ export interface paths {
         };
         /**
          * Get Memory Messages
-         * @description Get messages for a specific conversation from a memory resource.
+         * @description Get messages for a specific session from a memory resource.
          */
-        get: operations["get_memory_messages_v1_memories__name__conversations__conversation_id__messages_get"];
+        get: operations["get_memory_messages_v1_memories__name__sessions__session_id__messages_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -859,7 +761,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/conversations": {
+    "/v1/sessions": {
         parameters: {
             query?: never;
             header?: never;
@@ -867,57 +769,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Conversations
-         * @description List all conversations in a namespace, optionally filtered by memory.
+         * List Sessions
+         * @description List all sessions in a namespace, optionally filtered by memory.
          */
-        get: operations["list_conversations_v1_conversations_get"];
+        get: operations["list_sessions_v1_sessions_get"];
         put?: never;
         post?: never;
-        /**
-         * Delete All Conversations
-         * @description Delete all conversations and their messages.
-         */
-        delete: operations["delete_all_conversations_v1_conversations_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/conversations/{conversation_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Delete Conversation
-         * @description Delete a specific conversation and all its messages.
-         */
-        delete: operations["delete_conversation_v1_conversations__conversation_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/conversations/{conversation_id}/queries/{query_id}/messages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Delete Query Messages
-         * @description Delete messages for a specific query within a conversation.
-         */
-        delete: operations["delete_query_messages_v1_conversations__conversation_id__queries__query_id__messages_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1235,114 +1093,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/broker/traces": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Traces
-         * @description Get or stream OTEL traces from the broker.
-         */
-        get: operations["get_traces_v1_broker_traces_get"];
-        put?: never;
-        post?: never;
-        /**
-         * Purge Traces
-         * @description Purge all traces from the broker.
-         */
-        delete: operations["purge_traces_v1_broker_traces_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/broker/traces/{trace_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Trace
-         * @description Get or stream a specific trace from the broker.
-         */
-        get: operations["get_trace_v1_broker_traces__trace_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/broker/messages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Messages
-         * @description Get or stream messages from the broker.
-         */
-        get: operations["get_messages_v1_broker_messages_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/broker/chunks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Chunks
-         * @description Get or stream LLM chunks from the broker.
-         */
-        get: operations["get_chunks_v1_broker_chunks_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/broker/events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Events
-         * @description Get or stream operation events from the broker.
-         */
-        get: operations["get_events_v1_broker_events_get"];
-        put?: never;
-        post?: never;
-        /**
-         * Purge Events
-         * @description Purge all events from the broker.
-         */
-        delete: operations["purge_events_v1_broker_events_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/openai/v1/chat/completions": {
         parameters: {
             query?: never;
@@ -1416,16 +1166,6 @@ export interface components {
             /** Total */
             total: number;
         };
-        /**
-         * A2AServerRef
-         * @description Reference to an A2AServer.
-         */
-        A2AServerRef: {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace?: string | null;
-        };
         /** A2AServerResponse */
         A2AServerResponse: {
             /** Name */
@@ -1450,163 +1190,6 @@ export interface components {
             discovering?: boolean | null;
             /** Status Message */
             status_message?: string | null;
-        };
-        /**
-         * A2ATaskArtifact
-         * @description Artifact produced during task execution.
-         */
-        A2ATaskArtifact: {
-            /** Artifactid */
-            artifactId: string;
-            /** Name */
-            name?: string | null;
-            /** Description */
-            description?: string | null;
-            /** Parts */
-            parts: components["schemas"]["A2ATaskPart"][];
-            /** Metadata */
-            metadata?: {
-                [key: string]: string;
-            } | null;
-        };
-        /**
-         * A2ATaskDetailResponse
-         * @description Detailed A2ATask response model.
-         */
-        A2ATaskDetailResponse: {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace: string;
-            /** Taskid */
-            taskId: string;
-            a2aServerRef: components["schemas"]["A2AServerRef"];
-            agentRef: components["schemas"]["AgentRef"];
-            queryRef: components["schemas"]["ark_api__models__a2a_tasks__QueryRef"];
-            /** Contextid */
-            contextId?: string | null;
-            /** Input */
-            input?: string | null;
-            /** Parameters */
-            parameters?: {
-                [key: string]: string;
-            } | null;
-            /** Pollinterval */
-            pollInterval?: string | null;
-            /** Priority */
-            priority?: number | null;
-            /** Timeout */
-            timeout?: string | null;
-            /** Ttl */
-            ttl?: string | null;
-            status?: components["schemas"]["A2ATaskStatus"] | null;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
-        };
-        /**
-         * A2ATaskListResponse
-         * @description List of A2ATasks response model.
-         */
-        A2ATaskListResponse: {
-            /** Items */
-            items: components["schemas"]["A2ATaskResponse"][];
-            /** Count */
-            count: number;
-        };
-        /**
-         * A2ATaskMessage
-         * @description Message in the conversation history.
-         */
-        A2ATaskMessage: {
-            /** Messageid */
-            messageId?: string | null;
-            /**
-             * Role
-             * @enum {string}
-             */
-            role: "user" | "agent" | "system";
-            /** Parts */
-            parts: components["schemas"]["A2ATaskPart"][];
-            /** Metadata */
-            metadata?: {
-                [key: string]: string;
-            } | null;
-        };
-        /**
-         * A2ATaskPart
-         * @description Content part of an artifact or message.
-         */
-        A2ATaskPart: {
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "text" | "file" | "data";
-            /** Text */
-            text?: string | null;
-            /** Data */
-            data?: string | null;
-            /** Uri */
-            uri?: string | null;
-            /** Mimetype */
-            mimeType?: string | null;
-            /** Metadata */
-            metadata?: {
-                [key: string]: string;
-            } | null;
-        };
-        /**
-         * A2ATaskResponse
-         * @description A2ATask resource response model.
-         */
-        A2ATaskResponse: {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace: string;
-            /** Taskid */
-            taskId: string;
-            /** Phase */
-            phase?: string | null;
-            agentRef?: components["schemas"]["AgentRef"] | null;
-            queryRef?: components["schemas"]["ark_api__models__a2a_tasks__QueryRef"] | null;
-            /** Creationtimestamp */
-            creationTimestamp?: string | null;
-        };
-        /**
-         * A2ATaskStatus
-         * @description Status of the A2ATask.
-         */
-        A2ATaskStatus: {
-            /** Phase */
-            phase?: string | null;
-            /** Protocolstate */
-            protocolState?: string | null;
-            /** Protocolmetadata */
-            protocolMetadata?: {
-                [key: string]: string;
-            } | null;
-            /** Starttime */
-            startTime?: string | null;
-            /** Completiontime */
-            completionTime?: string | null;
-            /** Laststatustimestamp */
-            lastStatusTimestamp?: string | null;
-            /** Error */
-            error?: string | null;
-            /** Contextid */
-            contextId?: string | null;
-            /** Artifacts */
-            artifacts?: components["schemas"]["A2ATaskArtifact"][] | null;
-            /** History */
-            history?: components["schemas"]["A2ATaskMessage"][] | null;
-            lastStatusMessage?: components["schemas"]["A2ATaskMessage"] | null;
-            /** Conditions */
-            conditions?: {
-                [key: string]: unknown;
-            }[] | null;
         };
         /**
          * APIKeyCreateRequest
@@ -1752,8 +1335,6 @@ export interface components {
             prompt?: string | null;
             /** Tools */
             tools?: components["schemas"]["Tool-Input"][] | null;
-            /** Overrides */
-            overrides?: components["schemas"]["Override-Input"][] | null;
         };
         /**
          * AgentDetailResponse
@@ -1774,8 +1355,6 @@ export interface components {
             prompt?: string | null;
             /** Tools */
             tools?: components["schemas"]["Tool-Output"][] | null;
-            /** Overrides */
-            overrides?: components["schemas"]["Override-Output"][] | null;
             /** Skills */
             skills?: components["schemas"]["Skill"][] | null;
             /**
@@ -1802,16 +1381,6 @@ export interface components {
             items: components["schemas"]["AgentResponse"][];
             /** Count */
             count: number;
-        };
-        /**
-         * AgentRef
-         * @description Reference to an Agent.
-         */
-        AgentRef: {
-            /** Name */
-            name?: string | null;
-            /** Namespace */
-            namespace?: string | null;
         };
         /**
          * AgentResponse
@@ -1849,13 +1418,8 @@ export interface components {
             prompt?: string | null;
             /** Tools */
             tools?: components["schemas"]["Tool-Input"][] | null;
-            /** Overrides */
-            overrides?: components["schemas"]["Override-Input"][] | null;
         };
-        /**
-         * Annotation
-         * @description A URL citation when using web search.
-         */
+        /** Annotation */
         Annotation: {
             /**
              * Type
@@ -1866,10 +1430,7 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * AnnotationURLCitation
-         * @description A URL citation when using web search.
-         */
+        /** AnnotationURLCitation */
         AnnotationURLCitation: {
             /** End Index */
             end_index: number;
@@ -1931,11 +1492,7 @@ export interface components {
             /** Count */
             count: number;
         };
-        /**
-         * Audio
-         * @description Data about a previous audio response from the model.
-         *     [Learn more](https://platform.openai.com/docs/guides/audio).
-         */
+        /** Audio */
         Audio: {
             /** Id */
             id: string;
@@ -1957,8 +1514,6 @@ export interface components {
             baseUrl: string | components["schemas"]["ark_api__models__models__ValueSource"];
             /** Apiversion */
             apiVersion?: string | components["schemas"]["ark_api__models__models__ValueSource"] | null;
-            /** Headers */
-            headers?: components["schemas"]["ark_api__models__agents__Header-Input"][] | null;
         };
         /**
          * BaselineEvaluationMetadata
@@ -2062,10 +1617,7 @@ export interface components {
             /** Description */
             description?: string | null;
         };
-        /**
-         * ChatCompletion
-         * @description Represents a chat completion response returned by model, based on the provided input.
-         */
+        /** ChatCompletion */
         ChatCompletion: {
             /** Id */
             id: string;
@@ -2088,10 +1640,7 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * ChatCompletionAssistantMessageParam
-         * @description Messages sent by the model in response to user messages.
-         */
+        /** ChatCompletionAssistantMessageParam */
         "ChatCompletionAssistantMessageParam-Input": {
             /**
              * Role
@@ -2109,10 +1658,7 @@ export interface components {
             /** Tool Calls */
             tool_calls?: (components["schemas"]["ChatCompletionMessageFunctionToolCallParam-Input"] | components["schemas"]["ChatCompletionMessageCustomToolCallParam-Input"])[];
         };
-        /**
-         * ChatCompletionAssistantMessageParam
-         * @description Messages sent by the model in response to user messages.
-         */
+        /** ChatCompletionAssistantMessageParam */
         "ChatCompletionAssistantMessageParam-Output": {
             /**
              * Role
@@ -2130,11 +1676,7 @@ export interface components {
             /** Tool Calls */
             tool_calls?: (components["schemas"]["ChatCompletionMessageFunctionToolCallParam-Output"] | components["schemas"]["ChatCompletionMessageCustomToolCallParam-Output"])[];
         };
-        /**
-         * ChatCompletionAudio
-         * @description If the audio output modality is requested, this object contains data
-         *     about the audio response from the model. [Learn more](https://platform.openai.com/docs/guides/audio).
-         */
+        /** ChatCompletionAudio */
         ChatCompletionAudio: {
             /** Id */
             id: string;
@@ -2147,10 +1689,7 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * ChatCompletionContentPartImageParam
-         * @description Learn about [image inputs](https://platform.openai.com/docs/guides/vision).
-         */
+        /** ChatCompletionContentPartImageParam */
         ChatCompletionContentPartImageParam: {
             image_url: components["schemas"]["ImageURL"];
             /**
@@ -2159,10 +1698,7 @@ export interface components {
              */
             type: "image_url";
         };
-        /**
-         * ChatCompletionContentPartInputAudioParam
-         * @description Learn about [audio inputs](https://platform.openai.com/docs/guides/audio).
-         */
+        /** ChatCompletionContentPartInputAudioParam */
         ChatCompletionContentPartInputAudioParam: {
             input_audio: components["schemas"]["InputAudio"];
             /**
@@ -2181,10 +1717,7 @@ export interface components {
              */
             type: "refusal";
         };
-        /**
-         * ChatCompletionContentPartTextParam
-         * @description Learn about [text inputs](https://platform.openai.com/docs/guides/text-generation).
-         */
+        /** ChatCompletionContentPartTextParam */
         ChatCompletionContentPartTextParam: {
             /** Text */
             text: string;
@@ -2194,12 +1727,7 @@ export interface components {
              */
             type: "text";
         };
-        /**
-         * ChatCompletionDeveloperMessageParam
-         * @description Developer-provided instructions that the model should follow, regardless of
-         *     messages sent by the user. With o1 models and newer, `developer` messages
-         *     replace the previous `system` messages.
-         */
+        /** ChatCompletionDeveloperMessageParam */
         ChatCompletionDeveloperMessageParam: {
             /** Content */
             content: string | components["schemas"]["ChatCompletionContentPartTextParam"][];
@@ -2223,10 +1751,7 @@ export interface components {
              */
             role: "function";
         };
-        /**
-         * ChatCompletionMessage
-         * @description A chat completion message generated by the model.
-         */
+        /** ChatCompletionMessage */
         ChatCompletionMessage: {
             /** Content */
             content?: string | null;
@@ -2246,10 +1771,7 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * ChatCompletionMessageCustomToolCall
-         * @description A call to a custom tool created by the model.
-         */
+        /** ChatCompletionMessageCustomToolCall */
         ChatCompletionMessageCustomToolCall: {
             /** Id */
             id: string;
@@ -2262,10 +1784,7 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * ChatCompletionMessageCustomToolCallParam
-         * @description A call to a custom tool created by the model.
-         */
+        /** ChatCompletionMessageCustomToolCallParam */
         "ChatCompletionMessageCustomToolCallParam-Input": {
             /** Id */
             id: string;
@@ -2276,10 +1795,7 @@ export interface components {
              */
             type: "custom";
         };
-        /**
-         * ChatCompletionMessageCustomToolCallParam
-         * @description A call to a custom tool created by the model.
-         */
+        /** ChatCompletionMessageCustomToolCallParam */
         "ChatCompletionMessageCustomToolCallParam-Output": {
             /** Id */
             id: string;
@@ -2290,10 +1806,7 @@ export interface components {
              */
             type: "custom";
         };
-        /**
-         * ChatCompletionMessageFunctionToolCall
-         * @description A call to a function tool created by the model.
-         */
+        /** ChatCompletionMessageFunctionToolCall */
         ChatCompletionMessageFunctionToolCall: {
             /** Id */
             id: string;
@@ -2306,10 +1819,7 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * ChatCompletionMessageFunctionToolCallParam
-         * @description A call to a function tool created by the model.
-         */
+        /** ChatCompletionMessageFunctionToolCallParam */
         "ChatCompletionMessageFunctionToolCallParam-Input": {
             /** Id */
             id: string;
@@ -2320,10 +1830,7 @@ export interface components {
              */
             type: "function";
         };
-        /**
-         * ChatCompletionMessageFunctionToolCallParam
-         * @description A call to a function tool created by the model.
-         */
+        /** ChatCompletionMessageFunctionToolCallParam */
         "ChatCompletionMessageFunctionToolCallParam-Output": {
             /** Id */
             id: string;
@@ -2354,15 +1861,10 @@ export interface components {
             stream: boolean;
             /** Metadata */
             metadata?: {
-                [key: string]: unknown;
+                [key: string]: string;
             } | null;
         };
-        /**
-         * ChatCompletionSystemMessageParam
-         * @description Developer-provided instructions that the model should follow, regardless of
-         *     messages sent by the user. With o1 models and newer, use `developer` messages
-         *     for this purpose instead.
-         */
+        /** ChatCompletionSystemMessageParam */
         ChatCompletionSystemMessageParam: {
             /** Content */
             content: string | components["schemas"]["ChatCompletionContentPartTextParam"][];
@@ -2399,11 +1901,7 @@ export interface components {
             /** Tool Call Id */
             tool_call_id: string;
         };
-        /**
-         * ChatCompletionUserMessageParam
-         * @description Messages sent by an end user, containing prompts or additional context
-         *     information.
-         */
+        /** ChatCompletionUserMessageParam */
         "ChatCompletionUserMessageParam-Input": {
             /** Content */
             content: string | (components["schemas"]["ChatCompletionContentPartTextParam"] | components["schemas"]["ChatCompletionContentPartImageParam"] | components["schemas"]["ChatCompletionContentPartInputAudioParam"] | components["schemas"]["File"])[];
@@ -2415,11 +1913,7 @@ export interface components {
             /** Name */
             name?: string;
         };
-        /**
-         * ChatCompletionUserMessageParam
-         * @description Messages sent by an end user, containing prompts or additional context
-         *     information.
-         */
+        /** ChatCompletionUserMessageParam */
         "ChatCompletionUserMessageParam-Output": {
             /** Content */
             content: string | (components["schemas"]["ChatCompletionContentPartTextParam"] | components["schemas"]["ChatCompletionContentPartImageParam"] | components["schemas"]["ChatCompletionContentPartInputAudioParam"] | components["schemas"]["File"])[];
@@ -2459,10 +1953,7 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * ChoiceLogprobs
-         * @description Log probability information for the choice.
-         */
+        /** ChoiceLogprobs */
         ChoiceLogprobs: {
             /** Content */
             content?: components["schemas"]["ChatCompletionTokenLogprob"][] | null;
@@ -2471,10 +1962,7 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * CompletionTokensDetails
-         * @description Breakdown of tokens used in a completion.
-         */
+        /** CompletionTokensDetails */
         CompletionTokensDetails: {
             /** Accepted Prediction Tokens */
             accepted_prediction_tokens?: number | null;
@@ -2487,10 +1975,7 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * CompletionUsage
-         * @description Usage statistics for the completion request.
-         */
+        /** CompletionUsage */
         CompletionUsage: {
             /** Completion Tokens */
             completion_tokens: number;
@@ -2513,10 +1998,7 @@ export interface components {
             /** Cluster */
             cluster: string | null;
         };
-        /**
-         * Custom
-         * @description The custom tool that the model called.
-         */
+        /** Custom */
         Custom: {
             /** Input */
             input: string;
@@ -2525,10 +2007,7 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * Custom
-         * @description The custom tool that the model called.
-         */
+        /** Custom */
         "Custom-Input": {
             /** Input */
             input: string;
@@ -2624,7 +2103,7 @@ export interface components {
             input?: string | null;
             /** Output */
             output?: string | null;
-            queryRef?: components["schemas"]["ark_api__models__evaluations__QueryRef"] | null;
+            queryRef?: components["schemas"]["QueryRef"] | null;
             /** Evaluations */
             evaluations?: components["schemas"]["EvaluationRef"][] | null;
             /** Rules */
@@ -2925,10 +2404,7 @@ export interface components {
             /** Namespace */
             namespace?: string | null;
         };
-        /**
-         * File
-         * @description Learn about [file inputs](https://platform.openai.com/docs/guides/text) for text generation.
-         */
+        /** File */
         File: {
             file: components["schemas"]["FileFile"];
             /**
@@ -2946,10 +2422,7 @@ export interface components {
             /** Filename */
             filename?: string;
         };
-        /**
-         * Function
-         * @description The function that the model called.
-         */
+        /** Function */
         Function: {
             /** Arguments */
             arguments: string;
@@ -2958,22 +2431,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * Function
-         * @description The function that the model called.
-         */
+        /** Function */
         "Function-Input": {
             /** Arguments */
             arguments: string;
             /** Name */
             name: string;
         };
-        /**
-         * FunctionCall
-         * @description Deprecated and replaced by `tool_calls`.
-         *
-         *     The name and arguments of a function that should be called, as generated by the model.
-         */
+        /** FunctionCall */
         FunctionCall: {
             /** Arguments */
             arguments: string;
@@ -2982,12 +2447,7 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * FunctionCall
-         * @description Deprecated and replaced by `tool_calls`.
-         *
-         *     The name and arguments of a function that should be called, as generated by the model.
-         */
+        /** FunctionCall */
         "FunctionCall-Input": {
             /** Arguments */
             arguments: string;
@@ -3030,24 +2490,6 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
-        };
-        /**
-         * HeaderValue
-         * @description Value configuration for a header.
-         */
-        "HeaderValue-Input": {
-            /** Value */
-            value?: string | null;
-            valueFrom?: components["schemas"]["ark_api__models__agents__ValueFrom"] | null;
-        };
-        /**
-         * HeaderValue
-         * @description Value configuration for a header.
-         */
-        "HeaderValue-Output": {
-            /** Value */
-            value?: string | null;
-            valueFrom?: components["schemas"]["ark_api__models__agents__ValueFrom"] | null;
         };
         /**
          * HealthResponse
@@ -3093,22 +2535,6 @@ export interface components {
          * @enum {string}
          */
         InputType: "user" | "messages";
-        /** MCPServerCreateRequest */
-        MCPServerCreateRequest: {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace: string;
-            /** Labels */
-            labels?: {
-                [key: string]: string;
-            } | null;
-            /** Annotations */
-            annotations?: {
-                [key: string]: string;
-            } | null;
-            spec: components["schemas"]["MCPServerSpec"];
-        };
         /** MCPServerDetailResponse */
         MCPServerDetailResponse: {
             /** Name */
@@ -3125,15 +2551,14 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
-            available?: components["schemas"]["AvailabilityStatus"] | null;
-            /** Address */
-            address?: string | null;
-            /** Transport */
-            transport?: string | null;
-            /** Headers */
-            headers: components["schemas"]["ark_api__models__mcp_servers__Header-Output"][] | null;
-            /** Tool Count */
-            tool_count?: number | null;
+            /** Spec */
+            spec?: {
+                [key: string]: unknown;
+            } | null;
+            /** Status */
+            status?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** MCPServerListResponse */
         MCPServerListResponse: {
@@ -3148,6 +2573,12 @@ export interface components {
             name: string;
             /** Namespace */
             namespace: string;
+            /** Description */
+            description?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Address */
             address?: string | null;
             /** Annotations */
@@ -3156,23 +2587,14 @@ export interface components {
             } | null;
             /** Transport */
             transport?: string | null;
-            available?: components["schemas"]["AvailabilityStatus"] | null;
+            /** Ready */
+            ready?: boolean | null;
+            /** Discovering */
+            discovering?: boolean | null;
             /** Status Message */
             status_message?: string | null;
             /** Tool Count */
             tool_count?: number | null;
-        };
-        /** MCPServerSpec */
-        MCPServerSpec: {
-            /** Transport */
-            transport: string;
-            /** Description */
-            description?: string | null;
-            /** Tools */
-            tools?: string[] | null;
-            address: components["schemas"]["ark_api__models__mcp_servers__ValueSource-Input"];
-            /** Headers */
-            headers?: components["schemas"]["ark_api__models__mcp_servers__Header-Input"][] | null;
         };
         /**
          * Memory
@@ -3245,8 +2667,8 @@ export interface components {
             timestamp?: string | null;
             /** Memoryname */
             memoryName: string;
-            /** Conversationid */
-            conversationId: string;
+            /** Sessionid */
+            sessionId: string;
             /** Queryid */
             queryId?: string | null;
             /** Message */
@@ -3328,7 +2750,7 @@ export interface components {
                 [key: string]: {
                     [key: string]: string | {
                         [key: string]: unknown;
-                    } | unknown[];
+                    };
                 };
             };
             available?: components["schemas"]["AvailabilityStatus"] | null;
@@ -3425,35 +2847,8 @@ export interface components {
             apiKey: string | components["schemas"]["ark_api__models__models__ValueSource"];
             /** Baseurl */
             baseUrl: string | components["schemas"]["ark_api__models__models__ValueSource"];
-            /** Headers */
-            headers?: components["schemas"]["ark_api__models__agents__Header-Input"][] | null;
         };
-        /**
-         * Override
-         * @description Header override configuration for models and MCP servers.
-         */
-        "Override-Input": {
-            /** Headers */
-            headers: components["schemas"]["ark_api__models__agents__Header-Input"][];
-            /** Resourcetype */
-            resourceType: string;
-            labelSelector?: components["schemas"]["ark_api__models__agents__LabelSelector"] | null;
-        };
-        /**
-         * Override
-         * @description Header override configuration for models and MCP servers.
-         */
-        "Override-Output": {
-            /** Headers */
-            headers: components["schemas"]["ark_api__models__agents__Header-Output"][];
-            /** Resourcetype */
-            resourceType: string;
-            labelSelector?: components["schemas"]["ark_api__models__agents__LabelSelector"] | null;
-        };
-        /**
-         * PromptTokensDetails
-         * @description Breakdown of tokens used in the prompt.
-         */
+        /** PromptTokensDetails */
         PromptTokensDetails: {
             /** Audio Tokens */
             audio_tokens?: number | null;
@@ -3489,8 +2884,6 @@ export interface components {
             ttl?: string | null;
             /** Cancel */
             cancel?: boolean | null;
-            /** Overrides */
-            overrides?: components["schemas"]["Override-Input"][] | null;
             /** Evaluators */
             evaluators?: components["schemas"]["Memory"][] | null;
             evaluatorSelector?: components["schemas"]["ark_api__models__queries__LabelSelector"] | null;
@@ -3528,8 +2921,6 @@ export interface components {
             ttl?: string | null;
             /** Cancel */
             cancel?: boolean | null;
-            /** Overrides */
-            overrides?: components["schemas"]["Override-Output"][] | null;
             /** Metadata */
             metadata?: {
                 [key: string]: unknown;
@@ -3568,6 +2959,18 @@ export interface components {
             items: components["schemas"]["QueryResponse"][];
             /** Count */
             count: number;
+        };
+        /**
+         * QueryRef
+         * @description Reference to a query for evaluation.
+         */
+        QueryRef: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace?: string | null;
+            /** Responsetarget */
+            responseTarget?: string | null;
         };
         /**
          * QueryResponse
@@ -3616,8 +3019,6 @@ export interface components {
             ttl?: string | null;
             /** Cancel */
             cancel?: boolean | null;
-            /** Overrides */
-            overrides?: components["schemas"]["Override-Input"][] | null;
         };
         /**
          * ReadinessResponse
@@ -3743,11 +3144,11 @@ export interface components {
         };
         /**
          * SessionResponse
-         * @description Response model for a conversation.
+         * @description Response model for a session.
          */
         SessionResponse: {
-            /** Conversationid */
-            conversationId: string;
+            /** Sessionid */
+            sessionId: string;
             /** Memoryname */
             memoryName: string;
             /** Queries */
@@ -3825,7 +3226,6 @@ export interface components {
             /** Maxturns */
             maxTurns?: number | null;
             selector?: components["schemas"]["Selector"] | null;
-            available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Status */
             status?: {
                 [key: string]: unknown;
@@ -4010,18 +3410,6 @@ export interface components {
             type: string;
         };
         /**
-         * QueryRef
-         * @description Reference to a Query.
-         */
-        ark_api__models__a2a_tasks__QueryRef: {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace?: string | null;
-            /** Responsetarget */
-            responseTarget?: string | null;
-        };
-        /**
          * ConfigMapKeyRef
          * @description Reference to a key in a ConfigMap.
          */
@@ -4032,24 +3420,6 @@ export interface components {
             name: string;
             /** Optional */
             optional?: boolean | null;
-        };
-        /**
-         * Header
-         * @description HTTP header configuration.
-         */
-        "ark_api__models__agents__Header-Input": {
-            /** Name */
-            name: string;
-            value: components["schemas"]["HeaderValue-Input"];
-        };
-        /**
-         * Header
-         * @description HTTP header configuration.
-         */
-        "ark_api__models__agents__Header-Output": {
-            /** Name */
-            name: string;
-            value: components["schemas"]["HeaderValue-Output"];
         };
         /**
          * LabelSelector
@@ -4098,14 +3468,6 @@ export interface components {
             valueFrom?: components["schemas"]["ark_api__models__agents__ValueFrom"] | null;
         };
         /**
-         * QueryParameterRef
-         * @description Reference to a parameter in a query.
-         */
-        ark_api__models__agents__QueryParameterRef: {
-            /** Name */
-            name: string;
-        };
-        /**
          * SecretKeyRef
          * @description Reference to a key in a Secret.
          */
@@ -4118,40 +3480,12 @@ export interface components {
             optional?: boolean | null;
         };
         /**
-         * ServiceRef
-         * @description Reference to a service.
-         */
-        ark_api__models__agents__ServiceRef: {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace?: string | null;
-            /** Port */
-            port?: string | null;
-            /** Path */
-            path?: string | null;
-        };
-        /**
          * ValueFrom
          * @description Reference to external sources for parameter values.
          */
         ark_api__models__agents__ValueFrom: {
             configMapKeyRef?: components["schemas"]["ark_api__models__agents__ConfigMapKeyRef"] | null;
             secretKeyRef?: components["schemas"]["ark_api__models__agents__SecretKeyRef"] | null;
-            serviceRef?: components["schemas"]["ark_api__models__agents__ServiceRef"] | null;
-            queryParameterRef?: components["schemas"]["ark_api__models__agents__QueryParameterRef"] | null;
-        };
-        /**
-         * QueryRef
-         * @description Reference to a query for evaluation.
-         */
-        ark_api__models__evaluations__QueryRef: {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace?: string | null;
-            /** Responsetarget */
-            responseTarget?: string | null;
         };
         /**
          * ConfigMapKeyRef
@@ -4234,77 +3568,6 @@ export interface components {
             /** Value */
             value?: string | null;
             valueFrom?: components["schemas"]["ark_api__models__evaluators__ValueFrom"] | null;
-        };
-        /** ConfigMapKeyRef */
-        ark_api__models__mcp_servers__ConfigMapKeyRef: {
-            /** Key */
-            key: string;
-            /** Name */
-            name: string;
-            /** Optional */
-            optional?: boolean | null;
-        };
-        /** Header */
-        "ark_api__models__mcp_servers__Header-Input": {
-            /** Name */
-            name: string;
-            value: components["schemas"]["ark_api__models__mcp_servers__ValueSource-Input"];
-        };
-        /** Header */
-        "ark_api__models__mcp_servers__Header-Output": {
-            /** Name */
-            name: string;
-            value: components["schemas"]["ark_api__models__mcp_servers__ValueSource"];
-        };
-        /** QueryParameterRef */
-        ark_api__models__mcp_servers__QueryParameterRef: {
-            /** Name */
-            name: string;
-        };
-        /** SecretKeyRef */
-        ark_api__models__mcp_servers__SecretKeyRef: {
-            /** Key */
-            key: string;
-            /** Name */
-            name: string;
-            /** Optional */
-            optional?: boolean | null;
-        };
-        /** ServiceRef */
-        ark_api__models__mcp_servers__ServiceRef: {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace?: string | null;
-            /** Port */
-            port?: string | null;
-            /** Path */
-            path?: string | null;
-        };
-        /** ValueFrom */
-        ark_api__models__mcp_servers__ValueFrom: {
-            configMapKeyRef?: components["schemas"]["ark_api__models__mcp_servers__ConfigMapKeyRef"] | null;
-            secretKeyRef?: components["schemas"]["ark_api__models__mcp_servers__SecretKeyRef"] | null;
-            serviceRef?: components["schemas"]["ark_api__models__mcp_servers__ServiceRef"] | null;
-            queryParameterRef?: components["schemas"]["ark_api__models__mcp_servers__QueryParameterRef"] | null;
-        };
-        /**
-         * ValueSource
-         * @description ValueSource for configuration (supports direct value or valueFrom).
-         */
-        ark_api__models__mcp_servers__ValueSource: {
-            /** Value */
-            value?: string | null;
-            valueFrom?: components["schemas"]["ark_api__models__mcp_servers__ValueFrom"] | null;
-        };
-        /**
-         * ValueSource
-         * @description ValueSource for configuration (supports direct value or valueFrom).
-         */
-        "ark_api__models__mcp_servers__ValueSource-Input": {
-            /** Value */
-            value?: string | null;
-            valueFrom?: components["schemas"]["ark_api__models__mcp_servers__ValueFrom"] | null;
         };
         /**
          * ValueSource
@@ -4404,32 +3667,21 @@ export interface components {
             configMapKeyRef?: components["schemas"]["ark_api__models__queries__ConfigMapKeyRef"] | null;
             secretKeyRef?: components["schemas"]["ark_api__models__queries__SecretKeyRef"] | null;
         };
-        /**
-         * FunctionCall
-         * @description Deprecated and replaced by `tool_calls`.
-         *
-         *     The name and arguments of a function that should be called, as generated by the model.
-         */
+        /** FunctionCall */
         openai__types__chat__chat_completion_assistant_message_param__FunctionCall: {
             /** Arguments */
             arguments: string;
             /** Name */
             name: string;
         };
-        /**
-         * Custom
-         * @description The custom tool that the model called.
-         */
+        /** Custom */
         openai__types__chat__chat_completion_message_custom_tool_call_param__Custom: {
             /** Input */
             input: string;
             /** Name */
             name: string;
         };
-        /**
-         * Function
-         * @description The function that the model called.
-         */
+        /** Function */
         openai__types__chat__chat_completion_message_function_tool_call_param__Function: {
             /** Arguments */
             arguments: string;
@@ -4481,28 +3733,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReadinessResponse"];
-                };
-            };
-        };
-    };
-    list_agents_a2a_agents_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
                 };
             };
         };
@@ -5606,42 +4836,6 @@ export interface operations {
             };
         };
     };
-    create_mcp_server_v1_mcp_servers_post: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MCPServerCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MCPServerDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_mcp_server_v1_mcp_servers__mcp_server_name__get: {
         parameters: {
             query?: {
@@ -5783,104 +4977,6 @@ export interface operations {
             header?: never;
             path: {
                 a2a_server_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_a2a_tasks_v1_a2a_tasks_get: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["A2ATaskListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_a2a_task_v1_a2a_tasks__task_name__get: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                task_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["A2ATaskDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_a2a_task_v1_a2a_tasks__task_name__delete: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                task_name: string;
             };
             cookie?: never;
         };
@@ -6080,7 +5176,7 @@ export interface operations {
             };
         };
     };
-    get_memory_messages_v1_memories__name__conversations__conversation_id__messages_get: {
+    get_memory_messages_v1_memories__name__sessions__session_id__messages_get: {
         parameters: {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
@@ -6089,7 +5185,7 @@ export interface operations {
             header?: never;
             path: {
                 name: string;
-                conversation_id: string;
+                session_id: string;
             };
             cookie?: never;
         };
@@ -6124,8 +5220,8 @@ export interface operations {
                 namespace?: string | null;
                 /** @description Filter by memory name */
                 memory?: string | null;
-                /** @description Filter by conversation ID */
-                conversation?: string | null;
+                /** @description Filter by session ID */
+                session?: string | null;
                 /** @description Filter by query ID */
                 query?: string | null;
             };
@@ -6155,7 +5251,7 @@ export interface operations {
             };
         };
     };
-    list_conversations_v1_conversations_get: {
+    list_sessions_v1_sessions_get: {
         parameters: {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
@@ -6176,113 +5272,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_all_conversations_v1_conversations_delete: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_conversation_v1_conversations__conversation_id__delete: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                conversation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_query_messages_v1_conversations__conversation_id__queries__query_id__messages_delete: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                conversation_id: string;
-                query_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
                 };
             };
             /** @description Validation Error */
@@ -6922,250 +5911,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_traces_v1_broker_traces_get: {
-        parameters: {
-            query?: {
-                /** @description Stream traces via SSE */
-                watch?: boolean;
-                /** @description Memory resource name */
-                memory?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    purge_traces_v1_broker_traces_delete: {
-        parameters: {
-            query?: {
-                /** @description Memory resource name */
-                memory?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_trace_v1_broker_traces__trace_id__get: {
-        parameters: {
-            query?: {
-                /** @description Stream trace spans via SSE */
-                watch?: boolean;
-                /** @description Include existing spans */
-                "from-beginning"?: boolean;
-                /** @description Memory resource name */
-                memory?: string;
-            };
-            header?: never;
-            path: {
-                trace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_messages_v1_broker_messages_get: {
-        parameters: {
-            query?: {
-                /** @description Stream messages via SSE */
-                watch?: boolean;
-                /** @description Filter by conversation ID */
-                "conversation-id"?: string;
-                /** @description Memory resource name */
-                memory?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_chunks_v1_broker_chunks_get: {
-        parameters: {
-            query?: {
-                /** @description Stream chunks via SSE */
-                watch?: boolean;
-                /** @description Filter by query ID */
-                "query-id"?: string;
-                /** @description Memory resource name */
-                memory?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_events_v1_broker_events_get: {
-        parameters: {
-            query?: {
-                /** @description Stream events via SSE */
-                watch?: boolean;
-                /** @description Filter by query ID */
-                "query-id"?: string;
-                /** @description Memory resource name */
-                memory?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    purge_events_v1_broker_events_delete: {
-        parameters: {
-            query?: {
-                /** @description Memory resource name */
-                memory?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
             };
             /** @description Validation Error */
             422: {
