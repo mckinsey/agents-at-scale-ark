@@ -8,6 +8,8 @@ When a query runs in a namespace with a configured broker, the Ark controller se
 
 Port-forward to the broker service, then access the OpenAPI spec at `/openapi.json` or Swagger UI at `/api-docs`.
 
+**Note:** OTLP ingestion uses `/v1/traces` (OpenTelemetry standard path). Query endpoints use `/traces` (broker REST API).
+
 ## Ingesting Traces
 
 ```
