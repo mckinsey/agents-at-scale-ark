@@ -266,3 +266,15 @@ async def purge_traces(memory: str = Query("default", description="Memory resour
 async def purge_events(memory: str = Query("default", description="Memory resource name")):
     """Purge all events from the broker."""
     return await proxy_broker_delete(memory, "/events")
+
+
+@router.delete("/messages")
+async def purge_messages(memory: str = Query("default", description="Memory resource name")):
+    """Purge all messages from the broker."""
+    return await proxy_broker_delete(memory, "/messages")
+
+
+@router.delete("/chunks")
+async def purge_chunks(memory: str = Query("default", description="Memory resource name")):
+    """Purge all chunks from the broker."""
+    return await proxy_broker_delete(memory, "/stream")

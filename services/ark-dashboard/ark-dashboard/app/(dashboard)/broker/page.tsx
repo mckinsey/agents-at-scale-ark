@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
@@ -16,6 +17,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { type Memory, memoriesService } from '@/lib/services/memories';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbElement[] = [
   { href: '/', label: 'ARK Dashboard' },
@@ -180,12 +182,24 @@ function useSSEStream(endpoint: string, memory: string) {
     setIsConnected(false);
   }, []);
 
-  const clear = useCallback(() => {
-    setStreamedEntries([]);
-    setFetchedEntries([]);
-    nextCursorRef.current = undefined;
-    setHasMore(true);
-  }, []);
+  const purge = useCallback(async () => {
+    try {
+      const res = await fetch(`/api${endpoint}?memory=${encodeURIComponent(memory)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        throw new Error(`${res.status} ${res.statusText}`);
+      }
+      setStreamedEntries([]);
+      setFetchedEntries([]);
+      nextCursorRef.current = undefined;
+      setHasMore(false);
+    } catch (e) {
+      toast.error('Failed to purge data', {
+        description: (e as Error).message,
+      });
+    }
+  }, [endpoint, memory]);
 
   useEffect(() => {
     if (initialFetchDoneRef.current) return;
@@ -210,7 +224,7 @@ function useSSEStream(endpoint: string, memory: string) {
 
   const entries = [...streamedEntries, ...fetchedEntries];
 
-  return { entries, isConnected, isLoading, hasMore, error, clear, loadMore };
+  return { entries, isConnected, isLoading, hasMore, error, purge, loadMore };
 }
 
 interface StreamViewProps {
@@ -220,7 +234,7 @@ interface StreamViewProps {
   isLoading?: boolean;
   hasMore?: boolean;
   error: string | null;
-  onClear: () => void;
+  onPurge: () => void;
   onLoadMore?: () => void;
 }
 
@@ -231,7 +245,7 @@ function StreamView({
   isLoading,
   hasMore,
   error,
-  onClear,
+  onPurge,
   onLoadMore,
 }: StreamViewProps) {
   const [autoScroll, setAutoScroll] = useState(true);
@@ -266,15 +280,13 @@ function StreamView({
           />
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={onClear}>
-            Clear
+          <Button variant="outline" size="sm" onClick={onPurge}>
+            Purge
           </Button>
-          <Button
-            variant={autoScroll ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setAutoScroll(!autoScroll)}>
+          <label className="flex items-center gap-1.5 text-sm">
+            <Switch checked={autoScroll} onCheckedChange={setAutoScroll} />
             Auto-scroll
-          </Button>
+          </label>
         </div>
       </CardHeader>
       <CardContent className="flex-1 overflow-hidden">
@@ -285,7 +297,7 @@ function StreamView({
         )}
         <div
           ref={containerRef}
-          className="bg-muted h-[calc(100vh-320px)] overflow-y-auto overflow-x-hidden rounded-md p-2 font-mono text-xs">
+          className="bg-muted h-[calc(100vh-280px)] overflow-y-auto overflow-x-hidden rounded-md p-2 font-mono text-xs">
           {entries.length === 0 ? (
             <div className="text-muted-foreground flex h-full items-center justify-center">
               Waiting for data...
@@ -410,7 +422,7 @@ export default function BrokerPage() {
               isLoading={traces.isLoading}
               hasMore={traces.hasMore}
               error={traces.error}
-              onClear={traces.clear}
+              onPurge={traces.purge}
               onLoadMore={traces.loadMore}
             />
           </TabsContent>
@@ -422,7 +434,7 @@ export default function BrokerPage() {
               isLoading={messages.isLoading}
               hasMore={messages.hasMore}
               error={messages.error}
-              onClear={messages.clear}
+              onPurge={messages.purge}
               onLoadMore={messages.loadMore}
             />
           </TabsContent>
@@ -434,7 +446,7 @@ export default function BrokerPage() {
               isLoading={chunks.isLoading}
               hasMore={chunks.hasMore}
               error={chunks.error}
-              onClear={chunks.clear}
+              onPurge={chunks.purge}
               onLoadMore={chunks.loadMore}
             />
           </TabsContent>
@@ -446,7 +458,7 @@ export default function BrokerPage() {
               isLoading={events.isLoading}
               hasMore={events.hasMore}
               error={events.error}
-              onClear={events.clear}
+              onPurge={events.purge}
               onLoadMore={events.loadMore}
             />
           </TabsContent>
