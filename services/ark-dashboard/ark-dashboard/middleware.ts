@@ -12,9 +12,18 @@ async function middleware(request: NextRequest) {
 
   // Proxy anything starting with /api/ to the backend, stripping the /api prefix
   // This includes: /api/v1/*, /api/docs, /api/openapi.json
+  //
+  // TEMPORARY: /api/argo/* routes are handled by Next.js API routes for the Flows feature.
+  // These routes proxy to Argo Workflows server. Once the Flows feature is accepted,
+  // this routing should be harmonized - either by adding Argo proxy routes to ark-api,
+  // or by formalizing the Next.js API routes as the standard approach.
   const apiPath = `${basePath}/api/`;
+  const argoApiPath = `${basePath}/api/argo/`;
 
-  if (request.nextUrl.pathname.startsWith(apiPath)) {
+  if (
+    request.nextUrl.pathname.startsWith(apiPath) &&
+    !request.nextUrl.pathname.startsWith(argoApiPath)
+  ) {
     const token = await getToken({
       req: request,
       secret: process.env.AUTH_SECRET,
