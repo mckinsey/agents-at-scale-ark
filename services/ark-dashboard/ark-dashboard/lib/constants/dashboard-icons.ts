@@ -6,9 +6,11 @@ import {
   CheckCircle,
   ClipboardList,
   Database,
+  GitBranch,
   Key,
   Lock,
   type LucideIcon,
+  ScrollText,
   Search,
   Server,
   Settings,
@@ -62,6 +64,12 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     icon: CheckCircle,
     group: 'configurations',
   },
+  flows: {
+    key: 'flows',
+    title: 'Flows',
+    icon: GitBranch,
+    group: 'configurations',
+  },
 
   // Operations
   queries: {
@@ -86,6 +94,12 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     key: 'memory',
     title: 'Memory',
     icon: Database,
+    group: 'operations',
+  },
+  'flow-logs': {
+    key: 'flow-logs',
+    title: 'Flow Logs',
+    icon: ScrollText,
     group: 'operations',
   },
   tasks: {

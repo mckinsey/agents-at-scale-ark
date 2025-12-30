@@ -1,3 +1,30 @@
+export interface FlowParameter {
+  name: string;
+  value: string;
+  description?: string;
+}
+
+export interface Flow {
+  id: string;
+  name: string;
+  description?: string;
+  templateName: string;
+  templateNamespace: string;
+  parameters: FlowParameter[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FlowRun {
+  name: string;
+  flowId: string;
+  flowName: string;
+  status: 'Pending' | 'Running' | 'Succeeded' | 'Failed' | 'Error';
+  startedAt: string;
+  finishedAt?: string;
+  argoUrl: string;
+}
+
 export interface WorkflowRun {
   name: string;
   namespace: string;
