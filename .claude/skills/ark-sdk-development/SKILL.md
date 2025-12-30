@@ -56,6 +56,24 @@ make ark-api-build
 
 This generates `services/ark-api/openapi.json` from FastAPI routes and Pydantic models.
 
+### Pydantic Model Naming (CRITICAL)
+
+Pydantic model class names **MUST be globally unique** across all model files. When multiple files define classes with the same name (e.g., `ConfigMapKeyRef`, `Header`, `ValueFrom`), FastAPI generates non-deterministic OpenAPI schema names like `ark_api__models__agents__Header-Input`. These names depend on import order and cause CI failures when `types.ts` differs between environments.
+
+**Solution**: Prefix class names with their domain context:
+
+| File | Naming Pattern | Examples |
+|------|---------------|----------|
+| `agents.py` | `Agent*` | `AgentHeader`, `AgentValueFrom`, `AgentParameter` |
+| `evaluators.py` | `Evaluator*` | `EvaluatorParameter`, `EvaluatorValueSource` |
+| `mcp_servers.py` | `MCPServer*` | `MCPServerHeader`, `MCPServerValueSource` |
+| `queries.py` | `Query*` | `QueryParameter`, `QueryLabelSelector` |
+| `models.py` | `Model*` | `ModelValueSource` |
+
+**Safety net**: `generate_openapi.py` fails if any schema name contains `__models__`, catching collisions at build time.
+
+See: https://github.com/mckinsey/agents-at-scale-ark/issues/656
+
 ## ark-dashboard: TypeScript Type Generation
 
 ```bash
@@ -65,41 +83,24 @@ npm run generate:api
 npm run build  # verify types compile
 ```
 
-## Schema Naming Convention (Important!)
-
-Pydantic/FastAPI disambiguates models with the same name using fully qualified paths.
-
-**Example:** `Header` exists in multiple ark-api models:
-- `ark_api.models.agents.Header`
-- `ark_api.models.mcp_servers.Header`
-- `ark_api.models.a2a_servers.Header`
-
-**Generated TypeScript schema names use fully qualified paths:**
-
-```typescript
-// Correct - fully qualified name
-components['schemas']['ark_api__models__mcp_servers__Header-Output']
-
-// Wrong - causes "Property does not exist" errors
-components['schemas']['Header-Output']
-```
-
-Always check `types.ts` for exact schema names after regenerating.
-
 ## Debugging Type Errors
 
 When you see:
 ```
-Property 'Header-Output' does not exist on type
 Property 'SomeSchema' does not exist on type
 ```
 
 1. **Regenerate types.ts** from latest openapi.json
 2. **Find the correct schema name:**
    ```bash
-   grep "Header" services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
+   grep "SomeSchema" services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts
    ```
-3. **Update service files** to use fully qualified schema names
+3. **Update service files** to use correct schema names
+
+If you see schema names with `__models__` pattern (e.g., `ark_api__models__agents__Header-Input`):
+- This indicates a Pydantic model naming collision
+- Fix by renaming the Python class to be unique (see naming convention above)
+- Do NOT work around by using the `__models__` name - fix the root cause
 
 ## Key Files
 
@@ -108,6 +109,7 @@ Property 'SomeSchema' does not exist on type
 | `ark/config/crd/bases/*.yaml` | Source of truth - Kubernetes CRDs |
 | `lib/ark-sdk/gen_sdk/overlay/` | Custom SDK utilities (copied on top of generated) |
 | `services/ark-api/ark-api/src/ark_api/models/` | Manually written Pydantic models |
+| `services/ark-api/ark-api/generate_openapi.py` | Generates openapi.json with collision safety net |
 | `services/ark-api/openapi.json` | Generated OpenAPI spec from FastAPI |
 | `services/ark-dashboard/out/openapi.json` | Copy used for dashboard type generation |
 | `services/ark-dashboard/ark-dashboard/lib/api/generated/types.ts` | Generated TypeScript types |

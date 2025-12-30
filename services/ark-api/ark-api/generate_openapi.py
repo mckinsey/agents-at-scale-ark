@@ -25,11 +25,12 @@ openapi_schema = add_security_to_openapi(
     public_routes=get_public_routes(),
 )
 
-# Safety net: Detect non-deterministic schema names (fixes #656)
+# Safety net: Detect non-deterministic schema names (#656)
 # Pydantic auto-generates names like "ark_api__models__agents__Header-Input" when
 # multiple models share the same class name. These names depend on import order,
 # causing CI to fail with: "Error: Generated types.ts file has changed"
-# Fix: Add ConfigDict(title='UniqueName') to colliding models.
+# Fix: Rename Python classes to be unique (e.g., AgentHeader, MCPServerHeader).
+# See: https://github.com/mckinsey/agents-at-scale-ark/issues/656
 if "components" in openapi_schema and "schemas" in openapi_schema["components"]:
     collisions = [name for name in openapi_schema["components"]["schemas"] if "__models__" in name]
     if collisions:
@@ -37,7 +38,7 @@ if "components" in openapi_schema and "schemas" in openapi_schema["components"]:
         for name in sorted(collisions):
             print(f"  - {name}")
         print("\nThese cause CI failures: 'Error: Generated types.ts file has changed'")
-        print("Fix: Add model_config = ConfigDict(title='UniqueName') to each model.")
+        print("Fix: Rename Python classes to be unique (e.g., AgentHeader, MCPServerHeader).")
         print("See: https://github.com/mckinsey/agents-at-scale-ark/issues/656")
         sys.exit(1)
 
