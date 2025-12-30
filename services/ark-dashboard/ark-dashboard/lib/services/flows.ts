@@ -1,3 +1,19 @@
+/**
+ * Flows Service
+ *
+ * This service manages "Flows" - saved configurations of Argo WorkflowTemplates
+ * with pre-filled parameters. Flows act as shortcuts for running common workflows.
+ *
+ * STORAGE: Flows are stored in localStorage (client-side only).
+ * This is an intentional MVP design choice:
+ * - Flows are personal workflow shortcuts, not shared team resources
+ * - No database schema changes required
+ * - Simple to implement and test
+ * - Easy to migrate to server-side storage later if needed
+ *
+ * If flows need to be shared across users or persisted server-side,
+ * add a /api/flows endpoint backed by a database.
+ */
 import type {
   Flow,
   FlowParameter,
@@ -26,6 +42,11 @@ async function getArgoBaseUrl(): Promise<string> {
 
 export { getArgoBaseUrl };
 
+/**
+ * Check if Argo Workflows is deployed and accessible.
+ * Used for graceful degradation - shows helpful setup message instead of errors
+ * when Argo is not installed.
+ */
 async function checkArgoAvailable(): Promise<boolean> {
   try {
     const response = await fetch(
@@ -152,6 +173,7 @@ export const flowRunsService = {
       const response = await fetch('/api/argo/workflows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // Labels link workflow runs back to the originating Flow for tracking
         body: JSON.stringify({
           templateName: flow.templateName,
           namespace: flow.templateNamespace,
