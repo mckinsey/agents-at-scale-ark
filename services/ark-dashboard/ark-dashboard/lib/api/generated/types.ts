@@ -439,7 +439,11 @@ export interface paths {
         get: operations["get_chunks_v1_broker_chunks_get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Purge Chunks
+         * @description Purge all chunks from the broker.
+         */
+        delete: operations["purge_chunks_v1_broker_chunks_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -469,6 +473,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/broker/events/{query_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Events By Query
+         * @description Get or stream events for a specific query.
+         */
+        get: operations["get_events_by_query_v1_broker_events__query_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/broker/messages": {
         parameters: {
             query?: never;
@@ -483,7 +507,11 @@ export interface paths {
         get: operations["get_messages_v1_broker_messages_get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Purge Messages
+         * @description Purge all messages from the broker.
+         */
+        delete: operations["purge_messages_v1_broker_messages_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -5084,7 +5112,43 @@ export interface operations {
                 /** @description Stream chunks via SSE */
                 watch?: boolean;
                 /** @description Filter by query ID */
-                "query-id"?: string;
+                "query-id"?: string | null;
+                /** @description Memory resource name */
+                memory?: string;
+                /** @description Max chunks to return */
+                limit?: number;
+                /** @description Cursor for pagination */
+                cursor?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    purge_chunks_v1_broker_chunks_delete: {
+        parameters: {
+            query?: {
                 /** @description Memory resource name */
                 memory?: string;
             };
@@ -5119,10 +5183,12 @@ export interface operations {
             query?: {
                 /** @description Stream events via SSE */
                 watch?: boolean;
-                /** @description Filter by query ID */
-                "query-id"?: string;
                 /** @description Memory resource name */
                 memory?: string;
+                /** @description Max events to return */
+                limit?: number;
+                /** @description Cursor for pagination */
+                cursor?: number | null;
             };
             header?: never;
             path?: never;
@@ -5182,13 +5248,93 @@ export interface operations {
             };
         };
     };
+    get_events_by_query_v1_broker_events__query_id__get: {
+        parameters: {
+            query?: {
+                /** @description Stream events via SSE */
+                watch?: boolean;
+                /** @description Include existing events */
+                "from-beginning"?: boolean;
+                /** @description Cursor for pagination/streaming */
+                cursor?: number | null;
+                /** @description Memory resource name */
+                memory?: string;
+                /** @description Max events to return */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                query_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_messages_v1_broker_messages_get: {
         parameters: {
             query?: {
                 /** @description Stream messages via SSE */
                 watch?: boolean;
+                /** @description Memory resource name */
+                memory?: string;
+                /** @description Max messages to return */
+                limit?: number;
+                /** @description Cursor for pagination */
+                cursor?: number | null;
                 /** @description Filter by conversation ID */
-                "conversation-id"?: string;
+                conversation_id?: string | null;
+                /** @description Filter by query ID */
+                query_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    purge_messages_v1_broker_messages_delete: {
+        parameters: {
+            query?: {
                 /** @description Memory resource name */
                 memory?: string;
             };
@@ -5225,6 +5371,10 @@ export interface operations {
                 watch?: boolean;
                 /** @description Memory resource name */
                 memory?: string;
+                /** @description Max traces to return */
+                limit?: number;
+                /** @description Cursor for pagination */
+                cursor?: number | null;
             };
             header?: never;
             path?: never;
@@ -5291,6 +5441,8 @@ export interface operations {
                 watch?: boolean;
                 /** @description Include existing spans */
                 "from-beginning"?: boolean;
+                /** @description Cursor for pagination/streaming */
+                cursor?: number | null;
                 /** @description Memory resource name */
                 memory?: string;
             };
