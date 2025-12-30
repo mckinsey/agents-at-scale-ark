@@ -1,7 +1,7 @@
 """Agent CRD response models."""
 from typing import List, Dict, Optional, Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 from .common import AvailabilityStatus
 
@@ -88,7 +88,6 @@ class HeaderValue(BaseModel):
 
 class Header(BaseModel):
     """HTTP header configuration."""
-    model_config = ConfigDict(title='AgentHeader')
     name: str
     value: HeaderValue
 

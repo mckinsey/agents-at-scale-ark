@@ -1293,11 +1293,27 @@ export interface paths {
         get: operations["get_messages_v1_broker_messages_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/broker/chunks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         /**
-         * Purge Messages
-         * @description Purge all messages from the broker.
+         * Get Chunks
+         * @description Get or stream LLM chunks from the broker.
          */
-        delete: operations["purge_messages_v1_broker_messages_delete"];
+        get: operations["get_chunks_v1_broker_chunks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1322,50 +1338,6 @@ export interface paths {
          * @description Purge all events from the broker.
          */
         delete: operations["purge_events_v1_broker_events_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/broker/events/{query_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Events By Query
-         * @description Get or stream events for a specific query.
-         */
-        get: operations["get_events_by_query_v1_broker_events__query_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/broker/chunks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Chunks
-         * @description Get or stream LLM chunks from the broker.
-         */
-        get: operations["get_chunks_v1_broker_chunks_get"];
-        put?: never;
-        post?: never;
-        /**
-         * Purge Chunks
-         * @description Purge all chunks from the broker.
-         */
-        delete: operations["purge_chunks_v1_broker_chunks_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1510,7 +1482,7 @@ export interface components {
             taskId: string;
             a2aServerRef: components["schemas"]["A2AServerRef"];
             agentRef: components["schemas"]["AgentRef"];
-            queryRef: components["schemas"]["QueryRef-Output"];
+            queryRef: components["schemas"]["ark_api__models__a2a_tasks__QueryRef"];
             /** Contextid */
             contextId?: string | null;
             /** Input */
@@ -1599,7 +1571,7 @@ export interface components {
             /** Phase */
             phase?: string | null;
             agentRef?: components["schemas"]["AgentRef"] | null;
-            queryRef?: components["schemas"]["QueryRef-Output"] | null;
+            queryRef?: components["schemas"]["ark_api__models__a2a_tasks__QueryRef"] | null;
             /** Creationtimestamp */
             creationTimestamp?: string | null;
         };
@@ -1775,7 +1747,7 @@ export interface components {
             executionEngine?: components["schemas"]["ExecutionEngineRef"] | null;
             modelRef?: components["schemas"]["ModelRef"] | null;
             /** Parameters */
-            parameters?: components["schemas"]["Parameter"][] | null;
+            parameters?: components["schemas"]["ark_api__models__agents__Parameter-Input"][] | null;
             /** Prompt */
             prompt?: string | null;
             /** Tools */
@@ -1797,7 +1769,7 @@ export interface components {
             executionEngine?: components["schemas"]["ExecutionEngineRef"] | null;
             modelRef?: components["schemas"]["ModelRef"] | null;
             /** Parameters */
-            parameters?: components["schemas"]["Parameter"][] | null;
+            parameters?: components["schemas"]["ark_api__models__agents__Parameter-Output"][] | null;
             /** Prompt */
             prompt?: string | null;
             /** Tools */
@@ -1872,7 +1844,7 @@ export interface components {
             executionEngine?: components["schemas"]["ExecutionEngineRef"] | null;
             modelRef?: components["schemas"]["ModelRef"] | null;
             /** Parameters */
-            parameters?: components["schemas"]["Parameter"][] | null;
+            parameters?: components["schemas"]["ark_api__models__agents__Parameter-Input"][] | null;
             /** Prompt */
             prompt?: string | null;
             /** Tools */
@@ -1980,11 +1952,11 @@ export interface components {
          */
         AzureConfig: {
             /** Apikey */
-            apiKey: string | components["schemas"]["ValueSource"];
+            apiKey: string | components["schemas"]["ark_api__models__models__ValueSource"];
             /** Baseurl */
-            baseUrl: string | components["schemas"]["ValueSource"];
+            baseUrl: string | components["schemas"]["ark_api__models__models__ValueSource"];
             /** Apiversion */
-            apiVersion?: string | components["schemas"]["ValueSource"] | null;
+            apiVersion?: string | components["schemas"]["ark_api__models__models__ValueSource"] | null;
             /** Headers */
             headers?: components["schemas"]["ark_api__models__agents__Header-Input"][] | null;
         };
@@ -2060,15 +2032,15 @@ export interface components {
          */
         BedrockConfig: {
             /** Region */
-            region?: string | components["schemas"]["ValueSource"] | null;
+            region?: string | components["schemas"]["ark_api__models__models__ValueSource"] | null;
             /** Accesskeyid */
-            accessKeyId?: string | components["schemas"]["ValueSource"] | null;
+            accessKeyId?: string | components["schemas"]["ark_api__models__models__ValueSource"] | null;
             /** Secretaccesskey */
-            secretAccessKey?: string | components["schemas"]["ValueSource"] | null;
+            secretAccessKey?: string | components["schemas"]["ark_api__models__models__ValueSource"] | null;
             /** Sessiontoken */
-            sessionToken?: string | components["schemas"]["ValueSource"] | null;
+            sessionToken?: string | components["schemas"]["ark_api__models__models__ValueSource"] | null;
             /** Modelarn */
-            modelArn?: string | components["schemas"]["ValueSource"] | null;
+            modelArn?: string | components["schemas"]["ark_api__models__models__ValueSource"] | null;
             /** Maxtokens */
             maxTokens?: number | null;
             /** Temperature */
@@ -2532,18 +2504,6 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * ConfigMapKeyRef
-         * @description Reference to a key in a ConfigMap.
-         */
-        ConfigMapKeyRef: {
-            /** Key */
-            key: string;
-            /** Name */
-            name: string;
-            /** Optional */
-            optional?: boolean | null;
-        };
-        /**
          * ContextResponse
          * @description Response model for current Kubernetes context.
          */
@@ -2664,7 +2624,7 @@ export interface components {
             input?: string | null;
             /** Output */
             output?: string | null;
-            queryRef?: components["schemas"]["QueryRef-Input"] | null;
+            queryRef?: components["schemas"]["ark_api__models__evaluations__QueryRef"] | null;
             /** Evaluations */
             evaluations?: components["schemas"]["EvaluationRef"][] | null;
             /** Rules */
@@ -3071,12 +3031,6 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /** MCPServerHeader */
-        Header: {
-            /** Name */
-            name: string;
-            value: components["schemas"]["ValueSource-Output"];
-        };
         /**
          * HeaderValue
          * @description Value configuration for a header.
@@ -3084,7 +3038,7 @@ export interface components {
         "HeaderValue-Input": {
             /** Value */
             value?: string | null;
-            valueFrom?: components["schemas"]["ValueFrom"] | null;
+            valueFrom?: components["schemas"]["ark_api__models__agents__ValueFrom"] | null;
         };
         /**
          * HeaderValue
@@ -3093,7 +3047,7 @@ export interface components {
         "HeaderValue-Output": {
             /** Value */
             value?: string | null;
-            valueFrom?: components["schemas"]["ValueFrom"] | null;
+            valueFrom?: components["schemas"]["ark_api__models__agents__ValueFrom"] | null;
         };
         /**
          * HealthResponse
@@ -3139,30 +3093,6 @@ export interface components {
          * @enum {string}
          */
         InputType: "user" | "messages";
-        /**
-         * LabelSelector
-         * @description A label selector is a label query over a set of resources.
-         */
-        LabelSelector: {
-            /** Matchlabels */
-            matchLabels?: {
-                [key: string]: string;
-            } | null;
-            /** Matchexpressions */
-            matchExpressions?: components["schemas"]["LabelSelectorRequirement"][] | null;
-        };
-        /**
-         * LabelSelectorRequirement
-         * @description A label selector requirement is a selector that contains values, a key, and an operator.
-         */
-        LabelSelectorRequirement: {
-            /** Key */
-            key: string;
-            /** Operator */
-            operator: string;
-            /** Values */
-            values?: string[] | null;
-        };
         /** MCPServerCreateRequest */
         MCPServerCreateRequest: {
             /** Name */
@@ -3201,7 +3131,7 @@ export interface components {
             /** Transport */
             transport?: string | null;
             /** Headers */
-            headers: components["schemas"]["Header"][] | null;
+            headers: components["schemas"]["ark_api__models__mcp_servers__Header-Output"][] | null;
             /** Tool Count */
             tool_count?: number | null;
         };
@@ -3242,7 +3172,7 @@ export interface components {
             tools?: string[] | null;
             address: components["schemas"]["ark_api__models__mcp_servers__ValueSource-Input"];
             /** Headers */
-            headers?: components["schemas"]["Header"][] | null;
+            headers?: components["schemas"]["ark_api__models__mcp_servers__Header-Input"][] | null;
         };
         /**
          * Memory
@@ -3492,9 +3422,9 @@ export interface components {
          */
         OpenAIConfig: {
             /** Apikey */
-            apiKey: string | components["schemas"]["ValueSource"];
+            apiKey: string | components["schemas"]["ark_api__models__models__ValueSource"];
             /** Baseurl */
-            baseUrl: string | components["schemas"]["ValueSource"];
+            baseUrl: string | components["schemas"]["ark_api__models__models__ValueSource"];
             /** Headers */
             headers?: components["schemas"]["ark_api__models__agents__Header-Input"][] | null;
         };
@@ -3507,7 +3437,7 @@ export interface components {
             headers: components["schemas"]["ark_api__models__agents__Header-Input"][];
             /** Resourcetype */
             resourceType: string;
-            labelSelector?: components["schemas"]["LabelSelector"] | null;
+            labelSelector?: components["schemas"]["ark_api__models__agents__LabelSelector"] | null;
         };
         /**
          * Override
@@ -3518,18 +3448,7 @@ export interface components {
             headers: components["schemas"]["ark_api__models__agents__Header-Output"][];
             /** Resourcetype */
             resourceType: string;
-            labelSelector?: components["schemas"]["LabelSelector"] | null;
-        };
-        /**
-         * Parameter
-         * @description Parameter for template processing in prompts and inputs.
-         */
-        Parameter: {
-            /** Name */
-            name: string;
-            /** Value */
-            value?: string | null;
-            valueFrom?: components["schemas"]["ValueFrom"] | null;
+            labelSelector?: components["schemas"]["ark_api__models__agents__LabelSelector"] | null;
         };
         /**
          * PromptTokensDetails
@@ -3650,35 +3569,6 @@ export interface components {
             /** Count */
             count: number;
         };
-        /** QueryParameterRef */
-        QueryParameterRef: {
-            /** Name */
-            name: string;
-        };
-        /**
-         * QueryRef
-         * @description Reference to a query for evaluation.
-         */
-        "QueryRef-Input": {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace?: string | null;
-            /** Responsetarget */
-            responseTarget?: string | null;
-        };
-        /**
-         * QueryRef
-         * @description Reference to a Query.
-         */
-        "QueryRef-Output": {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace?: string | null;
-            /** Responsetarget */
-            responseTarget?: string | null;
-        };
         /**
          * QueryResponse
          * @description Basic query response for list operations.
@@ -3797,15 +3687,6 @@ export interface components {
                 [key: string]: string;
             } | null;
         };
-        /** SecretKeyRef */
-        SecretKeyRef: {
-            /** Key */
-            key: string;
-            /** Name */
-            name: string;
-            /** Optional */
-            optional?: boolean | null;
-        };
         /**
          * SecretListResponse
          * @description List of secrets response model.
@@ -3849,20 +3730,6 @@ export interface components {
             agent?: string | null;
             /** Selectorprompt */
             selectorPrompt?: string | null;
-        };
-        /**
-         * ServiceRef
-         * @description Reference to a service.
-         */
-        ServiceRef: {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace?: string | null;
-            /** Port */
-            port?: string | null;
-            /** Path */
-            path?: string | null;
         };
         /**
          * SessionListResponse
@@ -4039,7 +3906,7 @@ export interface components {
             type: string;
             /** Name */
             name?: string | null;
-            labelSelector?: components["schemas"]["LabelSelector"] | null;
+            labelSelector?: components["schemas"]["ark_api__models__agents__LabelSelector"] | null;
         };
         /**
          * Tool
@@ -4050,7 +3917,7 @@ export interface components {
             type: string;
             /** Name */
             name?: string | null;
-            labelSelector?: components["schemas"]["LabelSelector"] | null;
+            labelSelector?: components["schemas"]["ark_api__models__agents__LabelSelector"] | null;
         };
         /** ToolDetailResponse */
         ToolDetailResponse: {
@@ -4143,40 +4010,31 @@ export interface components {
             type: string;
         };
         /**
-         * ValueFrom
-         * @description Reference to external sources for parameter values.
+         * QueryRef
+         * @description Reference to a Query.
          */
-        ValueFrom: {
-            configMapKeyRef?: components["schemas"]["ConfigMapKeyRef"] | null;
-            secretKeyRef?: components["schemas"]["ark_api__models__agents__SecretKeyRef"] | null;
-            serviceRef?: components["schemas"]["ServiceRef"] | null;
-            queryParameterRef?: components["schemas"]["ark_api__models__agents__QueryParameterRef"] | null;
+        ark_api__models__a2a_tasks__QueryRef: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace?: string | null;
+            /** Responsetarget */
+            responseTarget?: string | null;
         };
         /**
-         * ValueSource
-         * @description ValueSource for model configuration (supports direct value or valueFrom).
+         * ConfigMapKeyRef
+         * @description Reference to a key in a ConfigMap.
          */
-        ValueSource: {
-            /** Value */
-            value?: string | null;
-            /** Valuefrom */
-            valueFrom?: {
-                [key: string]: {
-                    [key: string]: string;
-                };
-            } | null;
+        ark_api__models__agents__ConfigMapKeyRef: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Optional */
+            optional?: boolean | null;
         };
         /**
-         * ValueSource
-         * @description ValueSource for configuration (supports direct value or valueFrom).
-         */
-        "ValueSource-Output": {
-            /** Value */
-            value?: string | null;
-            valueFrom?: components["schemas"]["ark_api__models__mcp_servers__ValueFrom"] | null;
-        };
-        /**
-         * AgentHeader
+         * Header
          * @description HTTP header configuration.
          */
         "ark_api__models__agents__Header-Input": {
@@ -4185,13 +4043,59 @@ export interface components {
             value: components["schemas"]["HeaderValue-Input"];
         };
         /**
-         * AgentHeader
+         * Header
          * @description HTTP header configuration.
          */
         "ark_api__models__agents__Header-Output": {
             /** Name */
             name: string;
             value: components["schemas"]["HeaderValue-Output"];
+        };
+        /**
+         * LabelSelector
+         * @description A label selector is a label query over a set of resources.
+         */
+        ark_api__models__agents__LabelSelector: {
+            /** Matchlabels */
+            matchLabels?: {
+                [key: string]: string;
+            } | null;
+            /** Matchexpressions */
+            matchExpressions?: components["schemas"]["ark_api__models__agents__LabelSelectorRequirement"][] | null;
+        };
+        /**
+         * LabelSelectorRequirement
+         * @description A label selector requirement is a selector that contains values, a key, and an operator.
+         */
+        ark_api__models__agents__LabelSelectorRequirement: {
+            /** Key */
+            key: string;
+            /** Operator */
+            operator: string;
+            /** Values */
+            values?: string[] | null;
+        };
+        /**
+         * Parameter
+         * @description Parameter for template processing in prompts and inputs.
+         */
+        "ark_api__models__agents__Parameter-Input": {
+            /** Name */
+            name: string;
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["ark_api__models__agents__ValueFrom"] | null;
+        };
+        /**
+         * Parameter
+         * @description Parameter for template processing in prompts and inputs.
+         */
+        "ark_api__models__agents__Parameter-Output": {
+            /** Name */
+            name: string;
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["ark_api__models__agents__ValueFrom"] | null;
         };
         /**
          * QueryParameterRef
@@ -4212,6 +4116,42 @@ export interface components {
             name: string;
             /** Optional */
             optional?: boolean | null;
+        };
+        /**
+         * ServiceRef
+         * @description Reference to a service.
+         */
+        ark_api__models__agents__ServiceRef: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace?: string | null;
+            /** Port */
+            port?: string | null;
+            /** Path */
+            path?: string | null;
+        };
+        /**
+         * ValueFrom
+         * @description Reference to external sources for parameter values.
+         */
+        ark_api__models__agents__ValueFrom: {
+            configMapKeyRef?: components["schemas"]["ark_api__models__agents__ConfigMapKeyRef"] | null;
+            secretKeyRef?: components["schemas"]["ark_api__models__agents__SecretKeyRef"] | null;
+            serviceRef?: components["schemas"]["ark_api__models__agents__ServiceRef"] | null;
+            queryParameterRef?: components["schemas"]["ark_api__models__agents__QueryParameterRef"] | null;
+        };
+        /**
+         * QueryRef
+         * @description Reference to a query for evaluation.
+         */
+        ark_api__models__evaluations__QueryRef: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace?: string | null;
+            /** Responsetarget */
+            responseTarget?: string | null;
         };
         /**
          * ConfigMapKeyRef
@@ -4304,6 +4244,32 @@ export interface components {
             /** Optional */
             optional?: boolean | null;
         };
+        /** Header */
+        "ark_api__models__mcp_servers__Header-Input": {
+            /** Name */
+            name: string;
+            value: components["schemas"]["ark_api__models__mcp_servers__ValueSource-Input"];
+        };
+        /** Header */
+        "ark_api__models__mcp_servers__Header-Output": {
+            /** Name */
+            name: string;
+            value: components["schemas"]["ark_api__models__mcp_servers__ValueSource"];
+        };
+        /** QueryParameterRef */
+        ark_api__models__mcp_servers__QueryParameterRef: {
+            /** Name */
+            name: string;
+        };
+        /** SecretKeyRef */
+        ark_api__models__mcp_servers__SecretKeyRef: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Optional */
+            optional?: boolean | null;
+        };
         /** ServiceRef */
         ark_api__models__mcp_servers__ServiceRef: {
             /** Name */
@@ -4318,9 +4284,18 @@ export interface components {
         /** ValueFrom */
         ark_api__models__mcp_servers__ValueFrom: {
             configMapKeyRef?: components["schemas"]["ark_api__models__mcp_servers__ConfigMapKeyRef"] | null;
-            secretKeyRef?: components["schemas"]["SecretKeyRef"] | null;
+            secretKeyRef?: components["schemas"]["ark_api__models__mcp_servers__SecretKeyRef"] | null;
             serviceRef?: components["schemas"]["ark_api__models__mcp_servers__ServiceRef"] | null;
-            queryParameterRef?: components["schemas"]["QueryParameterRef"] | null;
+            queryParameterRef?: components["schemas"]["ark_api__models__mcp_servers__QueryParameterRef"] | null;
+        };
+        /**
+         * ValueSource
+         * @description ValueSource for configuration (supports direct value or valueFrom).
+         */
+        ark_api__models__mcp_servers__ValueSource: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["ark_api__models__mcp_servers__ValueFrom"] | null;
         };
         /**
          * ValueSource
@@ -4330,6 +4305,20 @@ export interface components {
             /** Value */
             value?: string | null;
             valueFrom?: components["schemas"]["ark_api__models__mcp_servers__ValueFrom"] | null;
+        };
+        /**
+         * ValueSource
+         * @description ValueSource for model configuration (supports direct value or valueFrom).
+         */
+        ark_api__models__models__ValueSource: {
+            /** Value */
+            value?: string | null;
+            /** Valuefrom */
+            valueFrom?: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            } | null;
         };
         /**
          * ConfigMapKeyRef
@@ -6952,10 +6941,6 @@ export interface operations {
                 watch?: boolean;
                 /** @description Memory resource name */
                 memory?: string;
-                /** @description Max traces to return */
-                limit?: number;
-                /** @description Cursor for pagination */
-                cursor?: number | null;
             };
             header?: never;
             path?: never;
@@ -7022,8 +7007,6 @@ export interface operations {
                 watch?: boolean;
                 /** @description Include existing spans */
                 "from-beginning"?: boolean;
-                /** @description Cursor for pagination/streaming */
-                cursor?: number | null;
                 /** @description Memory resource name */
                 memory?: string;
             };
@@ -7060,16 +7043,10 @@ export interface operations {
             query?: {
                 /** @description Stream messages via SSE */
                 watch?: boolean;
+                /** @description Filter by conversation ID */
+                "conversation-id"?: string;
                 /** @description Memory resource name */
                 memory?: string;
-                /** @description Max messages to return */
-                limit?: number;
-                /** @description Cursor for pagination */
-                cursor?: number | null;
-                /** @description Filter by conversation ID */
-                conversation_id?: string | null;
-                /** @description Filter by query ID */
-                query_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -7097,9 +7074,13 @@ export interface operations {
             };
         };
     };
-    purge_messages_v1_broker_messages_delete: {
+    get_chunks_v1_broker_chunks_get: {
         parameters: {
             query?: {
+                /** @description Stream chunks via SSE */
+                watch?: boolean;
+                /** @description Filter by query ID */
+                "query-id"?: string;
                 /** @description Memory resource name */
                 memory?: string;
             };
@@ -7134,12 +7115,10 @@ export interface operations {
             query?: {
                 /** @description Stream events via SSE */
                 watch?: boolean;
+                /** @description Filter by query ID */
+                "query-id"?: string;
                 /** @description Memory resource name */
                 memory?: string;
-                /** @description Max events to return */
-                limit?: number;
-                /** @description Cursor for pagination */
-                cursor?: number | null;
             };
             header?: never;
             path?: never;
@@ -7168,120 +7147,6 @@ export interface operations {
         };
     };
     purge_events_v1_broker_events_delete: {
-        parameters: {
-            query?: {
-                /** @description Memory resource name */
-                memory?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_events_by_query_v1_broker_events__query_id__get: {
-        parameters: {
-            query?: {
-                /** @description Stream events via SSE */
-                watch?: boolean;
-                /** @description Include existing events */
-                "from-beginning"?: boolean;
-                /** @description Cursor for pagination/streaming */
-                cursor?: number | null;
-                /** @description Memory resource name */
-                memory?: string;
-                /** @description Max events to return */
-                limit?: number;
-            };
-            header?: never;
-            path: {
-                query_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_chunks_v1_broker_chunks_get: {
-        parameters: {
-            query?: {
-                /** @description Stream chunks via SSE */
-                watch?: boolean;
-                /** @description Filter by query ID */
-                "query-id"?: string | null;
-                /** @description Memory resource name */
-                memory?: string;
-                /** @description Max chunks to return */
-                limit?: number;
-                /** @description Cursor for pagination */
-                cursor?: number | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    purge_chunks_v1_broker_chunks_delete: {
         parameters: {
             query?: {
                 /** @description Memory resource name */
