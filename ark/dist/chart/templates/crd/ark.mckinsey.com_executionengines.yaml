@@ -63,7 +63,8 @@ spec:
               that reference them.
             properties:
               address:
-                description: Address specifies how to reach the execution engine
+                description: Address specifies how to reach the execution engine (for
+                  shared executors)
                 properties:
                   value:
                     type: string
@@ -139,20 +140,47 @@ spec:
                         type: object
                     type: object
                 type: object
+              configSchema:
+                description: ConfigSchema is the JSON schema for configuration values
+                  (populated from image label)
+                type: string
               description:
                 description: Description provides human-readable information about
                   this execution engine
                 type: string
+              isAgentic:
+                description: IsAgentic indicates the template produces an agent that
+                  gets A2A exposure
+                type: boolean
+              source:
+                description: Source specifies the template to deploy (for dedicated
+                  instances)
+                properties:
+                  git:
+                    properties:
+                      path:
+                        type: string
+                      ref:
+                        type: string
+                      url:
+                        type: string
+                    required:
+                    - url
+                    type: object
+                  image:
+                    type: string
+                type: object
               type:
                 description: Type specifies which execution engine implementation
                   to use
                 type: string
             required:
-            - address
             - type
             type: object
           status:
             properties:
+              imageRef:
+                type: string
               lastResolvedAddress:
                 description: LastResolvedAddress contains the actual resolved address
                   value

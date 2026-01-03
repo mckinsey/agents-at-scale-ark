@@ -31,7 +31,13 @@ spec:
   executionEngine:
     name: langchain-engine
     namespace: default
-    
+
+  # Config values for declarative components, that use declarative template-based execution engines (optional)
+  # These are injected as ARK_CONFIG_* environment variables
+  config:
+    my-key: "my-value"
+    my-feature-flag: "my-feature-flag-value"
+
   # Tools the agent can use
   tools:
     - type: built-in  # System-provided tools (web-search, calculations)
@@ -78,6 +84,8 @@ status:
     status: "True"
     reason: AllDependenciesReady
     message: Agent is ready for execution
+  # For template-based agents, the service address where the agent is accessible
+  serviceAddress: "http://my-agent.default.svc.cluster.local:8080"
 ```
 
 ## Status and Conditions
@@ -130,6 +138,43 @@ spec:
     - type: custom
       name: get-forecast
 ```
+
+### Template-Based Agent
+
+Agent using a custom container image (via ExecutionEngine template):
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: custom-researcher
+spec:
+  executionEngine:
+    name: researcher-template  # References an ExecutionEngine with source.image
+  config:
+    api_key: "sk-..."
+    model_name: "claude-3-opus"
+    temperature: "0.5"
+    max_tokens: "4096"
+```
+
+The referenced ExecutionEngine:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: researcher-template
+spec:
+  type: researcher  # Free-form label - can be any string
+  source:
+    image: ghcr.io/your-org/researcher-agent:v1.0.0
+  isAgentic: true
+  description: "Research agent with web search capabilities"
+```
+
+When created, Ark deploys a dedicated pod running the specified image. Config values
+are injected as environment variables (`ARK_CONFIG_API_KEY`, `ARK_CONFIG_MODEL_NAME`, etc.).
 
 ### Agent with Structured Output
 ```yaml

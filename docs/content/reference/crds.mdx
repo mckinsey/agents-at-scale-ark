@@ -304,17 +304,90 @@ spec:
 
 ## Execution Engines
 
-Execution Engines provide custom runtime environments for specialized agent execution.
+Execution Engines define how agents are executed. When omitted, agents are executed using Ark's in-built processor. 
+When an Execution Engine is used instead, they can be used in two modes:
 
-### Specification
+1. **Shared Executor Mode** (`address`): A given Execution Engine points to a shared service that handles requests for multiple agents. The entire configuration of the agent, and the request, is sent at the same time to be resolved.
+2. **Declarative Template Mode** (`source`): A given Execution Engine points to an application image. When an agent is created with an Execution Engine, the referenced image is deployed to its own long-running container, and override values that are declared when the agent was created are injected into the container. The agent is then ready to serve requests to that instantiated container. 
+
+### Shared Executor Mode
+
+For agents that use a shared execution service (e.g., LangChain executor):
+
 ```yaml
 apiVersion: ark.mckinsey.com/v1prealpha1
 kind: ExecutionEngine
 metadata:
-  name: custom-engine
+  name: langchain-engine
 spec:
-  type: external
-  endpoint: "http://custom-engine-service:8080"
+  type: langchain
+  address:
+    value: "http://executor-langchain:8080"
+```
+
+The address can also reference a Service or Secret:
+
+```yaml
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: executor-langchain
+        port: http
+```
+
+### Declarative Template Mode
+
+For agents that run as dedicated pods with their own container:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: my-agent-template
+spec:
+  type: researcher  # Free-form label - can be any string
+  source:
+    image: ghcr.io/your-org/my-agent:v1.0.0
+  isAgentic: true
+  description: "Custom research agent"
+```
+
+When an Agent references this template, Ark creates a dedicated Deployment and Service:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: researcher
+spec:
+  executionEngine:
+    name: my-agent-template
+  config:
+    api_key: "sk-..."
+    model_name: "gpt-4"
+```
+
+Config values are injected as `ARK_CONFIG_*` environment variables (e.g., `ARK_CONFIG_API_KEY`).
+
+### Key Fields
+
+| Field | Description |
+|-------|-------------|
+| `type` | Free-form label identifying the engine (e.g., "langchain", "autogen"). No validation - purely informational. |
+| `address` | For shared executor mode - URL or service reference |
+| `source.image` | For template mode - container image URL |
+| `source.git` | For template mode - git repository (future) |
+| `isAgentic` | If true, agents get A2A exposure |
+| `configSchema` | JSON Schema for config validation (from image label) |
+
+### Status
+
+```yaml
+status:
+  phase: Ready
+  lastResolvedAddress: "http://executor:8080"  # For shared executors
+  imageRef: "ghcr.io/org/agent@sha256:..."     # For templates
 ```
 
 ## Resource Relationships

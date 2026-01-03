@@ -16,20 +16,34 @@ type ExecutionEngineSpec struct {
 	// +kubebuilder:validation:Required
 	Type string `json:"type"`
 
-	// Address specifies how to reach the execution engine
-	// +kubebuilder:validation:Required
-	Address ValueSource `json:"address"`
+	// Address specifies how to reach the execution engine (for shared executors)
+	// +kubebuilder:validation:Optional
+	Address *ValueSource `json:"address,omitempty"`
+
+	// Source specifies the template to deploy (for dedicated instances)
+	// +kubebuilder:validation:Optional
+	Source *TemplateSource `json:"source,omitempty"`
+
+	// ConfigSchema is the JSON schema for configuration values (populated from image label)
+	// +kubebuilder:validation:Optional
+	ConfigSchema string `json:"configSchema,omitempty"`
+
+	// IsAgentic indicates the template produces an agent that gets A2A exposure
+	// +kubebuilder:validation:Optional
+	IsAgentic bool `json:"isAgentic,omitempty"`
 
 	// Description provides human-readable information about this execution engine
 	Description string `json:"description,omitempty"`
 }
 
 type ExecutionEngineStatus struct {
-	// +kubebuilder:validation:Optional
 	// LastResolvedAddress contains the actual resolved address value
+	// +kubebuilder:validation:Optional
 	LastResolvedAddress string `json:"lastResolvedAddress,omitempty"`
 	Phase               string `json:"phase,omitempty"`
 	Message             string `json:"message,omitempty"`
+	// +kubebuilder:validation:Optional
+	ImageRef string `json:"imageRef,omitempty"`
 }
 
 // +kubebuilder:object:root=true

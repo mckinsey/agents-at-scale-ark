@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: my-agent-team-spanish
+spec:
+  executionEngine:
+    name: my-translating-agent-team
+  config:
+    target-language: Spanish
+  modelRef:
+    name: default

@@ -46,6 +46,13 @@ func (r *ExecutionEngineReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
+	// Check if spec has changed from what's in status (e.g., image updated).
+	// If so, re-process even if status is ready.
+	if r.specChanged(&executionEngine) {
+		log.Info("ExecutionEngine spec changed, re-processing", "executionEngine", executionEngine.Name)
+		return r.processExecutionEngine(ctx, executionEngine)
+	}
+
 	switch executionEngine.Status.Phase {
 	case statusReady, statusError:
 		return ctrl.Result{}, nil
@@ -59,6 +66,23 @@ func (r *ExecutionEngineReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 }
 
+// specChanged checks if the ExecutionEngine spec has changed from what's recorded in status.
+// This detects when spec.source.image or spec.address changes after the engine was already ready.
+func (r *ExecutionEngineReconciler) specChanged(ee *arkv1prealpha1.ExecutionEngine) bool {
+	// Check if source.image differs from status.imageRef
+	if ee.Spec.Source != nil && ee.Spec.Source.Image != "" {
+		if ee.Status.ImageRef != ee.Spec.Source.Image {
+			return true
+		}
+	}
+
+	// For address-based engines, we could compare spec.address with status.lastResolvedAddress,
+	// but address resolution may involve secrets/configmaps that can change independently.
+	// For now, only handle the image case.
+
+	return false
+}
+
 func (r *ExecutionEngineReconciler) getResolver() *common.ValueSourceResolverV1PreAlpha1 {
 	if r.resolver == nil {
 		r.resolver = common.NewValueSourceResolverV1PreAlpha1(r.Client)
@@ -70,8 +94,25 @@ func (r *ExecutionEngineReconciler) processExecutionEngine(ctx context.Context, 
 	log := logf.FromContext(ctx)
 	log.Info("Processing execution engine", "executionEngine", executionEngine.Name)
 
+	if executionEngine.Spec.Source != nil {
+		return r.processTemplateBasedEngine(ctx, executionEngine)
+	}
+
+	if executionEngine.Spec.Address != nil {
+		return r.processAddressBasedEngine(ctx, executionEngine)
+	}
+
+	if err := r.updateStatus(ctx, executionEngine, statusError, "Either address or source must be specified"); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *ExecutionEngineReconciler) processAddressBasedEngine(ctx context.Context, executionEngine arkv1prealpha1.ExecutionEngine) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+
 	resolver := r.getResolver()
-	resolvedAddress, err := resolver.ResolveValueSource(ctx, executionEngine.Spec.Address, executionEngine.Namespace)
+	resolvedAddress, err := resolver.ResolveValueSource(ctx, *executionEngine.Spec.Address, executionEngine.Namespace)
 	if err != nil {
 		log.Error(err, "failed to resolve ExecutionEngine address", "executionEngine", executionEngine.Name)
 		r.Eventing.ExecutionEngineRecorder().AddressResolutionFailed(ctx, &executionEngine, fmt.Sprintf("Failed to resolve address: %v", err))
@@ -88,6 +129,33 @@ func (r *ExecutionEngineReconciler) processExecutionEngine(ctx context.Context, 
 	}
 
 	log.Info("ExecutionEngine processed successfully", "executionEngine", executionEngine.Name, "resolvedAddress", resolvedAddress)
+	return ctrl.Result{}, nil
+}
+
+func (r *ExecutionEngineReconciler) processTemplateBasedEngine(ctx context.Context, executionEngine arkv1prealpha1.ExecutionEngine) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+	source := executionEngine.Spec.Source
+
+	if source.Image != "" {
+		executionEngine.Status.ImageRef = source.Image
+		if err := r.updateStatus(ctx, executionEngine, statusReady, "Template image configured"); err != nil {
+			return ctrl.Result{}, err
+		}
+		log.Info("Template-based ExecutionEngine ready", "executionEngine", executionEngine.Name, "image", source.Image)
+		return ctrl.Result{}, nil
+	}
+
+	if source.Git != nil {
+		if err := r.updateStatus(ctx, executionEngine, statusRunning, "Waiting for image build from git source"); err != nil {
+			return ctrl.Result{}, err
+		}
+		log.Info("Template-based ExecutionEngine waiting for build", "executionEngine", executionEngine.Name, "git", source.Git.URL)
+		return ctrl.Result{}, nil
+	}
+
+	if err := r.updateStatus(ctx, executionEngine, statusError, "Source must specify either image or git"); err != nil {
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{}, nil
 }
 

@@ -39,6 +39,9 @@ type AgentReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=tools,verbs=get;list;watch
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=models,verbs=get;list;watch
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=a2aservers,verbs=get;list;watch
+// +kubebuilder:rbac:groups=ark.mckinsey.com,resources=executionengines,verbs=get;list;watch
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 
 //nolint:dupl
 func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -62,6 +65,25 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
+	}
+
+	// Handle template-based agents: if the ExecutionEngine has a source (image),
+	// create a dedicated Deployment and Service for this agent instance.
+	// See template_deployment.go for details on injected environment variables.
+	deployResult := r.reconcileTemplateDeployment(ctx, &agent)
+	if !deployResult.success {
+		r.setCondition(&agent, AgentAvailable, metav1.ConditionFalse, deployResult.reason, deployResult.message)
+		r.Eventing.AgentRecorder().DependencyUnavailable(ctx, &agent, deployResult.message)
+		if err := r.updateStatus(ctx, &agent); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Store the service address for template agents so queries can route to it
+	if deployResult.isTemplate && agent.Status.ServiceAddress != deployResult.serviceAddress {
+		agent.Status.ServiceAddress = deployResult.serviceAddress
+		log.Info("Template agent deployed", "agent", agent.Name, "serviceAddress", deployResult.serviceAddress)
 	}
 
 	// Check current condition

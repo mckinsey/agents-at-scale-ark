@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: my-agent-team-chinese
+spec:
+  executionEngine:
+    name: my-translating-agent-team
+  config:
+    target-language: Chinese
+  modelRef:
+    name: default

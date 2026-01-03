@@ -32,6 +32,9 @@ type Agent struct {
 	Annotations       map[string]string
 	OutputSchema      *runtime.RawExtension
 	client            client.Client
+	ServiceAddress    string
+	IsTemplateEngine  bool
+	IsAgentic         bool
 }
 
 // FullName returns the namespace/name format for the agent
@@ -80,6 +83,12 @@ func (a *Agent) executeWithExecutionEngineRouter(ctx context.Context, userInput 
 		return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
 	}
 
+	// Template agents have their own container and use a different API contract
+	if a.IsTemplateEngine {
+		return a.executeWithTemplateAgent(ctx, userInput, history, eventStream)
+	}
+
+	// Shared executors use the /execute endpoint with full agent config
 	messages, err := a.executeWithExecutionEngine(ctx, userInput, history)
 	if err != nil {
 		return nil, err
@@ -355,6 +364,7 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		}
 	}
 
+	// Validate execution engine if specified
 	if crd.Spec.ExecutionEngine != nil {
 		err := ValidateExecutionEngine(ctx, k8sClient, crd.Spec.ExecutionEngine, crd.Namespace)
 		if err != nil {
@@ -362,6 +372,13 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 				crd.Spec.ExecutionEngine.Name, crd.Namespace, crd.Name, err)
 		}
 	}
+
+	// Detect if this agent uses a template execution engine (dedicated container)
+	// vs a shared executor. Template engines have source.image set and get their own
+	// Deployment/Service. isAgentic determines the API contract:
+	//   - isAgentic=true:  POST /v1/chat/completions (OpenAI format)
+	//   - isAgentic=false: POST /invoke (simple input/output)
+	isTemplateEngine, isAgentic := detectTemplateEngine(ctx, k8sClient, crd)
 
 	query, err := MakeQuery(queryCrd)
 	if err != nil {
@@ -394,5 +411,38 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		Annotations:       crd.Annotations,
 		OutputSchema:      crd.Spec.OutputSchema,
 		client:            k8sClient,
+		ServiceAddress:    crd.Status.ServiceAddress,
+		IsTemplateEngine:  isTemplateEngine,
+		IsAgentic:         isAgentic,
 	}, nil
+}
+
+// detectTemplateEngine checks if the agent uses a template execution engine.
+// Returns (isTemplateEngine, isAgentic) based on the ExecutionEngine CRD.
+func detectTemplateEngine(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Agent) (bool, bool) {
+	if crd.Spec.ExecutionEngine == nil {
+		return false, false
+	}
+
+	// A2A is a special internal execution engine, not a template
+	if crd.Spec.ExecutionEngine.Name == ExecutionEngineA2A {
+		return false, false
+	}
+
+	// Resolve namespace
+	engineNamespace := crd.Spec.ExecutionEngine.Namespace
+	if engineNamespace == "" {
+		engineNamespace = crd.Namespace
+	}
+
+	// Fetch the ExecutionEngine CRD
+	var engineCRD arkv1prealpha1.ExecutionEngine
+	engineKey := types.NamespacedName{Name: crd.Spec.ExecutionEngine.Name, Namespace: engineNamespace}
+	if err := k8sClient.Get(ctx, engineKey, &engineCRD); err != nil {
+		return false, false
+	}
+
+	// Template engines have spec.source set (vs spec.address for shared executors)
+	isTemplate := engineCRD.Spec.Source != nil
+	return isTemplate, engineCRD.Spec.IsAgentic
 }

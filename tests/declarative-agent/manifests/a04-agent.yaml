@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: declarative-test-agent
+spec:
+  executionEngine:
+    name: declarative-test-engine
+  modelRef:
+    name: declarative-test-model
+  config:
+    target-language: Spanish
+    max-tokens: "1000"
+    api.endpoint: http://example.com

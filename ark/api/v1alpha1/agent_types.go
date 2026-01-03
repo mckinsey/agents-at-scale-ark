@@ -84,7 +84,10 @@ type AgentSpec struct {
 	// +kubebuilder:validation:Optional
 	// ExecutionEngine to use for running this agent. If not specified, uses the built-in OpenAI-compatible engine
 	ExecutionEngine *ExecutionEngineRef `json:"executionEngine,omitempty"`
-	Tools           []AgentTool         `json:"tools,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Config provides values for the execution engine's config schema
+	Config map[string]string `json:"config,omitempty"`
+	Tools  []AgentTool       `json:"tools,omitempty"`
 	// +kubebuilder:validation:Optional
 	// Parameters for template processing in the prompt field
 	Parameters []Parameter `json:"parameters,omitempty"`
@@ -98,6 +101,9 @@ type AgentSpec struct {
 type AgentStatus struct {
 	// Conditions represent the latest available observations of an agent's state
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// +kubebuilder:validation:Optional
+	// ServiceAddress is the internal service URL for template-based agents
+	ServiceAddress string `json:"serviceAddress,omitempty"`
 }
 
 // +kubebuilder:object:root=true

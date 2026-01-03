@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: declarative-test-engine
+spec:
+  type: langgraph
+  isAgentic: true
+  source:
+    image: busybox:latest

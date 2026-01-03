@@ -1,0 +1,140 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: declarative-agent
+spec:
+  description: Test that declarative agents create Deployments with correct env var injection
+  steps:
+    - name: setup-and-create-resources
+      try:
+      - script:
+          skipLogOutput: true
+          content: |
+            set -u
+            echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+          outputs:
+          - name: azure
+            value: (json_parse($stdout))
+      - apply:
+          file: "manifests/*.yaml"
+
+    - name: verify-executionengine-ready
+      try:
+      - assert:
+          resource:
+            apiVersion: ark.mckinsey.com/v1prealpha1
+            kind: ExecutionEngine
+            metadata:
+              name: declarative-test-engine
+            status:
+              phase: ready
+
+    - name: verify-model-ready
+      try:
+      - assert:
+          resource:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Model
+            metadata:
+              name: declarative-test-model
+            status:
+              conditions:
+              - type: ModelAvailable
+                status: "True"
+
+    - name: verify-agent-created
+      try:
+      - assert:
+          resource:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Agent
+            metadata:
+              name: declarative-test-agent
+
+    - name: verify-deployment-created
+      try:
+      - assert:
+          resource:
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: declarative-test-agent
+              labels:
+                ark.mckinsey.com/agent: declarative-test-agent
+
+    - name: verify-service-created
+      try:
+      - assert:
+          resource:
+            apiVersion: v1
+            kind: Service
+            metadata:
+              name: declarative-test-agent
+              labels:
+                ark.mckinsey.com/agent: declarative-test-agent
+
+    - name: verify-deployment-env-vars
+      try:
+      - script:
+          content: |
+            set -e
+
+            DEPLOYMENT=$(kubectl get deployment declarative-test-agent -n $NAMESPACE -o json)
+            ENVS=$(echo "$DEPLOYMENT" | jq -r '.spec.template.spec.containers[0].env[] | "\(.name)=\(.value)"')
+
+            echo "=== Deployment Environment Variables ==="
+            echo "$ENVS"
+            echo "========================================"
+
+            check_env() {
+              local name="$1"
+              local expected="$2"
+              local actual=$(echo "$ENVS" | grep "^${name}=" | cut -d= -f2-)
+              if [ "$actual" = "$expected" ]; then
+                echo "✓ $name = $expected"
+              else
+                echo "✗ $name: expected '$expected', got '$actual'"
+                exit 1
+              fi
+            }
+
+            check_env_exists() {
+              local name="$1"
+              if echo "$ENVS" | grep -q "^${name}="; then
+                echo "✓ $name exists"
+              else
+                echo "✗ $name not found"
+                exit 1
+              fi
+            }
+
+            echo ""
+            echo "=== Checking Agent Identity Env Vars ==="
+            check_env "ARK_AGENT_NAME" "declarative-test-agent"
+            check_env_exists "ARK_AGENT_NAMESPACE"
+
+            echo ""
+            echo "=== Checking Config Env Vars ==="
+            check_env "TARGET_LANGUAGE" "Spanish"
+            check_env "MAX_TOKENS" "1000"
+            check_env "API_ENDPOINT" "http://example.com"
+
+            echo ""
+            echo "=== Checking Model Env Vars ==="
+            check_env "ARK_MODEL_NAME" "gpt-4.1-mini"
+            check_env_exists "ARK_MODEL_API_KEY"
+            check_env_exists "ARK_MODEL_BASE_URL"
+            check_env "ARK_MODEL_API_VERSION" "2024-12-01-preview"
+
+            echo ""
+            echo "All environment variable checks passed!"
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 60s
+      catch:
+      - events: {}
+      - describe:
+          apiVersion: apps/v1
+          kind: Deployment
+          name: declarative-test-agent

@@ -379,6 +379,13 @@ func (in *AgentSpec) DeepCopyInto(out *AgentSpec) {
 		*out = new(ExecutionEngineRef)
 		**out = **in
 	}
+	if in.Config != nil {
+		in, out := &in.Config, &out.Config
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	if in.Tools != nil {
 		in, out := &in.Tools, &out.Tools
 		*out = make([]AgentTool, len(*in))

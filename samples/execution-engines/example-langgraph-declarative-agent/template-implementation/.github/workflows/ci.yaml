@@ -1,0 +1,138 @@
+name: Build and Push
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ['v*']
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Extract config schema
+        id: config
+        run: |
+          pip install pydantic pydantic-settings
+          python << 'EOF'
+          import ast
+          import json
+
+          # Parse main.py without importing it
+          with open("src/main.py") as f:
+              tree = ast.parse(f.read())
+
+          # Find the Config class and extract field info
+          config_source = None
+          for node in ast.walk(tree):
+              if isinstance(node, ast.ClassDef) and node.name == "Config":
+                  # Check if it inherits from BaseSettings
+                  for base in node.bases:
+                      if isinstance(base, ast.Name) and base.id == "BaseSettings":
+                          config_source = ast.unparse(node)
+                          break
+                  if config_source:
+                      break
+
+          if not config_source:
+              print("No Config(BaseSettings) class found")
+              exit(1)
+
+          # Create a minimal environment to evaluate the Config class
+          exec_globals = {"__builtins__": __builtins__}
+          exec("""
+          from pydantic_settings import BaseSettings
+          from pydantic import Field
+          from typing import Literal, Optional, List
+          """, exec_globals)
+
+          # Execute the Config class definition
+          exec(config_source, exec_globals)
+          Config = exec_globals["Config"]
+
+          # Build schema
+          schema = {"type": "object", "properties": {}}
+          required = []
+
+          for name, field in Config.model_fields.items():
+              key = name.replace("_", "-")
+              prop = {}
+
+              # Get type
+              annotation = Config.__annotations__.get(name)
+              if annotation:
+                  if hasattr(annotation, "__origin__"):  # Literal, List, etc
+                      prop["type"] = "string"
+                  elif annotation == str:
+                      prop["type"] = "string"
+                  elif annotation == int:
+                      prop["type"] = "integer"
+                  elif annotation == float:
+                      prop["type"] = "number"
+                  elif annotation == bool:
+                      prop["type"] = "boolean"
+                  else:
+                      prop["type"] = "string"
+              else:
+                  prop["type"] = "string"
+
+              if field.description:
+                  prop["description"] = field.description
+              if field.default is not None and str(field.default) != "PydanticUndefined":
+                  prop["default"] = field.default
+              else:
+                  required.append(key)
+
+              schema["properties"][key] = prop
+
+          if required:
+              schema["required"] = required
+
+          with open("config-schema.json", "w") as f:
+              json.dump(schema, f)
+
+          print(json.dumps(schema, indent=2))
+          EOF
+
+          echo "schema=$(cat config-schema.json | jq -c .)" >> $GITHUB_OUTPUT
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            ark.mckinsey.com/config-schema=${{ steps.config.outputs.schema }}

@@ -45,3 +45,19 @@ type Header struct {
 	// +kubebuilder:validation:Required
 	Value arkv1alpha1.HeaderValue `json:"value"`
 }
+
+type GitSource struct {
+	// +kubebuilder:validation:Required
+	URL string `json:"url"`
+	// +kubebuilder:validation:Optional
+	Ref string `json:"ref,omitempty"`
+	// +kubebuilder:validation:Optional
+	Path string `json:"path,omitempty"`
+}
+
+type TemplateSource struct {
+	// +kubebuilder:validation:Optional
+	Image string `json:"image,omitempty"`
+	// +kubebuilder:validation:Optional
+	Git *GitSource `json:"git,omitempty"`
+}

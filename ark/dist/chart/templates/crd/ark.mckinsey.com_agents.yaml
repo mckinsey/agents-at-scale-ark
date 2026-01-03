@@ -53,6 +53,12 @@ spec:
             type: object
           spec:
             properties:
+              config:
+                additionalProperties:
+                  type: string
+                description: Config provides values for the execution engine's config
+                  schema
+                type: object
               description:
                 type: string
               executionEngine:
@@ -607,6 +613,10 @@ spec:
                   - type
                   type: object
                 type: array
+              serviceAddress:
+                description: ServiceAddress is the internal service URL for template-based
+                  agents
+                type: string
             type: object
         type: object
     served: true

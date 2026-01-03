@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: my-translating-agent-team
+spec:
+  type: example-declarative-langgraph
+  isAgentic: true
+  source:
+    image: ghcr.io/<your-user>/example-declarative-agent:<your-image-tag>
