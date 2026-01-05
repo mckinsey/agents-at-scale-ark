@@ -32,7 +32,7 @@ kind: Query
 metadata:
   name: echo-example
 spec:
-  targets:
+  target:
   - name: echo-agent
     type: agent
   input: "Testing incoming messages"
@@ -89,7 +89,7 @@ kind: Query
 metadata:
   name: count-messages
 spec:
-  targets:
+  target:
   - name: message-counter-agent
     type: agent
   input: "First message"
@@ -123,7 +123,7 @@ metadata:
   annotations:
     ark.mckinsey.com/a2a-context-id: "${CONTEXT_ID}"
 spec:
-  targets:
+  target:
   - name: message-counter-agent
     type: agent
   input: "Message ${i}"

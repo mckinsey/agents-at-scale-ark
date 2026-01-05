@@ -53,9 +53,9 @@ spec:
           metadata:
             name: countdown-fail-query
           status:
-            (length(responses)): 1
-            (contains(responses[*].target.name, 'countdown-agent')): true
-            (contains(responses[0].content, 'Cannot countdown from negative number -5')): true
+            (response != null): true
+            (response.target.name): 'countdown-agent'
+            (contains(response.content, 'Cannot countdown from negative number -5')): true
     catch:
     - events: {}
     - describe:

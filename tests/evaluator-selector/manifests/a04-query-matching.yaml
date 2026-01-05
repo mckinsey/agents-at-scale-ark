@@ -8,6 +8,6 @@ metadata:
     evaluation_required: "true"
 spec:
   input: "What are the key benefits of renewable energy adoption?"
-  targets:
-    - type: model
-      name: selector-model
+  target:
+    type: model
+    name: selector-model

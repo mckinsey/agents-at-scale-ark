@@ -4,8 +4,8 @@ metadata:
   name: query-overrides-test-query
 spec:
   input: What is 2+2? Answer briefly.
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: query-overrides-test-agent
   overrides:
   - resourceType: model

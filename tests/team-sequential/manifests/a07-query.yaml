@@ -4,6 +4,6 @@ metadata:
   name: sequential-team-query
 spec:
   input: "Analyze the impact of artificial intelligence on modern business operations"
-  targets:
-  - type: team
+  target:
+    type: team
     name: sequential-research-team

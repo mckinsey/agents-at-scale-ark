@@ -4,6 +4,6 @@ metadata:
   name: math
 spec:
   input: "What is 2+2?"
-  targets:
-    - type: agent
-      name: math
+  target:
+    type: agent
+    name: math

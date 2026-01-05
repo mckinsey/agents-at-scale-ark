@@ -65,6 +65,6 @@ spec:
           name: query-secrets
           key: context_info
   
-  targets:
-    - type: agent
-      name: test-agent
+  target:
+    type: agent
+    name: test-agent

@@ -93,8 +93,8 @@ spec:
               metadata:
                 name: partial-tool-query
               status:
-                (length(responses)): 1
-                (contains(responses[*].target.name, 'partial-tool-agent')): true
+                (response != null): true
+                (response.target.name): 'partial-tool-agent'
       catch:
         - events: {}
         - describe:

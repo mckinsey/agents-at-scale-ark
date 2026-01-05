@@ -1618,45 +1618,38 @@ class TestQueriesEndpoint(unittest.TestCase):
     
     @patch('ark_api.api.v1.queries.with_ark_client')
     def test_create_query_with_targets(self, mock_ark_client):
-        """Test creating a query with targets."""
+        """Test creating a query with target."""
         # Setup async context manager mock
         mock_client = AsyncMock()
         mock_ark_client.return_value.__aenter__.return_value = mock_client
-        
+
         # Mock the created query response
         mock_query = Mock()
         mock_query.to_dict.return_value = {
             "metadata": {"name": "targeted-query", "namespace": "default"},
             "spec": {
                 "input": "Analyze this code",
-                "targets": [
-                    {"name": "code-analyzer", "type": "agent"},
-                    {"name": "gpt-4", "type": "model"}
-                ]
+                "target": {"name": "code-analyzer", "type": "agent"}
             },
             "status": {"phase": "pending"}
         }
-        
+
         mock_client.queries.a_create = AsyncMock(return_value=mock_query)
-        
+
         # Make the request
         request_data = {
             "name": "targeted-query",
             "input": "Analyze this code",
-            "targets": [
-                {"name": "code-analyzer", "type": "agent"},
-                {"name": "gpt-4", "type": "model"}
-            ]
+            "target": {"name": "code-analyzer", "type": "agent"}
         }
         response = self.client.post("/v1/queries?namespace=default", json=request_data)
-        
+
         # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["name"], "targeted-query")
-        self.assertEqual(len(data["targets"]), 2)
-        self.assertEqual(data["targets"][0]["name"], "code-analyzer")
-        self.assertEqual(data["targets"][0]["type"], "agent")
+        self.assertEqual(data["target"]["name"], "code-analyzer")
+        self.assertEqual(data["target"]["type"], "agent")
     
     @patch('ark_api.api.v1.queries.with_ark_client')
     def test_create_query_with_all_fields(self, mock_ark_client):
@@ -1676,13 +1669,13 @@ class TestQueriesEndpoint(unittest.TestCase):
                 "selector": {"matchLabels": {"app": "chatbot"}},
                 "serviceAccount": "query-runner",
                 "sessionId": "session-123",
-                "targets": [{"name": "assistant", "type": "agent"}]
+                "target": {"name": "assistant", "type": "agent"}
             },
             "status": {"phase": "pending"}
         }
-        
+
         mock_client.queries.a_create = AsyncMock(return_value=mock_query)
-        
+
         # Make the request
         request_data = {
             "name": "full-query",
@@ -1692,7 +1685,7 @@ class TestQueriesEndpoint(unittest.TestCase):
             "selector": {"matchLabels": {"app": "chatbot"}},
             "serviceAccount": "query-runner",
             "sessionId": "session-123",
-            "targets": [{"name": "assistant", "type": "agent"}]
+            "target": {"name": "assistant", "type": "agent"}
         }
         response = self.client.post("/v1/queries?namespace=default", json=request_data)
         
@@ -1719,7 +1712,7 @@ class TestQueriesEndpoint(unittest.TestCase):
             "metadata": {"name": "test-query", "namespace": "default"},
             "spec": {
                 "input": "What is the meaning of life?",
-                "targets": [{"name": "philosopher", "type": "agent"}]
+                "target": {"name": "philosopher", "type": "agent"}
             },
             "status": {
                 "phase": "done",
