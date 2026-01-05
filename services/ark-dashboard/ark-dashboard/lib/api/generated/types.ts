@@ -3619,10 +3619,10 @@ export interface components {
             /** Name */
             name: string;
             /**
-             * Type
+             * Provider
              * @enum {string}
              */
-            type: "openai" | "azure" | "bedrock";
+            provider: "openai" | "azure" | "bedrock";
         };
         /**
          * ModelDetailResponse
@@ -3648,13 +3648,19 @@ export interface components {
             name: string;
             /** Namespace */
             namespace: string;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "openai" | "azure" | "bedrock";
             /** Resolved Address */
             resolved_address?: string | null;
             /**
              * Type
-             * @enum {string}
+             * @default completions
+             * @constant
              */
-            type: "openai" | "azure" | "bedrock";
+            type: "completions";
         };
         /**
          * ModelListResponse
@@ -3693,10 +3699,16 @@ export interface components {
             /** Namespace */
             namespace: string;
             /**
-             * Type
+             * Provider
              * @enum {string}
              */
-            type: "openai" | "azure" | "bedrock";
+            provider: "openai" | "azure" | "bedrock";
+            /**
+             * Type
+             * @default completions
+             * @constant
+             */
+            type: "completions";
         };
         /**
          * ModelUpdateRequest

@@ -6,6 +6,22 @@ from pydantic import BaseModel, Field
 from .common import AvailabilityStatus
 from .agents import AgentHeader
 
+# Provider constants
+PROVIDER_OPENAI = "openai"
+PROVIDER_AZURE = "azure"
+PROVIDER_BEDROCK = "bedrock"
+
+# Model type constants
+MODEL_TYPE_COMPLETIONS = "completions"
+
+# Type aliases for Pydantic models
+ProviderType = Literal["openai", "azure", "bedrock"]
+ModelTypeType = Literal["completions"]
+
+# Deprecated: spec.type values that were used as provider before the provider field was added.
+# Will be removed in release 1.0.
+DEPRECATED_PROVIDER_TYPES = {PROVIDER_OPENAI, PROVIDER_AZURE, PROVIDER_BEDROCK}
+
 
 class ModelValueSource(BaseModel):
     """ValueSource for model configuration (supports direct value or valueFrom)."""
@@ -50,7 +66,8 @@ class ModelResponse(BaseModel):
     """Model resource response model."""
     name: str
     namespace: str
-    type: Literal["openai", "azure", "bedrock"]
+    type: ModelTypeType = MODEL_TYPE_COMPLETIONS
+    provider: ProviderType
     model: str
     available: Optional[AvailabilityStatus] = None
     annotations: Optional[Dict[str, str]] = None
@@ -65,7 +82,7 @@ class ModelListResponse(BaseModel):
 class ModelCreateRequest(BaseModel):
     """Request model for creating a model."""
     name: str
-    type: Literal["openai", "azure", "bedrock"]
+    provider: ProviderType
     model: str
     config: ModelConfig
 
@@ -80,7 +97,8 @@ class ModelDetailResponse(BaseModel):
     """Detailed model response model."""
     name: str
     namespace: str
-    type: Literal["openai", "azure", "bedrock"]
+    type: ModelTypeType = MODEL_TYPE_COMPLETIONS
+    provider: ProviderType
     model: str
     config: Dict[str, Dict[str, Union[str, Dict[str, Any], List[Any]]]]
     available: Optional[AvailabilityStatus] = None

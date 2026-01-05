@@ -1,9 +1,9 @@
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Model
 metadata:
-  name: invalid-model-invalid-type
+  name: invalid-model-missing-provider
 spec:
-  type: unsupported  # Invalid model type - should fail admission
+  # Missing required 'provider' field - should fail admission
   model:
     value: gpt-4.1-mini
   config:
