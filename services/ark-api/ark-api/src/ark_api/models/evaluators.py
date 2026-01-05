@@ -10,56 +10,56 @@ class ModelReference(BaseModel):
     namespace: Optional[str] = None
 
 
-class ConfigMapKeyRef(BaseModel):
+class EvaluatorConfigMapKeyRef(BaseModel):
     """Reference to a key in a ConfigMap."""
     key: str
     name: str = ""
     optional: Optional[bool] = None
 
 
-class SecretKeyRef(BaseModel):
+class EvaluatorSecretKeyRef(BaseModel):
     """Reference to a key in a Secret."""
     key: str
     name: str = ""
     optional: Optional[bool] = None
 
 
-class ValueFrom(BaseModel):
+class EvaluatorValueFrom(BaseModel):
     """Reference to external sources for parameter values."""
-    configMapKeyRef: Optional[ConfigMapKeyRef] = None
-    secretKeyRef: Optional[SecretKeyRef] = None
+    configMapKeyRef: Optional[EvaluatorConfigMapKeyRef] = None
+    secretKeyRef: Optional[EvaluatorSecretKeyRef] = None
 
 
-class ValueSource(BaseModel):
+class EvaluatorValueSource(BaseModel):
     """Source for a value - either direct or from external reference."""
     value: Optional[str] = None
-    valueFrom: Optional[ValueFrom] = None
+    valueFrom: Optional[EvaluatorValueFrom] = None
 
 
-class Parameter(BaseModel):
+class EvaluatorParameter(BaseModel):
     """Parameter for evaluator configuration."""
     name: str
     value: Optional[str] = None
-    valueFrom: Optional[ValueFrom] = None
+    valueFrom: Optional[EvaluatorValueFrom] = None
 
 
-class LabelSelectorRequirement(BaseModel):
+class EvaluatorLabelSelectorRequirement(BaseModel):
     """A label selector requirement."""
     key: str
     operator: str
     values: Optional[List[str]] = None
 
 
-class LabelSelector(BaseModel):
+class EvaluatorLabelSelector(BaseModel):
     """Label selector for resources."""
-    matchExpressions: Optional[List[LabelSelectorRequirement]] = None
+    matchExpressions: Optional[List[EvaluatorLabelSelectorRequirement]] = None
     matchLabels: Optional[Dict[str, str]] = None
 
 
 class ResourceSelector(BaseModel):
     """Selector for automatic evaluation of resources."""
     resource: str  # e.g., "Query"
-    labelSelector: Optional[LabelSelector] = None
+    labelSelector: Optional[EvaluatorLabelSelector] = None
 
 
 class EvaluatorResponse(BaseModel):
@@ -81,18 +81,18 @@ class EvaluatorListResponse(BaseModel):
 class EvaluatorCreateRequest(BaseModel):
     """Request body for creating an evaluator."""
     name: str
-    address: ValueSource
+    address: EvaluatorValueSource
     description: Optional[str] = None
     selector: Optional[ResourceSelector] = None
-    parameters: Optional[List[Parameter]] = None
+    parameters: Optional[List[EvaluatorParameter]] = None
 
 
 class EvaluatorUpdateRequest(BaseModel):
     """Request body for updating an evaluator."""
-    address: Optional[ValueSource] = None
+    address: Optional[EvaluatorValueSource] = None
     description: Optional[str] = None
     selector: Optional[ResourceSelector] = None
-    parameters: Optional[List[Parameter]] = None
+    parameters: Optional[List[EvaluatorParameter]] = None
 
 
 class EvaluatorDetailResponse(BaseModel):
@@ -108,7 +108,7 @@ def evaluator_to_response(evaluator: dict) -> EvaluatorResponse:
     """Convert a Kubernetes evaluator object to response model."""
     spec = evaluator.get("spec", {})
     status = evaluator.get("status", {})
-    
+
     # Extract address value
     address = None
     if "address" in spec:
@@ -116,7 +116,7 @@ def evaluator_to_response(evaluator: dict) -> EvaluatorResponse:
             address = spec["address"].get("value")
         else:
             address = spec["address"]
-    
+
     return EvaluatorResponse(
         name=evaluator["metadata"]["name"],
         namespace=evaluator["metadata"]["namespace"],
