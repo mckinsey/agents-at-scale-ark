@@ -95,6 +95,26 @@ Dynamic prompt/input processing using Go templates with resource context.
 - HTTP fetcher tools for API integration
 - MCP server tools for external service integration
 
+### Migration Warnings
+When deprecating fields or changing resource formats, use the migration warning pattern:
+
+1. **Mutating webhook** detects old format and migrates it
+2. **Add annotation** `annotations.MigrationWarningPrefix + "name"` with warning message
+3. **Validating webhook** calls `collectMigrationWarnings()` to return warnings to user
+
+```go
+// In mutating webhook (CustomDefaulter)
+model.Annotations[annotations.MigrationWarningPrefix+"provider"] = fmt.Sprintf(
+    "spec.type is deprecated for provider values - migrated '%s' to spec.provider",
+    originalType,
+)
+
+// In validating webhook (CustomValidator)
+return collectMigrationWarnings(model.Annotations), nil
+```
+
+See `internal/annotations/annotations.go` for `MigrationWarningPrefix` and `internal/webhook/v1/model_webhook.go` for implementation.
+
 ## Testing
 
 ### Unit Tests

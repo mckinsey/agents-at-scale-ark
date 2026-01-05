@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # Upgrading
 
 Ark uses [Semantic Versioning](https://semver.org/). The technical details are in the [semantic versioning specification](https://semver.org/). Briefly, they are:
@@ -9,6 +11,60 @@ Ark uses [Semantic Versioning](https://semver.org/). The technical details are i
 5. Minor releases prior to `v0.1.0` (e.g. `v0.3.0` to `v0.4.0`) may introduce backwards incompatible behavior changes, which are documented in this guide with migration instructions.
 
 A detailed record of every change is documented in [`CHANGELOG.md`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/CHANGELOG.md).
+
+## v0.1.50
+
+### Model Provider Field
+
+Prior to `v0.1.50`, the `spec.type` field on Models specified the AI provider (openai, azure, bedrock).
+
+From `v0.1.50`, provider and type are separate fields:
+- `spec.provider`: The model provider (`openai`, `azure`, or `bedrock`)
+- `spec.type`: The model type (`completions` for a OpenAI V1 Chat Completions API compliant model)
+
+**New models** should use the new format:
+
+```yaml
+spec:
+  provider: openai
+  type: completions  # optional, defaults to completions
+```
+
+**Existing models** using the old format (such as `spec.type: openai`) will show as unavailable with a clear error message:
+
+```
+provider is required - update model to migrate 'openai' from spec.type to spec.provider
+```
+
+On create or update, models are automatically migrated to the new format by the admission webhook.
+
+<Callout type="warning">
+The automatic migration will be removed in v1.0.0. Update your manifests to the new format before upgrading to v1.0.0.
+</Callout>
+
+To migrate existing models:
+
+```bash
+# View current models - PROVIDER column may be empty for old format, and models
+# which have not been migated will have the 'type' set to openai/azure/etc.
+kubectl get models
+
+# e.g:
+# NAME         TYPE          PROVIDER   MODEL   AVAILABLE   AGE
+# my-model     openai                   gpt-4   False       2d16h
+
+# Trigger migration by annotating all models
+kubectl annotate models --all 'ark.mckinsey.com/migrate-provider-0.1.50=done' --overwrite
+
+# Verify migration - PROVIDER column now populated and TYPE set correctly.
+kubectl get models
+
+# e.g:
+# NAME         TYPE          PROVIDER   MODEL   AVAILABLE   AGE
+# my-model     completions   openai     gpt-4   True        2d16h
+```
+
+This is a **breaking** change for existing models that have not been updated. They will remain unavailable until migrated.
 
 ## v0.1.34
 

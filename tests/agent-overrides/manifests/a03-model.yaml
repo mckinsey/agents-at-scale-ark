@@ -6,7 +6,8 @@ metadata:
     environment: test
     override-target: "true"
 spec:
-  type: openai
+  type: completions
+  provider: openai
   model:
     value: gpt-5
   pollInterval: 3s

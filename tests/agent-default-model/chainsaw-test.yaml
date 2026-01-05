@@ -80,7 +80,8 @@ spec:
             name: default
             namespace: $NAMESPACE
           spec:
-            type: openai
+            type: completions
+            provider: openai
             model:
               value: gpt-4.1
             pollInterval: 3s
