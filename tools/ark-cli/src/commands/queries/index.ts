@@ -34,8 +34,8 @@ async function getQuery(
     const query = await getResource<Query>('queries', name);
 
     if (options.response) {
-      if (query.status?.responses && query.status.responses.length > 0) {
-        const response = query.status.responses[0];
+      if (query.status?.response) {
+        const response = query.status.response;
         if (options.output === 'markdown') {
           console.log(renderMarkdown(response.content || ''));
         } else {
@@ -45,8 +45,8 @@ async function getQuery(
         output.warning('No response available');
       }
     } else if (options.output === 'markdown') {
-      if (query.status?.responses && query.status.responses.length > 0) {
-        console.log(renderMarkdown(query.status.responses[0].content || ''));
+      if (query.status?.response) {
+        console.log(renderMarkdown(query.status.response.content || ''));
       } else {
         output.warning('No response available');
       }

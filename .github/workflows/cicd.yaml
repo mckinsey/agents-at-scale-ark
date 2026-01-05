@@ -442,9 +442,9 @@ jobs:
       - name: Test end-to-end query
         run: |
           kubectl describe agent sample-agent
-          # Test the soon-to-be-deprecated query script (still used in quickstart).
-          ./scripts/query.sh agent/sample-agent "confirm you have read this message"
-          # Test fark.
+          # Test ark-cli query command
+          ark query agent/sample-agent "confirm you have read this message"
+          # Test fark
           fark agent sample-agent "confirm you have read this message"
 
   e2e-ark-cli:

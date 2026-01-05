@@ -124,9 +124,9 @@ spec:
                 name: partial-tool-valuefrom-query
               spec:
                 input: What are the coordinates?
-                targets:
-                  - type: agent
-                    name: partial-tool-valuefrom-agent
+                target:
+                  type: agent
+                  name: partial-tool-valuefrom-agent
         - assert:
             timeout: 10s
             resource:
@@ -145,8 +145,8 @@ spec:
               metadata:
                 name: partial-tool-valuefrom-query
               status:
-                (length(responses)): 1
-                (contains(responses[*].target.name, 'partial-tool-valuefrom-agent')): true
+                (response != null): true
+                (response.target.name): 'partial-tool-valuefrom-agent'
       catch:
         - events: {}
         - describe:

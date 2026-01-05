@@ -66,6 +66,36 @@ kubectl get models
 
 This is a **breaking** change for existing models that have not been updated. They will remain unavailable until migrated.
 
+### Query Single Target
+
+Prior to `v0.1.50`, Query resources supported multiple targets via `spec.targets[]`:
+
+```yaml
+# Old format (no longer supported)
+spec:
+  input: "What is 2+2?"
+  targets:
+    - type: agent
+      name: math-agent
+    - type: agent
+      name: backup-agent
+```
+
+From `v0.1.50`, Query resources support a single target via `spec.target`:
+
+```yaml
+# New format
+spec:
+  input: "What is 2+2?"
+  target:
+    type: agent
+    name: math-agent
+```
+
+This is a **breaking** change. Existing Query manifests using `spec.targets[]` must be updated to use `spec.target`.
+
+To query multiple targets, create one Query per target and check the results individually.
+
 ## v0.1.34
 
 ### Agent Model References

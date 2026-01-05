@@ -92,8 +92,8 @@ spec:
           metadata:
             name: test-query-jq-filtered
           status:
-            (length(responses)): 1
-            (contains(responses[0].content, 'Sample Slide Show')): true
+            (response != null): true
+            (contains(response.content, 'Sample Slide Show')): true
             responses:
             - target:
                 name: test-agent-jq-filtered
@@ -105,7 +105,7 @@ spec:
           metadata:
             name: test-query-unfiltered
           status:
-            (length(responses)): 1
-            (contains(responses[0].content, 'slideshow')): true
-            (contains(responses[0].content, 'author')): true
-            (contains(responses[0].content, 'slides')): true
+            (response != null): true
+            (contains(response.content, 'slideshow')): true
+            (contains(response.content, 'author')): true
+            (contains(response.content, 'slides')): true

@@ -13,6 +13,6 @@ spec:
     4. Final risk rating with detailed justification
 
     Focus on accuracy and completeness using all available information.
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: context-test-agent

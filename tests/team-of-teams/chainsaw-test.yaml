@@ -108,9 +108,9 @@ spec:
           metadata:
             name: team-of-teams-query
           status:
-            (length(responses)): 1
-            (contains(responses[*].target.name, 'parent-team')): true
-            (length(join('', responses[*].content)) > `100`): true
+            (response != null): true
+            (response.target.name): 'parent-team'
+            (length(response.content) > `100`): true
     catch:
     - events: {}
     - describe:

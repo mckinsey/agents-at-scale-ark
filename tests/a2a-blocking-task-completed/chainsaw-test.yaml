@@ -54,12 +54,12 @@ spec:
           metadata:
             name: countdown-test-query
           status:
-            (length(responses)): 1
-            (contains(responses[*].target.name, 'countdown-agent')): true
-            (contains(responses[0].content, 'Starting countdown from 2 seconds')): true
-            (contains(responses[0].content, '1 seconds remaining')): true
-            (contains(responses[0].content, '0 seconds remaining')): true
-            (contains(responses[0].content, 'Countdown complete!')): true
+            (response != null): true
+            (response.target.name): 'countdown-agent'
+            (contains(response.content, 'Starting countdown from 2 seconds')): true
+            (contains(response.content, '1 seconds remaining')): true
+            (contains(response.content, '0 seconds remaining')): true
+            (contains(response.content, 'Countdown complete!')): true
     catch:
     - events: {}
     - describe:

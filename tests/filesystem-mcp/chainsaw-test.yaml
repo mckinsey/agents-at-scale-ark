@@ -154,8 +154,8 @@ spec:
               "This is Agent A's confidential data. Created at workspace A."
 
               After creating the file, list all files in the current directory to confirm it was created successfully.
-            targets:
-            - type: agent
+            target:
+              type: agent
               name: filesystem-agent-a
     - assert:
         resource:
@@ -173,7 +173,7 @@ spec:
           metadata:
             name: filesystem-write-a
           status:
-            (length(responses)): 1
+            (response != null): true
     catch:
     - events: {}
     - describe:
@@ -207,8 +207,8 @@ spec:
               "This is Agent B's confidential data. Created at workspace B."
 
               After creating the file, list all files in the current directory to confirm it was created successfully.
-            targets:
-            - type: agent
+            target:
+              type: agent
               name: filesystem-agent-b
     - assert:
         resource:
@@ -226,7 +226,7 @@ spec:
           metadata:
             name: filesystem-write-b
           status:
-            (length(responses)): 1
+            (response != null): true
     catch:
     - events: {}
     - describe:
@@ -320,8 +320,8 @@ spec:
               Read the file "agent-a-data.txt" and confirm it contains Agent A's data.
 
               Then list all files in the current directory.
-            targets:
-            - type: agent
+            target:
+              type: agent
               name: filesystem-agent-a
     - assert:
         resource:
@@ -339,7 +339,7 @@ spec:
           metadata:
             name: filesystem-read-a
           status:
-            (length(responses)): 1
+            (response != null): true
     catch:
     - events: {}
     - describe:
@@ -372,8 +372,8 @@ spec:
               Read the file "agent-b-data.txt" and confirm it contains Agent B's data.
 
               Then list all files in the current directory.
-            targets:
-            - type: agent
+            target:
+              type: agent
               name: filesystem-agent-b
     - assert:
         resource:
@@ -391,7 +391,7 @@ spec:
           metadata:
             name: filesystem-read-b
           status:
-            (length(responses)): 1
+            (response != null): true
     catch:
     - events: {}
     - describe:
@@ -408,7 +408,7 @@ spec:
           metadata:
             name: filesystem-read-a
           status:
-            (contains(responses[0].content, 'agent-a-data.txt')): true
+            (contains(response.content, 'agent-a-data.txt')): true
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -416,7 +416,7 @@ spec:
           metadata:
             name: filesystem-read-a
           status:
-            (contains(responses[0].content, 'Agent A')): true
+            (contains(response.content, 'Agent A')): true
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -424,7 +424,7 @@ spec:
           metadata:
             name: filesystem-read-b
           status:
-            (contains(responses[0].content, 'agent-b-data.txt')): true
+            (contains(response.content, 'agent-b-data.txt')): true
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -432,14 +432,14 @@ spec:
           metadata:
             name: filesystem-read-b
           status:
-            (contains(responses[0].content, 'Agent B')): true
+            (contains(response.content, 'Agent B')): true
     - script:
         env:
         - name: NAMESPACE
           value: ($namespace)
         content: |
-          RESPONSE_A=$(kubectl -n $NAMESPACE get query filesystem-read-a -o jsonpath='{.status.responses[0].content}')
-          RESPONSE_B=$(kubectl -n $NAMESPACE get query filesystem-read-b -o jsonpath='{.status.responses[0].content}')
+          RESPONSE_A=$(kubectl -n $NAMESPACE get query filesystem-read-a -o jsonpath='{.status.response.content}')
+          RESPONSE_B=$(kubectl -n $NAMESPACE get query filesystem-read-b -o jsonpath='{.status.response.content}')
 
           echo "=== Agent A Read Response ==="
           echo "$RESPONSE_A"

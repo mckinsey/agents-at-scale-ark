@@ -4,6 +4,6 @@ metadata:
   name: invalid-query-empty-input
 spec:
   input: ""  # Empty input - should fail admission
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: test-agent

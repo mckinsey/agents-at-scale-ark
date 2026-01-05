@@ -50,8 +50,8 @@ func (c *TargetCommand) Run() error {
 		return fmt.Errorf("failed to parse parameters: %v", err)
 	}
 
-	targets := []arkv1alpha1.QueryTarget{{Type: c.TargetType, Name: c.TargetName}}
-	query, err := createQuery(c.Input, targets, c.Namespace, params, c.SessionId, c.ConversationId, &c.Timeout)
+	target := &arkv1alpha1.QueryTarget{Type: c.TargetType, Name: c.TargetName}
+	query, err := createQuery(c.Input, target, c.Namespace, params, c.SessionId, c.ConversationId, &c.Timeout)
 	if err != nil {
 		return fmt.Errorf("failed to create query: %v", err)
 	}

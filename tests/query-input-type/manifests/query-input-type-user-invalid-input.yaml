@@ -16,6 +16,6 @@ spec:
       content: "4"
     - role: user
       content: "What is the sum of all previous sums?"
-  targets:
-    - type: agent
-      name: test-agent
+  target:
+    type: agent
+    name: test-agent

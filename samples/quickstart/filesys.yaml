@@ -68,6 +68,6 @@ metadata:
   name: query-fetcher
 spec:
   input: Get and store weather report, produce a list of reports available.
-  targets:
-    - type: team
-      name: team-weather-filesys
+  target:
+    type: team
+    name: team-weather-filesys

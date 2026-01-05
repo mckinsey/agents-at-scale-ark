@@ -4,6 +4,6 @@ metadata:
   name: selector-team-query
 spec:
   input: "Analyze the benefits and challenges of implementing microservices architecture in enterprise applications."
-  targets:
-  - type: team
+  target:
+    type: team
     name: selector-team

@@ -57,8 +57,8 @@ kind: Query
 metadata:
   name: query-team-graph
 spec:
-  targets:
-    - type: team
-      name: graph-team-sample
+  target:
+    type: team
+    name: graph-team-sample
   input: Kick it.
 

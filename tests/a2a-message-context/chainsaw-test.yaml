@@ -58,8 +58,8 @@ spec:
           metadata:
             name: message-counter-first
           status:
-            (length(responses)): 1
-            (contains(responses[0].content, '1 message(s) received')): true
+            (response != null): true
+            (contains(response.content, '1 message(s) received')): true
     catch:
     - events: {}
     - describe:
@@ -71,7 +71,7 @@ spec:
     try:
     - script:
         content: |
-          CONTEXT_ID=$(kubectl get query message-counter-first -n $NAMESPACE -o jsonpath='{.status.responses[0].a2a.contextId}')
+          CONTEXT_ID=$(kubectl get query message-counter-first -n $NAMESPACE -o jsonpath='{.status.response.a2a.contextId}')
           if [ -z "$CONTEXT_ID" ]; then
             echo "ERROR: contextId not set in response a2a metadata" >&2
             exit 1
@@ -93,9 +93,9 @@ spec:
               ark.mckinsey.com/a2a-context-id: ($contextId)
           spec:
             input: Second message
-            targets:
-              - type: agent
-                name: message-counter-agent
+            target:
+              type: agent
+              name: message-counter-agent
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -105,8 +105,8 @@ spec:
           status:
             (conditions[?type == 'Completed']):
             - status: 'True'
-            (length(responses)): 1
-            (contains(responses[0].content, '2 message(s) received')): true
+            (response != null): true
+            (contains(response.content, '2 message(s) received')): true
     catch:
     - events: {}
     - describe:

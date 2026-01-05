@@ -100,14 +100,14 @@ spec:
           metadata:
             name: query-overrides-test-query
           status:
-            (length(responses)): 1
-            (contains(responses[*].target.name, 'query-overrides-test-agent')): true
+            (response != null): true
+            (response.target.name): 'query-overrides-test-agent'
     - script:
         env:
         - name: NAMESPACE
           value: ($namespace)
         content: |
-          RESPONSE=$(kubectl -n $NAMESPACE get query query-overrides-test-query -o jsonpath='{.status.responses[0].content}')
+          RESPONSE=$(kubectl -n $NAMESPACE get query query-overrides-test-query -o jsonpath='{.status.response.content}')
 
           echo "=== Query Response Content ==="
           echo "$RESPONSE"
@@ -154,7 +154,7 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
         content: |
-          RESPONSE=$(kubectl -n $NAMESPACE get query query-overrides-test-query-tool -o jsonpath='{.status.responses[0].content}')
+          RESPONSE=$(kubectl -n $NAMESPACE get query query-overrides-test-query-tool -o jsonpath='{.status.response.content}')
 
           echo "=== Query Tool Response Content ==="
           echo "$RESPONSE"
@@ -207,7 +207,7 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
         content: |
-          RESPONSE=$(kubectl -n $NAMESPACE get query query-overrides-precedence-test -o jsonpath='{.status.responses[0].content}')
+          RESPONSE=$(kubectl -n $NAMESPACE get query query-overrides-precedence-test -o jsonpath='{.status.response.content}')
 
           echo "=== Query Precedence Response Content ==="
           echo "$RESPONSE"

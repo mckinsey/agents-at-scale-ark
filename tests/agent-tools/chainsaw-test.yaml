@@ -70,8 +70,8 @@ spec:
             name: weather-query
           spec:
             input: What's the current weather like in New York City?
-            targets:
-            - type: agent
+            target:
+              type: agent
               name: weather-agent
     - assert:
         resource:
@@ -111,9 +111,9 @@ spec:
           metadata:
             name: weather-query
           status:
-            (length(responses)): 1
-            (contains(responses[*].target.name, 'weather-agent')): true
-            (length(join('', responses[*].content)) > `10`): true
+            (response != null): true
+            (response.target.name): 'weather-agent'
+            (length(response.content) > `10`): true
     catch:
     - events: {}
     - describe:

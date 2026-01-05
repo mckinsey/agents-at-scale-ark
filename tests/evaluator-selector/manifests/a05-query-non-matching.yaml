@@ -8,6 +8,6 @@ metadata:
     evaluation_required: "false"
 spec:
   input: "Test query for development purposes"
-  targets:
-    - type: model
-      name: selector-model
+  target:
+    type: model
+    name: selector-model
