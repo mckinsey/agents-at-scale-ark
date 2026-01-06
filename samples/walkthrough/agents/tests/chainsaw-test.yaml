@@ -91,7 +91,7 @@ spec:
               spec:
                 description: Research agent that searches the web for information and provides comprehensive findings
                 tools:
-                - type: custom
+                - type: http
                   name: web-search
         
         # Validate analyst agent

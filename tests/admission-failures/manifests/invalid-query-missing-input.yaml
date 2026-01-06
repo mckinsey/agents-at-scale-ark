@@ -4,6 +4,6 @@ metadata:
   name: invalid-query-missing-input
 spec:
   # Missing required 'input' field - should fail admission
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: nonexistent-agent

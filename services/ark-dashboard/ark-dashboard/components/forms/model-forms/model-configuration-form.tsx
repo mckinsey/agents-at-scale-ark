@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { getModelTypeDisplayName } from '@/lib/constants/model-types';
 import type { Secret } from '@/lib/services';
 import type { SecretDetailResponse } from '@/lib/services/secrets';
 import {
@@ -56,7 +57,7 @@ import { useModelConfigurationForm } from './model-configuration-form-context';
 import type { FormValues } from './schema';
 
 export function ModelConfiguratorForm() {
-  const { form, formId, onSubmit, type, disabledFields } =
+  const { form, formId, onSubmit, provider, disabledFields } =
     useModelConfigurationForm();
 
   const {
@@ -101,16 +102,26 @@ export function ModelConfiguratorForm() {
               </FormItem>
             )}
           />
+          <FormItem>
+            <FormLabel>Type</FormLabel>
+            <FormControl>
+              <Input
+                value={getModelTypeDisplayName('completions')}
+                disabled={true}
+                className="bg-muted"
+              />
+            </FormControl>
+          </FormItem>
           <FormField
             control={form.control}
-            name="type"
+            name="provider"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Type</FormLabel>
+                <FormLabel>Provider</FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   value={field.value}
-                  disabled={disabledFields?.type}>
+                  disabled={disabledFields?.provider}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue />
@@ -136,9 +147,9 @@ export function ModelConfiguratorForm() {
                   <Input
                     {...field}
                     placeholder={
-                      type === 'openai'
+                      provider === 'openai'
                         ? 'e.g., gpt-4-turbo-preview'
-                        : type === 'azure'
+                        : provider === 'azure'
                           ? 'e.g., gpt-4'
                           : 'e.g., anthropic.claude-v2'
                     }
@@ -148,21 +159,21 @@ export function ModelConfiguratorForm() {
               </FormItem>
             )}
           />
-          {type === 'openai' && (
+          {provider === 'openai' && (
             <OpenAISpecificFields
               isSecretsPending={isSecretsPending}
               secrets={secrets}
               control={form.control}
             />
           )}
-          {type === 'azure' && (
+          {provider === 'azure' && (
             <AzureSpecificFields
               isSecretsPending={isSecretsPending}
               secrets={secrets}
               control={form.control}
             />
           )}
-          {type === 'bedrock' && (
+          {provider === 'bedrock' && (
             <AWSBedrockSpecificFields
               isSecretsPending={isSecretsPending}
               secrets={secrets}

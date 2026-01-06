@@ -4,7 +4,7 @@ metadata:
   name: memory-followup
 spec:
   input: "What is my name? Do you remember what I told you earlier?"
-  targets:
-    - type: agent
-      name: amazed
+  target:
+    type: agent
+    name: amazed
   sessionId: test-session-2010

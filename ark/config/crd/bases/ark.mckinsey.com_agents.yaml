@@ -536,6 +536,11 @@ spec:
                       enum:
                       - built-in
                       - custom
+                      - mcp
+                      - http
+                      - agent
+                      - team
+                      - builtin
                       type: string
                   required:
                   - type

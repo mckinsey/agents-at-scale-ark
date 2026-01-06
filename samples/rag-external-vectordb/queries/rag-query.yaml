@@ -7,7 +7,6 @@ metadata:
     app: rag-demo
 spec:
   input: "What are the main features of ARK? How do teams work?"
-  targets:
-    - type: agent
-      name: rag-agent
-
+  target:
+    type: agent
+    name: rag-agent

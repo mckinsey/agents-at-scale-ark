@@ -384,9 +384,9 @@ metadata:
   name: test-support-query
 spec:
   input: "I need help with my order #12345"
-  targets:
+  target:
     - kind: Agent
-      name: customer-support
+    name: customer-support
 ```
 
 ### Execute and Monitor
@@ -576,9 +576,9 @@ metadata:
   name: eval-customer-support
 spec:
   input: "Test customer inquiry"
-  targets:
+  target:
     - kind: Agent
-      name: customer-support
+    name: customer-support
   evaluations:
     - evaluatorRef:
         name: llm-evaluator

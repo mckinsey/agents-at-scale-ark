@@ -38,5 +38,5 @@ spec:
     
     Be thorough, accurate, and well-organized in your research presentation.
   tools:
-    - type: custom
+    - type: http
       name: web-search

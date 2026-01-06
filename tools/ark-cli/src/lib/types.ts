@@ -132,7 +132,7 @@ export interface QueryResponse {
 export interface QueryStatus {
   phase?: 'initializing' | 'running' | 'done' | 'error' | 'canceled';
   conditions?: K8sCondition[];
-  responses?: QueryResponse[];
+  response?: QueryResponse;
   message?: string;
   error?: string;
   tokenUsage?: {
@@ -152,7 +152,7 @@ export interface Query {
   metadata: K8sMetadata;
   spec?: {
     input: string;
-    targets: QueryTarget[];
+    target: QueryTarget;
     sessionId?: string;
     conversationId?: string;
     timeout?: string;

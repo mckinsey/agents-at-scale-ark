@@ -17,7 +17,7 @@ spec:
     IMPORTANT: You should NOT answer with unnecessary preamble or postamble.
     IMPORTANT: You should not ask any questions or make suggestions.
   tools:
-    - type: custom
+    - type: http
       name: get-coordinates
-    - type: custom
+    - type: http
       name: get-forecast

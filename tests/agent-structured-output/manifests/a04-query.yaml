@@ -9,6 +9,6 @@ spec:
     exceptional performance during the earnings call from Cupertino, California. The company 
     reported strong growth in iPhone sales and services revenue. Investors are optimistic 
     about the company's future prospects, with stock prices rising 5% in after-hours trading.
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: structured-output-test-agent

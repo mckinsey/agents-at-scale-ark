@@ -95,7 +95,7 @@ func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Mode
 	if err != nil {
 		return genai.ProbeResult{
 			Available:     false,
-			Message:       "Failed to load model configuration",
+			Message:       err.Error(),
 			DetailedError: err,
 		}
 	}
