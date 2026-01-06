@@ -53,16 +53,15 @@ make ark-sdk-build
 # After this, the ark-api can be built:
 make ark-api-build
 
-# This genreated the services/ark-api/openapi.json, based on the FastAPI models.
+# This generates the services/ark-api/openapi.json, based on the FastAPI models.
 
 # Finally, the ark dashboard can have its Typescript types automatically updated
-# based on the new ark-api routes and models:
+# based on the new ark-api routes and models. Run from ark-dashboard/ark-dashboard:
 cp ../../ark-api/openapi.json ../out/
 npm run generate:api
 
-# This generate:
-# lib/api/generated/types.ts
-
+# This generates: lib/api/generated/types.ts
+```
 
 ## Local Development Workflow
 

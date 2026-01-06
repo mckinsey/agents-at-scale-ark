@@ -22,7 +22,7 @@ describe('ARK Broker API', () => {
       const response = await request(app).get('/messages?conversation_id=test-conversation');
 
       expect(response.status).toBe(200);
-      expect(response.body.messages).toEqual([]);
+      expect(response.body.items).toEqual([]);
     });
 
     test('should add and retrieve single message', async () => {
@@ -39,9 +39,9 @@ describe('ARK Broker API', () => {
       const getResponse = await request(app).get('/messages?conversation_id=test-conversation-single');
 
       expect(getResponse.status).toBe(200);
-      expect(getResponse.body.messages).toHaveLength(1);
-      expect(getResponse.body.messages[0].message).toEqual(message);
-      expect(getResponse.body.messages[0].sequence).toBe(1);
+      expect(getResponse.body.items).toHaveLength(1);
+      expect(getResponse.body.items[0].message).toEqual(message);
+      expect(getResponse.body.items[0].sequence).toBe(1);
     });
 
     test('should add multiple messages sequentially', async () => {
@@ -59,11 +59,11 @@ describe('ARK Broker API', () => {
       const response = await request(app).get('/messages?conversation_id=test-conversation-2');
 
       expect(response.status).toBe(200);
-      expect(response.body.messages).toHaveLength(2);
-      expect(response.body.messages[0].message).toEqual(message1);
-      expect(response.body.messages[1].message).toEqual(message2);
-      expect(response.body.messages[0].sequence).toBe(1);
-      expect(response.body.messages[1].sequence).toBe(2);
+      expect(response.body.items).toHaveLength(2);
+      expect(response.body.items[0].message).toEqual(message1);
+      expect(response.body.items[1].message).toEqual(message2);
+      expect(response.body.items[0].sequence).toBe(1);
+      expect(response.body.items[1].sequence).toBe(2);
     });
 
     test('should return error for missing conversation_id', async () => {
@@ -163,11 +163,11 @@ describe('ARK Broker API', () => {
       const getResponse = await request(app).get('/messages?conversation_id=batch-conversation');
 
       expect(getResponse.status).toBe(200);
-      expect(getResponse.body.messages).toHaveLength(2);
-      expect(getResponse.body.messages[0].message).toEqual(messages[0]);
-      expect(getResponse.body.messages[1].message).toEqual(messages[1]);
-      expect(getResponse.body.messages[0].sequence).toBe(1);
-      expect(getResponse.body.messages[1].sequence).toBe(2);
+      expect(getResponse.body.items).toHaveLength(2);
+      expect(getResponse.body.items[0].message).toEqual(messages[0]);
+      expect(getResponse.body.items[1].message).toEqual(messages[1]);
+      expect(getResponse.body.items[0].sequence).toBe(1);
+      expect(getResponse.body.items[1].sequence).toBe(2);
     });
 
     test('should return error for invalid messages array', async () => {
@@ -195,13 +195,13 @@ describe('ARK Broker API', () => {
 
       // Check conversation1
       const response1 = await request(app).get('/messages?conversation_id=conversation1');
-      expect(response1.body.messages).toHaveLength(1);
-      expect(response1.body.messages[0].message).toEqual(message1);
+      expect(response1.body.items).toHaveLength(1);
+      expect(response1.body.items[0].message).toEqual(message1);
 
       // Check conversation2
       const response2 = await request(app).get('/messages?conversation_id=conversation2');
-      expect(response2.body.messages).toHaveLength(1);
-      expect(response2.body.messages[0].message).toEqual(message2);
+      expect(response2.body.items).toHaveLength(1);
+      expect(response2.body.items[0].message).toEqual(message2);
     });
   });
 
@@ -228,12 +228,12 @@ describe('ARK Broker API', () => {
       const response = await request(app).get('/messages');
 
       expect(response.status).toBe(200);
-      expect(response.body.messages).toHaveLength(3);
+      expect(response.body.items).toHaveLength(3);
 
       // Messages should be in sequence order (1, 2, 3)
-      expect(response.body.messages[0].sequence).toBe(1);
-      expect(response.body.messages[1].sequence).toBe(2);
-      expect(response.body.messages[2].sequence).toBe(3);
+      expect(response.body.items[0].sequence).toBe(1);
+      expect(response.body.items[1].sequence).toBe(2);
+      expect(response.body.items[2].sequence).toBe(3);
     });
   });
 

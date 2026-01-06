@@ -1,0 +1,143 @@
+# Traces
+
+OTEL (OpenTelemetry) traces capture the execution flow of queries. A trace contains multiple spans - each span represents an operation like an LLM call or tool execution.
+
+When a query runs in a namespace with a configured broker, the Ark controller sends all trace data to the broker's OTLP endpoint. The [Ark Broker](/developer-guide/services/ark-broker) provides an implementation of these APIs.
+
+## Accessing the API
+
+Port-forward to the broker service, then access the OpenAPI spec at `/openapi.json` or Swagger UI at `/api-docs`.
+
+**Note:** OTLP ingestion uses `/v1/traces` (OpenTelemetry standard path). Query endpoints use `/traces` (broker REST API).
+
+## Ingesting Traces
+
+```
+POST /v1/traces
+```
+
+Send traces to an endpoint. The [Ark Broker](/developer-guide/services/ark-broker) exposes this [standard OTLP/HTTP endpoint](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/). JSON and gRPC over HTTP supported.
+
+Example request:
+
+```bash
+curl -X POST http://localhost:8080/v1/traces \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resourceSpans": [{
+      "resource": {
+        "attributes": [{"key": "service.name", "value": {"stringValue": "my-service"}}]
+      },
+      "scopeSpans": [{
+        "spans": [
+          {"traceId": "abc123", "spanId": "span-1", "name": "query.execute"},
+          {"traceId": "abc123", "spanId": "span-2", "parentSpanId": "span-1", "name": "llm.chat"}
+        ]
+      }]
+    }]
+  }'
+```
+
+Example response:
+
+```
+{}
+```
+
+## Retrieving Traces
+
+```
+GET /traces
+GET /traces/{traceId}
+```
+
+Retrieve traces. Returns a paginated list of traces grouped by trace ID.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `limit` | 100 | Maximum traces to return (max 1000) |
+| `cursor` | - | Sequence number to paginate from |
+| `watch` | - | Enable SSE streaming. See [Streaming Traces](#streaming-traces) |
+
+List traces with pagination:
+
+```bash
+curl http://localhost:8080/traces?limit=10
+```
+
+```json
+{
+  "items": [
+    { "traceId": "abc123", "spans": [...] },
+    { "traceId": "def456", "spans": [...] }
+  ],
+  "total": 150,
+  "hasMore": true,
+  "nextCursor": 42
+}
+```
+
+Fetch the next page using `nextCursor`:
+
+```bash
+curl http://localhost:8080/traces?limit=10&cursor=42
+```
+
+Get a single trace:
+
+```bash
+curl http://localhost:8080/traces/abc123
+```
+
+```json
+{ "traceId": "abc123", "spans": [
+  { "spanId": "span1", "name": "query.execute", ... },
+  { "spanId": "span2", "parentSpanId": "span1", "name": "llm.chat", ... }
+]}
+```
+
+## Streaming Traces
+
+```
+GET /traces?watch=true
+GET /traces/{traceId}?watch=true
+```
+
+Stream traces in real-time via SSE.
+
+| Parameter | Description |
+|-----------|-------------|
+| `watch` | Set to `true` to enable SSE streaming |
+| `cursor` | Replay items after this sequence number, then stream new ones |
+| `from-beginning` | Replay all existing spans before streaming (single trace only). Overrides `cursor` if both provided |
+
+Stream all new spans:
+
+```bash
+curl http://localhost:8080/traces?watch=true
+```
+
+```
+data: {"traceId":"abc123","spanId":"span1","name":"llm.chat",...}
+data: {"traceId":"abc123","spanId":"span2","name":"tool.execute",...}
+```
+
+Resume from a cursor (useful after fetching initial list with `nextCursor`):
+
+```bash
+curl "http://localhost:8080/traces?watch=true&cursor=42"
+```
+
+Replay all existing spans for a single trace:
+
+```bash
+curl "http://localhost:8080/traces/abc123?watch=true&from-beginning=true"
+```
+
+## Purging Traces
+
+```
+DELETE /traces
+```
+
+Clear all trace data.
