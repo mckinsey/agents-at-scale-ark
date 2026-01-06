@@ -131,6 +131,7 @@ class AgentCreateRequest(BaseModel):
     executionEngine: Optional[ExecutionEngineRef] = None
     modelRef: Optional[ModelRef] = None
     parameters: Optional[List[Parameter]] = None
+    config: Optional[Dict[str, str]] = None
     prompt: Optional[str] = None
     tools: Optional[List[Tool]] = None
     overrides: Optional[List[Override]] = None
@@ -142,6 +143,7 @@ class AgentUpdateRequest(BaseModel):
     executionEngine: Optional[ExecutionEngineRef] = None
     modelRef: Optional[ModelRef] = None
     parameters: Optional[List[Parameter]] = None
+    config: Optional[Dict[str, str]] = None
     prompt: Optional[str] = None
     tools: Optional[List[Tool]] = None
     overrides: Optional[List[Override]] = None

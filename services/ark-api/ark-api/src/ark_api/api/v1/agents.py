@@ -155,7 +155,10 @@ async def create_agent(body: AgentCreateRequest, namespace: Optional[str] = Quer
         
         if body.parameters is not None:
             agent_spec["parameters"] = [param.model_dump(exclude_none=True) for param in body.parameters]
-        
+
+        if body.config is not None:
+            agent_spec["config"] = body.config
+
         if body.prompt is not None:
             agent_spec["prompt"] = body.prompt
         
@@ -226,7 +229,10 @@ async def update_agent(agent_name: str, body: AgentUpdateRequest, namespace: Opt
         
         if body.parameters is not None:
             existing_spec["parameters"] = [param.model_dump(exclude_none=True) for param in body.parameters]
-        
+
+        if body.config is not None:
+            existing_spec["config"] = body.config
+
         if body.prompt is not None:
             existing_spec["prompt"] = body.prompt
         

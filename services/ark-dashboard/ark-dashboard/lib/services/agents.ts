@@ -12,8 +12,14 @@ interface AxiosError extends Error {
 export type AgentResponse = components['schemas']['AgentResponse'];
 export type AgentDetailResponse = components['schemas']['AgentDetailResponse'];
 export type AgentListResponse = components['schemas']['AgentListResponse'];
-export type AgentCreateRequest = components['schemas']['AgentCreateRequest'];
-export type AgentUpdateRequest = components['schemas']['AgentUpdateRequest'];
+type BaseAgentCreateRequest = components['schemas']['AgentCreateRequest'];
+type BaseAgentUpdateRequest = components['schemas']['AgentUpdateRequest'];
+export interface AgentCreateRequest extends BaseAgentCreateRequest {
+  config?: Record<string, string>;
+}
+export interface AgentUpdateRequest extends BaseAgentUpdateRequest {
+  config?: Record<string, string>;
+}
 
 // AgentTool interface to match the API response structure
 export interface AgentTool {

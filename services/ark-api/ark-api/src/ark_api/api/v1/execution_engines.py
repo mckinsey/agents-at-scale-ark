@@ -17,6 +17,7 @@ Query Parameters:
     namespace: Filter by Kubernetes namespace
     is_agentic: Filter by isAgentic flag (for agent vs generic templates)
 """
+import json
 import logging
 
 from fastapi import APIRouter, Query
@@ -97,6 +98,8 @@ def engine_to_detail_response(engine: dict) -> ExecutionEngineDetailResponse:
             git=git,
         )
 
+    config_schema = parse_config_schema(spec.get("configSchema"))
+
     return ExecutionEngineDetailResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
@@ -104,12 +107,27 @@ def engine_to_detail_response(engine: dict) -> ExecutionEngineDetailResponse:
         description=spec.get("description"),
         address=address,
         source=source,
-        configSchema=spec.get("configSchema"),
+        configSchema=config_schema,
         isAgentic=spec.get("isAgentic", False),
         available=availability,
         status=status,
         annotations=metadata.get("annotations", {}),
     )
+
+
+def parse_config_schema(config_schema):
+    """Parse configSchema from CRD (stored as JSON string) to dict."""
+    if config_schema is None:
+        return None
+    if isinstance(config_schema, dict):
+        return config_schema
+    if isinstance(config_schema, str):
+        try:
+            return json.loads(config_schema)
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse configSchema as JSON: %s", config_schema[:100])
+            return None
+    return None
 
 
 @router.get("", response_model=ExecutionEngineListResponse)
@@ -203,7 +221,7 @@ async def create_execution_engine(
             spec["source"] = body.source.model_dump(exclude_none=True)
 
         if body.configSchema is not None:
-            spec["configSchema"] = body.configSchema
+            spec["configSchema"] = json.dumps(body.configSchema)
 
         if body.isAgentic:
             spec["isAgentic"] = body.isAgentic
@@ -275,7 +293,7 @@ async def update_execution_engine(
             existing_spec["source"] = body.source.model_dump(exclude_none=True)
 
         if body.configSchema is not None:
-            existing_spec["configSchema"] = body.configSchema
+            existing_spec["configSchema"] = json.dumps(body.configSchema)
 
         if body.isAgentic is not None:
             existing_spec["isAgentic"] = body.isAgentic

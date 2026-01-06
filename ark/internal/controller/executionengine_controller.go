@@ -15,14 +15,16 @@ import (
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
+	"mckinsey.com/ark/internal/registry"
 )
 
 // ExecutionEngineReconciler reconciles an ExecutionEngine object
 type ExecutionEngineReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Eventing eventing.Provider
-	resolver *common.ValueSourceResolverV1PreAlpha1
+	Scheme      *runtime.Scheme
+	Eventing    eventing.Provider
+	resolver    *common.ValueSourceResolverV1PreAlpha1
+	imageClient *registry.ImageClient
 }
 
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=executionengines,verbs=get;list;watch;create;update;patch;delete
@@ -90,6 +92,13 @@ func (r *ExecutionEngineReconciler) getResolver() *common.ValueSourceResolverV1P
 	return r.resolver
 }
 
+func (r *ExecutionEngineReconciler) getImageClient() *registry.ImageClient {
+	if r.imageClient == nil {
+		r.imageClient = registry.NewImageClient(r.Client)
+	}
+	return r.imageClient
+}
+
 func (r *ExecutionEngineReconciler) processExecutionEngine(ctx context.Context, executionEngine arkv1prealpha1.ExecutionEngine) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 	log.Info("Processing execution engine", "executionEngine", executionEngine.Name)
@@ -137,12 +146,7 @@ func (r *ExecutionEngineReconciler) processTemplateBasedEngine(ctx context.Conte
 	source := executionEngine.Spec.Source
 
 	if source.Image != "" {
-		executionEngine.Status.ImageRef = source.Image
-		if err := r.updateStatus(ctx, executionEngine, statusReady, "Template image configured"); err != nil {
-			return ctrl.Result{}, err
-		}
-		log.Info("Template-based ExecutionEngine ready", "executionEngine", executionEngine.Name, "image", source.Image)
-		return ctrl.Result{}, nil
+		return r.processImageBasedEngine(ctx, executionEngine)
 	}
 
 	if source.Git != nil {
@@ -157,6 +161,69 @@ func (r *ExecutionEngineReconciler) processTemplateBasedEngine(ctx context.Conte
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
+}
+
+func (r *ExecutionEngineReconciler) processImageBasedEngine(ctx context.Context, executionEngine arkv1prealpha1.ExecutionEngine) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+	source := executionEngine.Spec.Source
+
+	executionEngine.Status.ImageRef = source.Image
+
+	specUpdated, err := r.extractImageMetadata(ctx, &executionEngine)
+	if err != nil {
+		log.Error(err, "Failed to extract image metadata, continuing without it", "image", source.Image)
+	}
+
+	if specUpdated {
+		if err := r.Update(ctx, &executionEngine); err != nil {
+			log.Error(err, "Failed to update ExecutionEngine spec with image metadata")
+			return ctrl.Result{}, err
+		}
+		log.Info("Updated ExecutionEngine spec with image metadata", "executionEngine", executionEngine.Name)
+	}
+
+	if err := r.updateStatus(ctx, executionEngine, statusReady, "Template image configured"); err != nil {
+		return ctrl.Result{}, err
+	}
+	log.Info("Template-based ExecutionEngine ready", "executionEngine", executionEngine.Name, "image", source.Image)
+	return ctrl.Result{}, nil
+}
+
+func (r *ExecutionEngineReconciler) extractImageMetadata(ctx context.Context, ee *arkv1prealpha1.ExecutionEngine) (bool, error) {
+	log := logf.FromContext(ctx)
+	source := ee.Spec.Source
+
+	if source == nil || source.Image == "" {
+		return false, nil
+	}
+
+	imageClient := r.getImageClient()
+	metadata, err := imageClient.GetImageMetadata(ctx, source.Image, ee.Namespace, source.ImagePullSecrets)
+	if err != nil {
+		return false, fmt.Errorf("failed to get image metadata: %w", err)
+	}
+
+	updated := false
+
+	if metadata.ConfigSchema != "" && ee.Spec.ConfigSchema == "" {
+		ee.Spec.ConfigSchema = metadata.ConfigSchema
+		updated = true
+		log.Info("Extracted configSchema from image label", "executionEngine", ee.Name)
+	}
+
+	if metadata.Description != "" && ee.Spec.Description == "" {
+		ee.Spec.Description = metadata.Description
+		updated = true
+		log.Info("Extracted description from image label", "executionEngine", ee.Name)
+	}
+
+	if metadata.IsAgentic != nil && !ee.Spec.IsAgentic {
+		ee.Spec.IsAgentic = *metadata.IsAgentic
+		updated = true
+		log.Info("Extracted isAgentic from image label", "executionEngine", ee.Name, "isAgentic", *metadata.IsAgentic)
+	}
+
+	return updated, nil
 }
 
 func (r *ExecutionEngineReconciler) updateStatus(ctx context.Context, executionEngine arkv1prealpha1.ExecutionEngine, status, message string) error {

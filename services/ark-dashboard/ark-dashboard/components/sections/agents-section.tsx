@@ -6,7 +6,12 @@ import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { toast } from 'sonner';
 
 import { AgentCard } from '@/components/cards';
+import {
+  type AgentType,
+  AgentTypeSelector,
+} from '@/components/dialogs/agent-type-selector';
 import { AgentEditor } from '@/components/editors';
+import { AdvancedAgentEditor } from '@/components/editors/advanced-agent-editor';
 import { AgentRow } from '@/components/rows/agent-row';
 import { Button } from '@/components/ui/button';
 import {
@@ -36,7 +41,9 @@ export const AgentsSection = forwardRef<{ openAddEditor: () => void }, object>(
     const [agents, setAgents] = useState<Agent[]>([]);
     const [teams, setTeams] = useState<Team[]>([]);
     const [models, setModels] = useState<Model[]>([]);
+    const [typeSelectorOpen, setTypeSelectorOpen] = useState(false);
     const [agentEditorOpen, setAgentEditorOpen] = useState(false);
+    const [advancedEditorOpen, setAdvancedEditorOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const showLoading = useDelayedLoading(loading);
     const [showCompactView, setShowCompactView] = useState(false);
@@ -47,8 +54,17 @@ export const AgentsSection = forwardRef<{ openAddEditor: () => void }, object>(
     ];
 
     useImperativeHandle(ref, () => ({
-      openAddEditor: () => setAgentEditorOpen(true),
+      openAddEditor: () => setTypeSelectorOpen(true),
     }));
+
+    const handleAgentTypeSelect = (type: AgentType) => {
+      setTypeSelectorOpen(false);
+      if (type === 'basic') {
+        setAgentEditorOpen(true);
+      } else if (type === 'advanced') {
+        setAdvancedEditorOpen(true);
+      }
+    };
 
     useEffect(() => {
       const loadData = async () => {
@@ -159,7 +175,7 @@ export const AgentsSection = forwardRef<{ openAddEditor: () => void }, object>(
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
-              <Button onClick={() => setAgentEditorOpen(true)}>
+              <Button onClick={() => setTypeSelectorOpen(true)}>
                 <Plus className="h-4 w-4" />
                 Create Agent
               </Button>
@@ -176,6 +192,11 @@ export const AgentsSection = forwardRef<{ openAddEditor: () => void }, object>(
               </a>
             </Button>
           </Empty>
+          <AgentTypeSelector
+            open={typeSelectorOpen}
+            onOpenChange={setTypeSelectorOpen}
+            onSelect={handleAgentTypeSelect}
+          />
           <AgentEditor
             open={agentEditorOpen}
             onOpenChange={setAgentEditorOpen}
@@ -183,6 +204,13 @@ export const AgentsSection = forwardRef<{ openAddEditor: () => void }, object>(
             models={models}
             teams={teams}
             onSave={handleSaveAgent}
+          />
+          <AdvancedAgentEditor
+            open={advancedEditorOpen}
+            onOpenChange={setAdvancedEditorOpen}
+            models={models}
+            onSave={handleSaveAgent}
+            onBack={() => setTypeSelectorOpen(true)}
           />
         </>
       );
@@ -232,6 +260,11 @@ export const AgentsSection = forwardRef<{ openAddEditor: () => void }, object>(
           </main>
         </div>
 
+        <AgentTypeSelector
+          open={typeSelectorOpen}
+          onOpenChange={setTypeSelectorOpen}
+          onSelect={handleAgentTypeSelect}
+        />
         <AgentEditor
           open={agentEditorOpen}
           onOpenChange={setAgentEditorOpen}
@@ -239,6 +272,13 @@ export const AgentsSection = forwardRef<{ openAddEditor: () => void }, object>(
           models={models}
           teams={teams}
           onSave={handleSaveAgent}
+        />
+        <AdvancedAgentEditor
+          open={advancedEditorOpen}
+          onOpenChange={setAdvancedEditorOpen}
+          models={models}
+          onSave={handleSaveAgent}
+          onBack={() => setTypeSelectorOpen(true)}
         />
       </>
     );

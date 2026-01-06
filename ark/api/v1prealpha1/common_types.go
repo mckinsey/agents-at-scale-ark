@@ -60,4 +60,6 @@ type TemplateSource struct {
 	Image string `json:"image,omitempty"`
 	// +kubebuilder:validation:Optional
 	Git *GitSource `json:"git,omitempty"`
+	// +kubebuilder:validation:Optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
