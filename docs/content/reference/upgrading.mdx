@@ -189,8 +189,31 @@ This is a **non-breaking** change. `type: custom` continues to work but shows a 
 To find agents using deprecated `type: custom`:
 
 ```bash
-# Search for agents with 'type: custom' in their spec
-kubectl get agents -o yaml | grep -B5 "type: custom"
+# List agents with 'type: custom' tools
+kubectl get agents -A -o json | jq -r '.items[] | select(.spec.tools[]?.type == "custom") | "\(.metadata.namespace)/\(.metadata.name)"'
+```
+
+**Migration:**
+
+To determine the correct type for each tool, check the Tool resource:
+
+```bash
+# Check a tool's type
+kubectl get tool <tool-name> -o jsonpath='{.spec.type}'
+```
+
+Most `type: custom` tools are MCP tools and should be updated to `type: mcp`. Update your agent manifests accordingly:
+
+```yaml
+# Before
+tools:
+  - type: custom
+    name: github-read-file
+
+# After
+tools:
+  - type: mcp
+    name: github-read-file
 ```
 
 ## v0.1.34
