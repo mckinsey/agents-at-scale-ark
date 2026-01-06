@@ -449,13 +449,6 @@ export default function FloatingChat({
 
                   return (
                     <div key={index} className="contents">
-                      {content && (
-                        <ChatMessage
-                          role={message.role as 'user' | 'assistant' | 'system'}
-                          content={content}
-                          viewMode={viewMode}
-                        />
-                      )}
                       {toolCalls &&
                         toolCalls.map((toolCall, toolIndex) => (
                           <ChatMessage
@@ -472,6 +465,13 @@ export default function FloatingChat({
                             ]}
                           />
                         ))}
+                      {content && (
+                        <ChatMessage
+                          role={message.role as 'user' | 'assistant' | 'system'}
+                          content={content}
+                          viewMode={viewMode}
+                        />
+                      )}
                     </div>
                   );
                 })}
