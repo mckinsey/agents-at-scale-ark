@@ -7,4 +7,4 @@ spec:
   modelRef:
     name: nonexistent-model
   tools:
-  - type: custom  # Missing name for custom tool - should fail admission
+  - type: http  # Missing name for http tool - should fail admission

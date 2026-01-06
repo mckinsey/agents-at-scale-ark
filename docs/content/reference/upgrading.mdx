@@ -96,6 +96,51 @@ This is a **breaking** change. Existing Query manifests using `spec.targets[]` m
 
 To query multiple targets, create one Query per target and check the results individually.
 
+### Agent Tool Type Deprecation
+
+Prior to `v0.1.50`, agents referenced Tool resources using `type: custom`:
+
+```yaml
+# Old format (deprecated)
+spec:
+  tools:
+    - type: custom
+      name: get-coordinates    # References an HTTP Tool
+    - type: custom
+      name: github-read-file   # References an MCP Tool
+```
+
+From `v0.1.50`, agents should use explicit tool types that match the Tool resource type:
+
+```yaml
+# New format
+spec:
+  tools:
+    - type: http
+      name: get-coordinates    # HTTP tool
+    - type: mcp
+      name: github-read-file   # MCP tool
+    - type: agent
+      name: sub-agent-tool     # Agent tool
+    - type: team
+      name: research-team      # Team tool
+    - type: builtin
+      name: noop               # Builtin tool
+```
+
+This is a **non-breaking** change. `type: custom` continues to work but shows a deprecation warning. The controller now validates that the declared type matches the Tool CRD type (except for `custom` which bypasses validation for backwards compatibility).
+
+<Callout type="warning">
+`type: custom` will be removed in v1.0.0. Update your agent manifests to use explicit tool types.
+</Callout>
+
+To find agents using deprecated `type: custom`:
+
+```bash
+# Search for agents with 'type: custom' in their spec
+kubectl get agents -o yaml | grep -B5 "type: custom"
+```
+
 ## v0.1.34
 
 ### Agent Model References

@@ -8,9 +8,9 @@ spec:
     name: test-model-query-overrides
   tools:
   - name: mock-llm-mcp-echo-headers
-    type: custom
+    type: mcp
   - name: mock-llm-mcp-echo
-    type: custom
+    type: mcp
   overrides:
   - resourceType: model
     labelSelector:

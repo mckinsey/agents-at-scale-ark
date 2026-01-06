@@ -439,9 +439,9 @@ Services deployed via Helm that create MCPServer resources require:
 spec:
   tools:
   - name: service-name-tool-1
-    type: custom
+    type: mcp
   - name: service-name-tool-2
-    type: custom
+    type: mcp
 ```
 
 3. **Additional RBAC for service discovery**:

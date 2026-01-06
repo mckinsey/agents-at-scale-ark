@@ -15,7 +15,7 @@ Agents can use this tool by including it in their tool configuration:
 
 ```yaml
 tools:
-  - type: custom
+  - type: http
     name: web-search
 ```
 

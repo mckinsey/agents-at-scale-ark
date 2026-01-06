@@ -35,29 +35,29 @@ spec:
     IMPORTANT: You should not ask any questions or make suggestions.
   tools:
     # Core file operations
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-read-file
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-write-file
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-move-file
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-edit-file
 
     # Directory operations
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-create-directory
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-list-directory
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-list-allowed-directories
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-directory-tree
 
     # File information and search
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-get-file-info
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-search-files
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-read-multiple-files

@@ -47,6 +47,20 @@ func (d *AgentCustomDefaulter) Default(ctx context.Context, obj runtime.Object) 
 		}
 	}
 
+	// Add deprecation warning for 'custom' tool type
+	for i, tool := range agent.Spec.Tools {
+		if tool.Type == "custom" {
+			if agent.Annotations == nil {
+				agent.Annotations = make(map[string]string)
+			}
+			agent.Annotations[annotations.MigrationWarningPrefix+"tool-type-custom"] = fmt.Sprintf(
+				"tool[%d]: 'custom' type is deprecated, use the tool's actual type (mcp, http, agent, team, builtin) instead",
+				i,
+			)
+			break
+		}
+	}
+
 	return nil
 }
 
@@ -107,6 +121,9 @@ func (v *AgentCustomValidator) validateAgent(ctx context.Context, agent *arkv1al
 		warnings = append(warnings, toolWarnings...)
 	}
 
+	// Collect migration warnings (e.g., deprecated 'custom' tool type)
+	warnings = append(warnings, collectMigrationWarnings(agent.Annotations)...)
+
 	return warnings, nil
 }
 
@@ -148,10 +165,10 @@ func (v *AgentCustomValidator) validateTool(index int, tool arkv1alpha1.AgentToo
 		if err := v.validateBuiltInTool(tool, hasName, index); err != nil {
 			return warnings, err
 		}
-	case "custom":
+	case "custom", "mcp", "http", "agent", "team", "builtin":
 		return v.validateCustomTool(tool, hasName, index)
 	default:
-		return warnings, fmt.Errorf("tool[%d]: unsupported tool type '%s': supported types are: built-in, custom", index, tool.Type)
+		return warnings, fmt.Errorf("tool[%d]: unsupported tool type '%s': supported types are: built-in, mcp, http, agent, team, builtin", index, tool.Type)
 	}
 
 	return warnings, nil
