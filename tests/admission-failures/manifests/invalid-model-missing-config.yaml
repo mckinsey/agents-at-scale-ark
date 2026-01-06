@@ -3,7 +3,8 @@ kind: Model
 metadata:
   name: invalid-model-missing-config
 spec:
-  type: azure
+  type: completions
+  provider: azure
   model:
     value: gpt-4.1-mini
   # Missing required 'config' section - should fail admission

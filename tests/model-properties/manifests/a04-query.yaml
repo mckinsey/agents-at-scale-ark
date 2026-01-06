@@ -4,6 +4,6 @@ metadata:
   name: model-properties-query
 spec:
   input: "Generate exactly 3 creative words."
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: properties-test-agent

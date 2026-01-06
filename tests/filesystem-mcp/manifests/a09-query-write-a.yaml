@@ -10,6 +10,6 @@ spec:
     "This is Agent A's confidential data. Created at workspace A."
 
     After creating the file, list all files in the current directory to confirm it was created successfully.
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: filesystem-agent-a

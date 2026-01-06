@@ -9,7 +9,7 @@ spec:
       - script:
           content: |
             helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-              --version 0.1.23 \
+              --version 0.1.27 \
               --namespace $NAMESPACE \
               --values mock-llm-values.yaml
           env:
@@ -93,11 +93,11 @@ spec:
             metadata:
               name: test-query-with-params
             status:
-              (length(responses)): 1
-              (contains(responses[*].target.name, 'test-agent')): true
+              (response != null): true
+              (response.target.name): 'test-agent'
               # Verify system message echoed back with resolved parameter
-              (contains(responses[0].raw, '"role":"system"')): true
-              (contains(responses[0].content, 'QueryAgent123')): true
+              (contains(response.raw, '"role":"system"')): true
+              (contains(response.content, 'QueryAgent123')): true
       # Test nested valueFrom resolution - Agent referencing Query params that use ConfigMap/Secret
       - assert:
           timeout: 5s
@@ -126,11 +126,11 @@ spec:
             metadata:
               name: test-query-nested-params
             status:
-              (length(responses)): 1
-              (contains(responses[*].target.name, 'test-agent-nested')): true
+              (response != null): true
+              (response.target.name): 'test-agent-nested'
               # Verify the agent received the nested-resolved parameters
-              (contains(join('', responses[*].content), 'NestedConfigAgent')): true
-              (contains(join('', responses[*].content), 'SecretAnalyst')): true
+              (contains(response.content, 'NestedConfigAgent')): true
+              (contains(response.content, 'SecretAnalyst')): true
       catch:
       - events: {}
       - describe:

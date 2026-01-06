@@ -14,7 +14,7 @@ spec:
     - script:
         content: |
           helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.25 \
+            --version 0.1.27 \
             --namespace $NAMESPACE \
             --values mock-llm-values.yaml \
             --wait --timeout=120s
@@ -95,8 +95,8 @@ spec:
           metadata:
             name: sequential-team-query
           status:
-            (length(responses)): 1
-            (contains(responses[0].content, 'SUMMARY:')): true
+            (response != null): true
+            (contains(response.content, 'SUMMARY:')): true
     catch:
     - events: {}
     - describe:

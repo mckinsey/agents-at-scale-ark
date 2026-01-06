@@ -1781,10 +1781,10 @@ func (in *QuerySpec) DeepCopyInto(out *QuerySpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	if in.Targets != nil {
-		in, out := &in.Targets, &out.Targets
-		*out = make([]QueryTarget, len(*in))
-		copy(*out, *in)
+	if in.Target != nil {
+		in, out := &in.Target, &out.Target
+		*out = new(QueryTarget)
+		**out = **in
 	}
 	if in.Selector != nil {
 		in, out := &in.Selector, &out.Selector
@@ -1835,12 +1835,10 @@ func (in *QueryStatus) DeepCopyInto(out *QueryStatus) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	if in.Responses != nil {
-		in, out := &in.Responses, &out.Responses
-		*out = make([]Response, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
+	if in.Response != nil {
+		in, out := &in.Response, &out.Response
+		*out = new(Response)
+		(*in).DeepCopyInto(*out)
 	}
 	out.TokenUsage = in.TokenUsage
 	if in.Duration != nil {

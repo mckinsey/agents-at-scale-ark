@@ -4,6 +4,6 @@ metadata:
   name: test-graph-team
 spec:
   input: Research renewable energy trends, analyze the findings, review for accuracy, and create a summary report
-  targets:
-  - type: team
+  target:
+    type: team
     name: graph-team

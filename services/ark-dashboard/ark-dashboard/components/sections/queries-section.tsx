@@ -134,11 +134,11 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
     };
 
     const getTargetDisplay = (query: QueryResponse) => {
-      const responses = query.status?.responses as
-        | Array<{ target?: { name: string; type: string } }>
+      const response = query.status?.response as
+        | { target?: { name: string; type: string } }
         | undefined;
-      if (!responses || responses.length === 0) return '-';
-      const target = responses[0].target;
+      if (!response) return '-';
+      const target = response.target;
       if (!target?.type || !target?.name) return '-';
       return `${target.type}:${target.name}`;
     };
@@ -165,19 +165,19 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
       return 0;
     });
 
-    // Extract first response content (text) if available
+    // Extract response content (text) if available
     const getFirstResponseText = (query: QueryResponse) => {
-      const responses = query.status?.responses as
-        | Array<{ content?: string }>
+      const response = query.status?.response as
+        | { content?: string }
         | undefined;
-      if (!responses || responses.length === 0) return undefined;
-      return responses[0].content;
+      if (!response) return undefined;
+      return response.content;
     };
 
-    // Build a small JSON preview string (first response object or status)
+    // Build a small JSON preview string (response object or status)
     const getFirstResponseJsonPreview = (query: QueryResponse) => {
-      const responses = (query.status?.responses as unknown[]) || [];
-      const raw = responses.length > 0 ? responses[0] : (query.status ?? query);
+      const response = query.status?.response;
+      const raw = response ?? query.status ?? query;
       try {
         return JSON.stringify(raw, null, 2);
       } catch {

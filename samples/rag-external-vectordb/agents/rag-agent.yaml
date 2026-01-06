@@ -25,6 +25,6 @@ spec:
     name: default
   
   tools:
-    - type: custom
+    - type: http
       name: retrieve-chunks
 
