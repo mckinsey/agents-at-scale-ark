@@ -14,6 +14,7 @@ import {
   Search,
   Server,
   Settings,
+  Store,
   Users,
   Wrench,
   Zap,
@@ -28,7 +29,12 @@ export interface DashboardSection {
   key: string;
   title: string;
   icon: LucideIcon;
-  group: 'configurations' | 'operations' | 'runtime' | 'service';
+  group:
+    | 'configurations'
+    | 'operations'
+    | 'runtime'
+    | 'service'
+    | 'marketplace';
   enablerFeature?: string;
 }
 
@@ -150,6 +156,14 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     icon: Key,
     group: 'service',
   },
+
+  // Marketplace
+  'marketplace-explore': {
+    key: 'marketplace',
+    title: 'Explore',
+    icon: Store,
+    group: 'marketplace',
+  },
 } as const satisfies Record<string, DashboardSection>;
 
 // Type-safe keys
@@ -175,4 +189,8 @@ export const RUNTIME_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
 
 export const SERVICE_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
   section => section.group === 'service',
+);
+
+export const MARKETPLACE_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
+  section => section.group === 'marketplace',
 );

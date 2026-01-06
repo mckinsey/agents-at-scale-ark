@@ -53,6 +53,7 @@ import {
 import { signout } from '@/lib/auth/signout';
 import {
   CONFIGURATION_SECTIONS,
+  MARKETPLACE_SECTIONS,
   OPERATION_SECTIONS,
   RUNTIME_SECTIONS,
   SERVICE_SECTIONS,
@@ -257,6 +258,39 @@ export function AppSidebar() {
                             }
                             isActive={isActive}
                             disabled={isDisabled}>
+                            <item.icon />
+                            <span>{item.title}</span>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      );
+                    })}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </Collapsible>
+          </SidebarGroup>
+
+          <SidebarGroup>
+            <Collapsible defaultOpen className="group/collapsible">
+              <SidebarGroupLabel
+                asChild
+                className="group/label text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-sm">
+                <CollapsibleTrigger className="flex w-full items-center">
+                  Marketplace
+                  <ChevronRight className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                </CollapsibleTrigger>
+              </SidebarGroupLabel>
+              <CollapsibleContent>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {MARKETPLACE_SECTIONS.map(item => {
+                      const isActive = getCurrentSection() === item.key;
+                      return (
+                        <SidebarMenuItem key={item.key}>
+                          <SidebarMenuButton
+                            onClick={() => navigateToSection(item.key)}
+                            isActive={isActive}
+                            disabled={loading}>
                             <item.icon />
                             <span>{item.title}</span>
                           </SidebarMenuButton>

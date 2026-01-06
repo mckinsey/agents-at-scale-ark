@@ -21,6 +21,7 @@ from .api_keys import router as api_keys_router
 from .a2a_tasks import router as a2a_tasks_router
 from .broker import router as broker_router
 from .execution_engines import router as execution_engines_router
+from .marketplace import router as marketplace_router
 
 router = APIRouter(prefix="/v1", tags=["v1"])
 
@@ -46,3 +47,4 @@ router.include_router(evaluators_router)
 router.include_router(api_keys_router)
 router.include_router(broker_router)
 router.include_router(execution_engines_router)
+router.include_router(marketplace_router)

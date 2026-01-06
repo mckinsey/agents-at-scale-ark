@@ -24,10 +24,10 @@ rules:
   - apiGroups: [""]
     resources: ["secrets", "events"]
     verbs: ["get", "list", "create", "update", "patch", "delete"]
-  # Permission to read configmaps to load ark-config-streaming configuration
+  # Permission to read/write configmaps for ark-config-streaming and marketplace
   - apiGroups: [""]
     resources: ["configmaps"]
-    verbs: ["get", "list"]
+    verbs: ["get", "list", "create", "update", "patch"]
   # Permission to read services to get the address of the configured streaming service
   - apiGroups: [""]
     resources: ["services"]
@@ -38,7 +38,7 @@ rules:
     verbs: ["get", "list"]
   # Ark resources
   - apiGroups: ["ark.mckinsey.com"]
-    resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories", "evaluations", "evaluators", "a2atasks"]
+    resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories", "evaluations", "evaluators", "a2atasks", "executionengines"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 ---
