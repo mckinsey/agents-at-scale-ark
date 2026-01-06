@@ -214,7 +214,7 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
 
     try:
         # Build query spec with optional sessionId, conversationId and timeout
-        query_spec_dict = {"type": "messages", "input": messages, "targets": [target]}
+        query_spec_dict = {"type": "messages", "input": messages, "target": target}
         if session_id:
             query_spec_dict["sessionId"] = session_id
         if conversation_id:
