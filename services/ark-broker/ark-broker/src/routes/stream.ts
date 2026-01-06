@@ -1,7 +1,8 @@
 import { Router } from 'express';
-import { StreamStore } from '../stream-store.js';
+import { CompletionChunkBroker } from '../completion-chunk-broker.js';
 import { StreamError } from '../types.js';
 import { streamSSE, writeSSEEvent } from '../sse.js';
+import { parsePaginationParams, PaginationError } from '../pagination.js';
 
 const parseTimeout = (timeoutStr: string | undefined, defaultTimeout: number): number => {
   if (!timeoutStr) return defaultTimeout;
@@ -10,42 +11,36 @@ const parseTimeout = (timeoutStr: string | undefined, defaultTimeout: number): n
 };
 
 
-export function createStreamRouter(stream: StreamStore): Router {
+export function createStreamRouter(chunks: CompletionChunkBroker): Router {
   const router = Router();
 
   /**
    * @swagger
    * /stream:
    *   get:
-   *     summary: Get stream statistics
-   *     description: Returns statistics about all stored streams including chunk counts and completion status
+   *     summary: Get paginated chunks or stream via SSE
+   *     description: Returns paginated list of chunks or streams them via SSE with watch=true
    *     tags:
    *       - Streaming
+   *     parameters:
+   *       - in: query
+   *         name: watch
+   *         schema:
+   *           type: boolean
+   *         description: Stream chunks via SSE
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *         description: Maximum items to return
+   *       - in: query
+   *         name: cursor
+   *         schema:
+   *           type: integer
+   *         description: Cursor for pagination
    *     responses:
    *       200:
-   *         description: Stream statistics retrieved successfully
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 total_queries:
-   *                   type: integer
-   *                   description: Total number of queries with streams
-   *                 queries:
-   *                   type: object
-   *                   description: Per-query statistics
-   *                   additionalProperties:
-   *                     type: object
-   *                     properties:
-   *                       total_chunks:
-   *                         type: integer
-   *                       completed:
-   *                         type: boolean
-   *                       has_done_marker:
-   *                         type: boolean
-   *                       chunk_types:
-   *                         type: object
+   *         description: Paginated chunks or SSE stream
    */
   router.get('/', (req, res) => {
     const watch = req.query['watch'] === 'true';
@@ -57,29 +52,19 @@ export function createStreamRouter(stream: StreamStore): Router {
         req,
         tag: 'STREAM',
         itemName: 'chunks',
-        subscribe: (callback) => stream.subscribeToAllChunks(callback)
+        subscribe: (callback) => chunks.subscribe((item) => callback(item.data.chunk))
       });
     } else {
       try {
-        const allStreams = stream.getAllStreams();
-        const queryIds = Object.keys(allStreams);
-        const stats: Record<string, any> = {};
-
-        for (const queryId of queryIds) {
-          const chunks = allStreams[queryId];
-          stats[queryId] = {
-            total_chunks: chunks.length,
-            completed: stream.isStreamComplete(queryId),
-            has_done_marker: chunks.includes('[DONE]')
-          };
-        }
-
-        res.json({
-          total_queries: queryIds.length,
-          queries: stats
-        });
+        const params = parsePaginationParams(req.query as Record<string, unknown>);
+        const result = chunks.paginate(params);
+        res.json(result);
       } catch (error) {
-        console.error('[STREAM] Failed to get stream statistics:', error);
+        if (error instanceof PaginationError) {
+          res.status(400).json({ error: error.message });
+          return;
+        }
+        console.error('[STREAM] Failed to get chunks:', error);
         const err = error as Error;
         res.status(500).json({ error: err.message });
       }
@@ -172,7 +157,8 @@ export function createStreamRouter(stream: StreamStore): Router {
         other: 0
       };
       
-      const unsubscribeChunks = stream.subscribeToChunks(query_name, (chunk: any) => {
+      const unsubscribeChunks = chunks.subscribeToQuery(query_name, (item) => {
+        const chunk = item.data.chunk as any;
         hasReceivedChunks = true;
 
         // Clear timeout on first chunk
@@ -221,9 +207,9 @@ export function createStreamRouter(stream: StreamStore): Router {
           unsubscribeComplete();
           return;
         }
-        
+
         outboundChunkCount++;
-        
+
         // Count chunk type
         if (chunk?.choices?.[0]?.delta?.content) {
           chunkTypeCounts.content++;
@@ -234,7 +220,7 @@ export function createStreamRouter(stream: StreamStore): Router {
         } else {
           chunkTypeCounts.other++;
         }
-        
+
         // Log every second instead of every 10 chunks
         const now = Date.now();
         if (now - lastLogTime >= 1000) {
@@ -257,10 +243,10 @@ export function createStreamRouter(stream: StreamStore): Router {
         res.write('data: [DONE]\n\n');
         res.end();
         unsubscribeChunks();
-        stream.eventEmitter.off(`complete:${query_name}`, completeHandler);
+        chunks.eventEmitter.off(`complete:${query_name}`, completeHandler);
       };
-      const unsubscribeComplete = (): void => { stream.eventEmitter.off(`complete:${query_name}`, completeHandler); };
-      stream.eventEmitter.on(`complete:${query_name}`, completeHandler);
+      const unsubscribeComplete = (): void => { chunks.eventEmitter.off(`complete:${query_name}`, completeHandler); };
+      chunks.eventEmitter.on(`complete:${query_name}`, completeHandler);
       
       // Set up timeout if wait-for-query is specified
       if (waitForQuery) {
@@ -283,9 +269,9 @@ export function createStreamRouter(stream: StreamStore): Router {
         }, timeout);
       }
 
-      // If from-beginning, send existing chunks first  
+      // If from-beginning, send existing chunks first
       if (fromBeginning) {
-        const existingChunks = stream.getStreamChunks(query_name);
+        const existingChunks = chunks.getChunksByQuery(query_name);
         console.log(`[STREAM] Sending ${existingChunks.length} existing chunks for query ${query_name}`);
         
         for (let i = 0; i < existingChunks.length; i++) {
@@ -450,7 +436,7 @@ export function createStreamRouter(stream: StreamStore): Router {
               }
               
               // Store the chunk for later replay AND forward to active streaming clients
-              stream.addStreamChunk(query_id, streamChunk);
+              chunks.addChunk(query_id, streamChunk);
             } catch (parseError) {
               console.error(`[STREAM-IN] Failed to parse chunk for query ${query_id}:`, parseError);
             }
@@ -530,13 +516,13 @@ export function createStreamRouter(stream: StreamStore): Router {
       console.log(`[STREAM] POST /stream/${query_id}/complete - marking query as complete`);
 
       // Check if stream exists
-      if (!stream.hasStream(query_id)) {
+      if (!chunks.hasQuery(query_id)) {
         res.status(404).json({ error: 'Stream not found' });
         return;
       }
 
       // Check if already completed (for idempotency)
-      if (stream.isStreamComplete(query_id)) {
+      if (chunks.isComplete(query_id)) {
         res.json({
           status: 'already_completed',
           query: query_id
@@ -545,7 +531,7 @@ export function createStreamRouter(stream: StreamStore): Router {
       }
 
       // Mark query stream as complete
-      stream.completeQueryStream(query_id);
+      chunks.completeQuery(query_id);
 
       res.json({
         status: 'completed',
@@ -585,7 +571,7 @@ export function createStreamRouter(stream: StreamStore): Router {
    */
   router.delete('/', (_req, res) => {
     try {
-      stream.purge();
+      chunks.delete();
       res.json({ status: 'success', message: 'Stream data purged' });
     } catch (error) {
       console.error('Stream purge failed:', error);

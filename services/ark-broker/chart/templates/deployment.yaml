@@ -34,15 +34,21 @@ spec:
           env:
             - name: PORT
               value: {{ .Values.memory.port | quote }}
-            - name: MAX_MESSAGE_SIZE
-              value: {{ .Values.memory.maxMessageSize | quote }}
-            {{- if .Values.memory.maxMemoryDb }}
-            - name: MAX_MEMORY_DB
-              value: {{ .Values.memory.maxMemoryDb | quote }}
+            {{- if .Values.limits.maxMessages }}
+            - name: MAX_MESSAGES
+              value: {{ .Values.limits.maxMessages | quote }}
             {{- end }}
-            {{- if .Values.memory.maxItemAge }}
-            - name: MAX_ITEM_AGE
-              value: {{ .Values.memory.maxItemAge | quote }}
+            {{- if .Values.limits.maxChunks }}
+            - name: MAX_CHUNKS
+              value: {{ .Values.limits.maxChunks | quote }}
+            {{- end }}
+            {{- if .Values.limits.maxSpans }}
+            - name: MAX_SPANS
+              value: {{ .Values.limits.maxSpans | quote }}
+            {{- end }}
+            {{- if .Values.limits.maxEvents }}
+            - name: MAX_EVENTS
+              value: {{ .Values.limits.maxEvents | quote }}
             {{- end }}
             {{- if .Values.persistence.enabled }}
             - name: MEMORY_FILE_PATH

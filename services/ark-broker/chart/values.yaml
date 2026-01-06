@@ -12,7 +12,7 @@ app:
     repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-broker
     # tag defaults to .Chart.AppVersion if not specified
     pullPolicy: IfNotPresent
-  
+
   # Resource configuration
   resources:
     requests:
@@ -36,14 +36,19 @@ memory:
   setAsDefault: false
   # Port for the HTTP server
   port: 8080
-  # Maximum message size in bytes (10MB)
-  maxMessageSize: 10485760
-  # Maximum number of messages/chunks to keep (0 = unlimited)
-  # Defaults to 50000 messages to prevent unbounded growth while staying well within the 1GB memory limit
-  maxMemoryDb: 50000
-  # Maximum age of items in seconds (0 = no age limit)
-  # Examples: 86400 = 1 day, 604800 = 7 days, 2592000 = 30 days
-  maxItemAge: 0
+
+# Store limits (0 = unlimited)
+# Each store persists to JSON. Limits prevent unbounded file growth.
+# Estimates: messages ~2KB, chunks ~500B, spans ~1KB, events ~500B each
+limits:
+  # Max messages to persist (~100MB at 50k messages)
+  maxMessages: 50000
+  # Max stream chunks to persist (~100MB at 200k chunks)
+  maxChunks: 200000
+  # Max trace spans to persist (~100MB at 100k spans)
+  maxSpans: 100000
+  # Max events to persist (~100MB at 200k events)
+  maxEvents: 200000
 
 # Streaming configuration
 streaming:
@@ -62,11 +67,11 @@ persistence:
   # Path where data will be stored
   mountPath: /data
   # Filename for the memory data
-  memoryFileName: memory.json
+  memoryFileName: messages.json
   # Filename for the stream data
-  streamFileName: stream.json
+  streamFileName: completionchunks.json
   # Filename for the trace data
-  traceFileName: traces.json
+  traceFileName: oteltraces.json
   # Filename for the event data
   eventFileName: events.json
   # Use existing PVC instead of creating a new one
