@@ -14,7 +14,7 @@ spec:
     IMPORTANT: You should not ask any questions or make suggestions.
 
   tools:
-    - type: custom
+    - type: http
       name: get-coordinates
     - type: built-in
       name: terminate
