@@ -331,6 +331,7 @@ func (r *ResourceIdentifier) createAgentFromFlags(spec *AgentSpec) error {
 	}
 
 	// Add tools if provided
+	// TODO: "custom" type is deprecated - consider adding --tool-type flag or fetching tool type from cluster
 	if len(spec.Tools) > 0 {
 		agentTools := make([]arkv1alpha1.AgentTool, 0, len(spec.Tools))
 		for _, toolName := range spec.Tools {
