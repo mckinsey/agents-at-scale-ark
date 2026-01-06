@@ -193,7 +193,7 @@ class TestBrokerAPI(unittest.TestCase):
         mock_client_instance.get = AsyncMock(return_value=mock_response)
         mock_async_client.return_value.__aenter__.return_value = mock_client_instance
 
-        response = self.client.get("/v1/broker/messages?conversation-id=conv-123")
+        response = self.client.get("/v1/broker/messages?conversation_id=conv-123")
 
         self.assertEqual(response.status_code, 200)
         mock_client_instance.get.assert_called_once()
@@ -400,7 +400,7 @@ class TestBrokerAPI(unittest.TestCase):
         mock_client_instance.get = AsyncMock(return_value=mock_response)
         mock_async_client.return_value.__aenter__.return_value = mock_client_instance
 
-        response = self.client.get("/v1/broker/events?query-id=query-123")
+        response = self.client.get("/v1/broker/events/query-123")
 
         self.assertEqual(response.status_code, 200)
         mock_client_instance.get.assert_called_once()
@@ -417,7 +417,7 @@ class TestBrokerAPI(unittest.TestCase):
 
         mock_proxy_sse.return_value = mock_stream()
 
-        response = self.client.get("/v1/broker/events?watch=true&query-id=query-123")
+        response = self.client.get("/v1/broker/events/query-123?watch=true")
 
         self.assertEqual(response.status_code, 200)
         mock_proxy_sse.assert_called_once()
