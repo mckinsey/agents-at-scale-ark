@@ -106,7 +106,7 @@ export default function FloatingChat({
     setChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
     let accumulatedContent = '';
-    const accumulatedToolCalls: Array<{
+    let accumulatedToolCalls: Array<{
       id: string;
       type: 'function';
       function: { name: string; arguments: string };
@@ -126,9 +126,8 @@ export default function FloatingChat({
       }
 
       if (delta?.tool_calls) {
+        let index = accumulatedToolCalls.length - 1;
         for (const toolCallDelta of delta.tool_calls) {
-          let index = accumulatedToolCalls.length - 1;
-
           // name is only defined when starting a new tool invocation
           if (toolCallDelta.function?.name) {
             index += 1;

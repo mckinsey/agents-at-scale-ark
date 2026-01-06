@@ -220,6 +220,8 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
                 iterated_messages = [tool_call for tool_call in message["tool_calls"]]
                 if iterated_messages:
                     message["tool_calls"] = iterated_messages
+                else:
+                    del message["tool_calls"]
 
         # Build query spec with optional sessionId, conversationId and timeout
         query_spec_dict = {"type": "messages", "input": messages, "targets": [target]}
