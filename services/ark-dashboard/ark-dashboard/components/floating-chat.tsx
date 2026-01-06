@@ -106,7 +106,7 @@ export default function FloatingChat({
     setChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
     let accumulatedContent = '';
-    let accumulatedToolCalls: Array<{
+    const accumulatedToolCalls: Array<{
       id: string;
       type: 'function';
       function: { name: string; arguments: string };
