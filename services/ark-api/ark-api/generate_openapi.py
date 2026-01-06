@@ -41,7 +41,6 @@ if "components" in openapi_schema and "schemas" in openapi_schema["components"]:
         print("Fix: Rename Python classes to be unique (e.g., AgentHeader, MCPServerHeader).")
         print("See: https://github.com/mckinsey/agents-at-scale-ark/issues/656")
         sys.exit(1)
-
 # Write to file with sorted keys for deterministic JSON
 with open("openapi.json", "w") as f:
     json.dump(openapi_schema, f, indent=2, sort_keys=True)
