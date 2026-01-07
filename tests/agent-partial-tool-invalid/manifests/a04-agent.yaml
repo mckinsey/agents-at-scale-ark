@@ -7,7 +7,7 @@ spec:
   modelRef:
     name: test-model
   tools:
-    - type: custom
+    - type: http
       name: get-coordinates-of-nyc
       description: Pre-fills city parameter for New York
       partial:

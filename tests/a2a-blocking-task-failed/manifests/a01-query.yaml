@@ -4,6 +4,6 @@ metadata:
   name: countdown-fail-query
 spec:
   input: countdown from -5
-  targets:
-    - type: agent
-      name: countdown-agent
+  target:
+    type: agent
+    name: countdown-agent

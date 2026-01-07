@@ -108,7 +108,7 @@ spec:
 
           # If the query failed, show the error message.
           if [ "$PHASE" = "error" ]; then
-            ERROR=$(jq -r '.status.responses[0].content' /tmp/query.json)
+            ERROR=$(jq -r '.status.response.content' /tmp/query.json)
             echo "Error: $ERROR"
             exit 1
           fi
@@ -129,9 +129,9 @@ spec:
           # Get all queries from this workflow using the label selector
           kubectl get queries -l workflow={{workflow.name}} -o json | \
             jq -r '.items[] |
-              "Model: " + .spec.targets[0].name + "\n" +
+              "Model: " + .spec.target.name + "\n" +
               "Status: " + .status.phase + "\n" +
-              "Response: " + (.status.responses[0].content // .status.error // "No response") + "\n" +
+              "Response: " + (.status.response.content // .status.error // "No response") + "\n" +
               "Tokens: " + (.status.tokenUsage.totalTokens // 0 | tostring) + "\n"' \
             > /tmp/results.txt
 
@@ -165,7 +165,7 @@ spec:
           # Wait for the query to complete, grab it.
           kubectl wait --for=condition=Completed \
             --timeout=5m query/$EVAL_QUERY
-          kubectl get query $EVAL_QUERY -o jsonpath='{.status.responses[0].content}' > /tmp/evaluation.txt
+          kubectl get query $EVAL_QUERY -o jsonpath='{.status.response.content}' > /tmp/evaluation.txt
           
           # Show the final result, output it.
           echo "Evaluation result:"

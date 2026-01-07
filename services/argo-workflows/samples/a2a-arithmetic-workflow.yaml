@@ -135,7 +135,7 @@ spec:
 
         kubectl apply -f /tmp/query.yaml
         kubectl wait --for=condition=Completed --timeout=120s query/curiosa-{{workflow.name}}-{{inputs.parameters.final-number}}
-        kubectl get query curiosa-{{workflow.name}}-{{inputs.parameters.final-number}} -o jsonpath='{.status.responses[0].content}' > /tmp/curiosa-facts.txt
+        kubectl get query curiosa-{{workflow.name}}-{{inputs.parameters.final-number}} -o jsonpath='{.status.response.content}' > /tmp/curiosa-facts.txt
         cat /tmp/curiosa-facts.txt
     outputs:
       parameters:
@@ -172,7 +172,7 @@ spec:
 
         kubectl apply -f /tmp/countdown-query.yaml
         kubectl wait --for=condition=Completed --timeout=120s query/countdown-{{workflow.name}}-start
-        kubectl get query countdown-{{workflow.name}}-start -o jsonpath='{.status.responses[0].content}' | tee /tmp/countdown-result.txt
+        kubectl get query countdown-{{workflow.name}}-start -o jsonpath='{.status.response.content}' | tee /tmp/countdown-result.txt
     outputs:
       parameters:
       - name: countdown-result

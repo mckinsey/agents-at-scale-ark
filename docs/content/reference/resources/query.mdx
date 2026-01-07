@@ -40,12 +40,10 @@ spec:
           name: weather-api
           key: token
 
-  # Execution targets
-  targets:
-    - type: agent
-      name: weather-agent
-    - type: team
-      name: forecast-team
+  # Execution target
+  target:
+    type: agent
+    name: weather-agent
 
   # Optional: session identifier for tracking and telemetry
   sessionId: user-session-123
@@ -73,12 +71,12 @@ status:
   # Execution state: pending, running, done, error
   phase: done
 
-  # Responses from each target
-  responses:
-    - target:
-        type: agent
-        name: weather-agent
-      content: "It's 72°F and sunny in New York"
+  # Response from target
+  response:
+    target:
+      type: agent
+      name: weather-agent
+    content: "It's 72°F and sunny in New York"
 
   # A2A protocol metadata (when targeting A2A agents)
   a2a:
@@ -103,9 +101,9 @@ spec:
   parameters:
     - name: country
       value: "France"
-  targets:
-    - type: agent
-      name: geography-agent
+  target:
+    type: agent
+    name: geography-agent
 ```
 
 ### Messages Input
@@ -126,9 +124,9 @@ spec:
       content: "2"
     - role: user
       content: "Now calculate 2+2"
-  targets:
-    - type: agent
-      name: math-agent
+  target:
+    type: agent
+    name: math-agent
 ```
 
 **Supported roles:**
@@ -152,16 +150,16 @@ Targets specify which resources should process the query. Supported types: `agen
 ```yaml
 spec:
   input: "What's your recommendation?"
-  targets:
-    - type: agent
-      name: data-analyst
-    - type: team
-      name: review-team
-    - type: model
-      name: gpt-4
+  target:
+    type: agent
+    name: data-analyst
+    type: team
+    name: review-team
+    type: model
+    name: gpt-4
 ```
 
-Each target receives the same input and produces an independent response in `status.responses[]`.
+Each target receives the same input and produces an independent response in `status.response[]`.
 
 ## Query Parameter Expansion
 
@@ -245,9 +243,9 @@ spec:
       value: "production"
     - name: target_env
       value: "us-west-2"
-  targets:
-    - type: agent
-      name: dynamic-agent
+  target:
+    type: agent
+    name: dynamic-agent
 ```
 
 ## Session and Conversation Management
@@ -272,9 +270,9 @@ spec:
   memory:
     name: broker
   input: "Hello, my name is Alice"
-  targets:
-    - type: agent
-      name: assistant
+  target:
+    type: agent
+    name: assistant
 ---
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
@@ -286,9 +284,9 @@ spec:
   memory:
     name: broker
   input: "What's my name?"
-  targets:
-    - type: agent
-      name: assistant
+  target:
+    type: agent
+    name: assistant
 ```
 
 The agent will remember "Alice" from the first query when processing the second because they share the same `conversationId`.
@@ -306,9 +304,9 @@ metadata:
   name: long-running-query
 spec:
   input: "Perform deep analysis"
-  targets:
-    - type: agent
-      name: research-agent
+  target:
+    type: agent
+    name: research-agent
   timeout: 30m  # Wait up to 30 minutes (default: 5m)
 ```
 
@@ -340,9 +338,9 @@ metadata:
   name: hello-query
 spec:
   input: "Hello, how are you?"
-  targets:
-    - type: agent
-      name: assistant
+  target:
+    type: agent
+    name: assistant
 ```
 
 ### Query with Parameters
@@ -362,9 +360,9 @@ spec:
         configMapKeyRef:
           name: query-config
           key: target-date
-  targets:
-    - type: agent
-      name: weather-agent
+  target:
+    type: agent
+    name: weather-agent
 ```
 
 ### Conversation with Messages
@@ -383,9 +381,9 @@ spec:
       content: "15 + 27 = 42"
     - role: user
       content: "Now multiply that result by 3"
-  targets:
-    - type: agent
-      name: calculator
+  target:
+    type: agent
+    name: calculator
 ```
 
 ### Multi-Target Query
@@ -397,13 +395,13 @@ metadata:
   name: opinion-poll
 spec:
   input: "Should we deploy this feature?"
-  targets:
-    - type: agent
-      name: product-manager
-    - type: agent
-      name: tech-lead
-    - type: team
-      name: qa-team
+  target:
+    type: agent
+    name: product-manager
+    type: agent
+    name: tech-lead
+    type: team
+    name: qa-team
 ```
 
 ### Query with Overrides
@@ -417,9 +415,9 @@ metadata:
   name: tracked-query
 spec:
   input: "Analyze this data"
-  targets:
-    - type: agent
-      name: data-analyst
+  target:
+    type: agent
+    name: data-analyst
   overrides:
     - headers:
         - name: X-Request-ID

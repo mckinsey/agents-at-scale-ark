@@ -4,6 +4,6 @@ metadata:
   name: max-turns-team-query
 spec:
   input: "Provide a brief solution for improving team communication. Keep responses short."
-  targets:
-  - type: team
+  target:
+    type: team
     name: round-robin-max-turns-team

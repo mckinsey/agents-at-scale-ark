@@ -41,7 +41,7 @@ spec:
   prompt: You are a helpful AI assistant that interacts with GitHub resources.
   azureRuntime: azureruntime-sample
   tools:
-    - type: custom
+    - type: mcp
       name: github-get-repo  # References Tool that connects to github-remote-mcp
 ```
 
@@ -280,9 +280,9 @@ spec:
   prompt: You're an agent helping with calculations such as div and mul.
   tools:
     - name: simple-calculator-remote-http-divide
-      type: custom
+      type: mcp
     - name: simple-calculator-remote-http-multiply
-      type: custom
+      type: mcp
 ```
 - Please apply the above yaml
 - Shell verification
@@ -368,23 +368,23 @@ spec:
   tools:
     # File operations
     - name: mcp-filesystem-read-file
-      type: custom
+      type: mcp
     - name: mcp-filesystem-write-file
-      type: custom
+      type: mcp
     - name: mcp-filesystem-edit-file
-      type: custom
+      type: mcp
 
     # Directory operations
     - name: mcp-filesystem-list-directory
-      type: custom
+      type: mcp
     - name: mcp-filesystem-create-directory
-      type: custom
+      type: mcp
     - name: mcp-filesystem-tree
-      type: custom
+      type: mcp
 
     # Search operations
     - name: mcp-filesystem-search-files
-      type: custom
+      type: mcp
 ```
 
 Apply the agent configuration:
@@ -532,7 +532,7 @@ metadata:
       }
 spec:
   input: Create a file called data.txt with content 'Project A data'
-  targets:
+  target:
   - type: agent
     name: filesystem
 ```

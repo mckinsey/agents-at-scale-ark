@@ -73,40 +73,18 @@ class QueryEvaluationProvider(EvaluationProvider):
             input_text = query_resource["spec"].get("input", "")
             logger.debug(f"ARK-EVALUATOR: Extracted input: {input_text[:100]}...")
             
-            # Extract actual agent name from query targets for agent context resolution
+            # Extract actual agent name from query target for agent context resolution
             actual_agent_name = None
-            if query_resource.get("spec", {}).get("targets"):
-                targets = query_resource["spec"]["targets"]
-                agent_targets = [t for t in targets if t.get("type") == "agent"]
-                if agent_targets:
-                    actual_agent_name = agent_targets[0].get("name")
-                    logger.info(f"ARK-EVALUATOR: Found agent target: {actual_agent_name}")
-            
+            target = query_resource.get("spec", {}).get("target")
+            if target and target.get("type") == "agent":
+                actual_agent_name = target.get("name")
+                logger.info(f"ARK-EVALUATOR: Found agent target: {actual_agent_name}")
+
             output_text = ""
-            if query_resource.get("status", {}).get("responses"):
-                responses = query_resource["status"]["responses"]
-                if response_target:
-                    # Parse response_target format (could be "name" or "type:name")
-                    if ":" in response_target:
-                        target_type, target_name = response_target.split(":", 1)
-                        # Find response from specific target matching both type and name
-                        target_responses = [r for r in responses 
-                                          if r.get("target", {}).get("type") == target_type 
-                                          and r.get("target", {}).get("name") == target_name]
-                    else:
-                        # Legacy format: just the name
-                        target_responses = [r for r in responses if r.get("target", {}).get("name") == response_target]
-                    if target_responses:
-                        output_text = target_responses[0].get("content", "")
-                        logger.debug(f"ARK-EVALUATOR: Found response from target {response_target}")
-                    else:
-                        logger.warning(f"ARK-EVALUATOR: No response found from target {response_target}")
-                        available_targets = [r.get("target", {}).get("name") for r in responses]
-                        logger.debug(f"ARK-EVALUATOR: Available response targets: {available_targets}")
-                else:
-                    # Use first response if no specific target
-                    output_text = responses[0].get("content", "")
-                    logger.debug(f"ARK-EVALUATOR: Using first response (no specific target)")
+            response = query_resource.get("status", {}).get("response")
+            if response:
+                output_text = response.get("content", "")
+                logger.debug(f"ARK-EVALUATOR: Extracted response content")
             
             logger.debug(f"ARK-EVALUATOR: Extracted output: {output_text[:100]}...")
             

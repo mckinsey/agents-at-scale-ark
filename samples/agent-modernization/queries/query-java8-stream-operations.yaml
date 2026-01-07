@@ -7,9 +7,9 @@ metadata:
     evaluation_required: "true"
     agent-type: "java-modernizer"
 spec:
-  targets:
-    - type: agent
-      name: java8-to-js-modernizer
+  target:
+    type: agent
+    name: java8-to-js-modernizer
   input: |
     Convert this Java 8 code to modern JavaScript:
     

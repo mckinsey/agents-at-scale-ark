@@ -4,7 +4,7 @@ metadata:
   name: test-research-workflow
 spec:
   input: "Research the current state of Kubernetes adoption in enterprise environments, focusing on key benefits and challenges organizations face during implementation."
-  targets:
-    - type: team
-      name: research-analysis-team
+  target:
+    type: team
+    name: research-analysis-team
   timeout: "5m"

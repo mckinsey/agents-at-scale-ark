@@ -202,9 +202,9 @@ spec:
   # Optional - omit to use controller identity.
   serviceAccount: ark-tenant  
   input: "Hello from tenant-1"
-  targets:
-    - type: agent
-      name: my-agent
+  target:
+    type: agent
+    name: my-agent
 ```
 
 When no service account is specified, the query runs with the controller's identity. This is suitable for development and single-tenant deployments.

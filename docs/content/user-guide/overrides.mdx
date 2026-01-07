@@ -196,9 +196,9 @@ metadata:
   name: authenticated-query
 spec:
   input: "Analyze this data"
-  targets:
-    - type: agent
-      name: data-analyst
+  target:
+    type: agent
+    name: data-analyst
   overrides:
     - headers:
         - name: Authorization
@@ -251,9 +251,9 @@ metadata:
   name: conditional-query
 spec:
   input: "What's the weather?"
-  targets:
-    - type: agent
-      name: weather-agent
+  target:
+    type: agent
+    name: weather-agent
   overrides:
     - headers:
         - name: X-Priority

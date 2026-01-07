@@ -4,6 +4,6 @@ metadata:
   name: tool-target-query
 spec:
   input: '{"city": "Chicago"}'
-  targets:
-  - type: tool
+  target:
+    type: tool
     name: test-tool

@@ -21,7 +21,7 @@ const formId = 'model-update-form';
 
 const disabledFields: DisabledFields = {
   name: true,
-  type: true,
+  provider: true,
 };
 
 type UpdateModelFormProps = {
@@ -59,7 +59,7 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
         form,
         onSubmit,
         isSubmitPending: isPending,
-        type: defaultValues.type,
+        provider: defaultValues.provider,
         disabledFields,
         formId,
       }}>

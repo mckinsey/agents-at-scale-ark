@@ -80,7 +80,8 @@ spec:
             name: default
             namespace: $NAMESPACE
           spec:
-            type: openai
+            type: completions
+            provider: openai
             model:
               value: gpt-4.1
             pollInterval: 3s
@@ -156,9 +157,9 @@ spec:
           metadata:
             name: default-model-query
           status:
-            (length(responses)): 1
-            (contains(responses[*].target.name, 'agent-no-model')): true
-            (contains(responses[*].content, 'Please confirm you are working')): true
+            (response != null): true
+            (response.target.name): 'agent-no-model'
+            (response.content): 'Please confirm you are working'
     catch:
     - events: {}
     - describe:

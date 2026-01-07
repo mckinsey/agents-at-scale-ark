@@ -70,9 +70,17 @@ type BedrockModelConfig struct {
 type ModelSpec struct {
 	// +kubebuilder:validation:Required
 	Model ValueSource `json:"model"`
+	// Type specifies the API capability of the model (e.g., completions, embeddings).
+	// Deprecated: The values "openai", "azure", "bedrock" are accepted for backward
+	// compatibility but will be removed in release 1.0. Use spec.provider instead.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Enum=completions;openai;azure;bedrock
+	// +kubebuilder:default=completions
+	Type string `json:"type,omitempty"`
+	// Provider specifies the AI provider client to use (openai, azure, bedrock).
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=openai;azure;bedrock
-	Type string `json:"type,omitempty"`
+	Provider string `json:"provider"`
 	// +kubebuilder:validation:Required
 	Config ModelConfig `json:"config"`
 	// +kubebuilder:validation:Optional
@@ -91,6 +99,7 @@ type ModelStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.type`
+// +kubebuilder:printcolumn:name="Provider",type=string,JSONPath=`.spec.provider`
 // +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.model.value`
 // +kubebuilder:printcolumn:name="Available",type=string,JSONPath=`.status.conditions[?(@.type=="ModelAvailable")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`

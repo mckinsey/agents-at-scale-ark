@@ -63,7 +63,7 @@ spec:
           metadata:
             name: event-recorder-query
           status:
-            (length(responses)): 1
-            (contains(responses[*].target.name, 'event-test-agent')): true
+            (response != null): true
+            (response.target.name): 'event-test-agent'
     finally:
       - events: {}

@@ -142,20 +142,16 @@ class TestQueryEvaluationProvider:
         mock_k8s_client.ApiClient.return_value = mock_api_client
         mock_k8s_client.CustomObjectsApi.return_value = mock_custom_api
         
-        # Mock query resource with multiple responses
+        # Mock query resource with singular response
         mock_query_resource = {
-            "spec": {"input": "What is the weather?"},
+            "spec": {
+                "input": "What is the weather?",
+                "target": {"name": "weather-agent", "type": "agent"}
+            },
             "status": {
-                "responses": [
-                    {
-                        "target": {"name": "weather-agent", "type": "agent"},
-                        "content": "The weather is sunny."
-                    },
-                    {
-                        "target": {"name": "forecast-model", "type": "model"},
-                        "content": "Today will be partly cloudy."
-                    }
-                ]
+                "response": {
+                    "content": "The weather is sunny."
+                }
             }
         }
         mock_custom_api.get_namespaced_custom_object.return_value = mock_query_resource
@@ -202,37 +198,33 @@ class TestQueryEvaluationProvider:
         mock_k8s_client.ApiClient.return_value = mock_api_client
         mock_k8s_client.CustomObjectsApi.return_value = mock_custom_api
         
-        # Mock query resource with multiple responses
+        # Mock query resource with singular response
         mock_query_resource = {
-            "spec": {"input": "What is the weather?"},
+            "spec": {
+                "input": "What is the weather?",
+                "target": {"name": "weather-agent", "type": "agent"}
+            },
             "status": {
-                "responses": [
-                    {
-                        "target": {"name": "weather-agent", "type": "agent"},
-                        "content": "The weather is sunny."
-                    },
-                    {
-                        "target": {"name": "backup-agent", "type": "agent"},
-                        "content": "Weather information unavailable."
-                    }
-                ]
+                "response": {
+                    "content": "The weather is sunny."
+                }
             }
         }
         mock_custom_api.get_namespaced_custom_object.return_value = mock_query_resource
-        
+
         # Setup mock evaluator
         mock_evaluator_instance = AsyncMock()
         mock_evaluator_class.return_value = mock_evaluator_instance
         expected_response = EvaluationResponse(score="0.75", passed=True, metadata={"message": "Legacy format evaluation completed"})
         mock_evaluator_instance.evaluate.return_value = expected_response
-        
+
         # Setup request with legacy target format
         request = Mock(spec=UnifiedEvaluationRequest)
         request.config = Mock()
         request.config.queryRef = Mock()
         request.config.queryRef.name = "test-query"
         request.config.queryRef.namespace = "default"
-        request.config.queryRef.responseTarget = "weather-agent"  # Legacy format - just name
+        request.config.queryRef.responseTarget = "weather-agent"  # Legacy format - name only
         request.evaluatorName = "test-evaluator"
         request.parameters = {"model.name": "gpt-4"}
         

@@ -4,6 +4,6 @@ metadata:
   name: model-target-query
 spec:
   input: "What is the capital of France? Respond with just the city name."
-  targets:
-  - type: model
+  target:
+    type: model
     name: test-model

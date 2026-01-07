@@ -345,7 +345,7 @@ kubectl apply -f samples/rag-external-vectordb/queries/rag-query.yaml
 kubectl wait --for=condition=complete query/rag-query --timeout=60s
 
 # View results
-kubectl get query rag-query -o jsonpath='{.status.responses[0].content}'
+kubectl get query rag-query -o jsonpath='{.status.response.content}'
 ```
 
 ### 4. Tool Call Verification

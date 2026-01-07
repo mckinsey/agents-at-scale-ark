@@ -5,6 +5,6 @@ metadata:
 spec:
   type: user
   input: "User: Calculate 1+1.\n\nAgent: To calculate 1 + 1, the sum is equal to 2.\n\nUser: Calculate 2+2.\n\nAgent: To calculate 2 + 2, the sum is equal to 4.\n\nUser: What is the sum of all previous sums?"
-  targets:
-    - type: agent
-      name: test-agent
+  target:
+    type: agent
+    name: test-agent
