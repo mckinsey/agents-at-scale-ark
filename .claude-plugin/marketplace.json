@@ -1,0 +1,32 @@
+{
+  "name": "agents-at-scale-ark",
+  "owner": {
+    "name": "mckinsey"
+  },
+  "plugins": [
+    {
+      "name": "ark",
+      "source": "./.claude",
+      "description": "Skills and agents for working with Ark - testing, setup, analysis, and research",
+      "version": "0.3.0",
+      "agents": [
+        "./agents/ark-architect.md",
+        "./agents/ark-protocol-orchestrator.md",
+        "./agents/ark-prototyper.md",
+        "./agents/ark-security-patcher.md",
+        "./agents/researcher.md"
+      ],
+      "skills": [
+        "./skills/analysis/SKILL.md",
+        "./skills/architecture/SKILL.md",
+        "./skills/chainsaw/SKILL.md",
+        "./skills/dashboard/SKILL.md",
+        "./skills/issues/SKILL.md",
+        "./skills/pentest-issue-resolver/SKILL.md",
+        "./skills/research/SKILL.md",
+        "./skills/setup/SKILL.md",
+        "./skills/vulnerability-fixer/SKILL.md"
+      ]
+    }
+  ]
+}
