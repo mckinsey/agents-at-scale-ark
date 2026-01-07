@@ -64,10 +64,38 @@ runs:
       shell: bash
       run: ark status
 
-    - name: Install Ark using CLI
+    - name: Install Ark from local charts
       shell: bash
       run: |
-        ark install --yes
+        # Install cert-manager (required dependency)
+        helm repo add jetstack https://charts.jetstack.io --force-update
+        helm upgrade --install cert-manager jetstack/cert-manager \
+          --namespace cert-manager \
+          --create-namespace \
+          --set crds.enabled=true \
+          --wait --timeout=5m
+
+        # Install ark-controller from local chart (includes CRDs)
+        helm upgrade --install ark-controller ark/dist/chart \
+          --namespace ark-system \
+          --create-namespace \
+          --wait --timeout=5m
+
+        # Install ark-tenant from local chart
+        helm upgrade --install ark-tenant charts/ark-tenant \
+          --namespace default \
+          --wait --timeout=5m
+
+        # Install ark-api from local chart
+        helm upgrade --install ark-api services/ark-api/chart \
+          --namespace default \
+          --wait --timeout=5m
+
+        # Install ark-dashboard from local chart
+        helm upgrade --install ark-dashboard services/ark-dashboard/chart \
+          --namespace default \
+          --wait --timeout=5m
+
         ark --version
 
     - name: Wait for Ark components to be ready
@@ -104,6 +132,9 @@ runs:
     - name: Uninstall Ark
       shell: bash
       run: |
-        ark uninstall --yes
+        helm uninstall ark-dashboard --namespace default --ignore-not-found || true
+        helm uninstall ark-api --namespace default --ignore-not-found || true
+        helm uninstall ark-tenant --namespace default --ignore-not-found || true
+        helm uninstall ark-controller --namespace ark-system --ignore-not-found || true
         ark status
-        sleep 30 && ark status
+        sleep 10 && ark status
