@@ -85,18 +85,19 @@ runs:
     - name: Install Ark using CLI
       shell: bash
       run: |
-        ark install --yes --wait-for-ready=5m
+        ark install --yes
         ark --version
-        ark status
 
-    - name: Wait for webhook to be ready
+    - name: Wait for Ark components to be ready
       shell: bash
       run: |
-        kubectl wait --for=condition=Ready certificate/serving-cert \
-          -n ark-system --timeout=120s
-        # Wait for webhook endpoint to be registered
-        kubectl rollout status deployment/ark-controller -n ark-system --timeout=120s
-        sleep 5
+        ark status \
+          ark-controller \
+          ark-api \
+          ark-dashboard \
+          --wait-for-ready=15m
+
+        ark status
 
     - name: Create default model
       shell: bash
