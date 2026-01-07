@@ -64,6 +64,29 @@ runs:
       shell: bash
       run: ark status
 
+    - name: Configure Ark CLI for local charts
+      shell: bash
+      run: |
+        # By default, 'ark install' pulls charts from the published OCI registry
+        # (ghcr.io/mckinsey/agents-at-scale-ark/charts). For CI testing, we need
+        # to use the local charts from this PR to test unreleased CRD changes.
+        cat > .arkrc.yaml << 'EOF'
+        services:
+          ark-controller:
+            chartPath: ./ark/dist/chart
+          ark-tenant:
+            chartPath: ./charts/ark-tenant
+          ark-api:
+            chartPath: ./services/ark-api/chart
+          ark-dashboard:
+            chartPath: ./services/ark-dashboard/chart
+          ark-mcp:
+            chartPath: ./services/ark-mcp/chart
+          ark-broker:
+            chartPath: ./services/ark-broker/chart
+        EOF
+        cat .arkrc.yaml
+
     - name: Install Ark using CLI
       shell: bash
       run: |
