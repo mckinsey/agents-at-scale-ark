@@ -1,3 +1,8 @@
+export interface PrerequisiteUninstall {
+  releaseName: string;
+  namespace?: string;
+}
+
 export interface ArkService {
   name: string;
   helmReleaseName: string;
@@ -7,6 +12,7 @@ export interface ArkService {
   namespace?: string;
   chartPath?: string;
   installArgs?: string[];
+  prerequisiteUninstalls?: PrerequisiteUninstall[];
   k8sServiceName?: string;
   k8sServicePort?: number;
   k8sPortForwardLocalPort?: number;
