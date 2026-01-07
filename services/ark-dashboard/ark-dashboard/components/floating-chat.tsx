@@ -533,7 +533,7 @@ export default function FloatingChat({
                   />
                   <label
                     htmlFor="debug-mode"
-                    className="text-muted-foreground text-sm cursor-pointer">
+                    className="text-muted-foreground cursor-pointer text-sm">
                     Debug mode
                   </label>
                 </div>
