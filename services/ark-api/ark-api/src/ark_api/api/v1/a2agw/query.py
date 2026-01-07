@@ -77,15 +77,14 @@ async def wait_for_query(namespace: str, query_name: str, timeout: int = 60) -> 
 
                     if phase == "done":
                         # Extract response content
-                        if query_status.status.responses:
-                            response = query_status.status.responses[0]
-                            return response.content or "No response content"
+                        if query_status.status.response:
+                            return query_status.status.response.content or "No response content"
                         return "Query completed but no response available"
 
                     elif phase == "error":
                         error_msg = "Query failed"
-                        if query_status.status.responses:
-                            error_msg = query_status.status.responses[0].content or error_msg
+                        if query_status.status.response:
+                            error_msg = query_status.status.response.content or error_msg
                         raise Exception(f"Query error: {error_msg}")
 
                 # Wait before next poll
