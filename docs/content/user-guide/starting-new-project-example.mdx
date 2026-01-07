@@ -128,7 +128,7 @@ Press `Ctrl+C` to stop watching.
 
 ```bash
 # Get the agent's response
-kubectl get query test-password-reset -o jsonpath='{.status.responses[0].content}' | jq -r
+kubectl get query test-password-reset -o jsonpath='{.status.response.content}' | jq -r
 ```
 
 **Example output:**
@@ -214,7 +214,7 @@ spec:
 EOF
 
 kubectl apply -f queries/test-billing.yaml
-kubectl get query test-billing -o jsonpath='{.status.responses[0].content}' | jq -r
+kubectl get query test-billing -o jsonpath='{.status.response.content}' | jq -r
 ```
 
 ## Step 10: Add a Triage Agent (Optional)
@@ -281,8 +281,8 @@ EOF
 
 kubectl apply -f queries/team-test.yaml
 
-# View all responses (triage + support)
-kubectl get query team-test -o jsonpath='{.status.responses}' | jq
+# View the response
+kubectl get query team-test -o jsonpath='{.status.response}' | jq
 ```
 
 ## Summary: What You Learned

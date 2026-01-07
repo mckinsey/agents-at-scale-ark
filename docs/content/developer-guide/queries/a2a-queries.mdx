@@ -102,7 +102,7 @@ Track the context ID generated when the query completes:
 kubectl wait --for=condition=Completed query/count-messages --timeout=30s
 
 # View the response
-kubectl get query count-messages -o jsonpath='{.status.responses[0].content}'
+kubectl get query count-messages -o jsonpath='{.status.response.content}'
 # 1 message(s) recieved
 
 # Extract the context ID from status
@@ -132,7 +132,7 @@ EOF
 done
 
 # Check the final count
-kubectl get query count-messages-10 -o jsonpath='{.status.responses[0].content}'
+kubectl get query count-messages-10 -o jsonpath='{.status.response.content}'
 # 11 message(s) recieved
 ```
 

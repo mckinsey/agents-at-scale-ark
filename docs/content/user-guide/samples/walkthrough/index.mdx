@@ -321,7 +321,7 @@ The complete workflow typically takes 2-3 minutes depending on research complexi
 kubectl get queries research-query -o yaml
 
 # Check response content
-kubectl get queries research-query -o jsonpath='{.status.responses[0].content}' | jq '.'
+kubectl get queries research-query -o jsonpath='{.status.response.content}' | jq '.'
 ```
 
 ### Access Generated Documents
