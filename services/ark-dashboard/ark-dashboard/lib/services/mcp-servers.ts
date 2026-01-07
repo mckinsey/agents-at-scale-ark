@@ -9,9 +9,7 @@ export type MCPServerListResponse =
 export type MCPServerCreateRequest =
   components['schemas']['MCPServerCreateRequest'];
 export type MCPServerSpec = components['schemas']['MCPServerSpec'];
-export type MCPHeader =
-  components['schemas']['ark_api__models__mcp_servers__Header-Output'];
-//export type MCPServerListResponse = components['schemas']['MCPServerListResponse']
+export type MCPHeader = components['schemas']['MCPServerHeader-Output'];
 
 export type MCPServer = MCPServerResponse & { id: string };
 export type MCPServerDetail = MCPServerDetailResponse & { id: string };

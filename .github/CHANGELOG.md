@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.49](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.48...v0.1.49) (2025-12-23)
+
+
+### Features
+
+* Add header support to memory CRD ([#633](https://github.com/mckinsey/agents-at-scale-ark/issues/633)) ([388ec2b](https://github.com/mckinsey/agents-at-scale-ark/commit/388ec2bbe845fa7bd71256e2edafa461247bb6f5))
+* add operation events to broker page ([#642](https://github.com/mckinsey/agents-at-scale-ark/issues/642)) ([74c6680](https://github.com/mckinsey/agents-at-scale-ark/commit/74c6680d07fa21a1516ff528fa8272bd02c21590))
+* ark broker init ([#634](https://github.com/mckinsey/agents-at-scale-ark/issues/634)) ([cbd5b08](https://github.com/mckinsey/agents-at-scale-ark/commit/cbd5b0832260abca0bc064038da0e62034562879))
+* ark documentation skill for diataxis ([#637](https://github.com/mckinsey/agents-at-scale-ark/issues/637)) ([62e4db6](https://github.com/mckinsey/agents-at-scale-ark/commit/62e4db60b1103f12230f4d203426793bfe6ffa95))
+* **ark-cli:** add port-forward reuse configuration ([#519](https://github.com/mckinsey/agents-at-scale-ark/issues/519)) ([4239d53](https://github.com/mckinsey/agents-at-scale-ark/commit/4239d53a5e9b557d5858ebcb5b6d373721fdd078))
+
 ## [0.1.48](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.47...v0.1.48) (2025-12-17)
 
 

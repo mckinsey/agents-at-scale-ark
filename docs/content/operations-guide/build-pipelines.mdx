@@ -116,7 +116,7 @@ GitHub variables and secrets for ARK build and deployment workflows. All configu
 | **Documentation Site** | | |
 | `DOCS_SITE_BASE_PATH` | Variable (Optional) | Base path for documentation site when serving from non-root URL (e.g., GitHub Pages) | |
 | **NPM Registry (CLI Deployment)** | | |
-| `NPM_TOKEN` | Secret (Optional) | NPM authentication token with publish permissions for CLI deployment | |
+| `NPM_TOKEN` | Secret (Optional) | NPM authentication token with publish permissions for CLI deployment. Not required when using [Trusted Publishing](#trusted-publishing-for-npm). | |
 | **PyPI Registry (Python SDK Deployment)** | | |
 | `TEST_PYPI_API_TOKEN` | Secret (Required for PyPI deployment) | TestPyPI authentication token for testing Python package deployment | |
 | `PYPI_API_TOKEN` | Secret (Required for PyPI deployment) | PyPI authentication token with publish permissions for Python SDK deployment | |
@@ -127,6 +127,48 @@ GitHub variables and secrets for ARK build and deployment workflows. All configu
 | `ARTIFACTORY_USER` | Secret | Artifactory username for dependency resolution |
 | `ARTIFACTORY_PASS` | Secret | Artifactory password for dependency resolution |
 | `CODECOV_TOKEN` | Secret (Required for CI) | Codecov authentication token for test coverage reporting. CI builds will fail if not set. |
+
+## Trusted Publishing for npm
+
+Trusted publishing uses OpenID Connect (OIDC) to authenticate npm publishes directly from GitHub Actions, eliminating the need for long-lived `NPM_TOKEN` secrets. This is the recommended approach for npm package deployment.
+
+### Setup
+
+1. Navigate to your package settings on [npmjs.com](https://www.npmjs.com)
+2. Find the "Trusted Publisher" section
+3. Select "GitHub Actions" as your provider
+4. Configure the following fields:
+   - **Organization or user**: Your GitHub username or organization name
+   - **Repository**: Your repository name (e.g., `agents-at-scale-ark`)
+   - **Workflow filename**: `deploy.yml`
+   - **Environment name**: Leave empty unless using GitHub environments
+
+### Workflow Configuration
+
+The deploy workflow includes the required OIDC permissions and npm version:
+
+```yaml
+permissions:
+  id-token: write  # Required for OIDC trusted publishing
+  contents: read
+
+steps:
+  - name: Install npm with trusted publishing support
+    run: npm install -g npm@11  # Requires npm 11.5.1+
+
+  - name: Publish to npm
+    run: npm publish --provenance  # Provenance adds supply chain attestations
+```
+
+Once configured on npmjs.com, npm will automatically use OIDC authentication and fall back to `NPM_TOKEN` if trusted publishing is not configured.
+
+### Security Recommendation
+
+After enabling trusted publishers, restrict traditional token-based access:
+
+1. Navigate to your package's Settings → Publishing access on npmjs.com
+2. Select "Require two-factor authentication and disallow tokens"
+3. Revoke any existing `NPM_TOKEN` secrets that are no longer needed
 
 ## Troubleshooting
 
