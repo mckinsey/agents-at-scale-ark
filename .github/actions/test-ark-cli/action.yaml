@@ -85,7 +85,7 @@ runs:
     - name: Install Ark using CLI
       shell: bash
       run: |
-        ark install --yes
+        ark install --yes --verbose
         ark --version
 
     - name: Wait for Ark components to be ready
@@ -96,9 +96,6 @@ runs:
           ark-api \
           ark-dashboard \
           --wait-for-ready=15m
-
-        # Wait for cert-manager to inject CA into webhook configuration
-        sleep 10
 
         ark status
 
