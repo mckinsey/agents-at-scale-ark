@@ -46,6 +46,7 @@ def query_to_response(query: dict) -> QueryResponse:
         input=input_value,
         memory=spec.get("memory"),
         sessionId=spec.get("sessionId"),
+        conversationId=spec.get("conversationId"),
         status=query.get("status"),
         creationTimestamp=creation_timestamp
     )
@@ -70,6 +71,7 @@ def query_to_detail_response(query: dict) -> QueryDetailResponse:
         selector=spec.get("selector"),
         serviceAccount=spec.get("serviceAccount"),
         sessionId=spec.get("sessionId"),
+        conversationId=spec.get("conversationId"),
         target=spec.get("target"),
         timeout=spec.get("timeout"),
         ttl=spec.get("ttl"),
@@ -126,6 +128,8 @@ async def create_query(
             spec["serviceAccount"] = query.serviceAccount
         if query.sessionId:
             spec["sessionId"] = query.sessionId
+        if query.conversationId:
+            spec["conversationId"] = query.conversationId
         if query.target:
             spec["target"] = query.target.model_dump()
         if query.timeout:
@@ -192,6 +196,8 @@ async def update_query(
             spec["serviceAccount"] = query.serviceAccount
         if query.sessionId is not None:
             spec["sessionId"] = query.sessionId
+        if query.conversationId is not None:
+            spec["conversationId"] = query.conversationId
         if query.target is not None:
             spec["target"] = query.target.model_dump()
         if query.timeout is not None:
