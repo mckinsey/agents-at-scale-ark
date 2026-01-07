@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import {
   Tooltip,
   TooltipContent,
@@ -56,6 +57,7 @@ export default function FloatingChat({
   const [error, setError] = useState<string | null>(null);
   const [windowState, setWindowState] = useState<WindowState>('default');
   const [viewMode, setViewMode] = useState<'text' | 'markdown'>('markdown');
+  const [debugMode, setDebugMode] = useState(false);
   const [sessionId] = useState(() => `session-${Date.now()}`);
   const inputRef = useRef<HTMLInputElement>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
@@ -449,7 +451,8 @@ export default function FloatingChat({
 
                   return (
                     <div key={index} className="contents">
-                      {toolCalls &&
+                      {debugMode &&
+                        toolCalls &&
                         toolCalls.map((toolCall, toolIndex) => (
                           <ChatMessage
                             key={`${index}-tool-${toolIndex}`}
@@ -496,27 +499,45 @@ export default function FloatingChat({
               </div>
             </div>
 
-            <div className="flex flex-shrink-0 gap-2 border-t p-4">
-              <div className="relative flex-1">
-                <Input
-                  ref={inputRef}
-                  placeholder={
-                    isProcessing ? 'Processing...' : 'Type your message...'
-                  }
-                  value={currentMessage}
-                  onChange={e => setCurrentMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  disabled={isProcessing}
-                />
+            <div className="flex-shrink-0 border-t">
+              <div className="flex gap-2 p-4">
+                <div className="relative flex-1">
+                  <Input
+                    ref={inputRef}
+                    placeholder={
+                      isProcessing ? 'Processing...' : 'Type your message...'
+                    }
+                    value={currentMessage}
+                    onChange={e => setCurrentMessage(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    disabled={isProcessing}
+                  />
+                </div>
+                <Button
+                  onClick={handleSendMessage}
+                  disabled={!currentMessage.trim() || isProcessing}
+                  size="sm"
+                  variant="default"
+                  aria-label="Send message">
+                  <Send className="h-4 w-4" />
+                </Button>
               </div>
-              <Button
-                onClick={handleSendMessage}
-                disabled={!currentMessage.trim() || isProcessing}
-                size="sm"
-                variant="default"
-                aria-label="Send message">
-                <Send className="h-4 w-4" />
-              </Button>
+
+              {/* Toolbar */}
+              <div className="border-t px-4 py-2">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="debug-mode"
+                    checked={debugMode}
+                    onCheckedChange={setDebugMode}
+                  />
+                  <label
+                    htmlFor="debug-mode"
+                    className="text-muted-foreground text-sm cursor-pointer">
+                    Debug mode
+                  </label>
+                </div>
+              </div>
             </div>
           </>
         )}
