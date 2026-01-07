@@ -64,38 +64,10 @@ runs:
       shell: bash
       run: ark status
 
-    - name: Install Ark from local charts
+    - name: Install Ark using CLI
       shell: bash
       run: |
-        # Install cert-manager (required dependency)
-        helm repo add jetstack https://charts.jetstack.io --force-update
-        helm upgrade --install cert-manager jetstack/cert-manager \
-          --namespace cert-manager \
-          --create-namespace \
-          --set crds.enabled=true \
-          --wait --timeout=5m
-
-        # Install ark-controller from local chart (includes CRDs)
-        helm upgrade --install ark-controller ark/dist/chart \
-          --namespace ark-system \
-          --create-namespace \
-          --wait --timeout=5m
-
-        # Install ark-tenant from local chart
-        helm upgrade --install ark-tenant charts/ark-tenant \
-          --namespace default \
-          --wait --timeout=5m
-
-        # Install ark-api from local chart
-        helm upgrade --install ark-api services/ark-api/chart \
-          --namespace default \
-          --wait --timeout=5m
-
-        # Install ark-dashboard from local chart
-        helm upgrade --install ark-dashboard services/ark-dashboard/chart \
-          --namespace default \
-          --wait --timeout=5m
-
+        ark install --yes
         ark --version
 
     - name: Wait for Ark components to be ready
