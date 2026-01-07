@@ -57,7 +57,7 @@ export default function FloatingChat({
   const [error, setError] = useState<string | null>(null);
   const [windowState, setWindowState] = useState<WindowState>('default');
   const [viewMode, setViewMode] = useState<'text' | 'markdown'>('markdown');
-  const [debugMode, setDebugMode] = useState(false);
+  const [debugMode, setDebugMode] = useState(true);
   const [sessionId] = useState(() => `session-${Date.now()}`);
   const inputRef = useRef<HTMLInputElement>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
@@ -534,7 +534,7 @@ export default function FloatingChat({
                   <label
                     htmlFor="debug-mode"
                     className="text-muted-foreground cursor-pointer text-sm">
-                    Debug mode
+                    Show tool calls
                   </label>
                 </div>
               </div>
