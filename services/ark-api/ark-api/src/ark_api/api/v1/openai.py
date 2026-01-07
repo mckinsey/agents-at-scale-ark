@@ -213,8 +213,7 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
         metadata["annotations"][STREAMING_ENABLED_ANNOTATION] = "true"
 
     try:
-        # Convert messages to dictionaries to avoid Pydantic serialization issues
-        # The Kubernetes client expects plain dicts, not Pydantic models
+        # Pydantic returns the tool calls as a ValidatorIterator, so we need to iterate it
         for message in messages:
             if message.get("tool_calls"):
                 iterated_messages = [tool_call for tool_call in message["tool_calls"]]
@@ -231,8 +230,6 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             query_spec_dict["conversationId"] = conversation_id
         if timeout:
             query_spec_dict["timeout"] = timeout
-        logger.info(f"query_spec_dict: {query_spec_dict}")
-        logger.info(f"metadata: {metadata}")
 
         # Create the QueryV1alpha1 object with type="messages"
         query_resource = QueryV1alpha1(
