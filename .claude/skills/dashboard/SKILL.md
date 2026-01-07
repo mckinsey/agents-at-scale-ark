@@ -1,9 +1,9 @@
 ---
-name: Ark Testing
-description: Test the Ark Dashboard with Playwright and create PRs with screenshots. Use this skill when testing dashboard UI, taking screenshots for PRs, or validating dashboard changes.
+name: Ark Dashboard and UI Testing
+description: Test the Ark Dashboard and UI with Playwright and create PRs with screenshots. Use this skill when testing dashboard UI, taking screenshots for PRs, or validating dashboard changes.
 ---
 
-# Ark Testing
+# Ark Dashboard and UI
 
 Test Ark Dashboard UI with Playwright and attach screenshots to PRs.
 
