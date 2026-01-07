@@ -97,6 +97,9 @@ runs:
           ark-dashboard \
           --wait-for-ready=15m
 
+        # Wait for cert-manager to inject CA into webhook configuration
+        sleep 10
+
         ark status
 
     - name: Create default model
