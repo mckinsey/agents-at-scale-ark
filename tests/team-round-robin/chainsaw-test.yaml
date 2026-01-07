@@ -86,10 +86,10 @@ spec:
           metadata:
             name: round-robin-team-query
           status:
-            (length(responses)): 1
-            (contains(responses[*].target.name, 'round-robin-brainstorm-team')): true
-            (length(join('', responses[*].content)) > `300`): true
-            (contains(responses[0].content, 'customer satisfaction') || contains(responses[0].content, 'software')): true
+            (response != null): true
+            (response.target.name): 'round-robin-brainstorm-team'
+            (length(response.content) > `300`): true
+            (contains(response.content, 'customer satisfaction') || contains(response.content, 'software')): true
             (tokenUsage.totalTokens > `50`): true
     catch:
     - events: {}

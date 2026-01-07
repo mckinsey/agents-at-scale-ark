@@ -115,13 +115,13 @@ type QueryDetailResponse = components['schemas']['QueryDetailResponse'];
 // Proper typing for query status based on CRD structure
 interface QueryStatus {
   phase?: string;
-  responses?: Array<{
+  response?: {
     target?: {
       type: string;
       name: string;
     };
     content?: string;
-  }>;
+  };
   evaluations?: Array<{
     evaluatorName?: string;
     score?: string;
@@ -135,9 +135,11 @@ interface QueryStatus {
   };
 }
 
-interface TypedQueryDetailResponse extends Omit<QueryDetailResponse, 'status'> {
+interface TypedQueryDetailResponse
+  extends Omit<QueryDetailResponse, 'status' | 'targets'> {
   status?: QueryStatus | null;
   metadata?: Record<string, string>;
+  target?: { name: string; type: string };
 }
 
 // Reusable styles for table field headings
@@ -436,12 +438,12 @@ function QueryDetailContent() {
     if (!query) return;
 
     // Validate required fields
-    if (!query.targets || query.targets.length === 0) {
-      toast.error('Missing Targets', {
+    if (!query.target) {
+      toast.error('Missing Target', {
         description:
-          'Please select at least one target (agent, model, team, or tool) to execute the query.',
+          'Please select a target (agent, model, team, or tool) to execute the query.',
       });
-      // TODO: Focus targets field
+      // TODO: Focus target field
       return;
     }
 
@@ -466,7 +468,7 @@ function QueryDetailContent() {
           ? ('messages' as const)
           : ('user' as const),
         input: query.input || '',
-        targets: query.targets || [],
+        target: query.target,
         timeout: query.timeout,
         ttl: query.ttl,
         sessionId: query.sessionId,
@@ -514,7 +516,7 @@ function QueryDetailContent() {
         namespace: '',
         type: 'user',
         input: '',
-        targets: [],
+        target: undefined,
         status: null,
       } as TypedQueryDetailResponse);
       setLoading(false);
@@ -548,9 +550,7 @@ function QueryDetailContent() {
               t => t.type === 'tool' && t.name === targetTool,
             );
             if (foundTool) {
-              setQuery(prev =>
-                prev ? { ...prev, targets: [foundTool] } : null,
-              );
+              setQuery(prev => (prev ? { ...prev, target: foundTool } : null));
             }
           }
         } catch (error) {
@@ -605,12 +605,10 @@ function QueryDetailContent() {
     loadQuery();
   }, [queryId, isNew, targetTool]);
 
-  // Fetch tool schema when exactly one tool is selected
+  // Fetch tool schema when target is a tool
   useEffect(() => {
-    const selectedTools = query?.targets?.filter(t => t.type === 'tool') || [];
-
-    if (selectedTools.length === 1) {
-      const toolName = selectedTools[0].name;
+    if (query?.target?.type === 'tool') {
+      const toolName = query.target.name;
       toolsService
         .getDetail(toolName)
         .then(setToolSchema)
@@ -618,7 +616,7 @@ function QueryDetailContent() {
     } else {
       setToolSchema(null);
     }
-  }, [query?.targets]);
+  }, [query?.target]);
 
   if (loading) {
     return (
@@ -733,11 +731,13 @@ function QueryDetailContent() {
                   </tr>
                   <QueryTargetsField
                     mode={mode}
-                    value={query.targets || []}
+                    value={query.target ? [query.target] : []}
                     onChange={targets =>
-                      setQuery(prev => (prev ? { ...prev, targets } : null))
+                      setQuery(prev =>
+                        prev ? { ...prev, target: targets[0] } : null,
+                      )
                     }
-                    label="Targets"
+                    label="Target"
                     availableTargets={availableTargets}
                     loading={targetsLoading}
                   />
@@ -854,9 +854,9 @@ function QueryDetailContent() {
                     </td>
                   </tr>
                   <tr className="border-b border-gray-100 dark:border-gray-800">
-                    <td className={FIELD_HEADING_STYLES}>Responses</td>
+                    <td className={FIELD_HEADING_STYLES}>Response</td>
                     <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                      {query.status?.responses?.length || 0}
+                      {query.status?.response ? 'Available' : 'None'}
                     </td>
                   </tr>
                   <tr className="border-b border-gray-100 dark:border-gray-800">
@@ -888,7 +888,7 @@ function QueryDetailContent() {
                 {/* Header */}
                 {mode === 'new' &&
                 toolSchema &&
-                query.targets?.filter(t => t.type === 'tool').length === 1 ? (
+                query.target?.type === 'tool' ? (
                   <div className="grid grid-cols-2 gap-0 border-b bg-gray-100 dark:bg-gray-800">
                     <div className="border-r border-gray-200 px-3 py-2 dark:border-gray-700">
                       <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
@@ -920,17 +920,14 @@ function QueryDetailContent() {
                 {mode === 'new' ? (
                   <div
                     className={
-                      toolSchema &&
-                      query.targets?.filter(t => t.type === 'tool').length === 1
+                      toolSchema && query.target?.type === 'tool'
                         ? 'grid grid-cols-2 gap-0'
                         : 'p-3'
                     }>
                     {/* Input Section */}
                     <div
                       className={
-                        toolSchema &&
-                        query.targets?.filter(t => t.type === 'tool').length ===
-                          1
+                        toolSchema && query.target?.type === 'tool'
                           ? 'border-r border-gray-200 p-3 dark:border-gray-700'
                           : ''
                       }>
@@ -950,24 +947,21 @@ function QueryDetailContent() {
                       />
                     </div>
 
-                    {/* Tool Schema Example - only show for single tool selection */}
-                    {toolSchema &&
-                      query.targets?.filter(t => t.type === 'tool').length ===
-                        1 && (
-                        <div className="p-3">
-                          <Textarea
-                            value={
-                              toolSchema.spec?.inputSchema
-                                ? getSchemaExample(
-                                    toolSchema.spec.inputSchema,
-                                  ) || '{}'
-                                : '{}'
-                            }
-                            readOnly
-                            className="min-h-[200px] resize-none border-0 bg-transparent font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-                          />
-                        </div>
-                      )}
+                    {/* Tool Schema Example - only show for tool target */}
+                    {toolSchema && query.target?.type === 'tool' && (
+                      <div className="p-3">
+                        <Textarea
+                          value={
+                            toolSchema.spec?.inputSchema
+                              ? getSchemaExample(toolSchema.spec.inputSchema) ||
+                                '{}'
+                              : '{}'
+                          }
+                          readOnly
+                          className="min-h-[200px] resize-none border-0 bg-transparent font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                        />
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <pre className="bg-gray-50 p-3 font-mono text-sm whitespace-pre-wrap text-gray-700 dark:bg-gray-900/50 dark:text-gray-300">
@@ -981,8 +975,8 @@ function QueryDetailContent() {
               </div>
 
               {/* Conditional Response or Error Section */}
-              {query.status?.responses && query.status.responses.length > 0 ? (
-                /* Response Section - show when there are responses */
+              {query.status?.response ? (
+                /* Response Section - show when there is a response */
                 <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
                   <div className="flex items-center justify-between border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
                     <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
@@ -1010,15 +1004,11 @@ function QueryDetailContent() {
                     </div>
                   </div>
                   <div className="p-3">
-                    {query.status?.responses?.map((response, index) => (
-                      <div key={index} className="mb-4 last:mb-0">
-                        <ResponseContent
-                          content={response.content || 'No content'}
-                          viewMode={responseViewMode}
-                          rawJson={response}
-                        />
-                      </div>
-                    ))}
+                    <ResponseContent
+                      content={query.status.response.content || 'No content'}
+                      viewMode={responseViewMode}
+                      rawJson={query.status.response}
+                    />
                   </div>
                 </div>
               ) : !isNew &&

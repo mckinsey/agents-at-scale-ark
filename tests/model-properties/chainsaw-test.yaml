@@ -77,10 +77,10 @@ spec:
           metadata:
             name: model-properties-query
           status:
-            (length(responses)): 1
-            (contains(responses[*].target.name, 'properties-test-agent')): true
-            (length(join('', responses[*].content)) > `5`): true
-            (length(join('', responses[*].content)) < `200`): true
+            (response != null): true
+            (response.target.name): 'properties-test-agent'
+            (length(response.content) > `5`): true
+            (length(response.content) < `200`): true
     catch:
     - events: {}
     - describe:

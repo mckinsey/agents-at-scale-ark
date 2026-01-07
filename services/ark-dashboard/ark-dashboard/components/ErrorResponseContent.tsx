@@ -96,7 +96,7 @@ export function ErrorResponseContent({
         message: errorMessage,
         details: {
           phase: query.status?.phase,
-          responses: query.status?.responses?.length || 0,
+          response: query.status?.response ? 'Available' : 'None',
           timestamp: query.creationTimestamp,
           eventId: latestError.id,
           eventType: latestError.type,
@@ -124,7 +124,7 @@ export function ErrorResponseContent({
         message: 'Query failed - no specific error details available',
         details: {
           phase: query.status?.phase,
-          responses: query.status?.responses?.length || 0,
+          response: query.status?.response ? 'Available' : 'None',
           timestamp: query.creationTimestamp,
         },
       };
@@ -182,7 +182,7 @@ export function ErrorResponseContent({
               <strong>Phase:</strong> {errorDetails.details.phase}
             </p>
             <p>
-              <strong>Responses:</strong> {errorDetails.details.responses}
+              <strong>Response:</strong> {errorDetails.details.response}
             </p>
             <p>
               <strong>Timestamp:</strong> {errorDetails.details.timestamp}
@@ -243,7 +243,7 @@ export function ErrorResponseContent({
             <strong>Phase:</strong> {errorDetails.details.phase}
           </p>
           <p>
-            <strong>Responses:</strong> {errorDetails.details.responses}
+            <strong>Response:</strong> {errorDetails.details.response}
           </p>
           <p>
             <strong>Timestamp:</strong> {errorDetails.details.timestamp}

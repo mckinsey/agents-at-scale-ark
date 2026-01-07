@@ -92,30 +92,31 @@ func (v *QueryCustomValidator) validateQuery(ctx context.Context, query *arkv1al
 }
 
 func (v *QueryCustomValidator) validateQueryTargets(ctx context.Context, query *arkv1alpha1.Query) error {
-	if len(query.Spec.Targets) == 0 && query.Spec.Selector == nil {
-		return fmt.Errorf("at least one target or selector must be specified")
+	if query.Spec.Target == nil && query.Spec.Selector == nil {
+		return fmt.Errorf("target or selector must be specified")
 	}
 
-	for i, target := range query.Spec.Targets {
+	if query.Spec.Target != nil {
+		target := query.Spec.Target
 		switch target.Type {
 		case TargetTypeAgent:
 			if err := v.ValidateLoadAgent(ctx, target.Name, query.Namespace); err != nil {
-				return fmt.Errorf("target[%d] references %v", i, err)
+				return fmt.Errorf("target references %v", err)
 			}
 		case TargetTypeTeam:
 			if err := v.ValidateLoadTeam(ctx, target.Name, query.Namespace); err != nil {
-				return fmt.Errorf("target[%d] references %v", i, err)
+				return fmt.Errorf("target references %v", err)
 			}
 		case TargetTypeModel:
 			if err := v.ValidateLoadModel(ctx, target.Name, query.Namespace); err != nil {
-				return fmt.Errorf("target[%d] references %v", i, err)
+				return fmt.Errorf("target references %v", err)
 			}
 		case TargetTypeTool:
 			if err := v.ValidateLoadTool(ctx, target.Name, query.Namespace); err != nil {
-				return fmt.Errorf("target[%d] references %v", i, err)
+				return fmt.Errorf("target references %v", err)
 			}
 		default:
-			return fmt.Errorf("target[%d]: unsupported type '%s': supported types are: %s, %s, %s, %s", i, target.Type, TargetTypeAgent, TargetTypeTeam, TargetTypeModel, TargetTypeTool)
+			return fmt.Errorf("target: unsupported type '%s': supported types are: %s, %s, %s, %s", target.Type, TargetTypeAgent, TargetTypeTeam, TargetTypeModel, TargetTypeTool)
 		}
 	}
 

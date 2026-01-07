@@ -99,7 +99,7 @@ metadata:
 spec:
   target:
     agent:
-      name: support-agent
+    name: support-agent
   input:
     type: message
     message: "How do I reset my password?"
@@ -128,7 +128,7 @@ Press `Ctrl+C` to stop watching.
 
 ```bash
 # Get the agent's response
-kubectl get query test-password-reset -o jsonpath='{.status.responses[0].content}' | jq -r
+kubectl get query test-password-reset -o jsonpath='{.status.response.content}' | jq -r
 ```
 
 **Example output:**
@@ -207,14 +207,14 @@ metadata:
 spec:
   target:
     agent:
-      name: support-agent
+    name: support-agent
   input:
     type: message
     message: "How can I upgrade my subscription plan?"
 EOF
 
 kubectl apply -f queries/test-billing.yaml
-kubectl get query test-billing -o jsonpath='{.status.responses[0].content}' | jq -r
+kubectl get query test-billing -o jsonpath='{.status.response.content}' | jq -r
 ```
 
 ## Step 10: Add a Triage Agent (Optional)
@@ -273,7 +273,7 @@ metadata:
 spec:
   target:
     team:
-      name: support-team
+    name: support-team
   input:
     type: message
     message: "I want to upgrade my plan and my payment failed"
@@ -281,8 +281,8 @@ EOF
 
 kubectl apply -f queries/team-test.yaml
 
-# View all responses (triage + support)
-kubectl get query team-test -o jsonpath='{.status.responses}' | jq
+# View the response
+kubectl get query team-test -o jsonpath='{.status.response}' | jq
 ```
 
 ## Summary: What You Learned

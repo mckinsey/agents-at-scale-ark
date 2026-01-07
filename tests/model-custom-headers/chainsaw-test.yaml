@@ -11,7 +11,7 @@ spec:
     - script:
         content: |
           helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.23 \
+            --version 0.1.27 \
             --namespace $NAMESPACE \
             --values mock-llm-values.yaml
         env:
@@ -60,12 +60,12 @@ spec:
           metadata:
             name: custom-headers-query
           status:
-            (length(responses)): 1
-            (contains(responses[*].target.name, 'headers-test-agent')): true
+            (response != null): true
+            (response.target.name): 'headers-test-agent'
             # Headers are echoed back as JSON object (Express lowercases header names)
-            (contains(responses[0].content, '"x-consumer-application":"ark-chainsaw-test-value"')): true
-            (contains(responses[0].content, '"x-authorization-session":"test-secret-token-chainsaw-12345"')): true
-            (contains(responses[0].content, '"x-consumer-group":"chainsaw-test-consumer-group"')): true
+            (contains(response.content, '"x-consumer-application":"ark-chainsaw-test-value"')): true
+            (contains(response.content, '"x-authorization-session":"test-secret-token-chainsaw-12345"')): true
+            (contains(response.content, '"x-consumer-group":"chainsaw-test-consumer-group"')): true
     catch:
     - events: {}
     - describe:

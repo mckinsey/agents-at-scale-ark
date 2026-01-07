@@ -45,9 +45,9 @@ spec:
           metadata:
             name: tool-target-query
           status:
-            (length(responses)): 1
-            (contains(responses[*].target.name, 'test-tool')): true
-            (length(join('', responses[*].content)) > `10`): true
+            (response != null): true
+            (response.target.name): 'test-tool'
+            (length(response.content) > `10`): true
     catch:
     - events: {}
     - describe:

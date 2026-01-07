@@ -4,8 +4,8 @@ metadata:
   name: query-overrides-precedence-test
 spec:
   input: What is 3+3? Answer briefly.
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: query-overrides-test-agent
   overrides:
   - resourceType: model

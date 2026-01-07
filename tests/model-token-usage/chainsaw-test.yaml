@@ -57,10 +57,10 @@ spec:
           metadata:
             name: model-token-query
           status:
-            (length(responses)): 1
-            (responses[0].target.type): model
-            (responses[0].target.name): model-token-test
-            (length(responses[0].content) > `100`): true
+            (response != null): true
+            (response.target.type): model
+            (response.target.name): model-token-test
+            (length(response.content) > `100`): true
 
   - name: validate-model-token-usage
     try:

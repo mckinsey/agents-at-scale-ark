@@ -1,0 +1,48 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: model-deprecated-type
+  labels:
+    standard: "true"
+spec:
+  description: Verify that models using deprecated type field are migrated to use provider field
+  steps:
+    - name: setup
+      try:
+        - script:
+            content: |
+              helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --wait
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+
+    - name: apply-model-with-deprecated-format
+      try:
+        - apply:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Model
+              metadata:
+                name: deprecated-format-model
+              spec:
+                type: openai
+                model:
+                  value: gpt-4
+                config:
+                  openai:
+                    baseUrl:
+                      value: "https://api.openai.com"
+                    apiKey:
+                      value: "mock-key"
+
+    - name: verify-migration
+      try:
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Model
+              metadata:
+                name: deprecated-format-model
+              spec:
+                provider: openai
+                type: completions

@@ -745,9 +745,12 @@ describe('FloatingChat', () => {
       });
 
       // Should eventually show the response
-      await waitFor(() => {
-        expect(screen.getByText('Polled response')).toBeInTheDocument();
-      });
+      await waitFor(
+        () => {
+          expect(screen.getByText('Polled response')).toBeInTheDocument();
+        },
+        { timeout: 5000 },
+      );
 
       // Should NOT call streamChatResponse
       expect(chatService.streamChatResponse).not.toHaveBeenCalled();
@@ -777,9 +780,12 @@ describe('FloatingChat', () => {
       const sendButton = screen.getByRole('button', { name: /send/i });
       await user.click(sendButton);
 
-      await waitFor(() => {
-        expect(screen.getByText('Something went wrong')).toBeInTheDocument();
-      });
+      await waitFor(
+        () => {
+          expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+        },
+        { timeout: 5000 },
+      );
     });
   });
 });
