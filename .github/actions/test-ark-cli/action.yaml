@@ -89,11 +89,14 @@ runs:
         ark --version
         ark status
 
-    - name: Wait for webhook certificate
+    - name: Wait for webhook to be ready
       shell: bash
       run: |
         kubectl wait --for=condition=Ready certificate/serving-cert \
           -n ark-system --timeout=120s
+        # Wait for webhook endpoint to be registered
+        kubectl rollout status deployment/ark-controller -n ark-system --timeout=120s
+        sleep 5
 
     - name: Create default model
       shell: bash
