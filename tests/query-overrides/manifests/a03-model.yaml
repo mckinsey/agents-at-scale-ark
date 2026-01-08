@@ -1,0 +1,19 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: test-model-query-overrides
+  labels:
+    environment: test
+    query-override-target: "true"
+spec:
+  type: completions
+  provider: openai
+  model:
+    value: gpt-5
+  pollInterval: 3s
+  config:
+    openai:
+      baseUrl:
+        value: http://mock-llm.($namespace).svc.cluster.local:8080/v1
+      apiKey:
+        value: mock-api-key
