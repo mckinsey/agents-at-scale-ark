@@ -161,24 +161,30 @@ runs:
           webhook_errors=0
           for attempt in {1..3}; do
             # Test with a minimal valid model that should pass webhook validation
-            test_result=$(kubectl apply -f - --dry-run=server 2>&1 <<EOF || true
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Model
-metadata:
-  name: webhook-test-$RANDOM
-  namespace: default
-spec:
-  provider: openai
-  model: gpt-4
-  baseUrl: http://test
-  apiKey: test-key
-EOF
-            )
+            printf '%s\n' \
+              'apiVersion: ark.mckinsey.com/v1alpha1' \
+              'kind: Model' \
+              'metadata:' \
+              '  name: webhook-test' \
+              '  namespace: default' \
+              'spec:' \
+              '  provider: openai' \
+              '  model: gpt-4' \
+              '  baseUrl: http://test' \
+              '  apiKey: test-key' \
+              > /tmp/webhook-test.yaml
+
+            test_result=$(kubectl apply -f /tmp/webhook-test.yaml --dry-run=server 2>&1 || true)
 
             if echo "$test_result" | grep -q "the server could not find the requested resource"; then
               webhook_errors=$((webhook_errors + 1))
-            elif echo "$test_result" | grep -qE "dry-run|created|configured"; then
-              # Webhook responded successfully
+            elif echo "$test_result" | grep -q "dry-run"; then
+              webhook_ready=true
+              break 2
+            elif echo "$test_result" | grep -q "created"; then
+              webhook_ready=true
+              break 2
+            elif echo "$test_result" | grep -q "configured"; then
               webhook_ready=true
               break 2
             fi
@@ -189,6 +195,8 @@ EOF
           sleep 5
           elapsed=$((elapsed + 5))
         done
+
+        rm -f /tmp/webhook-test.yaml
 
         if [ "$webhook_ready" = false ]; then
           echo "❌ Timeout waiting for webhook to respond"
