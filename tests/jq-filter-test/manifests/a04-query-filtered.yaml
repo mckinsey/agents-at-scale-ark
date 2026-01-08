@@ -4,6 +4,6 @@ metadata:
   name: test-query-jq-filtered
 spec:
   input: "Please use the test-json-api tool to get data."
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: test-agent-jq-filtered

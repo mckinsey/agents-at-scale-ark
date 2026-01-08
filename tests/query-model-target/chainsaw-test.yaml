@@ -57,10 +57,10 @@ spec:
           metadata:
             name: model-target-query
           status:
-            (length(responses)): 1
-            (contains(responses[*].target.name, 'test-model')): true
-            (responses[*].target.type): ['model']
-            (length(join('', responses[*].content)) > `3`): true
+            (response != null): true
+            (response.target.name): 'test-model'
+            (response.target.type): 'model'
+            (length(response.content) > `3`): true
     catch:
     - events: {}
     - describe:

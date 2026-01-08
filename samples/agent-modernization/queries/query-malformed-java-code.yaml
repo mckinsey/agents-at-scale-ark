@@ -8,9 +8,9 @@ metadata:
     environment: "development"
     agent-type: "java-modernizer"
 spec:
-  targets:
-    - type: agent
-      name: java8-to-js-modernizer
+  target:
+    type: agent
+    name: java8-to-js-modernizer
   input: |
     Convert this Java code to JavaScript:
     

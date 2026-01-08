@@ -17,6 +17,6 @@ spec:
         secretKeyRef:
           name: query-secrets
           key: agent-role
-  targets:
-    - type: agent
-      name: test-agent-nested
+  target:
+    type: agent
+    name: test-agent-nested

@@ -6,7 +6,7 @@ spec:
   prompt: |
     Use tools available to help the user with the answer.
   tools:
-    - type: custom
+    - type: http
       name: get-coordinates # Actual Tool CRD name
       description: Get the current location coordinates of the user # Description exposed to Agent
       partial: 

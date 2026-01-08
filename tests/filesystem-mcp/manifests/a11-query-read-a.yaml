@@ -9,6 +9,6 @@ spec:
     Read the file "agent-a-data.txt" and confirm it contains Agent A's data.
 
     Then list all files in the current directory.
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: filesystem-agent-a

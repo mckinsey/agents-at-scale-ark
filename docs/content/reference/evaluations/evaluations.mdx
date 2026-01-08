@@ -150,9 +150,9 @@ metadata:
     evaluation_required: "true"
 spec:
   input: "Analyze market trends for renewable energy"
-  targets:
-    - type: agent
-      name: research-agent
+  target:
+    type: agent
+    name: research-agent
 ```
 
 When the query completes (status: "done"), the evaluator automatically creates an evaluation named `production-evaluator-production-query-eval`.
@@ -388,9 +388,9 @@ spec:
       value: "Q4 2024 analysis"
     - name: reference.previous_report
       value: "See October 2024 sustainability report"
-  targets:
-    - type: agent
-      name: research-agent
+  target:
+    type: agent
+    name: research-agent
 ```
 
 When this query is evaluated, the evaluation automatically receives:

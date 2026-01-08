@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import express from 'express';
-import { TraceStore, OTELSpan } from '../trace-store.js';
+import { TraceBroker, OTELSpan } from '../trace-broker.js';
 import protobuf from 'protobufjs';
 import { join } from 'path';
 
@@ -57,7 +57,7 @@ interface OTLPRequest {
   }>;
 }
 
-export function createOTLPRouter(traces: TraceStore): Router {
+export function createOTLPRouter(traces: TraceBroker): Router {
   const router = Router();
 
   loadProtoDefinitions().catch(err => {
@@ -109,14 +109,14 @@ export function createOTLPRouter(traces: TraceStore): Router {
         return;
       }
 
-      let spanCount = 0;
+      const spans: OTELSpan[] = [];
 
       for (const resourceSpan of body.resourceSpans) {
         const resourceAttrs = resourceSpan.resource?.attributes || [];
 
         for (const scopeSpan of resourceSpan.scopeSpans || []) {
           for (const otlpSpan of scopeSpan.spans || []) {
-            const span: OTELSpan = {
+            spans.push({
               traceId: otlpSpan.traceId,
               spanId: otlpSpan.spanId,
               parentSpanId: otlpSpan.parentSpanId,
@@ -127,15 +127,13 @@ export function createOTLPRouter(traces: TraceStore): Router {
               attributes: convertAttributes(otlpSpan.attributes || []),
               status: otlpSpan.status,
               resource: convertAttributesToObject(resourceAttrs)
-            };
-
-            traces.addSpan(span);
-            spanCount++;
+            });
           }
         }
       }
 
-      console.log(`[OTLP] Received ${spanCount} spans`);
+      traces.addSpans(spans);
+      console.log(`[OTLP] Received ${spans.length} spans`);
       res.status(200).json({});
     } catch (error) {
       console.error('[OTLP] Failed to process request:', error);

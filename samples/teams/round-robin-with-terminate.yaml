@@ -26,6 +26,6 @@ spec:
   input: "Sheldon says:"
   memory:
     name: postgres-memory
-  targets:
-    - type: team
-      name: team-rr
+  target:
+    type: team
+    name: team-rr

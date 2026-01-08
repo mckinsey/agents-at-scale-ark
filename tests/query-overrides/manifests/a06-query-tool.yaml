@@ -4,8 +4,8 @@ metadata:
   name: query-overrides-test-query-tool
 spec:
   input: echo-headers
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: query-overrides-test-agent
   overrides:
   - resourceType: mcpserver

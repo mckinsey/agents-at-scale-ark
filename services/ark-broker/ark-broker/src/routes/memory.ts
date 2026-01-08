@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
-import { MemoryStore } from '../memory-store.js';
+import { MemoryBroker } from '../memory-broker.js';
 import { streamSSE } from '../sse.js';
+import { parsePaginationParams, PaginationError, PaginatedList } from '../pagination.js';
 
-export function createMemoryRouter(memory: MemoryStore): Router {
+export function createMemoryRouter(memory: MemoryBroker): Router {
   const router = Router();
 
   /**
@@ -63,7 +64,8 @@ export function createMemoryRouter(memory: MemoryStore): Router {
 
       console.log(`POST /messages - conversation_id: ${conversation_id}, query_id: ${query_id}, messages: ${messages?.length}`);
 
-      memory.addMessagesWithMetadata(conversation_id, query_id, messages);
+      memory.addMessages(conversation_id, query_id, messages);
+      memory.save();
 
       res.status(200).send();
     } catch (error) {
@@ -73,38 +75,85 @@ export function createMemoryRouter(memory: MemoryStore): Router {
     }
   });
 
-  // GET /messages - returns messages or streams via SSE
   router.get('/messages', (req, res) => {
     const watch = req.query['watch'] === 'true';
-    const conversation_id = req.query.conversation_id as string;
+    const conversationId = req.query.conversation_id as string;
 
     if (watch) {
-      console.log('[MESSAGES] GET /messages?watch=true - starting SSE stream for all messages');
+      const cursor = req.query['cursor'] ? parseInt(req.query['cursor'] as string, 10) : undefined;
+      console.log(`[MESSAGES] GET /messages?watch=true${cursor ? `&cursor=${cursor}` : ''} - starting SSE stream for all messages`);
+
+      let replayItems: Array<{ timestamp: string; conversation_id: string; query_id: string; message: unknown; sequence: number }> | undefined;
+      if (cursor !== undefined && !isNaN(cursor)) {
+        let items = memory.all().filter(item => item.sequenceNumber > cursor);
+        if (conversationId) {
+          items = items.filter(item => item.data.conversationId === conversationId);
+        }
+        replayItems = items.map(item => ({
+          timestamp: item.timestamp.toISOString(),
+          conversation_id: item.data.conversationId,
+          query_id: item.data.queryId,
+          message: item.data.message,
+          sequence: item.sequenceNumber
+        }));
+      }
+
       streamSSE({
         res,
         req,
         tag: 'MESSAGES',
         itemName: 'messages',
-        subscribe: (callback) => memory.subscribeToAllMessages(callback),
-        filter: conversation_id ? (msg) => msg.conversation_id === conversation_id : undefined
+        subscribe: (callback) => memory.subscribe((item) => {
+          callback({
+            timestamp: item.timestamp.toISOString(),
+            conversation_id: item.data.conversationId,
+            query_id: item.data.queryId,
+            message: item.data.message,
+            sequence: item.sequenceNumber
+          });
+        }),
+        filter: conversationId ? (msg) => msg.conversation_id === conversationId : undefined,
+        replayItems
       });
     } else {
       try {
-        const query_id = req.query.query_id as string;
+        const queryId = req.query.query_id as string;
+        const params = parsePaginationParams(req.query as Record<string, unknown>);
 
-        const allMessages = memory.getAllMessages();
-        let filteredMessages = allMessages;
+        const filters = {
+          conversationId: conversationId || undefined,
+          queryId: queryId || undefined
+        };
 
-        if (conversation_id) {
-          filteredMessages = filteredMessages.filter(m => m.conversation_id === conversation_id);
+        const result = memory.paginate(params, filters);
+
+        interface MessageItem {
+          timestamp: string;
+          conversation_id: string;
+          query_id: string;
+          message: unknown;
+          sequence: number;
         }
 
-        if (query_id) {
-          filteredMessages = filteredMessages.filter(m => m.query_id === query_id);
-        }
+        const response: PaginatedList<MessageItem> = {
+          items: result.items.map(item => ({
+            timestamp: item.timestamp.toISOString(),
+            conversation_id: item.data.conversationId,
+            query_id: item.data.queryId,
+            message: item.data.message,
+            sequence: item.sequenceNumber
+          })),
+          total: result.total,
+          hasMore: result.hasMore,
+          nextCursor: result.nextCursor
+        };
 
-        res.json({ messages: filteredMessages });
+        res.json(response);
       } catch (error) {
+        if (error instanceof PaginationError) {
+          res.status(400).json({ error: error.message });
+          return;
+        }
         console.error('Failed to get messages:', error);
         const err = error as Error;
         res.status(500).json({ error: err.message });
@@ -112,34 +161,25 @@ export function createMemoryRouter(memory: MemoryStore): Router {
     }
   });
 
-  // GET /memory-status - returns memory statistics summary
   router.get('/memory-status', (_req, res) => {
     try {
-      const conversations = memory.getAllConversations();
-      const allMessages = memory.getAllMessages();
+      const conversationIds = memory.getConversationIds();
+      const allItems = memory.all();
 
-      // Get per-conversation statistics
-      const conversationStats: any = {};
-      for (const conversationId of conversations) {
-        const messages = memory.getMessages(conversationId);
-        const queries = new Set<string>();
-
-        // Extract unique query IDs from messages
-        for (const msg of allMessages) {
-          if (msg.conversation_id === conversationId && msg.query_id) {
-            queries.add(msg.query_id);
-          }
-        }
+      const conversationStats: Record<string, { message_count: number; query_count: number }> = {};
+      for (const conversationId of conversationIds) {
+        const convItems = allItems.filter(i => i.data.conversationId === conversationId);
+        const queryIds = new Set(convItems.map(i => i.data.queryId));
 
         conversationStats[conversationId] = {
-          message_count: messages.length,
-          query_count: queries.size
+          message_count: convItems.length,
+          query_count: queryIds.size
         };
       }
 
       res.json({
-        total_conversations: conversations.length,
-        total_messages: allMessages.length,
+        total_conversations: conversationIds.length,
+        total_messages: allItems.length,
         conversations: conversationStats
       });
     } catch (error) {
@@ -149,12 +189,9 @@ export function createMemoryRouter(memory: MemoryStore): Router {
     }
   });
 
-
-  // List conversations - GET /conversations
-  router.get('/conversations', (req, res) => {
+  router.get('/conversations', (_req, res) => {
     try {
-      // Get all unique conversation IDs from the memory store
-      const conversations = memory.getAllConversations();
+      const conversations = memory.getConversationIds();
       res.json({ conversations });
     } catch (error) {
       console.error('Failed to get conversations:', error);
@@ -189,7 +226,7 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    *         description: Failed to purge memory
    */
   router.delete('/messages', (_req, res) => {
-    memory.purge();
+    memory.delete();
     res.json({ status: 'success', message: 'Memory purged' });
   });
 
@@ -235,7 +272,7 @@ export function createMemoryRouter(memory: MemoryStore): Router {
       return;
     }
 
-    memory.clearConversation(conversationId);
+    memory.deleteConversation(conversationId);
     res.json({ status: 'success', message: `Conversation ${conversationId} deleted` });
   });
 
@@ -292,7 +329,7 @@ export function createMemoryRouter(memory: MemoryStore): Router {
       return;
     }
 
-    memory.clearQuery(conversationId, queryId);
+    memory.deleteQuery(conversationId, queryId);
     res.json({ status: 'success', message: `Query ${queryId} messages deleted from conversation ${conversationId}` });
   });
 
@@ -322,7 +359,7 @@ export function createMemoryRouter(memory: MemoryStore): Router {
    *         description: Failed to delete conversations
    */
   router.delete('/conversations', (_req, res) => {
-    memory.purge();
+    memory.delete();
     res.json({ status: 'success', message: 'All conversations deleted' });
   });
 
@@ -389,12 +426,20 @@ export function createMemoryRouter(memory: MemoryStore): Router {
       return;
     }
 
-    const messages = memory.getMessagesWithMetadata(conversationId);
+    const items = memory.getByConversation(conversationId);
 
-    if (messages.length === 0) {
+    if (items.length === 0) {
       res.status(404).json({ error: 'Conversation not found' });
       return;
     }
+
+    const messages = items.map(item => ({
+      timestamp: item.timestamp.toISOString(),
+      conversation_id: item.data.conversationId,
+      query_id: item.data.queryId,
+      message: item.data.message,
+      sequence: item.sequenceNumber
+    }));
 
     res.json({
       conversation_id: conversationId,

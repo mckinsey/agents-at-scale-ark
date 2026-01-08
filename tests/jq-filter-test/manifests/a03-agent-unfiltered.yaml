@@ -7,5 +7,5 @@ spec:
   prompt: |
     You are a test agent. Use the test-json-api tool to get data and respond with the results verbatim.
   tools:
-  - type: custom
+  - type: http
     name: test-json-api

@@ -1,5 +1,6 @@
 export default {
   '---interfaces': { type: 'separator', title: 'Interfaces' },
+  'api-specifications': 'API Specifications',
   'ark-apis': 'Ark APIs',
 
   '---crds': { type: 'separator', title: 'Kubernetes API' },

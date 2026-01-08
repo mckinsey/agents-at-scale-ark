@@ -50,13 +50,13 @@ spec:
     Use markdown format for better readability and structure.
     Provide confirmation of successful document creation with file location.
   tools:
-    - type: custom
+    - type: http
       name: web-search
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-write-file
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-create-directory
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-list-directory
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-get-file-info

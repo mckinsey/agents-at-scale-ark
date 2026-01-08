@@ -148,19 +148,27 @@ func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1
 // checkToolDependencies validates tool dependencies
 func (r *AgentReconciler) checkToolDependencies(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string) {
 	for _, toolSpec := range agent.Spec.Tools {
-		if toolSpec.Type == "custom" && toolSpec.Name != "" {
+		// Skip built-in tools - they don't reference Tool CRDs
+		if toolSpec.Type == "built-in" || toolSpec.Name == "" {
+			continue
+		}
 
-			toolName := toolSpec.GetToolCRDName()
+		toolName := toolSpec.GetToolCRDName()
 
-			var tool arkv1alpha1.Tool
-			toolKey := types.NamespacedName{Name: toolName, Namespace: agent.Namespace}
-			if err := r.Get(ctx, toolKey, &tool); err != nil {
-				if errors.IsNotFound(err) {
-					msg := fmt.Sprintf("Tool '%s' not found in namespace '%s'", toolName, agent.Namespace)
-					return false, msg
-				}
-				return false, fmt.Sprintf("Error checking tool: %v", err)
+		var tool arkv1alpha1.Tool
+		toolKey := types.NamespacedName{Name: toolName, Namespace: agent.Namespace}
+		if err := r.Get(ctx, toolKey, &tool); err != nil {
+			if errors.IsNotFound(err) {
+				msg := fmt.Sprintf("Tool '%s' not found in namespace '%s'", toolName, agent.Namespace)
+				return false, msg
 			}
+			return false, fmt.Sprintf("Error checking tool: %v", err)
+		}
+
+		// Validate that the declared type matches the Tool CRD type (except for deprecated 'custom')
+		if toolSpec.Type != "custom" && tool.Spec.Type != toolSpec.Type {
+			msg := fmt.Sprintf("Tool '%s' has type '%s', but agent declares it as '%s'", toolName, tool.Spec.Type, toolSpec.Type)
+			return false, msg
 		}
 	}
 
@@ -322,14 +330,16 @@ func (r *AgentReconciler) findAgentsForDependency(ctx context.Context, resourceN
 // agentDependsOnTool checks if an agent depends on a specific tool
 func (r *AgentReconciler) agentDependsOnTool(agent *arkv1alpha1.Agent, toolName string) bool {
 	for _, toolSpec := range agent.Spec.Tools {
-		if toolSpec.Type == "custom" {
-			// Check both the exposed name and the actual tool name (for partial tools)
-			if toolSpec.Name == toolName {
-				return true
-			}
-			if toolSpec.Partial != nil && toolSpec.Partial.Name == toolName {
-				return true
-			}
+		// Skip built-in tools - they don't reference Tool CRDs
+		if toolSpec.Type == "built-in" {
+			continue
+		}
+		// Check both the exposed name and the actual tool name (for partial tools)
+		if toolSpec.Name == toolName {
+			return true
+		}
+		if toolSpec.Partial != nil && toolSpec.Partial.Name == toolName {
+			return true
 		}
 	}
 	return false

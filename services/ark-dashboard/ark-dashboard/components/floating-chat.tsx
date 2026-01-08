@@ -106,6 +106,11 @@ export default function FloatingChat({
     setChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
     let accumulatedContent = '';
+    const accumulatedToolCalls: Array<{
+      id: string;
+      type: 'function';
+      function: { name: string; arguments: string };
+    }> = [];
 
     for await (const chunk of chatService.streamChatResponse(
       messageArray,
@@ -118,17 +123,57 @@ export default function FloatingChat({
       const delta = typedChunk?.choices?.[0]?.delta;
       if (delta?.content) {
         accumulatedContent += delta.content;
-
-        // Update the assistant message with accumulated content
-        setChatMessages(prev => {
-          const updated = [...prev];
-          updated[assistantMessageIndex] = {
-            role: 'assistant',
-            content: accumulatedContent,
-          };
-          return updated;
-        });
       }
+
+      if (delta?.tool_calls) {
+        let index = accumulatedToolCalls.length - 1;
+        for (const toolCallDelta of delta.tool_calls) {
+          // name is only defined when starting a new tool invocation
+          if (toolCallDelta.function?.name) {
+            index += 1;
+            accumulatedToolCalls.push({
+              id: toolCallDelta.id || '',
+              type: 'function',
+              function: { name: toolCallDelta.function.name, arguments: '' },
+            });
+          }
+
+          if (toolCallDelta.id) {
+            accumulatedToolCalls[index].id = toolCallDelta.id;
+          }
+
+          if (toolCallDelta.function?.arguments) {
+            accumulatedToolCalls[index].function.arguments +=
+              toolCallDelta.function.arguments;
+          }
+        }
+      }
+      setChatMessages(prev => {
+        const updated = [...prev];
+        updated[assistantMessageIndex] = {
+          role: 'assistant',
+          content: accumulatedContent,
+          tool_calls: accumulatedToolCalls,
+        };
+        return updated;
+      });
+    }
+
+    // After streaming completes, add tool messages (OpenAI format)
+    // These won't be displayed but they will be part of the history
+    if (accumulatedToolCalls.length > 0) {
+      setChatMessages(prev => {
+        const newMessages = [...prev];
+        // Add a tool message for each tool call
+        accumulatedToolCalls.forEach(toolCall => {
+          newMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: `Called ${toolCall.function.name} with ${toolCall.function.arguments}`,
+          });
+        });
+        return newMessages;
+      });
     }
   };
 
@@ -371,6 +416,12 @@ export default function FloatingChat({
                 )}
 
                 {chatMessages.map((message, index) => {
+                  // Don't show tool messages (role='tool') - tool call will show up with assistant message
+                  if (message.role === 'tool') {
+                    return '';
+                  }
+
+                  // Handle regular messages
                   let content = '';
                   if (typeof message.content === 'string') {
                     content = message.content;
@@ -393,14 +444,36 @@ export default function FloatingChat({
                       .join('\n');
                   }
 
-                  return content ? (
-                    <ChatMessage
-                      key={index}
-                      role={message.role as 'user' | 'assistant' | 'system'}
-                      content={content}
-                      viewMode={viewMode}
-                    />
-                  ) : null;
+                  const toolCalls =
+                    'tool_calls' in message ? message.tool_calls : undefined;
+
+                  return (
+                    <div key={index} className="contents">
+                      {toolCalls &&
+                        toolCalls.map((toolCall, toolIndex) => (
+                          <ChatMessage
+                            key={`${index}-tool-${toolIndex}`}
+                            role="assistant"
+                            content=""
+                            viewMode={viewMode}
+                            toolCalls={[
+                              toolCall as {
+                                id: string;
+                                type: 'function';
+                                function: { name: string; arguments: string };
+                              },
+                            ]}
+                          />
+                        ))}
+                      {content && (
+                        <ChatMessage
+                          role={message.role as 'user' | 'assistant' | 'system'}
+                          content={content}
+                          viewMode={viewMode}
+                        />
+                      )}
+                    </div>
+                  );
                 })}
 
                 {/* Show typing indicator when processing */}

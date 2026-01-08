@@ -3,6 +3,7 @@ import json
 import logging
 import os
 from typing import Optional
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Query
@@ -18,6 +19,11 @@ router = APIRouter(prefix="/broker", tags=["broker"])
 
 VERSION = "v1alpha1"
 BROKER_CONNECT_TIMEOUT = float(os.getenv('BROKER_CONNECT_TIMEOUT', '10.0'))
+
+sse_headers = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+}
 
 
 async def get_broker_url(memory_name: str) -> Optional[str]:
@@ -70,18 +76,13 @@ async def proxy_sse_stream(url: str):
         yield f"data: {json.dumps({'error': {'message': str(e), 'type': 'server_error'}})}\n\n"
 
 
-sse_headers = {
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
-}
-
-
-@router.get("/traces")
-async def get_traces(
-    watch: bool = Query(False, description="Stream traces via SSE"),
-    memory: str = Query("default", description="Memory resource name"),
+async def proxy_broker_request(
+    memory: str,
+    path: str,
+    watch: bool = False,
+    params: Optional[dict] = None,
 ):
-    """Get or stream OTEL traces from the broker."""
+    """Generic proxy for broker requests - handles both SSE streaming and JSON fetching."""
     broker_url = await get_broker_url(memory)
     if not broker_url:
         return JSONResponse(
@@ -89,9 +90,14 @@ async def get_traces(
             status_code=503,
         )
 
+    query_params = {k: v for k, v in (params or {}).items() if v is not None}
+
     if watch:
-        url = f"{broker_url}/traces?watch=true"
-        logger.info(f"Proxying trace SSE stream from {url}")
+        query_params["watch"] = "true"
+        url = f"{broker_url}{path}"
+        if query_params:
+            url += f"?{urlencode(query_params)}"
+        logger.info(f"Proxying SSE stream from {url}")
         return StreamingResponse(
             proxy_sse_stream(url),
             media_type="text/event-stream",
@@ -100,96 +106,9 @@ async def get_traces(
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{broker_url}/traces")
-            return JSONResponse(content=response.json(), status_code=response.status_code)
-    except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to broker: {e}")
-        return JSONResponse(
-            content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
-            status_code=503,
-        )
-    except Exception as e:
-        logger.error(f"Error fetching traces: {e}")
-        return JSONResponse(
-            content={"error": {"message": str(e), "type": "server_error"}},
-            status_code=500,
-        )
-
-
-@router.get("/traces/{trace_id}")
-async def get_trace(
-    trace_id: str,
-    watch: bool = Query(False, description="Stream trace spans via SSE"),
-    from_beginning: bool = Query(True, alias="from-beginning", description="Include existing spans"),
-    memory: str = Query("default", description="Memory resource name"),
-):
-    """Get or stream a specific trace from the broker."""
-    broker_url = await get_broker_url(memory)
-    if not broker_url:
-        return JSONResponse(
-            content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
-            status_code=503,
-        )
-
-    if watch:
-        url = f"{broker_url}/traces/{trace_id}?watch=true"
-        if from_beginning:
-            url += "&from-beginning=true"
-        logger.info(f"Proxying trace SSE stream from {url}")
-        return StreamingResponse(
-            proxy_sse_stream(url),
-            media_type="text/event-stream",
-            headers=sse_headers,
-        )
-
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{broker_url}/traces/{trace_id}")
-            return JSONResponse(content=response.json(), status_code=response.status_code)
-    except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to broker: {e}")
-        return JSONResponse(
-            content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
-            status_code=503,
-        )
-    except Exception as e:
-        logger.error(f"Error fetching trace: {e}")
-        return JSONResponse(
-            content={"error": {"message": str(e), "type": "server_error"}},
-            status_code=500,
-        )
-
-
-@router.get("/messages")
-async def get_messages(
-    watch: bool = Query(False, description="Stream messages via SSE"),
-    conversation_id: str = Query(None, alias="conversation-id", description="Filter by conversation ID"),
-    memory: str = Query("default", description="Memory resource name"),
-):
-    """Get or stream messages from the broker."""
-    broker_url = await get_broker_url(memory)
-    if not broker_url:
-        return JSONResponse(
-            content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
-            status_code=503,
-        )
-
-    if watch:
-        url = f"{broker_url}/messages?watch=true"
-        if conversation_id:
-            url += f"&conversation_id={conversation_id}"
-        logger.info(f"Proxying messages SSE stream from {url}")
-        return StreamingResponse(
-            proxy_sse_stream(url),
-            media_type="text/event-stream",
-            headers=sse_headers,
-        )
-
-    try:
-        async with httpx.AsyncClient() as client:
-            url = f"{broker_url}/messages"
-            if conversation_id:
-                url += f"?conversation_id={conversation_id}"
+            url = f"{broker_url}{path}"
+            if query_params:
+                url += f"?{urlencode(query_params)}"
             response = await client.get(url)
             return JSONResponse(content=response.json(), status_code=response.status_code)
     except httpx.ConnectError as e:
@@ -199,33 +118,105 @@ async def get_messages(
             status_code=503,
         )
     except Exception as e:
-        logger.error(f"Error fetching messages: {e}")
+        logger.error(f"Error fetching from broker: {e}")
         return JSONResponse(
             content={"error": {"message": str(e), "type": "server_error"}},
             status_code=500,
         )
 
 
+@router.get("/traces")
+async def get_traces(
+    watch: bool = Query(False, description="Stream traces via SSE"),
+    memory: str = Query("default", description="Memory resource name"),
+    limit: int = Query(100, description="Max traces to return"),
+    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+):
+    """Get or stream OTEL traces from the broker."""
+    return await proxy_broker_request(
+        memory, "/traces", watch,
+        {"limit": limit, "cursor": cursor}
+    )
+
+
+@router.get("/traces/{trace_id}")
+async def get_trace(
+    trace_id: str,
+    watch: bool = Query(False, description="Stream trace spans via SSE"),
+    from_beginning: bool = Query(False, alias="from-beginning", description="Include existing spans"),
+    cursor: Optional[int] = Query(None, description="Cursor for pagination/streaming"),
+    memory: str = Query("default", description="Memory resource name"),
+):
+    """Get or stream a specific trace from the broker."""
+    params = {"cursor": cursor}
+    if from_beginning:
+        params["from-beginning"] = "true"
+    return await proxy_broker_request(memory, f"/traces/{trace_id}", watch, params)
+
+
+@router.get("/messages")
+async def get_messages(
+    watch: bool = Query(False, description="Stream messages via SSE"),
+    memory: str = Query("default", description="Memory resource name"),
+    limit: int = Query(100, description="Max messages to return"),
+    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+    conversation_id: Optional[str] = Query(None, description="Filter by conversation ID"),
+    query_id: Optional[str] = Query(None, description="Filter by query ID"),
+):
+    """Get or stream messages from the broker."""
+    return await proxy_broker_request(
+        memory, "/messages", watch,
+        {"limit": limit, "cursor": cursor, "conversation_id": conversation_id, "query_id": query_id}
+    )
+
+
+@router.get("/events")
+async def get_events(
+    watch: bool = Query(False, description="Stream events via SSE"),
+    memory: str = Query("default", description="Memory resource name"),
+    limit: int = Query(100, description="Max events to return"),
+    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+):
+    """Get or stream operation events from the broker."""
+    return await proxy_broker_request(
+        memory, "/events", watch,
+        {"limit": limit, "cursor": cursor}
+    )
+
+
+@router.get("/events/{query_id}")
+async def get_events_by_query(
+    query_id: str,
+    watch: bool = Query(False, description="Stream events via SSE"),
+    from_beginning: bool = Query(False, alias="from-beginning", description="Include existing events"),
+    cursor: Optional[int] = Query(None, description="Cursor for pagination/streaming"),
+    memory: str = Query("default", description="Memory resource name"),
+    limit: int = Query(100, description="Max events to return"),
+):
+    """Get or stream events for a specific query."""
+    params = {"limit": limit, "cursor": cursor}
+    if from_beginning:
+        params["from-beginning"] = "true"
+    return await proxy_broker_request(memory, f"/events/{query_id}", watch, params)
+
+
 @router.get("/chunks")
 async def get_chunks(
     watch: bool = Query(False, description="Stream chunks via SSE"),
-    query_id: str = Query(None, alias="query-id", description="Filter by query ID"),
+    query_id: Optional[str] = Query(None, alias="query-id", description="Filter by query ID"),
     memory: str = Query("default", description="Memory resource name"),
+    limit: int = Query(100, description="Max chunks to return"),
+    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
 ):
     """Get or stream LLM chunks from the broker."""
-    broker_url = await get_broker_url(memory)
-    if not broker_url:
-        return JSONResponse(
-            content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
-            status_code=503,
-        )
-
-    if watch:
-        if query_id:
-            url = f"{broker_url}/stream/{query_id}?from-beginning=true"
-        else:
-            url = f"{broker_url}/stream?watch=true"
-
+    if watch and query_id:
+        broker_url = await get_broker_url(memory)
+        if not broker_url:
+            return JSONResponse(
+                content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
+                status_code=503,
+            )
+        url = f"{broker_url}/stream/{query_id}?from-beginning=true"
         logger.info(f"Proxying chunks SSE stream from {url}")
         return StreamingResponse(
             proxy_sse_stream(url),
@@ -233,9 +224,23 @@ async def get_chunks(
             headers=sse_headers,
         )
 
+    return await proxy_broker_request(
+        memory, "/stream", watch,
+        {"limit": limit, "cursor": cursor}
+    )
+
+
+async def proxy_broker_delete(memory: str, path: str):
+    """Proxy DELETE requests to broker."""
+    broker_url = await get_broker_url(memory)
+    if not broker_url:
+        return JSONResponse(
+            content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
+            status_code=503,
+        )
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{broker_url}/stream-statistics")
+            response = await client.delete(f"{broker_url}{path}")
             return JSONResponse(content=response.json(), status_code=response.status_code)
     except httpx.ConnectError as e:
         logger.error(f"Failed to connect to broker: {e}")
@@ -244,7 +249,7 @@ async def get_chunks(
             status_code=503,
         )
     except Exception as e:
-        logger.error(f"Error fetching chunks: {e}")
+        logger.error(f"Error in DELETE request: {e}")
         return JSONResponse(
             content={"error": {"message": str(e), "type": "server_error"}},
             status_code=500,
@@ -252,106 +257,24 @@ async def get_chunks(
 
 
 @router.delete("/traces")
-async def purge_traces(
-    memory: str = Query("default", description="Memory resource name"),
-):
+async def purge_traces(memory: str = Query("default", description="Memory resource name")):
     """Purge all traces from the broker."""
-    broker_url = await get_broker_url(memory)
-    if not broker_url:
-        return JSONResponse(
-            content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
-            status_code=503,
-        )
-
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.delete(f"{broker_url}/traces")
-            return JSONResponse(content=response.json(), status_code=response.status_code)
-    except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to broker: {e}")
-        return JSONResponse(
-            content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
-            status_code=503,
-        )
-    except Exception as e:
-        logger.error(f"Error purging traces: {e}")
-        return JSONResponse(
-            content={"error": {"message": str(e), "type": "server_error"}},
-            status_code=500,
-        )
-
-
-@router.get("/events")
-async def get_events(
-    watch: bool = Query(False, description="Stream events via SSE"),
-    query_id: str = Query(None, alias="query-id", description="Filter by query ID"),
-    memory: str = Query("default", description="Memory resource name"),
-):
-    """Get or stream operation events from the broker."""
-    broker_url = await get_broker_url(memory)
-    if not broker_url:
-        return JSONResponse(
-            content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
-            status_code=503,
-        )
-
-    if watch:
-        url = f"{broker_url}/events?watch=true"
-        if query_id:
-            url = f"{broker_url}/events/{query_id}?watch=true"
-        logger.info(f"Proxying events SSE stream from {url}")
-        return StreamingResponse(
-            proxy_sse_stream(url),
-            media_type="text/event-stream",
-            headers=sse_headers,
-        )
-
-    try:
-        async with httpx.AsyncClient() as client:
-            url = f"{broker_url}/events"
-            if query_id:
-                url = f"{broker_url}/events/{query_id}"
-            response = await client.get(url)
-            return JSONResponse(content=response.json(), status_code=response.status_code)
-    except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to broker: {e}")
-        return JSONResponse(
-            content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
-            status_code=503,
-        )
-    except Exception as e:
-        logger.error(f"Error fetching events: {e}")
-        return JSONResponse(
-            content={"error": {"message": str(e), "type": "server_error"}},
-            status_code=500,
-        )
+    return await proxy_broker_delete(memory, "/traces")
 
 
 @router.delete("/events")
-async def purge_events(
-    memory: str = Query("default", description="Memory resource name"),
-):
+async def purge_events(memory: str = Query("default", description="Memory resource name")):
     """Purge all events from the broker."""
-    broker_url = await get_broker_url(memory)
-    if not broker_url:
-        return JSONResponse(
-            content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
-            status_code=503,
-        )
+    return await proxy_broker_delete(memory, "/events")
 
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.delete(f"{broker_url}/events")
-            return JSONResponse(content=response.json(), status_code=response.status_code)
-    except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to broker: {e}")
-        return JSONResponse(
-            content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
-            status_code=503,
-        )
-    except Exception as e:
-        logger.error(f"Error purging events: {e}")
-        return JSONResponse(
-            content={"error": {"message": str(e), "type": "server_error"}},
-            status_code=500,
-        )
+
+@router.delete("/messages")
+async def purge_messages(memory: str = Query("default", description="Memory resource name")):
+    """Purge all messages from the broker."""
+    return await proxy_broker_delete(memory, "/messages")
+
+
+@router.delete("/chunks")
+async def purge_chunks(memory: str = Query("default", description="Memory resource name")):
+    """Purge all chunks from the broker."""
+    return await proxy_broker_delete(memory, "/stream")

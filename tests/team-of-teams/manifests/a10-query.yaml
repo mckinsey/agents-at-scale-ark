@@ -4,6 +4,6 @@ metadata:
   name: team-of-teams-query
 spec:
   input: "Analyze the benefits of using microservices architecture. Provide research and synthesis."
-  targets:
-  - type: team
+  target:
+    type: team
     name: parent-team

@@ -85,10 +85,10 @@ spec:
           status:
             (conditions[?type == 'Completed']):
             - status: 'True'
-            (contains(['positive', 'negative', 'neutral'], json_parse(responses[0].content).sentiment)): true
-            (json_parse(responses[0].content).confidence >= `0`): true
-            (json_parse(responses[0].content).confidence <= `1`): true
-            (length(json_parse(responses[0].content).entities) >= `0`): true
+            (contains(['positive', 'negative', 'neutral'], json_parse(response.content).sentiment)): true
+            (json_parse(response.content).confidence >= `0`): true
+            (json_parse(response.content).confidence <= `1`): true
+            (length(json_parse(response.content).entities) >= `0`): true
     catch:
     - events: {}
     - describe:

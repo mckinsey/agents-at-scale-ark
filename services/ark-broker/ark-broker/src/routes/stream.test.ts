@@ -1,17 +1,17 @@
 import request from 'supertest';
 import express from 'express';
-import { StreamStore } from '../stream-store';
+import { CompletionChunkBroker } from '../completion-chunk-broker';
 import { createStreamRouter } from './stream';
 
 describe('Streaming API', () => {
   let app: express.Application;
-  let stream: StreamStore;
-  
+  let chunks: CompletionChunkBroker;
+
   beforeEach(() => {
-    stream = new StreamStore();
+    chunks = new CompletionChunkBroker();
     app = express();
     app.use(express.json());
-    app.use('/stream', createStreamRouter(stream));
+    app.use('/stream', createStreamRouter(chunks));
   });
 
   // Helper to generate OpenAI chunks
