@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { BreadcrumbElement } from '@/components/common/page-header';
@@ -274,13 +274,13 @@ interface StreamViewProps {
 
 interface SessionsViewProps {
   title: string;
-  entries: StreamEntry[];
-  isConnected: boolean;
-  isLoading?: boolean;
-  hasMore?: boolean;
+  eventEntries: StreamEntry[];
+  chunkEntries: StreamEntry[];
+  eventsConnected: boolean;
+  chunksConnected: boolean;
   error: string | null;
-  onPurge: () => void;
-  onLoadMore?: () => void;
+  onPurgeEvents: () => void;
+  onPurgeChunks: () => void;
 }
 
 function StreamView({
@@ -401,13 +401,13 @@ function StreamView({
 
 function SessionsView({
   title,
-  entries,
-  isConnected,
-  isLoading,
-  hasMore,
+  eventEntries,
+  chunkEntries,
+  eventsConnected,
+  chunksConnected,
   error,
-  onPurge,
-  onLoadMore,
+  onPurgeEvents,
+  onPurgeChunks,
 }: SessionsViewProps) {
   const [autoScroll, setAutoScroll] = useState(true);
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(
@@ -416,17 +416,35 @@ function SessionsView({
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const allEntries = useMemo(
+    () => [...eventEntries, ...chunkEntries],
+    [eventEntries, chunkEntries],
+  );
+
   useEffect(() => {
     if (autoScroll && containerRef.current) {
       containerRef.current.scrollTop = 0;
     }
-  }, [entries, autoScroll]);
+  }, [allEntries, autoScroll]);
 
-  const groupedBySession = entries.reduce(
+  const groupedBySession = allEntries.reduce(
     (acc, entry) => {
       const outerData = entry.data as Record<string, unknown>;
+
+      let sessionId = 'unknown';
       const innerData = outerData?.data as Record<string, unknown>;
-      const sessionId = (innerData?.sessionId as string) || 'unknown';
+      if (innerData?.sessionId) {
+        sessionId = innerData.sessionId as string;
+      } else {
+        const chunk = innerData?.chunk as Record<string, unknown>;
+        const ark = chunk?.ark as Record<string, unknown>;
+        if (ark?.session) {
+          sessionId = ark.session as string;
+        }
+        if (ark?.completedQuery?.spec?.sessionId){
+            sessionId = ark.completedQuery.spec.sessionId as string;
+        }
+      }
 
       if (!acc[sessionId]) {
         acc[sessionId] = [];
@@ -467,18 +485,29 @@ function SessionsView({
     });
   };
 
+  const handlePurgeAll = async () => {
+    await Promise.all([onPurgeEvents(), onPurgeChunks()]);
+  };
+
   return (
     <Card className="flex h-full flex-col">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <div className="flex items-center gap-2">
           <CardTitle className="text-base font-medium">{title}</CardTitle>
-          <span
-            className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-300'}`}
-          />
+          <div className="flex items-center gap-1">
+            <span
+              className={`h-2 w-2 rounded-full ${eventsConnected ? 'bg-green-500' : 'bg-gray-300'}`}
+              title="Events"
+            />
+            <span
+              className={`h-2 w-2 rounded-full ${chunksConnected ? 'bg-green-500' : 'bg-gray-300'}`}
+              title="Chunks"
+            />
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={onPurge}>
-            Purge
+          <Button variant="outline" size="sm" onClick={handlePurgeAll}>
+            Purge All
           </Button>
           <label className="flex items-center gap-1.5 text-sm">
             <Switch checked={autoScroll} onCheckedChange={setAutoScroll} />
@@ -495,7 +524,7 @@ function SessionsView({
         <div
           ref={containerRef}
           className="bg-muted h-[calc(100vh-280px)] overflow-x-hidden overflow-y-auto rounded-md p-2 font-mono text-xs">
-          {entries.length === 0 ? (
+          {allEntries.length === 0 ? (
             <div className="text-muted-foreground flex h-full items-center justify-center">
               Waiting for data...
             </div>
@@ -560,17 +589,6 @@ function SessionsView({
                   </div>
                 );
               })}
-              {onLoadMore && hasMore && (
-                <div className="flex justify-center py-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onLoadMore}
-                    disabled={isLoading}>
-                    {isLoading ? 'Loading...' : 'Load more'}
-                  </Button>
-                </div>
-              )}
             </>
           )}
         </div>
@@ -705,13 +723,13 @@ export default function BrokerPage() {
           <TabsContent value="sessions" className="mt-4 flex-1">
             <SessionsView
               title="Sessions"
-              entries={events.entries}
-              isConnected={events.isConnected}
-              isLoading={events.isLoading}
-              hasMore={events.hasMore}
-              error={events.error}
-              onPurge={events.purge}
-              onLoadMore={events.loadMore}
+              eventEntries={events.entries}
+              chunkEntries={chunks.entries}
+              eventsConnected={events.isConnected}
+              chunksConnected={chunks.isConnected}
+              error={events.error || chunks.error}
+              onPurgeEvents={events.purge}
+              onPurgeChunks={chunks.purge}
             />
           </TabsContent>
         </Tabs>
