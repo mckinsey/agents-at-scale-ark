@@ -109,6 +109,24 @@ runs:
 
         ark status
 
+    - name: Wait for webhook CA bundle injection
+      shell: bash
+      run: |
+        echo "Waiting for cert-manager to inject CA bundle into webhooks..."
+        timeout=300
+        elapsed=0
+        while [ $elapsed -lt $timeout ]; do
+          if kubectl get mutatingwebhookconfiguration ark-mutating-webhook-configuration -o jsonpath='{.webhooks[?(@.name=="mmodel-v1.kb.io")].clientConfig.caBundle}' | grep -q .; then
+            echo "CA bundle injected successfully"
+            exit 0
+          fi
+          echo "Waiting for CA bundle injection... ($elapsed/$timeout seconds)"
+          sleep 5
+          elapsed=$((elapsed + 5))
+        done
+        echo "Timeout waiting for CA bundle injection"
+        exit 1
+
     - name: Create default model
       shell: bash
       run: |
