@@ -2724,6 +2724,32 @@ export interface components {
             namespace: string;
         };
         /**
+         * ConversationListResponse
+         * @description Response model for listing conversations.
+         */
+        ConversationListResponse: {
+            /** Items */
+            items: components["schemas"]["ConversationResponse"][];
+            /** Total */
+            total?: number | null;
+        };
+        /**
+         * ConversationResponse
+         * @description Response model for a conversation.
+         */
+        ConversationResponse: {
+            /** Conversationid */
+            conversationId: string;
+            /** Lastactivity */
+            lastActivity?: string | null;
+            /** Memoryname */
+            memoryName: string;
+            /** Messagecount */
+            messageCount?: number | null;
+            /** Queries */
+            queries?: string[] | null;
+        };
+        /**
          * Custom
          * @description The custom tool that the model called.
          */
@@ -3833,6 +3859,8 @@ export interface components {
         QueryCreateRequest: {
             /** Cancel */
             cancel?: boolean | null;
+            /** Conversationid */
+            conversationId?: string | null;
             evaluatorSelector?: components["schemas"]["QueryLabelSelector"] | null;
             /** Evaluators */
             evaluators?: components["schemas"]["Memory"][] | null;
@@ -3869,6 +3897,8 @@ export interface components {
         QueryDetailResponse: {
             /** Cancel */
             cancel?: boolean | null;
+            /** Conversationid */
+            conversationId?: string | null;
             /** Input */
             input: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam-Output"] | components["schemas"]["ChatCompletionAssistantMessageParam-Output"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
             memory?: components["schemas"]["Memory"] | null;
@@ -4006,6 +4036,8 @@ export interface components {
          * @description Basic query response for list operations.
          */
         QueryResponse: {
+            /** Conversationid */
+            conversationId?: string | null;
             /** Creationtimestamp */
             creationTimestamp?: string | null;
             /** Input */
@@ -4046,6 +4078,8 @@ export interface components {
         QueryUpdateRequest: {
             /** Cancel */
             cancel?: boolean | null;
+            /** Conversationid */
+            conversationId?: string | null;
             /** Input */
             input?: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam-Input"] | components["schemas"]["ChatCompletionAssistantMessageParam-Input"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[] | null;
             memory?: components["schemas"]["Memory"] | null;
@@ -4184,32 +4218,6 @@ export interface components {
             agent?: string | null;
             /** Selectorprompt */
             selectorPrompt?: string | null;
-        };
-        /**
-         * SessionListResponse
-         * @description Response model for listing sessions.
-         */
-        SessionListResponse: {
-            /** Items */
-            items: components["schemas"]["SessionResponse"][];
-            /** Total */
-            total?: number | null;
-        };
-        /**
-         * SessionResponse
-         * @description Response model for a conversation.
-         */
-        SessionResponse: {
-            /** Conversationid */
-            conversationId: string;
-            /** Lastactivity */
-            lastActivity?: string | null;
-            /** Memoryname */
-            memoryName: string;
-            /** Messagecount */
-            messageCount?: number | null;
-            /** Queries */
-            queries?: string[] | null;
         };
         /**
          * Skill
@@ -5523,7 +5531,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SessionListResponse"];
+                    "application/json": components["schemas"]["ConversationListResponse"];
                 };
             };
             /** @description Validation Error */
