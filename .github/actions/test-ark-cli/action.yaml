@@ -109,23 +109,52 @@ runs:
 
         ark status
 
-    - name: Wait for webhook CA bundle injection
+    - name: Wait for webhooks to be ready
       shell: bash
       run: |
         echo "Waiting for cert-manager to inject CA bundle into webhooks..."
         timeout=300
         elapsed=0
+
+        # Wait for CA bundle injection
         while [ $elapsed -lt $timeout ]; do
           if kubectl get mutatingwebhookconfiguration ark-mutating-webhook-configuration -o jsonpath='{.webhooks[?(@.name=="mmodel-v1.kb.io")].clientConfig.caBundle}' | grep -q .; then
             echo "CA bundle injected successfully"
-            exit 0
+            break
           fi
           echo "Waiting for CA bundle injection... ($elapsed/$timeout seconds)"
           sleep 5
           elapsed=$((elapsed + 5))
         done
-        echo "Timeout waiting for CA bundle injection"
-        exit 1
+
+        if [ $elapsed -ge $timeout ]; then
+          echo "Timeout waiting for CA bundle injection"
+          exit 1
+        fi
+
+        # Wait for webhook service to have endpoints
+        echo "Waiting for ark-webhook-service to have endpoints..."
+        elapsed=0
+        while [ $elapsed -lt $timeout ]; do
+          endpoint_count=$(kubectl get endpoints ark-webhook-service -n ark-system -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null | wc -w)
+          if [ "$endpoint_count" -gt 0 ]; then
+            echo "Webhook service has $endpoint_count endpoint(s)"
+            break
+          fi
+          echo "Waiting for webhook service endpoints... ($elapsed/$timeout seconds)"
+          sleep 5
+          elapsed=$((elapsed + 5))
+        done
+
+        if [ $elapsed -ge $timeout ]; then
+          echo "Timeout waiting for webhook service endpoints"
+          exit 1
+        fi
+
+        # Give the webhook server a few more seconds to fully initialize
+        echo "Waiting for webhook server to fully initialize..."
+        sleep 10
+        echo "Webhooks are ready"
 
     - name: Create default model
       shell: bash
