@@ -64,6 +64,20 @@ runs:
       shell: bash
       run: ark status
 
+    - name: Build ark-controller image
+      shell: bash
+      run: |
+        set -x
+        cd ark
+
+        # Build controller Docker image with CI tag
+        docker build -t ark-controller:ci-test -f Dockerfile .
+
+        # Load image into K3s
+        docker save ark-controller:ci-test -o /tmp/ark-controller-ci.tar
+        sudo k3s ctr images import /tmp/ark-controller-ci.tar
+        rm /tmp/ark-controller-ci.tar
+
     - name: Install Ark from local charts
       shell: bash
       run: |
@@ -76,9 +90,13 @@ runs:
           --wait --timeout=5m
 
         # Install ark-controller from local chart (includes CRDs)
+        # Use the locally built controller image
         helm upgrade --install ark-controller ark/dist/chart \
           --namespace ark-system \
           --create-namespace \
+          --set controllerManager.container.image.repository=ark-controller \
+          --set controllerManager.container.image.tag=ci-test \
+          --set controllerManager.container.image.pullPolicy=Never \
           --wait --timeout=5m
 
         # Install ark-tenant from local chart
@@ -109,167 +127,20 @@ runs:
 
         ark status
 
-    - name: Wait for webhooks to be ready
+    - name: Wait for Ark to be fully ready
       shell: bash
       run: |
-        echo "Waiting for cert-manager to inject CA bundle into webhooks..."
-        timeout=300
-        elapsed=0
+        echo "Waiting for Ark controller to be ready..."
 
-        # Wait for CA bundle injection
-        while [ $elapsed -lt $timeout ]; do
-          if kubectl get mutatingwebhookconfiguration ark-mutating-webhook-configuration -o jsonpath='{.webhooks[?(@.name=="mmodel-v1.kb.io")].clientConfig.caBundle}' | grep -q .; then
-            echo "CA bundle injected successfully"
-            break
-          fi
-          echo "Waiting for CA bundle injection... ($elapsed/$timeout seconds)"
-          sleep 5
-          elapsed=$((elapsed + 5))
-        done
+        # Simple wait for controller to be available (via ark status)
+        # This is sufficient for the validating webhook to work
+        kubectl wait --for=condition=available deployment/ark-controller -n ark-system --timeout=5m
 
-        if [ $elapsed -ge $timeout ]; then
-          echo "Timeout waiting for CA bundle injection"
-          exit 1
-        fi
-
-        # Wait for webhook service to have endpoints
-        echo "Waiting for ark-webhook-service to have endpoints..."
-        elapsed=0
-        while [ $elapsed -lt $timeout ]; do
-          endpoint_count=$(kubectl get endpoints ark-webhook-service -n ark-system -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null | wc -w)
-          if [ "$endpoint_count" -gt 0 ]; then
-            echo "Webhook service has $endpoint_count endpoint(s)"
-            break
-          fi
-          echo "Waiting for webhook service endpoints... ($elapsed/$timeout seconds)"
-          sleep 5
-          elapsed=$((elapsed + 5))
-        done
-
-        if [ $elapsed -ge $timeout ]; then
-          echo "Timeout waiting for webhook service endpoints"
-          exit 1
-        fi
-
-        # Test webhook connectivity by making actual requests
-        echo "Testing webhook connectivity..."
-        elapsed=0
-        webhook_ready=false
-        consecutive_successes=0
-        required_successes=5
-
-        # Create a test model YAML
-        printf '%s\n' \
-          'apiVersion: ark.mckinsey.com/v1alpha1' \
-          'kind: Model' \
-          'metadata:' \
-          '  name: webhook-test' \
-          '  namespace: default' \
-          'spec:' \
-          '  provider: openai' \
-          '  model: gpt-4' \
-          '  baseUrl: http://test' \
-          '  apiKey: test-key' \
-          > /tmp/webhook-test.yaml
-
-        while [ $elapsed -lt $timeout ]; do
-          # Try to create the model with dry-run
-          test_result=$(kubectl apply -f /tmp/webhook-test.yaml --dry-run=server 2>&1 || true)
-
-          # If we get the "could not find" error, webhook isn't responding yet
-          if echo "$test_result" | grep -q "the server could not find the requested resource"; then
-            echo "Webhook not responding, resetting counter... ($elapsed/$timeout seconds)"
-            consecutive_successes=0
-            sleep 5
-            elapsed=$((elapsed + 5))
-          else
-            # Webhook responded - increment success counter
-            consecutive_successes=$((consecutive_successes + 1))
-            echo "Webhook responded successfully ($consecutive_successes/$required_successes)"
-
-            if [ $consecutive_successes -ge $required_successes ]; then
-              echo "Webhook is stable and responding consistently"
-              webhook_ready=true
-              break
-            fi
-
-            sleep 2
-            elapsed=$((elapsed + 2))
-          fi
-        done
-
-        rm -f /tmp/webhook-test.yaml
-
-        if [ "$webhook_ready" = false ]; then
-          echo "❌ Timeout waiting for webhook to respond"
-          echo ""
-          echo "=== Checking webhook configuration ==="
-          kubectl get mutatingwebhookconfiguration ark-mutating-webhook-configuration -o yaml
-          echo ""
-          echo "=== Checking webhook service ==="
-          kubectl get svc ark-webhook-service -n ark-system -o wide
-          echo ""
-          echo "=== Checking webhook endpoints ==="
-          kubectl get endpoints ark-webhook-service -n ark-system -o wide
-          echo ""
-          echo "=== Checking controller pods ==="
-          kubectl get pods -n ark-system -l control-plane=ark-controller -o wide
-          echo ""
-          echo "=== Controller logs (last 100 lines) ==="
-          kubectl logs -n ark-system -l control-plane=ark-controller --tail=100
-          exit 1
-        fi
-
-        echo "✓ Webhooks are ready and responding"
-
-        # Additional check: verify controller pod is stable
-        echo "Verifying controller pod stability..."
-        kubectl get pods -n ark-system -l control-plane=ark-controller -o wide
-
-        # Check for recent restarts
-        restart_count=$(kubectl get pods -n ark-system -l control-plane=ark-controller -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}')
-        echo "Controller restart count: $restart_count"
-
-        if [ "$restart_count" -gt 0 ]; then
-          echo "⚠️  Warning: Controller has restarted $restart_count times"
-          echo "Recent controller logs:"
-          kubectl logs -n ark-system -l control-plane=ark-controller --tail=50
-        fi
+        echo "✓ Ark controller is ready"
 
     - name: Create default model
       shell: bash
       run: |
-        # Final sanity check before model creation
-        echo "Performing final webhook check before creating model..."
-        printf '%s\n' \
-          'apiVersion: ark.mckinsey.com/v1alpha1' \
-          'kind: Model' \
-          'metadata:' \
-          '  name: final-webhook-check' \
-          '  namespace: default' \
-          'spec:' \
-          '  provider: openai' \
-          '  model: gpt-4' \
-          '  baseUrl: http://test' \
-          '  apiKey: test-key' \
-          > /tmp/final-webhook-check.yaml
-
-        final_check=$(kubectl apply -f /tmp/final-webhook-check.yaml --dry-run=server 2>&1 || true)
-        rm -f /tmp/final-webhook-check.yaml
-
-        if echo "$final_check" | grep -q "the server could not find the requested resource"; then
-          echo "❌ ERROR: Webhook became unavailable right before model creation!"
-          echo "Response: $final_check"
-          echo "Controller pods:"
-          kubectl get pods -n ark-system -l control-plane=ark-controller -o wide
-          echo "Controller logs:"
-          kubectl logs -n ark-system -l control-plane=ark-controller --tail=100
-          exit 1
-        else
-          echo "✓ Final webhook check passed"
-        fi
-
-        # Now create the actual model
         ark models create default \
           --type "${{ inputs.model-type }}" \
           --model "${{ inputs.model-name }}" \
