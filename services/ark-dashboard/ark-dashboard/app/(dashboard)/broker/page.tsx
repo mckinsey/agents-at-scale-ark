@@ -272,6 +272,17 @@ interface StreamViewProps {
   onLoadMore?: () => void;
 }
 
+interface SessionsViewProps {
+  title: string;
+  entries: StreamEntry[];
+  isConnected: boolean;
+  isLoading?: boolean;
+  hasMore?: boolean;
+  error: string | null;
+  onPurge: () => void;
+  onLoadMore?: () => void;
+}
+
 function StreamView({
   title,
   entries,
@@ -388,6 +399,186 @@ function StreamView({
   );
 }
 
+function SessionsView({
+  title,
+  entries,
+  isConnected,
+  isLoading,
+  hasMore,
+  error,
+  onPurge,
+  onLoadMore,
+}: SessionsViewProps) {
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(
+    new Set(),
+  );
+  const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (autoScroll && containerRef.current) {
+      containerRef.current.scrollTop = 0;
+    }
+  }, [entries, autoScroll]);
+
+  const groupedBySession = entries.reduce(
+    (acc, entry) => {
+      const outerData = entry.data as Record<string, unknown>;
+      const innerData = outerData?.data as Record<string, unknown>;
+      const sessionId = (innerData?.sessionId as string) || 'unknown';
+
+      if (!acc[sessionId]) {
+        acc[sessionId] = [];
+      }
+      acc[sessionId].push(entry);
+      return acc;
+    },
+    {} as Record<string, StreamEntry[]>,
+  );
+
+  const sortedSessions = Object.entries(groupedBySession).sort((a, b) => {
+    const aLatest = a[1][0]?.timestamp || '';
+    const bLatest = b[1][0]?.timestamp || '';
+    return bLatest.localeCompare(aLatest);
+  });
+
+  const toggleSession = (sessionId: string) => {
+    setExpandedSessions(prev => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+  };
+
+  const toggleEvent = (eventId: string) => {
+    setExpandedEvents(prev => {
+      const next = new Set(prev);
+      if (next.has(eventId)) {
+        next.delete(eventId);
+      } else {
+        next.add(eventId);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <div className="flex items-center gap-2">
+          <CardTitle className="text-base font-medium">{title}</CardTitle>
+          <span
+            className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-300'}`}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={onPurge}>
+            Purge
+          </Button>
+          <label className="flex items-center gap-1.5 text-sm">
+            <Switch checked={autoScroll} onCheckedChange={setAutoScroll} />
+            Auto-scroll
+          </label>
+        </div>
+      </CardHeader>
+      <CardContent className="flex-1 overflow-hidden">
+        {error && (
+          <div className="mb-2 rounded bg-red-100 p-2 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+        <div
+          ref={containerRef}
+          className="bg-muted h-[calc(100vh-280px)] overflow-x-hidden overflow-y-auto rounded-md p-2 font-mono text-xs">
+          {entries.length === 0 ? (
+            <div className="text-muted-foreground flex h-full items-center justify-center">
+              Waiting for data...
+            </div>
+          ) : (
+            <>
+              {sortedSessions.map(([sessionId, sessionEntries]) => {
+                const isSessionExpanded = expandedSessions.has(sessionId);
+                return (
+                  <div
+                    key={sessionId}
+                    className="border-border mb-2 rounded border p-2">
+                    <div
+                      className="flex cursor-pointer items-center gap-2"
+                      onClick={() => toggleSession(sessionId)}>
+                      {isSessionExpanded ? (
+                        <ChevronDown className="text-muted-foreground h-4 w-4 shrink-0" />
+                      ) : (
+                        <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
+                      )}
+                      <span className="font-semibold">
+                        Session: {sessionId}
+                      </span>
+                      <span className="text-muted-foreground ml-auto">
+                        ({sessionEntries.length} events)
+                      </span>
+                    </div>
+                    {isSessionExpanded && (
+                      <div className="mt-2 ml-6 space-y-1">
+                        {sessionEntries.map(entry => {
+                          const isEventExpanded = expandedEvents.has(entry.id);
+                          return (
+                            <div
+                              key={entry.id}
+                              className="border-border overflow-hidden border-b pb-1 last:border-b-0">
+                              <div className="flex min-w-0 items-center gap-1">
+                                <span
+                                  className="flex shrink-0 cursor-pointer items-center gap-1"
+                                  onClick={() => toggleEvent(entry.id)}>
+                                  {isEventExpanded ? (
+                                    <ChevronDown className="text-muted-foreground h-3 w-3 shrink-0" />
+                                  ) : (
+                                    <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
+                                  )}
+                                  <span>{entry.timestamp}</span>
+                                </span>
+                                {!isEventExpanded && (
+                                  <span className="text-muted-foreground w-0 flex-1 truncate">
+                                    {JSON.stringify(entry.data)}
+                                  </span>
+                                )}
+                              </div>
+                              {isEventExpanded && (
+                                <pre className="mt-1 break-all whitespace-pre-wrap">
+                                  {JSON.stringify(entry.data, null, 2)}
+                                </pre>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {onLoadMore && hasMore && (
+                <div className="flex justify-center py-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onLoadMore}
+                    disabled={isLoading}>
+                    {isLoading ? 'Loading...' : 'Load more'}
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function BrokerPage() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [selectedMemory, setSelectedMemory] = useState<string>('default');
@@ -460,6 +651,7 @@ export default function BrokerPage() {
               <TabsTrigger value="messages">Messages</TabsTrigger>
               <TabsTrigger value="chunks">LLM Chunks</TabsTrigger>
               <TabsTrigger value="events">Events</TabsTrigger>
+              <TabsTrigger value="sessions">Sessions</TabsTrigger>
             </TabsList>
           </div>
           <TabsContent value="traces" className="mt-4 flex-1">
@@ -501,6 +693,18 @@ export default function BrokerPage() {
           <TabsContent value="events" className="mt-4 flex-1">
             <StreamView
               title="Operation Events"
+              entries={events.entries}
+              isConnected={events.isConnected}
+              isLoading={events.isLoading}
+              hasMore={events.hasMore}
+              error={events.error}
+              onPurge={events.purge}
+              onLoadMore={events.loadMore}
+            />
+          </TabsContent>
+          <TabsContent value="sessions" className="mt-4 flex-1">
+            <SessionsView
+              title="Sessions"
               entries={events.entries}
               isConnected={events.isConnected}
               isLoading={events.isLoading}
