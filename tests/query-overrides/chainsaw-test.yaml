@@ -26,8 +26,6 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
     - apply:
-        file: manifests/a03-model.yaml
-    - apply:
         file: manifests/a01-secret-overrides.yaml
     - apply:
         file: manifests/a02-configmap-overrides.yaml
