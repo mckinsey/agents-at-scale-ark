@@ -151,10 +151,66 @@ runs:
           exit 1
         fi
 
-        # Give the webhook server a few more seconds to fully initialize
-        echo "Waiting for webhook server to fully initialize..."
-        sleep 10
-        echo "Webhooks are ready"
+        # Test webhook connectivity by making actual requests
+        echo "Testing webhook connectivity..."
+        elapsed=0
+        webhook_ready=false
+
+        while [ $elapsed -lt $timeout ]; do
+          # Try multiple times with short interval to test webhook responsiveness
+          webhook_errors=0
+          for attempt in {1..3}; do
+            # Test with a minimal valid model that should pass webhook validation
+            test_result=$(kubectl apply -f - --dry-run=server 2>&1 <<EOF || true
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: webhook-test-$RANDOM
+  namespace: default
+spec:
+  provider: openai
+  model: gpt-4
+  baseUrl: http://test
+  apiKey: test-key
+EOF
+            )
+
+            if echo "$test_result" | grep -q "the server could not find the requested resource"; then
+              webhook_errors=$((webhook_errors + 1))
+            elif echo "$test_result" | grep -qE "dry-run|created|configured"; then
+              # Webhook responded successfully
+              webhook_ready=true
+              break 2
+            fi
+            sleep 1
+          done
+
+          echo "Webhook not ready yet ($(($webhook_errors))/3 attempts failed), retrying... ($elapsed/$timeout seconds)"
+          sleep 5
+          elapsed=$((elapsed + 5))
+        done
+
+        if [ "$webhook_ready" = false ]; then
+          echo "❌ Timeout waiting for webhook to respond"
+          echo ""
+          echo "=== Checking webhook configuration ==="
+          kubectl get mutatingwebhookconfiguration ark-mutating-webhook-configuration -o yaml
+          echo ""
+          echo "=== Checking webhook service ==="
+          kubectl get svc ark-webhook-service -n ark-system -o wide
+          echo ""
+          echo "=== Checking webhook endpoints ==="
+          kubectl get endpoints ark-webhook-service -n ark-system -o wide
+          echo ""
+          echo "=== Checking controller pods ==="
+          kubectl get pods -n ark-system -l control-plane=ark-controller -o wide
+          echo ""
+          echo "=== Controller logs (last 100 lines) ==="
+          kubectl logs -n ark-system -l control-plane=ark-controller --tail=100
+          exit 1
+        fi
+
+        echo "✓ Webhooks are ready and responding"
 
     - name: Create default model
       shell: bash
