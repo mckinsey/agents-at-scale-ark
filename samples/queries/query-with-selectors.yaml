@@ -15,9 +15,9 @@ metadata:
   name: query-mixed-targets-and-selector
 spec:
   input: "Analyze system performance"
-  targets:
-    - type: agent
-      name: system-monitor
+  target:
+    type: agent
+    name: system-monitor
   selector:
     matchExpressions:
       - key: role

@@ -22,7 +22,6 @@ End-to-end tests for Agents at Scale (ARK) using Chainsaw testing framework.
 
 #### Query Targeting Tests
 - **`query-label-selector/`** - Label-based agent selection
-- **`query-multiple-targets/`** - Multi-agent queries
 - **`query-token-usage/`** - Token usage tracking
 
 #### Team Coordination Tests

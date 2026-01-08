@@ -10,7 +10,7 @@ export function createConfig(
   formValues: FormValues,
 ): ModelCreateRequest['config'] {
   const config: ModelCreateRequest['config'] = {};
-  switch (formValues.type) {
+  switch (formValues.provider) {
     case 'openai':
       config.openai = {
         apiKey: {
@@ -72,11 +72,11 @@ export function createModelUpdateConfig(
 }
 
 export function getResetValues(currentFormValues: FormValues): FormValues {
-  switch (currentFormValues.type) {
+  switch (currentFormValues.provider) {
     case 'openai':
       return {
         name: currentFormValues.name,
-        type: currentFormValues.type,
+        provider: currentFormValues.provider,
         model: currentFormValues.model,
         secret: currentFormValues.secret ?? '',
         baseUrl: currentFormValues.baseUrl ?? '',
@@ -84,7 +84,7 @@ export function getResetValues(currentFormValues: FormValues): FormValues {
     case 'azure':
       return {
         name: currentFormValues.name,
-        type: currentFormValues.type,
+        provider: currentFormValues.provider,
         model: currentFormValues.model,
         secret: currentFormValues.secret ?? '',
         baseUrl: currentFormValues.baseUrl ?? '',
@@ -93,7 +93,7 @@ export function getResetValues(currentFormValues: FormValues): FormValues {
     case 'bedrock':
       return {
         name: currentFormValues.name,
-        type: currentFormValues.type,
+        provider: currentFormValues.provider,
         model: currentFormValues.model,
         bedrockAccessKeyIdSecretName: '',
         bedrockSecretAccessKeySecretName: '',
@@ -127,11 +127,11 @@ function getConfigValue<T = unknown>(
 }
 
 export function getDefaultValuesForUpdate(model: Model): FormValues {
-  switch (model.type) {
+  switch (model.provider) {
     case 'openai':
       return {
         name: model.name,
-        type: model.type,
+        provider: model.provider,
         model: model.model,
         secret:
           getConfigValue<string>(model.config, [
@@ -151,7 +151,7 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
     case 'azure':
       return {
         name: model.name,
-        type: model.type,
+        provider: model.provider,
         model: model.model,
         secret:
           getConfigValue<string>(model.config, [
@@ -174,7 +174,7 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
     case 'bedrock':
       return {
         name: model.name,
-        type: model.type,
+        provider: model.provider,
         model: model.model,
         bedrockAccessKeyIdSecretName:
           getConfigValue<string>(model.config, [

@@ -11,7 +11,7 @@ spec:
     - script:
         content: |
           helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.23 \
+            --version 0.1.27 \
             --namespace $NAMESPACE \
             --values mock-llm-values.yaml
         env:
@@ -56,9 +56,9 @@ spec:
           metadata:
             name: echo-test-query
           status:
-            (length(responses)): 1
-            (contains(responses[*].target.name, 'echo-agent')): true
-            (contains(responses[0].content, 'Hello from A2A echo agent!')): true
+            (response != null): true
+            (response.target.name): 'echo-agent'
+            (contains(response.content, 'Hello from A2A echo agent!')): true
     catch:
     - events: {}
     - describe:

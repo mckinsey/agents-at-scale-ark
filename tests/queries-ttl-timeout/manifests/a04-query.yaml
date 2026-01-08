@@ -4,7 +4,7 @@ metadata:
   name: test-query-math-timeout
 spec:
   input: "What is 2+2*7+9? Give good explanation"
-  targets:
-    - type: agent
-      name: test-math
+  target:
+    type: agent
+    name: test-math
   timeout: "1s"

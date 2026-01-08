@@ -70,7 +70,7 @@ def query_to_detail_response(query: dict) -> QueryDetailResponse:
         selector=spec.get("selector"),
         serviceAccount=spec.get("serviceAccount"),
         sessionId=spec.get("sessionId"),
-        targets=spec.get("targets"),
+        target=spec.get("target"),
         timeout=spec.get("timeout"),
         ttl=spec.get("ttl"),
         cancel=spec.get("cancel"),
@@ -126,8 +126,8 @@ async def create_query(
             spec["serviceAccount"] = query.serviceAccount
         if query.sessionId:
             spec["sessionId"] = query.sessionId
-        if query.targets:
-            spec["targets"] = [t.model_dump() for t in query.targets]
+        if query.target:
+            spec["target"] = query.target.model_dump()
         if query.timeout:
             spec["timeout"] = query.timeout
         if query.ttl:
@@ -192,8 +192,8 @@ async def update_query(
             spec["serviceAccount"] = query.serviceAccount
         if query.sessionId is not None:
             spec["sessionId"] = query.sessionId
-        if query.targets is not None:
-            spec["targets"] = [t.model_dump() for t in query.targets]
+        if query.target is not None:
+            spec["target"] = query.target.model_dump()
         if query.timeout is not None:
             spec["timeout"] = query.timeout
         if query.ttl is not None:

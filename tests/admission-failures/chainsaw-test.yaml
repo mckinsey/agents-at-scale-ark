@@ -6,18 +6,18 @@ spec:
   description: Comprehensive test of admission controller validation failures for invalid ARK resources
   steps:
   # Model validation failures
-  - name: test-model-missing-type
+  - name: test-model-missing-provider
     try:
     - error:
-        file: manifests/invalid-model-missing-type.yaml
+        file: manifests/invalid-model-missing-provider.yaml
   - name: test-model-missing-config
     try:
     - error:
         file: manifests/invalid-model-missing-config.yaml
-  - name: test-model-invalid-type
+  - name: test-model-invalid-provider
     try:
     - error:
-        file: manifests/invalid-model-invalid-type.yaml
+        file: manifests/invalid-model-invalid-provider.yaml
   
   # Agent validation failures  
   - name: test-agent-missing-prompt

@@ -704,10 +704,8 @@ var _ = Describe("Evaluation Controller", func() {
 				Spec: arkv1alpha1.QuerySpec{},
 				Status: arkv1alpha1.QueryStatus{
 					Phase: "done",
-					Responses: []arkv1alpha1.Response{
-						{
-							Content: "4",
-						},
+					Response: &arkv1alpha1.Response{
+						Content: "4",
 					},
 				},
 			}
@@ -813,10 +811,8 @@ var _ = Describe("Evaluation Controller", func() {
 				Spec: arkv1alpha1.QuerySpec{},
 				Status: arkv1alpha1.QueryStatus{
 					Phase: "running",
-					Responses: []arkv1alpha1.Response{
-						{
-							Content: "4",
-						},
+					Response: &arkv1alpha1.Response{
+						Content: "4",
 					},
 				},
 			}

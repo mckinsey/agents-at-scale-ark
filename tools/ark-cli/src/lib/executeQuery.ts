@@ -169,12 +169,10 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
         conversationId:
           options.conversationId || process.env.ARK_CONVERSATION_ID,
       }),
-      targets: [
-        {
-          type: options.targetType,
-          name: options.targetName,
-        },
-      ],
+      target: {
+        type: options.targetType,
+        name: options.targetName,
+      },
     },
   };
 

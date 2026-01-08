@@ -46,7 +46,7 @@ rag-demo: rag-verify-ark rag-configure-azure rag-deploy-db rag-deploy-service ra
 	@echo ""
 	@echo "Or manually:"
 	@echo "  kubectl apply -f queries/rag-query.yaml"
-	@echo "  kubectl get query rag-query -o jsonpath='{.status.responses[0].content}'"
+	@echo "  kubectl get query rag-query -o jsonpath='{.status.response.content}'"
 
 rag-verify-ark: ## Verify ARK platform is running
 	@echo "$(YELLOW)Checking ARK platform...$(NC)"
@@ -129,7 +129,7 @@ rag-test: ## Test the RAG agent with a sample query
 	@sleep 15
 	@echo ""
 	@echo "$(GREEN)Query Response:$(NC)"
-	@kubectl get query rag-query -o jsonpath='{.status.responses[0].content}' | fold -w 80 -s
+	@kubectl get query rag-query -o jsonpath='{.status.response.content}' | fold -w 80 -s
 	@echo ""
 	@echo ""
 	@echo "$(GREEN)✅ Test complete$(NC)"

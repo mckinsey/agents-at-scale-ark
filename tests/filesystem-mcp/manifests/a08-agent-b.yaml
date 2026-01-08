@@ -16,10 +16,10 @@ spec:
     name: test-model
   tools:
   - name: mcp-filesystem-write-file
-    type: custom
+    type: mcp
   - name: mcp-filesystem-read-text-file
-    type: custom
+    type: mcp
   - name: mcp-filesystem-list-directory
-    type: custom
+    type: mcp
   - name: mcp-filesystem-create-directory
-    type: custom
+    type: mcp

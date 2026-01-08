@@ -7,8 +7,8 @@ registries:
   git:
     type: git
     url: https://github.com
-    username: x-access-token
-    password: ${{ secrets.GA_PAT }}
+    username: ${{ github.actor }}
+    password: ${{ secrets.GITHUB_TOKEN }}
 
 updates:
   - package-ecosystem: github-actions

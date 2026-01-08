@@ -1,49 +1,49 @@
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, model_serializer
+from pydantic import BaseModel
 
 from .common import AvailabilityStatus
 
 
-class ConfigMapKeyRef(BaseModel):
+class MCPServerConfigMapKeyRef(BaseModel):
     key: str
     name: str
     optional: Optional[bool] = None
 
 
-class SecretKeyRef(BaseModel):
+class MCPServerSecretKeyRef(BaseModel):
     key: str
     name: str
     optional: Optional[bool] = None
 
 
-class QueryParameterRef(BaseModel):
+class MCPServerQueryParameterRef(BaseModel):
     name: str
 
 
-class ServiceRef(BaseModel):
+class MCPServerServiceRef(BaseModel):
     name: str
     namespace: Optional[str] = None
     port: Optional[str] = None
     path: Optional[str] = None
 
 
-class ValueFrom(BaseModel):
-    configMapKeyRef: Optional[ConfigMapKeyRef] = None
-    secretKeyRef: Optional[SecretKeyRef] = None
-    serviceRef: Optional[ServiceRef] = None
-    queryParameterRef: Optional[QueryParameterRef] = None
+class MCPServerValueFrom(BaseModel):
+    configMapKeyRef: Optional[MCPServerConfigMapKeyRef] = None
+    secretKeyRef: Optional[MCPServerSecretKeyRef] = None
+    serviceRef: Optional[MCPServerServiceRef] = None
+    queryParameterRef: Optional[MCPServerQueryParameterRef] = None
 
 
-class ValueSource(BaseModel):
+class MCPServerValueSource(BaseModel):
     """ValueSource for configuration (supports direct value or valueFrom)."""
     value: Optional[str] = None
-    valueFrom: Optional[ValueFrom] = None
+    valueFrom: Optional[MCPServerValueFrom] = None
 
 
-class Header(BaseModel):
+class MCPServerHeader(BaseModel):
     name: str
-    value: ValueSource
+    value: MCPServerValueSource
 
 
 class MCPServerResponse(BaseModel):
@@ -71,7 +71,7 @@ class MCPServerDetailResponse(BaseModel):
     available: Optional[AvailabilityStatus] = None
     address: Optional[str] = None
     transport: Optional[str] = None
-    headers: Optional[List[Header]]
+    headers: Optional[List[MCPServerHeader]]
     tool_count: Optional[int] = None
 
 
@@ -87,8 +87,8 @@ class MCPServerSpec(BaseModel):
     transport: str
     description: Optional[str] = None
     tools: Optional[List[str]] = None
-    address: ValueSource
-    headers: Optional[List[Header]] = None
+    address: MCPServerValueSource
+    headers: Optional[List[MCPServerHeader]] = None
 
 
 class MCPServerCreateRequest(BaseModel):

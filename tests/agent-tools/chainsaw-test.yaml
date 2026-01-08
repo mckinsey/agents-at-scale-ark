@@ -10,7 +10,7 @@ spec:
     - script:
         content: |
           helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.25 \
+            --version 0.1.27 \
             --namespace $NAMESPACE \
             --values mock-llm-values.yaml \
             --wait --timeout=120s
@@ -60,7 +60,7 @@ spec:
             modelRef:
               name: test-model
             tools:
-            - type: custom
+            - type: http
               name: weather-tool
     - apply:
         resource:
@@ -70,8 +70,8 @@ spec:
             name: weather-query
           spec:
             input: What's the current weather like in New York City?
-            targets:
-            - type: agent
+            target:
+              type: agent
               name: weather-agent
     - assert:
         resource:
@@ -111,9 +111,9 @@ spec:
           metadata:
             name: weather-query
           status:
-            (length(responses)): 1
-            (contains(responses[*].target.name, 'weather-agent')): true
-            (length(join('', responses[*].content)) > `10`): true
+            (response != null): true
+            (response.target.name): 'weather-agent'
+            (length(response.content) > `10`): true
     catch:
     - events: {}
     - describe:

@@ -14,12 +14,12 @@ import (
 	"mckinsey.com/ark/internal/annotations"
 )
 
-func createQuery(input string, targets []arkv1alpha1.QueryTarget, namespace string, params []arkv1alpha1.Parameter, sessionId string, conversationId string, timeout *time.Duration) (*arkv1alpha1.Query, error) {
+func createQuery(input string, target *arkv1alpha1.QueryTarget, namespace string, params []arkv1alpha1.Parameter, sessionId string, conversationId string, timeout *time.Duration) (*arkv1alpha1.Query, error) {
 	queryName := fmt.Sprintf("cli-query-%d", time.Now().Unix())
 
 	spec := &arkv1alpha1.QuerySpec{
 		Input:          runtime.RawExtension{Raw: []byte(input)},
-		Targets:        targets,
+		Target:         target,
 		Parameters:     params,
 		SessionId:      sessionId,
 		ConversationId: conversationId,
@@ -179,7 +179,7 @@ func createTriggerQuery(existingQuery *arkv1alpha1.Query, input runtime.RawExten
 
 	spec := &arkv1alpha1.QuerySpec{
 		Input:          input,
-		Targets:        existingQuery.Spec.Targets,
+		Target:         existingQuery.Spec.Target,
 		Selector:       existingQuery.Spec.Selector,
 		Parameters:     params,
 		Memory:         existingQuery.Spec.Memory,
