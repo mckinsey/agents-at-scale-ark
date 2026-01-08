@@ -290,7 +290,7 @@ export function McpEditor({
                     <FormControl>
                       <Input
                         placeholder="https:/github.com/v1"
-                        disabled={!!mcpServer || form.formState.isSubmitting}
+                        disabled={form.formState.isSubmitting}
                         {...field}
                         onChange={e => field.onChange(e.target.value.trim())}
                       />
