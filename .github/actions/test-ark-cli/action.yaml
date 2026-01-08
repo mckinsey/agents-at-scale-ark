@@ -155,6 +155,8 @@ runs:
         echo "Testing webhook connectivity..."
         elapsed=0
         webhook_ready=false
+        consecutive_successes=0
+        required_successes=5
 
         # Create a test model YAML
         printf '%s\n' \
@@ -176,17 +178,24 @@ runs:
 
           # If we get the "could not find" error, webhook isn't responding yet
           if echo "$test_result" | grep -q "the server could not find the requested resource"; then
-            echo "Webhook not responding yet, retrying... ($elapsed/$timeout seconds)"
+            echo "Webhook not responding, resetting counter... ($elapsed/$timeout seconds)"
+            consecutive_successes=0
+            sleep 5
+            elapsed=$((elapsed + 5))
           else
-            # Any other response means webhook is working (success or validation error)
-            echo "Webhook is responding"
-            echo "Response: $test_result"
-            webhook_ready=true
-            break
-          fi
+            # Webhook responded - increment success counter
+            consecutive_successes=$((consecutive_successes + 1))
+            echo "Webhook responded successfully ($consecutive_successes/$required_successes)"
 
-          sleep 5
-          elapsed=$((elapsed + 5))
+            if [ $consecutive_successes -ge $required_successes ]; then
+              echo "Webhook is stable and responding consistently"
+              webhook_ready=true
+              break
+            fi
+
+            sleep 2
+            elapsed=$((elapsed + 2))
+          fi
         done
 
         rm -f /tmp/webhook-test.yaml
@@ -213,9 +222,54 @@ runs:
 
         echo "✓ Webhooks are ready and responding"
 
+        # Additional check: verify controller pod is stable
+        echo "Verifying controller pod stability..."
+        kubectl get pods -n ark-system -l control-plane=ark-controller -o wide
+
+        # Check for recent restarts
+        restart_count=$(kubectl get pods -n ark-system -l control-plane=ark-controller -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}')
+        echo "Controller restart count: $restart_count"
+
+        if [ "$restart_count" -gt 0 ]; then
+          echo "⚠️  Warning: Controller has restarted $restart_count times"
+          echo "Recent controller logs:"
+          kubectl logs -n ark-system -l control-plane=ark-controller --tail=50
+        fi
+
     - name: Create default model
       shell: bash
       run: |
+        # Final sanity check before model creation
+        echo "Performing final webhook check before creating model..."
+        printf '%s\n' \
+          'apiVersion: ark.mckinsey.com/v1alpha1' \
+          'kind: Model' \
+          'metadata:' \
+          '  name: final-webhook-check' \
+          '  namespace: default' \
+          'spec:' \
+          '  provider: openai' \
+          '  model: gpt-4' \
+          '  baseUrl: http://test' \
+          '  apiKey: test-key' \
+          > /tmp/final-webhook-check.yaml
+
+        final_check=$(kubectl apply -f /tmp/final-webhook-check.yaml --dry-run=server 2>&1 || true)
+        rm -f /tmp/final-webhook-check.yaml
+
+        if echo "$final_check" | grep -q "the server could not find the requested resource"; then
+          echo "❌ ERROR: Webhook became unavailable right before model creation!"
+          echo "Response: $final_check"
+          echo "Controller pods:"
+          kubectl get pods -n ark-system -l control-plane=ark-controller -o wide
+          echo "Controller logs:"
+          kubectl logs -n ark-system -l control-plane=ark-controller --tail=100
+          exit 1
+        else
+          echo "✓ Final webhook check passed"
+        fi
+
+        # Now create the actual model
         ark models create default \
           --type "${{ inputs.model-type }}" \
           --model "${{ inputs.model-name }}" \
