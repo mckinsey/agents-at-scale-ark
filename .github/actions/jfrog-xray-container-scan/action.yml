@@ -118,7 +118,8 @@ runs:
         echo "|-------|-------------|---------|-----------|--------|----------|" >> $GITHUB_STEP_SUMMARY
         echo "| $VULN_COUNT | $CRITICAL | $HIGH | $MEDIUM | $LOW | $UNKNOWN |" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "#### Details" >> $GITHUB_STEP_SUMMARY
+        echo "<details>" >> $GITHUB_STEP_SUMMARY
+        echo "<summary>Details</summary>" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "| ID | Affected Component | Severity | CVEs |" >> $GITHUB_STEP_SUMMARY
         echo "|----|-------------------|----------|------|" >> $GITHUB_STEP_SUMMARY
@@ -128,6 +129,8 @@ runs:
         else
           echo "| No vulnerabilities found | - | - | - |" >> $GITHUB_STEP_SUMMARY
         fi
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "</details>" >> $GITHUB_STEP_SUMMARY
 
     - name: Upload scan results
       if: always()
