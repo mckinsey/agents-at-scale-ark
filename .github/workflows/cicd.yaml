@@ -311,7 +311,8 @@ jobs:
           prebuild: ${{ matrix.prebuild }}
 
   xray-container-scan:
-    needs: [build-containers]
+    needs: [setup-container-cache-registry, build-containers]
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
