@@ -39,6 +39,9 @@ interface PaginatedResponse<T> {
 const PAGE_SIZE = 100;
 
 function extractItemTimestamp(item: unknown): string {
+  if (!item) {
+    return new Date().toISOString();
+  }
   const typedItem = item as Record<string, unknown>;
   if (typedItem.timestamp) {
     return typedItem.timestamp as string;
@@ -52,9 +55,7 @@ function extractItemTimestamp(item: unknown): string {
     unixTimestamp = spans[0].startTimeUnixNano as string;
   }
   if (unixTimestamp) {
-      return new Date(
-        parseInt(unixTimestamp.substring(0, 13)),
-      ).toISOString();
+    return new Date(parseInt(unixTimestamp.substring(0, 13))).toISOString();
   }
 
   return new Date().toISOString();
