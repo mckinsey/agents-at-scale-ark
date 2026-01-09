@@ -9,17 +9,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/proxy", tags=["proxy"])
 
 
-@router.api_route(
-    "/{service_name}/{api_path:path}",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
-)
-async def proxy_request(
+async def _proxy_request_impl(
     service_name: str,
     api_path: str,
     request: Request,
 ) -> Response:
     """
-    Proxy requests to other services in the cluster.
+    Internal implementation for proxying requests to other services in the cluster.
 
     Args:
         service_name: Name of the Kubernetes service to proxy to
@@ -66,3 +62,73 @@ async def proxy_request(
             status_code=502,
             detail=f"Failed to proxy request to {service_name}: {str(e)}"
         )
+
+
+@router.get("/{service_name}/{api_path:path}")
+async def proxy_request_get(
+    service_name: str,
+    api_path: str,
+    request: Request,
+) -> Response:
+    """Proxy GET requests to other services in the cluster."""
+    return await _proxy_request_impl(service_name, api_path, request)
+
+
+@router.post("/{service_name}/{api_path:path}")
+async def proxy_request_post(
+    service_name: str,
+    api_path: str,
+    request: Request,
+) -> Response:
+    """Proxy POST requests to other services in the cluster."""
+    return await _proxy_request_impl(service_name, api_path, request)
+
+
+@router.put("/{service_name}/{api_path:path}")
+async def proxy_request_put(
+    service_name: str,
+    api_path: str,
+    request: Request,
+) -> Response:
+    """Proxy PUT requests to other services in the cluster."""
+    return await _proxy_request_impl(service_name, api_path, request)
+
+
+@router.delete("/{service_name}/{api_path:path}")
+async def proxy_request_delete(
+    service_name: str,
+    api_path: str,
+    request: Request,
+) -> Response:
+    """Proxy DELETE requests to other services in the cluster."""
+    return await _proxy_request_impl(service_name, api_path, request)
+
+
+@router.patch("/{service_name}/{api_path:path}")
+async def proxy_request_patch(
+    service_name: str,
+    api_path: str,
+    request: Request,
+) -> Response:
+    """Proxy PATCH requests to other services in the cluster."""
+    return await _proxy_request_impl(service_name, api_path, request)
+
+
+@router.head("/{service_name}/{api_path:path}")
+async def proxy_request_head(
+    service_name: str,
+    api_path: str,
+    request: Request,
+) -> Response:
+    """Proxy HEAD requests to other services in the cluster."""
+    return await _proxy_request_impl(service_name, api_path, request)
+
+
+@router.options("/{service_name}/{api_path:path}")
+async def proxy_request_options(
+    service_name: str,
+    api_path: str,
+    request: Request,
+) -> Response:
+    """Proxy OPTIONS requests to other services in the cluster."""
+    return await _proxy_request_impl(service_name, api_path, request)
