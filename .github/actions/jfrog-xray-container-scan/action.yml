@@ -57,26 +57,26 @@ runs:
       run: |
         SCAN_FILE="xray-container-scan-${{ inputs.image_name }}.json"
 
-        VIOLATIONS_COUNT=$(jq '[.[] | select(.violations != null) | .violations | length] | add // 0' "$SCAN_FILE" 2>/dev/null || echo "0")
+        VULN_COUNT=$(jq '[.[] | select(.vulnerabilities != null) | .vulnerabilities | length] | add // 0' "$SCAN_FILE" 2>/dev/null || echo "0")
 
-        echo "Violations found in ${{ inputs.image_name }}: $VIOLATIONS_COUNT"
-        echo "violations_count=$VIOLATIONS_COUNT" >> $GITHUB_OUTPUT
+        echo "Vulnerabilities found in ${{ inputs.image_name }}: $VULN_COUNT"
+        echo "violations_count=$VULN_COUNT" >> $GITHUB_OUTPUT
 
         TABLE=$(jq -r '
           .[]
-          | select(.violations != null) | .violations[]?
+          | select(.vulnerabilities != null) | .vulnerabilities[]?
           | {
               issue_id: (.issue_id // "N/A"),
               component_ids: (
                 if (.components and (.components | length > 0))
-                then (.components | to_entries | map( .value.impact_paths[]? | .[].component_id ) | flatten | unique )
+                then (.components | keys)
                 else []
                 end
               ),
               severity: (.severity // "N/A"),
               cves: (
                 if (.cves and (.cves | type == "array" and length > 0))
-                then (.cves | map(.cve) )
+                then (.cves | map(.cve))
                 else []
                 end
               )
@@ -84,9 +84,9 @@ runs:
         ' "$SCAN_FILE" 2>/dev/null | jq -r -s 'group_by(.issue_id)[] |
           [
             (.[0].issue_id),
-            ( map(.component_ids[]) | unique | join(",")),
-            ( map(.severity) | unique | join(",")),
-            ( map(.cves[]) | unique | join(","))
+            (map(.component_ids[]) | unique | join(",")),
+            (map(.severity) | unique | join(",")),
+            (map(.cves[]) | unique | join(","))
           ] | @tsv
         ' 2>/dev/null || echo "")
 
@@ -98,7 +98,7 @@ runs:
         if [ -n "$TABLE" ]; then
           echo "$TABLE" | awk '{print "| " $1 " | " $2 " | " $3 " | " $4 " |"}' >> $GITHUB_STEP_SUMMARY
         else
-          echo "| No violations found | - | - | - |" >> $GITHUB_STEP_SUMMARY
+          echo "| No vulnerabilities found | - | - | - |" >> $GITHUB_STEP_SUMMARY
         fi
 
     - name: Upload scan results
