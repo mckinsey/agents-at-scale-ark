@@ -1,10 +1,13 @@
 'use client';
 
+import copy from 'copy-to-clipboard';
 import {
   ChevronLeft,
+  Copy,
   Download,
   FileIcon,
   FolderIcon,
+  MoreVertical,
   Trash2,
   Upload as UploadIcon,
 } from 'lucide-react';
@@ -21,6 +24,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Empty,
   EmptyContent,
@@ -246,6 +255,12 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
       filesService.download(key);
     };
 
+    const handleCopySuccess = (path: string) => {
+      toast.success('Path Copied', {
+        description: `Copied "${path}" to clipboard`,
+      });
+    };
+
     const handleLoadMore = async () => {
       if (!nextToken) return;
 
@@ -364,20 +379,42 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
                         —
                       </td>
                       <td className="px-3 py-3 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={e => {
-                            e.stopPropagation();
-                            handleDelete(
-                              'directory',
-                              dir.prefix,
-                              dir.prefix.split('/').filter(Boolean).pop() ||
-                                dir.prefix,
-                            );
-                          }}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={e => e.stopPropagation()}
+                              aria-label="More actions">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={e => {
+                                e.stopPropagation();
+                                copy(dir.prefix);
+                                handleCopySuccess(dir.prefix);
+                              }}>
+                              <Copy className="h-4 w-4" />
+                              Copy Path
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={e => {
+                                e.stopPropagation();
+                                handleDelete(
+                                  'directory',
+                                  dir.prefix,
+                                  dir.prefix.split('/').filter(Boolean).pop() ||
+                                    dir.prefix,
+                                );
+                              }}>
+                              <Trash2 className="h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
                     </tr>
                   ))}
@@ -405,18 +442,38 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
                             onClick={() => handleDownload(file.key)}>
                             <Download className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              handleDelete(
-                                'file',
-                                file.key,
-                                file.key.split('/').pop() || file.key,
-                              )
-                            }>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                aria-label="More actions">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  copy(file.key);
+                                  handleCopySuccess(file.key);
+                                }}>
+                                <Copy className="h-4 w-4" />
+                                Copy Path
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() =>
+                                  handleDelete(
+                                    'file',
+                                    file.key,
+                                    file.key.split('/').pop() || file.key,
+                                  )
+                                }>
+                                <Trash2 className="h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </td>
                     </tr>
