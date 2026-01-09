@@ -276,11 +276,14 @@ interface SessionsViewProps {
   title: string;
   eventEntries: StreamEntry[];
   chunkEntries: StreamEntry[];
+  traceEntries: StreamEntry[];
   eventsConnected: boolean;
   chunksConnected: boolean;
+  tracesConnected: boolean;
   error: string | null;
   onPurgeEvents: () => void;
   onPurgeChunks: () => void;
+  onPurgeTraces: () => void;
 }
 
 function StreamView({
@@ -403,11 +406,14 @@ function SessionsView({
   title,
   eventEntries,
   chunkEntries,
+  traceEntries,
   eventsConnected,
   chunksConnected,
+  tracesConnected,
   error,
   onPurgeEvents,
   onPurgeChunks,
+  onPurgeTraces,
 }: SessionsViewProps) {
   const [autoScroll, setAutoScroll] = useState(true);
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(
@@ -417,8 +423,8 @@ function SessionsView({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const allEntries = useMemo(
-    () => [...eventEntries, ...chunkEntries],
-    [eventEntries, chunkEntries],
+    () => [...eventEntries, ...chunkEntries, ...traceEntries],
+    [eventEntries, chunkEntries, traceEntries],
   );
 
   useEffect(() => {
@@ -432,17 +438,48 @@ function SessionsView({
       const outerData = entry.data as Record<string, unknown>;
 
       let sessionId = 'unknown';
-      const innerData = outerData?.data as Record<string, unknown>;
-      if (innerData?.sessionId) {
-        sessionId = innerData.sessionId as string;
-      } else {
-        const chunk = innerData?.chunk as Record<string, unknown>;
-        const ark = chunk?.ark as Record<string, unknown>;
-        if (ark?.session) {
-          sessionId = ark.session as string;
+
+      let foundSessionId = false;
+        const spans = outerData?.spans as Array<Record<string, unknown>>;
+        if (spans && spans.length > 0) {
+          for (const span of spans) {
+
+            const attributes = span?.attributes as Array<
+              Record<string, unknown>
+            >;
+            if (attributes) {
+              const sessionAttr = attributes.find(
+                attr => attr?.key === 'session.id',
+              );
+              if (sessionAttr?.value) {
+                sessionId = sessionAttr.value as string;
+                foundSessionId = true;
+                break;
+              }
+            }
+          }
         }
-        if (ark?.completedQuery?.spec?.sessionId){
-            sessionId = ark.completedQuery.spec.sessionId as string;
+
+      if (!foundSessionId) {
+        const innerData = outerData?.data as Record<string, unknown>;
+        if (innerData?.sessionId) {
+          sessionId = innerData.sessionId as string;
+        } else {
+          const chunk = innerData?.chunk as Record<string, unknown>;
+          const ark = chunk?.ark as Record<string, unknown>;
+          if (ark?.session) {
+            sessionId = ark.session as string;
+          }
+          if (ark?.completedQuery) {
+            const completedQuery = ark.completedQuery as Record<
+              string,
+              unknown
+            >;
+            const spec = completedQuery?.spec as Record<string, unknown>;
+            if (spec?.sessionId) {
+              sessionId = spec.sessionId as string;
+            }
+          }
         }
       }
 
@@ -486,7 +523,7 @@ function SessionsView({
   };
 
   const handlePurgeAll = async () => {
-    await Promise.all([onPurgeEvents(), onPurgeChunks()]);
+    await Promise.all([onPurgeEvents(), onPurgeChunks(), onPurgeTraces()]);
   };
 
   return (
@@ -502,6 +539,10 @@ function SessionsView({
             <span
               className={`h-2 w-2 rounded-full ${chunksConnected ? 'bg-green-500' : 'bg-gray-300'}`}
               title="Chunks"
+            />
+            <span
+              className={`h-2 w-2 rounded-full ${tracesConnected ? 'bg-green-500' : 'bg-gray-300'}`}
+              title="Traces"
             />
           </div>
         </div>
@@ -725,11 +766,14 @@ export default function BrokerPage() {
               title="Sessions"
               eventEntries={events.entries}
               chunkEntries={chunks.entries}
+              traceEntries={traces.entries}
               eventsConnected={events.isConnected}
               chunksConnected={chunks.isConnected}
-              error={events.error || chunks.error}
+              tracesConnected={traces.isConnected}
+              error={events.error || chunks.error || traces.error}
               onPurgeEvents={events.purge}
               onPurgeChunks={chunks.purge}
+              onPurgeTraces={traces.purge}
             />
           </TabsContent>
         </Tabs>
