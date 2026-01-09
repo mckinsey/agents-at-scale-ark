@@ -1,3 +1,4 @@
+import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
 import {
   fireEvent,
   render,
@@ -78,15 +79,24 @@ describe('FilesSection', () => {
       isError: false,
       error: null,
       refetch: vi.fn(),
-    } as any);
+    } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
+      ListFilesResponse,
+      Error
+    >);
 
     mockUseDeleteFile.mockReturnValue({
       mutateAsync: vi.fn().mockResolvedValue(undefined),
-    } as any);
+    } as Partial<UseMutationResult<void, Error, string>> as UseMutationResult<
+      void,
+      Error,
+      string
+    >);
 
     mockUseDeleteDirectory.mockReturnValue({
       mutateAsync: vi.fn().mockResolvedValue({ deleted_count: 5 }),
-    } as any);
+    } as Partial<
+      UseMutationResult<DeleteDirectoryResponse, Error, string>
+    > as UseMutationResult<DeleteDirectoryResponse, Error, string>);
   });
 
   afterEach(() => {
@@ -175,7 +185,11 @@ describe('FilesSection', () => {
       const mockMutateAsync = vi.fn().mockResolvedValue(undefined);
       mockUseDeleteFile.mockReturnValue({
         mutateAsync: mockMutateAsync,
-      } as any);
+      } as Partial<UseMutationResult<void, Error, string>> as UseMutationResult<
+        void,
+        Error,
+        string
+      >);
 
       render(<FilesSection />);
 
@@ -208,7 +222,11 @@ describe('FilesSection', () => {
       const mockMutateAsync = vi.fn().mockResolvedValue(undefined);
       mockUseDeleteFile.mockReturnValue({
         mutateAsync: mockMutateAsync,
-      } as any);
+      } as Partial<UseMutationResult<void, Error, string>> as UseMutationResult<
+        void,
+        Error,
+        string
+      >);
 
       render(<FilesSection />);
 
@@ -239,7 +257,11 @@ describe('FilesSection', () => {
         .mockRejectedValue(new Error('Network error'));
       mockUseDeleteFile.mockReturnValue({
         mutateAsync: mockMutateAsync,
-      } as any);
+      } as Partial<UseMutationResult<void, Error, string>> as UseMutationResult<
+        void,
+        Error,
+        string
+      >);
 
       render(<FilesSection />);
 
@@ -354,7 +376,9 @@ describe('FilesSection', () => {
         .mockResolvedValue({ deleted_count: 5 } as DeleteDirectoryResponse);
       mockUseDeleteDirectory.mockReturnValue({
         mutateAsync: mockMutateAsync,
-      } as any);
+      } as Partial<
+        UseMutationResult<DeleteDirectoryResponse, Error, string>
+      > as UseMutationResult<DeleteDirectoryResponse, Error, string>);
 
       render(<FilesSection />);
 
@@ -455,7 +479,10 @@ describe('FilesSection', () => {
         isError: false,
         error: null,
         refetch: vi.fn(),
-      } as any);
+      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
+        ListFilesResponse,
+        Error
+      >);
 
       renderWithProviders(<FilesSection />);
 
@@ -470,7 +497,10 @@ describe('FilesSection', () => {
         isError: false,
         error: null,
         refetch: vi.fn(),
-      } as any);
+      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
+        ListFilesResponse,
+        Error
+      >);
 
       const { rerender } = render(<FilesSection />);
 
@@ -481,7 +511,10 @@ describe('FilesSection', () => {
         isError: false,
         error: null,
         refetch: vi.fn(),
-      } as any);
+      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
+        ListFilesResponse,
+        Error
+      >);
 
       rerender(<FilesSection />);
     });
@@ -514,7 +547,10 @@ describe('FilesSection', () => {
         isError: false,
         error: null,
         refetch: vi.fn(),
-      } as any);
+      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
+        ListFilesResponse,
+        Error
+      >);
 
       renderWithProviders(<FilesSection />);
 
@@ -550,7 +586,10 @@ describe('FilesSection', () => {
         isError: true,
         error: new Error('Directory not found'),
         refetch: vi.fn(),
-      } as any);
+      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
+        ListFilesResponse,
+        Error
+      >);
 
       renderWithProviders(<FilesSection />);
 
@@ -579,7 +618,10 @@ describe('FilesSection', () => {
         isError: false,
         error: null,
         refetch: vi.fn(),
-      } as any);
+      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
+        ListFilesResponse,
+        Error
+      >);
 
       const goUpButton = screen.getByRole('button', { name: /go up/i });
       fireEvent.click(goUpButton);
@@ -739,7 +781,10 @@ describe('FilesSection', () => {
         isError: false,
         error: null,
         refetch: vi.fn(),
-      } as any);
+      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
+        ListFilesResponse,
+        Error
+      >);
 
       render(<FilesSection />);
 
@@ -754,7 +799,10 @@ describe('FilesSection', () => {
         isError: false,
         error: null,
         refetch: vi.fn(),
-      } as any);
+      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
+        ListFilesResponse,
+        Error
+      >);
 
       render(<FilesSection />);
 
@@ -770,7 +818,10 @@ describe('FilesSection', () => {
         isError: true,
         error: new Error('Failed to fetch'),
         refetch: vi.fn(),
-      } as any);
+      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
+        ListFilesResponse,
+        Error
+      >);
 
       render(<FilesSection />);
 
@@ -793,7 +844,10 @@ describe('FilesSection', () => {
         isError: false,
         error: null,
         refetch: vi.fn(),
-      } as any);
+      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
+        ListFilesResponse,
+        Error
+      >);
 
       render(<FilesSection />);
 
@@ -835,7 +889,10 @@ describe('FilesSection', () => {
         isError: false,
         error: null,
         refetch: vi.fn(),
-      } as any);
+      } as Partial<UseQueryResult<ListFilesResponse>> as UseQueryResult<
+        ListFilesResponse,
+        Error
+      >);
 
       render(<FilesSection />);
 
