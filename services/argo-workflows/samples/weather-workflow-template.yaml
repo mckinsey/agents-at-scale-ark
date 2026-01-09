@@ -71,12 +71,12 @@ spec:
           PHASE=$(jq -r '.status.phase' /tmp/query.json)
 
           if [ "$PHASE" = "error" ]; then
-            ERROR_MESSAGE=$(jq -r '.status.responses[0].content // .status.error // "Unknown error"' /tmp/query.json)
+            ERROR_MESSAGE=$(jq -r '.status.response.content // .status.error // "Unknown error"' /tmp/query.json)
             echo "$ERROR_MESSAGE"
             exit 1
           fi
 
-          jq -r '.status.responses[0].content // ""' /tmp/query.json | tee /tmp/response.txt
+          jq -r '.status.response.content // ""' /tmp/query.json | tee /tmp/response.txt
       outputs:
         parameters:
           - name: response

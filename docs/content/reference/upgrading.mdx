@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # Upgrading
 
 Ark uses [Semantic Versioning](https://semver.org/). The technical details are in the [semantic versioning specification](https://semver.org/). Briefly, they are:
@@ -9,6 +11,210 @@ Ark uses [Semantic Versioning](https://semver.org/). The technical details are i
 5. Minor releases prior to `v0.1.0` (e.g. `v0.3.0` to `v0.4.0`) may introduce backwards incompatible behavior changes, which are documented in this guide with migration instructions.
 
 A detailed record of every change is documented in [`CHANGELOG.md`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/CHANGELOG.md).
+
+## v0.1.50
+
+### MCP Server Path Configuration
+
+Prior to `v0.1.50`, the Ark controller automatically appended `/mcp` or `/sse` to MCP server addresses based on the transport type. This prevented users from connecting to MCP servers with custom endpoint paths.
+
+From version `v0.1.50`, MCP server addresses are used exactly as specified. You must include the full path in your MCPServer configuration.
+
+This is a **breaking** change for existing MCPServer resources that rely on automatic path appending.
+
+**Symptoms after upgrade:**
+- MCPServer shows `Available=False`
+- Event: `Warning ClientCreationFailed Failed to create MCP client`
+- Condition reason: `ClientCreationFailed`
+
+**Migration:**
+
+Update your MCPServer resources to include the endpoint path:
+
+```yaml
+# Before (path auto-appended)
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: my-mcp-server
+        port: http
+  transport: http
+
+# After (explicit path required)
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: my-mcp-server
+        port: http
+        path: /mcp   # Add this for HTTP transport
+  transport: http
+```
+
+For direct value addresses:
+
+```yaml
+# Before
+address:
+  value: "http://my-server:8080"
+
+# After
+address:
+  value: "http://my-server:8080/mcp"
+```
+
+Use `path: /sse` for SSE transport.
+
+### Model Provider Field
+
+Prior to `v0.1.50`, the `spec.type` field on Models specified the AI provider (openai, azure, bedrock).
+
+From `v0.1.50`, provider and type are separate fields:
+- `spec.provider`: The model provider (`openai`, `azure`, or `bedrock`)
+- `spec.type`: The model type (`completions` for a OpenAI V1 Chat Completions API compliant model)
+
+**New models** should use the new format:
+
+```yaml
+spec:
+  provider: openai
+  type: completions  # optional, defaults to completions
+```
+
+**Existing models** using the old format (such as `spec.type: openai`) will show as unavailable with a clear error message:
+
+```
+provider is required - update model to migrate 'openai' from spec.type to spec.provider
+```
+
+On create or update, models are automatically migrated to the new format by the admission webhook.
+
+<Callout type="warning">
+The automatic migration will be removed in v1.0.0. Update your manifests to the new format before upgrading to v1.0.0.
+</Callout>
+
+To migrate existing models:
+
+```bash
+# View current models - PROVIDER column may be empty for old format, and models
+# which have not been migated will have the 'type' set to openai/azure/etc.
+kubectl get models
+
+# e.g:
+# NAME         TYPE          PROVIDER   MODEL   AVAILABLE   AGE
+# my-model     openai                   gpt-4   False       2d16h
+
+# Trigger migration by annotating all models
+kubectl annotate models --all 'ark.mckinsey.com/migrate-provider-0.1.50=done' --overwrite
+
+# Verify migration - PROVIDER column now populated and TYPE set correctly.
+kubectl get models
+
+# e.g:
+# NAME         TYPE          PROVIDER   MODEL   AVAILABLE   AGE
+# my-model     completions   openai     gpt-4   True        2d16h
+```
+
+This is a **breaking** change for existing models that have not been updated. They will remain unavailable until migrated.
+
+### Query Single Target
+
+Prior to `v0.1.50`, Query resources supported multiple targets via `spec.targets[]`:
+
+```yaml
+# Old format (no longer supported)
+spec:
+  input: "What is 2+2?"
+  targets:
+    - type: agent
+      name: math-agent
+    - type: agent
+      name: backup-agent
+```
+
+From `v0.1.50`, Query resources support a single target via `spec.target`:
+
+```yaml
+# New format
+spec:
+  input: "What is 2+2?"
+  target:
+    type: agent
+    name: math-agent
+```
+
+This is a **breaking** change. Existing Query manifests using `spec.targets[]` must be updated to use `spec.target`.
+
+To query multiple targets, create one Query per target and check the results individually.
+
+### Agent Tool Type Deprecation
+
+Prior to `v0.1.50`, agents referenced Tool resources using `type: custom`:
+
+```yaml
+# Old format (deprecated)
+spec:
+  tools:
+    - type: custom
+      name: get-coordinates    # References an HTTP Tool
+    - type: custom
+      name: github-read-file   # References an MCP Tool
+```
+
+From `v0.1.50`, agents should use explicit tool types that match the Tool resource type:
+
+```yaml
+# New format
+spec:
+  tools:
+    - type: http
+      name: get-coordinates    # HTTP tool
+    - type: mcp
+      name: github-read-file   # MCP tool
+    - type: agent
+      name: sub-agent-tool     # Agent tool
+    - type: team
+      name: research-team      # Team tool
+    - type: builtin
+      name: noop               # Builtin tool
+```
+
+This is a **non-breaking** change. `type: custom` continues to work but shows a deprecation warning. The controller now validates that the declared type matches the Tool CRD type (except for `custom` which bypasses validation for backwards compatibility).
+
+<Callout type="warning">
+`type: custom` will be removed in v1.0.0. Update your agent manifests to use explicit tool types.
+</Callout>
+
+To find agents using deprecated `type: custom`:
+
+```bash
+# List agents with 'type: custom' tools
+kubectl get agents -A -o json | jq -r '.items[] | select(.spec.tools[]?.type == "custom") | "\(.metadata.namespace)/\(.metadata.name)"'
+```
+
+**Migration:**
+
+To determine the correct type for each tool, check the Tool resource:
+
+```bash
+# Check a tool's type
+kubectl get tool <tool-name> -o jsonpath='{.spec.type}'
+```
+
+Most `type: custom` tools are MCP tools and should be updated to `type: mcp`. Update your agent manifests accordingly:
+
+```yaml
+# Before
+tools:
+  - type: custom
+    name: github-read-file
+
+# After
+tools:
+  - type: mcp
+    name: github-read-file
+```
 
 ## v0.1.34
 

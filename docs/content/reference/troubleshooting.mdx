@@ -265,6 +265,34 @@ helm list --all-namespaces | grep ark
 done
 ```
 
+## MCP Servers
+
+**MCPServer shows 'ClientCreationFailed' after upgrading Ark**
+
+After upgrading to v0.1.49 or later, MCPServer resources may fail with:
+
+```bash
+kubectl get mcpservers
+# NAME        TOOLS   PHASE   ADDRESS
+# my-server   <none>          http://my-server:8080
+
+kubectl describe mcpserver my-server
+# ...
+# Conditions:
+#   Type: Available
+#   Status: False
+#   Reason: ClientCreationFailed
+#   Message: Server not ready due to client creation failure
+```
+
+**Cause**
+
+From v0.1.49, MCP server addresses must include the full endpoint path (e.g., `/mcp` or `/sse`). The controller no longer auto-appends these paths.
+
+**Fix**
+
+Add the path to your MCPServer configuration. See [v0.1.49 Upgrade Guide](/reference/upgrading#v0149) for migration instructions.
+
 ## Agents
 
 **Agents without a model show as 'Unavailable'**

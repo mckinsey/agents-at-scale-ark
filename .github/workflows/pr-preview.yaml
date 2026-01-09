@@ -1,0 +1,26 @@
+name: PR Preview
+
+on: [pull_request]
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docs
+        if: github.event.action != 'closed'
+        working-directory: docs
+        env:
+          NEXT_PUBLIC_BASE_PATH: /pr-preview/pr-${{ github.event.number }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Deploy preview
+        uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: docs/out/

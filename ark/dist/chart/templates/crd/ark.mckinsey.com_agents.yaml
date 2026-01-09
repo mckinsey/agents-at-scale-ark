@@ -305,9 +305,10 @@ spec:
                                 namespace as the resource.
                               type: string
                             path:
-                              description: Optional path to append to the service
-                                address. For models might be 'v1', for gemini might
-                                be 'v1beta/openai', for mcp servers might be 'mcp'.
+                              description: Path component of the service URL. For
+                                anthropic models might be 'v1', for gemini might be
+                                'v1beta/openai', for MCP servers often will be 'mcp'
+                                or 'sse'.
                               type: string
                             port:
                               description: Port name to use. If not specified, uses
@@ -407,10 +408,10 @@ spec:
                                       to the namespace as the resource.
                                     type: string
                                   path:
-                                    description: Optional path to append to the service
-                                      address. For models might be 'v1', for gemini
-                                      might be 'v1beta/openai', for mcp servers might
-                                      be 'mcp'.
+                                    description: Path component of the service URL.
+                                      For anthropic models might be 'v1', for gemini
+                                      might be 'v1beta/openai', for MCP servers often
+                                      will be 'mcp' or 'sse'.
                                     type: string
                                   port:
                                     description: Port name to use. If not specified,
@@ -519,10 +520,10 @@ spec:
                                           to the namespace as the resource.
                                         type: string
                                       path:
-                                        description: Optional path to append to the
-                                          service address. For models might be 'v1',
+                                        description: Path component of the service
+                                          URL. For anthropic models might be 'v1',
                                           for gemini might be 'v1beta/openai', for
-                                          mcp servers might be 'mcp'.
+                                          MCP servers often will be 'mcp' or 'sse'.
                                         type: string
                                       port:
                                         description: Port name to use. If not specified,
@@ -541,6 +542,11 @@ spec:
                       enum:
                       - built-in
                       - custom
+                      - mcp
+                      - http
+                      - agent
+                      - team
+                      - builtin
                       type: string
                   required:
                   - type
@@ -613,4 +619,4 @@ spec:
     storage: true
     subresources:
       status: {}
-{{- end -}}
+{{- end }}

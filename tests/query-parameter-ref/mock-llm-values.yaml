@@ -5,7 +5,8 @@ ark:
   model:
     enabled: true
     name: mock-gpt-4.1
-    type: openai
+    type: completions
+    provider: openai
     model: gpt-4.1
     pollInterval: 3s
     apiKey: mock-api-key

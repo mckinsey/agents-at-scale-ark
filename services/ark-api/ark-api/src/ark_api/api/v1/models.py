@@ -11,7 +11,12 @@ from ...models.models import (
     ModelListResponse,
     ModelCreateRequest,
     ModelUpdateRequest,
-    ModelDetailResponse
+    ModelDetailResponse,
+    DEPRECATED_PROVIDER_TYPES,
+    PROVIDER_OPENAI,
+    PROVIDER_AZURE,
+    PROVIDER_BEDROCK,
+    MODEL_TYPE_COMPLETIONS,
 )
 from ...models.common import extract_availability_from_conditions
 from .exceptions import handle_k8s_errors
@@ -22,6 +27,18 @@ router = APIRouter(prefix="/models", tags=["models"])
 
 # CRD configuration
 VERSION = "v1alpha1"
+
+def get_provider_from_spec(spec: dict) -> str:
+    """Extract provider from spec, with fallback for deprecated format."""
+    provider = spec.get("provider", "")
+    if provider:
+        return provider
+    # Fallback: check if type contains a deprecated provider value
+    type_value = spec.get("type", "")
+    if type_value in DEPRECATED_PROVIDER_TYPES:
+        return type_value
+    return ""
+
 
 def model_to_response(model: dict) -> ModelResponse:
     """Convert a Kubernetes Model CR to a response model."""
@@ -36,7 +53,7 @@ def model_to_response(model: dict) -> ModelResponse:
     return ModelResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
-        type=spec.get("type", ""),
+        provider=get_provider_from_spec(spec),
         model=spec.get("model", {}).get("value", "") if isinstance(spec.get("model"), dict) else "",
         available=availability,
         annotations=metadata.get("annotations", {})
@@ -74,7 +91,7 @@ def model_to_detail_response(model: dict) -> ModelDetailResponse:
     return ModelDetailResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
-        type=spec.get("type", ""),
+        provider=get_provider_from_spec(spec),
         model=spec.get("model", {}).get("value", "") if isinstance(spec.get("model"), dict) else spec.get("model", ""),
         config=processed_config,
         available=availability,
@@ -122,45 +139,46 @@ async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Quer
         ModelDetailResponse: The created model details
     """
     async with with_ark_client(namespace, VERSION) as ark_client:
-        # Build the config based on the type
+        # Build the config based on the provider
         config_dict = {}
-        
-        if body.config.openai and body.type == "openai":
-            config_dict["openai"] = {}
+
+        if body.config.openai and body.provider == PROVIDER_OPENAI:
+            config_dict[PROVIDER_OPENAI] = {}
             # Convert to the expected format with value/valueFrom
             for field, value in body.config.openai.model_dump(by_alias=True, exclude_none=True).items():
                 if field == "headers" and value is not None:
-                    config_dict["openai"][field] = value
+                    config_dict[PROVIDER_OPENAI][field] = value
                 elif isinstance(value, dict) and ("value" in value or "valueFrom" in value):
-                    config_dict["openai"][field] = value
+                    config_dict[PROVIDER_OPENAI][field] = value
                 elif isinstance(value, str):
-                    config_dict["openai"][field] = {"value": value}
-                    
-        elif body.config.azure and body.type == "azure":
-            config_dict["azure"] = {}
+                    config_dict[PROVIDER_OPENAI][field] = {"value": value}
+
+        elif body.config.azure and body.provider == PROVIDER_AZURE:
+            config_dict[PROVIDER_AZURE] = {}
             for field, value in body.config.azure.model_dump(by_alias=True, exclude_none=True).items():
                 if field == "headers" and value is not None:
-                    config_dict["azure"][field] = value
+                    config_dict[PROVIDER_AZURE][field] = value
                 elif isinstance(value, dict) and ("value" in value or "valueFrom" in value):
-                    config_dict["azure"][field] = value
+                    config_dict[PROVIDER_AZURE][field] = value
                 elif isinstance(value, str):
-                    config_dict["azure"][field] = {"value": value}
-                    
-        elif body.config.bedrock and body.type == "bedrock":
-            config_dict["bedrock"] = {}
+                    config_dict[PROVIDER_AZURE][field] = {"value": value}
+
+        elif body.config.bedrock and body.provider == PROVIDER_BEDROCK:
+            config_dict[PROVIDER_BEDROCK] = {}
             for field, value in body.config.bedrock.model_dump(by_alias=True).items():
                 if value is not None:
                     # Handle non-ValueSource fields (maxTokens, temperature)
                     if field in ["maxTokens", "temperature"]:
-                        config_dict["bedrock"][field] = value
+                        config_dict[PROVIDER_BEDROCK][field] = value
                     elif isinstance(value, dict) and ("value" in value or "valueFrom" in value):
-                        config_dict["bedrock"][field] = value
+                        config_dict[PROVIDER_BEDROCK][field] = value
                     elif isinstance(value, str):
-                        config_dict["bedrock"][field] = {"value": value}
-        
+                        config_dict[PROVIDER_BEDROCK][field] = {"value": value}
+
         # Build the model spec
         model_spec = {
-            "type": body.type,
+            "type": MODEL_TYPE_COMPLETIONS,
+            "provider": body.provider,
             "model": {
                 "value": body.model
             },
@@ -221,48 +239,48 @@ async def update_model(model_name: str, body: ModelUpdateRequest, namespace: Opt
         # Get the existing model first
         existing_model = await ark_client.models.a_get(model_name)
         existing_spec = existing_model.to_dict()["spec"]
-        model_type = existing_spec.get("type", "")
-        
+        provider = get_provider_from_spec(existing_spec)
+
         # Update only the fields that are provided
         if body.model is not None:
             existing_spec["model"] = {"value": body.model}
-        
+
         if body.config is not None:
-            # Build the config based on the type
+            # Build the config based on the provider
             config_dict = {}
-            
-            if body.config.openai and model_type == "openai":
-                config_dict["openai"] = {}
+
+            if body.config.openai and provider == PROVIDER_OPENAI:
+                config_dict[PROVIDER_OPENAI] = {}
                 for field, value in body.config.openai.model_dump(by_alias=True, exclude_none=True).items():
                     if field == "headers" and value is not None:
-                        config_dict["openai"][field] = value
+                        config_dict[PROVIDER_OPENAI][field] = value
                     elif isinstance(value, dict) and ("value" in value or "valueFrom" in value):
-                        config_dict["openai"][field] = value
+                        config_dict[PROVIDER_OPENAI][field] = value
                     elif isinstance(value, str):
-                        config_dict["openai"][field] = {"value": value}
-                        
-            elif body.config.azure and model_type == "azure":
-                config_dict["azure"] = {}
+                        config_dict[PROVIDER_OPENAI][field] = {"value": value}
+
+            elif body.config.azure and provider == PROVIDER_AZURE:
+                config_dict[PROVIDER_AZURE] = {}
                 for field, value in body.config.azure.model_dump(by_alias=True, exclude_none=True).items():
                     if field == "headers" and value is not None:
-                        config_dict["azure"][field] = value
+                        config_dict[PROVIDER_AZURE][field] = value
                     elif isinstance(value, dict) and ("value" in value or "valueFrom" in value):
-                        config_dict["azure"][field] = value
+                        config_dict[PROVIDER_AZURE][field] = value
                     elif isinstance(value, str):
-                        config_dict["azure"][field] = {"value": value}
-                        
-            elif body.config.bedrock and model_type == "bedrock":
-                config_dict["bedrock"] = {}
+                        config_dict[PROVIDER_AZURE][field] = {"value": value}
+
+            elif body.config.bedrock and provider == PROVIDER_BEDROCK:
+                config_dict[PROVIDER_BEDROCK] = {}
                 for field, value in body.config.bedrock.model_dump(by_alias=True).items():
                     if value is not None:
                         # Handle non-ValueSource fields (maxTokens, temperature)
                         if field in ["maxTokens", "temperature"]:
-                            config_dict["bedrock"][field] = value
+                            config_dict[PROVIDER_BEDROCK][field] = value
                         elif isinstance(value, dict) and ("value" in value or "valueFrom" in value):
-                            config_dict["bedrock"][field] = value
+                            config_dict[PROVIDER_BEDROCK][field] = value
                         elif isinstance(value, str):
-                            config_dict["bedrock"][field] = {"value": value}
-            
+                            config_dict[PROVIDER_BEDROCK][field] = {"value": value}
+
             existing_spec["config"] = config_dict
         
         # Update the model - need to update the entire resource object

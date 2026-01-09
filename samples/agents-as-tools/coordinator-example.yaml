@@ -68,7 +68,7 @@ spec:
 
     Always explain your approach and provide a final integrated answer.
   tools:
-  - type: custom # 🎯 Creates call_research_agent tool via ark-mcp
+  - type: agent # References an Agent Tool
     name: call-research-agent
 ---
 

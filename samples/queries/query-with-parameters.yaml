@@ -46,9 +46,9 @@ spec:
           name: api-secrets
           key: financial-api-url
   
-  targets:
-    - type: agent
-      name: financial-analyst
+  target:
+    type: agent
+    name: financial-analyst
 ---
 # Supporting ConfigMap for shared configuration
 apiVersion: v1

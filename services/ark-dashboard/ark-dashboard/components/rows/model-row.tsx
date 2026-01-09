@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/tooltip';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { DASHBOARD_SECTIONS } from '@/lib/constants/dashboard-icons';
+import { getModelTypeDisplayName } from '@/lib/constants/model-types';
 import type { Model } from '@/lib/services';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
 
@@ -44,8 +45,9 @@ export function ModelRow({ model, onDelete }: ModelRowProps) {
             </p>
             <p
               className="text-muted-foreground truncate text-xs"
-              title={`${model.type} • ${model.model}`}>
-              {model.type} • {model.model}
+              title={`${getModelTypeDisplayName(model.type)} • ${model.provider} • ${model.model}`}>
+              {getModelTypeDisplayName(model.type)} • {model.provider} •{' '}
+              {model.model}
             </p>
           </div>
         </div>

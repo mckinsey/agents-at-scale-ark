@@ -12,7 +12,7 @@ export type DisabledFields = Partial<Record<KeysOfUnion<FormValues>, boolean>>;
 interface ModelConfigurationFormContext {
   formId: string;
   form: UseFormReturn<FormValues>;
-  type: FormValues['type'];
+  provider: FormValues['provider'];
   onSubmit: (formValues: FormValues) => void;
   isSubmitPending: boolean;
   disabledFields?: DisabledFields;

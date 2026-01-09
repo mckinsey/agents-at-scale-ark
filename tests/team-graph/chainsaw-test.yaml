@@ -44,10 +44,10 @@ spec:
           metadata:
             name: test-graph-team
           status:
-            (length(responses)): 1
-            (responses[0].target.type): team
-            (responses[0].target.name): graph-team
-            (length(responses[0].content) > `500`): true
+            (response != null): true
+            (response.target.type): team
+            (response.target.name): graph-team
+            (length(response.content) > `500`): true
     catch:
     - events: {}
     - describe:

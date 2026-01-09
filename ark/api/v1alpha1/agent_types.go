@@ -29,7 +29,7 @@ type ToolPartial struct {
 
 type AgentTool struct {
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=built-in;custom
+	// +kubebuilder:validation:Enum=built-in;custom;mcp;http;agent;team;builtin
 	Type string `json:"type"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MinLength=1

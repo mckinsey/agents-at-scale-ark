@@ -4,6 +4,6 @@ metadata:
   name: test-event-query
 spec:
   input: "What is 2 + 2?"
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: test-event-agent

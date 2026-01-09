@@ -14,8 +14,18 @@ interface AxiosError extends Error {
 export type QueryResponse = components['schemas']['QueryResponse'];
 export type QueryDetailResponse = components['schemas']['QueryDetailResponse'];
 export type QueryListResponse = components['schemas']['QueryListResponse'];
-export type QueryCreateRequest = components['schemas']['QueryCreateRequest'];
-export type QueryUpdateRequest = components['schemas']['QueryUpdateRequest'];
+export type QueryCreateRequest = Omit<
+  components['schemas']['QueryCreateRequest'],
+  'targets'
+> & {
+  target?: { name: string; type: string };
+};
+export type QueryUpdateRequest = Omit<
+  components['schemas']['QueryUpdateRequest'],
+  'targets'
+> & {
+  target?: { name: string; type: string };
+};
 
 // Define terminal status phases
 type TerminalQueryStatusPhase = 'done' | 'error' | 'canceled' | 'unknown';
@@ -42,7 +52,7 @@ const QUERY_STATUS_PHASES: readonly QueryStatusPhase[] = [
 
 type QueryStatusWithPhase = {
   phase: string;
-  responses?: Array<{ content: string }>;
+  response?: { content: string };
 };
 
 // Type guard for checking if a phase is terminal
@@ -81,13 +91,15 @@ export type ChatSession = {
 
 export const chatService = {
   async createQuery(query: QueryCreateRequest): Promise<QueryDetailResponse> {
-    // Normalize target types to lowercase
+    // Normalize target type to lowercase
     const normalizedQuery = {
       ...query,
-      targets: query.targets?.map(target => ({
-        ...target,
-        type: target.type?.toLowerCase(),
-      })),
+      target: query.target
+        ? {
+            ...query.target,
+            type: query.target.type?.toLowerCase(),
+          }
+        : undefined,
     };
 
     const response = await apiClient.post<QueryDetailResponse>(
@@ -157,12 +169,10 @@ export const chatService = {
       type: 'messages',
       // Use OpenAI ChatCompletionMessageParam which supports multimodal content
       input: messages,
-      targets: [
-        {
-          type: targetType.toLowerCase(),
-          name: targetName,
-        },
-      ],
+      target: {
+        type: targetType.toLowerCase(),
+        name: targetName,
+      },
       sessionId,
     };
 
@@ -194,7 +204,7 @@ export const chatService = {
             selector: undefined,
             serviceAccount: undefined,
             sessionId: sessionId,
-            targets: undefined,
+            target: undefined,
           }) as QueryDetailResponse,
       )
       .sort((a, b) => {
@@ -216,8 +226,7 @@ export const chatService = {
       if (typeof status === 'object' && 'phase' in status) {
         const statusWithPhase = status as QueryStatusWithPhase;
         const phase = statusWithPhase.phase;
-        const responses = statusWithPhase.responses || [];
-        const response = responses[0]?.content || 'No response';
+        const response = statusWithPhase.response?.content || 'No response';
 
         // Check if phase is in the valid set, otherwise use 'unknown'
         const validatedPhase: QueryStatusPhase = isValidQueryStatusPhase(phase)

@@ -3721,10 +3721,10 @@ export interface components {
             /** Name */
             name: string;
             /**
-             * Type
+             * Provider
              * @enum {string}
              */
-            type: "openai" | "azure" | "bedrock";
+            provider: "openai" | "azure" | "bedrock";
         };
         /**
          * ModelDetailResponse
@@ -3750,13 +3750,19 @@ export interface components {
             name: string;
             /** Namespace */
             namespace: string;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "openai" | "azure" | "bedrock";
             /** Resolved Address */
             resolved_address?: string | null;
             /**
              * Type
-             * @enum {string}
+             * @default completions
+             * @constant
              */
-            type: "openai" | "azure" | "bedrock";
+            type: "completions";
         };
         /**
          * ModelListResponse
@@ -3795,10 +3801,16 @@ export interface components {
             /** Namespace */
             namespace: string;
             /**
-             * Type
+             * Provider
              * @enum {string}
              */
-            type: "openai" | "azure" | "bedrock";
+            provider: "openai" | "azure" | "bedrock";
+            /**
+             * Type
+             * @default completions
+             * @constant
+             */
+            type: "completions";
         };
         /**
          * ModelUpdateRequest
@@ -3916,8 +3928,7 @@ export interface components {
             serviceAccount?: string | null;
             /** Sessionid */
             sessionId?: string | null;
-            /** Targets */
-            targets?: components["schemas"]["Target"][] | null;
+            target?: components["schemas"]["Target"] | null;
             /** Timeout */
             timeout?: string | null;
             /** Ttl */
@@ -3956,8 +3967,7 @@ export interface components {
             status?: {
                 [key: string]: unknown;
             } | null;
-            /** Targets */
-            targets?: components["schemas"]["Target"][] | null;
+            target?: components["schemas"]["Target"] | null;
             /** Timeout */
             timeout?: string | null;
             /** Ttl */
@@ -4122,8 +4132,7 @@ export interface components {
             serviceAccount?: string | null;
             /** Sessionid */
             sessionId?: string | null;
-            /** Targets */
-            targets?: components["schemas"]["Target"][] | null;
+            target?: components["schemas"]["Target"] | null;
             /** Timeout */
             timeout?: string | null;
             /** Ttl */

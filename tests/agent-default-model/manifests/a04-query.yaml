@@ -4,6 +4,6 @@ metadata:
   name: default-model-query
 spec:
   input: "Please confirm you are working"
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: agent-no-model

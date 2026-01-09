@@ -49,37 +49,21 @@ def _create_chat_completion_response(query_name: str, model: str, content: str, 
 
 
 def _get_error_detail(status: dict) -> dict:
-    """Extract error details from query status, including individual target errors.
+    """Extract error details from query status.
 
     Returns a structured error dict with:
-    - message: The primary error message
-    - errors: List of individual target errors (for multi-target queries)
-
-    Note: For multi-target queries, we currently use the first error as the main message.
-    In the future, we should enhance this to better aggregate or present all errors.
+    - message: The error message from the response or status
     """
     error_message = status.get("message", "")
-    error_responses = status.get("responses", [])
+    response = status.get("response", {})
 
-    logger.info(f"_get_error_detail - error_message: {error_message}, responses count: {len(error_responses)}")
+    logger.info(f"_get_error_detail - error_message: {error_message}, response: {response}")
 
-    # Collect individual target errors from responses
-    target_errors = []
-    for idx, response in enumerate(error_responses):
-        # In error phase, the 'content' field contains the actual error message
-        content = response.get("content", "")
-        target = response.get("target", f"target-{idx}")
-        logger.info(f"_get_error_detail - response {idx}: content={content[:100] if content else 'EMPTY'}, target={target}")
-        if content:
-            target_errors.append({
-                "target": target,
-                "message": content
-            })
+    # Get error from response content if available
+    response_content = response.get("content", "") if response else ""
 
-    # Determine the main error message
-    if target_errors:
-        # Use the first target error message directly
-        main_message = target_errors[0]['message']
+    if response_content:
+        main_message = response_content
     elif error_message:
         main_message = error_message
     else:
@@ -87,7 +71,7 @@ def _get_error_detail(status: dict) -> dict:
 
     return {
         "message": main_message,
-        "errors": target_errors if len(target_errors) > 1 else []
+        "errors": []
     }
 
 
@@ -116,12 +100,12 @@ async def watch_query_completion(ark_client, query_name: str, model: str, messag
             phase = status.get("phase", "pending")
 
             if phase == "done":
-                responses = status.get("responses", [])
-                if not responses:
+                response = status.get("response")
+                if not response:
                     w.stop()
                     raise HTTPException(status_code=500, detail="No response received")
 
-                content = responses[0].get("content", "")
+                content = response.get("content", "")
                 w.stop()
                 return _create_chat_completion_response(query_name, model, content, messages, status)
 

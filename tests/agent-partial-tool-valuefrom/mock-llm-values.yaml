@@ -4,7 +4,8 @@ ark:
   model:
     enabled: true
     name: test-model
-    type: openai
+    type: completions
+    provider: openai
     model: gpt-4o-mini
     pollInterval: 3s
     config:

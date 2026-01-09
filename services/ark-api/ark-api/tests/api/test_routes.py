@@ -1101,13 +1101,15 @@ class TestModelsEndpoint(unittest.TestCase):
         
         # Check first model
         self.assertEqual(data["items"][0]["name"], "gpt-4-model")
-        self.assertEqual(data["items"][0]["type"], "openai")
+        self.assertEqual(data["items"][0]["provider"], "openai")
+        self.assertEqual(data["items"][0]["type"], "completions")
         self.assertEqual(data["items"][0]["model"], "gpt-4")
         self.assertEqual(data["items"][0]["available"], "True")
 
         # Check second model
         self.assertEqual(data["items"][1]["name"], "claude-model")
-        self.assertEqual(data["items"][1]["type"], "bedrock")
+        self.assertEqual(data["items"][1]["provider"], "bedrock")
+        self.assertEqual(data["items"][1]["type"], "completions")
         self.assertEqual(data["items"][1]["model"], "anthropic.claude-v2")
         self.assertEqual(data["items"][1]["available"], "False")
     
@@ -1142,7 +1144,8 @@ class TestModelsEndpoint(unittest.TestCase):
         mock_model.to_dict.return_value = {
             "metadata": {"name": "gpt-4-model", "namespace": "default"},
             "spec": {
-                "type": "openai",
+                "type": "completions",
+                "provider": "openai",
                 "model": {"value": "gpt-4"},
                 "config": {
                     "openai": {
@@ -1152,13 +1155,13 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
-        
+
         mock_client.models.a_create = AsyncMock(return_value=mock_model)
-        
+
         # Make the request
         request_data = {
             "name": "gpt-4-model",
-            "type": "openai",
+            "provider": "openai",
             "model": "gpt-4",
             "config": {
                 "openai": {
@@ -1168,12 +1171,13 @@ class TestModelsEndpoint(unittest.TestCase):
             }
         }
         response = self.client.post("/v1/models?namespace=default", json=request_data)
-        
+
         # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["name"], "gpt-4-model")
-        self.assertEqual(data["type"], "openai")
+        self.assertEqual(data["provider"], "openai")
+        self.assertEqual(data["type"], "completions")
         self.assertEqual(data["model"], "gpt-4")
         self.assertEqual(data["config"]["openai"]["apiKey"]["value"], "sk-test")
         self.assertEqual(data["config"]["openai"]["baseUrl"]["value"], "https://api.openai.com/v1")
@@ -1184,13 +1188,14 @@ class TestModelsEndpoint(unittest.TestCase):
         # Setup async context manager mock
         mock_client = AsyncMock()
         mock_ark_client.return_value.__aenter__.return_value = mock_client
-        
+
         # Mock the created model response
         mock_model = Mock()
         mock_model.to_dict.return_value = {
             "metadata": {"name": "azure-gpt", "namespace": "default"},
             "spec": {
-                "type": "azure",
+                "type": "completions",
+                "provider": "azure",
                 "model": {"value": "gpt-35-turbo"},
                 "config": {
                     "azure": {
@@ -1201,13 +1206,13 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
-        
+
         mock_client.models.a_create = AsyncMock(return_value=mock_model)
-        
+
         # Make the request
         request_data = {
             "name": "azure-gpt",
-            "type": "azure",
+            "provider": "azure",
             "model": "gpt-35-turbo",
             "config": {
                 "azure": {
@@ -1218,12 +1223,13 @@ class TestModelsEndpoint(unittest.TestCase):
             }
         }
         response = self.client.post("/v1/models?namespace=default", json=request_data)
-        
+
         # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["name"], "azure-gpt")
-        self.assertEqual(data["type"], "azure")
+        self.assertEqual(data["provider"], "azure")
+        self.assertEqual(data["type"], "completions")
         self.assertEqual(data["config"]["azure"]["apiVersion"]["value"], "2023-05-15")
     
     @patch('ark_api.api.v1.models.with_ark_client')
@@ -1232,13 +1238,14 @@ class TestModelsEndpoint(unittest.TestCase):
         # Setup async context manager mock
         mock_client = AsyncMock()
         mock_ark_client.return_value.__aenter__.return_value = mock_client
-        
+
         # Mock the created model response
         mock_model = Mock()
         mock_model.to_dict.return_value = {
             "metadata": {"name": "claude-bedrock", "namespace": "default"},
             "spec": {
-                "type": "bedrock",
+                "type": "completions",
+                "provider": "bedrock",
                 "model": {"value": "anthropic.claude-v2"},
                 "config": {
                     "bedrock": {
@@ -1251,13 +1258,13 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
-        
+
         mock_client.models.a_create = AsyncMock(return_value=mock_model)
-        
+
         # Make the request
         request_data = {
             "name": "claude-bedrock",
-            "type": "bedrock",
+            "provider": "bedrock",
             "model": "anthropic.claude-v2",
             "config": {
                 "bedrock": {
@@ -1270,12 +1277,13 @@ class TestModelsEndpoint(unittest.TestCase):
             }
         }
         response = self.client.post("/v1/models?namespace=default", json=request_data)
-        
+
         # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["name"], "claude-bedrock")
-        self.assertEqual(data["type"], "bedrock")
+        self.assertEqual(data["provider"], "bedrock")
+        self.assertEqual(data["type"], "completions")
         self.assertEqual(data["config"]["bedrock"]["region"]["value"], "us-east-1")
         self.assertEqual(data["config"]["bedrock"]["maxTokens"]["value"], "1000")
         self.assertEqual(data["config"]["bedrock"]["temperature"]["value"], "0.7")
@@ -1286,13 +1294,14 @@ class TestModelsEndpoint(unittest.TestCase):
         # Setup async context manager mock
         mock_client = AsyncMock()
         mock_ark_client.return_value.__aenter__.return_value = mock_client
-        
+
         # Mock the model response
         mock_model = Mock()
         mock_model.to_dict.return_value = {
             "metadata": {"name": "gpt-4-model", "namespace": "default"},
             "spec": {
-                "type": "openai",
+                "type": "completions",
+                "provider": "openai",
                 "model": {"value": "gpt-4"},
                 "config": {
                     "openai": {
@@ -1308,17 +1317,18 @@ class TestModelsEndpoint(unittest.TestCase):
                 "resolvedAddress": "https://api.openai.com/v1"
             }
         }
-        
+
         mock_client.models.a_get = AsyncMock(return_value=mock_model)
-        
+
         # Make the request
         response = self.client.get("/v1/models/gpt-4-model?namespace=default")
-        
+
         # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["name"], "gpt-4-model")
-        self.assertEqual(data["type"], "openai")
+        self.assertEqual(data["provider"], "openai")
+        self.assertEqual(data["type"], "completions")
         self.assertEqual(data["model"], "gpt-4")
         self.assertEqual(data["available"], "True")
         self.assertEqual(data["resolved_address"], "https://api.openai.com/v1")
@@ -1336,7 +1346,8 @@ class TestModelsEndpoint(unittest.TestCase):
         existing_model.to_dict.return_value = {
             "metadata": {"name": "gpt-model", "namespace": "default"},
             "spec": {
-                "type": "openai",
+                "provider": "openai",
+                "type": "completions",
                 "model": {"value": "gpt-3.5-turbo"},
                 "config": {
                     "openai": {
@@ -1346,13 +1357,14 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
-        
+
         # Mock updated model
         updated_model = Mock()
         updated_model.to_dict.return_value = {
             "metadata": {"name": "gpt-model", "namespace": "default"},
             "spec": {
-                "type": "openai",
+                "provider": "openai",
+                "type": "completions",
                 "model": {"value": "gpt-4"},
                 "config": {
                     "openai": {
@@ -1362,10 +1374,10 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
-        
+
         mock_client.models.a_get = AsyncMock(return_value=existing_model)
         mock_client.models.a_update = AsyncMock(return_value=updated_model)
-        
+
         # Make the request
         request_data = {
             "model": "gpt-4",
@@ -1377,7 +1389,7 @@ class TestModelsEndpoint(unittest.TestCase):
             }
         }
         response = self.client.put("/v1/models/gpt-model?namespace=default", json=request_data)
-        
+
         # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -1391,13 +1403,14 @@ class TestModelsEndpoint(unittest.TestCase):
         # Setup async context manager mock
         mock_client = AsyncMock()
         mock_ark_client.return_value.__aenter__.return_value = mock_client
-        
+
         # Mock existing model
         existing_model = Mock()
         existing_model.to_dict.return_value = {
             "metadata": {"name": "gpt-model", "namespace": "default"},
             "spec": {
-                "type": "openai",
+                "provider": "openai",
+                "type": "completions",
                 "model": {"value": "gpt-3.5-turbo"},
                 "config": {
                     "openai": {
@@ -1407,13 +1420,14 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
-        
+
         # Mock updated model
         updated_model = Mock()
         updated_model.to_dict.return_value = {
             "metadata": {"name": "gpt-model", "namespace": "default"},
             "spec": {
-                "type": "openai",
+                "provider": "openai",
+                "type": "completions",
                 "model": {"value": "gpt-4"},
                 "config": {
                     "openai": {
@@ -1423,14 +1437,14 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
-        
+
         mock_client.models.a_get = AsyncMock(return_value=existing_model)
         mock_client.models.a_update = AsyncMock(return_value=updated_model)
-        
+
         # Make the request - only update model
         request_data = {"model": "gpt-4"}
         response = self.client.put("/v1/models/gpt-model?namespace=default", json=request_data)
-        
+
         # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -1604,45 +1618,38 @@ class TestQueriesEndpoint(unittest.TestCase):
     
     @patch('ark_api.api.v1.queries.with_ark_client')
     def test_create_query_with_targets(self, mock_ark_client):
-        """Test creating a query with targets."""
+        """Test creating a query with target."""
         # Setup async context manager mock
         mock_client = AsyncMock()
         mock_ark_client.return_value.__aenter__.return_value = mock_client
-        
+
         # Mock the created query response
         mock_query = Mock()
         mock_query.to_dict.return_value = {
             "metadata": {"name": "targeted-query", "namespace": "default"},
             "spec": {
                 "input": "Analyze this code",
-                "targets": [
-                    {"name": "code-analyzer", "type": "agent"},
-                    {"name": "gpt-4", "type": "model"}
-                ]
+                "target": {"name": "code-analyzer", "type": "agent"}
             },
             "status": {"phase": "pending"}
         }
-        
+
         mock_client.queries.a_create = AsyncMock(return_value=mock_query)
-        
+
         # Make the request
         request_data = {
             "name": "targeted-query",
             "input": "Analyze this code",
-            "targets": [
-                {"name": "code-analyzer", "type": "agent"},
-                {"name": "gpt-4", "type": "model"}
-            ]
+            "target": {"name": "code-analyzer", "type": "agent"}
         }
         response = self.client.post("/v1/queries?namespace=default", json=request_data)
-        
+
         # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["name"], "targeted-query")
-        self.assertEqual(len(data["targets"]), 2)
-        self.assertEqual(data["targets"][0]["name"], "code-analyzer")
-        self.assertEqual(data["targets"][0]["type"], "agent")
+        self.assertEqual(data["target"]["name"], "code-analyzer")
+        self.assertEqual(data["target"]["type"], "agent")
     
     @patch('ark_api.api.v1.queries.with_ark_client')
     def test_create_query_with_all_fields(self, mock_ark_client):
@@ -1662,13 +1669,13 @@ class TestQueriesEndpoint(unittest.TestCase):
                 "selector": {"matchLabels": {"app": "chatbot"}},
                 "serviceAccount": "query-runner",
                 "sessionId": "session-123",
-                "targets": [{"name": "assistant", "type": "agent"}]
+                "target": {"name": "assistant", "type": "agent"}
             },
             "status": {"phase": "pending"}
         }
-        
+
         mock_client.queries.a_create = AsyncMock(return_value=mock_query)
-        
+
         # Make the request
         request_data = {
             "name": "full-query",
@@ -1678,7 +1685,7 @@ class TestQueriesEndpoint(unittest.TestCase):
             "selector": {"matchLabels": {"app": "chatbot"}},
             "serviceAccount": "query-runner",
             "sessionId": "session-123",
-            "targets": [{"name": "assistant", "type": "agent"}]
+            "target": {"name": "assistant", "type": "agent"}
         }
         response = self.client.post("/v1/queries?namespace=default", json=request_data)
         
@@ -1705,7 +1712,7 @@ class TestQueriesEndpoint(unittest.TestCase):
             "metadata": {"name": "test-query", "namespace": "default"},
             "spec": {
                 "input": "What is the meaning of life?",
-                "targets": [{"name": "philosopher", "type": "agent"}]
+                "target": {"name": "philosopher", "type": "agent"}
             },
             "status": {
                 "phase": "done",

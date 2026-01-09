@@ -50,5 +50,5 @@ spec:
     Focus on analytical rigor, insight generation, and clear communication of findings.
   # Add web search tool for data validation and research verification
   tools:
-    - type: custom
+    - type: http
       name: web-search

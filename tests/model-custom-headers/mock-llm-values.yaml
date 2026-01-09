@@ -5,7 +5,8 @@ ark:
   model:
     enabled: true
     name: test-model-custom-headers
-    type: openai
+    type: completions
+    provider: openai
     model: gpt-5
     apiKey: mock-api-key
     headers:
