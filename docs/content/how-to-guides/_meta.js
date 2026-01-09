@@ -49,8 +49,12 @@ export default {
     href: '/developer-guide/building-a2a-servers'
   },
   workflows: {
-    title: 'Add workflows and testing',
+    title: 'Add workflows',
     href: '/developer-guide/workflows'
+  },
+  testing: {
+    title: 'End to end testing',
+    href: '/developer-guide/testing'
   },
   observability: {
     title: 'Observability',
