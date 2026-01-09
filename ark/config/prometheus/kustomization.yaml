@@ -1,10 +1,12 @@
 resources:
 - monitor.yaml
 
-# [PROMETHEUS-WITH-CERTS] The following patch configures the ServiceMonitor in ../prometheus
-# to securely reference certificates created and managed by cert-manager.
-# Additionally, ensure that you uncomment the [METRICS WITH CERTMANAGER] patch under config/default/kustomization.yaml
-# to mount the "metrics-server-cert" secret in the Manager Deployment.
+# The ServiceMonitor is configured with secure TLS by default using cert-manager certificates.
+# The monitor.yaml file references the metrics-server-cert secret created by cert-manager.
+# Ensure that cert-manager resources are enabled in config/default/kustomization.yaml
+# and that the [METRICS WITH CERTMANAGER] patch is applied to mount the certificate in the Manager Deployment.
+#
+# For development/testing without cert-manager, you can use this patch to override with insecure configuration:
 #patches:
 #  - path: monitor_tls_patch.yaml
 #    target:
