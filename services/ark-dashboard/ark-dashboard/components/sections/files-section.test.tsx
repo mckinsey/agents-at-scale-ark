@@ -1,8 +1,15 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import copy from 'copy-to-clipboard';
+import { Provider as JotaiProvider, createStore } from 'jotai';
 import { toast } from 'sonner';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { filesService } from '@/lib/services/files';
 import {
@@ -31,6 +38,12 @@ const mockUseListFiles = vi.mocked(useListFiles);
 const mockUseDeleteFile = vi.mocked(useDeleteFile);
 const mockUseDeleteDirectory = vi.mocked(useDeleteDirectory);
 
+let jotaiStore: ReturnType<typeof createStore>;
+
+function renderWithProviders(ui: React.ReactElement) {
+  return render(<JotaiProvider store={jotaiStore}>{ui}</JotaiProvider>);
+}
+
 describe('FilesSection', () => {
   const mockFile: FileItem = {
     key: 'documents/report.pdf',
@@ -51,6 +64,8 @@ describe('FilesSection', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    jotaiStore = createStore();
+    sessionStorage.clear();
 
     mockToast.success = vi.fn();
     mockToast.error = vi.fn();
@@ -72,6 +87,10 @@ describe('FilesSection', () => {
     mockUseDeleteDirectory.mockReturnValue({
       mutateAsync: vi.fn().mockResolvedValue({ deleted_count: 5 }),
     } as any);
+  });
+
+  afterEach(() => {
+    sessionStorage.clear();
   });
 
   describe('File Row Three-Dots Menu', () => {
@@ -438,13 +457,12 @@ describe('FilesSection', () => {
         refetch: vi.fn(),
       } as any);
 
-      render(<FilesSection />);
+      renderWithProviders(<FilesSection />);
 
       expect(screen.queryByText(/go up/i)).not.toBeInTheDocument();
     });
 
     it('navigates up when Go Up button is clicked', async () => {
-      const user = userEvent.setup();
       mockUseListFiles.mockReturnValue({
         data: { files: [], directories: [], next_token: undefined },
         isLoading: false,
@@ -466,6 +484,113 @@ describe('FilesSection', () => {
       } as any);
 
       rerender(<FilesSection />);
+    });
+  });
+
+  describe('Navigation State Persistence', () => {
+    it('preserves navigation location when component remounts', async () => {
+      const { unmount } = renderWithProviders(<FilesSection />);
+
+      const dirRow = await screen.findByRole('row', { name: /archive/i });
+      fireEvent.click(dirRow);
+
+      await waitFor(() => {
+        expect(mockUseListFiles).toHaveBeenCalledWith({
+          prefix: 'documents/archive/',
+          max_keys: 100,
+        });
+      });
+
+      unmount();
+
+      mockUseListFiles.mockReturnValue({
+        data: {
+          files: [],
+          directories: [{ prefix: 'documents/archive/subfolder/' }],
+          next_token: undefined,
+        },
+        isLoading: false,
+        isFetching: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderWithProviders(<FilesSection />);
+
+      await waitFor(() => {
+        expect(mockUseListFiles).toHaveBeenCalledWith({
+          prefix: 'documents/archive/',
+          max_keys: 100,
+        });
+      });
+
+      expect(screen.getByText(/go up/i)).toBeInTheDocument();
+    });
+
+    it('falls back to root when saved location returns error', async () => {
+      const { unmount } = renderWithProviders(<FilesSection />);
+
+      const dirRow = await screen.findByRole('row', { name: /archive/i });
+      fireEvent.click(dirRow);
+
+      await waitFor(() => {
+        expect(mockUseListFiles).toHaveBeenCalledWith({
+          prefix: 'documents/archive/',
+          max_keys: 100,
+        });
+      });
+
+      unmount();
+
+      mockUseListFiles.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isFetching: false,
+        isError: true,
+        error: new Error('Directory not found'),
+        refetch: vi.fn(),
+      } as any);
+
+      renderWithProviders(<FilesSection />);
+
+      await waitFor(() => {
+        expect(mockUseListFiles).toHaveBeenCalledWith({
+          prefix: '',
+          max_keys: 100,
+        });
+      });
+    });
+
+    it('resets to root when navigating to root explicitly', async () => {
+      renderWithProviders(<FilesSection />);
+
+      const dirRow = await screen.findByRole('row', { name: /archive/i });
+      fireEvent.click(dirRow);
+
+      await waitFor(() => {
+        expect(screen.getByText(/go up/i)).toBeInTheDocument();
+      });
+
+      mockUseListFiles.mockReturnValue({
+        data: mockListFilesData,
+        isLoading: false,
+        isFetching: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      const goUpButton = screen.getByRole('button', { name: /go up/i });
+      fireEvent.click(goUpButton);
+      fireEvent.click(goUpButton);
+
+      await waitFor(() => {
+        expect(mockUseListFiles).toHaveBeenCalledWith({
+          prefix: '',
+          max_keys: 100,
+        });
+      });
     });
   });
 
@@ -634,9 +759,7 @@ describe('FilesSection', () => {
       render(<FilesSection />);
 
       expect(screen.getByText(/no files yet/i)).toBeInTheDocument();
-      expect(
-        screen.getByText(/this directory is empty/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/this directory is empty/i)).toBeInTheDocument();
     });
 
     it('shows error toast when files fail to load', () => {

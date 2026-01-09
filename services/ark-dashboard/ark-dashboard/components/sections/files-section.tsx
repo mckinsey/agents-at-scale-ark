@@ -1,6 +1,7 @@
 'use client';
 
 import copy from 'copy-to-clipboard';
+import { useAtom } from 'jotai';
 import {
   ChevronLeft,
   Copy,
@@ -14,6 +15,7 @@ import {
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { toast } from 'sonner';
 
+import { filesBrowserPrefixAtom } from '@/atoms/internal-states';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -69,7 +71,7 @@ function parseBreadcrumbs(prefix: string): string[] {
 
 export const FilesSection = forwardRef<{ refresh: () => void }>(
   function FilesSection(_, ref) {
-    const [prefix, setPrefix] = useState('');
+    const [prefix, setPrefix] = useAtom(filesBrowserPrefixAtom);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploading, setUploading] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -112,14 +114,24 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
       }
 
       if (listFilesError) {
-        toast.error('Failed to Load Files', {
-          description:
-            listFilesErrorObject instanceof Error
-              ? listFilesErrorObject.message
-              : 'An unexpected error occurred',
-        });
+        if (prefix !== '') {
+          setPrefix('');
+        } else {
+          toast.error('Failed to Load Files', {
+            description:
+              listFilesErrorObject instanceof Error
+                ? listFilesErrorObject.message
+                : 'An unexpected error occurred',
+          });
+        }
       }
-    }, [listFilesError, listFilesData, listFilesErrorObject]);
+    }, [
+      listFilesError,
+      listFilesData,
+      listFilesErrorObject,
+      prefix,
+      setPrefix,
+    ]);
 
     const handleNavigateToDirectory = (dirPrefix: string) => {
       setPrefix(dirPrefix);
