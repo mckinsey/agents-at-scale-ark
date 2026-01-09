@@ -9,7 +9,7 @@ spec:
       try:
         - script:
             content: |
-              if ! kubectl get crd certificates.cert-manager.io &>/dev/null; then
+              if ! kubectl get crd certificates.cert-manager.io >/dev/null 2>&1; then
                 echo "cert-manager CRDs not found. Installing cert-manager..."
                 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
                 kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
@@ -73,7 +73,7 @@ spec:
       try:
         - script:
             content: |
-              if ! kubectl get crd servicemonitors.monitoring.coreos.com &>/dev/null; then
+              if ! kubectl get crd servicemonitors.monitoring.coreos.com >/dev/null 2>&1; then
                 echo "ServiceMonitor CRD not found. Installing..."
                 kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.71.2/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
                 kubectl wait --for=condition=established crd/servicemonitors.monitoring.coreos.com --timeout=60s
