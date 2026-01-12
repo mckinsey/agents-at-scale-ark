@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 
-import { TrackedButton } from '@/components/ui/tracked-button';
 import { Spinner } from '@/components/ui/spinner';
+import { TrackedButton } from '@/components/ui/tracked-button';
 import { useCreateModel } from '@/lib/services/models-hooks';
 
 import { ModelConfiguratorForm } from './model-configuration-form';

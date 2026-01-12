@@ -71,4 +71,3 @@ export class NoopAdapter implements AnalyticsAdapter {
     this.errors = [];
   }
 }
-

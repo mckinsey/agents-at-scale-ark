@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { BreadcrumbElement } from '@/components/common/page-header';
-import { trackEvent } from '@/lib/analytics/singleton';
 import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { trackEvent } from '@/lib/analytics/singleton';
 import { type Memory, memoriesService } from '@/lib/services/memories';
 
 const breadcrumbs: BreadcrumbElement[] = [
@@ -422,7 +422,7 @@ export default function BrokerPage() {
         <Tabs
           defaultValue="traces"
           className="flex-1"
-          onValueChange={(tab) => {
+          onValueChange={tab => {
             trackEvent({
               name: 'broker_tab_changed',
               properties: { tabName: tab },
@@ -433,7 +433,7 @@ export default function BrokerPage() {
               <span className="text-muted-foreground text-sm">Memory:</span>
               <Select
                 value={selectedMemory}
-                onValueChange={(value) => {
+                onValueChange={value => {
                   setSelectedMemory(value);
                   trackEvent({
                     name: 'broker_memory_changed',

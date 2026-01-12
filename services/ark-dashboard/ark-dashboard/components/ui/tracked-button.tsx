@@ -1,11 +1,12 @@
 'use client';
 
+import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
 import { useTrackClick } from '@/lib/analytics/hooks';
 
-import { Button, buttonVariants } from './button';
-import type { VariantProps } from 'class-variance-authority';
+import type { buttonVariants } from './button';
+import { Button } from './button';
 
 interface TrackedButtonProps
   extends React.ComponentProps<'button'>,
@@ -32,4 +33,3 @@ function TrackedButton({
 }
 
 export { TrackedButton };
-

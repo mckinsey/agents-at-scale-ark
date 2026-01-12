@@ -548,7 +548,7 @@ export default function FloatingChat({
                   <Switch
                     id="debug-mode"
                     checked={debugMode}
-                    onCheckedChange={(checked) => {
+                    onCheckedChange={checked => {
                       setDebugMode(checked);
                       trackEvent({
                         name: 'chat_debug_mode_toggled',

@@ -110,7 +110,9 @@ export const chatService = {
     );
 
     const inputContent =
-      typeof query.input === 'string' ? query.input : JSON.stringify(query.input);
+      typeof query.input === 'string'
+        ? query.input
+        : JSON.stringify(query.input);
 
     trackEvent({
       name: 'query_executed',

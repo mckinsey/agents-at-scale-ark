@@ -61,4 +61,3 @@ export class AnalyticsErrorBoundary extends Component<Props, State> {
     return this.props.children;
   }
 }
-

@@ -39,4 +39,3 @@ export interface AnalyticsAdapter {
   flush(): Promise<void>;
   getTraceContext?(): { traceId?: string; spanId?: string } | null;
 }
-

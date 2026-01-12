@@ -52,7 +52,8 @@ export class DynatraceAdapter implements AnalyticsAdapter {
       return;
     }
 
-    const userIdentifier = user.name || user.email || user.userId || 'anonymous';
+    const userIdentifier =
+      user.name || user.email || user.userId || 'anonymous';
     this.dtrum.identifyUser(userIdentifier);
 
     this.dtrum.sendSessionProperties(undefined, undefined, {
@@ -135,7 +136,9 @@ export class DynatraceAdapter implements AnalyticsAdapter {
 
   async flush(): Promise<void> {
     if (this.isDebug) {
-      console.log('[Dynatrace] Flush called (Dynatrace handles this internally)');
+      console.log(
+        '[Dynatrace] Flush called (Dynatrace handles this internally)',
+      );
     }
   }
 
@@ -148,4 +151,3 @@ export class DynatraceAdapter implements AnalyticsAdapter {
     return sessionId ? { traceId: sessionId } : null;
   }
 }
-

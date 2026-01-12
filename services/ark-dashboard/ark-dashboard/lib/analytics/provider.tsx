@@ -49,13 +49,14 @@ export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    createAdapter().then((instance) => {
+    createAdapter().then(instance => {
       if (!mounted) return;
 
       instance.init({
         provider:
-          (process.env.NEXT_PUBLIC_ANALYTICS_PROVIDER as 'dynatrace' | 'noop') ||
-          'noop',
+          (process.env.NEXT_PUBLIC_ANALYTICS_PROVIDER as
+            | 'dynatrace'
+            | 'noop') || 'noop',
         dynatraceRumUrl: process.env.NEXT_PUBLIC_DYNATRACE_RUM_URL,
         debug: process.env.NODE_ENV === 'development',
       });
@@ -105,7 +106,10 @@ export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('pagehide', handleBeforeUnload);
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+      window.removeEventListener(
+        'unhandledrejection',
+        handleUnhandledRejection,
+      );
     };
   }, [adapter]);
 
@@ -160,4 +164,3 @@ export function useAnalyticsContext() {
   }
   return context;
 }
-

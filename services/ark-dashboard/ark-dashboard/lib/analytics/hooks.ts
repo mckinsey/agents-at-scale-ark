@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback } from 'react';
 import { usePathname } from 'next/navigation';
+import { useCallback } from 'react';
 import { useEffect } from 'react';
 
 import { useAnalyticsContext } from './provider';
@@ -87,4 +87,3 @@ export function createTrackingHandler<T extends (...args: unknown[]) => void>(
     return handler(...args);
   }) as T;
 }
-

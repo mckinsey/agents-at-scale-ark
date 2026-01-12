@@ -17,4 +17,3 @@ export function trackEvent(event: TrackingEvent): void {
 export function trackError(error: ErrorEvent): void {
   analyticsInstance?.trackError(error);
 }
-

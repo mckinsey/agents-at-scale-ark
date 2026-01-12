@@ -15,4 +15,3 @@ export function hashPromptSync(content: string): string {
   }
   return Math.abs(hash).toString(16).padStart(8, '0');
 }
-

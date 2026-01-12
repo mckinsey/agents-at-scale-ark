@@ -9,7 +9,6 @@ import { AgentCard } from '@/components/cards';
 import { AgentEditor } from '@/components/editors';
 import { AgentRow } from '@/components/rows/agent-row';
 import { Button } from '@/components/ui/button';
-import { TrackedButton } from '@/components/ui/tracked-button';
 import {
   Empty,
   EmptyContent,
@@ -19,6 +18,7 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { type ToggleOption, ToggleSwitch } from '@/components/ui/toggle-switch';
+import { TrackedButton } from '@/components/ui/tracked-button';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useDelayedLoading } from '@/lib/hooks';
 import {
