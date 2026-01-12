@@ -40,7 +40,8 @@ var _ = Describe("Model Controller", func() {
 						Namespace: "default",
 					},
 					Spec: arkv1alpha1.ModelSpec{
-						Type: "openai",
+						Provider: "openai",
+						Type:     "completions",
 						Model: arkv1alpha1.ValueSource{
 							Value: "gpt-4",
 						},

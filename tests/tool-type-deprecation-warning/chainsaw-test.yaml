@@ -1,0 +1,124 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: tool-type-deprecation-warning
+spec:
+  description: Test that deprecated 'custom' tool type generates appropriate warning
+  steps:
+  - name: setup-mock-llm
+    try:
+    - script:
+        content: |
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.27 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: MCPServer
+          metadata:
+            name: mock-llm-mcp
+          status:
+            (contains(conditions[?type == 'Available'].status, 'True')): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: mock-llm-mcp-echo
+          status:
+            state: Ready
+
+  - name: test-custom-type-warning
+    try:
+    - script:
+        content: |
+          # Create agent with deprecated 'custom' type and capture warnings
+          OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: test-deprecated-custom
+          spec:
+            prompt: "You are a test agent"
+            modelRef:
+              name: default
+            tools:
+            - type: custom
+              name: mock-llm-mcp-echo
+          EOF
+          )
+          echo "$OUTPUT"
+
+          # Verify the warning contains agent name and tool name
+          if echo "$OUTPUT" | grep -q "agent 'test-deprecated-custom'"; then
+            echo "✓ Warning contains agent name"
+          else
+            echo "✗ Warning missing agent name"
+            exit 1
+          fi
+
+          if echo "$OUTPUT" | grep -q "tool 'mock-llm-mcp-echo'"; then
+            echo "✓ Warning contains tool name"
+          else
+            echo "✗ Warning missing tool name"
+            exit 1
+          fi
+
+          if echo "$OUTPUT" | grep -q "deprecated"; then
+            echo "✓ Warning mentions deprecation"
+          else
+            echo "✗ Warning missing deprecation message"
+            exit 1
+          fi
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: test-deprecated-custom
+
+  - name: test-explicit-type-no-warning
+    try:
+    - script:
+        content: |
+          # Create agent with explicit 'mcp' type - should not produce warning
+          OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: test-explicit-mcp
+          spec:
+            prompt: "You are a test agent"
+            modelRef:
+              name: default
+            tools:
+            - type: mcp
+              name: mock-llm-mcp-echo
+          EOF
+          )
+          echo "$OUTPUT"
+
+          # Verify NO deprecation warning for explicit type
+          if echo "$OUTPUT" | grep -q "deprecated"; then
+            echo "✗ Unexpected deprecation warning for explicit mcp type"
+            exit 1
+          else
+            echo "✓ No deprecation warning for explicit mcp type"
+          fi
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: test-explicit-mcp

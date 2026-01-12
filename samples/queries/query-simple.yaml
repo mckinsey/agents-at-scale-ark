@@ -4,7 +4,7 @@ metadata:
   name: query-simple
 spec:
   input: "What is the capital of France"
-  targets:
-    - type: agent
-      name: sample-agent
+  target:
+    type: agent
+    name: sample-agent
 

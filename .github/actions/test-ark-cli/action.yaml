@@ -64,10 +64,56 @@ runs:
       shell: bash
       run: ark status
 
-    - name: Install Ark using CLI
+    - name: Build ark-controller image
       shell: bash
       run: |
-        ark install --yes
+        set -x
+        cd ark
+
+        # Build controller Docker image with CI tag
+        docker build -t ark-controller:ci-test -f Dockerfile .
+
+        # Load image into K3s
+        docker save ark-controller:ci-test -o /tmp/ark-controller-ci.tar
+        sudo k3s ctr images import /tmp/ark-controller-ci.tar
+        rm /tmp/ark-controller-ci.tar
+
+    - name: Install Ark from local charts
+      shell: bash
+      run: |
+        # Install cert-manager (required dependency)
+        helm repo add jetstack https://charts.jetstack.io --force-update
+        helm upgrade --install cert-manager jetstack/cert-manager \
+          --namespace cert-manager \
+          --create-namespace \
+          --set crds.enabled=true \
+          --wait --timeout=5m
+
+        # Install ark-controller from local chart (includes CRDs)
+        # Use the locally built controller image
+        helm upgrade --install ark-controller ark/dist/chart \
+          --namespace ark-system \
+          --create-namespace \
+          --set controllerManager.container.image.repository=ark-controller \
+          --set controllerManager.container.image.tag=ci-test \
+          --set controllerManager.container.image.pullPolicy=Never \
+          --wait --timeout=5m
+
+        # Install ark-tenant from local chart
+        helm upgrade --install ark-tenant charts/ark-tenant \
+          --namespace default \
+          --wait --timeout=5m
+
+        # Install ark-api from local chart
+        helm upgrade --install ark-api services/ark-api/chart \
+          --namespace default \
+          --wait --timeout=5m
+
+        # Install ark-dashboard from local chart
+        helm upgrade --install ark-dashboard services/ark-dashboard/chart \
+          --namespace default \
+          --wait --timeout=5m
+
         ark --version
 
     - name: Wait for Ark components to be ready
@@ -80,6 +126,17 @@ runs:
           --wait-for-ready=15m
 
         ark status
+
+    - name: Wait for Ark to be fully ready
+      shell: bash
+      run: |
+        echo "Waiting for Ark controller to be ready..."
+
+        # Simple wait for controller to be available (via ark status)
+        # This is sufficient for the validating webhook to work
+        kubectl wait --for=condition=available deployment/ark-controller -n ark-system --timeout=5m
+
+        echo "✓ Ark controller is ready"
 
     - name: Create default model
       shell: bash
@@ -104,6 +161,9 @@ runs:
     - name: Uninstall Ark
       shell: bash
       run: |
-        ark uninstall --yes
+        helm uninstall ark-dashboard --namespace default --ignore-not-found || true
+        helm uninstall ark-api --namespace default --ignore-not-found || true
+        helm uninstall ark-tenant --namespace default --ignore-not-found || true
+        helm uninstall ark-controller --namespace ark-system --ignore-not-found || true
         ark status
-        sleep 30 && ark status
+        sleep 10 && ark status

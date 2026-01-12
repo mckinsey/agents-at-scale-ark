@@ -34,10 +34,12 @@ spec:
     
   # Tools the agent can use
   tools:
-    - type: built-in  # System-provided tools (web-search, calculations)
-      name: web-search
-    - type: custom   # References to Tool or MCPServer resources
-      name: my-custom-tool
+    - type: built-in  # System-provided tools (terminate, noop)
+      name: terminate
+    - type: http      # HTTP tool references
+      name: my-http-tool
+    - type: mcp       # MCP server tool references
+      name: my-mcp-tool
       
   # Parameters for template processing in prompts
   parameters:
@@ -125,9 +127,9 @@ spec:
     You are a weather forecasting assistant.
     Use the available tools to get weather information.
   tools:
-    - type: custom
+    - type: http
       name: get-coordinates
-    - type: custom
+    - type: http
       name: get-forecast
 ```
 
@@ -241,11 +243,11 @@ metadata:
   name: my-agent
 spec:
   tools:
-    - type: custom
+    - type: http
       name: weather-forecast  # Name exposed to Agent
       description: "Get latest weather forecast"  # Description exposed to Agent
       partial:
-        name: weather-api  # Actual Tool CRD name
+        name: weather-api  # Actual Tool CRD name (type: http)
         parameters:
           - name: city
             value: "{{ .Query.city }}"  # From query parameters

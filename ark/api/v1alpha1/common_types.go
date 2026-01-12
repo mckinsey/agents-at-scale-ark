@@ -43,7 +43,7 @@ type ServiceReference struct {
 	// Port name to use. If not specified, uses the service's only port or first port.
 	Port string `json:"port,omitempty"`
 	// +kubebuilder:validation:Optional
-	// Optional path to append to the service address. For models might be 'v1', for gemini might be 'v1beta/openai', for mcp servers might be 'mcp'.
+	// Path component of the service URL. For anthropic models might be 'v1', for gemini might be 'v1beta/openai', for MCP servers often will be 'mcp' or 'sse'.
 	Path string `json:"path,omitempty"`
 }
 

@@ -4,7 +4,7 @@ metadata:
   name: blog
 spec:
   input: "Create a blog post with title 'Testing ARK' and body 'This is a test post created by ARK agent'"
-  targets:
-    - type: agent
-      name: blog
+  target:
+    type: agent
+    name: blog
   ttl: 5m

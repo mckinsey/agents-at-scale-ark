@@ -4,6 +4,6 @@ metadata:
   name: event-recorder-query
 spec:
   input: "Test event recording functionality"
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: event-test-agent

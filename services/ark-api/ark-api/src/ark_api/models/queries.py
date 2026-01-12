@@ -100,7 +100,7 @@ class QueryCreateRequest(BaseModel):
     selector: Optional[QueryLabelSelector] = None
     serviceAccount: Optional[str] = None
     sessionId: Optional[str] = None
-    targets: Optional[List[Target]] = None
+    target: Optional[Target] = None
     timeout: Optional[str] = None
     ttl: Optional[str] = None
     cancel: Optional[bool] = None
@@ -119,7 +119,7 @@ class QueryUpdateRequest(BaseModel):
     selector: Optional[QueryLabelSelector] = None
     serviceAccount: Optional[str] = None
     sessionId: Optional[str] = None
-    targets: Optional[List[Target]] = None
+    target: Optional[Target] = None
     timeout: Optional[str] = None
     ttl: Optional[str] = None
     cancel: Optional[bool] = None
@@ -137,7 +137,7 @@ class QueryDetailResponse(BaseModel):
     selector: Optional[QueryLabelSelector] = None
     serviceAccount: Optional[str] = None
     sessionId: Optional[str] = None
-    targets: Optional[List[Target]] = None
+    target: Optional[Target] = None
     timeout: Optional[str] = None
     ttl: Optional[str] = None
     cancel: Optional[bool] = None

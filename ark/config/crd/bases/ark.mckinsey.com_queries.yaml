@@ -290,9 +290,10 @@ spec:
                                 namespace as the resource.
                               type: string
                             path:
-                              description: Optional path to append to the service
-                                address. For models might be 'v1', for gemini might
-                                be 'v1beta/openai', for mcp servers might be 'mcp'.
+                              description: Path component of the service URL. For
+                                anthropic models might be 'v1', for gemini might be
+                                'v1beta/openai', for MCP servers often will be 'mcp'
+                                or 'sse'.
                               type: string
                             port:
                               description: Port name to use. If not specified, uses
@@ -361,24 +362,22 @@ spec:
               sessionId:
                 minLength: 1
                 type: string
-              targets:
-                items:
-                  properties:
-                    name:
-                      minLength: 1
-                      type: string
-                    type:
-                      enum:
-                      - agent
-                      - team
-                      - model
-                      - tool
-                      type: string
-                  required:
-                  - name
-                  - type
-                  type: object
-                type: array
+              target:
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                  type:
+                    enum:
+                    - agent
+                    - team
+                    - model
+                    - tool
+                    type: string
+                required:
+                - name
+                - type
+                type: object
               timeout:
                 default: 5m
                 description: Timeout for query execution (e.g., "30s", "5m", "1h")
@@ -469,47 +468,45 @@ spec:
                 - done
                 - canceled
                 type: string
-              responses:
-                items:
-                  description: Response defines a response from a query target.
-                  properties:
-                    a2a:
-                      description: A2A contains optional A2A protocol metadata (contextId,
-                        taskId)
-                      properties:
-                        contextId:
-                          description: ContextID from the A2A protocol when the target
-                            is an A2A agent
-                          type: string
-                        taskId:
-                          description: TaskID from the A2A protocol when the target
-                            is an A2A agent and a task was created
-                          type: string
-                      type: object
-                    content:
-                      type: string
-                    phase:
-                      type: string
-                    raw:
-                      type: string
-                    target:
-                      properties:
-                        name:
-                          minLength: 1
-                          type: string
-                        type:
-                          enum:
-                          - agent
-                          - team
-                          - model
-                          - tool
-                          type: string
-                      required:
-                      - name
-                      - type
-                      type: object
-                  type: object
-                type: array
+              response:
+                description: Response defines a response from a query target.
+                properties:
+                  a2a:
+                    description: A2A contains optional A2A protocol metadata (contextId,
+                      taskId)
+                    properties:
+                      contextId:
+                        description: ContextID from the A2A protocol when the target
+                          is an A2A agent
+                        type: string
+                      taskId:
+                        description: TaskID from the A2A protocol when the target
+                          is an A2A agent and a task was created
+                        type: string
+                    type: object
+                  content:
+                    type: string
+                  phase:
+                    type: string
+                  raw:
+                    type: string
+                  target:
+                    properties:
+                      name:
+                        minLength: 1
+                        type: string
+                      type:
+                        enum:
+                        - agent
+                        - team
+                        - model
+                        - tool
+                        type: string
+                    required:
+                    - name
+                    - type
+                    type: object
+                type: object
               tokenUsage:
                 properties:
                   completionTokens:

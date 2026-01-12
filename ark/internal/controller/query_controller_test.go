@@ -41,11 +41,9 @@ var _ = Describe("Query Controller", func() {
 						Namespace: "default",
 					},
 					Spec: arkv1alpha1.QuerySpec{
-						Targets: []arkv1alpha1.QueryTarget{
-							{
-								Type: "agent",
-								Name: "test-agent",
-							},
+						Target: &arkv1alpha1.QueryTarget{
+							Type: "agent",
+							Name: "test-agent",
 						},
 					},
 				}
@@ -93,11 +91,9 @@ var _ = Describe("Query Controller", func() {
 					Namespace: "default",
 				},
 				Spec: arkv1alpha1.QuerySpec{
-					Targets: []arkv1alpha1.QueryTarget{
-						{
-							Type: "agent",
-							Name: "test-agent",
-						},
+					Target: &arkv1alpha1.QueryTarget{
+						Type: "agent",
+						Name: "test-agent",
 					},
 				},
 			}
@@ -153,11 +149,9 @@ var _ = Describe("Query Controller", func() {
 					Namespace: "default",
 				},
 				Spec: arkv1alpha1.QuerySpec{
-					Targets: []arkv1alpha1.QueryTarget{
-						{
-							Type: "agent",
-							Name: "test-agent",
-						},
+					Target: &arkv1alpha1.QueryTarget{
+						Type: "agent",
+						Name: "test-agent",
 					},
 				},
 			}

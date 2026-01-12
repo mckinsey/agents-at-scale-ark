@@ -4,6 +4,6 @@ metadata:
   name: weather-query
 spec:
   input: 'What is the weather today in New York?'
-  targets:
-    - type: agent
-      name: weather
+  target:
+    type: agent
+    name: weather

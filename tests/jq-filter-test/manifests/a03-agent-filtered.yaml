@@ -8,7 +8,7 @@ spec:
     You are a test agent. Use the test-json-api tool to get data and respond with the results verbatim, as is
     without any remarks and pre-amble.
   tools:
-  - type: custom
+  - type: http
     name: test-json-api
     functions:
     - name: jq

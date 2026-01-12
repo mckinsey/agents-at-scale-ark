@@ -144,6 +144,9 @@ const defaultArkServices: ServiceCollection = {
     k8sDevDeploymentName: 'ark-mcp-devspace',
   },
 
+  // ark-broker replaces ark-cluster-memory (renamed in v0.1.49). The old release
+  // must be uninstalled first to avoid Helm ownership conflicts on shared
+  // resources like the ark-config-streaming ConfigMap.
   'ark-broker': {
     name: 'ark-broker',
     helmReleaseName: 'ark-broker',
@@ -151,9 +154,9 @@ const defaultArkServices: ServiceCollection = {
       'In-memory storage service with streaming support for Ark queries',
     enabled: true,
     category: 'service',
-    // namespace: undefined - uses current context namespace
     chartPath: `${REGISTRY_BASE}/ark-broker`,
     installArgs: [],
+    prerequisiteUninstalls: [{releaseName: 'ark-cluster-memory'}],
     k8sDeploymentName: 'ark-broker',
     k8sDevDeploymentName: 'ark-broker-devspace',
   },

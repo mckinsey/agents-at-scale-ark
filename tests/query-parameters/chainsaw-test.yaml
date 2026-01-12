@@ -65,9 +65,9 @@ spec:
             metadata:
               name: test-query-with-params
             status:
-              (length(responses)): 1
-              (contains(responses[*].target.name, 'test-agent')): true
-              (length(join('', responses[*].content)) > `10`): true
+              (response != null): true
+              (response.target.name): 'test-agent'
+              (length(response.content) > `10`): true
       catch:
       - events: {}
       - describe:

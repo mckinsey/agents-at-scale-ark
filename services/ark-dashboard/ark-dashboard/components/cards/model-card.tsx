@@ -8,6 +8,7 @@ import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { AvailabilityStatusBadge } from '@/components/ui/availability-status-badge';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { DASHBOARD_SECTIONS } from '@/lib/constants/dashboard-icons';
+import { getModelTypeDisplayName } from '@/lib/constants/model-types';
 import type { Model } from '@/lib/services';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
 
@@ -49,7 +50,7 @@ export function ModelCard({ model, onDelete }: ModelCardProps) {
 
   const description = (
     <span className="text-sm">
-      {model.type} • {model.model}
+      {getModelTypeDisplayName(model.type)} • {model.provider} • {model.model}
     </span>
   );
 

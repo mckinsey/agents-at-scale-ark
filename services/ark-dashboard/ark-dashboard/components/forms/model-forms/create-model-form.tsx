@@ -28,14 +28,14 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
     resolver: zodResolver(schema),
     defaultValues: {
       name: defaultName || '',
-      type: 'openai',
+      provider: 'openai',
       model: '',
       secret: '',
       baseUrl: '',
     },
   });
 
-  const type = form.watch('type');
+  const provider = form.watch('provider');
 
   const handleSuccess = useCallback(() => {
     router.push('/models');
@@ -49,13 +49,13 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
     const currentValues = form.getValues();
     form.reset(getResetValues(currentValues));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type]);
+  }, [provider]);
 
   const onSubmit = (formValues: FormValues) => {
     const config = createConfig(formValues);
     mutate({
       name: formValues.name,
-      type: formValues.type,
+      provider: formValues.provider,
       model: formValues.model,
       config,
     });
@@ -66,7 +66,7 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
       value={{
         formId,
         form,
-        type,
+        provider,
         onSubmit,
         isSubmitPending: isPending,
       }}>

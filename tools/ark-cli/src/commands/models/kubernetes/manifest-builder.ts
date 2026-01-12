@@ -17,7 +17,7 @@ export class KubernetesModelManifestBuilder implements ModelManifestBuilder {
         name: this.modelName,
       },
       spec: {
-        type: config.type,
+        provider: config.type,  // Use provider field (required as of v0.50.0)
         model: {
           value: config.modelValue,
         },

@@ -186,7 +186,7 @@ sleep 15
 
 # View results
 kubectl get query rag-query
-kubectl get query rag-query -o jsonpath='{.status.responses[0].content}'
+kubectl get query rag-query -o jsonpath='{.status.response.content}'
 ```
 
 ## Components

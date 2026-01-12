@@ -213,8 +213,17 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
         metadata["annotations"][STREAMING_ENABLED_ANNOTATION] = "true"
 
     try:
+        # Pydantic returns the tool calls as a ValidatorIterator, so we need to iterate it
+        for message in messages:
+            if message.get("tool_calls"):
+                iterated_messages = [tool_call for tool_call in message["tool_calls"]]
+                if iterated_messages:
+                    message["tool_calls"] = iterated_messages
+                else:
+                    del message["tool_calls"]
+
         # Build query spec with optional sessionId, conversationId and timeout
-        query_spec_dict = {"type": "messages", "input": messages, "targets": [target]}
+        query_spec_dict = {"type": "messages", "input": messages, "target": target}
         if session_id:
             query_spec_dict["sessionId"] = session_id
         if conversation_id:
@@ -223,7 +232,6 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             query_spec_dict["timeout"] = timeout
 
         # Create the QueryV1alpha1 object with type="messages"
-        # Pass messages directly without json.dumps() - SDK handles serialization
         query_resource = QueryV1alpha1(
             metadata=metadata,
             spec=QueryV1alpha1Spec(**query_spec_dict),
