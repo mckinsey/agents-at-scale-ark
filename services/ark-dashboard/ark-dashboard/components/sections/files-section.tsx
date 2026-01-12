@@ -183,21 +183,7 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
 
         if (file.size > MAX_FILE_SIZE) {
           toast.error('File Too Large', {
-            description: (
-              <>
-                File size is {formatBytes(file.size)}. Maximum allowed is 1 MB.
-                <br />
-                To work with larger files, configure a{' '}
-                <a
-                  href="https://mckinsey.github.io/agents-at-scale-ark/developer-guide/rag-implementation/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:no-underline">
-                  RAG (Retrieval-Augmented Generation)
-                </a>{' '}
-                system instead.
-              </>
-            ),
+            description: `File size is ${formatBytes(file.size)}. Directly loading files into context is only suitable for small and simple files. For larger files, explore RAG (Retrieval-Augmented Generation) or vectorization patterns.`,
           });
           return;
         }
@@ -216,21 +202,7 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
 
         if (file.size > MAX_FILE_SIZE) {
           toast.error('File Too Large', {
-            description: (
-              <>
-                File size is {formatBytes(file.size)}. Maximum allowed is 1 MB.
-                <br />
-                To work with larger files, configure a{' '}
-                <a
-                  href="https://mckinsey.github.io/agents-at-scale-ark/developer-guide/rag-implementation/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:no-underline">
-                  RAG (Retrieval-Augmented Generation)
-                </a>{' '}
-                system instead.
-              </>
-            ),
+            description: `File size is ${formatBytes(file.size)}. Directly loading files into context is only suitable for small and simple files. For larger files, explore RAG (Retrieval-Augmented Generation) or vectorization patterns.`,
           });
           return;
         }

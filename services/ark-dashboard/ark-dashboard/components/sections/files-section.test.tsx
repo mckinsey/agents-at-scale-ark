@@ -686,7 +686,7 @@ describe('FilesSection', () => {
       expect(dropZone).toHaveClass('cursor-pointer');
     });
 
-    it('rejects files larger than 1MB with RAG documentation link', async () => {
+    it('rejects files larger than 1MB', async () => {
       render(<FilesSection />);
 
       const dropZone = screen.getByText(/drag and drop a file here/i)
@@ -712,7 +712,9 @@ describe('FilesSection', () => {
         expect(mockToast.error).toHaveBeenCalledWith(
           'File Too Large',
           expect.objectContaining({
-            description: expect.anything(),
+            description: expect.stringContaining(
+              'Directly loading files into context is only suitable for small and simple files',
+            ),
           }),
         );
       });
