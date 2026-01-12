@@ -637,6 +637,55 @@ describe('FilesSection', () => {
   });
 
   describe('File Upload', () => {
+    it('opens file browser when clicking drop zone', async () => {
+      render(<FilesSection />);
+
+      const dropZone = screen.getByText(/drag and drop a file here/i)
+        .parentElement?.parentElement;
+
+      const fileInput = screen.getByLabelText(/browse files/i, {
+        selector: 'input[type="file"]',
+      }) as HTMLInputElement;
+
+      const clickSpy = vi.fn();
+      fileInput.click = clickSpy;
+
+      if (dropZone) {
+        fireEvent.click(dropZone);
+      }
+
+      expect(clickSpy).toHaveBeenCalled();
+    });
+
+    it('allows uploading file via file input', async () => {
+      render(<FilesSection />);
+
+      const fileInput = screen.getByLabelText(/browse files/i, {
+        selector: 'input[type="file"]',
+      }) as HTMLInputElement;
+
+      const file = new File(['content'], 'test.txt', { type: 'text/plain' });
+
+      fireEvent.change(fileInput, { target: { files: [file] } });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole('heading', { name: /upload file/i }),
+        ).toBeInTheDocument();
+      });
+
+      expect(screen.getByLabelText(/filename/i)).toHaveValue('test.txt');
+    });
+
+    it('shows visual indication that drop zone is clickable', () => {
+      render(<FilesSection />);
+
+      const dropZone = screen.getByText(/drag and drop a file here/i)
+        .parentElement?.parentElement;
+
+      expect(dropZone).toHaveClass('cursor-pointer');
+    });
+
     it('rejects files larger than 1MB with RAG documentation link', async () => {
       render(<FilesSection />);
 

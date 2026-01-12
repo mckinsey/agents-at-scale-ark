@@ -12,7 +12,13 @@ import {
   Trash2,
   Upload as UploadIcon,
 } from 'lucide-react';
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
 
 import { filesBrowserPrefixAtom } from '@/atoms/internal-states';
@@ -87,6 +93,7 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
     const [pendingFile, setPendingFile] = useState<File | null>(null);
     const [filename, setFilename] = useState('');
     const [isDragging, setIsDragging] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const {
       data: listFilesData,
@@ -198,6 +205,49 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
         setPendingFile(file);
         setFilename(file.name);
         setUploadDialogOpen(true);
+      }
+    };
+
+    const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (files && files.length > 0) {
+        const file = files[0];
+        const MAX_FILE_SIZE = 1024 * 1024;
+
+        if (file.size > MAX_FILE_SIZE) {
+          toast.error('File Too Large', {
+            description: (
+              <>
+                File size is {formatBytes(file.size)}. Maximum allowed is 1 MB.
+                <br />
+                To work with larger files, configure a{' '}
+                <a
+                  href="https://mckinsey.github.io/agents-at-scale-ark/developer-guide/rag-implementation/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:no-underline">
+                  RAG (Retrieval-Augmented Generation)
+                </a>{' '}
+                system instead.
+              </>
+            ),
+          });
+          return;
+        }
+
+        setPendingFile(file);
+        setFilename(file.name);
+        setUploadDialogOpen(true);
+      }
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    };
+
+    const handleDropZoneClick = () => {
+      if (!uploading) {
+        fileInputRef.current?.click();
       }
     };
 
@@ -532,14 +582,24 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
             isDragging
               ? 'border-primary bg-primary/10'
               : 'border-gray-300 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/30'
-          } ${uploading ? 'pointer-events-none opacity-50' : ''}`}
+          } ${uploading ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
-          onDrop={handleDrop}>
+          onDrop={handleDrop}
+          onClick={handleDropZoneClick}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileInputChange}
+            aria-label="Browse files"
+          />
           <div className="flex flex-col items-center justify-center gap-2 text-center">
             <UploadIcon className="text-muted-foreground h-8 w-8" />
             <p className="text-sm font-medium">
-              {uploading ? 'Uploading...' : 'Drag and drop a file here'}
+              {uploading
+                ? 'Uploading...'
+                : 'Drag and drop a file here or click to browse'}
             </p>
             {uploading && (
               <div className="mt-2 flex w-full max-w-xs items-center gap-2">
