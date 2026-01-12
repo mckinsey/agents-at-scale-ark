@@ -72,7 +72,7 @@ export const modelsService = {
       name: 'model_created',
       properties: {
         modelName: response.name,
-        modelType: model.type,
+        modelProvider: model.provider,
       },
     });
 

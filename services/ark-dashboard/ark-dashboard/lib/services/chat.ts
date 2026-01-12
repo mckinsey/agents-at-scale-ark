@@ -117,8 +117,8 @@ export const chatService = {
       properties: {
         queryName: response.name,
         inputType: query.type,
-        targetCount: query.targets?.length ?? 0,
-        targetNames: query.targets?.map(t => t.name).join(',') ?? '',
+        targetName: query.target?.name ?? '',
+        targetType: query.target?.type ?? '',
         promptHash: hashPromptSync(inputContent),
       },
     });
