@@ -26,7 +26,6 @@ spec:
               - name: NAMESPACE
                 value: ($namespace)
         - assert:
-            timeout: 30s
             resource:
               apiVersion: ark.mckinsey.com/v1alpha1
               kind: Model
