@@ -36,7 +36,7 @@ describe('FilesPage', () => {
     render(<FilesPage />);
 
     expect(screen.getByTestId('files-section')).toBeInTheDocument();
-    expect(screen.queryByText(/filesystem mcp/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/file gateway service/i)).not.toBeInTheDocument();
   });
 
   it('should display setup instructions when feature flag is disabled', () => {
@@ -46,7 +46,15 @@ describe('FilesPage', () => {
 
     expect(screen.queryByTestId('files-section')).not.toBeInTheDocument();
     expect(
-      screen.getByText(/Filesystem MCP Not Configured/i),
+      screen.getByText(/File Gateway Service Not Configured/i),
     ).toBeInTheDocument();
+
+    const link = screen.getByRole('link', { name: /File Gateway Service/i });
+    expect(link).toHaveAttribute(
+      'href',
+      'https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/',
+    );
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   });
 });
