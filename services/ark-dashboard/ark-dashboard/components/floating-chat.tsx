@@ -451,26 +451,33 @@ export default function FloatingChat({
                     <div key={index} className="contents">
                       {toolCalls &&
                         toolCalls.map((toolCall, toolIndex) => (
-                          <ChatMessage
+                          <div
                             key={`${index}-tool-${toolIndex}`}
-                            role="assistant"
-                            content=""
-                            viewMode={viewMode}
-                            toolCalls={[
-                              toolCall as {
-                                id: string;
-                                type: 'function';
-                                function: { name: string; arguments: string };
-                              },
-                            ]}
-                          />
+                            className={toolIndex > 0 ? 'mt-2' : ''}>
+                            <ChatMessage
+                              role="assistant"
+                              content=""
+                              viewMode={viewMode}
+                              toolCalls={[
+                                toolCall as {
+                                  id: string;
+                                  type: 'function';
+                                  function: { name: string; arguments: string };
+                                },
+                              ]}
+                            />
+                          </div>
                         ))}
                       {content && (
-                        <ChatMessage
-                          role={message.role as 'user' | 'assistant' | 'system'}
-                          content={content}
-                          viewMode={viewMode}
-                        />
+                        <div className={toolCalls ? 'mt-2' : ''}>
+                          <ChatMessage
+                            role={
+                              message.role as 'user' | 'assistant' | 'system'
+                            }
+                            content={content}
+                            viewMode={viewMode}
+                          />
+                        </div>
                       )}
                     </div>
                   );
