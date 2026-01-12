@@ -9,6 +9,7 @@ import { AgentCard } from '@/components/cards';
 import { AgentEditor } from '@/components/editors';
 import { AgentRow } from '@/components/rows/agent-row';
 import { Button } from '@/components/ui/button';
+import { TrackedButton } from '@/components/ui/tracked-button';
 import {
   Empty,
   EmptyContent,
@@ -159,10 +160,13 @@ export const AgentsSection = forwardRef<{ openAddEditor: () => void }, object>(
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
-              <Button onClick={() => setAgentEditorOpen(true)}>
+              <TrackedButton
+                trackingEvent="create_agent_clicked"
+                trackingProperties={{ source: 'empty_state' }}
+                onClick={() => setAgentEditorOpen(true)}>
                 <Plus className="h-4 w-4" />
                 Create Agent
-              </Button>
+              </TrackedButton>
             </EmptyContent>
             <Button
               variant="link"

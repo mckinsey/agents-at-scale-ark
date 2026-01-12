@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
@@ -69,9 +70,15 @@ export const mcpServersService = {
     }
   },
 
-  // Delete an MCP server
   async delete(identifier: string): Promise<void> {
     await apiClient.delete(`/api/v1/mcp-servers/${identifier}`);
+
+    trackEvent({
+      name: 'mcp_server_deleted',
+      properties: {
+        mcpServerName: identifier,
+      },
+    });
   },
 
   async create(mcpSever: MCPServerCreateRequest): Promise<MCPServer> {
@@ -79,6 +86,14 @@ export const mcpServersService = {
       `/api/v1/mcp-servers`,
       mcpSever,
     );
+
+    trackEvent({
+      name: 'mcp_server_created',
+      properties: {
+        mcpServerName: response.name,
+      },
+    });
+
     return {
       ...response,
       id: response.name,

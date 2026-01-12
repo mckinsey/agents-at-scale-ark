@@ -3,6 +3,7 @@ import { Suspense } from 'react';
 import type { PropsWithChildren } from 'react';
 import { Toaster } from 'sonner';
 
+import { AnalyticsProvider } from '@/lib/analytics/provider';
 import { ChatProvider } from '@/lib/chat-context';
 import { NamespaceProvider } from '@/providers/NamespaceProvider';
 
@@ -26,7 +27,9 @@ export function GlobalProviders({ children }: PropsWithChildren) {
                 </div>
               }>
               <NamespaceProvider>
-                <ChatProvider>{children}</ChatProvider>
+                <AnalyticsProvider>
+                  <ChatProvider>{children}</ChatProvider>
+                </AnalyticsProvider>
               </NamespaceProvider>
             </Suspense>
           </QueryClientProvider>

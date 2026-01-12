@@ -50,6 +50,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { trackEvent } from '@/lib/analytics/singleton';
 import { signout } from '@/lib/auth/signout';
 import {
   CONFIGURATION_SECTIONS,
@@ -118,6 +119,13 @@ export function AppSidebar() {
   };
 
   const navigateToSection = (sectionKey: string) => {
+    trackEvent({
+      name: 'nav_item_clicked',
+      properties: {
+        section: sectionKey,
+        fromSection: getCurrentSection(),
+      },
+    });
     router.push(`/${sectionKey}`);
   };
 
