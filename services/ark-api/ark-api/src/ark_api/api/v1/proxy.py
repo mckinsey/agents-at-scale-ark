@@ -1,12 +1,30 @@
 """Proxy endpoint for forwarding requests to other services in the cluster."""
-import logging
 import httpx
 from fastapi import APIRouter, Request, Response, HTTPException
-from typing import Any
+from kubernetes_asyncio import client
+from kubernetes_asyncio.client.api_client import ApiClient
+from pydantic import BaseModel
+from typing import List
 
-logger = logging.getLogger(__name__)
+from ark_sdk.k8s import get_context
 
-router = APIRouter(prefix="/proxy", tags=["proxy"])
+router = APIRouter(prefix="/proxy/service", tags=["proxy"])
+
+
+class ServiceListResponse(BaseModel):
+    """Response model for list services endpoint."""
+    services: List[str]
+
+
+@router.get("", response_model=ServiceListResponse)
+async def list_services() -> ServiceListResponse:
+    """List services available for proxying in the current namespace."""
+    namespace = get_context()["namespace"]
+    async with ApiClient() as api_client:
+        v1 = client.CoreV1Api(api_client)
+        services = await v1.list_namespaced_service(namespace=namespace)
+        service_names = [svc.metadata.name for svc in services.items]
+    return ServiceListResponse(services=service_names)
 
 
 async def _proxy_request_impl(
@@ -34,8 +52,6 @@ async def _proxy_request_impl(
     if query_params:
         target_url += "?" + "&".join(f"{k}={v}" for k, v in query_params.items())
 
-    logger.info(f"Proxying {request.method} request to {target_url}")
-
     try:
         async with httpx.AsyncClient() as client:
             response = await client.request(
@@ -57,7 +73,6 @@ async def _proxy_request_impl(
                 headers=filtered_headers,
             )
     except httpx.RequestError as e:
-        logger.error(f"Error proxying request to {target_url}: {e}")
         raise HTTPException(
             status_code=502,
             detail=f"Failed to proxy request to {service_name}: {str(e)}"

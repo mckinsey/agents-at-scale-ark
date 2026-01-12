@@ -51,7 +51,7 @@ export const filesService = {
 
       const baseURL =
         process.env.NEXT_PUBLIC_ARK_API_BASE_URL ||
-        '/api/v1/proxy/file-gateway-api';
+        '/api/v1/proxy/service/file-gateway-api';
       xhr.open('POST', `${baseURL}/files`);
       xhr.send(formData);
     });
@@ -64,7 +64,7 @@ export const filesService = {
   download(key: string): void {
     const baseURL =
       process.env.NEXT_PUBLIC_ARK_API_BASE_URL ||
-      '/api/v1/proxy/file-gateway-api';
+      '/api/v1/proxy/service/file-gateway-api';
     const url = `${baseURL}/files/${encodeURIComponent(key)}/download`;
     window.open(url, '_blank');
   },

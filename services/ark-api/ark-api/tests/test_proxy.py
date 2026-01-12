@@ -1,10 +1,49 @@
 """Tests for proxy endpoint."""
 import os
 import unittest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 
 os.environ["AUTH_MODE"] = "open"
+
+
+class TestListServices(unittest.TestCase):
+    """Test cases for list services endpoint."""
+
+    def setUp(self):
+        """Set up test client."""
+        from ark_api.main import app
+        self.client = TestClient(app)
+
+    @patch('ark_api.api.v1.proxy.get_context')
+    @patch('ark_api.api.v1.proxy.ApiClient')
+    def test_list_services_success(self, mock_api_client, mock_get_context):
+        """Test listing available services."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_svc1 = MagicMock()
+        mock_svc1.metadata.name = "file-gateway-api"
+        mock_svc2 = MagicMock()
+        mock_svc2.metadata.name = "other-service"
+
+        mock_services = MagicMock()
+        mock_services.items = [mock_svc1, mock_svc2]
+
+        mock_v1 = MagicMock()
+        mock_v1.list_namespaced_service = AsyncMock(return_value=mock_services)
+
+        mock_client_instance = MagicMock()
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=None)
+        mock_api_client.return_value = mock_client_instance
+
+        with patch('ark_api.api.v1.proxy.client.CoreV1Api', return_value=mock_v1):
+            response = self.client.get("/v1/proxy/service")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("services", data)
+        self.assertEqual(data["services"], ["file-gateway-api", "other-service"])
 
 
 class TestProxyEndpoint(unittest.TestCase):
@@ -25,7 +64,7 @@ class TestProxyEndpoint(unittest.TestCase):
         mock_response.content = b'{"files": [{"name": "test.txt"}]}'
         mock_request.return_value = mock_response
 
-        response = self.client.get("/v1/proxy/file-gateway/files")
+        response = self.client.get("/v1/proxy/service/file-gateway/files")
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -49,7 +88,7 @@ class TestProxyEndpoint(unittest.TestCase):
         mock_request.return_value = mock_response
 
         response = self.client.post(
-            "/v1/proxy/file-gateway/files",
+            "/v1/proxy/service/file-gateway/files",
             json={"name": "test.txt", "content": "test content"}
         )
 
@@ -66,7 +105,7 @@ class TestProxyEndpoint(unittest.TestCase):
         mock_response.content = b'{"files": []}'
         mock_request.return_value = mock_response
 
-        response = self.client.get("/v1/proxy/file-gateway/files?prefix=test&max_keys=10")
+        response = self.client.get("/v1/proxy/service/file-gateway/files?prefix=test&max_keys=10")
 
         self.assertEqual(response.status_code, 200)
         mock_request.assert_called_once()
@@ -79,7 +118,7 @@ class TestProxyEndpoint(unittest.TestCase):
         from httpx import ConnectError
         mock_request.side_effect = ConnectError("Connection refused")
 
-        response = self.client.get("/v1/proxy/file-gateway/files")
+        response = self.client.get("/v1/proxy/service/file-gateway/files")
 
         self.assertEqual(response.status_code, 502)
         data = response.json()
@@ -103,7 +142,7 @@ class TestProxyEndpoint(unittest.TestCase):
         mock_response.content = b"fake file content"
         mock_request.return_value = mock_response
 
-        response = self.client.get("/v1/proxy/file-gateway-api/files/test.jpg/download")
+        response = self.client.get("/v1/proxy/service/file-gateway-api/files/test.jpg/download")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"fake file content")

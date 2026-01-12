@@ -83,6 +83,13 @@ curl http://localhost:8000/agents
 curl http://localhost:8000/agent/<agent-name>/.well-known/agent.json
 ```
 
+### Service Proxy
+
+Proxy requests to other services deployed in your namespace. For example, the File Management features in Ark proxy requests from the dashboard directly to the filesystem server. Proxy APIs use the authentication policies configured for the tenant.
+
+- `GET /v1/proxy/service` - List available services
+- `* /v1/proxy/service/{service_name}/{path}` - Proxy to a cluster service
+
 ## Authentication
 
 ARK API supports multiple authentication modes:

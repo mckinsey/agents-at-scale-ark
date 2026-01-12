@@ -60,7 +60,7 @@ import {
   SERVICE_SECTIONS,
 } from '@/lib/constants/dashboard-icons';
 import { type SystemInfo, systemInfoService } from '@/lib/services';
-import { filesService } from '@/lib/services/files';
+import { proxyService } from '@/lib/services/proxy';
 import { useNamespace } from '@/providers/NamespaceProvider';
 import { useUser } from '@/providers/UserProvider';
 
@@ -116,8 +116,9 @@ export function AppSidebar() {
 
     const checkFilesAPIHealth = async () => {
       try {
-        await filesService.list({ max_keys: 1 });
-        setIsFilesBrowserAvailable(true);
+        const available =
+          await proxyService.isServiceAvailable('file-gateway-api');
+        setIsFilesBrowserAvailable(available);
       } catch (error) {
         console.error('Failed to check files API health:', error);
         setIsFilesBrowserAvailable(false);
