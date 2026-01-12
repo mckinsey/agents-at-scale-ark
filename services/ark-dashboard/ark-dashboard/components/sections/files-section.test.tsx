@@ -637,6 +637,73 @@ describe('FilesSection', () => {
   });
 
   describe('File Upload', () => {
+    it('rejects files larger than 1MB with RAG documentation link', async () => {
+      render(<FilesSection />);
+
+      const dropZone = screen.getByText(/drag and drop a file here/i)
+        .parentElement?.parentElement;
+
+      const largeContent = new Array(1024 * 1024 + 1).fill('a').join('');
+      const largeFile = new File([largeContent], 'large.txt', {
+        type: 'text/plain',
+      });
+      const dataTransfer = {
+        files: [largeFile],
+      };
+
+      if (dropZone) {
+        const dropEvent = new Event('drop', { bubbles: true });
+        Object.defineProperty(dropEvent, 'dataTransfer', {
+          value: dataTransfer,
+        });
+        dropZone.dispatchEvent(dropEvent);
+      }
+
+      await waitFor(() => {
+        expect(mockToast.error).toHaveBeenCalledWith(
+          'File Too Large',
+          expect.objectContaining({
+            description: expect.anything(),
+          }),
+        );
+      });
+
+      expect(
+        screen.queryByRole('heading', { name: /upload file/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('accepts files that are exactly 1MB', async () => {
+      render(<FilesSection />);
+
+      const dropZone = screen.getByText(/drag and drop a file here/i)
+        .parentElement?.parentElement;
+
+      const exactlyOneMB = new Array(1024 * 1024).fill('a').join('');
+      const file = new File([exactlyOneMB], 'exactly-1mb.txt', {
+        type: 'text/plain',
+      });
+      const dataTransfer = {
+        files: [file],
+      };
+
+      if (dropZone) {
+        const dropEvent = new Event('drop', { bubbles: true });
+        Object.defineProperty(dropEvent, 'dataTransfer', {
+          value: dataTransfer,
+        });
+        dropZone.dispatchEvent(dropEvent);
+      }
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole('heading', { name: /upload file/i }),
+        ).toBeInTheDocument();
+      });
+
+      expect(mockToast.error).not.toHaveBeenCalled();
+    });
+
     it('opens upload dialog when file is dropped', async () => {
       render(<FilesSection />);
 
