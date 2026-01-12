@@ -87,7 +87,7 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
             disabled={isPending}
             className="mt-8 w-full"
             trackingEvent="create_model_clicked"
-            trackingProperties={{ modelType: type }}>
+            trackingProperties={{ modelType: provider }}>
             {isPending ? (
               <>
                 <Spinner size="sm" />
