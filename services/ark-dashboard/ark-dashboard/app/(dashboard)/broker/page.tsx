@@ -38,6 +38,29 @@ interface PaginatedResponse<T> {
 
 const PAGE_SIZE = 100;
 
+function extractItemTimestamp(item: unknown): string {
+  if (!item) {
+    return new Date().toISOString();
+  }
+  const typedItem = item as Record<string, unknown>;
+  if (typedItem.timestamp) {
+    return typedItem.timestamp as string;
+  }
+  let unixTimestamp = '';
+  if (typedItem?.startTimeUnixNano) {
+    unixTimestamp = typedItem.startTimeUnixNano as string;
+  }
+  const spans = typedItem?.spans as Array<Record<string, unknown>>;
+  if (!unixTimestamp && spans && spans.length > 0) {
+    unixTimestamp = spans[0].startTimeUnixNano as string;
+  }
+  if (unixTimestamp) {
+    return new Date(parseInt(unixTimestamp.substring(0, 13))).toISOString();
+  }
+
+  return new Date().toISOString();
+}
+
 function useSSEStream(endpoint: string, memory: string) {
   const [streamedEntries, setStreamedEntries] = useState<StreamEntry[]>([]);
   const [fetchedEntries, setFetchedEntries] = useState<StreamEntry[]>([]);
@@ -86,7 +109,7 @@ function useSSEStream(endpoint: string, memory: string) {
           }
           const entry: StreamEntry = {
             id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-            timestamp: new Date().toISOString(),
+            timestamp: extractItemTimestamp(data),
             data,
           };
           setStreamedEntries(prev => [entry, ...prev.slice(0, 499)]);
@@ -136,7 +159,7 @@ function useSSEStream(endpoint: string, memory: string) {
         }
         const newEntries: StreamEntry[] = data.items.map((item, i) => ({
           id: `fetched-${cursor ?? 0}-${i}-${Math.random().toString(36).substring(2, 11)}`,
-          timestamp: new Date().toISOString(),
+          timestamp: extractItemTimestamp(item),
           data: item,
         }));
         if (mountedRef.current) {

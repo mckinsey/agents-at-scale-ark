@@ -1,10 +1,10 @@
-"""Pydantic models for session endpoints."""
+"""Pydantic models for conversation endpoints."""
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel
 
 
-class SessionResponse(BaseModel):
+class ConversationResponse(BaseModel):
     """Response model for a conversation."""
     conversationId: str
     memoryName: str
@@ -13,9 +13,9 @@ class SessionResponse(BaseModel):
     lastActivity: Optional[datetime] = None
 
 
-class SessionListResponse(BaseModel):
-    """Response model for listing sessions."""
-    items: List[SessionResponse]
+class ConversationListResponse(BaseModel):
+    """Response model for listing conversations."""
+    items: List[ConversationResponse]
     total: Optional[int] = None
 
 
