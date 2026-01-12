@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
@@ -283,7 +284,13 @@ export const evaluationsService = {
       `/api/v1/evaluations`,
       evaluation,
     );
-
+    trackEvent({
+      name: 'evaluation_created',
+      properties: {
+        evaluationName: response.name,
+        evaluatorRef: evaluation.evaluator,
+      },
+    });
     return response;
   },
 
@@ -299,6 +306,10 @@ export const evaluationsService = {
         `/api/v1/evaluations/${name}`,
         updates,
       );
+      trackEvent({
+        name: 'evaluation_updated',
+        properties: { evaluationName: response.name },
+      });
       return response;
     } catch (error) {
       if ((error as APIError).status === 404) {
@@ -314,6 +325,10 @@ export const evaluationsService = {
   async delete(name: string): Promise<boolean> {
     try {
       await apiClient.delete(`/api/v1/evaluations/${name}`);
+      trackEvent({
+        name: 'evaluation_deleted',
+        properties: { evaluationName: name },
+      });
       return true;
     } catch (error) {
       if ((error as APIError).status === 404) {

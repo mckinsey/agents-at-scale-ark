@@ -548,7 +548,17 @@ export default function FloatingChat({
                   <Switch
                     id="debug-mode"
                     checked={debugMode}
-                    onCheckedChange={setDebugMode}
+                    onCheckedChange={(checked) => {
+                      setDebugMode(checked);
+                      trackEvent({
+                        name: 'chat_debug_mode_toggled',
+                        properties: {
+                          enabled: checked,
+                          targetType: type,
+                          targetName: name,
+                        },
+                      });
+                    }}
                   />
                   <label
                     htmlFor="debug-mode"
