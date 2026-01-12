@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
@@ -30,6 +31,10 @@ export const secretsService = {
       `/api/v1/secrets`,
       request,
     );
+    trackEvent({
+      name: 'secret_created',
+      properties: { secretName: name },
+    });
     return response;
   },
 
@@ -44,11 +49,19 @@ export const secretsService = {
       `/api/v1/secrets/${name}`,
       request,
     );
+    trackEvent({
+      name: 'secret_updated',
+      properties: { secretName: name },
+    });
     return response;
   },
 
   // Delete a secret
   async delete(name: string): Promise<void> {
     await apiClient.delete(`/api/v1/secrets/${name}`);
+    trackEvent({
+      name: 'secret_deleted',
+      properties: { secretName: name },
+    });
   },
 };
