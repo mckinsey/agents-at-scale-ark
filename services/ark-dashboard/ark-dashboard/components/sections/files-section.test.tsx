@@ -710,11 +710,9 @@ describe('FilesSection', () => {
 
       await waitFor(() => {
         expect(mockToast.error).toHaveBeenCalledWith(
-          'File Too Large',
+          'File is too large',
           expect.objectContaining({
-            description: expect.stringContaining(
-              'Directly loading files into context is only suitable for small and simple files',
-            ),
+            description: expect.anything(),
           }),
         );
       });

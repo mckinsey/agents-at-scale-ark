@@ -179,12 +179,7 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
       const files = Array.from(e.dataTransfer.files);
       if (files.length > 0) {
         const file = files[0];
-        const MAX_FILE_SIZE = 1024 * 1024;
-
-        if (file.size > MAX_FILE_SIZE) {
-          toast.error('File Too Large', {
-            description: `File size is ${formatBytes(file.size)}. Directly loading files into context is only suitable for small and simple files. For larger files, explore RAG (Retrieval-Augmented Generation) or vectorization patterns.`,
-          });
+        if (!assertFileSize(file)) {
           return;
         }
 
@@ -198,12 +193,7 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
       const files = e.target.files;
       if (files && files.length > 0) {
         const file = files[0];
-        const MAX_FILE_SIZE = 1024 * 1024;
-
-        if (file.size > MAX_FILE_SIZE) {
-          toast.error('File Too Large', {
-            description: `File size is ${formatBytes(file.size)}. Directly loading files into context is only suitable for small and simple files. For larger files, explore RAG (Retrieval-Augmented Generation) or vectorization patterns.`,
-          });
+        if (!assertFileSize(file)) {
           return;
         }
 
@@ -215,6 +205,31 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+    };
+
+    const assertFileSize = (file: File) => {
+      const MAX_FILE_SIZE = 1024 * 1024;
+      if (file.size > MAX_FILE_SIZE) {
+        toast.error('File is too large', {
+          description: (
+            <span>
+              Maximum allowed is 1MB, see the{' '}
+              <a
+                href="https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/#file-size-limitations"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline">
+                File Gateway Service documentation
+              </a>{' '}
+              for more details.
+            </span>
+          ),
+        });
+
+        return false;
+      }
+
+      return true;
     };
 
     const handleDropZoneClick = () => {
