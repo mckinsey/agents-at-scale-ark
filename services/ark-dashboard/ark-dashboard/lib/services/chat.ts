@@ -1,5 +1,7 @@
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 
+import { trackEvent } from '@/lib/analytics/singleton';
+import { hashPromptSync } from '@/lib/analytics/utils';
 import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
@@ -106,6 +108,23 @@ export const chatService = {
       `/api/v1/queries/`,
       normalizedQuery,
     );
+
+    const inputContent =
+      typeof query.input === 'string'
+        ? query.input
+        : JSON.stringify(query.input);
+
+    trackEvent({
+      name: 'query_executed',
+      properties: {
+        queryName: response.name,
+        inputType: query.type,
+        targetName: query.target?.name ?? '',
+        targetType: query.target?.type ?? '',
+        promptHash: hashPromptSync(inputContent),
+      },
+    });
+
     return response;
   },
 
