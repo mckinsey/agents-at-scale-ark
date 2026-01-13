@@ -433,35 +433,39 @@ function SessionsView({
     }
   }, [allEntries, autoScroll]);
 
+  const queryToSessionMapRef = useRef<Record<string, string>>({});
+
+  const queryToSessionMap = queryToSessionMapRef.current;
+
   const groupedBySession = allEntries.reduce(
     (acc, entry) => {
       const outerData = entry.data as Record<string, unknown>;
+      const innerData = outerData?.data as Record<string, unknown>;
 
-      let sessionId = 'unknown';
+      let sessionId: string | undefined;
+      let queryId: string | undefined;
 
-      let foundSessionId = false;
-        const spans = outerData?.spans as Array<Record<string, unknown>>;
-        if (spans && spans.length > 0) {
-          for (const span of spans) {
+      if (innerData?.queryId) {
+        queryId = innerData.queryId as string;
+      }
 
-            const attributes = span?.attributes as Array<
-              Record<string, unknown>
-            >;
-            if (attributes) {
-              const sessionAttr = attributes.find(
-                attr => attr?.key === 'session.id',
-              );
-              if (sessionAttr?.value) {
-                sessionId = sessionAttr.value as string;
-                foundSessionId = true;
-                break;
-              }
+      const spans = outerData?.spans as Array<Record<string, unknown>>;
+      if (spans && spans.length > 0) {
+        for (const span of spans) {
+          const attributes = span?.attributes as Array<Record<string, unknown>>;
+          if (attributes) {
+            const sessionAttr = attributes.find(
+              attr => attr?.key === 'session.id',
+            );
+            if (sessionAttr?.value) {
+              sessionId = sessionAttr.value as string;
+              break;
             }
           }
         }
+      }
 
-      if (!foundSessionId) {
-        const innerData = outerData?.data as Record<string, unknown>;
+      if (!sessionId) {
         if (innerData?.sessionId) {
           sessionId = innerData.sessionId as string;
         } else {
@@ -481,6 +485,14 @@ function SessionsView({
             }
           }
         }
+      }
+
+      if (queryId && sessionId) {
+        queryToSessionMap[queryId] = sessionId;
+      }
+
+      if (queryId && !sessionId) {
+        sessionId = queryToSessionMap[queryId];
       }
 
       if (!acc[sessionId]) {
