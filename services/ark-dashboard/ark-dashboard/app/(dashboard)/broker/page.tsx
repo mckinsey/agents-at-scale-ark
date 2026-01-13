@@ -422,10 +422,26 @@ function SessionsView({
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const allEntries = useMemo(
-    () => [...eventEntries, ...chunkEntries, ...traceEntries],
-    [eventEntries, chunkEntries, traceEntries],
-  );
+  const allEntries = useMemo(() => {
+    const combined = [...eventEntries, ...chunkEntries, ...traceEntries];
+    return combined.sort((a, b) => {
+      const aTime = new Date(a.timestamp).getTime();
+      const bTime = new Date(b.timestamp).getTime();
+      const timeDiff = aTime - bTime;
+
+      if (timeDiff !== 0) {
+        return timeDiff;
+      }
+
+      const aData = a.data as Record<string, unknown>;
+      const bData = b.data as Record<string, unknown>;
+      const aSeq =
+        typeof aData?.sequenceNumber === 'number' ? aData.sequenceNumber : 0;
+      const bSeq =
+        typeof bData?.sequenceNumber === 'number' ? bData.sequenceNumber : 0;
+      return aSeq - bSeq;
+    });
+  }, [eventEntries, chunkEntries, traceEntries]);
 
   useEffect(() => {
     if (autoScroll && containerRef.current) {
@@ -495,6 +511,8 @@ function SessionsView({
         sessionId = queryToSessionMap[queryId];
       }
 
+      sessionId = sessionId || 'unknown';
+
       if (!acc[sessionId]) {
         acc[sessionId] = [];
       }
@@ -507,7 +525,7 @@ function SessionsView({
   const sortedSessions = Object.entries(groupedBySession).sort((a, b) => {
     const aLatest = a[1][0]?.timestamp || '';
     const bLatest = b[1][0]?.timestamp || '';
-    return bLatest.localeCompare(aLatest);
+    return aLatest.localeCompare(bLatest);
   });
 
   const toggleSession = (sessionId: string) => {
