@@ -63,10 +63,19 @@ export function AgentsAPIDialog({
   };
 
   const pythonCode = `import requests
+from requests.auth import HTTPBasicAuth
 
 response = requests.post(
     "${fullEndpoint}",
-    headers={"Content-Type": "application/json"},
+  
+    # Uncomment to use auth with key pair
+    # auth=HTTPBasicAuth(PUBLIC_KEY, SECRET_KEY),
+    
+    headers={
+        "Content-Type": "application/json",
+        # Uncomment to use auth with bearer token
+        # "Authorization": "Bearer YOUR_TOKEN_HERE",
+    },
     json={
         # Required: The agent to use (format: "agent/<name>")
         "model": "agent/${selectedAgent}",
@@ -132,11 +141,13 @@ func main() {
 	}
 
 	body, _ := json.Marshal(payload)
-	resp, err := http.Post(
-		"${fullEndpoint}",
-		"application/json",
-		bytes.NewBuffer(body),
-	)
+	req, _ := http.NewRequest("POST", "${fullEndpoint}", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	// Uncomment to use auth with key pair
+	// req.SetBasicAuth("PUBLIC_KEY", "SECRET_KEY")
+	// Uncomment to use auth with bearer token
+	// req.Header.Set("Authorization", "Bearer YOUR_TOKEN_HERE")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		panic(err)
 	}
@@ -147,6 +158,10 @@ func main() {
 }`;
 
   const bashCode = `curl -X POST "${fullEndpoint}" \\
+  # Uncomment to use auth with key pair
+  # -u PUBLIC_KEY:SECRET_KEY \\
+  # Uncomment to use auth with bearer token
+  # -H "Authorization: Bearer YOUR_TOKEN_HERE" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "agent/${selectedAgent}",
