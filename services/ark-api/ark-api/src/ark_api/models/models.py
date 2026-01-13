@@ -104,3 +104,7 @@ class ModelDetailResponse(BaseModel):
     available: Optional[AvailabilityStatus] = None
     resolved_address: Optional[str] = None
     annotations: Optional[Dict[str, str]] = None
+
+class ServiceListResponse(BaseModel):
+    """Response model for list services endpoint."""
+    services: List[str]

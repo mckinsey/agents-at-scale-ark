@@ -23,8 +23,8 @@ describe('Dashboard Sections - enabledWhen', () => {
   describe('DASHBOARD_SECTIONS filtering', () => {
     it('should return the expected total number of sections', () => {
       const allSections = Object.values(DASHBOARD_SECTIONS);
-      // 5 configurations + 6 operations + 4 runtime + 1 service = 16 total
-      expect(allSections).toHaveLength(16);
+      // 5 configurations + 7 operations + 4 runtime + 1 service = 17 total
+      expect(allSections).toHaveLength(17);
     });
   });
 
@@ -57,7 +57,7 @@ describe('Dashboard Sections - enabledWhen', () => {
 
   describe('OPERATION_SECTIONS', () => {
     it('should have the expected sections', () => {
-      expect(OPERATION_SECTIONS).toHaveLength(6);
+      expect(OPERATION_SECTIONS).toHaveLength(7);
 
       // Verify it matches the count from DASHBOARD_SECTIONS
       const opsFromDashboard = Object.values(DASHBOARD_SECTIONS).filter(
@@ -70,6 +70,7 @@ describe('Dashboard Sections - enabledWhen', () => {
       expect(opKeys).toContain('evaluations');
       expect(opKeys).toContain('events');
       expect(opKeys).toContain('memory');
+      expect(opKeys).toContain('files');
       expect(opKeys).toContain('tasks');
       expect(opKeys).toContain('broker');
     });

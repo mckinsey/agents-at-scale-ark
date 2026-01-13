@@ -1,9 +1,13 @@
 """A2A Proxy routes for making agent to agent comunication accesible from outside """
 import logging
+from multiprocessing import get_context
 from token import OP
 from ark_api.utils.ark_services import get_headers
+from ark_sdk.k8s import get_context
 from ark_sdk.client import with_ark_client
 from datetime import datetime
+from kubernetes_asyncio import client
+from kubernetes_asyncio.client.api_client import ApiClient
 from posix import preadv
 from typing import Optional
 import httpx
@@ -12,6 +16,7 @@ import resource
 from fastapi import APIRouter, Query, Request, Response, HTTPException
 
 from ..exceptions import handle_k8s_errors
+from ....models.models import ServiceListResponse
 from .proxy_resources import Resource
 
 logger = logging.getLogger(__name__)
@@ -21,6 +26,7 @@ router = APIRouter(prefix="/proxy", tags=["proxy"])
 # CRD configuration
 VERSION_A2A = "v1prealpha1"
 VERSION_MCP = "v1alpha1"
+VERSION = "v1"
 
 async def _get_a2a_server_address(a2a_server_name: str, 
     namespace: Optional[str] = None) -> tuple[str, dict]:
@@ -121,6 +127,7 @@ async def _proxy_request(
                 url=target_url,
                 headers=headers,
                 content=body if body else None,
+                params=dict(request.query_params) if request.query_params else None
             )
             return Response(
                 content=response.content,
@@ -137,6 +144,18 @@ async def _proxy_request(
                 status_code=502,
                 detail=f"Failed to proxy request to server: {str(e)}"
             )
+
+@router.get("/services", response_model=ServiceListResponse)
+async def list_services(namespace: Optional[str] = None) -> ServiceListResponse:
+    """List services available for proxying in the current namespace."""
+    if namespace is None:
+        namespace = get_context()["namespace"]
+
+    async with ApiClient() as api_client:
+        v1 = client.CoreV1Api(api_client)
+        services = await v1.list_namespaced_service(namespace=namespace)
+        service_names = [svc.metadata.name for svc in services.items]
+        return ServiceListResponse(services=service_names)
 
 @router.options("/{resource}/{server_name}")
 @router.post("/{resource}/{server_name}")
@@ -166,6 +185,9 @@ async def proxy_server(
         resource_url, additional_headers = await _get_a2a_server_address(server_name, namespace)
     elif resource == Resource.MCP:
         resource_url, additional_headers = await _get_mcp_server_address(server_name, namespace)
+    elif resource == Resource.SERVICES:
+        resource_url = f"http://{server_name}"
+        additional_headers = {}
     else:
         raise HTTPException(status_code=400,
             detail="Invalid resource type")
@@ -199,6 +221,9 @@ async def proxy_server_path(resource: Resource,
         resource_url, additional_headers = await _get_a2a_server_address(server_name, namespace)
     elif resource == Resource.MCP:
         resource_url, additional_headers = await _get_mcp_server_address(server_name, namespace)
+    elif resource == Resource.SERVICES:
+        resource_url = f"http://{server_name}"
+        additional_headers = {}
     else:
         raise HTTPException(status_code=400,
             detail="Invalid resource type")
@@ -207,3 +232,15 @@ async def proxy_server_path(resource: Resource,
         else f"{resource_url}{path}"
     logger.info(f"Forwarding at {request.method} {resource_url}")
     return await _proxy_request(resource_url, request, additional_headers)
+
+@router.delete("/services/{service_name}/{api_path:path}")
+@router.patch("/services/{service_name}/{api_path:path}")
+@router.head("/services/{service_name}/{api_path:path}")
+async def proxy_services(
+    service_name: str,
+    api_path: str,
+    request: Request,
+) -> Response:
+    """Proxy DELETE, PATCH, HEAD requests to other services in the cluster."""
+    resource_url = f"http://{service_name}/{api_path}"
+    return await _proxy_request(service_name, api_path, request)

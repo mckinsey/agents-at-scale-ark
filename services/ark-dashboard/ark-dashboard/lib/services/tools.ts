@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
 
 // Tool interface for UI compatibility
@@ -47,9 +48,15 @@ export const toolsService = {
     return response;
   },
 
-  // Delete a tool
   async delete(identifier: string): Promise<void> {
     await apiClient.delete(`/api/v1/tools/${identifier}`);
+
+    trackEvent({
+      name: 'tool_deleted',
+      properties: {
+        toolName: identifier,
+      },
+    });
   },
 
   // Create a new tool
@@ -100,5 +107,13 @@ export const toolsService = {
       spec,
     };
     await apiClient.post(`/api/v1/tools`, payload);
+
+    trackEvent({
+      name: 'tool_created',
+      properties: {
+        toolName: name,
+        toolType: type,
+      },
+    });
   },
 };

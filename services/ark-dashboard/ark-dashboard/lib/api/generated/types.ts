@@ -1116,6 +1116,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/proxy/services/{service_name}/{api_path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Proxy Services
+         * @description Proxy DELETE, PATCH, HEAD requests to other services in the cluster.
+         */
+        delete: operations["proxy_services_v1_proxy_services__service_name___api_path__delete"];
+        options?: never;
+        /**
+         * Proxy Services
+         * @description Proxy DELETE, PATCH, HEAD requests to other services in the cluster.
+         */
+        head: operations["proxy_services_v1_proxy_services__service_name___api_path__head"];
+        /**
+         * Proxy Services
+         * @description Proxy DELETE, PATCH, HEAD requests to other services in the cluster.
+         */
+        patch: operations["proxy_services_v1_proxy_services__service_name___api_path__patch"];
+        trace?: never;
+    };
     "/v1/proxy/{resource}/{server_name}": {
         parameters: {
             query?: never;
@@ -2804,6 +2832,32 @@ export interface components {
             namespace: string;
         };
         /**
+         * ConversationListResponse
+         * @description Response model for listing conversations.
+         */
+        ConversationListResponse: {
+            /** Items */
+            items: components["schemas"]["ConversationResponse"][];
+            /** Total */
+            total?: number | null;
+        };
+        /**
+         * ConversationResponse
+         * @description Response model for a conversation.
+         */
+        ConversationResponse: {
+            /** Conversationid */
+            conversationId: string;
+            /** Lastactivity */
+            lastActivity?: string | null;
+            /** Memoryname */
+            memoryName: string;
+            /** Messagecount */
+            messageCount?: number | null;
+            /** Queries */
+            queries?: string[] | null;
+        };
+        /**
          * Custom
          * @description The custom tool that the model called.
          */
@@ -3907,6 +3961,8 @@ export interface components {
         QueryCreateRequest: {
             /** Cancel */
             cancel?: boolean | null;
+            /** Conversationid */
+            conversationId?: string | null;
             evaluatorSelector?: components["schemas"]["QueryLabelSelector"] | null;
             /** Evaluators */
             evaluators?: components["schemas"]["Memory"][] | null;
@@ -3943,6 +3999,8 @@ export interface components {
         QueryDetailResponse: {
             /** Cancel */
             cancel?: boolean | null;
+            /** Conversationid */
+            conversationId?: string | null;
             /** Input */
             input: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam-Output"] | components["schemas"]["ChatCompletionAssistantMessageParam-Output"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
             memory?: components["schemas"]["Memory"] | null;
@@ -4080,6 +4138,8 @@ export interface components {
          * @description Basic query response for list operations.
          */
         QueryResponse: {
+            /** Conversationid */
+            conversationId?: string | null;
             /** Creationtimestamp */
             creationTimestamp?: string | null;
             /** Input */
@@ -4120,6 +4180,8 @@ export interface components {
         QueryUpdateRequest: {
             /** Cancel */
             cancel?: boolean | null;
+            /** Conversationid */
+            conversationId?: string | null;
             /** Input */
             input?: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam-Input"] | components["schemas"]["ChatCompletionAssistantMessageParam-Input"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[] | null;
             memory?: components["schemas"]["Memory"] | null;
@@ -4175,7 +4237,7 @@ export interface components {
          * Resource
          * @enum {string}
          */
-        Resource: "a2a" | "mcp";
+        Resource: "a2a" | "mcp" | "services";
         /**
          * ResourceSelector
          * @description Selector for automatic evaluation of resources.
@@ -4263,32 +4325,6 @@ export interface components {
             agent?: string | null;
             /** Selectorprompt */
             selectorPrompt?: string | null;
-        };
-        /**
-         * SessionListResponse
-         * @description Response model for listing sessions.
-         */
-        SessionListResponse: {
-            /** Items */
-            items: components["schemas"]["SessionResponse"][];
-            /** Total */
-            total?: number | null;
-        };
-        /**
-         * SessionResponse
-         * @description Response model for a conversation.
-         */
-        SessionResponse: {
-            /** Conversationid */
-            conversationId: string;
-            /** Lastactivity */
-            lastActivity?: string | null;
-            /** Memoryname */
-            memoryName: string;
-            /** Messagecount */
-            messageCount?: number | null;
-            /** Queries */
-            queries?: string[] | null;
         };
         /**
          * Skill
@@ -5602,7 +5638,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SessionListResponse"];
+                    "application/json": components["schemas"]["ConversationListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6788,6 +6824,102 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NamespaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_services_v1_proxy_services__service_name___api_path__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_name: string;
+                api_path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_services_v1_proxy_services__service_name___api_path__head: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_name: string;
+                api_path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_services_v1_proxy_services__service_name___api_path__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_name: string;
+                api_path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

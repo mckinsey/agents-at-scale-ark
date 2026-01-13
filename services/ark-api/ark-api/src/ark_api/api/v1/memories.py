@@ -14,7 +14,7 @@ from ...models.memories import (
     MemoryUpdateRequest,
     MemoryDetailResponse
 )
-from ...models.sessions import MemoryMessageResponse, MemoryMessageListResponse
+from ...models.conversations import MemoryMessageResponse, MemoryMessageListResponse
 from ...utils.memory_client import (
     get_memory_service_address,
     fetch_memory_service_data,

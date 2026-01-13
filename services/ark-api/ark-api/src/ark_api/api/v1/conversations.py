@@ -1,4 +1,4 @@
-"""Sessions API endpoints."""
+"""Conversations API endpoints."""
 import logging
 from typing import Optional
 
@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from ark_sdk.client import with_ark_client
 
-from ...models.sessions import SessionResponse, SessionListResponse
+from ...models.conversations import ConversationResponse, ConversationListResponse
 from ...utils.memory_client import (
     get_memory_service_address,
     fetch_memory_service_data,
@@ -24,17 +24,17 @@ router = APIRouter(
 VERSION = "v1alpha1"
 
 
-@router.get("", response_model=SessionListResponse)
+@router.get("", response_model=ConversationListResponse)
 @handle_k8s_errors(operation="list", resource_type="conversations")
 async def list_conversations(
     namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
     memory: Optional[str] = Query(None, description="Filter by memory name")
-) -> SessionListResponse:
+) -> ConversationListResponse:
     """List all conversations in a namespace, optionally filtered by memory."""
     async with with_ark_client(namespace, VERSION) as client:
         memory_dicts = await get_all_memory_resources(client, memory)
 
-        all_sessions = []
+        all_conversations = []
 
         for memory_dict in memory_dicts:
             memory_name = memory_dict.get("metadata", {}).get("name", "")
@@ -56,7 +56,7 @@ async def list_conversations(
 
                 # Convert to our response format - only include actual data
                 for conversation_id in conversations:
-                    all_sessions.append(SessionResponse(
+                    all_conversations.append(ConversationResponse(
                         conversationId=conversation_id,
                         memoryName=memory_name
                     ))
@@ -66,9 +66,9 @@ async def list_conversations(
                 # Continue processing other memories
                 continue
 
-        return SessionListResponse(
-            items=all_sessions,
-            total=len(all_sessions)
+        return ConversationListResponse(
+            items=all_conversations,
+            total=len(all_conversations)
         )
 
 
