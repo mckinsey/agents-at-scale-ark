@@ -8,7 +8,7 @@ from typing import List
 
 from ark_sdk.k8s import get_context
 
-router = APIRouter(prefix="/proxy/service", tags=["proxy"])
+router = APIRouter(prefix="/proxy/services", tags=["proxy"])
 
 
 class ServiceListResponse(BaseModel):

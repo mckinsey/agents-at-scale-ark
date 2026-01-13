@@ -13,6 +13,7 @@ vi.mock('@/lib/api/files-client', () => ({
     get: vi.fn(),
     delete: vi.fn(),
   },
+  FILES_API_BASE_URL: '/api/v1/proxy/services/file-gateway-api',
 }));
 
 describe('filesService', () => {
@@ -173,7 +174,7 @@ describe('filesService', () => {
 
       expect(mockXHR.open).toHaveBeenCalledWith(
         'POST',
-        '/api/v1/proxy/service/file-gateway-api/files',
+        '/api/v1/proxy/services/file-gateway-api/files',
       );
       expect(mockXHR.send).toHaveBeenCalled();
 
@@ -266,7 +267,7 @@ describe('filesService', () => {
       filesService.download('test-file.txt');
 
       expect(windowOpenSpy).toHaveBeenCalledWith(
-        '/api/v1/proxy/service/file-gateway-api/files/test-file.txt/download',
+        '/api/v1/proxy/services/file-gateway-api/files/test-file.txt/download',
         '_blank',
       );
     });
@@ -275,23 +276,9 @@ describe('filesService', () => {
       filesService.download('folder/file with spaces.txt');
 
       expect(windowOpenSpy).toHaveBeenCalledWith(
-        '/api/v1/proxy/service/file-gateway-api/files/folder%2Ffile%20with%20spaces.txt/download',
+        '/api/v1/proxy/services/file-gateway-api/files/folder%2Ffile%20with%20spaces.txt/download',
         '_blank',
       );
-    });
-
-    it('should use environment base URL if provided', () => {
-      const originalEnv = process.env.NEXT_PUBLIC_ARK_API_BASE_URL;
-      process.env.NEXT_PUBLIC_ARK_API_BASE_URL = 'https://api.example.com';
-
-      filesService.download('test.txt');
-
-      expect(windowOpenSpy).toHaveBeenCalledWith(
-        'https://api.example.com/files/test.txt/download',
-        '_blank',
-      );
-
-      process.env.NEXT_PUBLIC_ARK_API_BASE_URL = originalEnv;
     });
   });
 });

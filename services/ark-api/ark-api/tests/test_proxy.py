@@ -38,7 +38,7 @@ class TestListServices(unittest.TestCase):
         mock_api_client.return_value = mock_client_instance
 
         with patch('ark_api.api.v1.proxy.client.CoreV1Api', return_value=mock_v1):
-            response = self.client.get("/v1/proxy/service")
+            response = self.client.get("/v1/proxy/services")
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -64,7 +64,7 @@ class TestProxyEndpoint(unittest.TestCase):
         mock_response.content = b'{"files": [{"name": "test.txt"}]}'
         mock_request.return_value = mock_response
 
-        response = self.client.get("/v1/proxy/service/file-gateway/files")
+        response = self.client.get("/v1/proxy/services/file-gateway/files")
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -88,7 +88,7 @@ class TestProxyEndpoint(unittest.TestCase):
         mock_request.return_value = mock_response
 
         response = self.client.post(
-            "/v1/proxy/service/file-gateway/files",
+            "/v1/proxy/services/file-gateway/files",
             json={"name": "test.txt", "content": "test content"}
         )
 
@@ -105,7 +105,7 @@ class TestProxyEndpoint(unittest.TestCase):
         mock_response.content = b'{"files": []}'
         mock_request.return_value = mock_response
 
-        response = self.client.get("/v1/proxy/service/file-gateway/files?prefix=test&max_keys=10")
+        response = self.client.get("/v1/proxy/services/file-gateway/files?prefix=test&max_keys=10")
 
         self.assertEqual(response.status_code, 200)
         mock_request.assert_called_once()
@@ -118,7 +118,7 @@ class TestProxyEndpoint(unittest.TestCase):
         from httpx import ConnectError
         mock_request.side_effect = ConnectError("Connection refused")
 
-        response = self.client.get("/v1/proxy/service/file-gateway/files")
+        response = self.client.get("/v1/proxy/services/file-gateway/files")
 
         self.assertEqual(response.status_code, 502)
         data = response.json()
@@ -142,7 +142,7 @@ class TestProxyEndpoint(unittest.TestCase):
         mock_response.content = b"fake file content"
         mock_request.return_value = mock_response
 
-        response = self.client.get("/v1/proxy/service/file-gateway-api/files/test.jpg/download")
+        response = self.client.get("/v1/proxy/services/file-gateway-api/files/test.jpg/download")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"fake file content")

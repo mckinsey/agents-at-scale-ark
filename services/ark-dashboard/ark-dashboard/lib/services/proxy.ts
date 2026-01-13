@@ -1,6 +1,6 @@
 import { APIClient } from '@/lib/api/client';
 
-const proxyApiClient = new APIClient('/api/v1/proxy/service');
+const proxyApiClient = new APIClient('/api/v1/proxy/services');
 
 export interface ServiceListResponse {
   services: string[];
