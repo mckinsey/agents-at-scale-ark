@@ -465,7 +465,12 @@ function SessionsView({
         queryId = innerData.queryId as string;
       }
 
-      const spans = outerData?.spans as Array<Record<string, unknown>>;
+      let spans = outerData?.spans as Array<Record<string, unknown>>;
+      if (!spans) {
+        if (outerData?.attributes) {
+          spans = [outerData];
+        }
+      }
       if (spans && spans.length > 0) {
         for (const span of spans) {
           const attributes = span?.attributes as Array<Record<string, unknown>>;
@@ -480,13 +485,15 @@ function SessionsView({
           }
         }
       }
-
       if (!sessionId) {
         if (innerData?.sessionId) {
           sessionId = innerData.sessionId as string;
         } else {
-          const chunk = innerData?.chunk as Record<string, unknown>;
-          const ark = chunk?.ark as Record<string, unknown>;
+          let ark = outerData?.ark as Record<string, unknown>;
+          if (!ark) {
+            const chunk = innerData?.chunk as Record<string, unknown>;
+            ark = chunk?.ark as Record<string, unknown>;
+          }
           if (ark?.session) {
             sessionId = ark.session as string;
           }
