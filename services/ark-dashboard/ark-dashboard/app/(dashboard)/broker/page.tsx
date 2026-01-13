@@ -277,13 +277,16 @@ interface SessionsViewProps {
   eventEntries: StreamEntry[];
   chunkEntries: StreamEntry[];
   traceEntries: StreamEntry[];
+  messageEntries: StreamEntry[];
   eventsConnected: boolean;
   chunksConnected: boolean;
   tracesConnected: boolean;
+  messagesConnected: boolean;
   error: string | null;
   onPurgeEvents: () => void;
   onPurgeChunks: () => void;
   onPurgeTraces: () => void;
+  onPurgeMessages: () => void;
 }
 
 function StreamView({
@@ -407,13 +410,16 @@ function SessionsView({
   eventEntries,
   chunkEntries,
   traceEntries,
+  messageEntries,
   eventsConnected,
   chunksConnected,
   tracesConnected,
+  messagesConnected,
   error,
   onPurgeEvents,
   onPurgeChunks,
   onPurgeTraces,
+  onPurgeMessages,
 }: SessionsViewProps) {
   const [autoScroll, setAutoScroll] = useState(true);
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(
@@ -423,7 +429,12 @@ function SessionsView({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const allEntries = useMemo(() => {
-    const combined = [...eventEntries, ...chunkEntries, ...traceEntries];
+    const combined = [
+      ...eventEntries,
+      ...chunkEntries,
+      ...traceEntries,
+      ...messageEntries,
+    ];
     return combined.sort((a, b) => {
       const aTime = new Date(a.timestamp).getTime();
       const bTime = new Date(b.timestamp).getTime();
@@ -441,7 +452,7 @@ function SessionsView({
         typeof bData?.sequenceNumber === 'number' ? bData.sequenceNumber : 0;
       return aSeq - bSeq;
     });
-  }, [eventEntries, chunkEntries, traceEntries]);
+  }, [eventEntries, chunkEntries, traceEntries, messageEntries]);
 
   useEffect(() => {
     if (autoScroll && containerRef.current) {
@@ -461,9 +472,7 @@ function SessionsView({
       let sessionId: string | undefined;
       let queryId: string | undefined;
 
-      if (innerData?.queryId) {
-        queryId = innerData.queryId as string;
-      }
+      queryId = innerData.queryName as string || innerData.queryId as string || outerData?.query_id as string;
 
       let spans = outerData?.spans as Array<Record<string, unknown>>;
       if (!spans) {
@@ -560,7 +569,12 @@ function SessionsView({
   };
 
   const handlePurgeAll = async () => {
-    await Promise.all([onPurgeEvents(), onPurgeChunks(), onPurgeTraces()]);
+    await Promise.all([
+      onPurgeEvents(),
+      onPurgeChunks(),
+      onPurgeTraces(),
+      onPurgeMessages(),
+    ]);
   };
 
   return (
@@ -580,6 +594,10 @@ function SessionsView({
             <span
               className={`h-2 w-2 rounded-full ${tracesConnected ? 'bg-green-500' : 'bg-gray-300'}`}
               title="Traces"
+            />
+            <span
+              className={`h-2 w-2 rounded-full ${messagesConnected ? 'bg-green-500' : 'bg-gray-300'}`}
+              title="Messages"
             />
           </div>
         </div>
@@ -804,13 +822,18 @@ export default function BrokerPage() {
               eventEntries={events.entries}
               chunkEntries={chunks.entries}
               traceEntries={traces.entries}
+              messageEntries={messages.entries}
               eventsConnected={events.isConnected}
               chunksConnected={chunks.isConnected}
               tracesConnected={traces.isConnected}
-              error={events.error || chunks.error || traces.error}
+              messagesConnected={messages.isConnected}
+              error={
+                events.error || chunks.error || traces.error || messages.error
+              }
               onPurgeEvents={events.purge}
               onPurgeChunks={chunks.purge}
               onPurgeTraces={traces.purge}
+              onPurgeMessages={messages.purge}
             />
           </TabsContent>
         </Tabs>
