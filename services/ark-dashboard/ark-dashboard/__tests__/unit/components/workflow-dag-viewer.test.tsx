@@ -532,4 +532,39 @@ spec:
       });
     });
   });
+
+  describe('Steps workflow edge cases', () => {
+    it('should handle steps workflow with first step having no dependencies', async () => {
+      const manifest = `
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+spec:
+  templates:
+    - name: main
+      steps:
+        - - name: first-step
+`;
+
+      const parsed = {
+        spec: {
+          templates: [
+            {
+              name: 'main',
+              steps: [[{ name: 'first-step' }]],
+            },
+          ],
+        },
+      };
+
+      vi.mocked(yaml.load).mockReturnValue(parsed);
+
+      render(<WorkflowDagViewer manifest={manifest} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('node-first-step')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByTestId(/^edge-/)).not.toBeInTheDocument();
+    });
+  });
 });

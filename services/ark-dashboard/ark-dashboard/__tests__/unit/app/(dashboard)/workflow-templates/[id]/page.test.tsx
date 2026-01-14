@@ -273,7 +273,11 @@ describe('FlowDetailPage', () => {
     render(<FlowDetailPage />);
 
     await waitFor(() => {
-      expect(screen.getAllByText(/test-workflow/i).length).toBeGreaterThan(0);
+      expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
+    }, { timeout: 3000 });
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Workflow')).toBeInTheDocument();
     });
 
     const downloadButton = screen.getByRole('button', { name: /download/i });
@@ -298,7 +302,11 @@ describe('FlowDetailPage', () => {
     render(<FlowDetailPage />);
 
     await waitFor(() => {
-      expect(screen.getAllByText(/test-workflow/i).length).toBeGreaterThan(0);
+      expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
+    }, { timeout: 3000 });
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Workflow')).toBeInTheDocument();
     });
 
     expect(screen.getByText(/apiVersion: argoproj.io\/v1alpha1/)).toBeInTheDocument();
@@ -311,7 +319,11 @@ describe('FlowDetailPage', () => {
     render(<FlowDetailPage />);
 
     await waitFor(() => {
-      expect(screen.getAllByText(/test-workflow/i).length).toBeGreaterThan(0);
+      expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
+    }, { timeout: 3000 });
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Workflow')).toBeInTheDocument();
     });
 
     const treeTab = screen.getByRole('tab', { name: /tree/i });
