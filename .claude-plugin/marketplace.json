@@ -8,7 +8,7 @@
       "name": "ark",
       "source": "./.claude",
       "description": "Skills and agents for working with Ark - testing, setup, analysis, and research",
-      "version": "0.3.0",
+      "version": "0.1.50",
       "agents": [
         "./agents/ark-architect.md",
         "./agents/ark-protocol-orchestrator.md",

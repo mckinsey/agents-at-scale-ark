@@ -30,6 +30,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { trackEvent } from '@/lib/analytics/singleton';
+import { hashPromptSync } from '@/lib/analytics/utils';
 import { chatService } from '@/lib/services';
 
 type ChatType = 'model' | 'team' | 'agent';
@@ -242,6 +244,16 @@ export default function FloatingChat({
     const userMessage = currentMessage.trim();
     setCurrentMessage('');
     setError(null);
+
+    trackEvent({
+      name: 'chat_message_sent',
+      properties: {
+        targetType: type,
+        targetName: name,
+        messageLength: userMessage.length,
+        promptHash: hashPromptSync(userMessage),
+      },
+    });
 
     // Add user message
     setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
@@ -536,7 +548,17 @@ export default function FloatingChat({
                   <Switch
                     id="debug-mode"
                     checked={debugMode}
-                    onCheckedChange={setDebugMode}
+                    onCheckedChange={checked => {
+                      setDebugMode(checked);
+                      trackEvent({
+                        name: 'chat_debug_mode_toggled',
+                        properties: {
+                          enabled: checked,
+                          targetType: type,
+                          targetName: name,
+                        },
+                      });
+                    }}
                   />
                   <label
                     htmlFor="debug-mode"

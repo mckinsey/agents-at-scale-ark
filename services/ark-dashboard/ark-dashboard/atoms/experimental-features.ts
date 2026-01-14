@@ -64,3 +64,6 @@ export const storedIsBrokerEnabledAtom = atomWithStorage<boolean>(
 export const isBrokerEnabledAtom = atom(get => {
   return get(storedIsBrokerEnabledAtom);
 });
+
+export const FILES_BROWSER_FEATURE_KEY = 'files-browser-available';
+export const isFilesBrowserAvailableAtom = atom<boolean>(false);

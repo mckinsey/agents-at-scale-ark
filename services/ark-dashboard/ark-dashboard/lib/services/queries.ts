@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
@@ -24,6 +25,18 @@ export const queriesService = {
       `/api/v1/queries`,
       query,
     );
+
+    trackEvent({
+      name: 'query_created',
+      properties: {
+        queryName: response.name,
+        targetType: query.target?.type,
+        targetName: query.target?.name,
+        hasMemory: !!query.memory,
+        hasTimeout: !!query.timeout,
+      },
+    });
+
     return response;
   },
 
@@ -40,12 +53,27 @@ export const queriesService = {
 
   async delete(queryName: string): Promise<void> {
     await apiClient.delete(`/api/v1/queries/${queryName}`);
+
+    trackEvent({
+      name: 'query_deleted',
+      properties: {
+        queryName,
+      },
+    });
   },
 
   async cancel(queryName: string): Promise<QueryDetailResponse> {
     const response = await apiClient.patch<QueryDetailResponse>(
       `/api/v1/queries/${queryName}/cancel`,
     );
+
+    trackEvent({
+      name: 'query_canceled',
+      properties: {
+        queryName,
+      },
+    });
+
     return response;
   },
 
