@@ -3,6 +3,11 @@ set -e
 
 NAMESPACE="${1:?}"
 
+# Support both CICD_* and E2E_TEST_* variable naming
+AZURE_OPENAI_KEY="${CICD_AZURE_OPENAI_KEY:-${E2E_TEST_AZURE_OPENAI_KEY:?}}"
+AZURE_OPENAI_BASE_URL="${CICD_AZURE_OPENAI_BASE_URL:-${E2E_TEST_AZURE_OPENAI_BASE_URL:?}}"
+AZURE_OPENAI_API_VERSION="${CICD_AZURE_OPENAI_API_VERSION:-${E2E_TEST_AZURE_OPENAI_API_VERSION:-2024-12-01-preview}}"
+
 kubectl apply -n "$NAMESPACE" -f - <<EOF
 apiVersion: v1
 kind: Secret
@@ -10,7 +15,7 @@ metadata:
   name: test-model-token
 type: Opaque
 stringData:
-  token: ${E2E_TEST_AZURE_OPENAI_KEY:?}
+  token: ${AZURE_OPENAI_KEY}
 EOF
 
 kubectl wait --for=jsonpath='{.metadata.name}'=test-model-token secret/test-model-token -n "$NAMESPACE" --timeout=30s
@@ -27,12 +32,12 @@ spec:
   config:
     azure:
       baseUrl:
-        value: ${E2E_TEST_AZURE_OPENAI_BASE_URL:?}
+        value: ${AZURE_OPENAI_BASE_URL}
       apiKey:
         valueFrom:
           secretKeyRef:
             name: test-model-token
             key: token
       apiVersion:
-        value: ${E2E_TEST_AZURE_OPENAI_API_VERSION:-2024-12-01-preview}
+        value: ${AZURE_OPENAI_API_VERSION}
 EOF

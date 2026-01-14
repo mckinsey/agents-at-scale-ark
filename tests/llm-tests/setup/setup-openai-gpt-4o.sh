@@ -3,6 +3,10 @@ set -e
 
 NAMESPACE="${1:?}"
 
+# Support both CICD_* and E2E_TEST_* variable naming
+OPENAI_API_KEY="${CICD_OPENAI_API_KEY:-${E2E_TEST_OPENAI_API_KEY:?}}"
+OPENAI_BASE_URL="${CICD_OPENAI_BASE_URL:-${E2E_TEST_OPENAI_BASE_URL:-https://api.openai.com/v1}}"
+
 kubectl apply -n "$NAMESPACE" -f - <<EOF
 apiVersion: v1
 kind: Secret
@@ -10,7 +14,7 @@ metadata:
   name: test-model-token
 type: Opaque
 stringData:
-  token: ${E2E_TEST_OPENAI_API_KEY:?}
+  token: ${OPENAI_API_KEY}
 EOF
 
 kubectl wait --for=jsonpath='{.metadata.name}'=test-model-token secret/test-model-token -n "$NAMESPACE" --timeout=30s
@@ -27,7 +31,7 @@ spec:
   config:
     openai:
       baseUrl:
-        value: ${E2E_TEST_OPENAI_BASE_URL:-https://api.openai.com/v1}
+        value: ${OPENAI_BASE_URL}
       apiKey:
         valueFrom:
           secretKeyRef:
