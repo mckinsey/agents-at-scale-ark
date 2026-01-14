@@ -14,6 +14,7 @@ import {
   Server,
   Settings,
   Users,
+  Workflow,
   Wrench,
   Zap,
 } from 'lucide-react';
@@ -62,6 +63,12 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     key: 'evaluators',
     title: 'Evaluators',
     icon: CheckCircle,
+    group: 'configurations',
+  },
+  'workflow-templates': {
+    key: 'workflow-templates',
+    title: 'Workflow Templates',
+    icon: Workflow,
     group: 'configurations',
   },
 

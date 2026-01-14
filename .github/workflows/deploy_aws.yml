@@ -100,3 +100,11 @@ jobs:
           namespace: default
           pull_policy: IfNotPresent
           timeout: 10m
+          auth_mode: ${{ secrets.AWS_AUTH_MODE }}
+          dashboard_base_url: ${{ secrets.AWS_DASHBOARD_BASE_URL }}
+          auth_secret: ${{ secrets.AWS_AUTH_SECRET }}
+          oidc_issuer_url: ${{ secrets.AWS_OIDC_ISSUER_URL }}
+          oidc_client_id: ${{ secrets.AWS_OIDC_CLIENT_ID }}
+          oidc_client_secret: ${{ secrets.AWS_OIDC_CLIENT_SECRET }}
+          oidc_provider_id: ${{ secrets.AWS_OIDC_PROVIDER_ID }}
+          oidc_provider_name: ${{ secrets.AWS_OIDC_PROVIDER_NAME }}
