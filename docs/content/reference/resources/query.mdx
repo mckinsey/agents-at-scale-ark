@@ -375,9 +375,30 @@ spec:
 
 ### Retry Behavior
 
-- Retries occur on any error until `maxRetries` is exhausted
-- `status.retryCount` tracks the number of retry attempts made
-- Query phase becomes `error` if all retries are exhausted
+Retries only occur for **transient errors** - temporary failures that may succeed on retry. Non-transient errors fail immediately without retry.
+
+**Transient HTTP status codes** (following OpenAI SDK conventions):
+
+| Code | Name | Description |
+|------|------|-------------|
+| 408 | Request Timeout | Client took too long |
+| 409 | Conflict | Resource state conflict |
+| 429 | Too Many Requests | Rate limited |
+| 500 | Internal Server Error | Server-side error |
+| 502 | Bad Gateway | Upstream server error |
+| 503 | Service Unavailable | Server overloaded |
+| 504 | Gateway Timeout | Upstream timeout |
+
+**Non-transient errors** (no retry):
+- 400 Bad Request - malformed request
+- 401 Unauthorized - authentication failure
+- 403 Forbidden - permission denied
+- 404 Not Found - resource doesn't exist
+- 422 Unprocessable Entity - validation error
+
+**Status tracking:**
+- `status.retryCount` tracks retry attempts made
+- Query phase becomes `error` if all retries are exhausted or a non-transient error occurs
 
 ### Monitoring Retries
 

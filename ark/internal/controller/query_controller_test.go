@@ -283,6 +283,60 @@ var _ = Describe("Query Controller Message Serialization", func() {
 				}
 				Expect(r.shouldRetry(query)).To(BeTrue())
 			})
+
+			It("should return true for transient error codes", func() {
+				transientCodes := []int{408, 409, 429, 500, 502, 503, 504}
+				for _, code := range transientCodes {
+					errorCode := code
+					query := &arkv1alpha1.Query{
+						Spec: arkv1alpha1.QuerySpec{
+							RetryPolicy: &arkv1alpha1.RetryPolicy{
+								MaxRetries: 3,
+							},
+						},
+						Status: arkv1alpha1.QueryStatus{
+							RetryCount:    1,
+							LastErrorCode: &errorCode,
+						},
+					}
+					Expect(r.shouldRetry(query)).To(BeTrue(), "Expected retry for transient code %d", code)
+				}
+			})
+
+			It("should return false for non-transient error codes", func() {
+				nonTransientCodes := []int{400, 401, 403, 404, 422}
+				for _, code := range nonTransientCodes {
+					errorCode := code
+					query := &arkv1alpha1.Query{
+						Spec: arkv1alpha1.QuerySpec{
+							RetryPolicy: &arkv1alpha1.RetryPolicy{
+								MaxRetries: 3,
+							},
+						},
+						Status: arkv1alpha1.QueryStatus{
+							RetryCount:    1,
+							LastErrorCode: &errorCode,
+						},
+					}
+					Expect(r.shouldRetry(query)).To(BeFalse(), "Expected no retry for non-transient code %d", code)
+				}
+			})
+		})
+
+		Context("When testing isTransientError", func() {
+			It("should return true for transient HTTP codes", func() {
+				transientCodes := []int{408, 409, 429, 500, 502, 503, 504}
+				for _, code := range transientCodes {
+					Expect(isTransientError(code)).To(BeTrue(), "Expected %d to be transient", code)
+				}
+			})
+
+			It("should return false for non-transient HTTP codes", func() {
+				nonTransientCodes := []int{200, 201, 400, 401, 403, 404, 405, 422}
+				for _, code := range nonTransientCodes {
+					Expect(isTransientError(code)).To(BeFalse(), "Expected %d to be non-transient", code)
+				}
+			})
 		})
 
 		Context("When testing calculateBackoffDelay", func() {

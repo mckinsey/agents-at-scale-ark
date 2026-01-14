@@ -484,6 +484,14 @@ spec:
                 type: string
               duration:
                 type: string
+              lastErrorCode:
+                description: LastErrorCode contains the HTTP status code from the
+                  most recent failed attempt
+                type: integer
+              lastErrorMessage:
+                description: LastErrorMessage contains the error message from the
+                  most recent failed attempt
+                type: string
               phase:
                 default: pending
                 enum:
@@ -510,6 +518,14 @@ spec:
                         type: string
                     type: object
                   content:
+                    type: string
+                  errorCode:
+                    description: ErrorCode contains the HTTP status code if the request
+                      failed
+                    type: integer
+                  errorMessage:
+                    description: ErrorMessage contains the error message if the request
+                      failed
                     type: string
                   phase:
                     type: string

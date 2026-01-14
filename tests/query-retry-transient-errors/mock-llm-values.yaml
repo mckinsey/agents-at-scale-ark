@@ -1,0 +1,102 @@
+# Mock LLM configuration for transient error testing
+# Tests all 7 transient codes (408, 409, 429, 500, 502, 503, 504) then succeeds
+terminationGracePeriodSeconds: 3
+ark:
+  model:
+    enabled: true
+    name: test-model
+    type: openai
+    model: gpt-4.1-mini
+    pollInterval: 3s
+    apiKey: mock-api-key
+
+config:
+  rules:
+  # Fallback: handles probes and non-matching requests
+  - path: "/v1/chat/completions"
+    response:
+      status: 200
+      content: |
+        {
+          "id": "mock-probe",
+          "object": "chat.completion",
+          "model": "gpt-4.1-mini",
+          "choices": [{"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}]
+        }
+
+  # Sequence 0: 408 Request Timeout
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[-1].content || '', 'transient errors')"
+    sequence: 0
+    response:
+      status: 408
+      content: '{"error": {"message": "Request Timeout", "type": "timeout_error", "code": "request_timeout"}}'
+
+  # Sequence 1: 409 Conflict
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[-1].content || '', 'transient errors')"
+    sequence: 1
+    response:
+      status: 409
+      content: '{"error": {"message": "Conflict", "type": "conflict_error", "code": "conflict"}}'
+
+  # Sequence 2: 429 Too Many Requests
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[-1].content || '', 'transient errors')"
+    sequence: 2
+    response:
+      status: 429
+      content: '{"error": {"message": "Rate limit exceeded", "type": "rate_limit_error", "code": "rate_limit"}}'
+
+  # Sequence 3: 500 Internal Server Error
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[-1].content || '', 'transient errors')"
+    sequence: 3
+    response:
+      status: 500
+      content: '{"error": {"message": "Internal server error", "type": "server_error", "code": "internal_error"}}'
+
+  # Sequence 4: 502 Bad Gateway
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[-1].content || '', 'transient errors')"
+    sequence: 4
+    response:
+      status: 502
+      content: '{"error": {"message": "Bad Gateway", "type": "server_error", "code": "bad_gateway"}}'
+
+  # Sequence 5: 503 Service Unavailable
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[-1].content || '', 'transient errors')"
+    sequence: 5
+    response:
+      status: 503
+      content: '{"error": {"message": "Service Unavailable", "type": "server_error", "code": "service_unavailable"}}'
+
+  # Sequence 6: 504 Gateway Timeout
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[-1].content || '', 'transient errors')"
+    sequence: 6
+    response:
+      status: 504
+      content: '{"error": {"message": "Gateway Timeout", "type": "server_error", "code": "gateway_timeout"}}'
+
+  # Sequence 7: Success after all transient errors
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[-1].content || '', 'transient errors')"
+    sequence: 7
+    response:
+      status: 200
+      content: |
+        {
+          "id": "mock-transient-success",
+          "object": "chat.completion",
+          "model": "gpt-4.1-mini",
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "content": "Success after all transient errors"
+            },
+            "finish_reason": "stop"
+          }],
+          "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+        }

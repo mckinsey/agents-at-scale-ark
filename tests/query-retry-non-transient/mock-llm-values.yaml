@@ -1,5 +1,5 @@
-# Mock LLM configuration for retry exhaustion test
-# Fails requests containing "retry exhaustion", succeeds for probes
+# Mock LLM configuration for non-transient error testing
+# Returns 400 Bad Request to verify no retry is attempted
 terminationGracePeriodSeconds: 3
 ark:
   model:
@@ -12,28 +12,28 @@ ark:
 
 config:
   rules:
-  # Default: succeed (for model probes and other requests)
+  # Fallback: handles probes and non-matching requests
   - path: "/v1/chat/completions"
     response:
       status: 200
       content: |
         {
-          "id": "mock-success",
+          "id": "mock-probe",
           "object": "chat.completion",
           "model": "gpt-4.1-mini",
           "choices": [{"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}]
         }
 
-  # Fail requests containing the test query content
+  # 400 Bad Request - non-transient error, should not retry
   - path: "/v1/chat/completions"
-    match: "contains(body.messages[-1].content || '', 'retry exhaustion')"
+    match: "contains(body.messages[-1].content || '', 'non-transient')"
     response:
-      status: 500
+      status: 400
       content: |
         {
           "error": {
-            "message": "Internal server error - persistent failure",
-            "type": "server_error",
-            "code": "internal_error"
+            "message": "Bad Request - invalid input format",
+            "type": "invalid_request_error",
+            "code": "bad_request"
           }
         }

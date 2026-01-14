@@ -1,0 +1,69 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-retry-non-transient
+  labels:
+    standard: "true"
+spec:
+  description: Test non-transient errors (400) do not trigger retries
+  steps:
+  - name: setup-resources
+    try:
+    - script:
+        content: |
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.27 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-model
+          status:
+            conditions:
+            - type: ModelAvailable
+              status: "True"
+    - apply:
+        file: manifests/*.yaml
+
+  - name: wait-for-query-completion
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: non-transient-query
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+
+  - name: validate-no-retry
+    try:
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: non-transient-query
+          status:
+            phase: error
+            (retryCount == `0`): true
+    catch:
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: non-transient-query
+    - events: {}

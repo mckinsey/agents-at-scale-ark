@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: non-transient-query
+spec:
+  input: "Test query for non-transient error"
+  target:
+    type: agent
+    name: non-transient-test-agent
+  retryPolicy:
+    maxRetries: 5
+    backoffPolicy: fixed
+    initialDelay: 1s

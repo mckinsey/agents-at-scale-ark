@@ -132,6 +132,12 @@ type Response struct {
 	Raw     string      `json:"raw,omitempty"`
 	Phase   string      `json:"phase,omitempty"`
 	// +kubebuilder:validation:Optional
+	// ErrorCode contains the HTTP status code if the request failed
+	ErrorCode *int `json:"errorCode,omitempty"`
+	// +kubebuilder:validation:Optional
+	// ErrorMessage contains the error message if the request failed
+	ErrorMessage string `json:"errorMessage,omitempty"`
+	// +kubebuilder:validation:Optional
 	// A2A contains optional A2A protocol metadata (contextId, taskId)
 	A2A *A2AMetadata `json:"a2a,omitempty"`
 }
@@ -174,6 +180,12 @@ type QueryStatus struct {
 	Duration *metav1.Duration `json:"duration,omitempty"`
 	// +kubebuilder:validation:Optional
 	RetryCount int32 `json:"retryCount,omitempty"`
+	// +kubebuilder:validation:Optional
+	// LastErrorCode contains the HTTP status code from the most recent failed attempt
+	LastErrorCode *int `json:"lastErrorCode,omitempty"`
+	// +kubebuilder:validation:Optional
+	// LastErrorMessage contains the error message from the most recent failed attempt
+	LastErrorMessage string `json:"lastErrorMessage,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -265,7 +265,7 @@ Response:
 
 ### Query Retry Policies
 
-Configure automatic retries for failed queries:
+Configure automatic retries for transient failures like rate limits or server errors:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -282,6 +282,8 @@ spec:
     maxRetries: 3
     backoffPolicy: exponential
 ```
+
+Retries are triggered for transient HTTP errors: 408, 409, 429, 500, 502, 503, 504. Non-transient errors (like 400 Bad Request) fail immediately without retry.
 
 After completion, check the retry count in the status:
 

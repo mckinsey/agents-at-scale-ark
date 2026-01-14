@@ -65,12 +65,3 @@ config:
             "total_tokens": 15
           }
         }
-
-  # Model list endpoint
-  - path: "/v1/models"
-    response:
-      status: 200
-      content: |
-        {
-          "data": [{"id": "gpt-4.1-mini", "object": "model"}]
-        }

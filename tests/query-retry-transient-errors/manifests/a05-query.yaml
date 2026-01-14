@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: transient-errors-query
+spec:
+  input: "Test query for transient errors"
+  target:
+    type: agent
+    name: transient-test-agent
+  retryPolicy:
+    maxRetries: 10
+    backoffPolicy: fixed
+    initialDelay: 1s
