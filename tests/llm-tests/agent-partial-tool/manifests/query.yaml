@@ -5,6 +5,6 @@ metadata:
 spec:
   input: What are the coordinates?
   timeout: 2m
-  targets:
+  target:
   - type: agent
     name: partial-tool-agent

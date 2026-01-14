@@ -5,6 +5,6 @@ metadata:
 spec:
   input: What's the current weather like in New York City?
   timeout: 2m
-  targets:
+  target:
   - type: agent
     name: weather-agent
