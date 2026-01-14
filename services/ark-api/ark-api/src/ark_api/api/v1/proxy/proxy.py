@@ -40,22 +40,28 @@ async def _get_a2a_server_address(a2a_server_name: str,
     Returns:
         (mcp_endpoint, headers_required_by_mcp)
     """
-    async with with_ark_client(namespace, VERSION_A2A) as ark_client:
-        a2a_server = await ark_client.a2aservers.a_get(a2a_server_name)
-        a2a_dict = a2a_server.to_dict()
-        status = a2a_dict.get("status", {})
-        resolved_address = status.get("lastResolvedAddress")
-        spec = a2a_dict.get("spec", {})
-        headers = {}
-        await get_headers(spec, headers, namespace)
-        if not resolved_address:
-            raise HTTPException(
-                status_code=500,
-                detail=f"A2A server '{a2a_server_name}' has no resolved address"
-            )
-        
-        return resolved_address, headers
+    try:
+        async with with_ark_client(namespace, VERSION_A2A) as ark_client:
+            a2a_server = await ark_client.a2aservers.a_get(a2a_server_name)
+            a2a_dict = a2a_server.to_dict()
+            status = a2a_dict.get("status", {})
+            resolved_address = status.get("lastResolvedAddress")
+            spec = a2a_dict.get("spec", {})
+            headers = {}
+            await get_headers(spec, headers, namespace)
+            if not resolved_address:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"A2A server '{a2a_server_name}' has no resolved address"
+                )
 
+            return resolved_address, headers
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        logger.error(f"Failed to resolve A2A server '{a2a_server_name}': {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid resource a2a {a2a_server_name}")
+    
 async def _get_mcp_server_address(mcp_server_name: str, 
     namespace: Optional[str] = None) -> tuple[str, dict]:
     """Collect MCP Resource details from ark resources. If MCP Server requires 
@@ -68,21 +74,27 @@ async def _get_mcp_server_address(mcp_server_name: str,
     Returns:
         (mcp_endpoint, headers_required_by_mcp)
     """
-    async with with_ark_client(namespace, VERSION_MCP) as ark_client:
-        mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
-        mcp_dict = mcp_server.to_dict()
-        status = mcp_dict.get("status", {})
-        resolved_address = status.get("resolvedAddress")
-        spec = mcp_dict.get("spec", {})
-        headers = {}
-        await get_headers(spec, headers, namespace)
-          
-        if not resolved_address:
-            raise HTTPException(
-                status_code=500,
-                detail=f"MCP server '{mcp_server_name}' has no resolved address"
-            )
-        return resolved_address, headers
+    try:
+        async with with_ark_client(namespace, VERSION_MCP) as ark_client:
+            mcp_server = await ark_client.mcpservers.a_get(mcp_server_name)
+            mcp_dict = mcp_server.to_dict()
+            status = mcp_dict.get("status", {})
+            resolved_address = status.get("resolvedAddress")
+            spec = mcp_dict.get("spec", {})
+            headers = {}
+            await get_headers(spec, headers, namespace)
+
+            if not resolved_address:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"MCP server '{mcp_server_name}' has no resolved address"
+                )
+            return resolved_address, headers
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        logger.error(f"Failed to resolve MCP server '{mcp_server_name}': {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid resource mcp {mcp_server_name}")
 
 async def _proxy_request(
     target_url: str,
@@ -146,7 +158,9 @@ async def _proxy_request(
             )
 
 @router.get("/services", response_model=ServiceListResponse)
-async def list_services(namespace: Optional[str] = None) -> ServiceListResponse:
+async def list_services(
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+) -> ServiceListResponse:
     """List services available for proxying in the current namespace."""
     if namespace is None:
         namespace = get_context()["namespace"]
@@ -185,22 +199,11 @@ async def proxy_server(
         resource_url, additional_headers = await _get_a2a_server_address(server_name, namespace)
     elif resource == Resource.MCP:
         resource_url, additional_headers = await _get_mcp_server_address(server_name, namespace)
-    elif resource == Resource.SERVICES:
+    else: 
+        #resource == Resource.SERVICES
         resource_url = f"http://{server_name}"
         additional_headers = {}
-    else:
-        raise HTTPException(status_code=400,
-            detail="Invalid resource type")
-    # Get A2A server spec for headers (e.g., auth headers)
-    #async with with_ark_client(namespace, VERSION) as ark_client:
-    #    a2a_server = await ark_client.a2aservers.a_get(a2a_server_name)
-    #    a2a_dict = a2a_server.to_dict()
-    #    spec = a2a_dict.get("spec", {})
-    #    headers = spec.get("headers", [])
-        
-        # Resolve headers from ValueSources (simplified - may need full resolution)
-        # headers_to_forward = {}
-        # TODO: Resolve headers from ValueSources if needed
+    
     logger.info(f"Forwarding at {request.method} {resource_url}")
     return await _proxy_request(resource_url, request, additional_headers)
         
@@ -221,12 +224,10 @@ async def proxy_server_path(resource: Resource,
         resource_url, additional_headers = await _get_a2a_server_address(server_name, namespace)
     elif resource == Resource.MCP:
         resource_url, additional_headers = await _get_mcp_server_address(server_name, namespace)
-    elif resource == Resource.SERVICES:
+    else:
+        #resource == Resource.SERVICES:
         resource_url = f"http://{server_name}"
         additional_headers = {}
-    else:
-        raise HTTPException(status_code=400,
-            detail="Invalid resource type")
     
     resource_url = f"{resource_url}/{path}" if resource_url[-1]!= "/" \
         else f"{resource_url}{path}"
@@ -243,4 +244,5 @@ async def proxy_services(
 ) -> Response:
     """Proxy DELETE, PATCH, HEAD requests to other services in the cluster."""
     resource_url = f"http://{service_name}/{api_path}"
-    return await _proxy_request(service_name, api_path, request)
+    # Forward the request to the resolved resource URL
+    return await _proxy_request(resource_url, request)
