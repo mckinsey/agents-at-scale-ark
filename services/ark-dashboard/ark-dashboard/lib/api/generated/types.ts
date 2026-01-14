@@ -6868,6 +6868,7 @@ export interface operations {
     list_services_v1_proxy_services_get: {
         parameters: {
             query?: {
+                /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
             };
             header?: never;
