@@ -24,7 +24,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { AgentPromptParameterEditor } from '@/components/ui/agent-prompt-parameter-editor';
 import { PromptEditor } from '@/components/ui/prompt-editor';
 import { QueryParameterEditor } from '@/components/ui/query-parameter-editor';
 import type { components } from '@/lib/api/generated/types';
@@ -923,25 +922,7 @@ function QueryDetailContent() {
         <div className="flex min-h-0 flex-1 flex-col">
           <ScrollArea className="flex-1 p-3">
             <div className="space-y-3">
-              {/* Agent Prompt Parameters Section - only show when targeting an agent with queryParameterRef */}
-              {mode === 'new' && query.target?.type === 'agent' && agentRequiredParams.length > 0 && (
-                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
-                  <div className="border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
-                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                      Agent Prompt Parameters
-                    </h3>
-                  </div>
-                  <div className="p-3">
-                    <AgentPromptParameterEditor
-                      parameters={queryParameters}
-                      onChange={setQueryParameters}
-                      agentRequiredParams={agentRequiredParams}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Input Table */}
+              {/* Input Section */}
               <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
                 {/* Header */}
                 {mode === 'new' &&
@@ -1036,22 +1017,20 @@ function QueryDetailContent() {
                 )}
               </div>
 
-              {/* Input Parameters Section */}
+              {/* Parameters Section */}
               {mode === 'new' ? (
                 <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
                   <div className="border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
                     <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                      Input Parameters
+                      Parameters
                     </h3>
                   </div>
                   <div className="p-3">
                     <QueryParameterEditor
-                      parameters={queryParameters.filter(p => p.source !== 'agent')}
-                      onChange={newParams => {
-                        const agentParams = queryParameters.filter(p => p.source === 'agent');
-                        setQueryParameters([...agentParams, ...newParams]);
-                      }}
+                      parameters={queryParameters}
+                      onChange={setQueryParameters}
                       inputText={typeof query.input === 'string' ? query.input : ''}
+                      agentRequiredParams={agentRequiredParams}
                     />
                   </div>
                 </div>
@@ -1059,7 +1038,7 @@ function QueryDetailContent() {
                 <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
                   <div className="border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
                     <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                      Input Parameters
+                      Parameters
                     </h3>
                   </div>
                   <div className="p-3">
