@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
@@ -66,14 +67,18 @@ export const evaluatorsService = {
     }
   },
 
-  /**
-   * Create a new evaluator
-   */
   async create(evaluator: EvaluatorCreateRequest): Promise<Evaluator> {
     const response = await apiClient.post<EvaluatorResponse>(
       `/api/v1/evaluators`,
       evaluator,
     );
+
+    trackEvent({
+      name: 'evaluator_created',
+      properties: {
+        evaluatorName: response.name,
+      },
+    });
 
     return response as Evaluator;
   },
@@ -99,12 +104,17 @@ export const evaluatorsService = {
     }
   },
 
-  /**
-   * Delete an evaluator
-   */
   async delete(name: string): Promise<boolean> {
     try {
       await apiClient.delete(`/api/v1/evaluators/${name}`);
+
+      trackEvent({
+        name: 'evaluator_deleted',
+        properties: {
+          evaluatorName: name,
+        },
+      });
+
       return true;
     } catch (error) {
       if ((error as APIError).status === 404) {

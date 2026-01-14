@@ -14,6 +14,65 @@ A detailed record of every change is documented in [`CHANGELOG.md`](https://gith
 
 ## v0.1.50
 
+### Broker Service Rename
+
+The `ark-cluster-memory` Helm release has been renamed to `ark-cluster-broker`.
+
+**If using the Ark CLI:** Run `ark install` - it handles uninstalling the old release automatically.
+
+**If using Helm directly:** You must uninstall the old release first, otherwise Helm cannot adopt the shared `ark-config-streaming` ConfigMap:
+
+```
+Error: Unable to continue with install: ConfigMap "ark-config-streaming" in namespace "default"
+exists and cannot be imported into the current release: invalid ownership metadata;
+annotation validation error: key "meta.helm.sh/release-name" must equal "ark-broker":
+current value is "ark-cluster-memory"
+```
+
+**Migration (Helm users only):**
+
+```bash
+helm uninstall ark-cluster-memory
+```
+
+Then proceed with installing the new version. The `ark-cluster-broker` release will be created.
+
+### Session ID and Conversation ID
+
+Prior to `v0.1.50`, `sessionId` was used for both query grouping (telemetry) and memory/conversation continuity. This caused issues when users wanted to group queries by workflow but not share conversation memory.
+
+From `v0.1.50`, these are separate concepts:
+
+- **`sessionId`**: Groups related queries for tracking and telemetry (e.g., workflow ID)
+- **`conversationId`**: Associates queries with a specific memory thread for context continuity
+
+The `conversationId` is generated server-side when a query uses memory. To continue a conversation, pass back the `conversationId` from a previous query response.
+
+This is a **breaking** change if you relied on `sessionId` for memory continuity. Queries with the same `sessionId` no longer automatically share conversation context.
+
+**Migration:**
+
+If you were using `sessionId` to maintain conversation context across queries:
+
+1. On the first query, note the `conversationId` from the response
+2. Pass `conversationId` on subsequent queries to continue the conversation
+
+```yaml
+# Query with memory - conversationId generated server-side
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+spec:
+  input: "What did we discuss?"
+  target:
+    name: my-agent
+  memory:
+    name: ark-broker
+  sessionId: "workflow-123"        # For telemetry grouping
+  conversationId: "conv-456-789"   # For memory continuity (from previous response)
+```
+
+See [#550](https://github.com/mckinsey/agents-at-scale-ark/issues/550) and [#596](https://github.com/mckinsey/agents-at-scale-ark/pull/596) for details.
+
 ### MCP Server Path Configuration
 
 Prior to `v0.1.50`, the Ark controller automatically appended `/mcp` or `/sse` to MCP server addresses based on the transport type. This prevented users from connecting to MCP servers with custom endpoint paths.
