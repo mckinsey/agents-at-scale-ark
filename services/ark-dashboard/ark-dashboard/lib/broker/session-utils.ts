@@ -11,7 +11,7 @@ export function extractQueryIdAndSessionId(entry: StreamEntry): {
   const outerData = entry.data as Record<string, unknown>;
   const innerData = outerData?.data as Record<string, unknown>;
 
-  const queryId =
+  let queryId =
     (innerData?.queryName as string) ||
     (innerData?.queryId as string) ||
     (outerData?.query_id as string);
@@ -27,6 +27,10 @@ export function extractQueryIdAndSessionId(entry: StreamEntry): {
     for (const span of spans) {
       const attributes = span?.attributes as Array<Record<string, unknown>>;
       if (attributes) {
+        const queryAttr = attributes.find(attr => attr?.key === 'query.name');
+        if (queryAttr?.value) {
+          queryId = queryAttr.value as string;
+        }
         const sessionAttr = attributes.find(attr => attr?.key === 'session.id');
         if (sessionAttr?.value) {
           sessionId = sessionAttr.value as string;

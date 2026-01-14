@@ -41,8 +41,6 @@ interface PaginatedResponse<T> {
   nextCursor?: number;
 }
 
-const PAGE_SIZE = 100;
-
 function extractItemTimestamp(item: unknown): string {
   if (!item) {
     return new Date().toISOString();
@@ -144,7 +142,7 @@ function useSSEStream(endpoint: string, memory: string) {
 
       setIsLoading(true);
       try {
-        let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=${PAGE_SIZE}`;
+        let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=1000`;
         if (cursor !== undefined && cursor !== null) {
           url += `&cursor=${cursor}`;
         }
@@ -245,9 +243,23 @@ function useSSEStream(endpoint: string, memory: string) {
     mountedRef.current = true;
 
     async function init() {
-      const result = await fetchPage();
+      let cursor: number | undefined;
+
+      while (mountedRef.current) {
+        const result = await fetchPage(cursor);
+        if (!result || !mountedRef.current) {
+          break;
+        }
+
+        if (result.hasMore && result.nextCursor !== undefined) {
+          cursor = result.nextCursor;
+        } else {
+          break;
+        }
+      }
+
       if (mountedRef.current) {
-        connect(result?.nextCursor);
+        connect(cursor);
       }
     }
     init();
