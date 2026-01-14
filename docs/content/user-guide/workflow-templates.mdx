@@ -1,0 +1,145 @@
+---
+title: Workflow Templates
+description: View and manage Argo WorkflowTemplates in the dashboard
+---
+
+# Workflow Templates
+
+The Workflow Templates page displays Argo WorkflowTemplates deployed in your cluster. View template details and visualize workflow DAGs (Directed Acyclic Graphs).
+
+## Prerequisites
+
+This feature requires Argo Workflows to be installed in your cluster.
+
+Install Argo Workflows using the bundled devspace deployment:
+
+```bash
+cd services/argo-workflows
+devspace dev
+```
+
+See [Argo Workflows](/developer-guide/workflows/argo-workflows) for detailed installation instructions.
+
+## Accessing Workflow Templates
+
+Navigate to **Workflow Templates** from the dashboard sidebar or visit:
+
+```
+http://dashboard.127.0.0.1.nip.io:8080/workflow-templates
+```
+
+## Template List
+
+The main page displays all WorkflowTemplates in your namespace:
+
+- **Name** - Template identifier
+- **Description** - Template description from annotations
+- **Created** - Creation timestamp
+
+Click any template to view its details.
+
+## Template Details
+
+The detail view shows:
+
+### DAG Visualization
+
+Visual representation of the workflow graph showing:
+
+- **Nodes** - Individual workflow steps
+- **Edges** - Dependencies between steps
+- **Layout** - Hierarchical top-to-bottom flow
+
+### Template Information
+
+- **Name** - Template name
+- **Namespace** - Kubernetes namespace
+- **Entrypoint** - Starting workflow step
+- **Templates** - Available template definitions
+
+## DAG Viewer
+
+The DAG viewer provides:
+
+- **Interactive visualization** - Pan and zoom
+- **Node details** - Step names and types
+- **Dependency flow** - Visual connection between steps
+- **Auto-layout** - Automatic hierarchical positioning
+
+### Navigation
+
+- **Pan** - Click and drag the canvas
+- **Zoom** - Mouse wheel or pinch gesture
+
+## Creating Workflow Templates
+
+### Simple DAG Example
+
+Save this to a file (e.g., `simple-pipeline.yaml`):
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: simple-data-pipeline
+  annotations:
+    workflows.argoproj.io/description: "Process data through multiple stages"
+spec:
+  entrypoint: pipeline
+  templates:
+  - name: pipeline
+    dag:
+      tasks:
+      - name: collect
+        template: task-template
+        arguments:
+          parameters:
+          - name: message
+            value: "Collecting data"
+
+      - name: validate
+        template: task-template
+        dependencies: [collect]
+        arguments:
+          parameters:
+          - name: message
+            value: "Validating data"
+
+      - name: transform
+        template: task-template
+        dependencies: [validate]
+        arguments:
+          parameters:
+          - name: message
+            value: "Transforming data"
+
+      - name: load
+        template: task-template
+        dependencies: [transform]
+        arguments:
+          parameters:
+          - name: message
+            value: "Loading data"
+
+  - name: task-template
+    inputs:
+      parameters:
+      - name: message
+    container:
+      image: alpine:latest
+      command: [echo]
+      args: ["{{inputs.parameters.message}}"]
+```
+
+Apply it:
+
+```bash
+kubectl apply -f simple-pipeline.yaml
+```
+
+The template will appear in the dashboard where you can view the DAG visualization.
+
+## Related Documentation
+
+- [Argo Workflows](/developer-guide/workflows/argo-workflows) - Workflow integration
+- [Resources API](/reference/resources-api) - Accessing workflow templates via API
