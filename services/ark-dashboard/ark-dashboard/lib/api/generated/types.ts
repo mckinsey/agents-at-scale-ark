@@ -1116,6 +1116,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/proxy/services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Services
+         * @description List services available for proxying in the current namespace.
+         */
+        get: operations["list_services_v1_proxy_services_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/proxy/services/{service_name}/{api_path}": {
         parameters: {
             query?: never;
@@ -4327,6 +4347,14 @@ export interface components {
             selectorPrompt?: string | null;
         };
         /**
+         * ServiceListResponse
+         * @description Response model for list services endpoint.
+         */
+        ServiceListResponse: {
+            /** Services */
+            services: string[];
+        };
+        /**
          * Skill
          * @description Skill configuration for an A2A agent.
          */
@@ -6824,6 +6852,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NamespaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_services_v1_proxy_services_get: {
+        parameters: {
+            query?: {
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceListResponse"];
                 };
             };
             /** @description Validation Error */
