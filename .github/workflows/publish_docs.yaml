@@ -2,12 +2,6 @@ name: Publish Docs
 
 on:
   workflow_dispatch:
-    inputs:
-      branch:
-        description: 'Branch to publish docs from (defaults to main)'
-        required: false
-        type: string
-        default: 'main'
 
 permissions:
   contents: read
@@ -27,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.branch }}
+          ref: main
 
       - name: Setup Node
         uses: actions/setup-node@v4
