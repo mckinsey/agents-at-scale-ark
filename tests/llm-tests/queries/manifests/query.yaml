@@ -5,5 +5,5 @@ metadata:
 spec:
   input: "Hello, this is a test query. Please respond that you are a test agent and confirm the system is working."
   target:
-  - type: agent
+    type: agent
     name: test-agent

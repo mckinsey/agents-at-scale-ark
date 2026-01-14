@@ -6,5 +6,5 @@ spec:
   input: What are the coordinates?
   timeout: 2m
   target:
-  - type: agent
+    type: agent
     name: partial-tool-agent
