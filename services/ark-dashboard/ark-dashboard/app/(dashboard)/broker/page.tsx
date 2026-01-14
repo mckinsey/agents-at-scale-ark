@@ -18,6 +18,11 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { trackEvent } from '@/lib/analytics/singleton';
+import {
+  extractQueryIdAndSessionId,
+  groupEntriesBySession,
+  sortEntriesByTimestampAndSequence,
+} from '@/lib/broker/session-utils';
 import { type Memory, memoriesService } from '@/lib/services/memories';
 
 const breadcrumbs: BreadcrumbElement[] = [
@@ -435,23 +440,7 @@ function SessionsView({
       ...traceEntries,
       ...messageEntries,
     ];
-    return combined.sort((a, b) => {
-      const aTime = new Date(a.timestamp).getTime();
-      const bTime = new Date(b.timestamp).getTime();
-      const timeDiff = aTime - bTime;
-
-      if (timeDiff !== 0) {
-        return timeDiff;
-      }
-
-      const aData = a.data as Record<string, unknown>;
-      const bData = b.data as Record<string, unknown>;
-      const aSeq =
-        typeof aData?.sequenceNumber === 'number' ? aData.sequenceNumber : 0;
-      const bSeq =
-        typeof bData?.sequenceNumber === 'number' ? bData.sequenceNumber : 0;
-      return aSeq - bSeq;
-    });
+    return sortEntriesByTimestampAndSequence(combined);
   }, [eventEntries, chunkEntries, traceEntries, messageEntries]);
 
   useEffect(() => {
@@ -464,79 +453,7 @@ function SessionsView({
 
   const queryToSessionMap = queryToSessionMapRef.current;
 
-  const groupedBySession = allEntries.reduce(
-    (acc, entry) => {
-      const outerData = entry.data as Record<string, unknown>;
-      const innerData = outerData?.data as Record<string, unknown>;
-
-      let sessionId: string | undefined;
-      let queryId: string | undefined;
-
-      queryId = innerData.queryName as string || innerData.queryId as string || outerData?.query_id as string;
-
-      let spans = outerData?.spans as Array<Record<string, unknown>>;
-      if (!spans) {
-        if (outerData?.attributes) {
-          spans = [outerData];
-        }
-      }
-      if (spans && spans.length > 0) {
-        for (const span of spans) {
-          const attributes = span?.attributes as Array<Record<string, unknown>>;
-          if (attributes) {
-            const sessionAttr = attributes.find(
-              attr => attr?.key === 'session.id',
-            );
-            if (sessionAttr?.value) {
-              sessionId = sessionAttr.value as string;
-              break;
-            }
-          }
-        }
-      }
-      if (!sessionId) {
-        if (innerData?.sessionId) {
-          sessionId = innerData.sessionId as string;
-        } else {
-          let ark = outerData?.ark as Record<string, unknown>;
-          if (!ark) {
-            const chunk = innerData?.chunk as Record<string, unknown>;
-            ark = chunk?.ark as Record<string, unknown>;
-          }
-          if (ark?.session) {
-            sessionId = ark.session as string;
-          }
-          if (ark?.completedQuery) {
-            const completedQuery = ark.completedQuery as Record<
-              string,
-              unknown
-            >;
-            const spec = completedQuery?.spec as Record<string, unknown>;
-            if (spec?.sessionId) {
-              sessionId = spec.sessionId as string;
-            }
-          }
-        }
-      }
-
-      if (queryId && sessionId) {
-        queryToSessionMap[queryId] = sessionId;
-      }
-
-      if (queryId && !sessionId) {
-        sessionId = queryToSessionMap[queryId];
-      }
-
-      sessionId = sessionId || 'unknown';
-
-      if (!acc[sessionId]) {
-        acc[sessionId] = [];
-      }
-      acc[sessionId].push(entry);
-      return acc;
-    },
-    {} as Record<string, StreamEntry[]>,
-  );
+  const groupedBySession = groupEntriesBySession(allEntries, queryToSessionMap);
 
   const sortedSessions = Object.entries(groupedBySession).sort((a, b) => {
     const aLatest = a[1][0]?.timestamp || '';
