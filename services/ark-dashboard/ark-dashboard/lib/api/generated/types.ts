@@ -1252,6 +1252,140 @@ export interface paths {
         patch: operations["cancel_query_v1_queries__query_name__cancel_patch"];
         trace?: never;
     };
+    "/v1/resources/api/{version}/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Core Resources
+         * @description List core Kubernetes resources.
+         *
+         *     Args:
+         *         version: API version (e.g., 'v1')
+         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
+         *         namespace: The namespace (defaults to current context)
+         *
+         *     Returns:
+         *         Response: List of raw Kubernetes resources as JSON
+         *
+         *     Examples:
+         *         - GET /v1/resources/api/v1/Pod
+         *         - GET /v1/resources/api/v1/Service
+         */
+        get: operations["list_core_resources_v1_resources_api__version___kind__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/api/{version}/{kind}/{resource_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Core Resource
+         * @description Get a core Kubernetes resource by name.
+         *
+         *     Args:
+         *         version: API version (e.g., 'v1')
+         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
+         *         resource_name: The name of the resource
+         *         namespace: The namespace (defaults to current context)
+         *
+         *     Returns:
+         *         Response: The raw Kubernetes resource as JSON
+         *
+         *     Examples:
+         *         - GET /v1/resources/api/v1/Pod/my-pod
+         *         - GET /v1/resources/api/v1/Service/my-service
+         */
+        get: operations["get_core_resource_v1_resources_api__version___kind___resource_name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/{group}/{version}/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Grouped Resources
+         * @description List grouped Kubernetes resources.
+         *
+         *     Args:
+         *         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
+         *         version: API version (e.g., 'v1', 'v1alpha1')
+         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+         *         namespace: The namespace (defaults to current context)
+         *
+         *     Returns:
+         *         Response: List of raw Kubernetes resources as JSON
+         *
+         *     Examples:
+         *         - GET /v1/resources/apis/apps/v1/Deployment
+         *         - GET /v1/resources/apis/batch/v1/Job
+         *         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
+         */
+        get: operations["list_grouped_resources_v1_resources_apis__group___version___kind__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/{group}/{version}/{kind}/{resource_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Grouped Resource
+         * @description Get a grouped Kubernetes resource by name.
+         *
+         *     Args:
+         *         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
+         *         version: API version (e.g., 'v1', 'v1alpha1')
+         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+         *         resource_name: The name of the resource
+         *         namespace: The namespace (defaults to current context)
+         *
+         *     Returns:
+         *         Response: The raw Kubernetes resource as JSON
+         *
+         *     Examples:
+         *         - GET /v1/resources/apis/apps/v1/Deployment/my-deployment
+         *         - GET /v1/resources/apis/batch/v1/Job/my-job
+         *         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
+         */
+        get: operations["get_grouped_resource_v1_resources_apis__group___version___kind___resource_name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/secrets": {
         parameters: {
             query?: never;
@@ -7239,6 +7373,150 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QueryDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_core_resources_v1_resources_api__version___kind__get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                version: string;
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_core_resource_v1_resources_api__version___kind___resource_name__get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                version: string;
+                kind: string;
+                resource_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_grouped_resources_v1_resources_apis__group___version___kind__get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                group: string;
+                version: string;
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_grouped_resource_v1_resources_apis__group___version___kind___resource_name__get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                group: string;
+                version: string;
+                kind: string;
+                resource_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
