@@ -26,7 +26,8 @@ func (r *QueryReconciler) shouldRetry(query *arkv1alpha1.Query) bool {
 		return isTransientError(*query.Status.LastErrorCode)
 	}
 
-	// Default to retry if no error code available (backwards compatibility)
+	// When error code is unavailable (e.g., network errors, timeouts, or errors
+	// from providers that don't return HTTP status codes), assume transient and retry
 	return true
 }
 
