@@ -81,6 +81,9 @@ runs:
             --namespace ingress-nginx \
             --create-namespace \
             --set controller.service.type=LoadBalancer \
+            --set controller.config.proxy-buffer-size="16k" \
+            --set controller.config.proxy-buffers-number="4" \
+            --set controller.config.large-client-header-buffers="4 16k" \
             $( [ -n "${{ inputs.load_balancer_annotations }}" ] && echo "--set controller.service.annotations={${{ inputs.load_balancer_annotations }}}" ) \
             --wait
         
