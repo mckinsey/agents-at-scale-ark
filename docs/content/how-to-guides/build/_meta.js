@@ -1,5 +1,4 @@
 export default {
-  index: 'Overview',
   models: {
     title: 'Configure providers and models',
     href: '/user-guide/models'

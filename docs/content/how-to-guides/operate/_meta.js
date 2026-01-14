@@ -1,5 +1,4 @@
 export default {
-  index: 'Overview',
   provisioning: {
     title: 'Cloud infrastructure',
     href: '/operations-guide/provisioning'

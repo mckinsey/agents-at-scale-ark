@@ -87,7 +87,7 @@ func extractHTTPStatusCode(err error) *int {
 	// OpenAI API error
 	var openaiErr *openai.Error
 	if errors.As(err, &openaiErr) {
-		code := int(openaiErr.StatusCode)
+		code := openaiErr.StatusCode
 		return &code
 	}
 

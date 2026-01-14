@@ -1,5 +1,4 @@
 export default {
-  index: 'Overview',
   'local-development': {
     title: 'Build and run locally',
     href: '/developer-guide/local-development'
