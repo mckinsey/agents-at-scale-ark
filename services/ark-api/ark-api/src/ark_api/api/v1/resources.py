@@ -57,20 +57,12 @@ async def get_core_resource(
     async with ApiClient() as api:
         dynamic_client = await DynamicClient(api)
 
-        try:
-            api_resource = await dynamic_client.resources.get(
-                api_version=version,
-                kind=kind
-            )
-        except Exception as e:
-            logger.error(f"Failed to get API resource for {version}/{kind}: {e}")
-            raise
+        api_resource = await dynamic_client.resources.get(
+            api_version=version,
+            kind=kind
+        )
 
-        try:
-            resource = await api_resource.get(name=resource_name, namespace=namespace)
-        except Exception as e:
-            logger.debug(f"Failed to retrieve core resource: {e}")
-            raise
+        resource = await api_resource.get(name=resource_name, namespace=namespace)
 
         return _create_resource_response(resource.to_dict(), request)
 
@@ -104,20 +96,12 @@ async def list_core_resources(
     async with ApiClient() as api:
         dynamic_client = await DynamicClient(api)
 
-        try:
-            api_resource = await dynamic_client.resources.get(
-                api_version=version,
-                kind=kind
-            )
-        except Exception as e:
-            logger.error(f"Failed to get API resource for {version}/{kind}: {e}")
-            raise
+        api_resource = await dynamic_client.resources.get(
+            api_version=version,
+            kind=kind
+        )
 
-        try:
-            resources = await api_resource.get(namespace=namespace)
-        except Exception as e:
-            logger.debug(f"Failed to list core resources: {e}")
-            raise
+        resources = await api_resource.get(namespace=namespace)
 
         return _create_resource_response(resources.to_dict(), request)
 
@@ -159,20 +143,12 @@ async def get_grouped_resource(
     async with ApiClient() as api:
         dynamic_client = await DynamicClient(api)
 
-        try:
-            api_resource = await dynamic_client.resources.get(
-                api_version=api_version,
-                kind=kind
-            )
-        except Exception as e:
-            logger.error(f"Failed to get API resource for {api_version}/{kind}: {e}")
-            raise
+        api_resource = await dynamic_client.resources.get(
+            api_version=api_version,
+            kind=kind
+        )
 
-        try:
-            resource = await api_resource.get(name=resource_name, namespace=namespace)
-        except Exception as e:
-            logger.debug(f"Failed to retrieve grouped resource: {e}")
-            raise
+        resource = await api_resource.get(name=resource_name, namespace=namespace)
 
         return _create_resource_response(resource.to_dict(), request)
 
@@ -211,19 +187,11 @@ async def list_grouped_resources(
     async with ApiClient() as api:
         dynamic_client = await DynamicClient(api)
 
-        try:
-            api_resource = await dynamic_client.resources.get(
-                api_version=api_version,
-                kind=kind
-            )
-        except Exception as e:
-            logger.error(f"Failed to get API resource for {api_version}/{kind}: {e}")
-            raise
+        api_resource = await dynamic_client.resources.get(
+            api_version=api_version,
+            kind=kind
+        )
 
-        try:
-            resources = await api_resource.get(namespace=namespace)
-        except Exception as e:
-            logger.debug(f"Failed to list grouped resources: {e}")
-            raise
+        resources = await api_resource.get(namespace=namespace)
 
         return _create_resource_response(resources.to_dict(), request)
