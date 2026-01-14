@@ -5,12 +5,10 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/aws/smithy-go/transport/http"
 	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -140,7 +138,7 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 			log := logf.FromContext(ctx)
 			obj.Status.RetryCount++
 			backoff := r.calculateBackoffDelay(obj.Spec.RetryPolicy, obj.Status.RetryCount)
-			log.Info("Scheduling query retry", "query", obj.Name, "attempt", obj.Status.RetryCount, "backoff", backoff)
+			log.V(1).Info("Scheduling query retry", "query", obj.Name, "attempt", obj.Status.RetryCount, "backoff", backoff)
 			if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
 				return ctrl.Result{RequeueAfter: backoff}, err
 			}
@@ -581,75 +579,6 @@ func (r *QueryReconciler) determineQueryStatus(response *arkv1alpha1.Response) s
 	return statusDone
 }
 
-func (r *QueryReconciler) shouldRetry(query *arkv1alpha1.Query) bool {
-	if query.Spec.RetryPolicy == nil {
-		return false
-	}
-
-	if query.Status.RetryCount >= query.Spec.RetryPolicy.MaxRetries {
-		return false
-	}
-
-	// Check if the last error was transient (retryable)
-	if query.Status.LastErrorCode != nil {
-		return isTransientError(*query.Status.LastErrorCode)
-	}
-
-	// Default to retry if no error code available (backwards compatibility)
-	return true
-}
-
-// isTransientError returns true if the HTTP status code indicates a transient error
-// that may succeed on retry. Follows OpenAI SDK conventions.
-func isTransientError(code int) bool {
-	switch code {
-	case 408, // Request Timeout
-		409, // Conflict
-		429, // Too Many Requests (rate limited)
-		500, // Internal Server Error
-		502, // Bad Gateway
-		503, // Service Unavailable
-		504: // Gateway Timeout
-		return true
-	default:
-		return false
-	}
-}
-
-func (r *QueryReconciler) calculateBackoffDelay(policy *arkv1alpha1.RetryPolicy, attempt int32) time.Duration {
-	if policy == nil {
-		return time.Second
-	}
-
-	initialDelay := time.Second
-	if policy.InitialDelay != nil {
-		initialDelay = policy.InitialDelay.Duration
-	}
-
-	maxDelay := 30 * time.Second
-	if policy.MaxDelay != nil {
-		maxDelay = policy.MaxDelay.Duration
-	}
-
-	var delay time.Duration
-	switch policy.BackoffPolicy {
-	case arkv1alpha1.BackoffPolicyExponential:
-		delay = initialDelay * time.Duration(1<<uint(attempt))
-	case arkv1alpha1.BackoffPolicyLinear:
-		delay = initialDelay * time.Duration(attempt+1)
-	case arkv1alpha1.BackoffPolicyFixed:
-		delay = initialDelay
-	default:
-		delay = initialDelay * time.Duration(1<<uint(attempt))
-	}
-
-	if delay > maxDelay {
-		delay = maxDelay
-	}
-
-	return delay
-}
-
 // createErrorResponse creates a standardized error response for a failed target
 func (r *QueryReconciler) createErrorResponse(target arkv1alpha1.QueryTarget, err error) arkv1alpha1.Response {
 	// Create error structure for Raw field - similar to successful message format
@@ -673,25 +602,6 @@ func (r *QueryReconciler) createErrorResponse(target arkv1alpha1.QueryTarget, er
 	}
 
 	return response
-}
-
-// extractHTTPStatusCode extracts the HTTP status code from various error types
-func extractHTTPStatusCode(err error) *int {
-	// OpenAI API error
-	var openaiErr *openai.Error
-	if errors.As(err, &openaiErr) {
-		code := int(openaiErr.StatusCode)
-		return &code
-	}
-
-	// AWS Smithy HTTP error
-	var httpErr *http.ResponseError
-	if errors.As(err, &httpErr) {
-		code := httpErr.HTTPStatusCode()
-		return &code
-	}
-
-	return nil
 }
 
 func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query) {
