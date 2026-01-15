@@ -896,6 +896,7 @@ jobs:
           slug: ${{ github.repository }}
           directory: tools/ark-cli/artifacts/coverage
           name: ark-cli
+          flags: ark-cli
 
       - name: Create NPM package tarball
         run: |
@@ -989,6 +990,7 @@ jobs:
           directory: ./coverage-artifacts
           fail_ci_if_error: false
           verbose: true
+          flags: combined-coverage
 
   check-release:
     needs:
