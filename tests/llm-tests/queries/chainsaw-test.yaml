@@ -49,16 +49,8 @@ spec:
               metadata:
                 name: test-query
               status:
-                (responses != null): true
-        - assert:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Query
-              metadata:
-                name: test-query
-              status:
-                (length(responses) > `0`): true
-                (length(responses[0].content) > `10`): true
+                (response != null): true
+                (length(response.content) > `10`): true
       catch:
         - events: {}
         - describe:

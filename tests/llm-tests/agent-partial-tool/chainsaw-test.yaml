@@ -51,15 +51,7 @@ spec:
               metadata:
                 name: partial-tool-query
               status:
-                (responses != null): true
-        - assert:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Query
-              metadata:
-                name: partial-tool-query
-              status:
-                (length(responses) > `0`): true
+                (response != null): true
       catch:
         - events: {}
         - describe:

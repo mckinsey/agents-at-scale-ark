@@ -49,15 +49,7 @@ spec:
               metadata:
                 name: structured-output-test-query
               status:
-                (responses != null): true
-        - assert:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Query
-              metadata:
-                name: structured-output-test-query
-              status:
-                (length(responses) > `0`): true
+                (response != null): true
       catch:
         - events: {}
         - describe:
