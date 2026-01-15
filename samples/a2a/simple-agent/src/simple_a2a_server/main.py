@@ -189,7 +189,7 @@ def create_agent_card() -> AgentCard:
     return AgentCard(
         name="simple-agent",
         description="A simple agent demonstrating basic functionality",
-        url=f"{server_url}/",
+        url=f"{server_url}",
         version="1.0.0",
         defaultInputModes=["text/plain"],
         defaultOutputModes=["text/plain"],
@@ -237,7 +237,7 @@ def create_app() -> Starlette:
         if hasattr(route, 'path'):
             if route.path == "/":
                 routes.append(Route("/", route.endpoint, methods=route.methods))
-            elif route.path == "/.well-known/agent.json":
+            elif route.path == "/.well-known/agent-card.json":
                 routes.append(route)
             elif route.path.startswith("/jsonrpc"):
                 routes.append(route)
@@ -258,7 +258,7 @@ def main():
     port = int(os.getenv("A2A_PORT", "8000"))
     
     logger.info(f"Starting Simple Agent on {host}:{port}")
-    logger.info(f"Agent card available at: http://{host}:{port}/.well-known/agent.json")
+    logger.info(f"Agent card available at: http://{host}:{port}/.well-known/agent-card.json")
     logger.info(f"Health check available at: http://{host}:{port}/health")
     
     uvicorn.run(app, host=host, port=port, log_level="info")
