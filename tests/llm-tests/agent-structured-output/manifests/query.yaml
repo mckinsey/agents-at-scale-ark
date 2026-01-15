@@ -1,0 +1,14 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: structured-output-test-query
+  namespace: ($namespace)
+spec:
+  input: |
+    Apple Inc. announced record quarterly earnings today. CEO Tim Cook praised the team's 
+    exceptional performance during the earnings call from Cupertino, California. The company 
+    reported strong growth in iPhone sales and services revenue. Investors are optimistic 
+    about the company's future prospects, with stock prices rising 5% in after-hours trading.
+  target:
+    type: agent
+    name: structured-output-test-agent
