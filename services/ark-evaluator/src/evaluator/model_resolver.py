@@ -158,23 +158,24 @@ class ModelResolver:
         spec = model_crd.get('spec', {})
         model_name = spec.get('model', {}).get('value', 'gpt-4')
         model_type = spec.get('type', 'openai')
+        provider = spec.get('provider', model_type)
         config = spec.get('config', {})
-        
-        logger.info(f"Extracting config from CRD - model: {model_name}, type: {model_type}")
-        
-        # Extract configuration based on model type
-        if model_type == 'azure':
+
+        logger.info(f"Extracting config from CRD - model: {model_name}, type: {model_type}, provider: {provider}")
+
+        # Extract configuration based on provider (or type as fallback)
+        if provider == 'azure' or model_type == 'azure':
             azure_config = config.get('azure', {})
             base_url = azure_config.get('baseUrl', {}).get('value', '')
             api_key = self._resolve_value_source(azure_config.get('apiKey', {}), model_crd.get('metadata', {}).get('namespace', 'default'))
             api_version = azure_config.get('apiVersion', {}).get('value', '2024-02-15')
-        elif model_type == 'openai':
+        elif provider == 'openai' or model_type == 'openai':
             openai_config = config.get('openai', {})
             base_url = openai_config.get('baseUrl', {}).get('value', 'https://api.openai.com/v1')
             api_key = self._resolve_value_source(openai_config.get('apiKey', {}), model_crd.get('metadata', {}).get('namespace', 'default'))
             api_version = openai_config.get('apiVersion', {}).get('value', '2024-02-15')
         else:
-            logger.warning(f"Unknown model type: {model_type}, using default OpenAI config")
+            logger.warning(f"Unknown provider: {provider} and type: {model_type}, using default OpenAI config")
             base_url = "https://api.openai.com/v1"
             api_key = "demo-key"
             api_version = "2024-02-15"

@@ -57,8 +57,9 @@ See the [Helm chart values](https://github.com/mckinsey/agents-at-scale-ark/tree
 - **Evaluations**: `/v1/namespaces/{namespace}/evaluations`
 - **Secrets**: `/v1/namespaces/{namespace}/secrets`
 - **API Keys**: `/v1/api-keys`
+- **Resources**: `/v1/resources` - Generic access to any Kubernetes resource
 
-See [ARK APIs Reference](/reference/ark-apis) for complete API documentation.
+See [ARK APIs Reference](/reference/ark-apis) and [Resources API](/reference/resources-api) for complete API documentation.
 
 ### OpenAI-Compatible APIs
 
@@ -71,7 +72,7 @@ The A2A Gateway exposes ARK agents via the [A2A Protocol](https://github.com/a2a
 
 **Endpoints:**
 - `GET /agents` - List all available agents
-- `GET /agent/{agent-name}/.well-known/agent.json` - Get agent card
+- `GET /agent/{agent-name}/.well-known/agent-card.json` - Get agent card
 - `GET /agent/{agent-name}/*` - Dynamic A2A protocol routes
 
 **Example:**
@@ -82,6 +83,21 @@ curl http://localhost:8000/agents
 # Get agent card
 curl http://localhost:8000/agent/<agent-name>/.well-known/agent.json
 ```
+
+### Service Proxy
+
+Proxy requests to other services deployed in your namespace. For example, the File Management features in Ark proxy requests from the dashboard directly to the filesystem server. Proxy APIs use the authentication policies configured for the tenant.
+
+- `GET /v1/proxy/services` - List available services
+- `* /v1/proxy/services/{service_name}/{path}` - Proxy to a cluster service
+- `GET,POST,OPTIONS /v1/proxy/a2a/{a2a-server}` - Proxy to an a2a server
+- `GET,POST,OPTIONS /v1/proxy/a2a/{a2a-server}/{path}` - Proxy to interact with an a2a server
+- `GET,POST,OPTIONS /v1/proxy/mcp/{mcp-server}` - Proxy to an mcp server
+- `GET,POST,OPTIONS /v1/proxy/mcp/{mcp-server}/{path}` - Proxy to interact with a mcp server
+
+In order to connect with A2A Server or MCP Server you can use the following dev tools:
+- [A2A Inspector](https://github.com/a2aproject/a2a-inspector): for connecting to A2A via proxy (digit the full path at agent-card)
+- [MCP Inspector](https://github.com/modelcontextprotocol/inspector): for connecting to MCP via proxy (use Streamable HTTP and Direct connection)
 
 ## Authentication
 
@@ -97,5 +113,6 @@ See [Authentication Guide](/developer-guide/authentication) for complete configu
 ## Related Documentation
 
 - [ARK APIs Reference](/reference/ark-apis) - Complete API documentation
+- [Resources API](/reference/resources-api) - Generic Kubernetes resource access
 - [Authentication Guide](/developer-guide/authentication) - Authentication configuration
 - [A2A Protocol Specification](https://github.com/a2a-integration/a2a-spec) - A2A protocol details

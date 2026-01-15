@@ -1116,6 +1116,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/proxy/services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Services
+         * @description List services available for proxying in the current namespace.
+         */
+        get: operations["list_services_v1_proxy_services_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/proxy/services/{service_name}/{api_path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Proxy Services
+         * @description Proxy DELETE, PATCH, HEAD requests to other services in the cluster.
+         */
+        delete: operations["proxy_services_v1_proxy_services__service_name___api_path__delete"];
+        options?: never;
+        /**
+         * Proxy Services
+         * @description Proxy DELETE, PATCH, HEAD requests to other services in the cluster.
+         */
+        head: operations["proxy_services_v1_proxy_services__service_name___api_path__head"];
+        /**
+         * Proxy Services
+         * @description Proxy DELETE, PATCH, HEAD requests to other services in the cluster.
+         */
+        patch: operations["proxy_services_v1_proxy_services__service_name___api_path__patch"];
+        trace?: never;
+    };
+    "/v1/proxy/{resource}/{server_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Proxy Server
+         * @description Proxy requests to a specific resource inside your agentic cluster.
+         *     The goal is to expose over public internet your agentic resources in
+         *     order to perform testing of the resource itself.
+         *
+         *     Args:
+         *         server_name: Name of the agentic resource. Supported only a2a and mcp.
+         *         path: Remaining path after the server name (will be forwarded as-is)
+         *         request: The incoming FastAPI request
+         *         namespace: The namespace containing the agentic resource
+         *
+         *     Returns:
+         *         Response: Proxied response from the agentic resource
+         */
+        get: operations["proxy_server_v1_proxy__resource___server_name__get"];
+        put?: never;
+        /**
+         * Proxy Server
+         * @description Proxy requests to a specific resource inside your agentic cluster.
+         *     The goal is to expose over public internet your agentic resources in
+         *     order to perform testing of the resource itself.
+         *
+         *     Args:
+         *         server_name: Name of the agentic resource. Supported only a2a and mcp.
+         *         path: Remaining path after the server name (will be forwarded as-is)
+         *         request: The incoming FastAPI request
+         *         namespace: The namespace containing the agentic resource
+         *
+         *     Returns:
+         *         Response: Proxied response from the agentic resource
+         */
+        post: operations["proxy_server_v1_proxy__resource___server_name__post"];
+        delete?: never;
+        /**
+         * Proxy Server
+         * @description Proxy requests to a specific resource inside your agentic cluster.
+         *     The goal is to expose over public internet your agentic resources in
+         *     order to perform testing of the resource itself.
+         *
+         *     Args:
+         *         server_name: Name of the agentic resource. Supported only a2a and mcp.
+         *         path: Remaining path after the server name (will be forwarded as-is)
+         *         request: The incoming FastAPI request
+         *         namespace: The namespace containing the agentic resource
+         *
+         *     Returns:
+         *         Response: Proxied response from the agentic resource
+         */
+        options: operations["proxy_server_v1_proxy__resource___server_name__options"];
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/proxy/{resource}/{server_name}/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Proxy Server Path */
+        get: operations["proxy_server_path_v1_proxy__resource___server_name___path__get"];
+        put?: never;
+        /** Proxy Server Path */
+        post: operations["proxy_server_path_v1_proxy__resource___server_name___path__post"];
+        delete?: never;
+        /** Proxy Server Path */
+        options: operations["proxy_server_path_v1_proxy__resource___server_name___path__options"];
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/queries": {
         parameters: {
             query?: never;
@@ -1186,6 +1314,140 @@ export interface paths {
          * @description Cancel a specific query by setting spec.cancel to true.
          */
         patch: operations["cancel_query_v1_queries__query_name__cancel_patch"];
+        trace?: never;
+    };
+    "/v1/resources/api/{version}/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Core Resources
+         * @description List core Kubernetes resources.
+         *
+         *     Args:
+         *         version: API version (e.g., 'v1')
+         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
+         *         namespace: The namespace (defaults to current context)
+         *
+         *     Returns:
+         *         Response: List of raw Kubernetes resources as JSON
+         *
+         *     Examples:
+         *         - GET /v1/resources/api/v1/Pod
+         *         - GET /v1/resources/api/v1/Service
+         */
+        get: operations["list_core_resources_v1_resources_api__version___kind__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/api/{version}/{kind}/{resource_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Core Resource
+         * @description Get a core Kubernetes resource by name.
+         *
+         *     Args:
+         *         version: API version (e.g., 'v1')
+         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
+         *         resource_name: The name of the resource
+         *         namespace: The namespace (defaults to current context)
+         *
+         *     Returns:
+         *         Response: The raw Kubernetes resource as JSON
+         *
+         *     Examples:
+         *         - GET /v1/resources/api/v1/Pod/my-pod
+         *         - GET /v1/resources/api/v1/Service/my-service
+         */
+        get: operations["get_core_resource_v1_resources_api__version___kind___resource_name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/{group}/{version}/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Grouped Resources
+         * @description List grouped Kubernetes resources.
+         *
+         *     Args:
+         *         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
+         *         version: API version (e.g., 'v1', 'v1alpha1')
+         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+         *         namespace: The namespace (defaults to current context)
+         *
+         *     Returns:
+         *         Response: List of raw Kubernetes resources as JSON
+         *
+         *     Examples:
+         *         - GET /v1/resources/apis/apps/v1/Deployment
+         *         - GET /v1/resources/apis/batch/v1/Job
+         *         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
+         */
+        get: operations["list_grouped_resources_v1_resources_apis__group___version___kind__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/{group}/{version}/{kind}/{resource_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Grouped Resource
+         * @description Get a grouped Kubernetes resource by name.
+         *
+         *     Args:
+         *         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
+         *         version: API version (e.g., 'v1', 'v1alpha1')
+         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+         *         resource_name: The name of the resource
+         *         namespace: The namespace (defaults to current context)
+         *
+         *     Returns:
+         *         Response: The raw Kubernetes resource as JSON
+         *
+         *     Examples:
+         *         - GET /v1/resources/apis/apps/v1/Deployment/my-deployment
+         *         - GET /v1/resources/apis/batch/v1/Job/my-job
+         *         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
+         */
+        get: operations["get_grouped_resource_v1_resources_apis__group___version___kind___resource_name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/secrets": {
@@ -2724,6 +2986,32 @@ export interface components {
             namespace: string;
         };
         /**
+         * ConversationListResponse
+         * @description Response model for listing conversations.
+         */
+        ConversationListResponse: {
+            /** Items */
+            items: components["schemas"]["ConversationResponse"][];
+            /** Total */
+            total?: number | null;
+        };
+        /**
+         * ConversationResponse
+         * @description Response model for a conversation.
+         */
+        ConversationResponse: {
+            /** Conversationid */
+            conversationId: string;
+            /** Lastactivity */
+            lastActivity?: string | null;
+            /** Memoryname */
+            memoryName: string;
+            /** Messagecount */
+            messageCount?: number | null;
+            /** Queries */
+            queries?: string[] | null;
+        };
+        /**
          * Custom
          * @description The custom tool that the model called.
          */
@@ -3510,14 +3798,8 @@ export interface components {
             value?: string | null;
             valueFrom?: components["schemas"]["MCPServerValueFrom"] | null;
         };
-        /**
-         * MCPServerValueSource
-         * @description ValueSource for configuration (supports direct value or valueFrom).
-         */
         "MCPServerValueSource-Output": {
-            /** Value */
-            value?: string | null;
-            valueFrom?: components["schemas"]["MCPServerValueFrom"] | null;
+            [key: string]: unknown;
         };
         /**
          * Memory
@@ -3833,6 +4115,8 @@ export interface components {
         QueryCreateRequest: {
             /** Cancel */
             cancel?: boolean | null;
+            /** Conversationid */
+            conversationId?: string | null;
             evaluatorSelector?: components["schemas"]["QueryLabelSelector"] | null;
             /** Evaluators */
             evaluators?: components["schemas"]["Memory"][] | null;
@@ -3869,6 +4153,8 @@ export interface components {
         QueryDetailResponse: {
             /** Cancel */
             cancel?: boolean | null;
+            /** Conversationid */
+            conversationId?: string | null;
             /** Input */
             input: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam-Output"] | components["schemas"]["ChatCompletionAssistantMessageParam-Output"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
             memory?: components["schemas"]["Memory"] | null;
@@ -4006,6 +4292,8 @@ export interface components {
          * @description Basic query response for list operations.
          */
         QueryResponse: {
+            /** Conversationid */
+            conversationId?: string | null;
             /** Creationtimestamp */
             creationTimestamp?: string | null;
             /** Input */
@@ -4046,6 +4334,8 @@ export interface components {
         QueryUpdateRequest: {
             /** Cancel */
             cancel?: boolean | null;
+            /** Conversationid */
+            conversationId?: string | null;
             /** Input */
             input?: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam-Input"] | components["schemas"]["ChatCompletionAssistantMessageParam-Input"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[] | null;
             memory?: components["schemas"]["Memory"] | null;
@@ -4097,6 +4387,11 @@ export interface components {
              */
             status: string;
         };
+        /**
+         * Resource
+         * @enum {string}
+         */
+        Resource: "a2a" | "mcp" | "services";
         /**
          * ResourceSelector
          * @description Selector for automatic evaluation of resources.
@@ -4186,30 +4481,12 @@ export interface components {
             selectorPrompt?: string | null;
         };
         /**
-         * SessionListResponse
-         * @description Response model for listing sessions.
+         * ServiceListResponse
+         * @description Response model for list services endpoint.
          */
-        SessionListResponse: {
-            /** Items */
-            items: components["schemas"]["SessionResponse"][];
-            /** Total */
-            total?: number | null;
-        };
-        /**
-         * SessionResponse
-         * @description Response model for a conversation.
-         */
-        SessionResponse: {
-            /** Conversationid */
-            conversationId: string;
-            /** Lastactivity */
-            lastActivity?: string | null;
-            /** Memoryname */
-            memoryName: string;
-            /** Messagecount */
-            messageCount?: number | null;
-            /** Queries */
-            queries?: string[] | null;
+        ServiceListResponse: {
+            /** Services */
+            services: string[];
         };
         /**
          * Skill
@@ -5523,7 +5800,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SessionListResponse"];
+                    "application/json": components["schemas"]["ConversationListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6722,6 +6999,347 @@ export interface operations {
             };
         };
     };
+    list_services_v1_proxy_services_get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_services_v1_proxy_services__service_name___api_path__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_name: string;
+                api_path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_services_v1_proxy_services__service_name___api_path__head: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_name: string;
+                api_path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_services_v1_proxy_services__service_name___api_path__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_name: string;
+                api_path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_server_v1_proxy__resource___server_name__get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                resource: components["schemas"]["Resource"];
+                server_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_server_v1_proxy__resource___server_name__post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                resource: components["schemas"]["Resource"];
+                server_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_server_v1_proxy__resource___server_name__options: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                resource: components["schemas"]["Resource"];
+                server_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_server_path_v1_proxy__resource___server_name___path__get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                resource: components["schemas"]["Resource"];
+                server_name: string;
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_server_path_v1_proxy__resource___server_name___path__post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                resource: components["schemas"]["Resource"];
+                server_name: string;
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_server_path_v1_proxy__resource___server_name___path__options: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                resource: components["schemas"]["Resource"];
+                server_name: string;
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_queries_v1_queries_get: {
         parameters: {
             query?: {
@@ -6915,6 +7533,150 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QueryDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_core_resources_v1_resources_api__version___kind__get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                version: string;
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_core_resource_v1_resources_api__version___kind___resource_name__get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                version: string;
+                kind: string;
+                resource_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_grouped_resources_v1_resources_apis__group___version___kind__get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                group: string;
+                version: string;
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_grouped_resource_v1_resources_apis__group___version___kind___resource_name__get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                group: string;
+                version: string;
+                kind: string;
+                resource_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

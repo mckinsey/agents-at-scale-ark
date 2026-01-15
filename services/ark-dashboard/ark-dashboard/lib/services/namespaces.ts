@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
@@ -37,6 +38,10 @@ export const namespacesService = {
     const response = await apiClient.post<
       components['schemas']['NamespaceResponse']
     >('/api/v1/namespaces', request);
+    trackEvent({
+      name: 'namespace_created',
+      properties: { namespaceName: response.name },
+    });
     return {
       ...response,
       id: 0, // Will be properly assigned when we refresh the list

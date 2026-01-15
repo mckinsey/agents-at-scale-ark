@@ -310,6 +310,43 @@ jobs:
           push: true
           prebuild: ${{ matrix.prebuild }}
 
+  xray-container-scan:
+    needs: [setup-container-cache-registry, build-containers]
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - ark-controller
+          - ark-api
+          - ark-dashboard
+          - ark-evaluator
+          - executor-langchain
+          - ark-broker
+          - langchain-weather-agent
+          - ark-mcp
+          - ark-cli
+          - ark-tools
+          - filesystem-mcp-server
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Docker Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry-hostname }}
+          username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
+          password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - uses: ./.github/actions/jfrog-xray-container-scan
+        with:
+          image: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/${{ matrix.image }}:${{ github.sha }}
+          image_name: ${{ matrix.image }}
+          jfrog_user: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME }}
+          jfrog_password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD }}
+          jfrog_url: ${{ vars.JFROG_PLATFORM_URL }}
+
   build-libs:
     runs-on: ubuntu-24.04
     steps:

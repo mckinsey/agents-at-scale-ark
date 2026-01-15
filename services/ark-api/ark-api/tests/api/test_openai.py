@@ -228,3 +228,37 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         session_id = getattr(query_resource.spec, 'sessionId', None)
         self.assertTrue(session_id is None or session_id == "")
 
+    @patch('ark_api.api.v1.openai.with_ark_client')
+    @patch('ark_api.api.v1.openai.get_namespace')
+    @patch('ark_api.api.v1.openai.parse_model_to_query_target')
+    @patch('ark_api.api.v1.openai.watch_query_completion')
+    def test_chat_completions_with_conversation_id(self, mock_watch, mock_parse_target, mock_get_namespace, mock_with_ark_client):
+        """Test chat completions with conversationId for memory continuity."""
+        mock_get_namespace.return_value = "default"
+        mock_parse_target.return_value = {"name": "test-agent", "type": "agent"}
+
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        mock_client.queries.a_create = AsyncMock()
+        mock_watch.return_value = mock_completion
+
+        request_data = {
+            "model": "agent/test-agent",
+            "messages": [{"role": "user", "content": "Hello"}],
+            "metadata": {
+                "sessionId": "test-session-123",
+                "conversationId": "conv-456-789"
+            }
+        }
+        response = self.client.post("/openai/v1/chat/completions", json=request_data)
+
+        self.assertEqual(response.status_code, 200)
+
+        mock_client.queries.a_create.assert_called_once()
+        query_resource = mock_client.queries.a_create.call_args[0][0]
+        spec_dict = query_resource.spec.to_dict() if hasattr(query_resource.spec, 'to_dict') else query_resource.spec.__dict__
+        session_id = spec_dict.get('sessionId') or spec_dict.get('session_id') or getattr(query_resource.spec, 'session_id', None) or getattr(query_resource.spec, 'sessionId', None)
+        conversation_id = spec_dict.get('conversationId') or spec_dict.get('conversation_id') or getattr(query_resource.spec, 'conversation_id', None) or getattr(query_resource.spec, 'conversationId', None)
+        self.assertEqual(session_id, "test-session-123")
+        self.assertEqual(conversation_id, "conv-456-789")
+
