@@ -3,14 +3,14 @@ coverage:
     project:
       default:
         target: auto
-        threshold: 1%
+        threshold: 0.1%
         flags:
           - ark-cli
           - combined-coverage
     patch:
       default:
         target: auto
-        threshold: 1%
+        threshold: 0.1%
 
 flags:
   ark-cli:
