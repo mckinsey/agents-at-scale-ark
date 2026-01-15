@@ -4,7 +4,7 @@ metadata:
   name: test-agent
 spec:
   modelRef:
-    name: default
+    name: test-model
   prompt: |
     You are a test agent used for end-to-end testing.
     You should respond helpfully to test queries and validate that the agent system is working correctly.
