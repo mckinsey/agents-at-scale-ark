@@ -1,13 +1,23 @@
 import { createStore } from 'jotai';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { experimentalFeaturesDialogOpenAtom } from '@/atoms/internal-states';
+import {
+  experimentalFeaturesDialogOpenAtom,
+  filesBrowserPrefixAtom,
+} from '@/atoms/internal-states';
 
 describe('Internal States Atoms', () => {
   let store: ReturnType<typeof createStore>;
 
   beforeEach(() => {
     store = createStore();
+    sessionStorage.clear();
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    sessionStorage.clear();
+    localStorage.clear();
   });
 
   describe('experimentalFeaturesDialogOpenAtom', () => {
@@ -28,6 +38,36 @@ describe('Internal States Atoms', () => {
 
       store.set(experimentalFeaturesDialogOpenAtom, false);
       expect(store.get(experimentalFeaturesDialogOpenAtom)).toBe(false);
+    });
+  });
+
+  describe('filesBrowserPrefixAtom', () => {
+    it('should default to empty string', () => {
+      const value = store.get(filesBrowserPrefixAtom);
+      expect(value).toBe('');
+    });
+
+    it('should be updatable to a directory path', () => {
+      store.set(filesBrowserPrefixAtom, 'documents/reports/');
+      const value = store.get(filesBrowserPrefixAtom);
+      expect(value).toBe('documents/reports/');
+    });
+
+    it('should be updatable back to root', () => {
+      store.set(filesBrowserPrefixAtom, 'documents/');
+      expect(store.get(filesBrowserPrefixAtom)).toBe('documents/');
+
+      store.set(filesBrowserPrefixAtom, '');
+      expect(store.get(filesBrowserPrefixAtom)).toBe('');
+    });
+
+    it('should persist value across store recreations (page refresh)', () => {
+      store.set(filesBrowserPrefixAtom, 'documents/reports/');
+      expect(store.get(filesBrowserPrefixAtom)).toBe('documents/reports/');
+
+      const newStore = createStore();
+      const valueAfterRefresh = newStore.get(filesBrowserPrefixAtom);
+      expect(valueAfterRefresh).toBe('documents/reports/');
     });
   });
 });

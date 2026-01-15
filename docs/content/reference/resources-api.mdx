@@ -1,0 +1,180 @@
+---
+title: Resources API
+description: Generic API for accessing Kubernetes resources
+---
+
+# Resources API
+
+The Resources API provides generic access to any Kubernetes resource through the Ark API. Use this to retrieve core resources (Pods, Services, ConfigMaps) and grouped resources (Deployments, WorkflowTemplates, custom resources) without resource-specific endpoints.
+
+## Endpoints
+
+### Core Resources
+
+Core Kubernetes resources (API version v1):
+
+**Get single resource:**
+```
+GET /v1/resources/api/{version}/{kind}/{resource_name}
+```
+
+**List resources:**
+```
+GET /v1/resources/api/{version}/{kind}
+```
+
+**Examples:**
+```bash
+# Get a Pod
+curl http://ark-api:8000/v1/resources/api/v1/Pod/my-pod
+
+# List all Services
+curl http://ark-api:8000/v1/resources/api/v1/Service
+```
+
+### Grouped Resources
+
+Resources in API groups (apps, batch, custom groups):
+
+**Get single resource:**
+```
+GET /v1/resources/apis/{group}/{version}/{kind}/{resource_name}
+```
+
+**List resources:**
+```
+GET /v1/resources/apis/{group}/{version}/{kind}
+```
+
+**Examples:**
+```bash
+# Get a Deployment
+curl http://ark-api:8000/v1/resources/apis/apps/v1/Deployment/my-deployment
+
+# Get an Argo WorkflowTemplate
+curl http://ark-api:8000/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/my-workflow
+
+# List all Jobs
+curl http://ark-api:8000/v1/resources/apis/batch/v1/Job
+```
+
+## Parameters
+
+### Query Parameters
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `namespace` | Kubernetes namespace | Current context namespace |
+
+**Example:**
+```bash
+curl "http://ark-api:8000/v1/resources/api/v1/Pod?namespace=production"
+```
+
+## Response Format
+
+### Content Negotiation
+
+The API supports both JSON and YAML responses based on the `Accept` header:
+
+**JSON (default):**
+```bash
+curl http://ark-api:8000/v1/resources/api/v1/Pod/my-pod
+```
+
+**YAML:**
+```bash
+curl -H "Accept: application/yaml" \
+  http://ark-api:8000/v1/resources/api/v1/Pod/my-pod
+```
+
+### Response Structure
+
+Responses return the raw Kubernetes resource:
+
+```json
+{
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {
+    "name": "my-pod",
+    "namespace": "default"
+  },
+  "spec": { ... },
+  "status": { ... }
+}
+```
+
+## Scope Handling
+
+The API automatically handles both namespaced and cluster-scoped resources:
+
+1. First attempts namespaced access
+2. Falls back to cluster-scoped if namespaced fails
+3. Returns error if both fail
+
+This works transparently for resources like Nodes (cluster-scoped) and Pods (namespaced).
+
+## Use Cases
+
+### Workflow Templates
+
+Access Argo WorkflowTemplates:
+
+```bash
+# List all workflow templates
+curl http://ark-api:8000/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
+
+# Get specific template
+curl http://ark-api:8000/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/my-workflow
+```
+
+### Custom Resources
+
+Access any custom resource:
+
+```bash
+# Ark Agents
+curl http://ark-api:8000/v1/resources/apis/ark.mckinsey.com/v1alpha1/Agent
+
+# Other CRDs
+curl http://ark-api:8000/v1/resources/apis/mycompany.com/v1/CustomResource
+```
+
+### Standard Resources
+
+Access standard Kubernetes resources:
+
+```bash
+# ConfigMaps
+curl http://ark-api:8000/v1/resources/api/v1/ConfigMap
+
+# Deployments
+curl http://ark-api:8000/v1/resources/apis/apps/v1/Deployment
+
+# Jobs
+curl http://ark-api:8000/v1/resources/apis/batch/v1/Job
+```
+
+## Authentication
+
+The Resources API respects Ark API authentication:
+
+```bash
+# With API key
+curl -H "X-API-Key: your-key" \
+  http://ark-api:8000/v1/resources/api/v1/Pod/my-pod
+
+# With JWT
+curl -H "Authorization: Bearer your-token" \
+  http://ark-api:8000/v1/resources/api/v1/Pod/my-pod
+```
+
+## RBAC
+
+The API uses the service account configured for the Ark API pod. Ensure the service account has appropriate RBAC permissions for the resources you want to access.
+
+## Related Documentation
+
+- [Ark API](/developer-guide/services/ark-api) - API service overview
+- [Authentication](/developer-guide/authentication) - Authentication configuration
