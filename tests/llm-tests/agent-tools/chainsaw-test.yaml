@@ -52,6 +52,13 @@ spec:
                 name: weather-query
               status:
                 (responses != null): true
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Query
+              metadata:
+                name: weather-query
+              status:
                 (length(responses) > `0`): true
       catch:
         - events: {}
