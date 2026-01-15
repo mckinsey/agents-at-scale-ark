@@ -161,17 +161,17 @@
         },
         {
           "type": "yaml",
-          "path": "services/ark-cluster-memory/chart/Chart.yaml",
+          "path": "services/ark-broker/chart/Chart.yaml",
           "jsonpath": "$.version"
         },
         {
           "type": "yaml",
-          "path": "services/ark-cluster-memory/chart/Chart.yaml",
+          "path": "services/ark-broker/chart/Chart.yaml",
           "jsonpath": "$.appVersion"
         },
         {
           "type": "json",
-          "path": "services/ark-cluster-memory/ark-cluster-memory/package.json",
+          "path": "services/ark-broker/ark-broker/package.json",
           "jsonpath": "$.version"
         },
         {
@@ -193,6 +193,11 @@
           "type": "yaml",
           "path": "services/argo-workflows/chart/Chart.yaml",
           "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "json",
+          "path": ".claude-plugin/marketplace.json",
+          "jsonpath": "$.plugins[0].version"
         }
       ]
     }

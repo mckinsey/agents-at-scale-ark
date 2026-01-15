@@ -9,12 +9,12 @@ def test_from_dict_valid():
     """Test creating config from valid dict."""
     data = {
         "enabled": "true",
-        "serviceRef": 'name: ark-cluster-memory\nport: "80"'
+        "serviceRef": 'name: ark-broker\nport: "80"'
     }
     config = ArkStreamingConfig.from_dict(data)
 
     assert config.enabled is True
-    assert config.serviceRef.name == "ark-cluster-memory"
+    assert config.serviceRef.name == "ark-broker"
     assert config.serviceRef.port == "80"
 
 
@@ -49,14 +49,14 @@ async def test_get_config_valid():
     mock_cm = MagicMock()
     mock_cm.data = {
         "enabled": "true",
-        "serviceRef": 'name: ark-cluster-memory\nport: "80"'
+        "serviceRef": 'name: ark-broker\nport: "80"'
     }
     mock_client.read_namespaced_config_map.return_value = mock_cm
 
     result = await get_streaming_config(mock_client, "default")
 
     assert result.enabled is True
-    assert result.serviceRef.name == "ark-cluster-memory"
+    assert result.serviceRef.name == "ark-broker"
     assert result.serviceRef.port == "80"
 
 

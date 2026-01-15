@@ -18,8 +18,12 @@ import { useEffect, useState } from 'react';
 
 import {
   A2A_TASKS_FEATURE_KEY,
+  BROKER_FEATURE_KEY,
+  FILES_BROWSER_FEATURE_KEY,
   isA2ATasksEnabledAtom,
+  isBrokerEnabledAtom,
   isExperimentalDarkModeEnabledAtom,
+  isFilesBrowserAvailableAtom,
 } from '@/atoms/experimental-features';
 import { experimentalFeaturesDialogOpenAtom } from '@/atoms/internal-states';
 import { NamespaceEditor } from '@/components/editors';
@@ -48,6 +52,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { trackEvent } from '@/lib/analytics/singleton';
 import { signout } from '@/lib/auth/signout';
 import {
   CONFIGURATION_SECTIONS,
@@ -56,6 +61,7 @@ import {
   SERVICE_SECTIONS,
 } from '@/lib/constants/dashboard-icons';
 import { type SystemInfo, systemInfoService } from '@/lib/services';
+import { proxyService } from '@/lib/services/proxy';
 import { useNamespace } from '@/providers/NamespaceProvider';
 import { useUser } from '@/providers/UserProvider';
 
@@ -68,12 +74,14 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { user } = useUser();
   const isA2ATasksEnabled = useAtomValue(isA2ATasksEnabledAtom);
+  const isBrokerEnabled = useAtomValue(isBrokerEnabledAtom);
   const isExperimentalDarkModeEnabled = useAtomValue(
     isExperimentalDarkModeEnabledAtom,
   );
   const setExperimentalFeaturesDialogOpen = useSetAtom(
     experimentalFeaturesDialogOpenAtom,
   );
+  const setIsFilesBrowserAvailable = useSetAtom(isFilesBrowserAvailableAtom);
 
   const {
     availableNamespaces,
@@ -107,14 +115,33 @@ export function AppSidebar() {
       }
     };
 
+    const checkFilesAPIHealth = async () => {
+      try {
+        const available =
+          await proxyService.isServiceAvailable('file-gateway-api');
+        setIsFilesBrowserAvailable(available);
+      } catch (error) {
+        console.error('Failed to check files API health:', error);
+        setIsFilesBrowserAvailable(false);
+      }
+    };
+
     loadInitialData();
-  }, [router, pathname]);
+    checkFilesAPIHealth();
+  }, [router, pathname, setIsFilesBrowserAvailable]);
 
   const handleCreateNamespace = (name: string) => {
     createNamespace(name);
   };
 
   const navigateToSection = (sectionKey: string) => {
+    trackEvent({
+      name: 'nav_item_clicked',
+      properties: {
+        section: sectionKey,
+        fromSection: getCurrentSection(),
+      },
+    });
     router.push(`/${sectionKey}`);
   };
 
@@ -126,6 +153,10 @@ export function AppSidebar() {
     switch (item.enablerFeature) {
       case A2A_TASKS_FEATURE_KEY:
         return isA2ATasksEnabled;
+      case BROKER_FEATURE_KEY:
+        return isBrokerEnabled;
+      case FILES_BROWSER_FEATURE_KEY:
+        return true;
       default:
         return true;
     }

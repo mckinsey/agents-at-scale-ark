@@ -1,12 +1,20 @@
 package config
 
 import (
+	"context"
+
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"mckinsey.com/ark/internal/eventing"
+	brokereventing "mckinsey.com/ark/internal/eventing/broker"
 	k8seventing "mckinsey.com/ark/internal/eventing/kubernetes"
 	recorders "mckinsey.com/ark/internal/eventing/recorder"
+	"mckinsey.com/ark/internal/telemetry/routing"
 )
+
+var log = logf.Log.WithName("eventing.config")
 
 type Provider struct {
 	modelRecorder           eventing.ModelRecorder
@@ -20,20 +28,43 @@ type Provider struct {
 	memoryRecorder          eventing.MemoryRecorder
 }
 
-func NewProvider(mgr ctrl.Manager) *Provider {
+func NewProvider(mgr ctrl.Manager, k8sClient client.Client) *Provider {
 	recorder := mgr.GetEventRecorderFor("ark-controller")
-	emitter := k8seventing.NewKubernetesEventEmitter(recorder)
+	k8sEmitter := k8seventing.NewKubernetesEventEmitter(recorder)
+
+	operationEmitter := k8sEmitter
+
+	if k8sClient != nil {
+		ctx := context.Background()
+		endpoints, err := routing.DiscoverBrokerEndpoints(ctx, k8sClient)
+
+		switch {
+		case err != nil:
+			log.Error(err, "failed to discover broker endpoints, using Kubernetes events for operations",
+				"troubleshooting", "check RBAC permissions for listing ConfigMaps",
+				"configmap", "ark-config-broker")
+		case len(endpoints) > 0:
+			namespaces := make([]string, 0, len(endpoints))
+			for _, ep := range endpoints {
+				namespaces = append(namespaces, ep.Namespace)
+			}
+			log.Info("broker endpoints discovered, using broker for operation events", "count", len(endpoints), "namespaces", namespaces)
+			operationEmitter = brokereventing.NewBrokerEventEmitter(endpoints)
+		default:
+			log.Info("no broker endpoints found, using Kubernetes events for operations")
+		}
+	}
 
 	return &Provider{
-		modelRecorder:           recorders.NewModelRecorder(emitter),
-		a2aRecorder:             recorders.NewA2aRecorder(emitter),
-		agentRecorder:           recorders.NewAgentRecorder(emitter),
-		teamRecorder:            recorders.NewTeamRecorder(emitter),
-		executionEngineRecorder: recorders.NewExecutionEngineRecorder(emitter),
-		mcpServerRecorder:       recorders.NewMCPServerRecorder(emitter),
-		queryRecorder:           recorders.NewQueryRecorder(emitter),
-		toolRecorder:            recorders.NewToolRecorder(emitter),
-		memoryRecorder:          recorders.NewMemoryRecorder(emitter),
+		modelRecorder:           recorders.NewModelRecorder(k8sEmitter, operationEmitter),
+		a2aRecorder:             recorders.NewA2aRecorder(k8sEmitter, operationEmitter),
+		agentRecorder:           recorders.NewAgentRecorder(k8sEmitter, operationEmitter),
+		teamRecorder:            recorders.NewTeamRecorder(k8sEmitter, operationEmitter),
+		executionEngineRecorder: recorders.NewExecutionEngineRecorder(k8sEmitter, operationEmitter),
+		mcpServerRecorder:       recorders.NewMCPServerRecorder(k8sEmitter),
+		queryRecorder:           recorders.NewQueryRecorder(k8sEmitter, operationEmitter),
+		toolRecorder:            recorders.NewToolRecorder(k8sEmitter, operationEmitter),
+		memoryRecorder:          recorders.NewMemoryRecorder(k8sEmitter, operationEmitter),
 	}
 }
 

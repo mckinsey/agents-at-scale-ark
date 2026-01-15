@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
@@ -62,25 +63,41 @@ export const teamsService = {
     return teamsService.getByName(name);
   },
 
-  // Create a new team
   async create(team: TeamCreateRequest): Promise<Team> {
     const response = await apiClient.post<TeamDetailResponse>(
       `/api/v1/teams`,
       team,
     );
+
+    trackEvent({
+      name: 'team_created',
+      properties: {
+        teamName: response.name,
+        memberCount: team.members?.length ?? 0,
+        strategy: team.strategy,
+      },
+    });
+
     return {
       ...response,
       id: response.name,
     };
   },
 
-  // Update an existing team
   async update(name: string, updates: TeamUpdateRequest): Promise<Team | null> {
     try {
       const response = await apiClient.put<TeamDetailResponse>(
         `/api/v1/teams/${name}`,
         updates,
       );
+
+      trackEvent({
+        name: 'team_updated',
+        properties: {
+          teamName: response.name,
+        },
+      });
+
       return {
         ...response,
         id: response.name,
@@ -102,10 +119,17 @@ export const teamsService = {
     return teamsService.update(name, updates);
   },
 
-  // Delete a team
   async delete(name: string): Promise<boolean> {
     try {
       await apiClient.delete(`/api/v1/teams/${name}`);
+
+      trackEvent({
+        name: 'team_deleted',
+        properties: {
+          teamName: name,
+        },
+      });
+
       return true;
     } catch (error) {
       if ((error as AxiosError).response?.status === 404) {

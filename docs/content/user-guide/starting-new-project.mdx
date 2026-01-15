@@ -384,9 +384,9 @@ metadata:
   name: test-support-query
 spec:
   input: "I need help with my order #12345"
-  targets:
+  target:
     - kind: Agent
-      name: customer-support
+    name: customer-support
 ```
 
 ### Execute and Monitor
@@ -407,7 +407,7 @@ kubectl get query test-support-query -w
 kubectl describe query test-support-query
 
 # Get the response
-kubectl get query test-support-query -o jsonpath='{.status.responses[0].content}'
+kubectl get query test-support-query -o jsonpath='{.status.response.content}'
 ```
 
 ## Step 5: End-to-End Testing
@@ -451,7 +451,7 @@ kubectl wait --for=jsonpath='{.status.phase}'=done query/test-support-query --ti
 
 # Verify response
 echo "Verifying query response..."
-RESPONSE=$(kubectl get query test-support-query -o jsonpath='{.status.responses[0].content}')
+RESPONSE=$(kubectl get query test-support-query -o jsonpath='{.status.response.content}')
 
 if [ -z "$RESPONSE" ]; then
   echo "FAIL Test failed: No response received"
@@ -576,9 +576,9 @@ metadata:
   name: eval-customer-support
 spec:
   input: "Test customer inquiry"
-  targets:
+  target:
     - kind: Agent
-      name: customer-support
+    name: customer-support
   evaluations:
     - evaluatorRef:
         name: llm-evaluator

@@ -7,6 +7,8 @@ import (
 	"errors"
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/telemetry"
 	"mckinsey.com/ark/internal/telemetry/mock"
 
@@ -21,14 +23,24 @@ const (
 	queryExecuteSpan = "query.execute"
 )
 
+func newTestQuery() *arkv1alpha1.Query {
+	return &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testQueryName,
+			Namespace: testNamespace,
+		},
+	}
+}
+
 // TestQueryRecorderBasicOperations verifies basic QueryRecorder creation and span lifecycle
 func TestQueryRecorderBasicOperations(t *testing.T) {
 	mockTracer := mock.NewTracer()
 	mockRecorder := mock.NewQueryRecorder(mockTracer)
 	ctx := context.Background()
+	testQuery := newTestQuery()
 
 	// Create a query span
-	_, span := mockRecorder.StartQuery(ctx, testQueryName, testNamespace, "execute")
+	_, span := mockRecorder.StartQuery(ctx, testQuery, "execute")
 	assert.NotNil(t, span, "span should not be nil")
 
 	// End the span
@@ -46,8 +58,9 @@ func TestQueryRecorderSessionTracking(t *testing.T) {
 	mockTracer := mock.NewTracer()
 	mockRecorder := mock.NewQueryRecorder(mockTracer)
 	ctx := context.Background()
+	testQuery := newTestQuery()
 
-	_, span := mockRecorder.StartQuery(ctx, testQueryName, testNamespace, "execute")
+	_, span := mockRecorder.StartQuery(ctx, testQuery, "execute")
 	mockRecorder.RecordSessionID(span, testSessionID)
 	span.End()
 
@@ -62,8 +75,9 @@ func TestQueryRecorderTokenUsage(t *testing.T) {
 	mockTracer := mock.NewTracer()
 	mockRecorder := mock.NewQueryRecorder(mockTracer)
 	ctx := context.Background()
+	testQuery := newTestQuery()
 
-	_, span := mockRecorder.StartQuery(ctx, testQueryName, testNamespace, "execute")
+	_, span := mockRecorder.StartQuery(ctx, testQuery, "execute")
 	mockRecorder.RecordTokenUsage(span, 100, 50, 150)
 	span.End()
 
@@ -80,8 +94,9 @@ func TestQueryRecorderErrorHandling(t *testing.T) {
 	mockTracer := mock.NewTracer()
 	mockRecorder := mock.NewQueryRecorder(mockTracer)
 	ctx := context.Background()
+	testQuery := newTestQuery()
 
-	_, span := mockRecorder.StartQuery(ctx, testQueryName, testNamespace, "execute")
+	_, span := mockRecorder.StartQuery(ctx, testQuery, "execute")
 	testErr := errors.New("test error")
 	mockRecorder.RecordError(span, testErr)
 	span.End()
@@ -99,8 +114,9 @@ func TestQueryRecorderSuccessRecording(t *testing.T) {
 	mockTracer := mock.NewTracer()
 	mockRecorder := mock.NewQueryRecorder(mockTracer)
 	ctx := context.Background()
+	testQuery := newTestQuery()
 
-	_, span := mockRecorder.StartQuery(ctx, testQueryName, testNamespace, "execute")
+	_, span := mockRecorder.StartQuery(ctx, testQuery, "execute")
 	mockRecorder.RecordSuccess(span)
 	span.End()
 

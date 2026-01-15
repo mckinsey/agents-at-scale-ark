@@ -6,5 +6,6 @@ export default {
   models: 'Models',
   query: 'Queries',
   team: 'Teams',
-  tools: 'Tools'
+  tools: 'Tools',
+  a2atask: 'A2ATask'
 }

@@ -475,6 +475,226 @@ describe('FloatingChat', () => {
     });
   });
 
+  describe('debug mode toggle', () => {
+    beforeEach(() => {
+      vi.mocked(useAtomValue).mockReturnValue(true);
+    });
+
+    it('should render debug mode switch', () => {
+      render(<FloatingChat {...defaultProps} />);
+
+      const debugSwitch = screen.getByRole('switch', { name: /show tool calls/i });
+      expect(debugSwitch).toBeInTheDocument();
+    });
+
+    it('should have debug mode enabled by default', () => {
+      render(<FloatingChat {...defaultProps} />);
+
+      const debugSwitch = screen.getByRole('switch', { name: /show tool calls/i });
+      expect(debugSwitch).toBeChecked();
+    });
+
+    it('should toggle debug mode when switch is clicked', async () => {
+      const user = userEvent.setup();
+      render(<FloatingChat {...defaultProps} />);
+
+      const debugSwitch = screen.getByRole('switch', { name: /show tool calls/i });
+      expect(debugSwitch).toBeChecked();
+
+      await user.click(debugSwitch);
+      expect(debugSwitch).not.toBeChecked();
+
+      await user.click(debugSwitch);
+      expect(debugSwitch).toBeChecked();
+    });
+
+    it('should toggle debug mode when label is clicked', async () => {
+      const user = userEvent.setup();
+      render(<FloatingChat {...defaultProps} />);
+
+      const debugSwitch = screen.getByRole('switch', { name: /show tool calls/i });
+      const label = screen.getByText('Show tool calls');
+
+      expect(debugSwitch).toBeChecked();
+
+      await user.click(label);
+      expect(debugSwitch).not.toBeChecked();
+    });
+
+    it('should show tool calls by default (debug mode on)', async () => {
+      const user = userEvent.setup();
+
+      const mockChunks = [
+        {
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    id: 'call_1',
+                    function: { name: 'get_weather', arguments: '' },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        {
+          choices: [
+            {
+              delta: {
+                tool_calls: [{ function: { arguments: '{"city":"NYC"}' } }],
+              },
+            },
+          ],
+        },
+        { choices: [{ delta: { content: 'The weather is sunny' } }] },
+      ];
+
+      vi.mocked(chatService.streamChatResponse).mockImplementation(
+        async function* () {
+          for (const chunk of mockChunks) {
+            yield chunk;
+          }
+        },
+      );
+
+      render(<FloatingChat {...defaultProps} />);
+
+      const input = screen.getByPlaceholderText('Type your message...');
+      await user.type(input, 'What is the weather?');
+
+      const sendButton = screen.getByRole('button', { name: /send/i });
+      await user.click(sendButton);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('The weather is sunny'),
+        ).toBeInTheDocument();
+      });
+
+      expect(screen.getByText('get_weather')).toBeInTheDocument();
+    });
+
+    it('should not show tool calls when debug mode is disabled', async () => {
+      const user = userEvent.setup();
+
+      const mockChunks = [
+        {
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    id: 'call_1',
+                    function: { name: 'get_weather', arguments: '' },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        {
+          choices: [
+            {
+              delta: {
+                tool_calls: [{ function: { arguments: '{"city":"NYC"}' } }],
+              },
+            },
+          ],
+        },
+        { choices: [{ delta: { content: 'The weather is sunny' } }] },
+      ];
+
+      vi.mocked(chatService.streamChatResponse).mockImplementation(
+        async function* () {
+          for (const chunk of mockChunks) {
+            yield chunk;
+          }
+        },
+      );
+
+      render(<FloatingChat {...defaultProps} />);
+
+      const debugSwitch = screen.getByRole('switch', { name: /show tool calls/i });
+      await user.click(debugSwitch);
+
+      const input = screen.getByPlaceholderText('Type your message...');
+      await user.type(input, 'What is the weather?');
+
+      const sendButton = screen.getByRole('button', { name: /send/i });
+      await user.click(sendButton);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('The weather is sunny'),
+        ).toBeInTheDocument();
+      });
+
+      expect(screen.queryByText('get_weather')).not.toBeInTheDocument();
+    });
+
+    it('should hide tool calls when debug mode is toggled off after being on', async () => {
+      const user = userEvent.setup();
+
+      const mockChunks = [
+        {
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    id: 'call_1',
+                    function: { name: 'get_weather', arguments: '' },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        {
+          choices: [
+            {
+              delta: {
+                tool_calls: [{ function: { arguments: '{"city":"NYC"}' } }],
+              },
+            },
+          ],
+        },
+        { choices: [{ delta: { content: 'The weather is sunny' } }] },
+      ];
+
+      vi.mocked(chatService.streamChatResponse).mockImplementation(
+        async function* () {
+          for (const chunk of mockChunks) {
+            yield chunk;
+          }
+        },
+      );
+
+      render(<FloatingChat {...defaultProps} />);
+
+      const debugSwitch = screen.getByRole('switch', { name: /show tool calls/i });
+
+      const input = screen.getByPlaceholderText('Type your message...');
+      await user.type(input, 'What is the weather?');
+
+      const sendButton = screen.getByRole('button', { name: /send/i });
+      await user.click(sendButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('get_weather')).toBeInTheDocument();
+      });
+
+      await user.click(debugSwitch);
+
+      expect(screen.queryByText('get_weather')).not.toBeInTheDocument();
+      expect(
+        screen.getByText('The weather is sunny'),
+      ).toBeInTheDocument();
+    });
+  });
+
   describe('streaming disabled', () => {
     it('should poll for response when feature flag is disabled', async () => {
       // Mock feature flag to false
@@ -524,9 +744,12 @@ describe('FloatingChat', () => {
       });
 
       // Should eventually show the response
-      await waitFor(() => {
-        expect(screen.getByText('Polled response')).toBeInTheDocument();
-      });
+      await waitFor(
+        () => {
+          expect(screen.getByText('Polled response')).toBeInTheDocument();
+        },
+        { timeout: 5000 },
+      );
 
       // Should NOT call streamChatResponse
       expect(chatService.streamChatResponse).not.toHaveBeenCalled();
@@ -556,9 +779,12 @@ describe('FloatingChat', () => {
       const sendButton = screen.getByRole('button', { name: /send/i });
       await user.click(sendButton);
 
-      await waitFor(() => {
-        expect(screen.getByText('Something went wrong')).toBeInTheDocument();
-      });
+      await waitFor(
+        () => {
+          expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+        },
+        { timeout: 5000 },
+      );
     });
   });
 });

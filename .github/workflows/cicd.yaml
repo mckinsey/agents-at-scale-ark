@@ -110,7 +110,7 @@ jobs:
         shell: bash
         run: |
           GITHUB_REPOSITORY="${{ github.repository }}"
-          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&status=success&per_page=50" | jq -c '.workflow_runs[] | select(.name == "CI/CD") | .id' | head -n 1)
+          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&status=completed&per_page=50" | jq -c '.workflow_runs[] | select(.name == "CI/CD" and .conclusion == "success") | .id' | head -n 1)
           
           echo "Downloading artifacts from run ID: $LAST_RUN_ID"
           gh run download "$LAST_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern "xray-scan-results-agents-at-scale-*" --dir ./artifacts
@@ -264,8 +264,8 @@ jobs:
           - path: services/executor-langchain
             image: executor-langchain
             prebuild: "make executor-langchain-deps && mkdir -p services/executor-langchain/build-context && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/executor-langchain/build-context/"
-          - path: services/ark-cluster-memory/ark-cluster-memory
-            image: ark-cluster-memory
+          - path: services/ark-broker/ark-broker
+            image: ark-broker
           - path: samples/a2a/langchain-weather-agent
             image: langchain-weather-agent
           - path: services/ark-mcp
@@ -309,6 +309,43 @@ jobs:
           platforms: linux/amd64
           push: true
           prebuild: ${{ matrix.prebuild }}
+
+  xray-container-scan:
+    needs: [setup-container-cache-registry, build-containers]
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - ark-controller
+          - ark-api
+          - ark-dashboard
+          - ark-evaluator
+          - executor-langchain
+          - ark-broker
+          - langchain-weather-agent
+          - ark-mcp
+          - ark-cli
+          - ark-tools
+          - filesystem-mcp-server
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Docker Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry-hostname }}
+          username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
+          password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - uses: ./.github/actions/jfrog-xray-container-scan
+        with:
+          image: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/${{ matrix.image }}:${{ github.sha }}
+          image_name: ${{ matrix.image }}
+          jfrog_user: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME }}
+          jfrog_password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD }}
+          jfrog_url: ${{ vars.JFROG_PLATFORM_URL }}
 
   build-libs:
     runs-on: ubuntu-24.04
@@ -442,9 +479,9 @@ jobs:
       - name: Test end-to-end query
         run: |
           kubectl describe agent sample-agent
-          # Test the soon-to-be-deprecated query script (still used in quickstart).
-          ./scripts/query.sh agent/sample-agent "confirm you have read this message"
-          # Test fark.
+          # Test ark-cli query command
+          ark query agent/sample-agent "confirm you have read this message"
+          # Test fark
           fark agent sample-agent "confirm you have read this message"
 
   e2e-ark-cli:
@@ -598,8 +635,8 @@ jobs:
           FILESYS_IMAGE_TAG: ${{ github.sha }}
           LANGCHAIN_WEATHER_AGENT_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/langchain-weather-agent
           LANGCHAIN_WEATHER_AGENT_IMAGE_TAG: ${{ github.sha }}
-          ARK_CLUSTER_MEMORY_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-cluster-memory
-          ARK_CLUSTER_MEMORY_IMAGE_TAG: ${{ github.sha }}
+          ARK_BROKER_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-broker
+          ARK_BROKER_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
@@ -641,8 +678,8 @@ jobs:
           FILESYS_IMAGE_TAG: ${{ github.sha }}
           LANGCHAIN_WEATHER_AGENT_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/langchain-weather-agent
           LANGCHAIN_WEATHER_AGENT_IMAGE_TAG: ${{ github.sha }}
-          ARK_CLUSTER_MEMORY_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-cluster-memory
-          ARK_CLUSTER_MEMORY_IMAGE_TAG: ${{ github.sha }}
+          ARK_BROKER_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-broker
+          ARK_BROKER_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
@@ -663,6 +700,104 @@ jobs:
         with:
           artifact-name: coverage-reports-evaluated
 
+  e2e-ui-tests:
+    needs: [setup-container-cache-registry, build-containers]
+    runs-on: ubuntu-24.04
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-e2e
+        with:
+          ark-image-tag: ${{ github.sha }}
+          install-coverage: "false"
+          install-evaluator: "false"
+          ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
+          ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
+          ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - name: Deploy ark-api
+        run: |
+          helm upgrade --install ark-api services/ark-api/chart \
+            --namespace default \
+            --create-namespace \
+            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-api" \
+            --set app.image.tag="${{ github.sha }}" \
+            --set app.image.pullPolicy="Always" \
+            --wait \
+            --timeout=5m
+
+      - name: Deploy ark-dashboard
+        run: |
+          helm upgrade --install ark-dashboard services/ark-dashboard/chart \
+            --namespace default \
+            --create-namespace \
+            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-dashboard" \
+            --set app.image.tag="${{ github.sha }}" \
+            --set app.image.pullPolicy="Always" \
+            --wait \
+            --timeout=5m
+
+      - name: Deploy ark-mcp
+        run: |
+          helm upgrade --install ark-mcp services/ark-mcp/chart \
+            --namespace default \
+            --create-namespace \
+            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-mcp" \
+            --set app.image.tag="${{ github.sha }}" \
+            --set app.image.pullPolicy="Always" \
+            --wait \
+            --timeout=5m
+
+      - name: Wait for services to be ready
+        run: |
+          kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
+          kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
+          kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install UI test dependencies
+        run: |
+          cd tests/pytest/ui-tests
+          pip install -r requirements.txt
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Create test environment
+        env:
+          CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
+          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL }}
+        run: |
+          cd tests/pytest/ui-tests
+          cat > .env << EOF
+          CICD_OPENAI_API_KEY=${CICD_OPENAI_API_KEY}
+          CICD_OPENAI_BASE_URL=${CICD_OPENAI_BASE_URL}
+          EOF
+
+      - name: Start port-forwarding
+        run: |
+          kubectl port-forward svc/ark-dashboard 3274:3000 &
+          sleep 5
+          curl -s -o /dev/null -w "%{http_code}" http://localhost:3274 || echo "Dashboard connectivity check"
+
+      - name: Run UI tests
+        run: |
+          cd tests/pytest/ui-tests
+          mkdir -p screenshots
+          pytest tests/ -v --tb=short
+
+      - name: Upload test screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-screenshots-${{ github.sha }}
+          path: tests/pytest/ui-tests/screenshots/
+          retention-days: 7
+
   build-charts:
     runs-on: ubuntu-24.04
     strategy:
@@ -673,7 +808,7 @@ jobs:
           - { name: ark-api, path: services/ark-api/chart }
           - { name: ark-dashboard, path: services/ark-dashboard/chart }
           - { name: ark-mcp, path: services/ark-mcp/chart }
-          - { name: ark-cluster-memory, path: services/ark-cluster-memory/chart }
+          - { name: ark-broker, path: services/ark-broker/chart }
           - { name: mcp-filesystem, path: mcp/filesystem-mcp/chart }
           - { name: localhost-gateway, path: services/localhost-gateway/chart }
           - { name: ark-tenant, path: charts/ark-tenant }
@@ -792,6 +927,7 @@ jobs:
         e2e-smoke-test,
         e2e-tests-standard,
         e2e-tests-evaluated,
+        e2e-ui-tests,
         build-and-test-ark,
         build-and-test-services,
         build-docs,
@@ -862,6 +998,7 @@ jobs:
         e2e-smoke-test,
         e2e-tests-standard,
         e2e-tests-evaluated,
+        e2e-ui-tests,
         build-and-test-ark,
         build-and-test-services,
         build-docs,
@@ -947,7 +1084,7 @@ jobs:
           - ark-api
           - ark-dashboard
           - ark-mcp
-          - ark-cluster-memory
+          - ark-broker
           - mcp-filesystem
           - localhost-gateway
           - ark-tenant

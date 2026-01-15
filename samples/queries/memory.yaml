@@ -4,7 +4,7 @@ metadata:
   name: memory
 spec:
   input: "Hello! My name is John. Please remember this for our conversation."
-  targets:
-    - type: agent
-      name: memory-test-agent
+  target:
+    type: agent
+    name: memory-test-agent
   sessionId: test-session-2010

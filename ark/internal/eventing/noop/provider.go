@@ -17,10 +17,10 @@ func NewProvider() eventing.Provider {
 	emitter := NewNoopEventEmitter()
 	return &noopProvider{
 		queryRecorder: NewQueryRecorder(),
-		modelRecorder: recorder.NewModelRecorder(emitter),
-		agentRecorder: recorder.NewAgentRecorder(emitter),
-		teamRecorder:  recorder.NewTeamRecorder(emitter),
-		toolRecorder:  recorder.NewToolRecorder(emitter),
+		modelRecorder: recorder.NewModelRecorder(emitter, emitter),
+		agentRecorder: recorder.NewAgentRecorder(emitter, emitter),
+		teamRecorder:  recorder.NewTeamRecorder(emitter, emitter),
+		toolRecorder:  recorder.NewToolRecorder(emitter, emitter),
 	}
 }
 
@@ -62,5 +62,5 @@ func (p *noopProvider) MemoryRecorder() eventing.MemoryRecorder {
 
 func NewModelRecorder() eventing.ModelRecorder {
 	emitter := NewNoopEventEmitter()
-	return recorder.NewModelRecorder(emitter)
+	return recorder.NewModelRecorder(emitter, emitter)
 }

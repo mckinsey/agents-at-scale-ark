@@ -144,18 +144,21 @@ const defaultArkServices: ServiceCollection = {
     k8sDevDeploymentName: 'ark-mcp-devspace',
   },
 
-  'ark-cluster-memory': {
-    name: 'ark-cluster-memory',
-    helmReleaseName: 'ark-cluster-memory',
+  // ark-broker replaces ark-cluster-memory (renamed in v0.1.49). The old release
+  // must be uninstalled first to avoid Helm ownership conflicts on shared
+  // resources like the ark-config-streaming ConfigMap.
+  'ark-broker': {
+    name: 'ark-broker',
+    helmReleaseName: 'ark-broker',
     description:
       'In-memory storage service with streaming support for Ark queries',
     enabled: true,
     category: 'service',
-    // namespace: undefined - uses current context namespace
-    chartPath: `${REGISTRY_BASE}/ark-cluster-memory`,
+    chartPath: `${REGISTRY_BASE}/ark-broker`,
     installArgs: [],
-    k8sDeploymentName: 'ark-cluster-memory',
-    k8sDevDeploymentName: 'ark-cluster-memory-devspace',
+    prerequisiteUninstalls: [{releaseName: 'ark-cluster-memory'}],
+    k8sDeploymentName: 'ark-broker',
+    k8sDevDeploymentName: 'ark-broker-devspace',
   },
 
   'mcp-filesystem': {
@@ -202,7 +205,9 @@ function applyConfigOverrides(defaults: ServiceCollection): ServiceCollection {
   const result: ServiceCollection = {};
 
   for (const [key, service] of Object.entries(defaults)) {
-    result[key] = overrides[key] ? {...service, ...overrides[key]} : service;
+    const override = overrides[key];
+    result[key] =
+      override && typeof override === 'object' ? {...service, ...override} : service;
   }
 
   return result;

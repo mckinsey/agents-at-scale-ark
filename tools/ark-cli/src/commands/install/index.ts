@@ -25,7 +25,21 @@ import {
 } from '../../lib/waitForReady.js';
 import {parseTimeoutToSeconds} from '../../lib/timeout.js';
 
+async function uninstallPrerequisites(service: ArkService, verbose: boolean = false) {
+  if (!service.prerequisiteUninstalls?.length) return;
+
+  for (const prereq of service.prerequisiteUninstalls) {
+    const helmArgs = ['uninstall', prereq.releaseName, '--ignore-not-found'];
+    if (prereq.namespace) {
+      helmArgs.push('--namespace', prereq.namespace);
+    }
+    await execute('helm', helmArgs, {stdio: 'inherit'}, {verbose});
+  }
+}
+
 async function installService(service: ArkService, verbose: boolean = false) {
+  await uninstallPrerequisites(service, verbose);
+
   const helmArgs = [
     'upgrade',
     '--install',

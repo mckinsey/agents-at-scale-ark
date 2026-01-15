@@ -1,4 +1,4 @@
 export default {
   'ark-api': 'Ark API',
-  'ark-cluster-memory': 'Ark Cluster Memory'
+  'ark-broker': 'Ark Broker'
 }

@@ -63,11 +63,10 @@ spec:
           metadata:
             name: test-query-label-selector
           status:
-            (length(responses)): 2
-            (contains(responses[*].target.name, 'test-agent-math')): true
-            (contains(responses[*].target.name, 'test-agent-weather')): true
-            (contains(responses[*].target.name, 'test-agent-general')): false
-            (length(join('', responses[*].content)) > `50`): true
+            (response != null): true
+            (response.target.name == 'test-agent-math' || response.target.name == 'test-agent-weather'): true
+            (response.target.name != 'test-agent-general'): true
+            (length(response.content) > `50`): true
     catch:
     - events: {}
     - describe:

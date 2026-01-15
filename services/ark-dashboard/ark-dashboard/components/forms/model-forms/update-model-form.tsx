@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 
-import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { TrackedButton } from '@/components/ui/tracked-button';
 import type { Model } from '@/lib/services';
 import { useUpdateModelById } from '@/lib/services/models-hooks';
 
@@ -21,7 +21,7 @@ const formId = 'model-update-form';
 
 const disabledFields: DisabledFields = {
   name: true,
-  type: true,
+  provider: true,
 };
 
 type UpdateModelFormProps = {
@@ -59,7 +59,7 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
         form,
         onSubmit,
         isSubmitPending: isPending,
-        type: defaultValues.type,
+        provider: defaultValues.provider,
         disabledFields,
         formId,
       }}>
@@ -74,11 +74,13 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
         </section>
         <section>
           <ModelConfiguratorForm />
-          <Button
+          <TrackedButton
             type="submit"
             form={formId}
             disabled={isPending}
-            className="mt-8 w-full">
+            className="mt-8 w-full"
+            trackingEvent="update_model_clicked"
+            trackingProperties={{ modelId: model.id }}>
             {isPending ? (
               <>
                 <Spinner size="sm" />
@@ -87,7 +89,7 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
             ) : (
               <span>Update Model</span>
             )}
-          </Button>
+          </TrackedButton>
         </section>
       </div>
     </ModelConfigurationFormContext.Provider>

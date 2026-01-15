@@ -4,7 +4,8 @@ metadata:
   name: structured-output-test-model
   namespace: ($namespace)
 spec:
-  type: azure
+  type: completions
+  provider: azure
   model:
     value: gpt-4.1-mini
   config:

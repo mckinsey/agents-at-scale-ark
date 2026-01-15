@@ -146,7 +146,7 @@ Models should assert existence and readiness:
 Use Chainsaw's JP functions for response validation instead of shell scripts:
 
 ```yaml
-# Validate response count
+# Validate response exists
 - assert:
     resource:
       apiVersion: ark.mckinsey.com/v1alpha1
@@ -154,7 +154,7 @@ Use Chainsaw's JP functions for response validation instead of shell scripts:
       metadata:
         name: test-query
       status:
-        (length(responses)): 2
+        (response != null): true
 
 # Validate specific agent responded
 - assert:
@@ -164,9 +164,9 @@ Use Chainsaw's JP functions for response validation instead of shell scripts:
       metadata:
         name: test-query
       status:
-        (contains(responses[*].target.name, 'expected-agent')): true
+        (response.target.name): 'expected-agent'
 
-# Validate agent did NOT respond
+# Validate agent did NOT respond (check different target name)
 - assert:
     resource:
       apiVersion: ark.mckinsey.com/v1alpha1
@@ -174,7 +174,7 @@ Use Chainsaw's JP functions for response validation instead of shell scripts:
       metadata:
         name: test-query
       status:
-        (contains(responses[*].target.name, 'excluded-agent')): false
+        (response.target.name != 'excluded-agent'): true
 
 # Validate response content length
 - assert:
@@ -184,7 +184,7 @@ Use Chainsaw's JP functions for response validation instead of shell scripts:
       metadata:
         name: test-query
       status:
-        (length(join('', responses[*].content)) > `50`): true
+        (length(response.content) > `50`): true
 ```
 
 ### Label Selector Testing
@@ -439,9 +439,9 @@ Services deployed via Helm that create MCPServer resources require:
 spec:
   tools:
   - name: service-name-tool-1
-    type: custom
+    type: mcp
   - name: service-name-tool-2
-    type: custom
+    type: mcp
 ```
 
 3. **Additional RBAC for service discovery**:
@@ -469,10 +469,10 @@ For functional testing, validate that service operations actually worked:
           name: test-query
         status:
           # Validate response mentions expected operations
-          (contains(responses[0].content, 'operation-evidence')): true
+          (contains(response.content, 'operation-evidence')): true
   - script:
       content: |
-        RESPONSE=$(kubectl -n $NAMESPACE get query test-query -o jsonpath='{.status.responses[0].content}')
+        RESPONSE=$(kubectl -n $NAMESPACE get query test-query -o jsonpath='{.status.response.content}')
         
         echo "=== Query Response Content ==="
         echo "$RESPONSE"
@@ -544,7 +544,7 @@ Separate query completion waiting from validation steps to ensure proper timing:
         metadata:
           name: test-query
         status:
-          (length(responses)): 1
+          (response != null): true
 ```
 
 ## HTTP API Testing with Hurl

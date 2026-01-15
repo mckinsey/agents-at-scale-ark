@@ -74,9 +74,9 @@ spec:
           metadata:
             name: max-turns-team-query
           status:
-            (length(responses)): 1
-            (contains(responses[*].target.name, 'round-robin-max-turns-team')): true
-            (length(join('', responses[*].content)) > `50`): true
+            (response != null): true
+            (response.target.name): 'round-robin-max-turns-team'
+            (length(response.content) > `50`): true
     catch:
     - events: {}
     - describe:

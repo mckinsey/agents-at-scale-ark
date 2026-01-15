@@ -211,7 +211,7 @@ export function AgentEditor({
   const handleToolToggle = (tool: Tool, checked: boolean) => {
     if (checked) {
       const newTool: AgentTool = {
-        type: 'custom',
+        type: tool.type || 'http',
         name: tool.name,
       };
       setSelectedTools(prev => [...prev, newTool]);

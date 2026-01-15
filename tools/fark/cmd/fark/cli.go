@@ -144,7 +144,7 @@ func getQueryErrorFromEvents(client dynamic.Interface, queryName, namespace stri
 func printQueryResults(query *arkv1alpha1.Query, outputMode string) {
 	if outputMode == "json" {
 		result := map[string]interface{}{
-			"responses": query.Status.Responses,
+			"response": query.Status.Response,
 		}
 		if jsonData, err := json.MarshalIndent(result, "", "  "); err == nil {
 			fmt.Println(string(jsonData))
@@ -157,15 +157,13 @@ func printQueryResults(query *arkv1alpha1.Query, outputMode string) {
 	}
 
 	// Text output
-	if len(query.Status.Responses) == 0 {
-		fmt.Println("No responses received")
+	if query.Status.Response == nil {
+		fmt.Println("No response received")
 		return
 	}
 
-	// Display responses
-	for _, response := range query.Status.Responses {
-		fmt.Printf("%s\n", response.Content)
-	}
+	// Display response
+	fmt.Printf("%s\n", query.Status.Response.Content)
 }
 
 // displayEventAsJSON handles JSON output for events

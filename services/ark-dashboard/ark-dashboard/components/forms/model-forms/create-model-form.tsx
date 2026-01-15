@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 
-import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { TrackedButton } from '@/components/ui/tracked-button';
 import { useCreateModel } from '@/lib/services/models-hooks';
 
 import { ModelConfiguratorForm } from './model-configuration-form';
@@ -28,14 +28,14 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
     resolver: zodResolver(schema),
     defaultValues: {
       name: defaultName || '',
-      type: 'openai',
+      provider: 'openai',
       model: '',
       secret: '',
       baseUrl: '',
     },
   });
 
-  const type = form.watch('type');
+  const provider = form.watch('provider');
 
   const handleSuccess = useCallback(() => {
     router.push('/models');
@@ -49,13 +49,13 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
     const currentValues = form.getValues();
     form.reset(getResetValues(currentValues));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type]);
+  }, [provider]);
 
   const onSubmit = (formValues: FormValues) => {
     const config = createConfig(formValues);
     mutate({
       name: formValues.name,
-      type: formValues.type,
+      provider: formValues.provider,
       model: formValues.model,
       config,
     });
@@ -66,7 +66,7 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
       value={{
         formId,
         form,
-        type,
+        provider,
         onSubmit,
         isSubmitPending: isPending,
       }}>
@@ -81,11 +81,13 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
         </section>
         <section>
           <ModelConfiguratorForm />
-          <Button
+          <TrackedButton
             type="submit"
             form={formId}
             disabled={isPending}
-            className="mt-8 w-full">
+            className="mt-8 w-full"
+            trackingEvent="create_model_clicked"
+            trackingProperties={{ modelType: provider }}>
             {isPending ? (
               <>
                 <Spinner size="sm" />
@@ -94,7 +96,7 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
             ) : (
               <span>Create Model</span>
             )}
-          </Button>
+          </TrackedButton>
         </section>
       </div>
     </ModelConfigurationFormContext.Provider>

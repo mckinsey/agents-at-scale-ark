@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
@@ -9,9 +10,7 @@ export type MCPServerListResponse =
 export type MCPServerCreateRequest =
   components['schemas']['MCPServerCreateRequest'];
 export type MCPServerSpec = components['schemas']['MCPServerSpec'];
-export type MCPHeader =
-  components['schemas']['ark_api__models__mcp_servers__Header-Output'];
-//export type MCPServerListResponse = components['schemas']['MCPServerListResponse']
+export type MCPHeader = components['schemas']['MCPServerHeader-Output'];
 
 export type MCPServer = MCPServerResponse & { id: string };
 export type MCPServerDetail = MCPServerDetailResponse & { id: string };
@@ -26,12 +25,14 @@ export type DirectHeader = {
 export type SecretHeader = {
   name: string;
   value: {
-    valueFrom: {
-      secretKeyRef: {
-        name: string;
-        key: string;
-      };
-    };
+    valueFrom: ValueFrom;
+  };
+};
+
+export type ValueFrom = {
+  secretKeyRef: {
+    name: string;
+    key: string;
   };
 };
 
@@ -71,9 +72,15 @@ export const mcpServersService = {
     }
   },
 
-  // Delete an MCP server
   async delete(identifier: string): Promise<void> {
     await apiClient.delete(`/api/v1/mcp-servers/${identifier}`);
+
+    trackEvent({
+      name: 'mcp_server_deleted',
+      properties: {
+        mcpServerName: identifier,
+      },
+    });
   },
 
   async create(mcpSever: MCPServerCreateRequest): Promise<MCPServer> {
@@ -81,6 +88,14 @@ export const mcpServersService = {
       `/api/v1/mcp-servers`,
       mcpSever,
     );
+
+    trackEvent({
+      name: 'mcp_server_created',
+      properties: {
+        mcpServerName: response.name,
+      },
+    });
+
     return {
       ...response,
       id: response.name,

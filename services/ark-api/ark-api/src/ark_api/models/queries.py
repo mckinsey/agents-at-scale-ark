@@ -5,7 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel
 from enum import Enum
 from openai.types.chat import ChatCompletionMessageParam
-from .agents import Override
+from .agents import AgentOverride
 
 
 class InputType(str, Enum):
@@ -20,43 +20,43 @@ class Memory(BaseModel):
     namespace: Optional[str] = None
 
 
-class ConfigMapKeyRef(BaseModel):
+class QueryConfigMapKeyRef(BaseModel):
     """Reference to a key in a ConfigMap."""
     key: str
     name: str = ""
     optional: Optional[bool] = None
 
 
-class SecretKeyRef(BaseModel):
+class QuerySecretKeyRef(BaseModel):
     """Reference to a key in a Secret."""
     key: str
     name: str = ""
     optional: Optional[bool] = None
 
 
-class ValueFrom(BaseModel):
+class QueryValueFrom(BaseModel):
     """Reference to external sources for parameter values."""
-    configMapKeyRef: Optional[ConfigMapKeyRef] = None
-    secretKeyRef: Optional[SecretKeyRef] = None
+    configMapKeyRef: Optional[QueryConfigMapKeyRef] = None
+    secretKeyRef: Optional[QuerySecretKeyRef] = None
 
 
-class Parameter(BaseModel):
+class QueryParameter(BaseModel):
     """Parameter for template processing in prompts and inputs."""
     name: str
     value: Optional[str] = None
-    valueFrom: Optional[ValueFrom] = None
+    valueFrom: Optional[QueryValueFrom] = None
 
 
-class LabelSelectorRequirement(BaseModel):
+class QueryLabelSelectorRequirement(BaseModel):
     """A label selector requirement."""
     key: str
     operator: str
     values: Optional[List[str]] = None
 
 
-class LabelSelector(BaseModel):
+class QueryLabelSelector(BaseModel):
     """Label selector for resources."""
-    matchExpressions: Optional[List[LabelSelectorRequirement]] = None
+    matchExpressions: Optional[List[QueryLabelSelectorRequirement]] = None
     matchLabels: Optional[Dict[str, str]] = None
 
 
@@ -80,6 +80,7 @@ class QueryResponse(BaseModel):
     input: Union[str, List[ChatCompletionMessageParam]]
     memory: Optional[Memory] = None
     sessionId: Optional[str] = None
+    conversationId: Optional[str] = None
     status: Optional[Dict[str, Any]] = None
     creationTimestamp: Optional[datetime] = None
 
@@ -96,17 +97,18 @@ class QueryCreateRequest(BaseModel):
     type: Optional[InputType] = InputType.USER
     input: Union[str, List[ChatCompletionMessageParam]]
     memory: Optional[Memory] = None
-    parameters: Optional[List[Parameter]] = None
-    selector: Optional[LabelSelector] = None
+    parameters: Optional[List[QueryParameter]] = None
+    selector: Optional[QueryLabelSelector] = None
     serviceAccount: Optional[str] = None
     sessionId: Optional[str] = None
-    targets: Optional[List[Target]] = None
+    conversationId: Optional[str] = None
+    target: Optional[Target] = None
     timeout: Optional[str] = None
     ttl: Optional[str] = None
     cancel: Optional[bool] = None
-    overrides: Optional[List[Override]] = None
+    overrides: Optional[List[AgentOverride]] = None
     evaluators: Optional[List[Memory]] = None
-    evaluatorSelector: Optional[LabelSelector] = None
+    evaluatorSelector: Optional[QueryLabelSelector] = None
     metadata: Optional[Dict[str, Any]] = None
 
 
@@ -115,15 +117,16 @@ class QueryUpdateRequest(BaseModel):
     type: Optional[InputType] = None
     input: Optional[Union[str, List[ChatCompletionMessageParam]]] = None
     memory: Optional[Memory] = None
-    parameters: Optional[List[Parameter]] = None
-    selector: Optional[LabelSelector] = None
+    parameters: Optional[List[QueryParameter]] = None
+    selector: Optional[QueryLabelSelector] = None
     serviceAccount: Optional[str] = None
     sessionId: Optional[str] = None
-    targets: Optional[List[Target]] = None
+    conversationId: Optional[str] = None
+    target: Optional[Target] = None
     timeout: Optional[str] = None
     ttl: Optional[str] = None
     cancel: Optional[bool] = None
-    overrides: Optional[List[Override]] = None
+    overrides: Optional[List[AgentOverride]] = None
 
 
 class QueryDetailResponse(BaseModel):
@@ -133,15 +136,16 @@ class QueryDetailResponse(BaseModel):
     type: Optional[InputType] = InputType.USER
     input: Union[str, List[ChatCompletionMessageParam]]
     memory: Optional[Memory] = None
-    parameters: Optional[List[Parameter]] = None
-    selector: Optional[LabelSelector] = None
+    parameters: Optional[List[QueryParameter]] = None
+    selector: Optional[QueryLabelSelector] = None
     serviceAccount: Optional[str] = None
     sessionId: Optional[str] = None
-    targets: Optional[List[Target]] = None
+    conversationId: Optional[str] = None
+    target: Optional[Target] = None
     timeout: Optional[str] = None
     ttl: Optional[str] = None
     cancel: Optional[bool] = None
-    overrides: Optional[List[Override]] = None
+    overrides: Optional[List[AgentOverride]] = None
     metadata: Optional[Dict[str, Any]] = None
     status: Optional[Dict[str, Any]] = None
 

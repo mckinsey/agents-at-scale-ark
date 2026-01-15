@@ -201,10 +201,10 @@ spec:
                                     to the namespace as the resource.
                                   type: string
                                 path:
-                                  description: Optional path to append to the service
-                                    address. For models might be 'v1', for gemini
-                                    might be 'v1beta/openai', for mcp servers might
-                                    be 'mcp'.
+                                  description: Path component of the service URL.
+                                    For anthropic models might be 'v1', for gemini
+                                    might be 'v1beta/openai', for MCP servers often
+                                    will be 'mcp' or 'sse'.
                                   type: string
                                 port:
                                   description: Port name to use. If not specified,
@@ -253,6 +253,16 @@ spec:
                                   - key
                                   type: object
                                   x-kubernetes-map-type: atomic
+                                queryParameterRef:
+                                  properties:
+                                    name:
+                                      description: Name of the parameter from the
+                                        Query resource
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
                                 secretKeyRef:
                                   description: SecretKeySelector selects a key of
                                     a Secret.
@@ -367,4 +377,4 @@ spec:
     storage: true
     subresources:
       status: {}
-{{- end -}}
+{{- end }}

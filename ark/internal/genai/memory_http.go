@@ -24,6 +24,7 @@ type HTTPMemory struct {
 	conversationId   string
 	name             string
 	namespace        string
+	headers          map[string]string
 	eventingRecorder eventing.MemoryRecorder
 }
 
@@ -49,6 +50,12 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 		httpClient.Timeout = config.Timeout
 	}
 
+	// Resolve headers on-demand (query context is extracted internally if needed for queryParameterRef)
+	headers, err := ResolveHeaders(ctx, k8sClient, memory.Spec.Headers, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve headers: %w", err)
+	}
+
 	baseURL := strings.TrimSuffix(*memory.Status.LastResolvedAddress, "/")
 
 	// Create conversation or use provided ID
@@ -64,11 +71,12 @@ func NewHTTPMemory(ctx context.Context, k8sClient client.Client, memoryName, nam
 		conversationId:   conversationId,
 		name:             memoryName,
 		namespace:        namespace,
+		headers:          headers,
 		eventingRecorder: memoryRecorder,
 	}, nil
 }
 
-// createConversation calls cluster-memory to create a new conversation and get its ID.
+// createConversation calls broker to create a new conversation and get its ID.
 // If conversationID is already provided (non-empty), it returns that ID without making an HTTP call.
 func createConversation(ctx context.Context, httpClient *http.Client, baseURL, conversationID string) (string, error) {
 	if conversationID != "" {
@@ -138,6 +146,14 @@ func (m *HTTPMemory) resolveAndUpdateAddress(ctx context.Context) error {
 
 	// Update the baseURL
 	m.baseURL = strings.TrimSuffix(resolvedAddress, "/")
+
+	// Resolve headers on-demand (query context is extracted internally if needed for queryParameterRef)
+	headers, err := ResolveHeaders(ctx, m.client, memory.Spec.Headers, m.namespace)
+	if err != nil {
+		return fmt.Errorf("failed to resolve headers: %w", err)
+	}
+	m.headers = headers
+
 	return nil
 }
 
@@ -183,6 +199,11 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 
 	req.Header.Set("Content-Type", ContentTypeJSON)
 	req.Header.Set("User-Agent", UserAgent)
+
+	// Apply resolved headers
+	for name, value := range m.headers {
+		req.Header.Set(name, value)
+	}
 
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
@@ -230,6 +251,11 @@ func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 	req.Header.Set("Accept", ContentTypeJSON)
 	req.Header.Set("User-Agent", UserAgent)
 
+	// Add custom headers
+	for name, value := range m.headers {
+		req.Header.Set(name, value)
+	}
+
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		operationData := map[string]string{"result": fmt.Sprintf("HTTP request failed: %v", err)}
@@ -274,6 +300,16 @@ func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 // GetConversationID returns the current conversation ID
 func (m *HTTPMemory) GetConversationID() string {
 	return m.conversationId
+}
+
+// GetBaseURL returns the memory service base URL for trace routing
+func (m *HTTPMemory) GetBaseURL() string {
+	return m.baseURL
+}
+
+// GetName returns the memory resource name
+func (m *HTTPMemory) GetName() string {
+	return m.name
 }
 
 // Close closes the HTTP client connections

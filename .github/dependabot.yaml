@@ -1,30 +1,101 @@
 version: 2
-registries:
-  tfe:
-    type: terraform-registry
-    url: https://terraform.mckinsey.cloud
-    token: ${{ secrets.TF_API_TOKEN }}
-  git:
-    type: git
-    url: https://github.com
-    username: x-access-token
-    password: ${{ secrets.GA_PAT }}
 
 updates:
+  # GitHub Actions
   - package-ecosystem: github-actions
     directory: '.github/workflows'
     commit-message:
-      prefix: 'chore: '
+      prefix: 'chore(actions): '
     schedule:
       interval: weekly
-    registries:
-      - "git"
+    open-pull-requests-limit: 1
+
+  # Terraform
   - package-ecosystem: "terraform"
     directories:
-      - "infrastructure/*/*/*"
+      - "infrastructure/providers/aws"
+      - "infrastructure/providers/gcp"
     commit-message:
-      prefix: 'chore: '
+      prefix: 'chore(terraform): '
     schedule:
       interval: weekly
-    registries:
-     - "tfe"
+    open-pull-requests-limit: 1
+
+  # NPM - ark-broker
+  - package-ecosystem: "npm"
+    directory: "services/ark-broker/ark-broker"
+    commit-message:
+      prefix: 'chore(npm): '
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+
+  # NPM - ark-dashboard
+  - package-ecosystem: "npm"
+    directory: "services/ark-dashboard"
+    commit-message:
+      prefix: 'chore(npm): '
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+
+  # NPM - docs
+  - package-ecosystem: "npm"
+    directory: "docs"
+    commit-message:
+      prefix: 'chore(npm): '
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+
+  # Python - ark-evaluator
+  - package-ecosystem: "pip"
+    directory: "services/ark-evaluator"
+    commit-message:
+      prefix: 'chore(python): '
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+
+  # Python - ark-api
+  - package-ecosystem: "pip"
+    directory: "services/ark-api"
+    commit-message:
+      prefix: 'chore(python): '
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+
+  # Python - ark-cluster-memory
+  - package-ecosystem: "pip"
+    directory: "services/ark-cluster-memory"
+    commit-message:
+      prefix: 'chore(python): '
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+
+  # Python - executor-langchain
+  - package-ecosystem: "pip"
+    directory: "services/executor-langchain"
+    commit-message:
+      prefix: 'chore(python): '
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+
+  # Docker - scan for base image updates
+  - package-ecosystem: "docker"
+    directories:
+      - "services/ark-api"
+      - "services/ark-broker/ark-broker"
+      - "services/ark-dashboard"
+      - "services/ark-evaluator"
+      - "services/ark-cluster-memory"
+      - "services/executor-langchain"
+      - "services/ark-mcp"
+    commit-message:
+      prefix: 'chore(docker): '
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1

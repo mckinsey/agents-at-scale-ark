@@ -16,10 +16,10 @@ type modelRecorder struct {
 	emitter eventing.EventEmitter
 }
 
-func NewModelRecorder(emitter eventing.EventEmitter) eventing.ModelRecorder {
+func NewModelRecorder(emitter, operationEmitter eventing.EventEmitter) eventing.ModelRecorder {
 	return &modelRecorder{
 		TokenCollector:   tokens.NewTokenCollector(),
-		OperationTracker: operations.NewOperationTracker(emitter),
+		OperationTracker: operations.NewOperationTracker(operationEmitter),
 		emitter:          emitter,
 	}
 }

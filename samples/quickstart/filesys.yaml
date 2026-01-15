@@ -16,7 +16,7 @@ spec:
   modelRef:
     name: gpt-4-model
   tools:
-    - type: custom
+    - type: http
       name: weather-report
 ---
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -29,9 +29,9 @@ spec:
   modelRef:
     name: gpt-4-model
   tools:
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-write-file
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-list-directory
 ---
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -43,9 +43,9 @@ spec:
   modelRef:
     name: gpt-4-model
   tools:
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-read-file
-    - type: custom
+    - type: mcp
       name: mcp-filesystem-list-directory
 ---
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -68,6 +68,6 @@ metadata:
   name: query-fetcher
 spec:
   input: Get and store weather report, produce a list of reports available.
-  targets:
-    - type: team
-      name: team-weather-filesys
+  target:
+    type: team
+    name: team-weather-filesys

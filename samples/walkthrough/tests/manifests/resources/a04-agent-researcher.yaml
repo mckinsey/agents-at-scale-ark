@@ -19,5 +19,5 @@ spec:
   modelRef:
     name: default
   tools:
-    - type: custom
+    - type: http
       name: web-search

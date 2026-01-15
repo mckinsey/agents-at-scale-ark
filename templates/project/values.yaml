@@ -49,7 +49,7 @@ security:
   # Pod security context
   podSecurityContext:
     runAsNonRoot: true
-    runAsUser: 1000
+    runAsUser: 1001
     fsGroup: 2000
 
   # Container security context
@@ -57,7 +57,7 @@ security:
     allowPrivilegeEscalation: false
     readOnlyRootFilesystem: true
     runAsNonRoot: true
-    runAsUser: 1000
+    runAsUser: 1001
     capabilities:
       drop:
         - ALL

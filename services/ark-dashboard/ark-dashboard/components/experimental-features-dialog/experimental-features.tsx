@@ -1,5 +1,6 @@
 import {
   storedIsA2ATasksEnabledAtom,
+  storedIsBrokerEnabledAtom,
   storedIsChatStreamingEnabledAtom,
   storedIsExperimentalDarkModeEnabledAtom,
   storedIsExperimentalExecutionEngineEnabledAtom,
@@ -42,6 +43,17 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
           </span>
         ),
         atom: storedIsA2ATasksEnabledAtom,
+      },
+      {
+        feature: 'Broker',
+        description: (
+          <span>
+            Enables the experimental <span className="font-bold">Broker</span>{' '}
+            diagnostic page for viewing real-time OTEL traces, messages, and LLM
+            chunks
+          </span>
+        ),
+        atom: storedIsBrokerEnabledAtom,
       },
     ],
   },

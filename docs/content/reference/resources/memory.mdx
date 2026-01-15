@@ -4,7 +4,7 @@ The `Memory` resource represents persistent storage for converations with agents
 
 The backend for a memory resource is an HTTP server that implements the [Memory API Specification](#memory-api-specification).
 
-In time, this resource will also configure how operations such as compaction can be performed. A reference implementation [ARK Cluster Memory](#ark-cluster-memory) is available.
+In time, this resource will also configure how operations such as compaction can be performed. A reference implementation [ARK Broker](#ark-broker) is available.
 
 ## Specification
 
@@ -12,16 +12,16 @@ In time, this resource will also configure how operations such as compaction can
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Memory
 metadata:
-  name: ark-cluster-memory
+  name: ark-broker
 spec:
   # The address of the service that handles memory API calls.
   address:
     # A 'value' can be provided to give a specific URL, or a service ref to
     # point to a specific service in the cluster.
     valueFrom:
-      # In this example, we point to a deployment of the "ARK Cluster Memory".
+      # In this example, we point to a deployment of the "ARK Broker".
       serviceRef:
-        name: ark-cluster-memory
+        name: ark-broker
         port: 8080
 ```
 
@@ -38,10 +38,10 @@ metadata:
   name: chat-with-memory
 spec:
   input: "What did we discuss earlier?"
-  targets:
+  target:
     - name: my-agent
   memory:
-    name: ark-cluster-memory
+    name: ark-broker
   # Optional: specify session ID to group related queries for tracking
   sessionId: "my-session"
   # Optional: specify conversation ID for memory continuity

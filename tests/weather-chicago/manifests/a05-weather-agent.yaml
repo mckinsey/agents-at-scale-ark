@@ -14,7 +14,7 @@ spec:
   modelRef:
     name: weather-default-model
   tools:
-    - type: custom
+    - type: http
       name: get-coordinates
-    - type: custom
+    - type: http
       name: get-forecast
