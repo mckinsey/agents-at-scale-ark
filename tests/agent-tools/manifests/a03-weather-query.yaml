@@ -4,6 +4,6 @@ metadata:
   name: weather-query
 spec:
   input: What's the current weather like in New York City?
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: weather-agent
