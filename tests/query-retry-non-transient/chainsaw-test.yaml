@@ -60,7 +60,7 @@ spec:
             name: non-transient-query
           status:
             phase: error
-            (retryCount == `0`): true
+            (retryCount == null || retryCount == `0`): true
     catch:
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1

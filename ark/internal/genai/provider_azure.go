@@ -145,6 +145,9 @@ func (ap *AzureProvider) createClient(ctx context.Context) openai.Client {
 		httpClient = common.NewHTTPClientWithLogging(ctx)
 	}
 
+	// Disable SDK's default retry logic (MaxRetries defaults to 2). The query
+	// controller implements retry logic for transient errors based on the user's
+	// retryPolicy specification, giving users control over retry behavior.
 	deploymentURL := fmt.Sprintf("%s/openai/deployments/%s", ap.BaseURL, ap.Model)
 	options := []option.RequestOption{
 		option.WithBaseURL(deploymentURL),
@@ -152,6 +155,7 @@ func (ap *AzureProvider) createClient(ctx context.Context) openai.Client {
 		option.WithAPIKey(ap.APIKey),
 		option.WithHTTPClient(httpClient),
 		option.WithQueryAdd("api-version", ap.APIVersion),
+		option.WithMaxRetries(0),
 	}
 
 	options = applyHeadersToOptions(ctx, ap.Headers, options, ap.Model)

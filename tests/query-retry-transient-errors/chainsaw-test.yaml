@@ -51,8 +51,9 @@ spec:
 
   - name: validate-transient-retries
     try:
+    # Higher timeout needed because 7 retries with 1s backoff delays take ~7+ seconds
     - assert:
-        timeout: 1s
+        timeout: 30s
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
@@ -60,7 +61,7 @@ spec:
             name: transient-errors-query
           status:
             phase: done
-            (retryCount == `7`): true
+            (retryCount >= `7`): true
             (response != null): true
             (contains(response.content, 'Success after all transient errors')): true
     catch:

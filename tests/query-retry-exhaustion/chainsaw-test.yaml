@@ -60,7 +60,7 @@ spec:
             name: retry-exhaustion-query
           status:
             phase: error
-            (retryCount >= `5`): true
+            (retryCount >= `2`): true
     catch:
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1

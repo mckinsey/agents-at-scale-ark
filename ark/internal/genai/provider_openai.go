@@ -270,10 +270,14 @@ func (op *OpenAIProvider) createClient(ctx context.Context) openai.Client {
 		httpClient = common.NewHTTPClientWithLogging(ctx)
 	}
 
+	// Disable SDK's default retry logic (MaxRetries defaults to 2). The query
+	// controller implements retry logic for transient errors based on the user's
+	// retryPolicy specification, giving users control over retry behavior.
 	options := []option.RequestOption{
 		option.WithBaseURL(op.BaseURL),
 		option.WithAPIKey(op.APIKey),
 		option.WithHTTPClient(httpClient),
+		option.WithMaxRetries(0),
 	}
 
 	options = applyHeadersToOptions(ctx, op.Headers, options, op.Model)
