@@ -17,6 +17,7 @@ venv/
 help.mk
 
 .venv/
+testenv/
 
 # Coverage reports
 coverage/
@@ -32,11 +33,12 @@ __pycache__/
 *.pyd
 .Python
 *.egg-info/
+.pytest_cache/
 
 # Local development
 .ark-sdk-local/
 .ark.env
-
+ark-export.yaml
 
 # Icon must end with two \r
 Icon
@@ -126,6 +128,7 @@ terraform.rc
 *.iws
 *.iml
 *.ipr
+screenshots
 
 # Runtime binaries
 runtime/bin/controller-gen*
@@ -156,3 +159,9 @@ services/ark-dashboard/ark-dashboard/lib/api/generated/openapi.json
 
 # Helm chart dependencies
 **/charts/*.tgz
+
+# Personal/local artifacts and experimental files
+vibe_artifacts/
+
+# Playwright MCP screenshots
+.playwright-mcp/

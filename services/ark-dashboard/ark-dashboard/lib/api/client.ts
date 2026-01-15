@@ -1,3 +1,5 @@
+import { trackError } from '@/lib/analytics/singleton';
+
 import { API_CONFIG } from './config';
 
 export class APIError extends Error {
@@ -61,11 +63,24 @@ class APIClient {
         const errorData = isJSON
           ? await response.json()
           : await response.text();
-        throw new APIError(
+        const apiError = new APIError(
           errorData.message || `HTTP error! status: ${response.status}`,
           response.status,
           errorData,
         );
+
+        trackError({
+          message: apiError.message,
+          severity: 'error',
+          context: {
+            type: 'api_error',
+            endpoint,
+            method: requestOptions.method || 'GET',
+            status: response.status,
+          },
+        });
+
+        throw apiError;
       }
 
       // Handle 204 No Content responses
@@ -84,10 +99,21 @@ class APIClient {
         throw error;
       }
 
-      // Network errors or other fetch errors
-      throw new APIError(
-        error instanceof Error ? error.message : 'An unknown error occurred',
-      );
+      const message =
+        error instanceof Error ? error.message : 'An unknown error occurred';
+
+      trackError({
+        message,
+        stack: error instanceof Error ? error.stack : undefined,
+        severity: 'error',
+        context: {
+          type: 'network_error',
+          endpoint,
+          method: requestOptions.method || 'GET',
+        },
+      });
+
+      throw new APIError(message);
     }
   }
 

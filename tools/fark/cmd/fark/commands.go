@@ -74,12 +74,13 @@ When triggering a query:
 			}
 
 			opts := TriggerCommand{
-				QueryName:     queryName,
-				InputOverride: inputOverride,
-				InputFile:     "",
-				Timeout:       f.timeout,
-				Parameters:    f.parameters,
-				SessionId:     f.sessionId,
+				QueryName:      queryName,
+				InputOverride:  inputOverride,
+				InputFile:      "",
+				Timeout:        f.timeout,
+				Parameters:     f.parameters,
+				SessionId:      f.sessionId,
+				ConversationId: f.conversationId,
 				ExecutionContext: ExecutionContext{
 					Config:     config,
 					Namespace:  ns,

@@ -57,7 +57,7 @@ type QuerySpec struct {
 	// Parameters for template processing in the input field
 	Parameters []Parameter `json:"parameters,omitempty"`
 	// +kubebuilder:validation:Optional
-	Targets []QueryTarget `json:"targets,omitempty"`
+	Target *QueryTarget `json:"target,omitempty"`
 	// +kubebuilder:validation:Optional
 	Selector *metav1.LabelSelector `json:"selector,omitempty"`
 	// +kubebuilder:validation:Optional
@@ -68,6 +68,9 @@ type QuerySpec struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MinLength=1
 	SessionId string `json:"sessionId,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MinLength=1
+	ConversationId string `json:"conversationId,omitempty"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default="720h"
 	TTL *metav1.Duration `json:"ttl,omitempty"`
@@ -130,8 +133,11 @@ type QueryStatus struct {
 	// +kubebuilder:validation:Optional
 	// Conditions represent the latest available observations of a query's state
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
-	Responses  []Response         `json:"responses,omitempty"`
+	Response   *Response          `json:"response,omitempty"`
 	TokenUsage TokenUsage         `json:"tokenUsage,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MinLength=1
+	ConversationId string `json:"conversationId,omitempty"`
 	// +kubebuilder:validation:Optional
 	Duration *metav1.Duration `json:"duration,omitempty"`
 }

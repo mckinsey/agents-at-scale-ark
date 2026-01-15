@@ -133,11 +133,9 @@ class TestQueryResolver:
                     'promptTokens': 60,
                     'completionTokens': 140
                 },
-                'responses': [
-                    {
-                        'content': 'This is a test response with some content'
-                    }
-                ]
+                'response': {
+                    'content': 'This is a test response with some content'
+                }
             }
         }
         
@@ -189,8 +187,7 @@ class TestQueryResolver:
                     'totalTokens': 100,
                     'promptTokens': 0,
                     'completionTokens': 100
-                },
-                'responses': []
+                }
             }
         }
         

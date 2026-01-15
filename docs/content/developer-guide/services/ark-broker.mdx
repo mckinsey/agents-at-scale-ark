@@ -1,0 +1,47 @@
+# Ark Broker
+
+In-memory storage service with Server-Sent Events (SSE) streaming support for Ark queries.
+
+- In-memory message storage, or optionally peristed to disk / persistent volume
+- Implements the [Memory API](/reference/resources/memory#memory-api-specification)
+- Supports [streaming queries](/developer-guide/queries/streaming)
+
+This service provides a basic but complete memory system for an Ark cluster, as well as offering the up-coming streaming APIs which enable real-time streaming responses to queries.
+
+## Installation
+
+Install via `helm`:
+
+```bash
+helm install ark-broker \
+    ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-broker
+```
+
+Or for local development:
+
+```bash
+cd services/ark-broker
+
+# Deploy the service...
+devspace deploy
+
+# ...or run in dev mode with live-reload.
+devspace dev
+```
+
+## Configuration
+
+All configuration options are documented in the Helm chart. Key configuration is:
+
+Environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| PORT | Server port | 8080 |
+| MAX_MESSAGE_SIZE | Maximum message size in bytes | 10485760 (10MB) |
+| MAX_MEMORY_DB | Maximum number of messages/chunks to keep | 50000 |
+| MAX_ITEM_AGE | Maximum age of items in seconds | 0 (no age limit) |
+| MEMORY_FILE_PATH | Path to persist memory data | Not set (no persistence) |
+| STREAM_FILE_PATH | Path to persist stream data | Not set (no persistence) |
+
+The Helm chart can optionally configure a persistent volume for data storage by setting `persistence.enabled=true`.

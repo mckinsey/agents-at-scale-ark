@@ -8,6 +8,6 @@ spec:
     # Direct values for simple parameters
     - name: city
       value: "Los Angeles"
-  targets:
-    - type: agent
-      name: partial-tool-calling
+  target:
+    type: agent
+    name: partial-tool-calling

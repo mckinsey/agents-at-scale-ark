@@ -207,23 +207,52 @@ spec:
     name: research-agent
 ```
 
+### Team as Tools
+
+Teams can be declared and exposed as tools, which means they can be called by agents in the system. This lets an agent delegate complex multi-agent workflows to a team, enabling sophisticated orchestration patterns where agents can leverage entire teams as reusable tools.
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: research-team-tool
+spec:
+  type: team
+  description: Multi-agent team that researches a topic and provides analysis
+  inputSchema:
+    type: object
+    properties:
+      input:
+        type: string
+        description: "The topic to research"
+    required: ["input"]
+  team:
+    name: research-team
+```
+
 ## Agent Tool Reference Types
 
-Agents reference tools using the `tools` field in their spec. Tools can be referenced by name and type.
+Agents reference tools using the `tools` field in their spec. Tools are referenced by name and type, where the type matches the Tool resource type.
 
-### Custom Tools
+### Tool References
 
-Reference custom Tool resources (HTTP, MCP, Agent, or Builtin tools) by name:
+Reference Tool resources using the same type as defined in the Tool resource:
 
 ```yaml
 tools:
-  - type: custom
+  - type: http
     name: get-coordinates            # HTTP tool
-  - type: custom
+  - type: mcp
     name: mcp-filesystem-read-file   # MCP tool
-  - type: custom
+  - type: agent
     name: call-research-agent        # Agent tool
+  - type: team
+    name: research-team-tool         # Team tool
+  - type: builtin
+    name: noop                       # Builtin tool
 ```
+
+**Note**: `type: custom` is deprecated. Use the explicit tool type instead.
 
 ### Built-in Tools
 
@@ -244,7 +273,7 @@ Agent used as tools:
 
 ```yaml
 tools:
-  - type: custom
+  - type: agent
     name: call-research-agent
 ```
 
@@ -252,13 +281,13 @@ tools:
 
 The partial tool calling feature in allows to pre-configure certain parameters of a tool at the agent configuration level, while leaving other parameters to be filled by the Agent at runtime. This enables parameter injection, template resolution, and simplified tool interfaces for the Agents.
 
-```
+```yaml
 tools:
-  - type: custom
+  - type: http
     name: weather-forecast  # Name exposed to Agent
     description: "Get latest weather forecast"  # Description exposed to Agent
     partial:
-      name: weather-api  # Actual Tool CRD name
+      name: weather-api  # Actual Tool CRD name (type: http)
       parameters:
         - name: city
           value: "{{ .Query.city }}"  # From query parameters

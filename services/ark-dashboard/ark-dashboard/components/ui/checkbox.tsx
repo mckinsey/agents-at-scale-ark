@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { cn } from '@/lib/utils';
+
 interface CheckboxProps {
   id?: string;
   checked?: boolean;
@@ -8,7 +10,7 @@ interface CheckboxProps {
   disabled?: boolean;
 }
 
-export function Checkbox({
+function Checkbox({
   id,
   checked,
   onCheckedChange,
@@ -21,8 +23,16 @@ export function Checkbox({
       id={id}
       checked={checked}
       onChange={e => onCheckedChange?.(e.target.checked)}
-      className={`h-4 w-4 rounded border border-gray-300 ${className || ''}`}
+      className={cn(
+        'border-border h-4 w-4 border',
+        'hover:border-border-hover hover:bg-field-hover',
+        'disabled:cursor-not-allowed disabled:opacity-50',
+        'accent-primary',
+        className,
+      )}
       disabled={disabled}
     />
   );
 }
+
+export { Checkbox };

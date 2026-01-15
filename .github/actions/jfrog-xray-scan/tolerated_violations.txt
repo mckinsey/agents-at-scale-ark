@@ -1,0 +1,6 @@
+XRAY-97724 - CVE-2018-20225
+- An issue was discovered in pip (all versions) because it installs the version with the highest version number, even if the user had intended to obtain a private package from a private index. This only affects use of the --extra-index-url option, and exploitation requires that the package does not already exist in the public index (and thus the attacker can put the package there with an arbitrary version number). NOTE: it has been reported that this is intended functionality and the user is responsible for using --extra-index-url securely.
+- In ARK pip is not used, but uv for fetching dependencies.
+XRAY-913110 - CVE-2026-0621
+- The npm package modelcontextprotocol/sdk has a vulnerability in versions 0 >= 1.25.1, however, 1.25.1 is the most up-to-date version. We will have to ignore this violation until a newer version is released.
+- Used in ark-cli and filesystem-mcp

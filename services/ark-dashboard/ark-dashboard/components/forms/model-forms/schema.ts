@@ -4,7 +4,7 @@ import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 
 const openaiSchema = z.object({
   name: kubernetesNameSchema,
-  type: z.literal('openai'),
+  provider: z.literal('openai'),
   model: z.string().min(1, { message: 'Model is required' }),
   secret: z.string().min(1, { message: 'API Key is required' }),
   baseUrl: z.string().min(1, { message: 'Base URL is required' }),
@@ -12,7 +12,7 @@ const openaiSchema = z.object({
 
 const azureSchema = z.object({
   name: kubernetesNameSchema,
-  type: z.literal('azure'),
+  provider: z.literal('azure'),
   model: z.string().min(1, { message: 'Model is required' }),
   secret: z.string().min(1, { message: 'API Key is required' }),
   baseUrl: z.string().min(1, { message: 'Base URL is required' }),
@@ -21,7 +21,7 @@ const azureSchema = z.object({
 
 const bedrockSchema = z.object({
   name: kubernetesNameSchema,
-  type: z.literal('bedrock'),
+  provider: z.literal('bedrock'),
   model: z.string().min(1, { message: 'Model is required' }),
   bedrockAccessKeyIdSecretName: z
     .string()
@@ -33,7 +33,7 @@ const bedrockSchema = z.object({
   modelARN: z.string().nullish(),
 });
 
-export const schema = z.discriminatedUnion('type', [
+export const schema = z.discriminatedUnion('provider', [
   openaiSchema,
   azureSchema,
   bedrockSchema,

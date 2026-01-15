@@ -5,6 +5,7 @@ package noop
 import (
 	"context"
 
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
@@ -41,7 +42,7 @@ func NewQueryRecorder() telemetry.QueryRecorder {
 	return &noopQueryRecorder{}
 }
 
-func (r *noopQueryRecorder) StartQuery(ctx context.Context, queryName, queryNamespace, phase string) (context.Context, telemetry.Span) {
+func (r *noopQueryRecorder) StartQuery(ctx context.Context, query *arkv1alpha1.Query, phase string) (context.Context, telemetry.Span) {
 	return ctx, &noopSpan{}
 }
 
@@ -54,10 +55,11 @@ func (r *noopQueryRecorder) RecordRootOutput(span telemetry.Span, content string
 func (r *noopQueryRecorder) RecordInput(span telemetry.Span, content string)      {} //nolint:revive
 func (r *noopQueryRecorder) RecordOutput(span telemetry.Span, content string)     {} //nolint:revive
 func (r *noopQueryRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {
-}                                                                                  //nolint:revive
-func (r *noopQueryRecorder) RecordSessionID(span telemetry.Span, sessionID string) {} //nolint:revive
-func (r *noopQueryRecorder) RecordSuccess(span telemetry.Span)                     {} //nolint:revive
-func (r *noopQueryRecorder) RecordError(span telemetry.Span, err error)            {} //nolint:revive
+}                                                                                            //nolint:revive
+func (r *noopQueryRecorder) RecordSessionID(span telemetry.Span, sessionID string)           {} //nolint:revive
+func (r *noopQueryRecorder) RecordConversationID(span telemetry.Span, conversationID string) {} //nolint:revive
+func (r *noopQueryRecorder) RecordSuccess(span telemetry.Span)                               {} //nolint:revive
+func (r *noopQueryRecorder) RecordError(span telemetry.Span, err error)                      {} //nolint:revive
 
 // noopAgentRecorder is a zero-overhead agent recorder that does nothing.
 // All methods are intentionally empty for zero-overhead no-op behavior.

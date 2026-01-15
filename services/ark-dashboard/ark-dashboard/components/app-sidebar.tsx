@@ -1,11 +1,13 @@
 'use client';
 
+import { useAtomValue, useSetAtom } from 'jotai';
 import {
   AlertCircle,
   Check,
   ChevronRight,
   ChevronsUpDown,
   ChevronsUpDownIcon,
+  FlaskConical,
   Home,
   LogOut,
   Plus,
@@ -14,6 +16,16 @@ import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import {
+  A2A_TASKS_FEATURE_KEY,
+  BROKER_FEATURE_KEY,
+  FILES_BROWSER_FEATURE_KEY,
+  isA2ATasksEnabledAtom,
+  isBrokerEnabledAtom,
+  isExperimentalDarkModeEnabledAtom,
+  isFilesBrowserAvailableAtom,
+} from '@/atoms/experimental-features';
+import { experimentalFeaturesDialogOpenAtom } from '@/atoms/internal-states';
 import { NamespaceEditor } from '@/components/editors';
 import {
   Collapsible,
@@ -40,6 +52,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { trackEvent } from '@/lib/analytics/singleton';
 import { signout } from '@/lib/auth/signout';
 import {
   CONFIGURATION_SECTIONS,
@@ -48,15 +61,27 @@ import {
   SERVICE_SECTIONS,
 } from '@/lib/constants/dashboard-icons';
 import { type SystemInfo, systemInfoService } from '@/lib/services';
+import { proxyService } from '@/lib/services/proxy';
 import { useNamespace } from '@/providers/NamespaceProvider';
 import { useUser } from '@/providers/UserProvider';
 
+import qbLogoDark from '../app/img/qb-logo-dark.svg';
+import qbLogoLight from '../app/img/qb-logo-light.svg';
 import { UserDetails } from './user';
 
 export function AppSidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useUser();
+  const isA2ATasksEnabled = useAtomValue(isA2ATasksEnabledAtom);
+  const isBrokerEnabled = useAtomValue(isBrokerEnabledAtom);
+  const isExperimentalDarkModeEnabled = useAtomValue(
+    isExperimentalDarkModeEnabledAtom,
+  );
+  const setExperimentalFeaturesDialogOpen = useSetAtom(
+    experimentalFeaturesDialogOpenAtom,
+  );
+  const setIsFilesBrowserAvailable = useSetAtom(isFilesBrowserAvailableAtom);
 
   const {
     availableNamespaces,
@@ -90,14 +115,33 @@ export function AppSidebar() {
       }
     };
 
+    const checkFilesAPIHealth = async () => {
+      try {
+        const available =
+          await proxyService.isServiceAvailable('file-gateway-api');
+        setIsFilesBrowserAvailable(available);
+      } catch (error) {
+        console.error('Failed to check files API health:', error);
+        setIsFilesBrowserAvailable(false);
+      }
+    };
+
     loadInitialData();
-  }, [router, pathname]);
+    checkFilesAPIHealth();
+  }, [router, pathname, setIsFilesBrowserAvailable]);
 
   const handleCreateNamespace = (name: string) => {
     createNamespace(name);
   };
 
   const navigateToSection = (sectionKey: string) => {
+    trackEvent({
+      name: 'nav_item_clicked',
+      properties: {
+        section: sectionKey,
+        fromSection: getCurrentSection(),
+      },
+    });
     router.push(`/${sectionKey}`);
   };
 
@@ -105,24 +149,43 @@ export function AppSidebar() {
     return pathname.split('/')[1];
   };
 
+  const enabledOperationSections = OPERATION_SECTIONS.filter(item => {
+    switch (item.enablerFeature) {
+      case A2A_TASKS_FEATURE_KEY:
+        return isA2ATasksEnabled;
+      case BROKER_FEATURE_KEY:
+        return isBrokerEnabled;
+      case FILES_BROWSER_FEATURE_KEY:
+        return true;
+      default:
+        return true;
+    }
+  });
+
   return (
     <>
       <Sidebar>
         <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem>
-              <DropdownMenu>
+              <DropdownMenu
+                // Dialog & DropdownMenu adds pointer-events: none
+                // Discussion here: https://github.com/shadcn-ui/ui/discussions/6908
+                modal={false}>
                 <DropdownMenuTrigger asChild>
                   <SidebarMenuButton
                     size="lg"
                     className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-white">
+                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
                       <Image
-                        src="/favicon.ico"
+                        src={
+                          isExperimentalDarkModeEnabled
+                            ? qbLogoDark
+                            : qbLogoLight
+                        }
                         alt="ARK"
-                        width={16}
-                        height={16}
-                        className="h-4 w-4"
+                        width={32}
+                        height={32}
                       />
                     </div>
                     <div className="flex flex-col gap-0.5 leading-none">
@@ -174,6 +237,11 @@ export function AppSidebar() {
                     onSelect={() => setNamespaceEditorOpen(true)}>
                     <Plus className="mr-2 h-4 w-4" />
                     Add Namespace
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => setExperimentalFeaturesDialogOpen(true)}>
+                    <FlaskConical className="mr-2 h-4 w-4" />
+                    Experimental Features
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -283,7 +351,7 @@ export function AppSidebar() {
               <CollapsibleContent>
                 <SidebarGroupContent>
                   <SidebarMenu>
-                    {OPERATION_SECTIONS.map(item => {
+                    {enabledOperationSections.map(item => {
                       const isPlaceholder = isPlaceholderSection(item.key);
                       const isDisabled =
                         !isNamespaceResolved || loading || isPlaceholder;

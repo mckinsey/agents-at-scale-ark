@@ -38,7 +38,7 @@ async function listAgents(options: {output?: string}) {
   }
 }
 
-export function createAgentsCommand(_: ArkConfig): Command {
+export function createAgentsCommand(config: ArkConfig): Command {
   const agentsCommand = new Command('agents');
 
   agentsCommand
@@ -65,13 +65,17 @@ export function createAgentsCommand(_: ArkConfig): Command {
     .description('Query an agent')
     .argument('<name>', 'Agent name')
     .argument('<message>', 'Message to send')
-    .action(async (name: string, message: string) => {
-      await executeQuery({
-        targetType: 'agent',
-        targetName: name,
-        message,
-      });
-    });
+    .option('--timeout <timeout>', 'Query timeout (e.g., 30s, 5m, 1h)')
+    .action(
+      async (name: string, message: string, options: {timeout?: string}) => {
+        await executeQuery({
+          targetType: 'agent',
+          targetName: name,
+          message,
+          timeout: options.timeout || config.queryTimeout,
+        });
+      }
+    );
 
   return agentsCommand;
 }

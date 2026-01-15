@@ -1,6 +1,6 @@
 {
   "name": "@agents-at-scale/ark",
-  "version": "0.1.43",
+  "version": "0.1.50",
   "description": "Ark CLI - Interactive terminal interface for ARK agents",
   "main": "dist/index.js",
   "type": "module",
@@ -9,7 +9,8 @@
   },
   "files": [
     "dist",
-    "templates"
+    "templates",
+    ".arkrc.template.yaml"
   ],
   "scripts": {
     "build": "npm run copy-templates && tsc && chmod +x dist/index.js",
@@ -48,6 +49,7 @@
     "commander": "^12.1.0",
     "debug": "^4.4.1",
     "execa": "^9.6.0",
+    "find-process": "^1.4.7",
     "ink": "^6.0.1",
     "ink-select-input": "^6.2.0",
     "ink-spinner": "^5.0.0",

@@ -10,9 +10,20 @@ export interface ChatConfig {
   outputFormat?: 'text' | 'markdown';
 }
 
+export interface MarketplaceConfig {
+  repoUrl?: string;
+  registry?: string;
+}
+
 export interface ArkConfig {
   chat?: ChatConfig;
-  services?: {[serviceName: string]: Partial<ArkService>};
+  marketplace?: MarketplaceConfig;
+  services?: {
+    reusePortForwards?: boolean;
+    [serviceName: string]: Partial<ArkService> | boolean | undefined;
+  };
+  queryTimeout?: string;
+  defaultExportTypes?: string[];
   // Cluster info - populated during startup if context exists
   clusterInfo?: ClusterInfo;
 }
@@ -30,6 +41,13 @@ export function loadConfig(): ArkConfig {
     chat: {
       streaming: true,
       outputFormat: 'text',
+    },
+    marketplace: {
+      repoUrl: 'https://github.com/mckinsey/agents-at-scale-marketplace',
+      registry: 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts',
+    },
+    services: {
+      reusePortForwards: false,
     },
   };
 
@@ -62,9 +80,7 @@ export function loadConfig(): ArkConfig {
   // Apply environment variable overrides
   if (process.env.ARK_CHAT_STREAMING !== undefined) {
     config.chat = config.chat || {};
-    config.chat.streaming =
-      process.env.ARK_CHAT_STREAMING === '1' ||
-      process.env.ARK_CHAT_STREAMING === 'true';
+    config.chat.streaming = process.env.ARK_CHAT_STREAMING === '1';
   }
 
   if (process.env.ARK_CHAT_OUTPUT_FORMAT !== undefined) {
@@ -73,6 +89,26 @@ export function loadConfig(): ArkConfig {
     if (format === 'markdown' || format === 'text') {
       config.chat.outputFormat = format;
     }
+  }
+
+  if (process.env.ARK_QUERY_TIMEOUT !== undefined) {
+    config.queryTimeout = process.env.ARK_QUERY_TIMEOUT;
+  }
+
+  if (process.env.ARK_MARKETPLACE_REPO_URL !== undefined) {
+    config.marketplace = config.marketplace || {};
+    config.marketplace.repoUrl = process.env.ARK_MARKETPLACE_REPO_URL;
+  }
+
+  if (process.env.ARK_MARKETPLACE_REGISTRY !== undefined) {
+    config.marketplace = config.marketplace || {};
+    config.marketplace.registry = process.env.ARK_MARKETPLACE_REGISTRY;
+  }
+
+  if (process.env.ARK_SERVICES_REUSE_PORT_FORWARDS !== undefined) {
+    config.services = config.services || {};
+    config.services.reusePortForwards =
+      process.env.ARK_SERVICES_REUSE_PORT_FORWARDS === '1';
   }
 
   return config;
@@ -92,14 +128,37 @@ function mergeConfig(target: ArkConfig, source: ArkConfig): void {
     }
   }
 
+  if (source.marketplace) {
+    target.marketplace = target.marketplace || {};
+    if (source.marketplace.repoUrl !== undefined) {
+      target.marketplace.repoUrl = source.marketplace.repoUrl;
+    }
+    if (source.marketplace.registry !== undefined) {
+      target.marketplace.registry = source.marketplace.registry;
+    }
+  }
+
   if (source.services) {
     target.services = target.services || {};
-    for (const [serviceName, overrides] of Object.entries(source.services)) {
-      target.services[serviceName] = {
-        ...target.services[serviceName],
-        ...overrides,
-      };
+    if (source.services.reusePortForwards !== undefined) {
+      target.services.reusePortForwards = source.services.reusePortForwards;
     }
+    for (const [serviceName, overrides] of Object.entries(source.services)) {
+      if (serviceName !== 'reusePortForwards' && typeof overrides === 'object') {
+        target.services[serviceName] = {
+          ...(target.services[serviceName] as Partial<ArkService>),
+          ...overrides,
+        };
+      }
+    }
+  }
+
+  if (source.queryTimeout !== undefined) {
+    target.queryTimeout = source.queryTimeout;
+  }
+
+  if (source.defaultExportTypes) {
+    target.defaultExportTypes = source.defaultExportTypes
   }
 }
 
@@ -118,4 +177,20 @@ export function getConfigPaths(): {user: string; project: string} {
  */
 export function formatConfig(config: ArkConfig): string {
   return yaml.stringify(config);
+}
+
+/**
+ * Get marketplace repository URL from config
+ */
+export function getMarketplaceRepoUrl(): string {
+  const config = loadConfig();
+  return config.marketplace!.repoUrl!;
+}
+
+/**
+ * Get marketplace registry from config
+ */
+export function getMarketplaceRegistry(): string {
+  const config = loadConfig();
+  return config.marketplace!.registry!;
 }

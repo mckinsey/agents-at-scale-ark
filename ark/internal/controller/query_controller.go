@@ -10,13 +10,11 @@ import (
 	"time"
 
 	"github.com/openai/openai-go"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -24,15 +22,17 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
+	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	"mckinsey.com/ark/internal/genai"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 )
 
-type targetResult struct {
-	executionResult *genai.ExecutionResult
-	err             error
-	target          arkv1alpha1.QueryTarget
-}
+const (
+	targetTypeAgent = "agent"
+	targetTypeTeam  = "team"
+	targetTypeModel = "model"
+	targetTypeTool  = "tool"
+)
 
 // QueryReconciler reconciles a Query object with telemetry abstraction.
 //
@@ -45,8 +45,8 @@ type targetResult struct {
 type QueryReconciler struct {
 	client.Client
 	Scheme     *runtime.Scheme
-	Recorder   record.EventRecorder
 	Telemetry  *telemetryconfig.Provider
+	Eventing   *eventingconfig.Provider
 	operations sync.Map
 }
 
@@ -155,19 +155,12 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 
 	opCtx, cancel := context.WithCancel(ctx)
 	r.operations.Store(req.NamespacedName, cancel)
-	recorder := genai.NewQueryRecorder(&obj, r.Recorder)
-	tokenCollector := genai.NewTokenUsageCollector(recorder)
 
-	queryTracker := genai.NewOperationTracker(tokenCollector, opCtx, "QueryResolve", obj.Name, map[string]string{
-		"namespace": obj.Namespace,
-		"targets":   fmt.Sprintf("%d", len(obj.Spec.Targets)),
-	})
-
-	go r.executeQueryAsync(opCtx, obj, req.NamespacedName, queryTracker, tokenCollector)
+	go r.executeQueryAsync(opCtx, obj, req.NamespacedName)
 	return ctrl.Result{}, nil
 }
 
-func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName, queryTracker *genai.OperationTracker, tokenCollector *genai.TokenUsageCollector) {
+func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName) {
 	log := logf.FromContext(opCtx)
 	cleanupCache := true
 	startTime := time.Now()
@@ -181,25 +174,40 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		}
 	}()
 
-	// Start session-aware query tracing using new abstraction
 	sessionId := obj.Spec.SessionId
 	if sessionId == "" {
 		sessionId = string(obj.UID)
 	}
 
-	// Create query execution span with session tracking.
-	// This span represents the entire query lifecycle and includes:
-	// - Session correlation for multi-query conversations
-	// - Token usage aggregation across all targets
-	opCtx, span := r.Telemetry.QueryRecorder().StartQuery(opCtx, obj.Name, obj.Namespace, "execute")
+	conversationId := obj.Spec.ConversationId
+
+	opCtx, span := r.Telemetry.QueryRecorder().StartQuery(opCtx, &obj, "execute")
 	r.Telemetry.QueryRecorder().RecordSessionID(span, sessionId)
 	defer span.End()
 
-	impersonatedClient, memory, err := r.setupQueryExecution(opCtx, obj, queryTracker, tokenCollector, sessionId)
+	impersonatedClient, memory, err := r.setupQueryExecution(opCtx, obj, conversationId)
 	if err != nil {
 		r.Telemetry.QueryRecorder().RecordError(span, err)
 		return
 	}
+
+	// Get conversation ID from memory if attached
+	if memory != nil {
+		if httpMemory, ok := memory.(*genai.HTTPMemory); ok {
+			conversationId = httpMemory.GetConversationID()
+		}
+	}
+
+	// Set conversation ID in status if we have one (from memory or spec)
+	if conversationId != "" {
+		obj.Status.ConversationId = conversationId
+		_ = r.updateStatus(opCtx, &obj, obj.Status.Phase)
+		r.Telemetry.QueryRecorder().RecordConversationID(span, conversationId)
+	}
+
+	opCtx = r.Eventing.QueryRecorder().InitializeQueryContext(opCtx, &obj)
+	opCtx = r.Eventing.QueryRecorder().StartTokenCollection(opCtx)
+	opCtx = r.Eventing.QueryRecorder().Start(opCtx, "QueryExecution", fmt.Sprintf("Executing query %s", obj.Name), nil)
 
 	inputMessages, err := genai.GetQueryInputMessages(opCtx, obj, impersonatedClient)
 	if err == nil {
@@ -207,44 +215,42 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		r.Telemetry.QueryRecorder().RecordRootInput(span, queryInput)
 	}
 
-	responses, eventStream, err := r.reconcileQueue(opCtx, obj, impersonatedClient, memory, tokenCollector)
+	response, eventStream, err := r.reconcileQueue(opCtx, obj, impersonatedClient, memory)
 	if err != nil {
-		// Stream error to clients if streaming is enabled
 		genai.StreamError(opCtx, eventStream, err, "query_execution_failed", "query")
-		queryTracker.Fail(err)
 		r.Telemetry.QueryRecorder().RecordError(span, err)
+		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Query execution failed: %v", err), err, nil)
 		_ = r.updateStatus(opCtx, &obj, statusError)
 		return
 	}
 
-	queryTracker.Complete("resolved")
+	obj.Status.Response = response
 
-	obj.Status.Responses = responses
-
-	if len(responses) > 0 && responses[0].Phase == statusDone {
-		r.Telemetry.QueryRecorder().RecordRootOutput(span, responses[0].Content)
+	if response != nil && response.Phase == statusDone {
+		r.Telemetry.QueryRecorder().RecordRootOutput(span, response.Content)
 	}
 
-	tokenSummary := tokenCollector.GetTokenSummary()
-	obj.Status.TokenUsage = arkv1alpha1.TokenUsage{
-		PromptTokens:     tokenSummary.PromptTokens,
-		CompletionTokens: tokenSummary.CompletionTokens,
-		TotalTokens:      tokenSummary.TotalTokens,
+	tokenSummary := r.Eventing.QueryRecorder().GetTokenSummary(opCtx)
+	obj.Status.TokenUsage = tokenSummary
+
+	if tokenSummary.TotalTokens > 0 {
+		r.Telemetry.QueryRecorder().RecordTokenUsage(span, tokenSummary.PromptTokens, tokenSummary.CompletionTokens, tokenSummary.TotalTokens)
 	}
 
-	// Record token usage in telemetry span
-	r.Telemetry.QueryRecorder().RecordTokenUsage(span, tokenSummary.PromptTokens, tokenSummary.CompletionTokens, tokenSummary.TotalTokens)
-
-	// Set overall query status based on whether any targets failed
-	queryStatus := r.determineQueryStatus(responses)
+	queryStatus := r.determineQueryStatus(response)
 	_ = r.updateStatus(opCtx, &obj, queryStatus)
 
 	duration := &metav1.Duration{Duration: time.Since(startTime)}
 	r.finalizeEventStream(opCtx, eventStream, &obj)
 	_ = r.updateStatusWithDuration(opCtx, &obj, queryStatus, duration)
 
-	// Mark span as successful
 	r.Telemetry.QueryRecorder().RecordSuccess(span)
+	operationData := map[string]string{
+		"promptTokens":     fmt.Sprintf("%d", tokenSummary.PromptTokens),
+		"completionTokens": fmt.Sprintf("%d", tokenSummary.CompletionTokens),
+		"totalTokens":      fmt.Sprintf("%d", tokenSummary.TotalTokens),
+	}
+	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
 }
 
 // finalizeEventStream sends a final chunk with complete query status, then closes the stream
@@ -279,49 +285,44 @@ func (r *QueryReconciler) finalizeEventStream(ctx context.Context, eventStream g
 	}
 }
 
-func (r *QueryReconciler) setupQueryExecution(opCtx context.Context, obj arkv1alpha1.Query, queryTracker *genai.OperationTracker, tokenCollector *genai.TokenUsageCollector, sessionId string) (client.Client, genai.MemoryInterface, error) {
+func (r *QueryReconciler) setupQueryExecution(opCtx context.Context, obj arkv1alpha1.Query, conversationId string) (client.Client, genai.MemoryInterface, error) {
 	impersonatedClient, err := r.getClientForQuery(obj)
 	if err != nil {
-		queryTracker.Fail(fmt.Errorf("failed to create impersonated client: %w", err))
 		_ = r.updateStatus(opCtx, &obj, statusError)
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to create impersonated client: %w", err)
 	}
 
-	memory, err := genai.NewMemoryForQuery(opCtx, impersonatedClient, obj.Spec.Memory, obj.Namespace, tokenCollector, sessionId, obj.Name)
+	memory, err := genai.NewMemoryForQuery(opCtx, impersonatedClient, obj.Spec.Memory, obj.Namespace, conversationId, obj.Name, r.Eventing.MemoryRecorder())
 	if err != nil {
-		queryTracker.Fail(fmt.Errorf("failed to create memory client: %w", err))
 		_ = r.updateStatus(opCtx, &obj, statusError)
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to create memory client: %w", err)
 	}
 
 	return impersonatedClient, memory, nil
 }
 
-func (r *QueryReconciler) resolveTargets(ctx context.Context, query arkv1alpha1.Query, impersonatedClient client.Client) ([]arkv1alpha1.QueryTarget, error) {
-	var allTargets []arkv1alpha1.QueryTarget
-
-	allTargets = append(allTargets, query.Spec.Targets...)
+func (r *QueryReconciler) resolveTarget(ctx context.Context, query arkv1alpha1.Query, impersonatedClient client.Client) (*arkv1alpha1.QueryTarget, error) {
+	if query.Spec.Target != nil {
+		return query.Spec.Target, nil
+	}
 
 	if query.Spec.Selector != nil {
-		targets, err := r.resolveSelector(ctx, query.Spec.Selector, query.Namespace, impersonatedClient)
+		target, err := r.resolveSelector(ctx, query.Spec.Selector, query.Namespace, impersonatedClient)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve selector: %w", err)
 		}
-		allTargets = append(allTargets, targets...)
+		return target, nil
 	}
 
-	return allTargets, nil
+	return nil, fmt.Errorf("no target or selector specified")
 }
 
-func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.LabelSelector, namespace string, impersonatedClient client.Client) ([]arkv1alpha1.QueryTarget, error) {
-	targets := make([]arkv1alpha1.QueryTarget, 0, 10)
-
+func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.LabelSelector, namespace string, impersonatedClient client.Client) (*arkv1alpha1.QueryTarget, error) {
 	labelSelector, err := metav1.LabelSelectorAsSelector(selector)
 	if err != nil {
 		return nil, fmt.Errorf("invalid label selector: %w", err)
 	}
 
-	// Search for agents
 	var agentList arkv1alpha1.AgentList
 	if err := impersonatedClient.List(ctx, &agentList, &client.ListOptions{
 		Namespace:     namespace,
@@ -330,14 +331,13 @@ func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.
 		return nil, fmt.Errorf("failed to list agents: %w", err)
 	}
 
-	for _, agent := range agentList.Items {
-		targets = append(targets, arkv1alpha1.QueryTarget{
-			Type: "agent",
-			Name: agent.Name,
-		})
+	if len(agentList.Items) > 0 {
+		return &arkv1alpha1.QueryTarget{
+			Type: targetTypeAgent,
+			Name: agentList.Items[0].Name,
+		}, nil
 	}
 
-	// Search for teams
 	var teamList arkv1alpha1.TeamList
 	if err := impersonatedClient.List(ctx, &teamList, &client.ListOptions{
 		Namespace:     namespace,
@@ -346,14 +346,13 @@ func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.
 		return nil, fmt.Errorf("failed to list teams: %w", err)
 	}
 
-	for _, team := range teamList.Items {
-		targets = append(targets, arkv1alpha1.QueryTarget{
-			Type: "team",
-			Name: team.Name,
-		})
+	if len(teamList.Items) > 0 {
+		return &arkv1alpha1.QueryTarget{
+			Type: targetTypeTeam,
+			Name: teamList.Items[0].Name,
+		}, nil
 	}
 
-	// Search for models
 	var modelList arkv1alpha1.ModelList
 	if err := impersonatedClient.List(ctx, &modelList, &client.ListOptions{
 		Namespace:     namespace,
@@ -362,14 +361,13 @@ func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.
 		return nil, fmt.Errorf("failed to list models: %w", err)
 	}
 
-	for _, model := range modelList.Items {
-		targets = append(targets, arkv1alpha1.QueryTarget{
-			Type: "model",
-			Name: model.Name,
-		})
+	if len(modelList.Items) > 0 {
+		return &arkv1alpha1.QueryTarget{
+			Type: targetTypeModel,
+			Name: modelList.Items[0].Name,
+		}, nil
 	}
 
-	// Search for tools
 	var toolList arkv1alpha1.ToolList
 	if err := impersonatedClient.List(ctx, &toolList, &client.ListOptions{
 		Namespace:     namespace,
@@ -378,29 +376,29 @@ func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.
 		return nil, fmt.Errorf("failed to list tools: %w", err)
 	}
 
-	for _, tool := range toolList.Items {
-		targets = append(targets, arkv1alpha1.QueryTarget{
-			Type: "tool",
-			Name: tool.Name,
-		})
+	if len(toolList.Items) > 0 {
+		return &arkv1alpha1.QueryTarget{
+			Type: targetTypeTool,
+			Name: toolList.Items[0].Name,
+		}, nil
 	}
 
-	return targets, nil
+	return nil, fmt.Errorf("no matching resources found for selector")
 }
 
-func (r *QueryReconciler) reconcileQueue(ctx context.Context, query arkv1alpha1.Query, impersonatedClient client.Client, memory genai.MemoryInterface, tokenCollector *genai.TokenUsageCollector) ([]arkv1alpha1.Response, genai.EventStreamInterface, error) {
+func (r *QueryReconciler) reconcileQueue(ctx context.Context, query arkv1alpha1.Query, impersonatedClient client.Client, memory genai.MemoryInterface) (*arkv1alpha1.Response, genai.EventStreamInterface, error) {
 	eventStream, err := r.createEventStreamIfNeeded(ctx, query)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	targets, err := r.resolveTargets(ctx, query, impersonatedClient)
+	target, err := r.resolveTarget(ctx, query, impersonatedClient)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to resolve targets: %w", err)
+		return nil, nil, fmt.Errorf("failed to resolve target: %w", err)
 	}
 
-	allResponses := r.executeTargetsInParallel(ctx, query, targets, impersonatedClient, memory, eventStream, tokenCollector)
-	return allResponses, eventStream, nil
+	response := r.executeTarget(ctx, query, *target, impersonatedClient, memory, eventStream)
+	return response, eventStream, nil
 }
 
 func (r *QueryReconciler) createEventStreamIfNeeded(ctx context.Context, query arkv1alpha1.Query) (genai.EventStreamInterface, error) {
@@ -427,47 +425,26 @@ func (r *QueryReconciler) createEventStreamIfNeeded(ctx context.Context, query a
 	return eventStream, nil
 }
 
-func (r *QueryReconciler) executeTargetsInParallel(ctx context.Context, query arkv1alpha1.Query, targets []arkv1alpha1.QueryTarget, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, tokenCollector *genai.TokenUsageCollector) []arkv1alpha1.Response {
-	resultChan := make(chan targetResult, len(targets))
-	var wg sync.WaitGroup
-
-	for _, target := range targets {
-		wg.Add(1)
-		go func(target arkv1alpha1.QueryTarget) {
-			defer wg.Done()
-			executionResult, err := r.executeTarget(ctx, query, target, impersonatedClient, memory, eventStream, tokenCollector)
-			resultChan <- targetResult{executionResult, err, target}
-		}(target)
+func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface) *arkv1alpha1.Response {
+	executionResult, err := r.performTargetExecution(ctx, query, target, impersonatedClient, memory, eventStream)
+	if err != nil {
+		errResponse := r.createErrorResponse(target, err)
+		return &errResponse
 	}
 
-	wg.Wait()
-	close(resultChan)
+	if executionResult == nil || executionResult.Messages == nil {
+		return nil
+	}
 
-	return r.processTargetResults(resultChan)
-}
-
-func (r *QueryReconciler) processTargetResults(resultChan chan targetResult) []arkv1alpha1.Response {
-	var allResponses []arkv1alpha1.Response
-
-	for result := range resultChan {
-		switch {
-		case result.err != nil:
-			allResponses = append(allResponses, r.createErrorResponse(result.target, result.err))
-		case result.executionResult == nil || result.executionResult.Messages == nil:
-			// Skip targets that were delegated to external execution engines (executionResult == nil or messages == nil)
-		default:
-			response := r.createSuccessResponse(result.target, result.executionResult.Messages)
-			if result.executionResult.A2AResponse != nil {
-				response.A2A = &arkv1alpha1.A2AMetadata{
-					ContextID: result.executionResult.A2AResponse.ContextID,
-					TaskID:    result.executionResult.A2AResponse.TaskID,
-				}
-			}
-			allResponses = append(allResponses, response)
+	response := r.createSuccessResponse(target, executionResult.Messages)
+	if executionResult.A2AResponse != nil {
+		response.A2A = &arkv1alpha1.A2AMetadata{
+			ContextID: executionResult.A2AResponse.ContextID,
+			TaskID:    executionResult.A2AResponse.TaskID,
 		}
 	}
 
-	return allResponses
+	return &response
 }
 
 func (r *QueryReconciler) createSuccessResponse(target arkv1alpha1.QueryTarget, messages []genai.Message) arkv1alpha1.Response {
@@ -557,11 +534,8 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 		r.setConditionCompleted(query, metav1.ConditionTrue, "QuerySucceeded", "Query completed successfully")
 	case statusError:
 		errorMsg := "Query completed with error"
-		for _, response := range query.Status.Responses {
-			if response.Phase == statusError && response.Content != "" {
-				errorMsg = response.Content
-				break
-			}
+		if query.Status.Response != nil && query.Status.Response.Phase == statusError && query.Status.Response.Content != "" {
+			errorMsg = query.Status.Response.Content
 		}
 		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryErrored", errorMsg)
 	case statusCanceled:
@@ -578,11 +552,9 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 }
 
 // determineQueryStatus checks if any responses have error phase and returns appropriate query status
-func (r *QueryReconciler) determineQueryStatus(responses []arkv1alpha1.Response) string {
-	for _, response := range responses {
-		if response.Phase == statusError {
-			return statusError
-		}
+func (r *QueryReconciler) determineQueryStatus(response *arkv1alpha1.Response) string {
+	if response != nil && response.Phase == statusError {
+		return statusError
 	}
 	return statusDone
 }
@@ -618,31 +590,23 @@ func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query
 	}
 }
 
-// handleTargetExecutionError handles error reporting for target execution failures.
-// It streams errors to clients if streaming is enabled and emits events.
-// Telemetry recording should be handled by the caller.
-func (r *QueryReconciler) handleTargetExecutionError(ctx context.Context, err error, target arkv1alpha1.QueryTarget, metadata map[string]string, eventStream genai.EventStreamInterface, tokenCollector *genai.TokenUsageCollector) {
-	// Stream error to clients if streaming is enabled
+func (r *QueryReconciler) handleTargetExecutionError(ctx context.Context, err error, target arkv1alpha1.QueryTarget, eventStream genai.EventStreamInterface) {
 	modelName := fmt.Sprintf("%s/%s", target.Type, target.Name)
 	genai.StreamError(ctx, eventStream, err, fmt.Sprintf("%s_execution_failed", target.Type), modelName)
-	event := genai.ExecutionEvent{
-		BaseEvent: genai.BaseEvent{Name: target.Name, Metadata: metadata},
-		Type:      target.Type,
-	}
-	tokenCollector.EmitEvent(ctx, corev1.EventTypeWarning, "TargetExecutionError", event)
 }
 
-func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, tokenCollector *genai.TokenUsageCollector) (*genai.ExecutionResult, error) {
+func (r *QueryReconciler) performTargetExecution(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface) (*genai.ExecutionResult, error) {
 	// Store query in context for access in deeper call stacks
 	ctx = context.WithValue(ctx, genai.QueryContextKey, &query)
 
-	// Create target-specific span for observability.
-	// This span tracks execution of a single target (agent/team/model/tool) and records:
-	// - Target type and name as attributes
-	// - Input/output content for debugging
-	// - Execution time and outcome
 	ctx, span := r.Telemetry.QueryRecorder().StartTarget(ctx, target.Type, target.Name)
 	defer span.End()
+
+	operationData := map[string]string{
+		"targetName": target.Name,
+		"targetType": target.Type,
+	}
+	ctx = r.Eventing.QueryRecorder().Start(ctx, "TargetExecution", fmt.Sprintf("Executing target %s/%s", target.Type, target.Name), operationData)
 
 	// Add query and session context for streaming metadata
 	queryID := string(query.UID)
@@ -660,21 +624,10 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 		"target": targetString,
 	})
 
-	var err error
-	metadata := map[string]string{"targetType": target.Type, "targetName": target.Name}
-
 	// Get input messages for processing and telemetry
 	inputMessages, err := genai.GetQueryInputMessages(ctx, query, impersonatedClient)
 	if err != nil {
 		r.Telemetry.QueryRecorder().RecordError(span, err)
-		// Add trace correlation to event metadata for observability linkage
-		metadata["traceId"] = span.TraceID()
-		metadata["spanId"] = span.SpanID()
-		event := genai.ExecutionEvent{
-			BaseEvent: genai.BaseEvent{Name: target.Name, Metadata: metadata},
-			Type:      target.Type,
-		}
-		tokenCollector.EmitEvent(ctx, corev1.EventTypeWarning, "QueryResolveError", event)
 		return nil, err
 	}
 
@@ -691,30 +644,26 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 
 	var result *genai.ExecutionResult
 	switch target.Type {
-	case "agent":
-		result, err = r.executeAgent(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream, tokenCollector)
-	case "team":
-		result, err = r.executeTeam(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream, tokenCollector)
-	case "model":
+	case targetTypeAgent:
+		result, err = r.executeAgent(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream)
+	case targetTypeTeam:
+		result, err = r.executeTeam(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream)
+	case targetTypeModel:
 		var messages []genai.Message
-		messages, err = r.executeModel(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream, tokenCollector)
+		messages, err = r.executeModel(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream)
 		result = &genai.ExecutionResult{Messages: messages}
-	case "tool":
+	case targetTypeTool:
 		var messages []genai.Message
-		messages, err = r.executeTool(execCtx, query, inputMessages, target.Name, impersonatedClient, tokenCollector)
+		messages, err = r.executeTool(execCtx, query, inputMessages, target.Name, impersonatedClient)
 		result = &genai.ExecutionResult{Messages: messages}
 	default:
 		panic(fmt.Errorf("unknown query target type:%s", target.Type))
 	}
 
 	if err != nil {
-		// Record telemetry error before handling error reporting
 		r.Telemetry.QueryRecorder().RecordError(span, err)
-		// Add trace correlation to event metadata for observability linkage
-		metadata["traceId"] = span.TraceID()
-		metadata["spanId"] = span.SpanID()
-
-		r.handleTargetExecutionError(ctx, err, target, metadata, eventStream, tokenCollector)
+		r.handleTargetExecutionError(ctx, err, target, eventStream)
+		r.Eventing.QueryRecorder().Fail(ctx, "TargetExecution", fmt.Sprintf("Target execution failed: %v", err), err, operationData)
 		return nil, err
 	}
 
@@ -726,19 +675,12 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 	}
 
 	r.Telemetry.QueryRecorder().RecordSuccess(span)
-	// Add trace correlation to event metadata for observability linkage
-	metadata["traceId"] = span.TraceID()
-	metadata["spanId"] = span.SpanID()
-	event := genai.ExecutionEvent{
-		BaseEvent: genai.BaseEvent{Name: target.Name, Metadata: metadata},
-		Type:      target.Type,
-	}
-	tokenCollector.EmitEvent(ctx, corev1.EventTypeNormal, "TargetExecutionComplete", event)
+	r.Eventing.QueryRecorder().Complete(ctx, "TargetExecution", "Target execution completed successfully", operationData)
 
 	return result, nil
 }
 
-func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Query, inputMessages []genai.Message, agentName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, tokenCollector *genai.TokenUsageCollector) (*genai.ExecutionResult, error) {
+func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Query, inputMessages []genai.Message, agentName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface) (*genai.ExecutionResult, error) {
 	var agentCRD arkv1alpha1.Agent
 	agentKey := types.NamespacedName{Name: agentName, Namespace: query.Namespace}
 
@@ -753,7 +695,7 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 	})
 
 	// Regular agent execution
-	agent, err := genai.MakeAgent(ctx, impersonatedClient, &agentCRD, tokenCollector, r.Telemetry)
+	agent, err := genai.MakeAgent(ctx, impersonatedClient, &agentCRD, r.Telemetry, r.Eventing)
 	if err != nil {
 		return nil, fmt.Errorf("unable to make agent %v, error:%w", agentKey, err)
 	}
@@ -781,7 +723,7 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 	return result, nil
 }
 
-func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Query, inputMessages []genai.Message, teamName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, tokenCollector *genai.TokenUsageCollector) (*genai.ExecutionResult, error) {
+func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Query, inputMessages []genai.Message, teamName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface) (*genai.ExecutionResult, error) {
 	var teamCRD arkv1alpha1.Team
 	teamKey := types.NamespacedName{Name: teamName, Namespace: query.Namespace}
 
@@ -789,7 +731,7 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 		return nil, fmt.Errorf("unable to fetch team %v, error:%w", teamKey, err)
 	}
 
-	team, err := genai.MakeTeam(ctx, impersonatedClient, &teamCRD, tokenCollector, r.Telemetry)
+	team, err := genai.MakeTeam(ctx, impersonatedClient, &teamCRD, r.Telemetry, r.Eventing)
 	if err != nil {
 		return nil, fmt.Errorf("unable to make team %v, error:%w", teamKey, err)
 	}
@@ -816,7 +758,7 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 	return result, nil
 }
 
-func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Query, inputMessages []genai.Message, modelName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) {
+func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Query, inputMessages []genai.Message, modelName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface) ([]genai.Message, error) {
 	var modelCRD arkv1alpha1.Model
 	modelKey := types.NamespacedName{Name: modelName, Namespace: query.Namespace}
 
@@ -824,7 +766,7 @@ func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Qu
 		return nil, fmt.Errorf("unable to get %v, error:%w", modelKey, err)
 	}
 
-	model, err := genai.LoadModel(ctx, impersonatedClient, &arkv1alpha1.AgentModelRef{Name: modelName, Namespace: query.Namespace}, query.Namespace, nil, r.Telemetry.ModelRecorder())
+	model, err := genai.LoadModel(ctx, impersonatedClient, &arkv1alpha1.AgentModelRef{Name: modelName, Namespace: query.Namespace}, query.Namespace, nil, r.Telemetry.ModelRecorder(), r.Eventing.ModelRecorder())
 	if err != nil {
 		return nil, fmt.Errorf("unable to load model %v, error:%w", modelKey, err)
 	}
@@ -837,37 +779,19 @@ func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Qu
 	// Append all input messages to conversation history
 	allMessages := genai.PrepareModelMessages(inputMessages, historyMessages)
 
-	// Create operation tracker for the model call
-	modelTracker := genai.NewOperationTracker(tokenCollector, ctx, "ModelCall", modelName, map[string]string{
-		"model":     modelName,
-		"type":      "direct",
-		"streaming": fmt.Sprintf("%t", eventStream != nil),
-	})
-
 	var responseMessages []genai.Message
 
 	if eventStream != nil {
-		// Execute with streaming
-		// Token usage is tracked within executeModelWithStreaming via the modelTracker
 		var err error
-		responseMessages, err = r.executeModelWithStreaming(ctx, model, allMessages, eventStream, modelTracker)
+		responseMessages, err = r.executeModelWithStreaming(ctx, model, allMessages, eventStream)
 		if err != nil {
 			return nil, err
 		}
 	} else {
 		completion, err := model.ChatCompletion(ctx, allMessages, nil, 1)
 		if err != nil {
-			modelTracker.Fail(err)
 			return nil, fmt.Errorf("model chat completion failed: %w", err)
 		}
-
-		// Extract and track token usage
-		tokenUsage := genai.TokenUsage{
-			PromptTokens:     completion.Usage.PromptTokens,
-			CompletionTokens: completion.Usage.CompletionTokens,
-			TotalTokens:      completion.Usage.TotalTokens,
-		}
-		modelTracker.CompleteWithTokens(tokenUsage)
 
 		if len(completion.Choices) == 0 {
 			return nil, fmt.Errorf("model returned no completion choices")
@@ -887,8 +811,7 @@ func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Qu
 	return responseMessages, nil
 }
 
-func (r *QueryReconciler) executeTool(ctx context.Context, crd arkv1alpha1.Query, inputMessages []genai.Message, toolName string, impersonatedClient client.Client, tokenCollector *genai.TokenUsageCollector) ([]genai.Message, error) { //nolint:unparam
-	// tokenCollector parameter is kept for consistency with other execute methods but not used since tools don't consume tokens
+func (r *QueryReconciler) executeTool(ctx context.Context, crd arkv1alpha1.Query, inputMessages []genai.Message, toolName string, impersonatedClient client.Client) ([]genai.Message, error) {
 	log := logf.FromContext(ctx)
 
 	query, err := genai.MakeQuery(&crd)
@@ -934,7 +857,7 @@ func (r *QueryReconciler) executeTool(ctx context.Context, crd arkv1alpha1.Query
 		Type: "function",
 	}
 
-	toolRegistry := genai.NewToolRegistry(query.McpSettings, r.Telemetry.ToolRecorder())
+	toolRegistry := genai.NewToolRegistry(query.McpSettings, r.Telemetry.ToolRecorder(), r.Eventing.ToolRecorder())
 	defer func() {
 		if err := toolRegistry.Close(); err != nil {
 			// Log the error but don't fail the request since tool execution already succeeded
@@ -946,14 +869,14 @@ func (r *QueryReconciler) executeTool(ctx context.Context, crd arkv1alpha1.Query
 	toolDefinition := genai.CreateToolFromCRD(&toolCRD)
 	// Pass the tool registry's MCP pool to CreateToolExecutor
 	mcpPool, McpSettings := toolRegistry.GetMCPPool()
-	executor, err := genai.CreateToolExecutor(ctx, impersonatedClient, &toolCRD, query.Namespace, mcpPool, McpSettings, r.Telemetry)
+	executor, err := genai.CreateToolExecutor(ctx, impersonatedClient, &toolCRD, query.Namespace, mcpPool, McpSettings, r.Telemetry, r.Eventing)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tool executor: %w", err)
 	}
 	toolRegistry.RegisterTool(toolDefinition, executor)
 
 	// Execute the tool using the same ExecuteTool method agents use
-	result, err := toolRegistry.ExecuteTool(ctx, toolCall, tokenCollector)
+	result, err := toolRegistry.ExecuteTool(ctx, toolCall)
 	if err != nil {
 		return nil, fmt.Errorf("tool execution failed: %w", err)
 	}
@@ -1026,21 +949,11 @@ func (r *QueryReconciler) cleanupExistingOperation(namespacedName types.Namespac
 	}
 }
 
-func (r *QueryReconciler) executeModelWithStreaming(ctx context.Context, model *genai.Model, messages []genai.Message, eventStream genai.EventStreamInterface, modelTracker *genai.OperationTracker) ([]genai.Message, error) {
-	// Call model with streaming enabled
+func (r *QueryReconciler) executeModelWithStreaming(ctx context.Context, model *genai.Model, messages []genai.Message, eventStream genai.EventStreamInterface) ([]genai.Message, error) {
 	completion, err := model.ChatCompletion(ctx, messages, eventStream, 1)
 	if err != nil {
-		modelTracker.Fail(err)
 		return nil, fmt.Errorf("model streaming completion failed: %w", err)
 	}
-
-	// Extract and track token usage
-	tokenUsage := genai.TokenUsage{
-		PromptTokens:     completion.Usage.PromptTokens,
-		CompletionTokens: completion.Usage.CompletionTokens,
-		TotalTokens:      completion.Usage.TotalTokens,
-	}
-	modelTracker.CompleteWithTokens(tokenUsage)
 
 	if len(completion.Choices) == 0 {
 		return nil, fmt.Errorf("model returned no completion choices")

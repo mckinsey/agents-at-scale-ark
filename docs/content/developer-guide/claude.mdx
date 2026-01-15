@@ -1,0 +1,57 @@
+# Ark Claude Code Marketplace
+
+The ARK project contains a Claude Code agents/skills, which can be installed locally or via Claude Code Marketplace
+
+Claude Code plugin for working with [Ark](https://github.com/mckinsey/agents-at-scale-ark).
+
+![Ark Analysis Screenshot](./images/ark-analysis-claude-code-screenshot.png)
+
+Note: these skills are largely designed for agents running in sandboxes, with access to `kind` to run clusters.
+
+## Quickstart
+
+Open Claude, choose `/Plugin` to interactively add the marketplace `mckinsey/agents-at-scale-ark`, or:
+
+```bash
+claude plugin marketplace add mckinsey/agents-at-scale-ark
+claude plugin install ark@agents-at-scale-ark
+```
+
+For local development or fork:
+
+```bash
+# Change the path on 'add' to your path.
+claude plugin marketplace add ./
+claude plugin install ark@agents-at-scale-ark
+```
+
+## Plugin: ark
+
+**Examples**
+
+> Use the 'ark researcher' agent to discover how the MCP Asynchronous Task protocol works, this was only released in November 2025 so you will have to do a lot of exploration
+
+> Use the 'ark security patcher' agent to fix security vulnerabilities: "Fix CVE-2025-55183 in Ark" or "The current version of golang has a vulnerability, fix it in ark"
+
+### Skills
+
+| Skill | Description |
+|-------|-------------|
+| **chainsaw** | Run and write Chainsaw e2e tests with mock-llm |
+| **dashboard** | Test Ark Dashboard UI with Playwright |
+| **setup** | Set up and install Ark from source |
+| **analysis** | Analyze the Ark codebase |
+| **research** | Research technical solutions with web search and GitHub repo analysis |
+| **architecture** | Ark architecture and design patterns |
+| **vulnerability-fixer** | Fix security vulnerabilities by researching CVEs and applying patches |
+
+### Agents
+
+| Agent | Description |
+|-------|-------------|
+| **researcher** | Research technical solutions with evidence gathering |
+| **ark-architect** | Design Ark architecture and CRDs |
+| **ark-prototyper** | Build prototypes and proof-of-concepts |
+| **ark-protocol-orchestrator** | Orchestrate protocol implementations |
+| **ark-issues** | Manage GitHub issues |
+| **ark-security-patcher** | Fix security vulnerabilities with CVE research and patching |

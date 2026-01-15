@@ -523,7 +523,7 @@ export class StatusChecker {
           // Extract model details
           const available =
             model.status?.conditions?.find(
-              (c: K8sCondition) => c.type === 'Available'
+              (c: K8sCondition) => c.type === 'ModelAvailable'
             )?.status === 'True';
 
           defaultModel = {

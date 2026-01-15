@@ -72,9 +72,9 @@ spec:
           name: documentation-urls
           key: enterprise-docs
   
-  targets:
-    - type: team
-      name: customer-success-team
+  target:
+    type: team
+    name: customer-success-team
 ---
 # Onboarding configuration templates
 apiVersion: v1

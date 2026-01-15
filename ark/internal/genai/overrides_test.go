@@ -651,3 +651,375 @@ func TestResolveHeadersFromOverrides(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveHeadersWithQueryContext(t *testing.T) {
+	tests := []struct {
+		name           string
+		headers        []arkv1alpha1.Header
+		query          *arkv1alpha1.Query
+		objects        []client.Object
+		namespace      string
+		want           map[string]string
+		wantErr        bool
+		wantErrContain string
+	}{
+		{
+			name: "header from query parameter",
+			headers: []arkv1alpha1.Header{
+				{
+					Name: "X-User-ID",
+					Value: arkv1alpha1.HeaderValue{
+						ValueFrom: &arkv1alpha1.HeaderValueSource{
+							QueryParameterRef: &arkv1alpha1.QueryParameterReference{
+								Name: "userId",
+							},
+						},
+					},
+				},
+			},
+			query: &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-query",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.QuerySpec{
+					Parameters: []arkv1alpha1.Parameter{
+						{
+							Name:  "userId",
+							Value: "user-123",
+						},
+					},
+				},
+			},
+			namespace: "default",
+			want: map[string]string{
+				"X-User-ID": "user-123",
+			},
+		},
+		{
+			name: "multiple headers from query parameters",
+			headers: []arkv1alpha1.Header{
+				{
+					Name: "X-User-ID",
+					Value: arkv1alpha1.HeaderValue{
+						ValueFrom: &arkv1alpha1.HeaderValueSource{
+							QueryParameterRef: &arkv1alpha1.QueryParameterReference{
+								Name: "userId",
+							},
+						},
+					},
+				},
+				{
+					Name: "X-Session-ID",
+					Value: arkv1alpha1.HeaderValue{
+						ValueFrom: &arkv1alpha1.HeaderValueSource{
+							QueryParameterRef: &arkv1alpha1.QueryParameterReference{
+								Name: "sessionId",
+							},
+						},
+					},
+				},
+			},
+			query: &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-query",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.QuerySpec{
+					Parameters: []arkv1alpha1.Parameter{
+						{
+							Name:  "userId",
+							Value: "user-456",
+						},
+						{
+							Name:  "sessionId",
+							Value: "session-789",
+						},
+					},
+				},
+			},
+			namespace: "default",
+			want: map[string]string{
+				"X-User-ID":    "user-456",
+				"X-Session-ID": "session-789",
+			},
+		},
+		{
+			name: "mixed headers - direct, secret, and query parameter",
+			headers: []arkv1alpha1.Header{
+				{
+					Name: "X-Direct",
+					Value: arkv1alpha1.HeaderValue{
+						Value: "direct-value",
+					},
+				},
+				{
+					Name: "X-From-Secret",
+					Value: arkv1alpha1.HeaderValue{
+						ValueFrom: &arkv1alpha1.HeaderValueSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "api-secret"},
+								Key:                  "token",
+							},
+						},
+					},
+				},
+				{
+					Name: "X-From-Query",
+					Value: arkv1alpha1.HeaderValue{
+						ValueFrom: &arkv1alpha1.HeaderValueSource{
+							QueryParameterRef: &arkv1alpha1.QueryParameterReference{
+								Name: "customValue",
+							},
+						},
+					},
+				},
+			},
+			query: &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-query",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.QuerySpec{
+					Parameters: []arkv1alpha1.Parameter{
+						{
+							Name:  "customValue",
+							Value: "from-query",
+						},
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: "api-secret", Namespace: "default"},
+					Data:       map[string][]byte{"token": []byte("secret-token")},
+				},
+			},
+			namespace: "default",
+			want: map[string]string{
+				"X-Direct":      "direct-value",
+				"X-From-Secret": "secret-token",
+				"X-From-Query":  "from-query",
+			},
+		},
+		{
+			name: "query parameter ref without query context fails",
+			headers: []arkv1alpha1.Header{
+				{
+					Name: "X-User-ID",
+					Value: arkv1alpha1.HeaderValue{
+						ValueFrom: &arkv1alpha1.HeaderValueSource{
+							QueryParameterRef: &arkv1alpha1.QueryParameterReference{
+								Name: "userId",
+							},
+						},
+					},
+				},
+			},
+			query:          nil,
+			namespace:      "default",
+			wantErr:        true,
+			wantErrContain: "queryParameterRef requires query context",
+		},
+		{
+			name: "query parameter not found in query",
+			headers: []arkv1alpha1.Header{
+				{
+					Name: "X-User-ID",
+					Value: arkv1alpha1.HeaderValue{
+						ValueFrom: &arkv1alpha1.HeaderValueSource{
+							QueryParameterRef: &arkv1alpha1.QueryParameterReference{
+								Name: "missingParam",
+							},
+						},
+					},
+				},
+			},
+			query: &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-query",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.QuerySpec{
+					Parameters: []arkv1alpha1.Parameter{
+						{
+							Name:  "userId",
+							Value: "user-123",
+						},
+					},
+				},
+			},
+			namespace:      "default",
+			wantErr:        true,
+			wantErrContain: "query parameter 'missingParam' not found",
+		},
+		{
+			name: "query parameter with empty value fails",
+			headers: []arkv1alpha1.Header{
+				{
+					Name: "X-User-ID",
+					Value: arkv1alpha1.HeaderValue{
+						ValueFrom: &arkv1alpha1.HeaderValueSource{
+							QueryParameterRef: &arkv1alpha1.QueryParameterReference{
+								Name: "userId",
+							},
+						},
+					},
+				},
+			},
+			query: &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-query",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.QuerySpec{
+					Parameters: []arkv1alpha1.Parameter{
+						{
+							Name:  "userId",
+							Value: "",
+						},
+					},
+				},
+			},
+			namespace:      "default",
+			wantErr:        true,
+			wantErrContain: "query parameter 'userId' has no value",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeClient := setupTestClient(tt.objects)
+			ctx := context.Background()
+			if tt.query != nil {
+				ctx = context.WithValue(ctx, QueryContextKey, tt.query)
+			}
+			got, err := ResolveHeaders(ctx, fakeClient, tt.headers, tt.namespace)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.wantErrContain != "" {
+					require.ErrorContains(t, err, tt.wantErrContain)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestResolveHeaderValue(t *testing.T) {
+	tests := []struct {
+		name           string
+		header         arkv1alpha1.Header
+		query          *arkv1alpha1.Query
+		objects        []client.Object
+		namespace      string
+		want           string
+		wantErr        bool
+		wantErrContain string
+	}{
+		{
+			name: "direct value",
+			header: arkv1alpha1.Header{
+				Name: "X-Custom",
+				Value: arkv1alpha1.HeaderValue{
+					Value: "direct-value",
+				},
+			},
+			namespace: "default",
+			want:      "direct-value",
+		},
+		{
+			name: "value from secret",
+			header: arkv1alpha1.Header{
+				Name: "Authorization",
+				Value: arkv1alpha1.HeaderValue{
+					ValueFrom: &arkv1alpha1.HeaderValueSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "api-secret"},
+							Key:                  "token",
+						},
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: "api-secret", Namespace: "default"},
+					Data:       map[string][]byte{"token": []byte("secret-token")},
+				},
+			},
+			namespace: "default",
+			want:      "secret-token",
+		},
+		{
+			name: "missing value and valueFrom fails",
+			header: arkv1alpha1.Header{
+				Name:  "X-Empty",
+				Value: arkv1alpha1.HeaderValue{},
+			},
+			namespace:      "default",
+			wantErr:        true,
+			wantErrContain: "header value must specify either value or valueFrom",
+		},
+		{
+			name: "valueFrom with no valid source fails",
+			header: arkv1alpha1.Header{
+				Name: "X-Invalid",
+				Value: arkv1alpha1.HeaderValue{
+					ValueFrom: &arkv1alpha1.HeaderValueSource{},
+				},
+			},
+			namespace:      "default",
+			wantErr:        true,
+			wantErrContain: "header value must specify either value or valueFrom with a valid source",
+		},
+		{
+			name: "queryParameterRef with query context",
+			header: arkv1alpha1.Header{
+				Name: "X-User-ID",
+				Value: arkv1alpha1.HeaderValue{
+					ValueFrom: &arkv1alpha1.HeaderValueSource{
+						QueryParameterRef: &arkv1alpha1.QueryParameterReference{
+							Name: "userId",
+						},
+					},
+				},
+			},
+			query: &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-query", Namespace: "default"},
+				Spec: arkv1alpha1.QuerySpec{
+					Parameters: []arkv1alpha1.Parameter{
+						{Name: "userId", Value: "user-123"},
+					},
+				},
+			},
+			namespace: "default",
+			want:      "user-123",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeClient := setupTestClient(tt.objects)
+			ctx := context.Background()
+			if tt.query != nil {
+				ctx = context.WithValue(ctx, QueryContextKey, tt.query)
+			}
+			got, err := ResolveHeaderValue(ctx, fakeClient, tt.header, tt.namespace)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.wantErrContain != "" {
+					require.ErrorContains(t, err, tt.wantErrContain)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}

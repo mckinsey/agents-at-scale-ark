@@ -1,0 +1,109 @@
+# ARK Broker chart values
+
+# Global annotations added to all resources
+global:
+  annotations:
+    ark.mckinsey.com/service: ark-broker
+
+# Application configuration
+app:
+  name: ark-broker
+  image:
+    repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-broker
+    # tag defaults to .Chart.AppVersion if not specified
+    pullPolicy: IfNotPresent
+
+  # Resource configuration
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "1024Mi"
+      cpu: "1000m"
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+
+# Memory service configuration
+memory:
+  # Create a Memory CRD resource
+  createMemoryCRD: true
+  # Set this Memory as the default (names it "default")
+  setAsDefault: false
+  # Port for the HTTP server
+  port: 8080
+
+# Store limits (0 = unlimited)
+# Each store persists to JSON. Limits prevent unbounded file growth.
+# Estimates: messages ~2KB, chunks ~500B, spans ~1KB, events ~500B each
+limits:
+  # Max messages to persist (~100MB at 50k messages)
+  maxMessages: 50000
+  # Max stream chunks to persist (~100MB at 200k chunks)
+  maxChunks: 200000
+  # Max trace spans to persist (~100MB at 100k spans)
+  maxSpans: 100000
+  # Max events to persist (~100MB at 200k events)
+  maxEvents: 200000
+
+# Streaming configuration
+streaming:
+  # Enable streaming support via ConfigMap (creates 'ark-config-streaming' when enabled)
+  enabled: true
+
+# Persistence configuration
+persistence:
+  enabled: false
+  # Storage class for the PVC (uses default if not specified)
+  storageClass: ""
+  # Access mode for the PVC
+  accessMode: ReadWriteOnce
+  # Size of the persistent volume
+  size: 1Gi
+  # Path where data will be stored
+  mountPath: /data
+  # Filename for the memory data
+  memoryFileName: messages.json
+  # Filename for the stream data
+  streamFileName: completionchunks.json
+  # Filename for the trace data
+  traceFileName: oteltraces.json
+  # Filename for the event data
+  eventFileName: events.json
+  # Use existing PVC instead of creating a new one
+  existingClaim: ""
+
+serviceAccount:
+  create: true
+  name: ""
+
+# L2 FIX: Pod security context for hardening
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
+
+# L2 FIX: Container security context for hardening
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# OTEL endpoint configuration - registers this broker as an OTEL trace receiver
+# When enabled, creates a ConfigMap that the ARK controller discovers when processing queries
+otelEndpoint:
+  enabled: true

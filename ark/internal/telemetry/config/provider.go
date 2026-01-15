@@ -11,11 +11,13 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"mckinsey.com/ark/internal/telemetry"
 	"mckinsey.com/ark/internal/telemetry/noop"
 	otelimpl "mckinsey.com/ark/internal/telemetry/otel"
+	"mckinsey.com/ark/internal/telemetry/routing"
 )
 
 var log = logf.Log.WithName("telemetry.config")
@@ -31,47 +33,86 @@ type Provider struct {
 	shutdown      func() error
 }
 
-// NewProvider creates a telemetry provider based on configuration.
-// If OTEL endpoint is not configured, returns a no-op provider.
-func NewProvider() *Provider {
-	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	if endpoint == "" {
-		log.Info("OTEL_EXPORTER_OTLP_ENDPOINT not set, using no-op telemetry")
-		return newNoopProvider()
+func discoverBrokerProcessor(ctx context.Context, k8sClient client.Client) trace.SpanProcessor {
+	brokerEndpoints, err := routing.DiscoverBrokerEndpoints(ctx, k8sClient)
+	if err != nil {
+		log.Error(err, "failed to discover broker endpoints")
+		return nil
 	}
 
+	if len(brokerEndpoints) == 0 {
+		log.Info("no broker OTEL endpoints discovered")
+		return nil
+	}
+
+	namespaces := make([]string, 0, len(brokerEndpoints))
+	for _, endpoint := range brokerEndpoints {
+		namespaces = append(namespaces, endpoint.Namespace)
+	}
+	log.Info("discovered broker OTEL endpoints", "count", len(brokerEndpoints), "namespaces", namespaces)
+
+	routingProcessor, err := routing.NewRoutingSpanProcessor(ctx, brokerEndpoints)
+	if err != nil {
+		log.Error(err, "failed to create routing processor")
+		return nil
+	}
+
+	log.Info("routing processor configured", "brokers", len(brokerEndpoints))
+	return routingProcessor
+}
+
+// NewProvider creates a telemetry provider based on configuration.
+// If OTEL endpoint is not configured and no brokers discovered, returns a no-op provider.
+func NewProvider(ctx context.Context, k8sClient client.Client) *Provider {
 	serviceName := os.Getenv("OTEL_SERVICE_NAME")
 	if serviceName == "" {
 		serviceName = "ark-controller"
 	}
 
-	headers := os.Getenv("OTEL_EXPORTER_OTLP_HEADERS")
+	spanProcessors := []trace.SpanProcessor{}
 
-	log.Info("initializing OTEL telemetry", "endpoint", endpoint, "service", serviceName, "headers", headers)
+	primaryEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if primaryEndpoint != "" {
+		headers := os.Getenv("OTEL_EXPORTER_OTLP_HEADERS")
+		log.Info("configuring primary OTEL endpoint", "endpoint", primaryEndpoint, "service", serviceName, "headers", headers)
 
-	// Auto-configure OTLP exporter from environment variables:
-	// OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS, OTEL_SERVICE_NAME
-	exporter, err := otlptracehttp.New(context.Background())
-	if err != nil {
-		log.Error(err, "failed to create OTLP exporter, falling back to no-op telemetry")
+		exporter, err := otlptracehttp.New(ctx)
+		if err != nil {
+			log.Error(err, "failed to create primary OTLP exporter")
+		} else {
+			spanProcessors = append(spanProcessors, trace.NewBatchSpanProcessor(exporter))
+			log.Info("primary OTEL exporter configured")
+		}
+	}
+
+	if k8sClient != nil {
+		if processor := discoverBrokerProcessor(ctx, k8sClient); processor != nil {
+			spanProcessors = append(spanProcessors, processor)
+		}
+	}
+
+	if len(spanProcessors) == 0 {
+		log.Info("no OTEL endpoints configured, using no-op telemetry")
 		return newNoopProvider()
 	}
 
-	// Create trace provider
-	tp := trace.NewTracerProvider(
-		trace.WithBatcher(exporter),
+	opts := []trace.TracerProviderOption{
 		trace.WithResource(resource.NewWithAttributes(
 			semconv.SchemaURL,
 			semconv.ServiceName(serviceName),
 		)),
-	)
+	}
+
+	for _, processor := range spanProcessors {
+		opts = append(opts, trace.WithSpanProcessor(processor))
+	}
+
+	tp := trace.NewTracerProvider(opts...)
 
 	otelapi.SetTracerProvider(tp)
 
-	// Send startup event
 	sendStartupEvent(serviceName)
 
-	// Create OTEL-backed implementations
 	tracer := otelimpl.NewTracer("ark/controller")
 	queryRecorder := otelimpl.NewQueryRecorder(tracer)
 	agentRecorder := otelimpl.NewAgentRecorder(tracer)
@@ -79,7 +120,7 @@ func NewProvider() *Provider {
 	toolRecorder := otelimpl.NewToolRecorder(tracer)
 	teamRecorder := otelimpl.NewTeamRecorder(tracer)
 
-	log.Info("OTEL telemetry initialized successfully")
+	log.Info("OTEL telemetry initialized successfully", "exporters", len(spanProcessors))
 
 	return &Provider{
 		tracer:        tracer,

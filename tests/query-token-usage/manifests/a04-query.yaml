@@ -7,6 +7,6 @@ spec:
     Please explain the concept of distributed computing in detail, including key principles, 
     advantages, challenges, and real-world applications. Provide examples of distributed 
     systems and discuss how they handle consistency, availability, and partition tolerance.
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: token-test-agent

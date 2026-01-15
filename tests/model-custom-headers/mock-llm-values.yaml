@@ -1,10 +1,12 @@
 # Mock LLM configuration for custom headers test
 # Echoes back received headers as JSON for verification
+terminationGracePeriodSeconds: 3
 ark:
   model:
     enabled: true
     name: test-model-custom-headers
-    type: openai
+    type: completions
+    provider: openai
     model: gpt-5
     apiKey: mock-api-key
     headers:

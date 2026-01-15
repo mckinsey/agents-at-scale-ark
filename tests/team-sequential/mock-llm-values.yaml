@@ -1,0 +1,39 @@
+terminationGracePeriodSeconds: 3
+ark:
+  model:
+    enabled: true
+    name: test-model
+    type: completions
+    provider: openai
+    model: gpt-4
+    apiKey: mock-api-key
+
+config:
+  rules:
+    # Catch-all - matches everything but gets overridden by more specific rules.
+    # This catches model probes which don't match the agent-specific rules below.
+    - path: "/v1/chat/completions"
+      response:
+        status: 200
+        content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
+
+    # Researcher Agent
+    - path: "/v1/chat/completions"
+      match: "contains(body.messages[0].content || '', 'Researcher Agent')"
+      response:
+        status: 200
+        content: '{"choices":[{"message":{"role":"assistant","content":"RESEARCH: AI adoption increased 270% in 4 years."},"finish_reason":"stop"}]}'
+
+    # Analyst Agent
+    - path: "/v1/chat/completions"
+      match: "contains(body.messages[0].content || '', 'Analyst Agent')"
+      response:
+        status: 200
+        content: '{"choices":[{"message":{"role":"assistant","content":"ANALYSIS: AI is transitioning from optional to mandatory."},"finish_reason":"stop"}]}'
+
+    # Summarizer Agent
+    - path: "/v1/chat/completions"
+      match: "contains(body.messages[0].content || '', 'Summarizer Agent')"
+      response:
+        status: 200
+        content: '{"choices":[{"message":{"role":"assistant","content":"SUMMARY: AI is reshaping business with 77% adoption."},"finish_reason":"stop"}]}'

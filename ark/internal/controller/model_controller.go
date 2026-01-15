@@ -5,18 +5,19 @@ package controller
 import (
 	"context"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/eventing"
+	eventnoop "mckinsey.com/ark/internal/eventing/noop"
 	"mckinsey.com/ark/internal/genai"
 	"mckinsey.com/ark/internal/telemetry"
+	telenoop "mckinsey.com/ark/internal/telemetry/noop"
 )
 
 const (
@@ -27,8 +28,8 @@ const (
 type ModelReconciler struct {
 	client.Client
 	Scheme    *runtime.Scheme
-	Recorder  record.EventRecorder
 	Telemetry telemetry.Provider
+	Eventing  eventing.Provider
 }
 
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=models,verbs=get;list;watch;create;update;patch;delete
@@ -66,6 +67,7 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		}
 		// Log the failure only when condition changes
 		if changed {
+			r.Eventing.ModelRecorder().ModelUnavailable(ctx, &model, result.Message)
 			log.Info("model probe failed",
 				"model", model.Name,
 				"status", result.Message,
@@ -84,33 +86,25 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 }
 
 func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Model) genai.ProbeResult {
-	ctx, span := r.Telemetry.ModelRecorder().StartModelProbe(ctx, model.Name, model.Namespace)
-	defer span.End()
-
+	noopTelemetryRecorder := telenoop.NewModelRecorder()
+	noopEventingRecorder := eventnoop.NewModelRecorder()
 	resolvedModel, err := genai.LoadModel(ctx, r.Client, &arkv1alpha1.AgentModelRef{
 		Name:      model.Name,
 		Namespace: model.Namespace,
-	}, model.Namespace, nil, r.Telemetry.ModelRecorder())
+	}, model.Namespace, nil, noopTelemetryRecorder, noopEventingRecorder)
 	if err != nil {
-		r.Telemetry.ModelRecorder().RecordError(span, err)
 		return genai.ProbeResult{
 			Available:     false,
-			Message:       "Failed to load model configuration",
+			Message:       err.Error(),
 			DetailedError: err,
 		}
 	}
 
 	result := genai.ProbeModel(ctx, resolvedModel)
-	if !result.Available {
-		r.Telemetry.ModelRecorder().RecordError(span, result.DetailedError)
-	} else {
-		r.Telemetry.ModelRecorder().RecordSuccess(span)
-	}
-
 	return result
 }
 
-// reconcileCondition updates a condition on the Model, emits an event if changed, and updates status
+// reconcileCondition updates a condition on the Model and updates status
 // Returns true if the condition changed, false otherwise
 func (r *ModelReconciler) reconcileCondition(ctx context.Context, model *arkv1alpha1.Model, conditionType string, status metav1.ConditionStatus, reason, message string) (bool, error) {
 	changed := meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
@@ -124,13 +118,6 @@ func (r *ModelReconciler) reconcileCondition(ctx context.Context, model *arkv1al
 	if !changed {
 		return false, nil
 	}
-
-	// Emit event based on condition status
-	eventType := corev1.EventTypeNormal
-	if status == metav1.ConditionFalse {
-		eventType = corev1.EventTypeWarning
-	}
-	r.Recorder.Event(model, eventType, reason, message)
 
 	// Update status
 	return true, r.updateStatus(ctx, model)

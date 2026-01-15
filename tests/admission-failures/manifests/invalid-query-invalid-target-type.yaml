@@ -4,6 +4,6 @@ metadata:
   name: invalid-query-invalid-target-type
 spec:
   input: "Test query with invalid target type"
-  targets:
-  - type: invalid  # Unsupported target type - should fail admission
+  target:
+    type: invalid  # Unsupported target type - should fail admission
     name: test-target

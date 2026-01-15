@@ -1,0 +1,154 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: agent-partial-tool-valuefrom
+spec:
+  description: Test partial tool parameters with valueFrom (configMapKeyRef)
+  steps:
+    - name: setup
+      try:
+        - script:
+            timeout: 120s
+            content: |
+              helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+                --version 0.1.27 \
+                --namespace $NAMESPACE \
+                --values mock-llm-values.yaml \
+                --wait --timeout=120s
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+        - script:
+            timeout: 30s
+            content: |
+              helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Model
+              metadata:
+                name: test-model
+              status:
+                conditions:
+                  - type: ModelAvailable
+                    status: "True"
+      catch:
+        - events: {}
+        - describe:
+            apiVersion: v1
+            kind: Pod
+            selector: app.kubernetes.io/name=mock-llm
+        - describe:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Model
+            name: test-model
+
+    - name: create-resources
+      try:
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: tool-config
+              data:
+                default-city: "Chicago"
+        - apply:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Tool
+              metadata:
+                name: get-coordinates
+              spec:
+                type: http
+                description: "Returns coordinates for a city"
+                inputSchema:
+                  type: object
+                  properties:
+                    city:
+                      type: string
+                      description: City name
+                  required: ["city"]
+                http:
+                  url: https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1
+        - apply:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                name: partial-tool-valuefrom-agent
+              spec:
+                description: Agent with partial tool using valueFrom
+                modelRef:
+                  name: test-model
+                tools:
+                  - type: http
+                    name: get-chicago-coordinates
+                    description: Get coordinates for city from config
+                    partial:
+                      name: get-coordinates
+                      parameters:
+                        - name: city
+                          valueFrom:
+                            configMapKeyRef:
+                              name: tool-config
+                              key: default-city
+        - assert:
+            timeout: 10s
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                name: partial-tool-valuefrom-agent
+              status:
+                (conditions[?type == 'Available']):
+                  - status: "True"
+      catch:
+        - events: {}
+        - describe:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Agent
+            name: partial-tool-valuefrom-agent
+
+    - name: run-query
+      try:
+        - apply:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Query
+              metadata:
+                name: partial-tool-valuefrom-query
+              spec:
+                input: What are the coordinates?
+                target:
+                  type: agent
+                  name: partial-tool-valuefrom-agent
+        - assert:
+            timeout: 10s
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Query
+              metadata:
+                name: partial-tool-valuefrom-query
+              status:
+                (conditions[?type == 'Completed']):
+                  - status: "True"
+        - assert:
+            timeout: 5s
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Query
+              metadata:
+                name: partial-tool-valuefrom-query
+              status:
+                (response != null): true
+                (response.target.name): 'partial-tool-valuefrom-agent'
+      catch:
+        - events: {}
+        - describe:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            name: partial-tool-valuefrom-query

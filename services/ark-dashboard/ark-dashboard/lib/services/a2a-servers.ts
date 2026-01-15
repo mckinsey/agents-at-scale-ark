@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
 
 // A2A Server interface for UI compatibility
@@ -64,19 +65,29 @@ export const A2AServersService = {
     const response =
       await apiClient.get<A2AServerListResponse>(`/api/v1/a2a-servers`);
     console.log('A2A Servers:', response.items);
-    return response.items;
+    return response.items.map(item => ({
+      ...item,
+      id: item.name,
+    }));
   },
 
   async get(A2AServerName: string): Promise<A2AServer> {
     const response = await apiClient.get<A2AServer>(
       `/api/v1/a2a-servers/${A2AServerName}`,
     );
-    return response;
+    return {
+      ...response,
+      id: response.name,
+    };
   },
 
   // Delete an A2A server
   async delete(identifier: string): Promise<void> {
     await apiClient.delete(`/api/v1/a2a-servers/${identifier}`);
+    trackEvent({
+      name: 'a2a_server_deleted',
+      properties: { serverName: identifier },
+    });
   },
 
   async create(A2ASever: A2AServerConfiguration): Promise<A2AServer> {
@@ -84,7 +95,14 @@ export const A2AServersService = {
       `/api/v1/a2a-servers`,
       A2ASever,
     );
-    return response;
+    trackEvent({
+      name: 'a2a_server_created',
+      properties: { serverName: response.name },
+    });
+    return {
+      ...response,
+      id: response.name,
+    };
   },
 
   async update(
@@ -95,6 +113,13 @@ export const A2AServersService = {
       `/api/v1/a2a-servers/${A2AServerName}`,
       spec,
     );
-    return response;
+    trackEvent({
+      name: 'a2a_server_updated',
+      properties: { serverName: response.name },
+    });
+    return {
+      ...response,
+      id: response.name,
+    };
   },
 };

@@ -1,0 +1,156 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: prometheus-tls-config
+spec:
+  description: Validates that Prometheus ServiceMonitor uses secure TLS configuration with cert-manager certificates
+  steps:
+    - name: verify-cert-manager-installed
+      try:
+        - script:
+            content: |
+              if ! kubectl get crd certificates.cert-manager.io >/dev/null 2>&1; then
+                echo "cert-manager CRDs not found. Installing cert-manager..."
+                kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
+                kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
+              else
+                echo "cert-manager already installed"
+              fi
+        - assert:
+            resource:
+              apiVersion: apiextensions.k8s.io/v1
+              kind: CustomResourceDefinition
+              metadata:
+                name: certificates.cert-manager.io
+
+    - name: setup-cert-manager-resources
+      try:
+        - apply:
+            file: manifests/cert-manager-setup.yaml
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: cert-manager.io/v1
+              kind: Issuer
+              metadata:
+                name: selfsigned-issuer
+                namespace: ark-system
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: cert-manager.io/v1
+              kind: Certificate
+              metadata:
+                name: metrics-certs
+                namespace: ark-system
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+
+    - name: verify-metrics-cert-secret-exists
+      try:
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: v1
+              kind: Secret
+              metadata:
+                name: metrics-server-cert
+                namespace: ark-system
+              data:
+                (length("ca.crt") > `0`): true
+                (length("tls.crt") > `0`): true
+                (length("tls.key") > `0`): true
+
+
+
+    - name: verify-servicemonitor-crd-installed
+      try:
+        - script:
+            content: |
+              if ! kubectl get crd servicemonitors.monitoring.coreos.com >/dev/null 2>&1; then
+                echo "ServiceMonitor CRD not found. Installing..."
+                kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.71.2/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+                kubectl wait --for=condition=established crd/servicemonitors.monitoring.coreos.com --timeout=60s
+              else
+                echo "ServiceMonitor CRD already installed"
+              fi
+        - assert:
+            resource:
+              apiVersion: apiextensions.k8s.io/v1
+              kind: CustomResourceDefinition
+              metadata:
+                name: servicemonitors.monitoring.coreos.com
+
+    - name: apply-service-monitor
+      try:
+        - apply:
+            file: manifests/service-monitor.yaml
+        - assert:
+            resource:
+              apiVersion: monitoring.coreos.com/v1
+              kind: ServiceMonitor
+              metadata:
+                name: ark-controller-metrics-monitor
+                namespace: ark-system
+              spec:
+                endpoints:
+                  - path: /metrics
+                    port: https
+                    scheme: https
+                    tlsConfig:
+                      insecureSkipVerify: false
+                      ca:
+                        secret:
+                          name: metrics-server-cert
+                          key: ca.crt
+                      cert:
+                        secret:
+                          name: metrics-server-cert
+                          key: tls.crt
+                      keySecret:
+                        name: metrics-server-cert
+                        key: tls.key
+
+    - name: verify-secure-tls-config
+      try:
+        - script:
+            content: |
+              # Verify ServiceMonitor has secure TLS configuration
+              sm=$(kubectl get servicemonitor ark-controller-metrics-monitor -n ark-system -o json)
+              
+              # Check insecureSkipVerify is false
+              insecure=$(echo "$sm" | jq -r '.spec.endpoints[0].tlsConfig.insecureSkipVerify')
+              if [ "$insecure" != "false" ]; then
+                echo "ERROR: insecureSkipVerify is not false, got: $insecure"
+                exit 1
+              fi
+              
+              # Check CA certificate reference exists
+              ca_secret=$(echo "$sm" | jq -r '.spec.endpoints[0].tlsConfig.ca.secret.name')
+              if [ "$ca_secret" != "metrics-server-cert" ]; then
+                echo "ERROR: CA secret name incorrect, got: $ca_secret"
+                exit 1
+              fi
+              
+              # Check cert reference exists
+              cert_secret=$(echo "$sm" | jq -r '.spec.endpoints[0].tlsConfig.cert.secret.name')
+              if [ "$cert_secret" != "metrics-server-cert" ]; then
+                echo "ERROR: Cert secret name incorrect, got: $cert_secret"
+                exit 1
+              fi
+              
+              # Check keySecret reference exists
+              key_secret=$(echo "$sm" | jq -r '.spec.endpoints[0].tlsConfig.keySecret.name')
+              if [ "$key_secret" != "metrics-server-cert" ]; then
+                echo "ERROR: KeySecret name incorrect, got: $key_secret"
+                exit 1
+              fi
+              
+              echo "✓ Secure TLS configuration verified"
+

@@ -1,0 +1,80 @@
+# DevSpace configuration for ark-broker service
+version: v2beta1
+
+pipelines:
+  deploy: |-
+    build_images --all
+    create_deployments --all
+  dev: |-
+    create_deployments --all
+    start_dev --all
+
+images:
+  ark-broker:
+    image: ark-broker
+    dockerfile: ./ark-broker/Dockerfile
+    context: ./ark-broker
+
+deployments:
+  ark-broker:
+    namespace: default
+    helm:
+      chart:
+        path: ./chart
+      values:
+        app:
+          image:
+            repository: ${runtime.images.ark-broker.image}
+            tag: ${runtime.images.ark-broker.tag}
+          resources:
+            limits:
+              memory: "1024Mi"
+              cpu: "1000m"
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+        memory:
+          setAsDefault: true
+        persistence:
+          enabled: true
+          size: 1Gi
+        otelEnvironmentVariableSecrets:
+          enabled: true
+          namespaces:
+            - ark-system
+            - default
+
+hooks:
+  - command: |-
+      echo "Restarting ark-controller to pick up broker OTEL configuration..."
+
+      # Check if ark-controller-devspace exists first (DevSpace deployment)
+      if kubectl get deployment ark-controller-devspace -n ark-system >/dev/null 2>&1; then
+        echo "Found ark-controller-devspace, restarting..."
+        kubectl rollout restart deployment/ark-controller-devspace -n ark-system
+        kubectl rollout status deployment/ark-controller-devspace -n ark-system --timeout=120s
+      # Otherwise check for regular ark-controller deployment
+      elif kubectl get deployment ark-controller -n ark-system >/dev/null 2>&1; then
+        echo "Found ark-controller, restarting..."
+        kubectl rollout restart deployment/ark-controller -n ark-system
+        kubectl rollout status deployment/ark-controller -n ark-system --timeout=120s
+      else
+        echo "Warning: No ark-controller deployment found in ark-system namespace"
+      fi
+    events: ["after:deploy:ark-broker"]
+
+dev:
+  ark-broker:
+    imageSelector: ark-broker
+    devImage: node:24-alpine
+    command: ["sh", "-c", "cd /app && npm install && npm run dev"]
+    namespace: default
+    logs:
+      lastLines: 50
+    sync:
+      - path: ./ark-broker:/app
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+    ssh:
+      enabled: true

@@ -10,6 +10,7 @@ import (
 
 	"github.com/openai/openai-go"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/eventing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -18,6 +19,7 @@ const (
 	DefaultTimeoutSeconds = 30 // Default timeout in seconds
 	ContentTypeJSON       = "application/json"
 	MessagesEndpoint      = "/messages"
+	ConversationsEndpoint = "/conversations"
 	CompletionEndpoint    = "/stream/%s/complete"
 	MaxRetries            = 3
 	RetryDelay            = 100 * time.Millisecond
@@ -42,25 +44,25 @@ type MemoryInterface interface {
 }
 
 type Config struct {
-	Timeout    time.Duration
-	MaxRetries int
-	RetryDelay time.Duration
-	SessionId  string
-	QueryName  string
+	Timeout        time.Duration
+	MaxRetries     int
+	RetryDelay     time.Duration
+	ConversationId string
+	QueryName      string
 }
 
 type MessagesRequest struct {
-	SessionID string                                   `json:"session_id"`
-	QueryID   string                                   `json:"query_id"`
-	Messages  []openai.ChatCompletionMessageParamUnion `json:"messages"`
+	ConversationID string                                   `json:"conversation_id,omitempty"`
+	QueryID        string                                   `json:"query_id"`
+	Messages       []openai.ChatCompletionMessageParamUnion `json:"messages"`
 }
 
 type MessageRecord struct {
-	ID        int64           `json:"id"`
-	SessionID string          `json:"session_id"`
-	QueryID   string          `json:"query_id"`
-	Message   json.RawMessage `json:"message"`
-	CreatedAt string          `json:"created_at"`
+	ID             int64           `json:"id"`
+	ConversationID string          `json:"conversation_id"`
+	QueryID        string          `json:"query_id"`
+	Message        json.RawMessage `json:"message"`
+	CreatedAt      string          `json:"created_at"`
 }
 
 type MessagesResponse struct {
@@ -78,17 +80,17 @@ func DefaultConfig() Config {
 	}
 }
 
-func NewMemory(ctx context.Context, k8sClient client.Client, memoryName, namespace string, recorder EventEmitter) (MemoryInterface, error) {
-	return NewMemoryWithConfig(ctx, k8sClient, memoryName, namespace, recorder, DefaultConfig())
+func NewMemory(ctx context.Context, k8sClient client.Client, memoryName, namespace string, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
+	return NewMemoryWithConfig(ctx, k8sClient, memoryName, namespace, DefaultConfig(), memoryRecorder)
 }
 
-func NewMemoryWithConfig(ctx context.Context, k8sClient client.Client, memoryName, namespace string, recorder EventEmitter, config Config) (MemoryInterface, error) {
-	return NewHTTPMemory(ctx, k8sClient, memoryName, namespace, recorder, config)
+func NewMemoryWithConfig(ctx context.Context, k8sClient client.Client, memoryName, namespace string, config Config, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
+	return NewHTTPMemory(ctx, k8sClient, memoryName, namespace, config, memoryRecorder)
 }
 
-func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *arkv1alpha1.MemoryRef, namespace string, recorder EventEmitter, sessionId, queryName string) (MemoryInterface, error) {
+func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *arkv1alpha1.MemoryRef, namespace, conversationId, queryName string, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
 	config := DefaultConfig()
-	config.SessionId = sessionId
+	config.ConversationId = conversationId
 	config.QueryName = queryName
 
 	var memoryName, memoryNamespace string
@@ -100,13 +102,13 @@ func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *
 			// If default memory doesn't exist, use noop memory
 			return NewNoopMemory(), nil
 		}
-		memoryName, memoryNamespace = "default", namespace
+		memoryName, memoryNamespace = "default", namespace //nolint:goconst // "default" here is memory name, not model
 	} else {
 		memoryName = memoryRef.Name
 		memoryNamespace = resolveNamespace(memoryRef.Namespace, namespace)
 	}
 
-	memory, err := NewMemoryWithConfig(ctx, k8sClient, memoryName, memoryNamespace, recorder, config)
+	memory, err := NewMemoryWithConfig(ctx, k8sClient, memoryName, memoryNamespace, config, memoryRecorder)
 	if err != nil {
 		return nil, err
 	}

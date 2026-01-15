@@ -6,6 +6,7 @@ import (
 	"context"
 	"sync"
 
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
@@ -199,11 +200,11 @@ func NewQueryRecorder(tracer *MockTracer) *MockQueryRecorder {
 	}
 }
 
-func (r *MockQueryRecorder) StartQuery(ctx context.Context, queryName, queryNamespace, phase string) (context.Context, telemetry.Span) {
+func (r *MockQueryRecorder) StartQuery(ctx context.Context, query *arkv1alpha1.Query, phase string) (context.Context, telemetry.Span) {
 	return r.Tracer.Start(ctx, "query."+phase,
 		telemetry.WithAttributes(
-			telemetry.String(telemetry.AttrQueryName, queryName),
-			telemetry.String(telemetry.AttrQueryNamespace, queryNamespace),
+			telemetry.String(telemetry.AttrQueryName, query.Name),
+			telemetry.String(telemetry.AttrQueryNamespace, query.Namespace),
 			telemetry.String(telemetry.AttrQueryPhase, phase),
 		),
 	)
@@ -245,6 +246,12 @@ func (r *MockQueryRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, 
 func (r *MockQueryRecorder) RecordSessionID(span telemetry.Span, sessionID string) {
 	if sessionID != "" {
 		span.SetAttributes(telemetry.String(telemetry.AttrSessionID, sessionID))
+	}
+}
+
+func (r *MockQueryRecorder) RecordConversationID(span telemetry.Span, conversationID string) {
+	if conversationID != "" {
+		span.SetAttributes(telemetry.String(telemetry.AttrConversationID, conversationID))
 	}
 }
 

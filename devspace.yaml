@@ -9,8 +9,8 @@ dependencies:
     path: ./services/keycloak
   ark:
     path: ./ark
-  ark-cluster-memory:
-    path: ./services/ark-cluster-memory
+  ark-broker:
+    path: ./services/ark-broker
   ark-api:
     path: ./services/ark-api
   ark-dashboard:

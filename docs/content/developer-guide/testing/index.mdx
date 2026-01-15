@@ -1,0 +1,440 @@
+---
+title: End-to-End Testing
+description: Comprehensive testing guide for ARK applications using Chainsaw and Hurl
+---
+
+# End-to-End Testing
+
+ARK uses [Chainsaw](https://github.com/kyverno/chainsaw) to declaratively create resources, run scripts, and validate resources. For example, we can create agents, teams, and queries and validate the statuses of each and the success state of a query or evaluation.
+
+## Setup
+
+Eusure you [installed Ark](../../quickstart.mdx).
+
+### Install Chainsaw CLI
+
+Install chainsaw for running tests locally:
+
+```bash
+# Install with Homebrew:
+brew tap kyverno/chainsaw https://github.com/kyverno/chainsaw
+brew install kyverno/chainsaw/chainsaw
+
+# Or with Go:
+go install github.com/kyverno/chainsaw@latest
+```
+
+## Running Tests Locally
+
+### Simulate GitHub E2E Environment
+
+To replicate the GitHub workflow environment locally:
+
+```bash
+# Install k3d and create test cluster
+brew install k3d
+k3d cluster create ark-e2e
+
+# Run standard tests.
+(cd tests && chainsaw test --selector 'standard')
+
+# Run LLM tests. Requires model credentials to be configured.
+(cd tests && chainsaw test --selector 'llm')
+
+# Run evaluated tests (requires evals to be setup)
+(cd tests && chainsaw test --selector 'evaluated')
+```
+
+### Model Tests
+
+Use the models e2e test as a sample:
+
+```bash
+# Setup required env vars - these are pre-configured for GitHub actions.
+export E2E_TEST_AZURE_OPENAI_KEY="your-key"
+export E2E_TEST_AZURE_OPENAI_BASE_URL="your-endpoint"
+
+# Run any specific tests.
+chainsaw test ./tests/models --fail-fast
+```
+
+### Test Execution Details
+
+Chainsaw tests will:
+
+- Check required environment variables are set (e.g., API keys)
+- Apply the test resources in a new namespace
+- Assert the resources reach the expected state
+- Clean up resources after test completion
+
+You can see the resources that are created in the namespace during test execution in the chainsaw output.
+
+### Testing Workflows Locally
+
+Use [act](https://github.com/nektos/act) to test GitHub workflows locally:
+
+```bash
+# Install act, then run workflows locally
+act pull_request
+```
+
+## Developing New Tests
+
+### Test Structure
+
+Chainsaw tests follow this typical pattern:
+
+```yaml
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: azure-openai-model-test
+spec:
+  steps:
+    # Validate required environment variables
+    - name: check-env-vars
+      try:
+        - script:
+            content: |
+              if [ -z "$E2E_TEST_AZURE_OPENAI_KEY" ]; then
+                echo "E2E_TEST_AZURE_OPENAI_KEY is required"
+                exit 1
+              fi
+    
+    # Generate templated resources and apply them  
+    - name: apply
+      try:
+        - script:
+            content: |
+              kustomize build manifests | envsubst > /tmp/test-resources.yaml
+        - apply:
+            file: /tmp/test-resources.yaml
+      finally:
+        - script:
+            content: rm -f /tmp/test-resources.yaml
+    
+    # Wait for model to reach ready state
+    - name: assert
+      try:
+        - assert:
+            file: assert-ready.yaml
+```
+
+### Writing Test Assertions
+
+Create assertion files to validate resource states:
+
+```yaml
+# assert-ready.yaml
+apiVersion: v1alpha1
+kind: Model
+metadata:
+  name: test-model
+status:
+  conditions:
+    - type: "Ready"
+      status: "True"
+      reason: "ModelResolved"
+      message: "Model successfully resolved and validated"
+      observedGeneration: 1
+    - type: "Discovering"
+      status: "False"
+      reason: "ValidationComplete"
+      message: "Model validation completed successfully"
+      observedGeneration: 1
+```
+
+### Environment Variable Templating
+
+Use `envsubst` for dynamic resource generation:
+
+```yaml
+# In your manifest template
+apiVersion: v1alpha1
+kind: Model
+metadata:
+  name: test-model
+spec:
+  source: azure-openai
+  config:
+    endpoint: $E2E_TEST_AZURE_OPENAI_BASE_URL
+    apiKey: $E2E_TEST_AZURE_OPENAI_KEY
+```
+
+### Test Organization
+
+Structure tests by component:
+- `tests/models/` - Core model resource tests
+- `services/{service}/test/` - Service-specific integration tests
+- `ark/test/e2e/` - Controller and webhook tests
+
+## Debugging Tests
+
+### Verbose Output
+
+Run chainsaw with verbose flags for debugging:
+
+```bash
+# Detailed output
+chainsaw test ./tests/models --verbose
+
+# Keep test namespaces for inspection
+chainsaw test ./tests/models --cleanup=false
+
+# Run specific test steps
+chainsaw test ./tests/models --test-dir=specific-test
+```
+
+### Inspecting Resources
+
+When tests fail, inspect the created resources:
+
+```bash
+# List namespaces created by chainsaw
+kubectl get ns | grep chainsaw
+
+# Check resources in test namespace
+kubectl get all -n chainsaw-test-namespace
+
+# View logs from failed pods
+kubectl logs -n chainsaw-test-namespace pod/failing-pod
+```
+
+### Summarizing Chainsaw Test Results
+
+For a quick summary of your Chainsaw test results, you can use the provided `scripts/chainsaw_summary.py` script. This script reads a Chainsaw JSON report and prints a concise table showing which tests passed or failed.
+
+#### Usage
+
+1. **Run your Chainsaw tests with JSON reporting enabled** (e.g., `chainsaw test ... --report-json /tmp/coverage-reports/chainsaw-report.json`).
+2. **Run the summary script:**
+
+   ```bash
+   python3 scripts/chainsaw_summary.py /tmp/coverage-reports/chainsaw-report.json
+   ```
+
+   If you omit the report path, it defaults to `/tmp/coverage-reports/chainsaw-report.json`.
+
+#### Example Output
+
+```
+Test Name                    | Result
+------------------------------------------
+query-model-target           | ✅ Passed
+admission-failures           | ❌ Failed
+query-label-selector         | ✅ Passed
+query-event-recorder         | ✅ Passed
+queries                      | ✅ Passed
+models                       | ✅ Passed
+
+```
+3. **Include the evaluation summary with the `--append-evals` flag:**
+
+   ```bash
+    python3 scripts/chainsaw_summary.py --append-evals 
+   ```
+
+#### Example Output
+
+```
+Evaluation                | Score     | Evaluator
+--------------------------------------------------
+chicago-weather-query     | 30       | evaluator-llm
+research-query            | 95       | evaluator-llm
+```
+
+### Common Issues
+
+**Environment Variables Not Set**
+- Ensure all required env vars are exported before running tests
+- Use `env | grep TEST` to verify variables are set
+
+**Resource Not Ready**
+- Increase timeout in assertion files
+- Check controller logs for resource processing errors
+- Verify all dependencies are deployed
+
+**Test Namespace Conflicts**
+- Use unique test names to avoid namespace collisions
+- Clean up previous test runs with `--cleanup=true`
+
+## Available Environment Variables for GitHub Actions
+
+These environment variables are available on GitHub runners for your tests:
+
+| Variable | Description |
+|----------|-------------|
+| `E2E_TEST_AZURE_OPENAI_KEY` | Azure OpenAI API key for testing model deployments |
+| `E2E_TEST_AZURE_OPENAI_BASE_URL` | Azure OpenAI endpoint URL (e.g., `https://your-instance.openai.azure.com`) |
+
+## Testign with Mocked LLMs, Mocked A2A Servers, or Mocked MCP Servers
+
+We have built and used [`mock-llm`](https://github.com/dwmkerr/mock-llm) to allow us to define how LLMs, A2A servers, and MCP servers should behave, this allows for deterministic testing of behaviours that rely on models.
+
+Search the codebase for `mock-llm` to see examples.
+
+## HTTP API Testing with Hurl
+
+[Hurl](https://hurl.dev/) is used for testing HTTP APIs of services within chainsaw tests. It comprehensive HTTP client functionality with JSON path validation and test assertions. This is used to test some MCP servers.
+
+Search the codebase for `hurl` for examples
+
+## Simple Test Example
+
+### Setting Up a Mock LLM Model
+
+Install [mock-llm Helm chart](https://github.com/dwmkerr/mock-llm). An Ark model named `mock-gpt-4.1` will be created:
+
+```yaml
+# Mock-LLM doesn't need to gracefully end, so we can be fast terminating it.
+terminationGracePeriodSeconds: 3
+
+# When Mock-LLM is installed, create an Ark Model that points to it and uses
+# the following configuration:
+ark:
+  model:
+    enabled: true
+    name: mock-gpt-4.1
+    type: openai
+    model: gpt-4.1
+    pollInterval: 3s
+    apiKey: mock-api-key
+
+# Specify rules - how the model will respond to specific inputs.
+config:
+  # On any incoming completions request, echo the messaege.
+  rules:
+  - path: "/v1/chat/completions"
+    match: "@"
+    response:
+      status: 200
+      content: |
+        {
+          "id": "mock-{{timestamp}}",
+          "object": "chat.completion",
+          "model": "{{jmes request body.model}}",
+          "choices": [{
+            "message": {{jmes request body.messages[0]}},
+            "finish_reason": "stop"
+          }]
+        }
+```
+
+Install in your chainsaw test:
+
+```yaml
+- script:
+    content: |
+      helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+        --version 0.1.23 \
+        --namespace $NAMESPACE \
+        --values mock-llm-values.yaml
+    env:
+    - name: NAMESPACE
+      value: ($namespace)
+```
+
+Wait for the Model to become available - this step will pass when the Mock-LLM server is responding to heath check sent by the Ark controller and the model is `Available`:
+
+```yaml
+- assert:
+    # 10 seconds is usually enough for mock-llm and the controller to reconcile
+    # the model.
+    timeout: 10s
+    resource:
+      apiVersion: ark.mckinsey.com/v1alpha1
+      kind: Model
+      metadata:
+        name: mock-gpt-4.1
+      status:
+        conditions:
+        - type: ModelAvailable
+          status: "True"
+  catch:
+  - describe:
+      apiVersion: ark.mckinsey.com/v1alpha1
+      kind: model
+      name: test-model
+```
+
+Keep a short timeout for `Assert` for determinstic tests - if resources fail to set the right conditions early the test is likely failing.
+
+Also use `catch` and `describe` to show events and resources if assertations fail.
+
+Create an Agent and assert it's available:
+
+```yaml
+- apply:
+    resource:
+      apiVersion: ark.mckinsey.com/v1alpha1
+      kind: Agent
+      metadata:
+        name: test-agent
+      spec:
+        modelRef:
+          name: mock-gpt-4.1
+        prompt: You are a test agent.
+
+- assert:
+    timeout: 10s   # Agents are quick to create
+    resource:
+      apiVersion: ark.mckinsey.com/v1alpha1
+      kind: Agent
+      metadata:
+        name: test-agent
+      status:
+        conditions:
+        - type: Available
+          status: "True"
+  catch:
+  - describe:
+      apiVersion: ark.mckinsey.com/v1alpha1
+      kind: model
+      name: test-model
+```
+
+Create a Query and validate the response:
+
+```yaml
+- apply:
+    resource:
+      apiVersion: ark.mckinsey.com/v1alpha1
+      kind: Query
+      metadata:
+        name: test-query
+      spec:
+        input: What is your name?
+        targets:
+        - type: agent
+          name: test-agent
+  catch:
+  - events: {}
+  - describe:
+      apiVersion: ark.mckinsey.com/v1alpha1
+      kind: agent
+      name: test-agent
+
+- assert:
+    timeout: 10s   # Queries should be quick with mock-llm
+    resource:
+      apiVersion: ark.mckinsey.com/v1alpha1
+      kind: Query
+      metadata:
+        name: test-query
+      status:
+        (conditions[?type == 'Completed']):
+        - status: 'True'
+  catch:
+  - events: {}
+  - describe:
+      apiVersion: ark.mckinsey.com/v1alpha1
+      kind: Query
+      name: test-query
+```
+
+Many more examples are in the `./tests/` folder.
+
+## Next Steps
+
+- [Services](/developer-guide/services) - Learn about ARK services
+- [Observability](/developer-guide/observability) - Monitor your ARK applications

@@ -82,7 +82,7 @@ spec:
           metadata:
             name: test-evaluated-query
           status:
-            (length(responses)): 1
+            (response != null): true
   - name: step-2-post-hoc-evaluation
     try:
     - apply:

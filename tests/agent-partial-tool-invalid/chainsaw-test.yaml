@@ -1,0 +1,75 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: agent-partial-tool-invalid
+spec:
+  description: Test agent with an invalid partial tool reference should have Available=False
+  steps:
+    - name: setup-mock-service
+      try:
+        - script:
+            content: |
+              helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+                --version 0.1.27 \
+                --namespace $NAMESPACE \
+                --values mock-llm-values.yaml
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+        - script:
+            content: |
+              helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                labels:
+                  app.kubernetes.io/name: mock-llm
+              status:
+                phase: Running
+                (contains(conditions[?type == 'Ready'].status, 'True')): true
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Model
+              metadata:
+                name: test-model
+              status:
+                conditions:
+                  - type: ModelAvailable
+                    status: "True"
+      catch:
+        - events: {}
+        - describe:
+            apiVersion: v1
+            kind: Pod
+            selector: app.kubernetes.io/name=mock-llm
+        - describe:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Model
+            name: test-model
+
+    - name: create-invalid-agent
+      try:
+        - apply:
+            file: manifests/*.yaml
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Agent
+              metadata:
+                name: partial-tool-agent-invalid
+              status:
+                (conditions[?type == 'Available']):
+                - status: 'False'
+                  reason: 'ToolNotFound'
+      catch:
+        - events: {}
+        - describe:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Agent
+            name: partial-tool-agent-invalid

@@ -1,11 +1,16 @@
 import {Command} from 'commander';
 import type {ArkConfig} from '../../lib/config.js';
+import {loadConfig} from '../../lib/config.js';
 import output from '../../lib/output.js';
 import {ArkApiProxy} from '../../lib/arkApiProxy.js';
 
 export async function listSessions(options: {output?: string}) {
   try {
-    const proxy = new ArkApiProxy();
+    const config = loadConfig();
+    const proxy = new ArkApiProxy(
+      undefined,
+      config.services?.reusePortForwards ?? false
+    );
     const arkApiClient = await proxy.start();
 
     const sessions = await arkApiClient.getSessions();
@@ -37,7 +42,11 @@ export async function deleteSession(
   options: {output?: string}
 ) {
   try {
-    const proxy = new ArkApiProxy();
+    const config = loadConfig();
+    const proxy = new ArkApiProxy(
+      undefined,
+      config.services?.reusePortForwards ?? false
+    );
     const arkApiClient = await proxy.start();
 
     const response = await arkApiClient.deleteSession(sessionId);
@@ -62,7 +71,11 @@ export async function deleteQuery(
   options: {output?: string}
 ) {
   try {
-    const proxy = new ArkApiProxy();
+    const config = loadConfig();
+    const proxy = new ArkApiProxy(
+      undefined,
+      config.services?.reusePortForwards ?? false
+    );
     const arkApiClient = await proxy.start();
 
     const response = await arkApiClient.deleteQueryMessages(sessionId, queryId);
@@ -85,7 +98,11 @@ export async function deleteQuery(
 
 export async function deleteAll(options: {output?: string}) {
   try {
-    const proxy = new ArkApiProxy();
+    const config = loadConfig();
+    const proxy = new ArkApiProxy(
+      undefined,
+      config.services?.reusePortForwards ?? false
+    );
     const arkApiClient = await proxy.start();
 
     const response = await arkApiClient.deleteAllSessions();

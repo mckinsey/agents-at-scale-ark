@@ -1,33 +1,37 @@
+from __future__ import annotations
+
 import json
 import logging
+import os
 import time
 import uuid
-from typing import Dict, List, Optional
 
-from ark_sdk import QueryV1alpha1Spec
-from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
-from ark_sdk.streaming_config import get_streaming_config, get_streaming_base_url
-from ark_sdk.k8s import get_namespace
-from fastapi import APIRouter
-from fastapi.responses import StreamingResponse, JSONResponse
-from openai.types.chat import ChatCompletion, ChatCompletionMessageParam
-from openai.types import Model
-from pydantic import BaseModel, ValidationError
 import httpx
-from kubernetes_asyncio import client as k8s_client
-
+from ark_sdk import QueryV1alpha1Spec
 from ark_sdk.client import with_ark_client
-from ...models.queries import ArkOpenAICompletionsMetadata
-from ...utils.query_targets import parse_model_to_query_target
-from ...utils.query_polling import poll_query_completion
-from ...utils.streaming import StreamingErrorResponse, create_single_chunk_sse_response
+from ark_sdk.k8s import get_namespace
+from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
+from ark_sdk.streaming_config import get_streaming_base_url, get_streaming_config
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse, StreamingResponse
+from kubernetes_asyncio import client as k8s_client
+from openai.types import Model
+from openai.types.chat import ChatCompletion, ChatCompletionMessageParam
+from pydantic import BaseModel, ValidationError
+
 from ...constants.annotations import STREAMING_ENABLED_ANNOTATION
+from ...models.queries import ArkOpenAICompletionsMetadata
+from ...utils.parse_duration import parse_duration_to_seconds
+from ...utils.query_targets import parse_model_to_query_target
+from ...utils.query_watch import watch_query_completion
+from ...utils.streaming import StreamingErrorResponse, create_single_chunk_sse_response
 
 router = APIRouter(prefix="/openai/v1", tags=["OpenAI"])
 logger = logging.getLogger(__name__)
 
 # Constants
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+BROKER_CONNECT_TIMEOUT = float(os.getenv('BROKER_CONNECT_TIMEOUT', '10.0'))
 
 
 def _parse_timestamp(metadata: dict) -> int:
@@ -52,16 +56,18 @@ def _create_model_entry(resource_id: str, metadata: dict) -> Model:
 
 class ChatCompletionRequest(BaseModel):
     model: str
-    messages: List[ChatCompletionMessageParam]
+    messages: list[ChatCompletionMessageParam]
     temperature: float = 1.0
-    max_tokens: Optional[int] = None
+    max_tokens: int | None = None
     stream: bool = False
-    metadata: Optional[dict] = None  # Supports queryAnnotations: JSON string of K8s annotations
+    metadata: dict | None = (
+        None  # Supports queryAnnotations: JSON string of K8s annotations
+    )
 
 
 def process_request_metadata(
-    request_metadata: Optional[Dict[str, str]], base_metadata: Dict[str, any]
-) -> Optional[JSONResponse]:
+    request_metadata: dict[str, str] | None, base_metadata: dict[str, any]
+) -> JSONResponse | None:
     """Process request metadata and merge Ark annotations into base metadata.
 
     Returns JSONResponse with error if validation fails, None if successful.
@@ -98,7 +104,7 @@ def process_request_metadata(
 # Start streaming first, wait for the first chunk/response, and use the status code of that to respond with
 async def proxy_streaming_response(streaming_url: str):
     """Proxy streaming chunks from memory service."""
-    timeout = httpx.Timeout(10.0, read=None)  # 10s connect, infinite read
+    timeout = httpx.Timeout(BROKER_CONNECT_TIMEOUT, read=None)
     async with httpx.AsyncClient(timeout=timeout) as client:
         async with client.stream("GET", streaming_url) as response:
             if response.status_code != 200:
@@ -107,21 +113,28 @@ async def proxy_streaming_response(streaming_url: str):
                 try:
                     response_text = await response.aread()
                     response_json = json.loads(response_text.decode("utf-8"))
-                    
+
                     # Expected structure: {"error": {"message": "...", "type": "...", "code": "..."}}
-                    if not isinstance(response_json, dict) or "error" not in response_json:
+                    if (
+                        not isinstance(response_json, dict)
+                        or "error" not in response_json
+                    ):
                         raise ValueError("Response missing 'error' field")
-                    
+
                     error_obj = response_json["error"]
                     if not isinstance(error_obj, dict):
                         raise ValueError("'error' field must be an object")
-                    
-                    if "message" not in error_obj or not isinstance(error_obj["message"], str):
+
+                    if "message" not in error_obj or not isinstance(
+                        error_obj["message"], str
+                    ):
                         raise ValueError("'error.message' field missing or invalid")
-                    
-                    if "type" not in error_obj or not isinstance(error_obj["type"], str):
+
+                    if "type" not in error_obj or not isinstance(
+                        error_obj["type"], str
+                    ):
                         raise ValueError("'error.type' field missing or invalid")
-                    
+
                     # Use the error structure from response, with status code added
                     error_data: StreamingErrorResponse = {
                         "error": {
@@ -133,7 +146,9 @@ async def proxy_streaming_response(streaming_url: str):
                     }
                 except (json.JSONDecodeError, ValueError, KeyError) as e:
                     # If we can't parse the expected structure, create a default error
-                    logger.warning(f"Failed to parse error response structure: {e}, using default error format")
+                    logger.warning(
+                        f"Failed to parse error response structure: {e}, using default error format"
+                    )
                     error_data: StreamingErrorResponse = {
                         "error": {
                             "status": response.status_code,
@@ -167,12 +182,25 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
     # Build metadata for the query resource
     metadata = {"name": query_name, "namespace": namespace}
 
-    # Parse queryAnnotations if provided
+    session_id = None
+    if request.metadata and "sessionId" in request.metadata:
+        session_id = request.metadata["sessionId"]
+
+    conversation_id = None
+    if request.metadata and "conversationId" in request.metadata:
+        conversation_id = request.metadata["conversationId"]
+
+    timeout = None
+    if request.metadata and "timeout" in request.metadata:
+        timeout = request.metadata["timeout"]
+
+    # Parse queryAnnotations if provided (for annotations like A2A context ID)
     if request.metadata and "queryAnnotations" in request.metadata:
         try:
             query_annotations = json.loads(request.metadata["queryAnnotations"])
             if "annotations" not in metadata:
                 metadata["annotations"] = {}
+            # Add annotations to metadata (e.g., A2A context ID)
             metadata["annotations"].update(query_annotations)
         except (json.JSONDecodeError, TypeError) as e:
             logger.warning(f"Failed to parse queryAnnotations: {e}")
@@ -185,11 +213,28 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
         metadata["annotations"][STREAMING_ENABLED_ANNOTATION] = "true"
 
     try:
+        # Pydantic returns the tool calls as a ValidatorIterator, so we need to iterate it
+        for message in messages:
+            if message.get("tool_calls"):
+                iterated_messages = [tool_call for tool_call in message["tool_calls"]]
+                if iterated_messages:
+                    message["tool_calls"] = iterated_messages
+                else:
+                    del message["tool_calls"]
+
+        # Build query spec with optional sessionId, conversationId and timeout
+        query_spec_dict = {"type": "messages", "input": messages, "target": target}
+        if session_id:
+            query_spec_dict["sessionId"] = session_id
+        if conversation_id:
+            query_spec_dict["conversationId"] = conversation_id
+        if timeout:
+            query_spec_dict["timeout"] = timeout
+
         # Create the QueryV1alpha1 object with type="messages"
-        # Pass messages directly without json.dumps() - SDK handles serialization
         query_resource = QueryV1alpha1(
             metadata=metadata,
-            spec=QueryV1alpha1Spec(type="messages", input=messages, targets=[target]),
+            spec=QueryV1alpha1Spec(**query_spec_dict),
         )
 
         async with with_ark_client(namespace, "v1alpha1") as ark_client:
@@ -197,11 +242,15 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             await ark_client.queries.a_create(query_resource)
             logger.info(f"Created query: {query_name}")
 
+            # Extract timeout from query spec
+            query_timeout_str = query_resource.spec.timeout
+            timeout_seconds = parse_duration_to_seconds(query_timeout_str) or 300
+
             # If the caller didn't request streaming, we can simply poll for
             # the response.
             if not request.stream:
-                return await poll_query_completion(
-                    ark_client, query_name, model, messages
+                return await watch_query_completion(
+                    ark_client, query_name, model, messages, timeout_seconds
                 )
 
             # Streaming was requested - check if streaming backend is available
@@ -219,8 +268,8 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             # If no config or not enabled, fall back to polling
             if not streaming_config or not streaming_config.enabled:
                 logger.info("No streaming backend configured, falling back to polling")
-                completion = await poll_query_completion(
-                    ark_client, query_name, model, messages
+                completion = await watch_query_completion(
+                    ark_client, query_name, model, messages, timeout_seconds
                 )
                 sse_lines = create_single_chunk_sse_response(completion)
                 return StreamingResponse(
@@ -229,12 +278,7 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
 
             # Streaming is enabled - get the base URL and construct full URL
             base_url = await get_streaming_base_url(streaming_config, namespace, v1)
-            # Construct streaming URL with query parameters:
-            # - from-beginning=true: Start streaming from the first chunk (don't skip any data)
-            # - wait-for-query=30s: Wait up to 30 seconds for the query to start producing output
-            streaming_url = (
-                f"{base_url}/stream/{query_name}?from-beginning=true&wait-for-query=30s"
-            )
+            streaming_url = f"{base_url}/stream/{query_name}?from-beginning=true&wait-for-query={timeout_seconds}"
 
             # Proxy to the streaming endpoint
             logger.info(f"Streaming available for query: {query_name}")

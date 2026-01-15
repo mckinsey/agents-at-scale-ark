@@ -9,12 +9,12 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	eventnoop "mckinsey.com/ark/internal/eventing/noop"
 	"mckinsey.com/ark/internal/telemetry/noop"
 )
 
@@ -40,7 +40,8 @@ var _ = Describe("Model Controller", func() {
 						Namespace: "default",
 					},
 					Spec: arkv1alpha1.ModelSpec{
-						Type: "openai",
+						Provider: "openai",
+						Type:     "completions",
 						Model: arkv1alpha1.ValueSource{
 							Value: "gpt-4",
 						},
@@ -74,8 +75,8 @@ var _ = Describe("Model Controller", func() {
 			controllerReconciler := &ModelReconciler{
 				Client:    k8sClient,
 				Scheme:    k8sClient.Scheme(),
-				Recorder:  record.NewFakeRecorder(10),
 				Telemetry: noop.NewProvider(),
+				Eventing:  eventnoop.NewProvider(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{

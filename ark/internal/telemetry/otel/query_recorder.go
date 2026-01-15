@@ -5,6 +5,7 @@ package otel
 import (
 	"context"
 
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
@@ -20,14 +21,14 @@ func NewQueryRecorder(tracer telemetry.Tracer) telemetry.QueryRecorder {
 	}
 }
 
-func (r *queryRecorder) StartQuery(ctx context.Context, queryName, queryNamespace, phase string) (context.Context, telemetry.Span) {
-	spanName := "query." + queryName
+func (r *queryRecorder) StartQuery(ctx context.Context, query *arkv1alpha1.Query, phase string) (context.Context, telemetry.Span) {
+	ctx = SetQueryInContext(ctx, query)
+
+	spanName := "query." + query.Name
 
 	return r.tracer.Start(ctx, spanName,
 		telemetry.WithSpanKind(telemetry.SpanKindChain),
 		telemetry.WithAttributes(
-			telemetry.String(telemetry.AttrQueryName, queryName),
-			telemetry.String(telemetry.AttrQueryNamespace, queryNamespace),
 			telemetry.String(telemetry.AttrQueryPhase, phase),
 			telemetry.String(telemetry.AttrServiceName, "ark"),
 			telemetry.String(telemetry.AttrComponentName, "ark-controller"),
@@ -83,6 +84,12 @@ func (r *queryRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, comp
 func (r *queryRecorder) RecordSessionID(span telemetry.Span, sessionID string) {
 	if sessionID != "" {
 		span.SetAttributes(telemetry.String(telemetry.AttrSessionID, sessionID))
+	}
+}
+
+func (r *queryRecorder) RecordConversationID(span telemetry.Span, conversationID string) {
+	if conversationID != "" {
+		span.SetAttributes(telemetry.String(telemetry.AttrConversationID, conversationID))
 	}
 }
 

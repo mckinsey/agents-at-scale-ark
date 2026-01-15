@@ -223,6 +223,28 @@ describe('kubectl', () => {
       );
     });
 
+    it('should pass namespace and label filters', async () => {
+      const result = await listResources<TestResource>('queries', {
+        labels: 'app=test',
+        namespace: 'foo'
+      });
+
+      expect(mockExeca).toHaveBeenCalledWith(
+        'kubectl',
+        [
+          'get',
+          'queries',
+          '-n',
+          'foo',
+          '-l',
+          'app=test',
+          '-o',
+          'json',
+        ],
+        {stdio: 'pipe'}
+      );
+    });
+
     it('should handle kubectl errors when listing resources', async () => {
       mockExeca.mockRejectedValue(new Error('kubectl connection error'));
 

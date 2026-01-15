@@ -1,0 +1,6 @@
+ark:
+  mcp:
+    enabled: true
+    name: mock-llm-mcp
+
+terminationGracePeriodSeconds: 1

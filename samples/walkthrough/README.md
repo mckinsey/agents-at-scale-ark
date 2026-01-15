@@ -60,7 +60,7 @@ Install ARK by following the [quickstart guide](../../docs/content/developer-gui
 
 ```bash
 # Quick installation (installs tools, sets up cluster, chainsaw, deploys controller)
-make quickstart
+devspace dev
 ```
 
 Verify installation:
@@ -328,10 +328,10 @@ The complete workflow typically takes 2-3 minutes depending on research complexi
 kubectl get queries research-query -o yaml
 
 # Check response content
-kubectl get queries research-query -o jsonpath='{.status.responses[0].content}'
+kubectl get queries research-query -o jsonpath='{.status.response.content}'
 
 # Or view the full response structure (JSON format)
-kubectl get queries research-query -o jsonpath='{.status.responses[0]}' | jq '.'
+kubectl get queries research-query -o jsonpath='{.status.response}' | jq '.'
 ```
 
 ### Access Generated Documents

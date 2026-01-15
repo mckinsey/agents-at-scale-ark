@@ -1,5 +1,6 @@
 import {ArkApiClient, QueryTarget} from './arkApiClient.js';
 import type {Query} from './types.js';
+import {QUERY_ANNOTATIONS} from './constants.js';
 
 // Re-export QueryTarget for compatibility
 export {QueryTarget};
@@ -8,6 +9,9 @@ export interface ChatConfig {
   streamingEnabled: boolean;
   currentTarget?: QueryTarget;
   a2aContextId?: string;
+  sessionId?: string;
+  conversationId?: string;
+  queryTimeout?: string;
 }
 
 export interface ToolCall {
@@ -61,13 +65,34 @@ export class ChatClient {
       signal: signal,
     };
 
-    // Add A2A context ID if present
-    if (config.a2aContextId) {
-      params.metadata = {
-        queryAnnotations: JSON.stringify({
-          'ark.mckinsey.com/a2a-context-id': config.a2aContextId,
-        }),
-      };
+    // Build metadata object - only add if we have something to include
+    if (
+      config.sessionId ||
+      config.conversationId ||
+      config.a2aContextId ||
+      config.queryTimeout
+    ) {
+      params.metadata = {};
+
+      if (config.sessionId) {
+        params.metadata.sessionId = config.sessionId;
+      }
+
+      if (config.conversationId) {
+        params.metadata.conversationId = config.conversationId;
+      }
+
+      if (config.queryTimeout) {
+        params.metadata.timeout = config.queryTimeout;
+      }
+
+      // Add A2A context ID to queryAnnotations (goes to annotations)
+      if (config.a2aContextId) {
+        const queryAnnotations: Record<string, string> = {
+          [QUERY_ANNOTATIONS.A2A_CONTEXT_ID]: config.a2aContextId,
+        };
+        params.metadata.queryAnnotations = JSON.stringify(queryAnnotations);
+      }
     }
 
     if (shouldStream) {

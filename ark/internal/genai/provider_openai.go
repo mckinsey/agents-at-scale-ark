@@ -3,6 +3,7 @@ package genai
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -196,6 +197,9 @@ func (op *OpenAIProvider) prepareStreamParams(messages []Message, n int64, tools
 		Model:    op.Model,
 		Messages: openaiMessages,
 		N:        openai.Int(n),
+		StreamOptions: openai.ChatCompletionStreamOptionsParam{
+			IncludeUsage: openai.Bool(true),
+		},
 	}
 
 	applyPropertiesToParams(op.Properties, &params)
@@ -231,6 +235,14 @@ func (op *OpenAIProvider) ChatCompletionStream(ctx context.Context, messages []M
 		}
 
 		accumulateStreamChunk(&chunk, &fullResponse, toolCallsMap)
+
+		if chunk.Usage.TotalTokens > 0 {
+			fullResponse.Usage = openai.CompletionUsage{
+				PromptTokens:     chunk.Usage.PromptTokens,
+				CompletionTokens: chunk.Usage.CompletionTokens,
+				TotalTokens:      chunk.Usage.TotalTokens,
+			}
+		}
 	}
 
 	// Process accumulated tool calls
@@ -247,20 +259,16 @@ func (op *OpenAIProvider) ChatCompletionStream(ctx context.Context, messages []M
 		return nil, fmt.Errorf("streaming completed but no response was accumulated")
 	}
 
-	// Initialize usage if not present (streaming responses may not include usage)
-	if fullResponse.Usage.TotalTokens == 0 {
-		fullResponse.Usage = openai.CompletionUsage{
-			PromptTokens:     0,
-			CompletionTokens: 0,
-			TotalTokens:      0,
-		}
-	}
-
 	return fullResponse, nil
 }
 
 func (op *OpenAIProvider) createClient(ctx context.Context) openai.Client {
-	httpClient := common.NewHTTPClientWithLogging(ctx)
+	var httpClient *http.Client
+	if IsProbeContext(ctx) {
+		httpClient = common.NewHTTPClientWithoutTracing()
+	} else {
+		httpClient = common.NewHTTPClientWithLogging(ctx)
+	}
 
 	options := []option.RequestOption{
 		option.WithBaseURL(op.BaseURL),

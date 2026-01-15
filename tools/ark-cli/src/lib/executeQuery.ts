@@ -9,6 +9,8 @@ import type {Query, QueryTarget} from './types.js';
 import {ExitCodes} from './errors.js';
 import {ArkApiProxy} from './arkApiProxy.js';
 import {ChatClient, ToolCall, ArkMetadata} from './chatClient.js';
+import {watchEventsLive} from './kubectl.js';
+import {loadConfig} from './config.js';
 
 export interface QueryOptions {
   targetType: string;
@@ -18,6 +20,8 @@ export interface QueryOptions {
   watchTimeout?: string;
   verbose?: boolean;
   outputFormat?: string;
+  sessionId?: string;
+  conversationId?: string;
 }
 
 interface StreamState {
@@ -35,7 +39,11 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
   const spinner = ora('Connecting to Ark API...').start();
 
   try {
-    arkApiProxy = new ArkApiProxy();
+    const config = loadConfig();
+    arkApiProxy = new ArkApiProxy(
+      undefined,
+      config.services?.reusePortForwards ?? false
+    );
     const arkApiClient = await arkApiProxy.start();
     const chatClient = new ChatClient(arkApiClient);
 
@@ -53,10 +61,19 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
     let headerShown = false;
     let firstOutput = true;
 
+    const sessionId = options.sessionId || process.env.ARK_SESSION_ID;
+    const conversationId =
+      options.conversationId || process.env.ARK_CONVERSATION_ID;
+
     await chatClient.sendMessage(
       targetId,
       messages,
-      {streamingEnabled: true},
+      {
+        streamingEnabled: true,
+        sessionId,
+        conversationId,
+        queryTimeout: options.timeout,
+      },
       (chunk: string, toolCalls?: ToolCall[], arkMetadata?: ArkMetadata) => {
         if (firstOutput) {
           spinner.stop();
@@ -145,12 +162,17 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
     spec: {
       input: options.message,
       ...(options.timeout && {timeout: options.timeout}),
-      targets: [
-        {
-          type: options.targetType,
-          name: options.targetName,
-        },
-      ],
+      ...((options.sessionId || process.env.ARK_SESSION_ID) && {
+        sessionId: options.sessionId || process.env.ARK_SESSION_ID,
+      }),
+      ...((options.conversationId || process.env.ARK_CONVERSATION_ID) && {
+        conversationId:
+          options.conversationId || process.env.ARK_CONVERSATION_ID,
+      }),
+      target: {
+        type: options.targetType,
+        name: options.targetName,
+      },
     },
   };
 
@@ -159,6 +181,14 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
       input: JSON.stringify(queryManifest),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+
+    // Give Kubernetes a moment to process the resource before watching
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    if (options.outputFormat === 'events') {
+      await watchEventsLive(queryName);
+      return;
+    }
 
     const timeoutSeconds = 300;
     await execa(
@@ -187,7 +217,7 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
     } else {
       console.error(
         chalk.red(
-          `Invalid output format: ${options.outputFormat}. Use: yaml, json, or name`
+          `Invalid output format: ${options.outputFormat}. Use: yaml, json, name, or events`
         )
       );
       process.exit(ExitCodes.CliError);

@@ -1,27 +1,19 @@
+import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
+import type { components } from '@/lib/api/generated/types';
 
-// MCP Server interface for UI compatibility
-export interface MCPServer {
-  id: string;
-  name: string;
-  namespace: string;
-  type?: string;
-  spec?: MCPServerSpec;
-  description?: string;
-  address?: string;
-  transport?: string;
-  ready?: boolean;
-  discovering?: boolean;
-  status_message?: string;
-  tool_count?: number;
-  annotations?: Record<string, string>;
-}
+export type MCPServerResponse = components['schemas']['MCPServerResponse'];
+export type MCPServerDetailResponse =
+  components['schemas']['MCPServerDetailResponse'];
+export type MCPServerListResponse =
+  components['schemas']['MCPServerListResponse'];
+export type MCPServerCreateRequest =
+  components['schemas']['MCPServerCreateRequest'];
+export type MCPServerSpec = components['schemas']['MCPServerSpec'];
+export type MCPHeader = components['schemas']['MCPServerHeader-Output'];
 
-// MCP Server list response
-interface MCPServerListResponse {
-  items: MCPServer[];
-  count: number;
-}
+export type MCPServer = MCPServerResponse & { id: string };
+export type MCPServerDetail = MCPServerDetailResponse & { id: string };
 
 export type DirectHeader = {
   name: string;
@@ -33,31 +25,16 @@ export type DirectHeader = {
 export type SecretHeader = {
   name: string;
   value: {
-    valueFrom: {
-      secretKeyRef: {
-        name: string;
-        key: string;
-      };
-    };
+    valueFrom: ValueFrom;
   };
 };
 
-export type Header = DirectHeader | SecretHeader;
-export interface MCPServerSpec {
-  address: {
-    value: string;
+export type ValueFrom = {
+  secretKeyRef: {
+    name: string;
+    key: string;
   };
-  description?: string;
-  headers?: Header[];
-  transport: 'http' | 'sse';
-  timeout?: string;
-}
-
-export interface MCPServerConfiguration {
-  name: string;
-  namespace: string;
-  spec: MCPServerSpec;
-}
+};
 
 // Service for MCP server operations
 export const mcpServersService = {
@@ -65,37 +42,77 @@ export const mcpServersService = {
   async getAll(): Promise<MCPServer[]> {
     const response =
       await apiClient.get<MCPServerListResponse>(`/api/v1/mcp-servers`);
-    return response.items;
-  },
 
-  async get(mcpServerName: string): Promise<MCPServer> {
-    const response = await apiClient.get<MCPServer>(
-      `/api/v1/mcp-servers/${mcpServerName}`,
+    const mcpservers = await Promise.all(
+      response.items.map(async item => {
+        if (item.available !== 'True') {
+          const mcp = await mcpServersService.get(item.name);
+          item.available = mcp?.available;
+        }
+        return {
+          ...item,
+          id: item.name,
+        };
+      }),
     );
-    return response;
+    return mcpservers;
   },
 
-  // Delete an MCP server
+  async get(mcpServerName: string): Promise<MCPServerDetail | null> {
+    try {
+      const response = await apiClient.get<MCPServerDetailResponse>(
+        `/api/v1/mcp-servers/${mcpServerName}`,
+      );
+      return {
+        ...response,
+        id: response.name, // Use name as id for UI compatibility
+      };
+    } catch (error) {
+      throw error;
+    }
+  },
+
   async delete(identifier: string): Promise<void> {
     await apiClient.delete(`/api/v1/mcp-servers/${identifier}`);
+
+    trackEvent({
+      name: 'mcp_server_deleted',
+      properties: {
+        mcpServerName: identifier,
+      },
+    });
   },
 
-  async create(mcpSever: MCPServerConfiguration): Promise<MCPServer> {
-    const response = await apiClient.post<MCPServer>(
+  async create(mcpSever: MCPServerCreateRequest): Promise<MCPServer> {
+    const response = await apiClient.post<MCPServerDetailResponse>(
       `/api/v1/mcp-servers`,
       mcpSever,
     );
-    return response;
+
+    trackEvent({
+      name: 'mcp_server_created',
+      properties: {
+        mcpServerName: response.name,
+      },
+    });
+
+    return {
+      ...response,
+      id: response.name,
+    };
   },
 
   async update(
     mcpServerName: string,
     spec: { spec: MCPServerSpec },
   ): Promise<MCPServer> {
-    const response = await apiClient.put<MCPServer>(
+    const response = await apiClient.put<MCPServerDetailResponse>(
       `/api/v1/mcp-servers/${mcpServerName}`,
       spec,
     );
-    return response;
+    return {
+      ...response,
+      id: response.name,
+    };
   },
 };

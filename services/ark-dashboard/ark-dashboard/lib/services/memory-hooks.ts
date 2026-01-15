@@ -6,7 +6,7 @@ import type { MemoryMessagesFilters } from './memory';
 import { memoryService } from './memory';
 
 export const GET_MEMORY_RESOURCES_QUERY_KEY = 'get-memory-resources';
-export const GET_SESSIONS_QUERY_KEY = 'get-sessions';
+export const GET_CONVERSATIONS_QUERY_KEY = 'get-conversations';
 export const GET_ALL_MEMORY_MESSAGES_QUERY_KEY = 'get-all-memory-messages';
 
 const getErrorMessage = (error: unknown): string => {
@@ -36,15 +36,15 @@ export const useGetMemoryResources = () => {
   return query;
 };
 
-export const useGetSessions = () => {
+export const useGetConversations = () => {
   const query = useQuery({
-    queryKey: [GET_SESSIONS_QUERY_KEY],
-    queryFn: memoryService.getSessions,
+    queryKey: [GET_CONVERSATIONS_QUERY_KEY],
+    queryFn: memoryService.getConversations,
   });
 
   useEffect(() => {
     if (query.error) {
-      toast.error('Failed to get Sessions', {
+      toast.error('Failed to get Conversations', {
         description:
           query.error instanceof Error
             ? query.error.message
@@ -61,7 +61,7 @@ export const useGetAllMemoryMessages = (filters: MemoryMessagesFilters) => {
     queryKey: [
       GET_ALL_MEMORY_MESSAGES_QUERY_KEY,
       filters.memory,
-      filters.session,
+      filters.conversation,
       filters.query,
     ],
     queryFn: () => memoryService.getAllMemoryMessages(filters),
@@ -90,7 +90,9 @@ export const useDeleteQueryMemory = () => {
       queryClient.invalidateQueries({
         queryKey: [GET_MEMORY_RESOURCES_QUERY_KEY],
       });
-      queryClient.invalidateQueries({ queryKey: [GET_SESSIONS_QUERY_KEY] });
+      queryClient.invalidateQueries({
+        queryKey: [GET_CONVERSATIONS_QUERY_KEY],
+      });
       queryClient.invalidateQueries({
         queryKey: [GET_ALL_MEMORY_MESSAGES_QUERY_KEY],
       });
@@ -105,29 +107,36 @@ export const useDeleteQueryMemory = () => {
   });
 };
 
-export const useDeleteSessionMemory = () => {
+export const useDeleteConversationMemory = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: memoryService.deleteSession,
-    onSuccess: (_, sessionId) => {
+    mutationFn: memoryService.deleteConversation,
+    onSuccess: (_, conversationId) => {
       queryClient.invalidateQueries({
         queryKey: [GET_MEMORY_RESOURCES_QUERY_KEY],
       });
-      queryClient.invalidateQueries({ queryKey: [GET_SESSIONS_QUERY_KEY] });
+      queryClient.invalidateQueries({
+        queryKey: [GET_CONVERSATIONS_QUERY_KEY],
+      });
       queryClient.invalidateQueries({
         queryKey: [GET_ALL_MEMORY_MESSAGES_QUERY_KEY],
       });
-      toast.success(`Successfully deleted Session: ${sessionId} from Memory`);
+      toast.success(
+        `Successfully deleted Conversation: ${conversationId} from Memory`,
+      );
     },
-    onError: (error, sessionId) => {
+    onError: (error, conversationId) => {
       console.error(
-        `Failed to delete Session: ${sessionId} from Memory:`,
+        `Failed to delete Conversation: ${conversationId} from Memory:`,
         error,
       );
-      toast.error(`Failed to delete Session: ${sessionId} from Memory`, {
-        description: getErrorMessage(error),
-      });
+      toast.error(
+        `Failed to delete Conversation: ${conversationId} from Memory`,
+        {
+          description: getErrorMessage(error),
+        },
+      );
     },
   });
 };
@@ -141,7 +150,9 @@ export const useResetMemory = () => {
       queryClient.invalidateQueries({
         queryKey: [GET_MEMORY_RESOURCES_QUERY_KEY],
       });
-      queryClient.invalidateQueries({ queryKey: [GET_SESSIONS_QUERY_KEY] });
+      queryClient.invalidateQueries({
+        queryKey: [GET_CONVERSATIONS_QUERY_KEY],
+      });
       queryClient.invalidateQueries({
         queryKey: [GET_ALL_MEMORY_MESSAGES_QUERY_KEY],
       });

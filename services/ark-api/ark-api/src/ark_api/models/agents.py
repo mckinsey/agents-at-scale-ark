@@ -18,70 +18,85 @@ class ModelRef(BaseModel):
     namespace: Optional[str] = None
 
 
-class ConfigMapKeyRef(BaseModel):
+class AgentConfigMapKeyRef(BaseModel):
     """Reference to a key in a ConfigMap."""
     key: str
     name: str
     optional: Optional[bool] = None
 
 
-class SecretKeyRef(BaseModel):
+class AgentSecretKeyRef(BaseModel):
     """Reference to a key in a Secret."""
     key: str
     name: str
     optional: Optional[bool] = None
 
 
-class ValueFrom(BaseModel):
+class AgentQueryParameterRef(BaseModel):
+    """Reference to a parameter in a query."""
+    name: str
+
+
+class AgentServiceRef(BaseModel):
+    """Reference to a service."""
+    name: str
+    namespace: Optional[str] = None
+    port: Optional[str] = None
+    path: Optional[str] = None
+
+
+class AgentValueFrom(BaseModel):
     """Reference to external sources for parameter values."""
-    configMapKeyRef: Optional[ConfigMapKeyRef] = None
-    secretKeyRef: Optional[SecretKeyRef] = None
+    configMapKeyRef: Optional[AgentConfigMapKeyRef] = None
+    secretKeyRef: Optional[AgentSecretKeyRef] = None
+    serviceRef: Optional[AgentServiceRef] = None
+    queryParameterRef: Optional[AgentQueryParameterRef] = None
 
 
-class Parameter(BaseModel):
+class AgentParameter(BaseModel):
     """Parameter for template processing in prompts and inputs."""
     name: str
     value: Optional[str] = None
-    valueFrom: Optional[ValueFrom] = None
+    valueFrom: Optional[AgentValueFrom] = None
 
 
-class LabelSelectorRequirement(BaseModel):
+class AgentLabelSelectorRequirement(BaseModel):
     """A label selector requirement is a selector that contains values, a key, and an operator."""
     key: str
     operator: str
     values: Optional[List[str]] = None
 
 
-class LabelSelector(BaseModel):
+class AgentLabelSelector(BaseModel):
     """A label selector is a label query over a set of resources."""
     matchLabels: Optional[Dict[str, str]] = None
-    matchExpressions: Optional[List[LabelSelectorRequirement]] = None
+    matchExpressions: Optional[List[AgentLabelSelectorRequirement]] = None
 
 
-class Tool(BaseModel):
+class AgentTool(BaseModel):
     """Tool configuration for an agent."""
-    type: str  # "built-in" or "custom"
+    type: str  # "built-in", "mcp", "http", "agent", "team", "builtin" (or deprecated "custom")
     name: Optional[str] = None
-    labelSelector: Optional[LabelSelector] = None
+    labelSelector: Optional[AgentLabelSelector] = None
 
 
-class HeaderValue(BaseModel):
+class AgentHeaderValue(BaseModel):
     """Value configuration for a header."""
     value: Optional[str] = None
-    valueFrom: Optional[ValueFrom] = None
+    valueFrom: Optional[AgentValueFrom] = None
 
 
-class Header(BaseModel):
+class AgentHeader(BaseModel):
     """HTTP header configuration."""
     name: str
-    value: HeaderValue
+    value: AgentHeaderValue
 
 
-class Override(BaseModel):
+class AgentOverride(BaseModel):
     """Header override configuration for models and MCP servers."""
-    headers: List[Header]
+    headers: List[AgentHeader]
     resourceType: str
-    labelSelector: Optional[LabelSelector] = None
+    labelSelector: Optional[AgentLabelSelector] = None
 
 
 class Skill(BaseModel):
@@ -115,10 +130,10 @@ class AgentCreateRequest(BaseModel):
     description: Optional[str] = None
     executionEngine: Optional[ExecutionEngineRef] = None
     modelRef: Optional[ModelRef] = None
-    parameters: Optional[List[Parameter]] = None
+    parameters: Optional[List[AgentParameter]] = None
     prompt: Optional[str] = None
-    tools: Optional[List[Tool]] = None
-    overrides: Optional[List[Override]] = None
+    tools: Optional[List[AgentTool]] = None
+    overrides: Optional[List[AgentOverride]] = None
 
 
 class AgentUpdateRequest(BaseModel):
@@ -126,10 +141,10 @@ class AgentUpdateRequest(BaseModel):
     description: Optional[str] = None
     executionEngine: Optional[ExecutionEngineRef] = None
     modelRef: Optional[ModelRef] = None
-    parameters: Optional[List[Parameter]] = None
+    parameters: Optional[List[AgentParameter]] = None
     prompt: Optional[str] = None
-    tools: Optional[List[Tool]] = None
-    overrides: Optional[List[Override]] = None
+    tools: Optional[List[AgentTool]] = None
+    overrides: Optional[List[AgentOverride]] = None
 
 
 class AgentDetailResponse(BaseModel):
@@ -139,10 +154,10 @@ class AgentDetailResponse(BaseModel):
     description: Optional[str] = None
     executionEngine: Optional[ExecutionEngineRef] = None
     modelRef: Optional[ModelRef] = None
-    parameters: Optional[List[Parameter]] = None
+    parameters: Optional[List[AgentParameter]] = None
     prompt: Optional[str] = None
-    tools: Optional[List[Tool]] = None
-    overrides: Optional[List[Override]] = None
+    tools: Optional[List[AgentTool]] = None
+    overrides: Optional[List[AgentOverride]] = None
     skills: Optional[List[Skill]] = None
     isA2A: bool = False
     available: Optional[AvailabilityStatus] = None

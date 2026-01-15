@@ -1,4 +1,5 @@
 # Mock LLM configuration for A2A agent discovery test
+terminationGracePeriodSeconds: 3
 ark:
   a2a:
     enabled: true

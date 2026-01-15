@@ -1,6 +1,11 @@
-import { Info, Server } from 'lucide-react';
+'use client';
 
-import { StatusBadge } from '@/components/ui/status-badge';
+import { Info, Server, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+
+import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
+import { AvailabilityStatusBadge } from '@/components/ui/availability-status-badge';
+import type { AvailabilityStatus } from '@/components/ui/availability-status-badge';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import type { A2AServerConfiguration } from '@/lib/services/a2a-servers';
 import type { A2AServer } from '@/lib/services/a2a-servers';
@@ -12,11 +17,17 @@ import { BaseCard } from './base-card';
 interface A2AServerCardProps {
   a2aServer: A2AServer;
   onInfo?: (a2aServer: A2AServer) => void;
+  onDelete?: (id: string) => void;
   namespace: string;
   onUpdate?: (a2aServerConfig: A2AServerConfiguration, edit: boolean) => void;
 }
 
-export function A2AServerCard({ a2aServer, onInfo }: A2AServerCardProps) {
+export function A2AServerCard({
+  a2aServer,
+  onInfo,
+  onDelete,
+}: A2AServerCardProps) {
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const actions: BaseCardAction[] = [];
 
   // Get custom icon or default Server icon
@@ -36,8 +47,20 @@ export function A2AServerCard({ a2aServer, onInfo }: A2AServerCardProps) {
     });
   }
 
-  // Get the address from either status.lastResolvedAddress or spec.address.value
+  if (onDelete) {
+    actions.push({
+      icon: Trash2,
+      label: 'Delete a2a server',
+      onClick: () => setDeleteConfirmOpen(true),
+      disabled: false,
+    });
+  }
+
   const address = a2aServer.address || 'Address not available';
+
+  const availabilityStatus: AvailabilityStatus = a2aServer.ready
+    ? 'True'
+    : 'False';
 
   return (
     <>
@@ -49,9 +72,9 @@ export function A2AServerCard({ a2aServer, onInfo }: A2AServerCardProps) {
         footer={
           <div className="text-muted-foreground flex flex-col gap-1 text-sm">
             <div className="w-fit">
-              <StatusBadge
-                ready={a2aServer.ready}
-                discovering={a2aServer.discovering}
+              <AvailabilityStatusBadge
+                status={availabilityStatus}
+                eventsLink={`/events?kind=A2AServer&name=${a2aServer.name}&page=1`}
               />
             </div>
             <div>
@@ -65,6 +88,18 @@ export function A2AServerCard({ a2aServer, onInfo }: A2AServerCardProps) {
           </div>
         }
       />
+      {onDelete && (
+        <ConfirmationDialog
+          open={deleteConfirmOpen}
+          onOpenChange={setDeleteConfirmOpen}
+          title="Delete A2A Server"
+          description={`Do you want to delete "${a2aServer.name}" A2A server? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={() => onDelete(a2aServer.id)}
+          variant="destructive"
+        />
+      )}
     </>
   );
 }

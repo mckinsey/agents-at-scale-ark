@@ -47,8 +47,20 @@ const (
 	LocalhostGatewayPort = ARKPrefix + "localhost-gateway-port"
 )
 
+// Event annotations
+const (
+	EventData = ARKPrefix + "event-data"
+)
+
 // Streaming annotations
 const (
 	StreamingEnabled = ARKPrefix + "streaming-enabled"
 	StreamingURL     = ARKPrefix + "streaming-url"
+)
+
+// Migration annotations - used by mutating webhooks to record deprecation warnings.
+// The validating webhook collects annotations matching this prefix and returns them
+// as admission warnings.
+const (
+	MigrationWarningPrefix = ARKPrefix + "migration-warning-"
 )

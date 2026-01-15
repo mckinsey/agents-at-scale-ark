@@ -128,5 +128,27 @@ var _ = Describe("Agent Webhook", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(agent.Spec.ModelRef).To(BeNil())
 		})
+
+		It("Should add deprecation warning for 'custom' tool type with agent and tool names", func() {
+			agent.Spec.Tools = []arkv1alpha1.AgentTool{
+				{Type: "custom", Name: "my-mcp-tool"},
+			}
+			err := defaulter.Default(ctx, agent)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(agent.Annotations).To(HaveKey(annotations.MigrationWarningPrefix + "tool-type-custom"))
+			Expect(agent.Annotations[annotations.MigrationWarningPrefix+"tool-type-custom"]).To(ContainSubstring("agent 'test-agent'"))
+			Expect(agent.Annotations[annotations.MigrationWarningPrefix+"tool-type-custom"]).To(ContainSubstring("tool 'my-mcp-tool'"))
+			Expect(agent.Annotations[annotations.MigrationWarningPrefix+"tool-type-custom"]).To(ContainSubstring("deprecated"))
+		})
+
+		It("Should not add deprecation warning for explicit tool types", func() {
+			agent.Spec.Tools = []arkv1alpha1.AgentTool{
+				{Type: "mcp", Name: "my-mcp-tool"},
+				{Type: "http", Name: "my-http-tool"},
+			}
+			err := defaulter.Default(ctx, agent)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(agent.Annotations).ToNot(HaveKey(annotations.MigrationWarningPrefix + "tool-type-custom"))
+		})
 	})
 })

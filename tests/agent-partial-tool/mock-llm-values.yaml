@@ -1,0 +1,25 @@
+# Mock LLM configuration for agent-partial-tool test
+ark:
+  model:
+    enabled: true
+    name: test-model
+    type: completions
+    provider: openai
+    model: gpt-4o-mini
+    pollInterval: 3s
+    config:
+      openai:
+        # baseUrl will be set to http://mock-llm/v1 by the chart
+        apiKey: mock-api-key
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+    ephemeral-storage: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+    ephemeral-storage: 128Mi
+
+terminationGracePeriodSeconds: 1

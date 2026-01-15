@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ark-broker.fullname" . }}
+  labels:
+    {{- include "ark-broker.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "ark-broker.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ark-broker.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "ark-broker.serviceAccountName" . }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.app.image.repository }}:{{ .Values.app.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.memory.port }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: {{ .Values.memory.port | quote }}
+            {{- if .Values.limits.maxMessages }}
+            - name: MAX_MESSAGES
+              value: {{ .Values.limits.maxMessages | quote }}
+            {{- end }}
+            {{- if .Values.limits.maxChunks }}
+            - name: MAX_CHUNKS
+              value: {{ .Values.limits.maxChunks | quote }}
+            {{- end }}
+            {{- if .Values.limits.maxSpans }}
+            - name: MAX_SPANS
+              value: {{ .Values.limits.maxSpans | quote }}
+            {{- end }}
+            {{- if .Values.limits.maxEvents }}
+            - name: MAX_EVENTS
+              value: {{ .Values.limits.maxEvents | quote }}
+            {{- end }}
+            {{- if .Values.persistence.enabled }}
+            - name: MEMORY_FILE_PATH
+              value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.memoryFileName }}"
+            - name: STREAM_FILE_PATH
+              value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.streamFileName }}"
+            - name: TRACE_FILE_PATH
+              value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.traceFileName }}"
+            - name: EVENT_FILE_PATH
+              value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.eventFileName }}"
+            {{- end }}
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.app.resources | nindent 12 }}
+      {{- if .Values.persistence.enabled }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim }}
+          {{- else }}
+          persistentVolumeClaim:
+            claimName: {{ include "ark-broker.fullname" . }}-data
+          {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

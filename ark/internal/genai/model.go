@@ -11,6 +11,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
+	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
@@ -22,6 +23,9 @@ func ResolveModelSpec(modelSpec any, defaultNamespace string) (string, string, e
 	}
 	switch spec := modelSpec.(type) {
 	case *arkv1alpha1.AgentModelRef:
+		if spec == nil {
+			return "", "", fmt.Errorf("AgentModelRef pointer is nil")
+		}
 		modelName := spec.Name
 		namespace := spec.Namespace
 		if namespace == "" {
@@ -42,7 +46,7 @@ func ResolveModelSpec(modelSpec any, defaultNamespace string) (string, string, e
 }
 
 // LoadModel loads a model by resolving modelSpec and defaultNamespace
-func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface{}, defaultNamespace string, additionalHeaders map[string]string, modelRecorder telemetry.ModelRecorder) (*Model, error) {
+func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface{}, defaultNamespace string, additionalHeaders map[string]string, telemetryRecorder telemetry.ModelRecorder, eventingRecorder eventing.ModelRecorder) (*Model, error) {
 	modelName, namespace, err := ResolveModelSpec(modelSpec, defaultNamespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve model spec: %w", err)
@@ -59,26 +63,33 @@ func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface
 	}
 
 	modelInstance := &Model{
-		Model:         model,
-		Type:          modelCRD.Spec.Type,
-		ModelRecorder: modelRecorder,
+		Model:             model,
+		Type:              modelCRD.Spec.Type,
+		telemetryRecorder: telemetryRecorder,
+		eventingRecorder:  eventingRecorder,
 	}
 
-	switch modelCRD.Spec.Type {
-	case ModelTypeAzure:
+	switch modelCRD.Spec.Provider {
+	case ProviderAzure:
 		if err := loadAzureConfig(ctx, resolver, modelCRD.Spec.Config.Azure, namespace, modelInstance, additionalHeaders); err != nil {
 			return nil, err
 		}
-	case ModelTypeOpenAI:
+	case ProviderOpenAI:
 		if err := loadOpenAIConfig(ctx, resolver, modelCRD.Spec.Config.OpenAI, namespace, modelInstance, additionalHeaders); err != nil {
 			return nil, err
 		}
-	case ModelTypeBedrock:
+	case ProviderBedrock:
 		if err := loadBedrockConfig(ctx, resolver, modelCRD.Spec.Config.Bedrock, namespace, model, modelInstance); err != nil {
 			return nil, err
 		}
 	default:
-		return nil, fmt.Errorf("unsupported model type: %s", modelCRD.Spec.Type)
+		if modelCRD.Spec.Provider == "" {
+			if IsDeprecatedProviderInType(modelCRD.Spec.Type) {
+				return nil, fmt.Errorf("provider is required - update model to migrate '%s' from spec.type to spec.provider", modelCRD.Spec.Type)
+			}
+			return nil, fmt.Errorf("provider is required")
+		}
+		return nil, fmt.Errorf("unsupported provider: %s", modelCRD.Spec.Provider)
 	}
 
 	return modelInstance, nil
@@ -96,12 +107,7 @@ func loadModelCRD(ctx context.Context, k8sClient client.Client, name, namespace 
 }
 
 func resolveModelHeaders(ctx context.Context, k8sClient client.Client, headers []arkv1alpha1.Header, namespace string) (map[string]string, error) {
-	resolvedHeaders, err := ResolveHeaders(ctx, k8sClient, headers, namespace)
-	if err != nil {
-		return nil, err
-	}
-
-	return resolvedHeaders, nil
+	return ResolveHeaders(ctx, k8sClient, headers, namespace)
 }
 
 // applyHeadersToOptions applies custom headers to OpenAI client options

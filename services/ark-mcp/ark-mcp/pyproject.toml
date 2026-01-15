@@ -11,6 +11,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "kubernetes-asyncio>=24.0.0",
     "setuptools>=75.0.0",
+    "urllib3>=2.6.0",
     "ark-sdk",
 ]
 classifiers = [
@@ -79,4 +80,4 @@ testpaths = [
 ]
 
 [tool.uv.sources]
-ark-sdk = { path = "out/ark_sdk-0.1.39-py3-none-any.whl" }
+ark-sdk = { path = "../../../out/ark-sdk/py-sdk/dist/ark_sdk-0.1.49-py3-none-any.whl" }

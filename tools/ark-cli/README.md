@@ -46,6 +46,8 @@ To troubleshoot an installation, run `ark status`.
 
 You can customize Ark service installations using a `.arkrc.yaml` file in your home directory (`~/.arkrc.yaml`) or project directory. This allows you to override service properties like enabled status, namespace, or chart location.
 
+See [`.arkrc.template.yaml`](.arkrc.template.yaml) for a complete reference of all available configuration options.
+
 Example `.arkrc.yaml`:
 
 ```yaml
@@ -76,3 +78,5 @@ services:
 ```
 
 Replace `YOUR_USERNAME` and `YOUR_PASSWORD` with your JFrog credentials.
+
+See [.arkrc.yaml.sample](.arkrc.yaml.sample) for a complete example with all available options.

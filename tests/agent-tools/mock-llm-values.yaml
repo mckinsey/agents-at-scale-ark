@@ -1,0 +1,48 @@
+terminationGracePeriodSeconds: 3
+ark:
+  model:
+    enabled: true
+    name: test-model
+    type: completions
+    provider: openai
+    model: gpt-4
+    apiKey: mock-api-key
+
+config:
+  rules:
+    # Catch-all - matches everything but gets overridden by more specific rules.
+    # This catches model probes which don't match the agent-specific rules below.
+    - path: "/v1/chat/completions"
+      response:
+        status: 200
+        content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
+
+    # Weather Agent - first call (no tool results yet) → returns tool_calls
+    - path: "/v1/chat/completions"
+      match: "contains(body.messages[0].content || '', 'Weather Agent')"
+      response:
+        status: 200
+        content: |
+          {
+            "choices": [{
+              "message": {
+                "role": "assistant",
+                "tool_calls": [{
+                  "id": "call_weather",
+                  "type": "function",
+                  "function": {
+                    "name": "weather-tool",
+                    "arguments": "{\"latitude\": 40.7128, \"longitude\": -74.006, \"current_weather\": true}"
+                  }
+                }]
+              },
+              "finish_reason": "tool_calls"
+            }]
+          }
+
+    # Weather Agent - second call (has tool result) → returns final answer
+    - path: "/v1/chat/completions"
+      match: "body.messages[?role=='tool']"
+      response:
+        status: 200
+        content: '{"choices":[{"message":{"role":"assistant","content":"NYC weather: 68°F, partly cloudy."},"finish_reason":"stop"}]}'

@@ -15,6 +15,7 @@ from ...models.mcp_servers import (
     MCPServerUpdateRequest,
     MCPServerDetailResponse
 )
+from ...models.common import AvailabilityStatus, extract_availability_from_conditions
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
@@ -30,33 +31,25 @@ def mcp_server_to_response(mcp_server: dict) -> MCPServerResponse:
     metadata = mcp_server.get("metadata", {})
     spec = mcp_server.get("spec", {})
     status = mcp_server.get("status", {})
-
     resolved_address = status.get("resolvedAddress")
-
     conditions = status.get("conditions", [])
-    ready = None
-    discovering = None
+    availability = extract_availability_from_conditions(conditions, "Available")
+    #discovering = None
     status_message = None
 
-    for condition in conditions:
-        if condition.get("type") == "Ready":
-            ready = condition.get("status") == "True"
-            if not ready:
-                status_message = condition.get("message")
-        elif condition.get("type") == "Discovering":
-            discovering = condition.get("status") == "True"
-
+    if availability == AvailabilityStatus.FALSE:
+        available_cond = next(filter(lambda c: c.get("type") == "Available", conditions))
+        if available_cond:
+            status_message = available_cond.get("message")
+    
     return MCPServerResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
-        description=spec.get("description"),
-        labels=metadata.get("labels"),
+        status_message=status_message,
         address=resolved_address,
         annotations=metadata.get("annotations"),
         transport=spec.get("transport"),
-        ready=ready,
-        discovering=discovering,
-        status_message=status_message,
+        available=availability,
         tool_count=status.get("toolCount")
     )
 
@@ -66,15 +59,22 @@ def mcp_server_to_detail_response(mcp_server: dict) -> MCPServerDetailResponse:
     metadata = mcp_server.get("metadata", {})
     spec = mcp_server.get("spec", {})
     status = mcp_server.get("status", {})
-    
+    conditions = status.get("conditions", [])
+    availability = extract_availability_from_conditions(conditions, "Available")
+    headers = spec.get("headers", [])
+    logger.info(f"Spec: {status}")
     return MCPServerDetailResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
         description=spec.get("description"),
         labels=metadata.get("labels"),
+        headers=headers,
         annotations=metadata.get("annotations"),
-        spec=spec,
-        status=status
+        available=availability,
+        status=status,
+        address=status.get("resolvedAddress"),
+        transport=spec.get("transport"),
+        tool_count=status.get("toolCount")
     )
 
 
@@ -103,7 +103,7 @@ async def list_mcp_servers(namespace: Optional[str] = Query(None, description="N
         )
 
 
-@router.post("", response_model=MCPServerDetailResponse, include_in_schema=False)
+@router.post("", response_model=MCPServerDetailResponse, include_in_schema=True)
 @handle_k8s_errors(operation="create", resource_type="mcp server")
 async def create_mcp_server(body: MCPServerCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> MCPServerDetailResponse:
     """
@@ -119,7 +119,6 @@ async def create_mcp_server(body: MCPServerCreateRequest, namespace: Optional[st
     async with with_ark_client(namespace, VERSION) as ark_client:
         # Build the MCP server spec
         mcp_server_spec = body.spec.model_dump(exclude_none=True)
-        
         # Create the MCPServerV1alpha1 object
         mcp_server_resource = MCPServerV1alpha1(
             metadata={
@@ -132,7 +131,6 @@ async def create_mcp_server(body: MCPServerCreateRequest, namespace: Optional[st
         )
         
         created_mcp_server = await ark_client.mcpservers.a_create(mcp_server_resource)
-        
         return mcp_server_to_detail_response(created_mcp_server.to_dict())
 
 

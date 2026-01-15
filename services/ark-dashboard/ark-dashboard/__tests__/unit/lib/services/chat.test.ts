@@ -39,7 +39,7 @@ describe('chatService', () => {
       const mockResponse: QueryDetailResponse = {
         name: 'test-query',
         input: 'Test input',
-        targets: [{ type: 'agent', name: 'agent1' }],
+        target: { type: 'agent', name: 'agent1' },
         status: { phase: 'pending' },
       };
 
@@ -48,14 +48,14 @@ describe('chatService', () => {
       const queryRequest = {
         name: 'test-query',
         input: 'Test input',
-        targets: [{ type: 'AGENT', name: 'agent1' }],
+        target: { type: 'AGENT', name: 'agent1' },
       };
 
       const result = await chatService.createQuery(queryRequest);
 
       expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/queries/`, {
         ...queryRequest,
-        targets: [{ type: 'agent', name: 'agent1' }],
+        target: { type: 'agent', name: 'agent1' },
       });
       expect(result).toEqual(mockResponse);
     });
@@ -94,7 +94,7 @@ describe('chatService', () => {
       const mockResponse: QueryDetailResponse = {
         name: 'chat-query-mock-uuid',
         input: messages,
-        targets: [{ type: 'agent', name: 'test-agent' }],
+        target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
       };
 
@@ -111,7 +111,7 @@ describe('chatService', () => {
         name: 'chat-query-mock-uuid',
         type: 'messages',
         input: messages,
-        targets: [{ type: 'agent', name: 'test-agent' }],
+        target: { type: 'agent', name: 'test-agent' },
         sessionId: 'session-123',
       });
       expect(result).toEqual(mockResponse);
@@ -122,11 +122,11 @@ describe('chatService', () => {
       const mockResponse: QueryDetailResponse = {
         name: 'chat-query-mock-uuid',
         input: messages,
-        targets: [{ type: 'agent', name: 'test-agent' }],
+        target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
         metadata: {
           annotations: {
-            'ark.mckinsey.com/streaming-enabled': 'true',
+            'ark.mckinsey.com/streaming-enabled': 'false',
           },
         },
       };
@@ -145,11 +145,11 @@ describe('chatService', () => {
         name: 'chat-query-mock-uuid',
         type: 'messages',
         input: messages,
-        targets: [{ type: 'agent', name: 'test-agent' }],
+        target: { type: 'agent', name: 'test-agent' },
         sessionId: 'session-123',
         metadata: {
           annotations: {
-            'ark.mckinsey.com/streaming-enabled': 'true',
+            'ark.mckinsey.com/streaming-enabled': 'false',
           },
         },
       });
@@ -161,7 +161,7 @@ describe('chatService', () => {
       const mockResponse: QueryDetailResponse = {
         name: 'chat-query-mock-uuid',
         input: messages,
-        targets: [{ type: 'agent', name: 'test-agent' }],
+        target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
       };
 
@@ -179,7 +179,7 @@ describe('chatService', () => {
         name: 'chat-query-mock-uuid',
         type: 'messages',
         input: messages,
-        targets: [{ type: 'agent', name: 'test-agent' }],
+        target: { type: 'agent', name: 'test-agent' },
         sessionId: 'session-123',
       });
       expect(result).toEqual(mockResponse);
@@ -193,7 +193,7 @@ describe('chatService', () => {
         input: 'Test',
         status: {
           phase: 'done',
-          responses: [{ content: 'Query completed successfully' }],
+          response: { content: 'Query completed successfully' },
         },
       };
 
@@ -214,7 +214,6 @@ describe('chatService', () => {
         input: 'Test',
         status: {
           phase: 'running',
-          responses: [],
         },
       };
 
@@ -510,7 +509,7 @@ describe('chatService', () => {
       const mockQueryResponse = {
         name: 'chat-query-mock-uuid',
         input: messages,
-        targets: [{ type: 'agent', name: 'test-agent' }],
+        target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
       } as unknown as QueryDetailResponse;
 
@@ -566,7 +565,7 @@ describe('chatService', () => {
       const mockQueryResponse: QueryDetailResponse = {
         name: 'chat-query-mock-uuid',
         input: messages,
-        targets: [{ type: 'agent', name: 'test-agent' }],
+        target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
       };
 
@@ -594,7 +593,7 @@ describe('chatService', () => {
       const mockQueryResponse: QueryDetailResponse = {
         name: 'chat-query-mock-uuid',
         input: messages,
-        targets: [{ type: 'agent', name: 'test-agent' }],
+        target: { type: 'agent', name: 'test-agent' },
         status: { phase: 'pending' },
       };
 

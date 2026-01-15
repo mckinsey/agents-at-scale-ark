@@ -32,7 +32,7 @@ kind: Query
 metadata:
   name: echo-example
 spec:
-  targets:
+  target:
   - name: echo-agent
     type: agent
   input: "Testing incoming messages"
@@ -89,7 +89,7 @@ kind: Query
 metadata:
   name: count-messages
 spec:
-  targets:
+  target:
   - name: message-counter-agent
     type: agent
   input: "First message"
@@ -102,7 +102,7 @@ Track the context ID generated when the query completes:
 kubectl wait --for=condition=Completed query/count-messages --timeout=30s
 
 # View the response
-kubectl get query count-messages -o jsonpath='{.status.responses[0].content}'
+kubectl get query count-messages -o jsonpath='{.status.response.content}'
 # 1 message(s) recieved
 
 # Extract the context ID from status
@@ -123,7 +123,7 @@ metadata:
   annotations:
     ark.mckinsey.com/a2a-context-id: "${CONTEXT_ID}"
 spec:
-  targets:
+  target:
   - name: message-counter-agent
     type: agent
   input: "Message ${i}"
@@ -132,7 +132,7 @@ EOF
 done
 
 # Check the final count
-kubectl get query count-messages-10 -o jsonpath='{.status.responses[0].content}'
+kubectl get query count-messages-10 -o jsonpath='{.status.response.content}'
 # 11 message(s) recieved
 ```
 

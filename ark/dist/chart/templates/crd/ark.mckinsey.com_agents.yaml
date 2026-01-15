@@ -123,6 +123,16 @@ spec:
                                     - key
                                     type: object
                                     x-kubernetes-map-type: atomic
+                                  queryParameterRef:
+                                    properties:
+                                      name:
+                                        description: Name of the parameter from the
+                                          Query resource
+                                        minLength: 1
+                                        type: string
+                                    required:
+                                    - name
+                                    type: object
                                   secretKeyRef:
                                     description: SecretKeySelector selects a key of
                                       a Secret.
@@ -295,9 +305,10 @@ spec:
                                 namespace as the resource.
                               type: string
                             path:
-                              description: Optional path to append to the service
-                                address. For models might be 'v1', for gemini might
-                                be 'v1beta/openai', for mcp servers might be 'mcp'.
+                              description: Path component of the service URL. For
+                                anthropic models might be 'v1', for gemini might be
+                                'v1beta/openai', for MCP servers often will be 'mcp'
+                                or 'sse'.
                               type: string
                             port:
                               description: Port name to use. If not specified, uses
@@ -316,6 +327,9 @@ spec:
               tools:
                 items:
                   properties:
+                    description:
+                      description: Description of the tool as exposed to the agent
+                      type: string
                     functions:
                       items:
                         properties:
@@ -324,6 +338,89 @@ spec:
                             type: string
                           value:
                             type: string
+                          valueFrom:
+                            properties:
+                              configMapKeyRef:
+                                description: Selects a key from a ConfigMap.
+                                properties:
+                                  key:
+                                    description: The key to select.
+                                    type: string
+                                  name:
+                                    default: ""
+                                    description: |-
+                                      Name of the referent.
+                                      This field is effectively required, but due to backwards compatibility is
+                                      allowed to be empty. Instances of this type with an empty value here are
+                                      almost certainly wrong.
+                                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                    type: string
+                                  optional:
+                                    description: Specify whether the ConfigMap or
+                                      its key must be defined
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              queryParameterRef:
+                                properties:
+                                  name:
+                                    description: Name of the parameter from the Query
+                                      resource
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              secretKeyRef:
+                                description: SecretKeySelector selects a key of a
+                                  Secret.
+                                properties:
+                                  key:
+                                    description: The key of the secret to select from.  Must
+                                      be a valid secret key.
+                                    type: string
+                                  name:
+                                    default: ""
+                                    description: |-
+                                      Name of the referent.
+                                      This field is effectively required, but due to backwards compatibility is
+                                      allowed to be empty. Instances of this type with an empty value here are
+                                      almost certainly wrong.
+                                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                    type: string
+                                  optional:
+                                    description: Specify whether the Secret or its
+                                      key must be defined
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              serviceRef:
+                                properties:
+                                  name:
+                                    description: Name of the service
+                                    type: string
+                                  namespace:
+                                    description: Namespace of the service. Defaults
+                                      to the namespace as the resource.
+                                    type: string
+                                  path:
+                                    description: Path component of the service URL.
+                                      For anthropic models might be 'v1', for gemini
+                                      might be 'v1beta/openai', for MCP servers often
+                                      will be 'mcp' or 'sse'.
+                                    type: string
+                                  port:
+                                    description: Port name to use. If not specified,
+                                      uses the service's only port or first port.
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                            type: object
                         required:
                         - name
                         type: object
@@ -333,14 +430,10 @@ spec:
                       type: string
                     partial:
                       description: |-
-                        ToolPartial allows overriding the tool's name and description as exposed to the agent,
-                        and preconfiguring or hiding tool parameters from the agent. Parameters defined here
-                        are injected at runtime and are not visible or editable by the agent itself.
+                        ToolPartial allows overriding the tool's name and preconfiguring or hiding tool parameters
+                        from the agent. Parameters defined here are injected at runtime and are not visible or
+                        editable by the agent itself.
                       properties:
-                        description:
-                          description: Description to override the tool's description
-                            as exposed to the agent (optional)
-                          type: string
                         name:
                           description: Name to override the tool's name as exposed
                             to the agent (optional)
@@ -357,8 +450,91 @@ spec:
                                 type: string
                               value:
                                 type: string
+                              valueFrom:
+                                properties:
+                                  configMapKeyRef:
+                                    description: Selects a key from a ConfigMap.
+                                    properties:
+                                      key:
+                                        description: The key to select.
+                                        type: string
+                                      name:
+                                        default: ""
+                                        description: |-
+                                          Name of the referent.
+                                          This field is effectively required, but due to backwards compatibility is
+                                          allowed to be empty. Instances of this type with an empty value here are
+                                          almost certainly wrong.
+                                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                        type: string
+                                      optional:
+                                        description: Specify whether the ConfigMap
+                                          or its key must be defined
+                                        type: boolean
+                                    required:
+                                    - key
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                  queryParameterRef:
+                                    properties:
+                                      name:
+                                        description: Name of the parameter from the
+                                          Query resource
+                                        minLength: 1
+                                        type: string
+                                    required:
+                                    - name
+                                    type: object
+                                  secretKeyRef:
+                                    description: SecretKeySelector selects a key of
+                                      a Secret.
+                                    properties:
+                                      key:
+                                        description: The key of the secret to select
+                                          from.  Must be a valid secret key.
+                                        type: string
+                                      name:
+                                        default: ""
+                                        description: |-
+                                          Name of the referent.
+                                          This field is effectively required, but due to backwards compatibility is
+                                          allowed to be empty. Instances of this type with an empty value here are
+                                          almost certainly wrong.
+                                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                        type: string
+                                      optional:
+                                        description: Specify whether the Secret or
+                                          its key must be defined
+                                        type: boolean
+                                    required:
+                                    - key
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                  serviceRef:
+                                    properties:
+                                      name:
+                                        description: Name of the service
+                                        type: string
+                                      namespace:
+                                        description: Namespace of the service. Defaults
+                                          to the namespace as the resource.
+                                        type: string
+                                      path:
+                                        description: Path component of the service
+                                          URL. For anthropic models might be 'v1',
+                                          for gemini might be 'v1beta/openai', for
+                                          MCP servers often will be 'mcp' or 'sse'.
+                                        type: string
+                                      port:
+                                        description: Port name to use. If not specified,
+                                          uses the service's only port or first port.
+                                        type: string
+                                    required:
+                                    - name
+                                    type: object
+                                type: object
                             required:
-                              - name
+                            - name
                             type: object
                           type: array
                       type: object
@@ -366,6 +542,11 @@ spec:
                       enum:
                       - built-in
                       - custom
+                      - mcp
+                      - http
+                      - agent
+                      - team
+                      - builtin
                       type: string
                   required:
                   - type
