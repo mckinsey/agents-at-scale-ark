@@ -49,9 +49,6 @@ Examples:
     # Build MCP server with auto-detection
     $0 -i github -f mcp-servers/github/Dockerfile -c mcp-servers/github
 
-    # Build MCP filesystem server
-    $0 -i filesystem-mcp-server -f mcp-servers/filesystem-mcp/Dockerfile -c mcp-servers/filesystem-mcp
-
     # Build for k3d cluster
     $0 -i my-service -k k3d
     

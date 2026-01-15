@@ -141,16 +141,6 @@
         },
         {
           "type": "yaml",
-          "path": "mcp/filesystem-mcp/chart/Chart.yaml",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "yaml",
-          "path": "mcp/filesystem-mcp/chart/Chart.yaml",
-          "jsonpath": "$.appVersion"
-        },
-        {
-          "type": "yaml",
           "path": "services/executor-langchain/chart/Chart.yaml",
           "jsonpath": "$.version"
         },
