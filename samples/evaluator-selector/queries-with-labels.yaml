@@ -11,10 +11,9 @@ metadata:
     status: "done"  # This would normally be set by the controller
 spec:
   input: "Analyze the latest quarterly revenue trends and provide strategic recommendations"
-  targets:
-    - type: agent
-      name: financial-analyst-agent
-
+  target:
+    type: agent
+    name: financial-analyst-agent
 ---
 # Query that matches the configmap-based-evaluator selector
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -27,10 +26,9 @@ metadata:
     priority: "high"
 spec:
   input: "What are the emerging trends in renewable energy storage technologies?"
-  targets:
-    - type: agent
-      name: research-agent
-
+  target:
+    type: agent
+    name: research-agent
 ---
 # Query that doesn't match any evaluator selectors
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -43,10 +41,9 @@ metadata:
     model: "gpt-3.5-turbo"
 spec:
   input: "Test query for development purposes"
-  targets:
-    - type: agent
-      name: test-agent
-
+  target:
+    type: agent
+    name: test-agent
 ---
 # Manual evaluation with parameter overrides
 apiVersion: ark.mckinsey.com/v1alpha1

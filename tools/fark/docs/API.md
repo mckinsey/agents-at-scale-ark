@@ -242,5 +242,5 @@ data: {"type": "kubernetes_event", "reason": "QueryStarted", "message": "..."}
 data: {"type": "MODIFIED", "phase": "done", "query": {...}}
 ```
 
-The final event contains the complete query object with results in the `status.responses` field.
+The final event contains the complete query object with results in the `status.response` field.
 

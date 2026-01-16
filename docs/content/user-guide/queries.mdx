@@ -28,9 +28,9 @@ metadata:
   name: query-simple
 spec:
   input: "What is the capital of France"
-  targets:
-    - type: agent
-      name: sample-agent
+  target:
+    type: agent
+    name: sample-agent
 ```
 
 Apply this sample query with:
@@ -70,9 +70,9 @@ spec:
       content: "4"
     - role: user
       content: "What is the sum of all previous sums?"
-  targets:
-    - type: agent
-      name: sample-agent
+  target:
+    type: agent
+    name: sample-agent
 ```
 
 Apply this query using kubectl:

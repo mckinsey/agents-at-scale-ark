@@ -1,0 +1,55 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: test-agent-with-params
+spec:
+  modelRef:
+    name: test-model
+  parameters:
+    # Direct value parameters
+    - name: agent_name
+      value: "Test Parameter Agent"
+    - name: test_mode
+      value: "enabled"
+    
+    # ConfigMap reference parameters
+    - name: response_style
+      valueFrom:
+        configMapKeyRef:
+          name: agent-config
+          key: response_style
+    - name: agent_role
+      valueFrom:
+        configMapKeyRef:
+          name: agent-config
+          key: agent_role
+    - name: max_tokens
+      valueFrom:
+        configMapKeyRef:
+          name: agent-config
+          key: max_tokens
+    
+    # Secret reference parameters
+    - name: api_endpoint
+      valueFrom:
+        secretKeyRef:
+          name: agent-secrets
+          key: api_endpoint
+    - name: special_instruction
+      valueFrom:
+        secretKeyRef:
+          name: agent-secrets
+          key: special_instruction
+  
+  prompt: |
+    You are {{.agent_name}} running in {{.test_mode}} mode.
+    Your role is: {{.agent_role}}
+    
+    Response style: {{.response_style}}
+    Maximum tokens per response: {{.max_tokens}}
+    
+    API endpoint for additional data: {{.api_endpoint}}
+    
+    Special instructions: {{.special_instruction}}
+    
+    Please acknowledge that you have received these parameters and are operating with the configured settings.

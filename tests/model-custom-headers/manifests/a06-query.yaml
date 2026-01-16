@@ -4,6 +4,6 @@ metadata:
   name: custom-headers-query
 spec:
   input: What is 2 plus 2?
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: headers-test-agent

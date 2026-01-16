@@ -25,9 +25,21 @@ rbac:
 podAnnotations: {}
 podLabels: {}
 
-podSecurityContext: {}
+# L2 FIX: Pod security context for hardening
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
 
-securityContext: {}
+# L2 FIX: Container security context for hardening
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
 
 service:
   type: ClusterIP

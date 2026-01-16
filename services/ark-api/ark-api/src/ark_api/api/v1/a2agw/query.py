@@ -6,7 +6,7 @@ from datetime import datetime
 from ark_sdk.client import V1_ALPHA1, with_ark_client
 from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
 from ark_sdk.models.query_v1alpha1_spec import QueryV1alpha1Spec
-from ark_sdk.models.query_v1alpha1_spec_targets_inner import QueryV1alpha1SpecTargetsInner
+from ark_sdk.models.query_v1alpha1_spec_target import QueryV1alpha1SpecTarget
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ async def post_query(
         # Create query spec
         query_spec = QueryV1alpha1Spec(
             input=query,
-            targets=[QueryV1alpha1SpecTargetsInner(name=target, type=target_type)],
+            target=QueryV1alpha1SpecTarget(name=target, type=target_type),
             timeout=f"{timeout}s",
         )
 
@@ -77,15 +77,14 @@ async def wait_for_query(namespace: str, query_name: str, timeout: int = 60) -> 
 
                     if phase == "done":
                         # Extract response content
-                        if query_status.status.responses:
-                            response = query_status.status.responses[0]
-                            return response.content or "No response content"
+                        if query_status.status.response:
+                            return query_status.status.response.content or "No response content"
                         return "Query completed but no response available"
 
                     elif phase == "error":
                         error_msg = "Query failed"
-                        if query_status.status.responses:
-                            error_msg = query_status.status.responses[0].content or error_msg
+                        if query_status.status.response:
+                            error_msg = query_status.status.response.content or error_msg
                         raise Exception(f"Query error: {error_msg}")
 
                 # Wait before next poll

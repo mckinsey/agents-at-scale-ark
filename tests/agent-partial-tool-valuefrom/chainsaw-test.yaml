@@ -11,7 +11,7 @@ spec:
             timeout: 120s
             content: |
               helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-                --version 0.1.25 \
+                --version 0.1.27 \
                 --namespace $NAMESPACE \
                 --values mock-llm-values.yaml \
                 --wait --timeout=120s
@@ -26,7 +26,6 @@ spec:
               - name: NAMESPACE
                 value: ($namespace)
         - assert:
-            timeout: 30s
             resource:
               apiVersion: ark.mckinsey.com/v1alpha1
               kind: Model
@@ -86,7 +85,7 @@ spec:
                 modelRef:
                   name: test-model
                 tools:
-                  - type: custom
+                  - type: http
                     name: get-chicago-coordinates
                     description: Get coordinates for city from config
                     partial:
@@ -124,9 +123,9 @@ spec:
                 name: partial-tool-valuefrom-query
               spec:
                 input: What are the coordinates?
-                targets:
-                  - type: agent
-                    name: partial-tool-valuefrom-agent
+                target:
+                  type: agent
+                  name: partial-tool-valuefrom-agent
         - assert:
             timeout: 10s
             resource:
@@ -145,8 +144,8 @@ spec:
               metadata:
                 name: partial-tool-valuefrom-query
               status:
-                (length(responses)): 1
-                (contains(responses[*].target.name, 'partial-tool-valuefrom-agent')): true
+                (response != null): true
+                (response.target.name): 'partial-tool-valuefrom-agent'
       catch:
         - events: {}
         - describe:

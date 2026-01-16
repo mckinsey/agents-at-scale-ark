@@ -11,7 +11,7 @@ spec:
     - script:
         content: |
           helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.23 \
+            --version 0.1.27 \
             --namespace $NAMESPACE \
             --values mock-llm-values.yaml
         env:
@@ -69,9 +69,9 @@ spec:
           status:
             # Done - not error. Tokens match the mocked value.
             phase: done
-            (length(responses)): 1
-            (contains(responses[*].target.name, 'token-test-agent')): true
-            (responses[0].content): "Please explain the concept of distributed computing in detail, including key principles, \nadvantages, challenges, and real-world applications. Provide examples of distributed \nsystems and discuss how they handle consistency, availability, and partition tolerance.\n"
+            (response != null): true
+            (response.target.name): 'token-test-agent'
+            (response.content): "Please explain the concept of distributed computing in detail, including key principles, \nadvantages, challenges, and real-world applications. Provide examples of distributed \nsystems and discuss how they handle consistency, availability, and partition tolerance.\n"
             (tokenUsage.promptTokens): 50
             (tokenUsage.completionTokens): 100
             (tokenUsage.totalTokens): 150

@@ -23,12 +23,15 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { trackEvent } from '@/lib/analytics/singleton';
+import { hashPromptSync } from '@/lib/analytics/utils';
 import { chatService } from '@/lib/services';
 
 type ChatType = 'model' | 'team' | 'agent';
@@ -56,6 +59,7 @@ export default function FloatingChat({
   const [error, setError] = useState<string | null>(null);
   const [windowState, setWindowState] = useState<WindowState>('default');
   const [viewMode, setViewMode] = useState<'text' | 'markdown'>('markdown');
+  const [debugMode, setDebugMode] = useState(true);
   const [sessionId] = useState(() => `session-${Date.now()}`);
   const inputRef = useRef<HTMLInputElement>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
@@ -106,6 +110,11 @@ export default function FloatingChat({
     setChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
     let accumulatedContent = '';
+    const accumulatedToolCalls: Array<{
+      id: string;
+      type: 'function';
+      function: { name: string; arguments: string };
+    }> = [];
 
     for await (const chunk of chatService.streamChatResponse(
       messageArray,
@@ -118,17 +127,57 @@ export default function FloatingChat({
       const delta = typedChunk?.choices?.[0]?.delta;
       if (delta?.content) {
         accumulatedContent += delta.content;
-
-        // Update the assistant message with accumulated content
-        setChatMessages(prev => {
-          const updated = [...prev];
-          updated[assistantMessageIndex] = {
-            role: 'assistant',
-            content: accumulatedContent,
-          };
-          return updated;
-        });
       }
+
+      if (delta?.tool_calls) {
+        let index = accumulatedToolCalls.length - 1;
+        for (const toolCallDelta of delta.tool_calls) {
+          // name is only defined when starting a new tool invocation
+          if (toolCallDelta.function?.name) {
+            index += 1;
+            accumulatedToolCalls.push({
+              id: toolCallDelta.id || '',
+              type: 'function',
+              function: { name: toolCallDelta.function.name, arguments: '' },
+            });
+          }
+
+          if (toolCallDelta.id) {
+            accumulatedToolCalls[index].id = toolCallDelta.id;
+          }
+
+          if (toolCallDelta.function?.arguments) {
+            accumulatedToolCalls[index].function.arguments +=
+              toolCallDelta.function.arguments;
+          }
+        }
+      }
+      setChatMessages(prev => {
+        const updated = [...prev];
+        updated[assistantMessageIndex] = {
+          role: 'assistant',
+          content: accumulatedContent,
+          tool_calls: accumulatedToolCalls,
+        };
+        return updated;
+      });
+    }
+
+    // After streaming completes, add tool messages (OpenAI format)
+    // These won't be displayed but they will be part of the history
+    if (accumulatedToolCalls.length > 0) {
+      setChatMessages(prev => {
+        const newMessages = [...prev];
+        // Add a tool message for each tool call
+        accumulatedToolCalls.forEach(toolCall => {
+          newMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: `Called ${toolCall.function.name} with ${toolCall.function.arguments}`,
+          });
+        });
+        return newMessages;
+      });
     }
   };
 
@@ -195,6 +244,16 @@ export default function FloatingChat({
     const userMessage = currentMessage.trim();
     setCurrentMessage('');
     setError(null);
+
+    trackEvent({
+      name: 'chat_message_sent',
+      properties: {
+        targetType: type,
+        targetName: name,
+        messageLength: userMessage.length,
+        promptHash: hashPromptSync(userMessage),
+      },
+    });
 
     // Add user message
     setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
@@ -371,6 +430,12 @@ export default function FloatingChat({
                 )}
 
                 {chatMessages.map((message, index) => {
+                  // Don't show tool messages (role='tool') - tool call will show up with assistant message
+                  if (message.role === 'tool') {
+                    return '';
+                  }
+
+                  // Handle regular messages
                   let content = '';
                   if (typeof message.content === 'string') {
                     content = message.content;
@@ -393,14 +458,44 @@ export default function FloatingChat({
                       .join('\n');
                   }
 
-                  return content ? (
-                    <ChatMessage
-                      key={index}
-                      role={message.role as 'user' | 'assistant' | 'system'}
-                      content={content}
-                      viewMode={viewMode}
-                    />
-                  ) : null;
+                  const toolCalls =
+                    'tool_calls' in message ? message.tool_calls : undefined;
+
+                  return (
+                    <div key={index} className="contents">
+                      {debugMode &&
+                        toolCalls &&
+                        toolCalls.map((toolCall, toolIndex) => (
+                          <div
+                            key={`${index}-tool-${toolIndex}`}
+                            className={toolIndex > 0 ? 'mt-2' : ''}>
+                            <ChatMessage
+                              role="assistant"
+                              content=""
+                              viewMode={viewMode}
+                              toolCalls={[
+                                toolCall as {
+                                  id: string;
+                                  type: 'function';
+                                  function: { name: string; arguments: string };
+                                },
+                              ]}
+                            />
+                          </div>
+                        ))}
+                      {content && (
+                        <div className={toolCalls ? 'mt-2' : ''}>
+                          <ChatMessage
+                            role={
+                              message.role as 'user' | 'assistant' | 'system'
+                            }
+                            content={content}
+                            viewMode={viewMode}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
                 })}
 
                 {/* Show typing indicator when processing */}
@@ -423,27 +518,55 @@ export default function FloatingChat({
               </div>
             </div>
 
-            <div className="flex flex-shrink-0 gap-2 border-t p-4">
-              <div className="relative flex-1">
-                <Input
-                  ref={inputRef}
-                  placeholder={
-                    isProcessing ? 'Processing...' : 'Type your message...'
-                  }
-                  value={currentMessage}
-                  onChange={e => setCurrentMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  disabled={isProcessing}
-                />
+            <div className="flex-shrink-0 border-t">
+              <div className="flex gap-2 p-4">
+                <div className="relative flex-1">
+                  <Input
+                    ref={inputRef}
+                    placeholder={
+                      isProcessing ? 'Processing...' : 'Type your message...'
+                    }
+                    value={currentMessage}
+                    onChange={e => setCurrentMessage(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    disabled={isProcessing}
+                  />
+                </div>
+                <Button
+                  onClick={handleSendMessage}
+                  disabled={!currentMessage.trim() || isProcessing}
+                  size="sm"
+                  variant="default"
+                  aria-label="Send message">
+                  <Send className="h-4 w-4" />
+                </Button>
               </div>
-              <Button
-                onClick={handleSendMessage}
-                disabled={!currentMessage.trim() || isProcessing}
-                size="sm"
-                variant="default"
-                aria-label="Send message">
-                <Send className="h-4 w-4" />
-              </Button>
+
+              {/* Toolbar */}
+              <div className="border-t px-4 py-2">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="debug-mode"
+                    checked={debugMode}
+                    onCheckedChange={checked => {
+                      setDebugMode(checked);
+                      trackEvent({
+                        name: 'chat_debug_mode_toggled',
+                        properties: {
+                          enabled: checked,
+                          targetType: type,
+                          targetName: name,
+                        },
+                      });
+                    }}
+                  />
+                  <label
+                    htmlFor="debug-mode"
+                    className="text-muted-foreground cursor-pointer text-sm">
+                    Show tool calls
+                  </label>
+                </div>
+              </div>
             </div>
           </>
         )}

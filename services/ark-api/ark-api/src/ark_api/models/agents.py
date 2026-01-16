@@ -75,7 +75,7 @@ class AgentLabelSelector(BaseModel):
 
 class AgentTool(BaseModel):
     """Tool configuration for an agent."""
-    type: str  # "built-in" or "custom"
+    type: str  # "built-in", "mcp", "http", "agent", "team", "builtin" (or deprecated "custom")
     name: Optional[str] = None
     labelSelector: Optional[AgentLabelSelector] = None
 

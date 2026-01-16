@@ -25,6 +25,6 @@ metadata:
   name: query-seq
 spec:
   input: "Sheldon says:"
-  targets:
-    - type: team
-      name: team-seq
+  target:
+    type: team
+    name: team-seq

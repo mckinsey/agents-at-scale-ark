@@ -16,9 +16,9 @@ metadata:
   name: query-with-parameter-reference
 spec:
   input: "What's your name?"
-  targets:
-    - type: agent
-      name: query-with-parameter-reference
+  target:
+    type: agent
+    name: query-with-parameter-reference
   parameters:
     - name: agent_name
       value: "QueryAgent123"

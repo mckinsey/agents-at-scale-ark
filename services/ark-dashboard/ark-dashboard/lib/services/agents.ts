@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
@@ -88,19 +89,27 @@ export const agentsService = {
     return agentsService.getByName(name);
   },
 
-  // Create a new agent
   async create(agent: AgentCreateRequest): Promise<Agent> {
     const response = await apiClient.post<AgentDetailResponse>(
       `/api/v1/agents`,
       agent,
     );
+
+    trackEvent({
+      name: 'agent_created',
+      properties: {
+        agentName: response.name,
+        hasTools: (agent.tools?.length ?? 0) > 0,
+        toolCount: agent.tools?.length ?? 0,
+      },
+    });
+
     return {
       ...response,
       id: response.name,
     };
   },
 
-  // Update an existing agent
   async update(
     name: string,
     updates: AgentUpdateRequest,
@@ -110,6 +119,14 @@ export const agentsService = {
         `/api/v1/agents/${name}`,
         updates,
       );
+
+      trackEvent({
+        name: 'agent_updated',
+        properties: {
+          agentName: response.name,
+        },
+      });
+
       return {
         ...response,
         id: response.name,
@@ -131,10 +148,17 @@ export const agentsService = {
     return agentsService.update(name, updates);
   },
 
-  // Delete an agent
   async delete(name: string): Promise<boolean> {
     try {
       await apiClient.delete(`/api/v1/agents/${name}`);
+
+      trackEvent({
+        name: 'agent_deleted',
+        properties: {
+          agentName: name,
+        },
+      });
+
       return true;
     } catch (error) {
       if ((error as AxiosError).response?.status === 404) {

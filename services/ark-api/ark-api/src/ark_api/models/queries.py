@@ -80,6 +80,7 @@ class QueryResponse(BaseModel):
     input: Union[str, List[ChatCompletionMessageParam]]
     memory: Optional[Memory] = None
     sessionId: Optional[str] = None
+    conversationId: Optional[str] = None
     status: Optional[Dict[str, Any]] = None
     creationTimestamp: Optional[datetime] = None
 
@@ -100,7 +101,8 @@ class QueryCreateRequest(BaseModel):
     selector: Optional[QueryLabelSelector] = None
     serviceAccount: Optional[str] = None
     sessionId: Optional[str] = None
-    targets: Optional[List[Target]] = None
+    conversationId: Optional[str] = None
+    target: Optional[Target] = None
     timeout: Optional[str] = None
     ttl: Optional[str] = None
     cancel: Optional[bool] = None
@@ -119,7 +121,8 @@ class QueryUpdateRequest(BaseModel):
     selector: Optional[QueryLabelSelector] = None
     serviceAccount: Optional[str] = None
     sessionId: Optional[str] = None
-    targets: Optional[List[Target]] = None
+    conversationId: Optional[str] = None
+    target: Optional[Target] = None
     timeout: Optional[str] = None
     ttl: Optional[str] = None
     cancel: Optional[bool] = None
@@ -137,7 +140,8 @@ class QueryDetailResponse(BaseModel):
     selector: Optional[QueryLabelSelector] = None
     serviceAccount: Optional[str] = None
     sessionId: Optional[str] = None
-    targets: Optional[List[Target]] = None
+    conversationId: Optional[str] = None
+    target: Optional[Target] = None
     timeout: Optional[str] = None
     ttl: Optional[str] = None
     cancel: Optional[bool] = None

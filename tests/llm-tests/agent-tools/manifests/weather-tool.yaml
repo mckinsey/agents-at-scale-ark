@@ -1,0 +1,23 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: weather-tool
+spec:
+  type: http
+  inputSchema:
+    type: object
+    properties:
+      latitude:
+        type: number
+        description: Latitude coordinate
+      longitude:
+        type: number
+        description: Longitude coordinate
+      current_weather:
+        type: boolean
+        description: Include current weather data
+        default: true
+    required: ["latitude", "longitude"]
+  description: "Fetches current weather data for given coordinates"
+  http:
+    url: https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current_weather=true

@@ -9,6 +9,6 @@ spec:
     quantum algorithms like Shor's and Grover's algorithms, and discuss current challenges
     in quantum computing hardware and error correction. Include potential applications
     in cryptography, optimization, and scientific simulation.
-  targets:
-  - type: model
+  target:
+    type: model
     name: model-token-test

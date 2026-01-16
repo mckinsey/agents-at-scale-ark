@@ -8,7 +8,7 @@ spec:
     name: default
   tools:
     - name: filesystem-directory-tree
-      type: custom
+      type: mcp
 ---
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query

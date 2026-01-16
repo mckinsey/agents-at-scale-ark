@@ -256,51 +256,41 @@ class QueryResolver:
     def _extract_response_metrics(self, status, metrics: Dict[str, Any]) -> None:
         """Extract response quality and size metrics"""
         logger.info(f"_extract_response_metrics: status type = {type(status)}")
-        
-        responses = None
+
+        response = None
         if isinstance(status, dict):
-            responses = status.get('responses')
-            if responses:
-                logger.info(f"Found responses field in dict, type: {type(responses)}, length: {len(responses) if responses else 0}")
+            response = status.get('response')
+            if response:
+                logger.info(f"Found response field in dict, type: {type(response)}")
         else:
-            if hasattr(status, 'responses') and status.responses:
-                responses = status.responses
-                logger.info(f"Found responses field, type: {type(responses)}, length: {len(responses) if responses else 0}")
-        
-        if responses:
-            total_response_length = 0
-            response_count = len(responses)
-            response_lengths = []
-            
-            for i, response in enumerate(responses):
-                logger.info(f"Processing response {i}, type: {type(response)}")
-                content_length = 0
-                
-                # Handle both dict and object formats
-                if isinstance(response, dict):
-                    content = response.get('content', '')
-                    if content:
-                        content_length = len(content)
-                        total_response_length += content_length
-                        response_lengths.append(content_length)
-                else:
-                    if hasattr(response, 'content') and response.content:
-                        content_length = len(response.content)
-                        total_response_length += content_length
-                        response_lengths.append(content_length)
-            
+            if hasattr(status, 'response') and status.response:
+                response = status.response
+                logger.info(f"Found response field, type: {type(response)}")
+
+        if response:
+            content_length = 0
+
+            # Handle both dict and object formats
+            if isinstance(response, dict):
+                content = response.get('content', '')
+                if content:
+                    content_length = len(content)
+            else:
+                if hasattr(response, 'content') and response.content:
+                    content_length = len(response.content)
+
             metrics.update({
-                "responseCount": response_count,
-                "totalResponseLength": total_response_length,
-                "averageResponseLength": total_response_length / response_count if response_count > 0 else 0,
-                "maxResponseLength": max(response_lengths) if response_lengths else 0,
-                "minResponseLength": min(response_lengths) if response_lengths else 0
+                "responseCount": 1,
+                "totalResponseLength": content_length,
+                "averageResponseLength": content_length,
+                "maxResponseLength": content_length,
+                "minResponseLength": content_length
             })
-            
+
             # Response completeness heuristic
-            if total_response_length > 0:
+            if content_length > 0:
                 # Simple heuristic: responses over 50 chars are more likely complete
-                completeness_score = min(1.0, total_response_length / 50)
+                completeness_score = min(1.0, content_length / 50)
                 metrics["responseCompleteness"] = completeness_score
     
     def _extract_status_metrics(self, status, metrics: Dict[str, Any]) -> None:

@@ -2,6 +2,7 @@ export default {
   '---platform-ops': { type: 'separator', title: 'Platform operations' },
   provisioning: 'Cloud Infrastructure Provisioning',
   'deploying-ark': 'Deploying ARK',
+  monitoring: 'Monitoring',
 
   '---cicd': { type: 'separator', title: 'CI/CD and supply chain' },
   'build-pipelines': 'Build Pipelines',

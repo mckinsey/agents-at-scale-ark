@@ -2,6 +2,8 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: agent-partial-tool
+  labels:
+    multi-provider: "true"
 spec:
   description: Test agent with a tool using partial parameters
   steps:
@@ -10,7 +12,7 @@ spec:
         - script:
             content: |
               helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-                --version 0.1.23 \
+                --version 0.1.27 \
                 --namespace $NAMESPACE \
                 --values mock-llm-values.yaml
             env:
@@ -93,8 +95,8 @@ spec:
               metadata:
                 name: partial-tool-query
               status:
-                (length(responses)): 1
-                (contains(responses[*].target.name, 'partial-tool-agent')): true
+                (response != null): true
+                (response.target.name): 'partial-tool-agent'
       catch:
         - events: {}
         - describe:
