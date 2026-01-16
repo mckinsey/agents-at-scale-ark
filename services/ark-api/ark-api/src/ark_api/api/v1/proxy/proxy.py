@@ -1,5 +1,6 @@
 """A2A Proxy routes for making agent to agent comunication accesible from outside """
 import logging
+import os
 from multiprocessing import get_context
 from token import OP
 from ark_api.utils.ark_services import get_headers
