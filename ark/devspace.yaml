@@ -39,13 +39,51 @@ deployments:
             runAsNonRoot: false
         webhook:
           enable: true
+  ark-controller-replica:
+    namespace: ark-system
+    helm:
+      chart:
+        path: ./dist/chart
+      values:
+        controllerManager:
+          container:
+            image:
+              repository: ${runtime.images.ark-controller.image}
+              tag: ${runtime.images.ark-controller.tag}
+            resources:
+              limits:
+                memory: "2048Mi"
+                cpu: "2000m"
+              requests:
+                memory: "256Mi"
+                cpu: "200m"
+          # Override security context for development
+          securityContext:
+            runAsNonRoot: false
+        webhook:
+          enable: false
+        crd:
+          enable: false
+        networkPolicy:
+          enable: false
+        metrics:
+          enable: false
+        prometheus:
+          enable: false
+        certmanager:
+          enable: false
+        customCACert:
+          enabled: false
+        rbac:
+          enable: false
 
 dev:
   ark-controller:
-    imageSelector: ark-controller
+    labelSelector: 
+      app.kubernetes.io/instance: ark-controller
     devImage: golang:1.24.11-bookworm
     command:
-      ["sh", "-c", "cd /app && GOTOOLCHAIN=auto go run cmd/main.go --leader-elect=false"]
+      ["sh", "-c", "cd /app && GOTOOLCHAIN=auto go run cmd/main.go --leader-elect=true"]
     namespace: ark-system
     logs:
       lastLines: 50
@@ -61,3 +99,23 @@ dev:
     ssh:
       enabled: true
 
+  ark-controller-replica:
+    labelSelector:
+      app.kubernetes.io/instance: ark-controller-replica
+    devImage: golang:1.24.11-bookworm
+    command:
+      ["sh", "-c", "cd /app && ENABLE_WEBHOOKS=false GOTOOLCHAIN=auto go run cmd/main.go --leader-elect=true"]
+    namespace: ark-system
+    logs:
+      lastLines: 50
+    # File synchronization for hot reload
+    sync:
+      - path: .:/app
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+        onUpload:
+          restartContainer: true
+    # Enable SSH for IDE integration
+    ssh:
+      enabled: true

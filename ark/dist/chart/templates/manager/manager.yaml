@@ -1,24 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ark-controller
+  name: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-    control-plane: ark-controller
+    control-plane: {{ .Release.Name }}
 spec:
   replicas:  {{ .Values.controllerManager.replicas }}
   selector:
     matchLabels:
       {{- include "chart.selectorLabels" . | nindent 6 }}
-      control-plane: ark-controller
+      control-plane: {{ .Release.Name }}
   template:
     metadata:
       annotations:
         kubectl.kubernetes.io/default-container: manager
       labels:
         {{- include "chart.labels" . | nindent 8 }}
-        control-plane: ark-controller
+        control-plane: {{ .Release.Name }}
         {{- if and .Values.controllerManager.pod .Values.controllerManager.pod.labels }}
         {{- range $key, $value := .Values.controllerManager.pod.labels }}
         {{ $key }}: {{ $value }}
