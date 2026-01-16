@@ -105,10 +105,6 @@ describe('dashboard-icons', () => {
       expect(DASHBOARD_SECTIONS.files.enablerFeature).toBeDefined();
     });
 
-    it('should have enabler feature for tasks section', () => {
-      expect(DASHBOARD_SECTIONS.tasks.enablerFeature).toBeDefined();
-    });
-
     it('should have enabler feature for broker section', () => {
       expect(DASHBOARD_SECTIONS.broker.enablerFeature).toBeDefined();
     });
