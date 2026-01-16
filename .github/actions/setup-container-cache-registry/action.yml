@@ -44,16 +44,22 @@ runs:
           echo "PR Author: ${{ github.event.pull_request.user.login }}"
         fi
         
-        # Check if this is a PR from a fork
+        # Check if this is a PR from a fork or from dependabot
         if [[ "${{ github.event_name }}" == "pull_request" ]] && \
            [[ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
           # EXTERNAL PR: Use a temp registry
           # The fork owner's GITHUB_TOKEN has write access to their own namespace
           # Example: ttl.sh/forked-owner/forked-repo-name
-        
+
           REGISTRY="ttl.sh/${{ github.event.pull_request.head.repo.full_name }}"
           IS_FORK_PR="true"
           echo "External PR detected - using fork's registry: $REGISTRY"
+        elif [[ "${{ github.actor }}" == "dependabot[bot]" ]]; then
+          # DEPENDABOT PR: Treat like a fork PR (no access to secrets)
+          # Use a temp registry since dependabot can't access organization secrets
+          REGISTRY="ttl.sh/${{ github.repository }}"
+          IS_FORK_PR="true"
+          echo "Dependabot PR detected - using temp registry: $REGISTRY"
         else
           # INTERNAL PR or PUSH: Use the organization's registry
           # Default format: ghcr.io/organization/repository
