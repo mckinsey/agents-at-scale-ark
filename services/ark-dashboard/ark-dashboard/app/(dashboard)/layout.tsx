@@ -5,6 +5,7 @@ import ChatManager from '@/components/chat-manager';
 import { ExperimentalFeaturesDialog } from '@/components/experimental-features-dialog';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { Spinner } from '@/components/ui/spinner';
+import { OnboardingWizard } from '@/components/wizards/onboarding-wizard';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 export default function DashboardLayout({
@@ -33,6 +34,7 @@ export default function DashboardLayout({
       </SidebarProvider>
       <ExperimentalFeaturesDialog />
       <ChatManager />
+      <OnboardingWizard />
     </>
   );
 }

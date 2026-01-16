@@ -7,10 +7,12 @@ import {
   HomepageTeamsCard,
 } from '@/components/cards';
 import { PageHeader } from '@/components/common/page-header';
+import { OnboardingTrigger } from '@/components/wizards/onboarding-wizard';
 
 export default function HomePage() {
   return (
     <div className="bg-background min-h-screen">
+      <OnboardingTrigger />
       <PageHeader currentPage="ARK Dashboard" />
       <main className="container space-y-8 p-6 py-8">
         <section>
