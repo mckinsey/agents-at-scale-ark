@@ -161,17 +161,21 @@ const defaultArkServices: ServiceCollection = {
     k8sDevDeploymentName: 'ark-broker-devspace',
   },
 
-  'mcp-filesystem': {
-    name: 'mcp-filesystem',
-    helmReleaseName: 'mcp-filesystem',
-    description: 'Stateful filesystem MCP server with workspace isolation',
-    enabled: false,
+  'file-gateway': {
+    name: 'file-gateway',
+    helmReleaseName: 'file-gateway',
+    description:
+      'S3-compatible file storage gateway with REST API for shared storage access',
+    enabled: true,
     category: 'service',
-    // namespace: undefined - uses current context namespace
-    chartPath: `${REGISTRY_BASE}/mcp-filesystem`,
-    installArgs: [],
-    k8sDeploymentName: 'mcp-filesystem',
-    k8sDevDeploymentName: 'mcp-filesystem-devspace',
+    namespace: 'default',
+    chartPath: `${getMarketplaceRegistry()}/file-gateway`,
+    installArgs: ['--create-namespace'],
+    k8sServiceName: 'file-gateway-file-api',
+    k8sServicePort: 8080,
+    k8sPortForwardLocalPort: undefined,
+    k8sDeploymentName: 'file-gateway-file-api',
+    k8sDevDeploymentName: undefined,
   },
 
   'localhost-gateway': {
@@ -185,7 +189,7 @@ const defaultArkServices: ServiceCollection = {
     installArgs: [],
   },
 
-  'noah': {
+  noah: {
     name: 'noah',
     helmReleaseName: 'noah',
     description: 'Runtime administration agent with cluster privileges',
@@ -207,7 +211,9 @@ function applyConfigOverrides(defaults: ServiceCollection): ServiceCollection {
   for (const [key, service] of Object.entries(defaults)) {
     const override = overrides[key];
     result[key] =
-      override && typeof override === 'object' ? {...service, ...override} : service;
+      override && typeof override === 'object'
+        ? {...service, ...override}
+        : service;
   }
 
   return result;
