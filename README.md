@@ -9,7 +9,6 @@
 
   <p align="center">
     <a href="#features">Features</a> •
-    <a href="#use-cases">Use Cases</a> •
     <a href="#quickstart">Quickstart</a> •
     <a href="https://mckinsey.github.io/agents-at-scale-ark/">Documentation</a>
   </p>
