@@ -54,7 +54,7 @@ const QUERY_STATUS_PHASES: readonly QueryStatusPhase[] = [
 
 type QueryStatusWithPhase = {
   phase: string;
-  response?: { content: string };
+  response?: { content: string; a2a?: { taskId: string } };
 };
 
 // Type guard for checking if a phase is terminal
@@ -73,6 +73,7 @@ export type ChatResponse = {
   status: QueryStatusPhase;
   terminal: boolean;
   response?: string;
+  a2aTaskId?: string;
 };
 
 export type ChatMessage = {
@@ -246,6 +247,7 @@ export const chatService = {
         const statusWithPhase = status as QueryStatusWithPhase;
         const phase = statusWithPhase.phase;
         const response = statusWithPhase.response?.content || 'No response';
+        const a2aTaskId = statusWithPhase.response?.a2a?.taskId;
 
         // Check if phase is in the valid set, otherwise use 'unknown'
         const validatedPhase: QueryStatusPhase = isValidQueryStatusPhase(phase)
@@ -256,6 +258,7 @@ export const chatService = {
           terminal: isTerminalPhase(validatedPhase),
           status: validatedPhase,
           response: response,
+          a2aTaskId: a2aTaskId,
         };
       }
 

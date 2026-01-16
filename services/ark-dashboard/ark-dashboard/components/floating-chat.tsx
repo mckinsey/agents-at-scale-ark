@@ -34,6 +34,7 @@ import {
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import { chatService } from '@/lib/services';
+import type { ChatResponse } from '@/lib/services/chat';
 
 type ChatType = 'model' | 'team' | 'agent';
 type WindowState = 'default' | 'minimized' | 'maximized';
@@ -59,13 +60,13 @@ interface CompletedQueryStatus {
     reason: string;
     message: string;
   }[];
-  responses: {
+  response: {
     a2a: {
       contextId: string;
       taskId: string;
     };
     content: string;
-  }[];
+  };
 }
 
 interface ArkMetadata {
@@ -83,12 +84,12 @@ function getA2ATaskFromArkChunk(chunk: ArkChunk): string | undefined {
   if (
     !arkMetadata ||
     !arkMetadata.completedQuery ||
-    !arkMetadata.completedQuery.status.responses[0].a2a
+    !arkMetadata.completedQuery.status.response.a2a
   ) {
     return undefined;
   }
 
-  return arkMetadata.completedQuery.status.responses[0].a2a.taskId;
+  return arkMetadata.completedQuery.status.response.a2a.taskId;
 }
 
 export default function FloatingChat({
@@ -242,13 +243,28 @@ export default function FloatingChat({
     }
   };
 
+  const getChatResponsePolling = async (queryName: string) => {
+    let pollingStopped = false;
+    stopPollingRef.current = () => {
+      pollingStopped = true;
+    };
+
+    let result: ChatResponse | null = null;
+    while (!pollingStopped) {
+      result = await chatService.getQueryResult(queryName);
+      if (!result.terminal) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        continue;
+      }
+
+      pollingStopped = true;
+    }
+
+    return result;
+  };
+
   const handlePollChatResponse = async (userMessage: string) => {
     const messageArray = buildChatMessages(chatMessages, userMessage);
-
-    // Add empty assistant message that will be updated with streamed content
-    // const assistantMessageIndex = chatMessages.length + 1; // +1 for user message already added
-    // setChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
-
     const query = await chatService.submitChatQuery(
       messageArray,
       type,
@@ -256,46 +272,40 @@ export default function FloatingChat({
       sessionId,
     );
 
-    let pollingStopped = false;
-    stopPollingRef.current = () => {
-      pollingStopped = true;
-    };
-
-    while (!pollingStopped) {
-      try {
-        const result = await chatService.getQueryResult(query.name);
-
-        // Check if terminal state with response
-        if (result.terminal) {
-          let content = '';
-
-          if (result.status === 'done' && result.response) {
-            content = result.response;
-          } else if (result.status === 'error') {
-            content = result.response || 'Query failed';
-          } else if (result.status === 'unknown') {
-            content = 'Query status unknown';
-          }
-
-          setChatMessages(prev => [...prev, { role: 'assistant', content }]);
-
-          pollingStopped = true;
-          break;
-        }
-      } catch (err) {
-        console.error('Error polling query status:', err);
-
+    try {
+      const result = await getChatResponsePolling(query.name);
+      if (!result) {
+        setError('Failed to process query');
+        setIsProcessing(false);
         setChatMessages(prev => [
           ...prev,
-          { role: 'assistant', content: 'Error while processing query' },
+          { role: 'assistant', content: 'Failed to process query' },
         ]);
 
-        pollingStopped = true;
+        return;
       }
 
-      if (!pollingStopped) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      const a2aTaskId = result.a2aTaskId;
+      if (a2aTaskId) {
+        setMessageMetadata(prev => {
+          const updated = new Map(prev);
+          updated.set(chatMessages.length, {
+            taskId: a2aTaskId,
+          });
+          return updated;
+        });
       }
+
+      setChatMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: result.response },
+      ]);
+    } catch (err) {
+      console.error('Error polling chat response:', err);
+      setChatMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: 'Failed to process query' },
+      ]);
     }
   };
 
@@ -522,6 +532,7 @@ export default function FloatingChat({
                   const toolCalls =
                     'tool_calls' in message ? message.tool_calls : undefined;
 
+                  console.log('metadata', messageMetadata);
                   const metadata = messageMetadata.get(index);
                   const hasTaskId = metadata?.taskId;
 
