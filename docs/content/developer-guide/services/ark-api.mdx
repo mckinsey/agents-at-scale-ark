@@ -72,7 +72,7 @@ The A2A Gateway exposes ARK agents via the [A2A Protocol](https://github.com/a2a
 
 **Endpoints:**
 - `GET /agents` - List all available agents
-- `GET /agent/{agent-name}/.well-known/agent.json` - Get agent card
+- `GET /agent/{agent-name}/.well-known/agent-card.json` - Get agent card
 - `GET /agent/{agent-name}/*` - Dynamic A2A protocol routes
 
 **Example:**
@@ -90,6 +90,14 @@ Proxy requests to other services deployed in your namespace. For example, the Fi
 
 - `GET /v1/proxy/services` - List available services
 - `* /v1/proxy/services/{service_name}/{path}` - Proxy to a cluster service
+- `GET,POST,OPTIONS /v1/proxy/a2a/{a2a-server}` - Proxy to an a2a server
+- `GET,POST,OPTIONS /v1/proxy/a2a/{a2a-server}/{path}` - Proxy to interact with an a2a server
+- `GET,POST,OPTIONS /v1/proxy/mcp/{mcp-server}` - Proxy to an mcp server
+- `GET,POST,OPTIONS /v1/proxy/mcp/{mcp-server}/{path}` - Proxy to interact with a mcp server
+
+In order to connect with A2A Server or MCP Server you can use the following dev tools:
+- [A2A Inspector](https://github.com/a2aproject/a2a-inspector): for connecting to A2A via proxy (digit the full path at agent-card)
+- [MCP Inspector](https://github.com/modelcontextprotocol/inspector): for connecting to MCP via proxy (use Streamable HTTP and Direct connection)
 
 ## Authentication
 
