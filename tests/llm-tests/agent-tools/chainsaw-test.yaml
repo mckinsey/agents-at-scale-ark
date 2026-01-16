@@ -1,0 +1,61 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: agent-tools
+  labels:
+    llm: "true"
+spec:
+  timeouts:
+    apply: 60s
+    assert: 300s 
+    exec: 120s
+  steps:
+    - name: setup-model
+      try:
+        - script:
+            content: bash ../setup/setup-${MODEL}.sh $NAMESPACE
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Model
+              metadata:
+                name: test-model
+              status:
+                conditions:
+                  - type: ModelAvailable
+                    status: "True"
+
+    - name: create-resources
+      try:
+        - apply:
+            file: manifests/weather-tool.yaml
+        - apply:
+            file: manifests/weather-agent.yaml
+        - apply:
+            file: manifests/weather-query.yaml
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Query
+              metadata:
+                name: weather-query
+              status:
+                phase: done
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Query
+              metadata:
+                name: weather-query
+              status:
+                (response != null): true
+      catch:
+        - events: {}
+        - describe:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            name: weather-query
+

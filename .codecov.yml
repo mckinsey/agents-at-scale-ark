@@ -1,0 +1,29 @@
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 0.1%
+        flags:
+          - ark-cli
+          - combined-coverage
+    patch:
+      default:
+        target: auto
+        threshold: 0.1%
+
+flags:
+  ark-cli:
+    paths:
+      - tools/ark-cli/
+  combined-coverage:
+    paths:
+      - ark/
+      - services/
+      - mcp/
+      - tests/
+
+comment:
+  layout: "reach,diff,flags,tree"
+  behavior: default
+  require_changes: false
