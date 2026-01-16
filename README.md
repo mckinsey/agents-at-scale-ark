@@ -2,15 +2,14 @@
   <h1 align="center"><code>⚒️ ark</code></h1>
   <h4 align="center">Agentic Runtime for Kubernetes</h4>
   <p align="center">
-    <strong>Technical Preview & RFC. Part of the Agents at Scale Ecosystem</strong>
-  </p>
-  <p align="center">
-    <em>Run agentic workloads across any system or cluster.</em>
+    <strong>A declarative, Kubernetes-native framework for building portable, scalable, and provider-agnostic agentic applications.</strong>
   </p>
 
   <hr>
 
   <p align="center">
+    <a href="#features">Features</a> •
+    <a href="#use-cases">Use Cases</a> •
     <a href="#quickstart">Quickstart</a> •
     <a href="https://mckinsey.github.io/agents-at-scale-ark/">Documentation</a>
   </p>
@@ -22,11 +21,27 @@
   </p>
 </div>
 
+## What is Ark?
+
+Ark is a declarative toolkit for building and hosting distributed AI agents. By defining what agents should do rather than how they do it, Ark eliminates vendor lock-in and ensures your applications stay adaptable as AI evolves.
+
+Built on Kubernetes, Ark lets you deploy a dev-friendly cluster in minutes or scale agentic workloads across existing infrastructure. Leverage proven patterns for security, monitoring, and RBAC—avoiding bespoke overhead while maintaining a portable, production-ready foundation for your AI projects.
+
+## Features
+
+- **Declarative Agents** — Define agents as Kubernetes custom resources with prompts, tools, and model references
+- **Provider Agnostic** — Swap between OpenAI, Anthropic, Google, Azure, or local Ollama without code changes
+- **Multi-Agent Teams** — Orchestrate agents with sequential, graph, selector, or round-robin strategies
+- **Tool Integration** — Connect agents to HTTP APIs, MCP servers, or other agents as tools
+- **Persistent Memory** — Maintain conversation context across sessions with pluggable memory backends
+- **A2A Protocol** — Interoperate with external agent systems via Agent-to-Agent protocol
+- **CLI & SDKs** — Manage agents from the command line or integrate via Python and TypeScript SDKs
+
 ## Quickstart
 
-You will need a Kubernetes cluster to install Ark into. You can use [Minikube](https://minikube.sigs.k8s.io/docs/start), [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/), [Docker Desktop](https://docs.docker.com/desktop/kubernetes/) or similar to run a local cluster. 
+You will need a Kubernetes cluster to install Ark into. You can use [Minikube](https://minikube.sigs.k8s.io/docs/start), [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/), [Docker Desktop](https://docs.docker.com/desktop/kubernetes/) or similar to run a local cluster.
 
-Ensure you have [Node.js](https://nodejs.org/en/download) and [Helm](https://helm.sh/docs/intro/install/) installed, as well as [kubectl](https://kubernetes.io/docs/reference/kubectl/) if not already installed as part of your Kubernetes setup. Then run the following commands to install Ark:
+Ensure you have [Node.js](https://nodejs.org/en/download) and [Helm](https://helm.sh/docs/intro/install/) installed. Then run the following commands to install Ark:
 
 ```bash
 # Install the 'ark' CLI:
@@ -49,16 +64,6 @@ User guides, developer guides, operations guides and API reference documentation
 https://mckinsey.github.io/agents-at-scale-ark/
 
 To troubleshoot an installation, run `ark status`.
-
-## What is Ark?
-
-ARK is a runtime environment built on Kubernetes to host AI agents - with built-in CRDs for agents, models, memory, tools, and evaluation, it abstracts away plumbing so teams can build agentic applications faster and reliably.
-
-## Technical Preview
-
-Agents at Scale - Agentic Runtime for Kubernetes ("Ark") is released as a technical preview and early access release. This software is provided as a Request for Comments (RFC) to share elements of our technical approach with the broader technology community, gather valuable feedback, and seek input from practitioners and researchers in the field of agentic AI systems and Kubernetes orchestration.
-
-As a technical preview release, this software may contain incomplete features, experimental functionality, and is subject to significant changes based on community feedback and continued development. The software is provided "as is" without warranties of any kind, and users should expect potential instability, breaking changes, and limited support during this preview phase.
 
 ## Credits
 
