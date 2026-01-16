@@ -2,6 +2,8 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: agent-partial-tool
+  labels:
+    multi-provider: "true"
 spec:
   description: Test agent with a tool using partial parameters
   steps:

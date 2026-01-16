@@ -33,6 +33,22 @@ deployments:
             requests:
               memory: "256Mi"
               cpu: "200m"
+        # Override security context for dev mode to allow DevSpace sync
+        podSecurityContext:
+          runAsNonRoot: false
+          runAsUser: 0
+          fsGroup: 0
+        securityContext:
+          runAsUser: 0
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            add:
+              - SETUID
+              - SETGID
+              - CHOWN
+              - FOWNER
+              - DAC_OVERRIDE
         memory:
           setAsDefault: true
         persistence:

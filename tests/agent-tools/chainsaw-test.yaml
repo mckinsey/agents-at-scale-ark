@@ -4,8 +4,11 @@ metadata:
   name: agent-tools
 spec:
   description: Test agent with weather tool functionality
+  timeouts:
+    apply: 30s
+    assert: 120s
   steps:
-  - name: step-1
+  - name: setup-mock-llm
     try:
     - script:
         content: |
@@ -23,56 +26,12 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-    - apply:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Tool
-          metadata:
-            name: weather-tool
-          spec:
-            type: http
-            inputSchema:
-              type: object
-              properties:
-                latitude:
-                  type: number
-                  description: Latitude coordinate
-                longitude:
-                  type: number
-                  description: Longitude coordinate
-                current_weather:
-                  type: boolean
-                  description: Include current weather data
-                  default: true
-              required: ["latitude", "longitude"]
-            description: "Fetches current weather data for given coordinates"
-            http:
-              url: https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current_weather=true
-    - apply:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: weather-agent
-          spec:
-            prompt: |
-              You are a Weather Agent. Use the weather-tool to get current weather information.
-            modelRef:
-              name: test-model
-            tools:
-            - type: http
-              name: weather-tool
-    - apply:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: weather-query
-          spec:
-            input: What's the current weather like in New York City?
-            target:
-              type: agent
-              name: weather-agent
+    catch:
+    - events: {}
+
+  - name: wait-for-model
+    try:
+    # Wait for mock-llm Model to be available before applying dependent resources
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -83,6 +42,28 @@ spec:
             conditions:
             - type: ModelAvailable
               status: "True"
+    catch:
+    - script:
+        content: |
+          echo "=== Model not ready ==="
+          kubectl get model -n $NAMESPACE -o yaml 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: deploy-resources
+    try:
+    - apply:
+        file: manifests/a01-weather-tool.yaml
+    - apply:
+        file: manifests/a02-weather-agent.yaml
+    - apply:
+        file: manifests/a03-weather-query.yaml
+    catch:
+    - events: {}
+
+  - name: verify-resources
+    try:
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -116,7 +97,12 @@ spec:
             (length(response.content) > `10`): true
     catch:
     - events: {}
-    - describe:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Query
-        name: weather-query
+    - script:
+        content: |
+          echo "=== Debug: Checking resources ==="
+          kubectl get model,agent,tool,query -n $NAMESPACE 2>/dev/null || true
+          kubectl describe query weather-query -n $NAMESPACE 2>/dev/null || echo "Query not found"
+          kubectl logs -l app.kubernetes.io/name=mock-llm -n $NAMESPACE --tail=50 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
