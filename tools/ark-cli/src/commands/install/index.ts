@@ -37,8 +37,45 @@ async function uninstallPrerequisites(service: ArkService, verbose: boolean = fa
   }
 }
 
+async function checkAndCleanFailedRelease(
+  releaseName: string,
+  namespace?: string,
+  verbose: boolean = false
+) {
+  const statusArgs = ['status', releaseName];
+  if (namespace) {
+    statusArgs.push('--namespace', namespace);
+  }
+
+  try {
+    const result = await execute(
+      'helm',
+      statusArgs,
+      {},
+      {verbose: false}
+    );
+
+    const stdout = String(result.stdout || '');
+    if (stdout.includes('STATUS: pending-install') ||
+        stdout.includes('STATUS: failed') ||
+        stdout.includes('STATUS: uninstalling')) {
+      const uninstallArgs = ['uninstall', releaseName];
+      if (namespace) {
+        uninstallArgs.push('--namespace', namespace);
+      }
+      await execute('helm', uninstallArgs, {stdio: 'inherit'}, {verbose});
+    }
+  } catch {
+  }
+}
+
 async function installService(service: ArkService, verbose: boolean = false) {
   await uninstallPrerequisites(service, verbose);
+  await checkAndCleanFailedRelease(
+    service.helmReleaseName,
+    service.namespace,
+    verbose
+  );
 
   const helmArgs = [
     'upgrade',
