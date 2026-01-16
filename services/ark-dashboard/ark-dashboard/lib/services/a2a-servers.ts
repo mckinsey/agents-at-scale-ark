@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
 
 // A2A Server interface for UI compatibility
@@ -83,6 +84,10 @@ export const A2AServersService = {
   // Delete an A2A server
   async delete(identifier: string): Promise<void> {
     await apiClient.delete(`/api/v1/a2a-servers/${identifier}`);
+    trackEvent({
+      name: 'a2a_server_deleted',
+      properties: { serverName: identifier },
+    });
   },
 
   async create(A2ASever: A2AServerConfiguration): Promise<A2AServer> {
@@ -90,6 +95,10 @@ export const A2AServersService = {
       `/api/v1/a2a-servers`,
       A2ASever,
     );
+    trackEvent({
+      name: 'a2a_server_created',
+      properties: { serverName: response.name },
+    });
     return {
       ...response,
       id: response.name,
@@ -104,6 +113,10 @@ export const A2AServersService = {
       `/api/v1/a2a-servers/${A2AServerName}`,
       spec,
     );
+    trackEvent({
+      name: 'a2a_server_updated',
+      properties: { serverName: response.name },
+    });
     return {
       ...response,
       id: response.name,

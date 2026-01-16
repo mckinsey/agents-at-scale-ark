@@ -23,12 +23,15 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { trackEvent } from '@/lib/analytics/singleton';
+import { hashPromptSync } from '@/lib/analytics/utils';
 import { chatService } from '@/lib/services';
 
 type ChatType = 'model' | 'team' | 'agent';
@@ -56,6 +59,7 @@ export default function FloatingChat({
   const [error, setError] = useState<string | null>(null);
   const [windowState, setWindowState] = useState<WindowState>('default');
   const [viewMode, setViewMode] = useState<'text' | 'markdown'>('markdown');
+  const [debugMode, setDebugMode] = useState(true);
   const [sessionId] = useState(() => `session-${Date.now()}`);
   const inputRef = useRef<HTMLInputElement>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
@@ -240,6 +244,16 @@ export default function FloatingChat({
     const userMessage = currentMessage.trim();
     setCurrentMessage('');
     setError(null);
+
+    trackEvent({
+      name: 'chat_message_sent',
+      properties: {
+        targetType: type,
+        targetName: name,
+        messageLength: userMessage.length,
+        promptHash: hashPromptSync(userMessage),
+      },
+    });
 
     // Add user message
     setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
@@ -449,28 +463,36 @@ export default function FloatingChat({
 
                   return (
                     <div key={index} className="contents">
-                      {toolCalls &&
+                      {debugMode &&
+                        toolCalls &&
                         toolCalls.map((toolCall, toolIndex) => (
-                          <ChatMessage
+                          <div
                             key={`${index}-tool-${toolIndex}`}
-                            role="assistant"
-                            content=""
-                            viewMode={viewMode}
-                            toolCalls={[
-                              toolCall as {
-                                id: string;
-                                type: 'function';
-                                function: { name: string; arguments: string };
-                              },
-                            ]}
-                          />
+                            className={toolIndex > 0 ? 'mt-2' : ''}>
+                            <ChatMessage
+                              role="assistant"
+                              content=""
+                              viewMode={viewMode}
+                              toolCalls={[
+                                toolCall as {
+                                  id: string;
+                                  type: 'function';
+                                  function: { name: string; arguments: string };
+                                },
+                              ]}
+                            />
+                          </div>
                         ))}
                       {content && (
-                        <ChatMessage
-                          role={message.role as 'user' | 'assistant' | 'system'}
-                          content={content}
-                          viewMode={viewMode}
-                        />
+                        <div className={toolCalls ? 'mt-2' : ''}>
+                          <ChatMessage
+                            role={
+                              message.role as 'user' | 'assistant' | 'system'
+                            }
+                            content={content}
+                            viewMode={viewMode}
+                          />
+                        </div>
                       )}
                     </div>
                   );
@@ -496,27 +518,55 @@ export default function FloatingChat({
               </div>
             </div>
 
-            <div className="flex flex-shrink-0 gap-2 border-t p-4">
-              <div className="relative flex-1">
-                <Input
-                  ref={inputRef}
-                  placeholder={
-                    isProcessing ? 'Processing...' : 'Type your message...'
-                  }
-                  value={currentMessage}
-                  onChange={e => setCurrentMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  disabled={isProcessing}
-                />
+            <div className="flex-shrink-0 border-t">
+              <div className="flex gap-2 p-4">
+                <div className="relative flex-1">
+                  <Input
+                    ref={inputRef}
+                    placeholder={
+                      isProcessing ? 'Processing...' : 'Type your message...'
+                    }
+                    value={currentMessage}
+                    onChange={e => setCurrentMessage(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    disabled={isProcessing}
+                  />
+                </div>
+                <Button
+                  onClick={handleSendMessage}
+                  disabled={!currentMessage.trim() || isProcessing}
+                  size="sm"
+                  variant="default"
+                  aria-label="Send message">
+                  <Send className="h-4 w-4" />
+                </Button>
               </div>
-              <Button
-                onClick={handleSendMessage}
-                disabled={!currentMessage.trim() || isProcessing}
-                size="sm"
-                variant="default"
-                aria-label="Send message">
-                <Send className="h-4 w-4" />
-              </Button>
+
+              {/* Toolbar */}
+              <div className="border-t px-4 py-2">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="debug-mode"
+                    checked={debugMode}
+                    onCheckedChange={checked => {
+                      setDebugMode(checked);
+                      trackEvent({
+                        name: 'chat_debug_mode_toggled',
+                        properties: {
+                          enabled: checked,
+                          targetType: type,
+                          targetName: name,
+                        },
+                      });
+                    }}
+                  />
+                  <label
+                    htmlFor="debug-mode"
+                    className="text-muted-foreground cursor-pointer text-sm">
+                    Show tool calls
+                  </label>
+                </div>
+              </div>
             </div>
           </>
         )}
