@@ -1,0 +1,55 @@
+name: Publish Docs
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
+      - name: Build Docs
+        run: |
+          cd docs
+          npm ci
+          npm i pagefind @pagefind/linux-x64 && npm run build
+        env:
+          NEXT_PUBLIC_BASE_PATH: ${{ vars.DOCS_SITE_BASE_PATH || '' }}
+      
+      - name: Validate Internal Documentation Links
+        run: |
+          # Rebuild docs without base path for link checking
+          echo "Rebuilding docs without base path for link validation..."
+          npm run build
+          echo "Checking for broken links..."
+          npm run check-links
+        working-directory: docs
+
+      - name: Upload Site Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/out
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

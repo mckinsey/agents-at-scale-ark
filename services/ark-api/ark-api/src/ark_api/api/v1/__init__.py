@@ -10,6 +10,7 @@ from .queries import router as queries_router
 from .tools import router as tools_router
 from .mcp_servers import router as mcp_servers_router
 from .a2a_servers import router as a2a_servers_router
+from .proxy import proxy_router
 from .memories import router as memories_router, memory_messages_router
 from .conversations import router as conversations_router
 from .system_info import router as system_info_router
@@ -21,7 +22,7 @@ from .api_keys import router as api_keys_router
 from .a2a_tasks import router as a2a_tasks_router
 from .resources import router as resources_router
 from .broker import router as broker_router
-from .proxy import router as proxy_router
+from .proxy import proxy_router
 
 router = APIRouter(prefix="/v1", tags=["v1"])
 
@@ -35,6 +36,7 @@ router.include_router(queries_router)
 router.include_router(tools_router)
 router.include_router(mcp_servers_router)
 router.include_router(a2a_servers_router)
+router.include_router(proxy_router)
 router.include_router(a2a_tasks_router)
 router.include_router(memories_router)
 router.include_router(memory_messages_router)
