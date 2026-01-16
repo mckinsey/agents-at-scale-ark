@@ -608,7 +608,6 @@ jobs:
 
           echo "Smoke test completed successfully!"
 
-
   e2e-tests-standard:
     needs: [setup-container-cache-registry, build-containers]
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }} # Remove skipping these tests once chainsaw can be run with mock-llm
@@ -732,8 +731,8 @@ jobs:
           E2E_TEST_AZURE_OPENAI_API_VERSION: ${{ secrets.CICD_AZURE_OPENAI_API_VERSION || '2024-12-01-preview' }}
           E2E_TEST_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
           E2E_TEST_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
-          FILESYS_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/filesystem-mcp-server
-          FILESYS_IMAGE_TAG: ${{ github.sha }}
+          FILESYS_IMAGE: ghcr.io/mckinsey/agents-at-scale-marketplace/filesystem-mcp-server
+          FILESYS_IMAGE_TAG: latest
           LANGCHAIN_WEATHER_AGENT_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/langchain-weather-agent
           LANGCHAIN_WEATHER_AGENT_IMAGE_TAG: ${{ github.sha }}
           ARK_CLUSTER_MEMORY_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-cluster-memory

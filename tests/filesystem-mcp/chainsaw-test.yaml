@@ -13,11 +13,9 @@ spec:
     try:
     - script:
         content: |
-          helm install mcp-filesystem ../../mcp/filesystem-mcp/chart --wait --timeout=180s \
-            --namespace $NAMESPACE \
-            --set image.repository=${FILESYS_IMAGE:-filesystem-mcp-server} \
-            --set image.tag=${FILESYS_IMAGE_TAG:-latest} \
-            --set persistence.enabled=false
+          helm install mcp-filesystem https://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/filesystem-mcp-server \
+            --wait --timeout=180s \
+            --namespace $NAMESPACE
         env:
         - name: NAMESPACE
           value: ($namespace)

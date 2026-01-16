@@ -5,8 +5,9 @@ Learn how to build a complete research workflow using ARK's multi-agent capabili
 ## What You'll Build
 
 A sequential team of three specialized agents that work together to:
+
 - **Researcher Agent**: Searches the web for information using DuckDuckGo
-- **Analyst Agent**: Processes research data and generates insights  
+- **Analyst Agent**: Processes research data and generates insights
 - **Creator Agent**: Consolidates findings into professional documents
 
 ## ARK Project Structure Best Practice
@@ -24,7 +25,7 @@ samples/walkthrough/
 │   │   │   └── researcher-query.yaml        # Query for researcher agent testing
 │   │   ├── chainsaw-analyst-test.yaml       # Individual analyst agent test
 │   │   ├── chainsaw-creator-test.yaml       # Individual creator agent test
-│   │   └── chainsaw-researcher-test.yaml    # Individual researcher agent test  
+│   │   └── chainsaw-researcher-test.yaml    # Individual researcher agent test
 │   ├── README.md                            # Agent component guide
 │   ├── analyst-agent.yaml
 │   ├── creator-agent.yaml
@@ -49,6 +50,7 @@ samples/walkthrough/
 ```
 
 **Key Benefits:**
+
 - **Component isolation**: Test each piece individually
 - **Progressive complexity**: Build from simple to complex
 - **Evaluation-driven**: Validate before proceeding
@@ -64,6 +66,7 @@ devspace dev
 ```
 
 Verify installation:
+
 ```bash
 # Check ARK controller is running
 kubectl get pods -n ark-system
@@ -78,16 +81,19 @@ The tests in this tutorial require Azure OpenAI credentials to execute queries. 
 export E2E_TEST_AZURE_OPENAI_KEY="your-azure-openai-api-key"
 export E2E_TEST_AZURE_OPENAI_BASE_URL="https://your-resource.openai.azure.com/"
 ```
+
 You can obtain these credentials from your Azure OpenAI service. If you don't have Azure OpenAI access, you can still follow the tutorial to understand the concepts, but the test execution steps will not work.
 
 ## Step 1: Create and Test Web Search Tool
 
 ### What You'll Learn
+
 - How to define ARK tools for external APIs
 - Tool schema definition and parameter configuration
 - Testing individual tools with chainsaw
 
 ### Create the Tool
+
 The web search tool uses DuckDuckGo's API to search the web and return structured results.
 
 ```bash
@@ -96,11 +102,13 @@ cat samples/walkthrough/tools/web-search-tool.yaml
 ```
 
 Key features:
+
 - DuckDuckGo API integration for web searches
 - Configurable number of results (default: 5)
 - Returns titles, snippets, and URLs in structured format
 
 ### Test the Tool
+
 ```bash
 # Run tool-specific tests with query execution
 chainsaw test samples/walkthrough/tools/tests/
@@ -109,6 +117,7 @@ chainsaw test samples/walkthrough/tools/tests/
 ```
 
 The tool test includes:
+
 - Tool resource creation and schema validation
 - Query execution from `queries/web-search-query.yaml`
 - Direct tool targeting to verify DuckDuckGo API integration
@@ -116,6 +125,7 @@ The tool test includes:
 - Tool readiness verification for agent integration
 
 ### Expected Results
+
 - Tool resource exists in cluster with correct schema
 - Tool successfully executes web searches via DuckDuckGo API
 - Query responses contain structured search results with titles, snippets, and URLs
@@ -126,6 +136,7 @@ The tool test includes:
 ## Step 2: Create and Test Agents
 
 ### What You'll Learn
+
 - How to create specialized agents with different capabilities
 - Agent prompt engineering and structured output
 - Model references and tool integration
@@ -133,6 +144,7 @@ The tool test includes:
 ### Create the Agents
 
 #### Researcher Agent
+
 Searches the web for information and structures findings:
 
 ```bash
@@ -141,24 +153,28 @@ cat samples/walkthrough/agents/researcher-agent.yaml
 ```
 
 Features:
+
 - Web search tool integration
 - Structured JSON output format
 - Research methodology in prompt
 
 #### Analyst Agent
+
 Processes research data and generates insights:
 
 ```bash
-# View the analyst agent  
+# View the analyst agent
 cat samples/walkthrough/agents/analyst-agent.yaml
 ```
 
 Features:
+
 - Data validation and consistency checking
 - Insight generation and trend analysis
 - Recommendation synthesis
 
 #### Creator Agent
+
 Consolidates findings into professional documents:
 
 ```bash
@@ -167,6 +183,7 @@ cat samples/walkthrough/agents/creator-agent.yaml
 ```
 
 Features:
+
 - Document generation capabilities
 - File system integration
 - Professional formatting
@@ -174,12 +191,14 @@ Features:
 ### Test the Agents
 
 **Option 1: Test all agents together**
+
 ```bash
 # Run all agent tests together
 chainsaw test samples/walkthrough/agents/tests/
 ```
 
 **Option 2: Test each agent individually with dedicated queries**
+
 ```bash
 # Navigate to the tests directory first
 cd samples/walkthrough/agents/tests/
@@ -187,7 +206,7 @@ cd samples/walkthrough/agents/tests/
 # Test researcher agent with web search functionality
 chainsaw test . --test-file chainsaw-researcher-test.yaml
 
-# Test analyst agent with data analysis capabilities  
+# Test analyst agent with data analysis capabilities
 chainsaw test . --test-file chainsaw-analyst-test.yaml
 
 # Test creator agent with document generation (requires MCP filesystem server)
@@ -195,6 +214,7 @@ chainsaw test . --test-file chainsaw-creator-test.yaml
 ```
 
 Each individual test includes:
+
 - Complete environment setup (Azure model, RBAC permissions)
 - Agent creation and validation
 - Dedicated query file from `queries/` folder for realistic testing
@@ -203,11 +223,13 @@ Each individual test includes:
 - Proper cleanup after test completion
 
 **Query Files Structure:**
+
 - `queries/researcher-query.yaml`: Kubernetes research scenario
 - `queries/analyst-query.yaml`: Data analysis with sample metrics
 - `queries/creator-query.yaml`: Document creation with analysis data
 
 ### Expected Results
+
 - All agent resources exist in cluster
 - Agents reference the default model correctly
 - Agents are ready for team integration
@@ -217,11 +239,13 @@ Each individual test includes:
 ## Step 3: Create and Test Sequential Team
 
 ### What You'll Learn
+
 - How to create teams with sequential strategy
 - Team member configuration and execution flow
 - Team testing and validation
 
 ### Create the Team
+
 The sequential team orchestrates the three agents in order:
 
 ```bash
@@ -230,11 +254,13 @@ cat samples/walkthrough/teams/research-team.yaml
 ```
 
 Features:
+
 - Sequential execution: Researcher → Analyst → Creator
 - Automatic data passing between agents
 - Maximum 3 turns for completion
 
 ### Test the Team
+
 ```bash
 # Run team-specific tests
 chainsaw test samples/walkthrough/teams/tests/
@@ -243,6 +269,7 @@ chainsaw test samples/walkthrough/teams/tests/
 ```
 
 ### Expected Results
+
 - Team resource exists in cluster
 - Team references all three agents correctly
 - Team strategy is configured as sequential
@@ -252,24 +279,26 @@ chainsaw test samples/walkthrough/teams/tests/
 ## Step 4: Execute Complete Research Workflow
 
 ### What You'll Learn
+
 - How to deploy complete ARK applications
 - End-to-end workflow execution
 - Result monitoring and validation
 
 ### Deploy the Complete Workflow
 
-First, set up the MCP filesystem server for document storage:
-```bash
-# Build and load the filesys MCP server image
-cd mcp-servers/filesystem-mcp
-docker build -t filesystem-mcp-server:latest .
-# Load image into cluster (choose based on your setup)
-kind load docker-image filesystem-mcp-server:latest        # For kind
-minikube image load filesystem-mcp-server:latest           # For minikube
-cd ../..
+First, set up a Filesystem MCP server for document storage. You can get one from the [ARK Marketplace](https://mckinsey.github.io/agents-at-scale-marketplace) to ease setup.
 
-# Deploy filesystem MCP server
-helm install mcp-filesystem mcp-servers/filesystem-mcp/chart --set image.repository=filesystem-mcp-server --set image.tag=latest
+From the Marketplace you can find:
+
+- [Filesystem MCP Server](https://mckinsey.github.io/agents-at-scale-marketplace/mcps/filesystem-mcp-server/) (MCP server only)
+- [Filegateway service](https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/) (MCP server + helper services to browse the filesystem from the ARK Dashboard)
+
+```bash
+# Install Filesystem MCP from ARK Marketplace
+ark install marketplace/mcps/filesystem-mcp-server
+
+# (in alternative) Install File Gateway from ARK Marketplace
+ark install marketplace/services/file-gateway
 
 # Verify it's ready (should show READY=True)
 kubectl get mcpservers
@@ -289,12 +318,14 @@ kubectl apply -f samples/walkthrough/research-query.yaml
 ```
 
 **Alternative (may fail due to timing issues):**
+
 ```bash
 # This approach may fail due to dependency timing issues
 kubectl apply -k samples/walkthrough/
 ```
 
 ### Execute a Research Query
+
 ```bash
 # Run a research query on Kubernetes adoption
 kubectl apply -f samples/walkthrough/research-query.yaml
@@ -304,6 +335,7 @@ kubectl get queries research-query -w
 ```
 
 ### Test the Complete Workflow
+
 ```bash
 # Run end-to-end integration tests
 chainsaw test samples/walkthrough/tests/
@@ -312,8 +344,9 @@ chainsaw test samples/walkthrough/tests/
 ```
 
 ### Expected Results
+
 1. **Research Phase**: Web search results with sources and structured findings
-2. **Analysis Phase**: Validated insights, trends, and recommendations  
+2. **Analysis Phase**: Validated insights, trends, and recommendations
 3. **Creation Phase**: Professional document saved to file system
 
 The complete workflow typically takes 2-3 minutes depending on research complexity.
@@ -323,6 +356,7 @@ The complete workflow typically takes 2-3 minutes depending on research complexi
 ## Step 5: Validate and Explore Results
 
 ### View Query Results
+
 ```bash
 # Get detailed query results
 kubectl get queries research-query -o yaml
@@ -335,6 +369,7 @@ kubectl get queries research-query -o jsonpath='{.status.response}' | jq '.'
 ```
 
 ### Access Generated Documents
+
 ```bash
 # Port forward to file browser
 kubectl port-forward svc/mcp-filesystem-filebrowser 8080:8080
@@ -353,14 +388,11 @@ open http://localhost:8080
 If you want to deploy everything at once without the step-by-step tutorial:
 
 ```bash
-# 1. Build and load the filesys MCP server image
-cd mcp-servers/filesystem-mcp
-docker build -t filesystem-mcp-server:latest .
-kind load docker-image filesystem-mcp-server:latest
-cd ../..
+# Install Filesystem MCP from ARK Marketplace
+ark install marketplace/mcps/filesystem-mcp-server
 
-# Deploy MCP filesystem server
-helm install mcp-filesystem mcp-servers/filesystem-mcp/chart --set image.repository=filesystem-mcp-server --set image.tag=latest
+# (in alternative) Install File Gateway from ARK Marketplace
+ark install marketplace/services/file-gateway
 
 # Verify it's ready (should show READY=True)
 kubectl get mcpservers
@@ -378,6 +410,7 @@ kubectl apply -f samples/walkthrough/research-query.yaml
 ## Customization
 
 ### Modify Research Topic
+
 Edit the query to research different topics:
 
 ```yaml
@@ -387,6 +420,7 @@ spec:
 ```
 
 ### Use Custom Models
+
 Reference specific models for different agents:
 
 ```yaml
@@ -402,7 +436,7 @@ spec:
 # Remove the research workflow using kustomization.yaml
 kubectl delete -k samples/walkthrough/
 
-# Remove the MCP filesystem server  
+# Remove the MCP filesystem server
 helm uninstall mcp-filesystem
 
 # Remove any test resources
@@ -421,6 +455,7 @@ kubectl delete queries --all
 ### Common Issues
 
 **Agents not responding:**
+
 ```bash
 # Check agent status
 kubectl get agents
@@ -431,6 +466,7 @@ kubectl get models
 ```
 
 **If queries don't complete:**
+
 ```bash
 # Check query status
 kubectl describe query research-query
@@ -443,7 +479,8 @@ kubectl logs -n ark-system deployment/ark-controller-manager
 ```
 
 **Team execution fails:**
-```bash  
+
+```bash
 # Check team configuration
 kubectl describe team research-analysis-team
 
@@ -452,6 +489,7 @@ kubectl get events --field-selector involvedObject.name=research-query
 ```
 
 **MCP tools not working:**
+
 ```bash
 # Check tool status
 kubectl get tools
