@@ -64,6 +64,11 @@ deployments:
           image:
             repository: ${runtime.images.ark-dashboard.image}
             tag: ${runtime.images.ark-dashboard.tag}
+          # Add host alias so keycloak.127.0.0.1.nip.io resolves to Keycloak service
+          hostAliases:
+            - ip: "10.100.29.235"
+              hostnames:
+                - "keycloak.127.0.0.1.nip.io"
           # Override resources for local development
           resources:
             limits:
@@ -130,11 +135,11 @@ dev:
       - name: AUTH_SECRET
         value: "dev-secret-key-for-local-testing-only-min-32-chars"
       - name: OIDC_ISSUER_URL
-        value: "http://keycloak.default.127.0.0.1.nip.io:8080/realms/ark-test"
+        value: "http://keycloak.127.0.0.1.nip.io:8080/realms/master"
       - name: OIDC_CLIENT_ID
         value: "ark-dashboard"
       - name: OIDC_CLIENT_SECRET
-        value: ""
+        value: "EnBB8pCenqmFhLTIIyaQctZCRrTTVgRg"
       - name: OIDC_PROVIDER_NAME
         value: "Local Keycloak"
       - name: OIDC_PROVIDER_ID

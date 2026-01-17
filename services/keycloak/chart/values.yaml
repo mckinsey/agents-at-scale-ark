@@ -27,3 +27,8 @@ httpRoute:
   hostnames:
     - "keycloak.127.0.0.1.nip.io"
     - "keycloak.default.127.0.0.1.nip.io"
+
+keycloak:
+  enabled: false
+  postgresql:
+    enabled: false

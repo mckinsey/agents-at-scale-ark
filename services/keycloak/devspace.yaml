@@ -20,8 +20,6 @@ dev:
   keycloak:
     labelSelector:
       app.kubernetes.io/name: keycloak
-    ports:
-      - port: 8080:8080
     logs:
       enabled: true
       lastLines: 100
