@@ -139,7 +139,7 @@ dev:
       - name: OIDC_CLIENT_ID
         value: "ark-dashboard"
       - name: OIDC_CLIENT_SECRET
-        value: "EnBB8pCenqmFhLTIIyaQctZCRrTTVgRg"
+        value: ""
       - name: OIDC_PROVIDER_NAME
         value: "Local Keycloak"
       - name: OIDC_PROVIDER_ID
