@@ -22,7 +22,11 @@ import {
 import { Switch } from '@/components/ui/switch';
 
 import { experimentalFeatureGroups } from './experimental-features';
-import type { BooleanSetting, ExperimentalFeature, SelectSetting } from './types';
+import type {
+  BooleanSetting,
+  ExperimentalFeature,
+  SelectSetting,
+} from './types';
 
 const EXPERIMENTAL_MODAL_KEYBOARD_SHORTCUT = 'e';
 
@@ -64,7 +68,7 @@ function SelectFeature({ feature }: SelectFeatureProps) {
 
   return (
     <div className="flex flex-row items-center justify-between">
-      <div className="space-y-0.5 flex-1">
+      <div className="flex-1 space-y-0.5">
         <Label>{feature.feature}</Label>
         {feature.description && (
           <div className="text-muted-foreground text-sm">
