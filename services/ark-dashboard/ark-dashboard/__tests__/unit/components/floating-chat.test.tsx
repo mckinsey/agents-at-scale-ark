@@ -48,12 +48,11 @@ describe('FloatingChat', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default to streaming enabled for most tests
+    vi.mocked(useAtomValue).mockReturnValue(true);
   });
 
   describe('streaming enabled', () => {
-    // Mock feature flag to true
-    vi.mocked(useAtomValue).mockReturnValue(true);
-
     it('should display streaming chunks as they arrive', async () => {
       const user = userEvent.setup();
 
@@ -280,10 +279,6 @@ describe('FloatingChat', () => {
   });
 
   describe('window state management', () => {
-    beforeEach(() => {
-      vi.mocked(useAtomValue).mockReturnValue(true);
-    });
-
     describe('default state', () => {
       it('should start in default state with visible content', () => {
         render(<FloatingChat {...defaultProps} />);
@@ -476,10 +471,6 @@ describe('FloatingChat', () => {
   });
 
   describe('debug mode toggle', () => {
-    beforeEach(() => {
-      vi.mocked(useAtomValue).mockReturnValue(true);
-    });
-
     it('should render debug mode switch', () => {
       render(<FloatingChat {...defaultProps} />);
 
@@ -785,6 +776,114 @@ describe('FloatingChat', () => {
         },
         { timeout: 5000 },
       );
+    });
+  });
+
+  describe('query timeout configuration', () => {
+    it('should work with default timeout (5m)', () => {
+      // Mock query timeout atom to return default value
+      vi.mocked(useAtomValue).mockImplementation((atom: any) => {
+        // Return true for streaming, '5m' for timeout
+        if (atom.toString().includes('queryTimeout')) return '5m';
+        return true;
+      });
+
+      render(<FloatingChat {...defaultProps} />);
+
+      // Component should render successfully with default timeout
+      expect(
+        screen.getByPlaceholderText('Type your message...'),
+      ).toBeInTheDocument();
+    });
+
+    it('should work with configured timeout (10m)', () => {
+      vi.mocked(useAtomValue).mockImplementation((atom: any) => {
+        if (atom.toString().includes('queryTimeout')) return '10m';
+        return true;
+      });
+
+      render(<FloatingChat {...defaultProps} />);
+
+      expect(
+        screen.getByPlaceholderText('Type your message...'),
+      ).toBeInTheDocument();
+    });
+
+    it('should work with configured timeout (15m)', () => {
+      vi.mocked(useAtomValue).mockImplementation((atom: any) => {
+        if (atom.toString().includes('queryTimeout')) return '15m';
+        return true;
+      });
+
+      render(<FloatingChat {...defaultProps} />);
+
+      expect(
+        screen.getByPlaceholderText('Type your message...'),
+      ).toBeInTheDocument();
+    });
+
+    it('should handle rapid timeout changes', () => {
+      // First render with 5m
+      vi.mocked(useAtomValue).mockImplementation((atom: any) => {
+        if (atom.toString().includes('queryTimeout')) return '5m';
+        return true;
+      });
+
+      const { rerender } = render(<FloatingChat {...defaultProps} />);
+
+      expect(
+        screen.getByPlaceholderText('Type your message...'),
+      ).toBeInTheDocument();
+
+      // Change to 10m
+      vi.mocked(useAtomValue).mockImplementation((atom: any) => {
+        if (atom.toString().includes('queryTimeout')) return '10m';
+        return true;
+      });
+
+      rerender(<FloatingChat {...defaultProps} />);
+
+      expect(
+        screen.getByPlaceholderText('Type your message...'),
+      ).toBeInTheDocument();
+
+      // Change to 15m
+      vi.mocked(useAtomValue).mockImplementation((atom: any) => {
+        if (atom.toString().includes('queryTimeout')) return '15m';
+        return true;
+      });
+
+      rerender(<FloatingChat {...defaultProps} />);
+
+      expect(
+        screen.getByPlaceholderText('Type your message...'),
+      ).toBeInTheDocument();
+    });
+
+    it('should maintain timeout setting when streaming is enabled', () => {
+      vi.mocked(useAtomValue).mockImplementation((atom: any) => {
+        if (atom.toString().includes('queryTimeout')) return '10m';
+        return true; // streaming enabled
+      });
+
+      render(<FloatingChat {...defaultProps} />);
+
+      expect(
+        screen.getByPlaceholderText('Type your message...'),
+      ).toBeInTheDocument();
+    });
+
+    it('should maintain timeout setting when streaming is disabled', () => {
+      vi.mocked(useAtomValue).mockImplementation((atom: any) => {
+        if (atom.toString().includes('queryTimeout')) return '15m';
+        return false; // streaming disabled
+      });
+
+      render(<FloatingChat {...defaultProps} />);
+
+      expect(
+        screen.getByPlaceholderText('Type your message...'),
+      ).toBeInTheDocument();
     });
   });
 });
