@@ -1,68 +1,45 @@
 'use client';
 
 import { Bot, MessageCircle, Pencil, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
-import { AgentEditor } from '@/components/editors';
 import { AvailabilityStatusBadge } from '@/components/ui/availability-status-badge';
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
-import type {
-  Agent,
-  AgentCreateRequest,
-  AgentUpdateRequest,
-  Model,
-  Team,
-} from '@/lib/services';
+import type { Agent } from '@/lib/services';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
 
 import { BaseCard, type BaseCardAction } from './base-card';
 
 interface AgentCardProps {
   agent: Agent;
-  teams: Team[];
-  models: Model[];
-  onUpdate?: (
-    agent: (AgentCreateRequest | AgentUpdateRequest) & { id?: string },
-  ) => void;
   onDelete?: (id: string) => void;
 }
 
-export function AgentCard({
-  agent,
-  teams,
-  models,
-  onUpdate,
-  onDelete,
-}: AgentCardProps) {
+export function AgentCard({ agent, onDelete }: AgentCardProps) {
+  const router = useRouter();
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(agent.name);
-  const [editorOpen, setEditorOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  // Get the model name from the modelRef
   const modelName = agent.modelRef?.name || 'No model assigned';
-
-  // Check if this is an A2A agent
   const isA2A = agent.isA2A || false;
 
-  // Get custom icon or default Bot icon
   const IconComponent = getCustomIcon(
     agent.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
     Bot,
   );
 
-  const actions: BaseCardAction[] = [];
-
-  if (onUpdate) {
-    actions.push({
+  const actions: BaseCardAction[] = [
+    {
       icon: Pencil,
       label: 'Edit agent',
-      onClick: () => setEditorOpen(true),
-    });
-  }
+      onClick: () => router.push(`/agents/${agent.name}/edit`),
+    },
+  ];
 
   if (onDelete) {
     actions.push({
@@ -107,14 +84,6 @@ export function AgentCard({
             />
           </div>
         }
-      />
-      <AgentEditor
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        agent={agent}
-        models={models}
-        teams={teams}
-        onSave={onUpdate || (() => {})}
       />
       {onDelete && (
         <ConfirmationDialog

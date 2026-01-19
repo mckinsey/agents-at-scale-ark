@@ -1,0 +1,296 @@
+# Form Validation and Handling Standards
+
+This document defines the standard practices for form validation and handling in the Ark Dashboard. All new forms should follow these patterns, and existing forms should be refactored to comply.
+
+## Core Technology Stack
+
+All forms in the dashboard use:
+
+| Technology | Purpose |
+|------------|---------|
+| [react-hook-form](https://react-hook-form.com/) | Form state management |
+| [zod](https://zod.dev/) | Schema validation |
+| [@hookform/resolvers](https://github.com/react-hook-form/resolvers) | Zod integration with react-hook-form |
+| Shadcn UI Form components | Consistent UI and accessibility |
+
+## Standard Form Pattern
+
+### 1. Schema Definition
+
+Define Zod schemas in a separate file or at the top of the component:
+
+```typescript
+import { z } from 'zod';
+import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
+
+const formSchema = z.object({
+  name: kubernetesNameSchema,
+  description: z.string().optional(),
+  type: z.string().min(1, 'Type is required'),
+});
+```
+
+For Kubernetes resource names, always use the shared `kubernetesNameSchema` from `@/lib/utils/kubernetes-validation`.
+
+### 2. Form Hook Setup
+
+```typescript
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+
+const form = useForm<z.infer<typeof formSchema>>({
+  resolver: zodResolver(formSchema),
+  mode: 'onChange', // Optional: validates on change
+  defaultValues: {
+    name: '',
+    description: '',
+    type: '',
+  },
+});
+```
+
+### 3. Form Component Structure
+
+```tsx
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+
+<Form {...form}>
+  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+    <FormField
+      control={form.control}
+      name="name"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>
+            Name <span className="text-red-500">*</span>
+          </FormLabel>
+          <FormControl>
+            <Input
+              placeholder="e.g., my-resource"
+              disabled={form.formState.isSubmitting}
+              {...field}
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+    {/* Additional fields... */}
+  </form>
+</Form>
+```
+
+## Required Components
+
+Every form field should include:
+
+| Component | Purpose | Required |
+|-----------|---------|----------|
+| `FormField` | Connects field to form state | Yes |
+| `FormItem` | Container with proper spacing | Yes |
+| `FormLabel` | Accessible label | Yes |
+| `FormControl` | Wraps input with aria attributes | Yes |
+| `FormMessage` | Displays validation errors | Yes |
+| `FormDescription` | Helper text | Optional |
+
+## Validation Patterns
+
+### Required Fields
+
+Mark required fields visually and in the schema:
+
+```tsx
+// Schema
+name: z.string().min(1, 'Name is required')
+
+// Label
+<FormLabel>
+  Name <span className="text-red-500">*</span>
+</FormLabel>
+```
+
+### Conditional Validation
+
+Use Zod's `.refine()` for complex conditional validation:
+
+```typescript
+const formSchema = z
+  .object({
+    type: z.string(),
+    httpUrl: z.string().optional(),
+  })
+  .refine(
+    data => {
+      if (data.type === 'http') {
+        return data.httpUrl && data.httpUrl.trim().length > 0;
+      }
+      return true;
+    },
+    {
+      message: 'URL is required for HTTP type',
+      path: ['httpUrl'],
+    }
+  );
+```
+
+### Discriminated Unions
+
+For forms with different field sets based on a type selector:
+
+```typescript
+const schema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('openai'),
+    model: z.string().min(1),
+    secret: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal('azure'),
+    model: z.string().min(1),
+    secret: z.string().min(1),
+    azureApiVersion: z.string().optional(),
+  }),
+]);
+```
+
+## Submit Handling
+
+### Standard Pattern
+
+```typescript
+const onSubmit = (values: z.infer<typeof formSchema>) => {
+  // Transform values if needed
+  const data = {
+    name: values.name,
+    config: createConfig(values),
+  };
+  
+  // Call mutation
+  mutate(data);
+};
+```
+
+### With Loading State
+
+```tsx
+<Button type="submit" disabled={form.formState.isSubmitting}>
+  {form.formState.isSubmitting ? (
+    <>
+      <Spinner size="sm" />
+      <span>Saving...</span>
+    </>
+  ) : (
+    <span>Save</span>
+  )}
+</Button>
+```
+
+## Form Reset on Dialog Open/Close
+
+Always reset forms when dialogs open or close:
+
+```typescript
+useEffect(() => {
+  if (open) {
+    form.reset({
+      name: existingData?.name || '',
+      description: existingData?.description || '',
+    });
+  }
+}, [open, existingData, form]);
+```
+
+## Error Handling
+
+### API Errors
+
+Display API errors using the toast notification system:
+
+```typescript
+const { mutate, isPending } = useCreateResource({
+  onSuccess: handleSuccess,
+  onError: (error) => {
+    toast.error('Failed to create resource', {
+      description: error instanceof Error ? error.message : 'An unexpected error occurred',
+    });
+  },
+});
+```
+
+### Manual Validation Errors
+
+For validation that can't be expressed in the schema:
+
+```typescript
+const onSubmit = (values: z.infer<typeof formSchema>) => {
+  // Custom validation
+  if (someComplexCondition) {
+    form.setError('fieldName', {
+      message: 'Custom error message',
+    });
+    return;
+  }
+  
+  // Proceed with submission...
+};
+```
+
+## Anti-Patterns to Avoid
+
+### ❌ Don't Use Inline State for Form Fields
+
+```typescript
+// BAD
+const [name, setName] = useState('');
+const [description, setDescription] = useState('');
+
+const validateForm = () => {
+  if (!name) return 'Name is required';
+  // ...
+};
+```
+
+### ❌ Don't Mix Validation Approaches
+
+```typescript
+// BAD - mixing zod with manual validation
+const formSchema = z.object({ name: z.string() });
+// Later in onSubmit...
+if (!values.name.match(/^[a-z]/)) {
+  // Manual validation for something zod should handle
+}
+```
+
+### ❌ Don't Define Schemas Inside Components
+
+```typescript
+// BAD
+function MyForm() {
+  const formSchema = z.object({...}); // Re-created on every render
+}
+
+// GOOD
+const formSchema = z.object({...}); // Outside component
+function MyForm() { ... }
+```
+
+## Reference Implementations
+
+The following files serve as reference implementations:
+
+| Pattern | Reference File |
+|---------|---------------|
+| Full page form with context | `components/forms/model-forms/create-model-form.tsx` |
+| Complex schema with unions | `components/forms/model-forms/schema.ts` |
+| Modal-based editor | `components/editors/agent-editor.tsx` |
+| Simple modal form | `components/editors/namespace-editor.tsx` |
+| Dialog with form | `components/dialogs/add-api-key-dialog.tsx` |
+

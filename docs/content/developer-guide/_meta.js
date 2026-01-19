@@ -17,6 +17,7 @@ export default {
   '---services': { type: 'separator', title: 'Services and runtime' },
   services: 'Services',
   'ark-dashboard': 'ARK Dashboard',
+  'form-validation-standards': 'Form Validation Standards',
   'ark-gateway': 'ARK Gateway',
   'building-a2a-servers': 'Building A2A Servers',
   'ark-evaluator': 'Evaluation Engine Service',
