@@ -142,6 +142,7 @@ interface TypedQueryDetailResponse
   status?: QueryStatus | null;
   metadata?: Record<string, string>;
   target?: { name: string; type: string };
+  timeout?: string | null;
 }
 
 // Reusable styles for table field headings
