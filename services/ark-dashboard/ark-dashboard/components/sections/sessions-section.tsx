@@ -16,15 +16,17 @@ import {
   Loader2,
   MessageSquare,
   Play,
+  RefreshCw,
   Terminal,
   Users,
   Workflow,
   XCircle,
   Zap,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Collapsible,
@@ -39,6 +41,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { useWorkflows, useWorkflow } from '@/lib/services/workflows-hooks';
+import { mapArgoWorkflowToSession, mapArgoWorkflowsToSessions } from '@/lib/services/workflow-mapper';
 
 type SessionSourceFilter = 'all' | 'workflows' | 'teams' | 'agents';
 type SessionType = 'workflow' | 'team' | 'agent';
@@ -2190,194 +2194,226 @@ function TeamStepDetail({ detail }: { detail: TeamStepDetail }) {
 function WorkflowStepNode({
   step,
   depth = 0,
+  isLast = false,
 }: {
   step: WorkflowStep;
   depth?: number;
+  isLast?: boolean;
 }) {
-  const [isOpen, setIsOpen] = useState(
-    step.status === 'running' || step.status === 'failed',
-  );
   const [showDetail, setShowDetail] = useState(false);
   const hasChildren = step.children && step.children.length > 0;
   const hasDetail = step.detail && Object.keys(step.detail).length > 0;
 
+  const getBorderColor = () => {
+    if (step.status === 'running') return 'border-l-blue-500';
+    if (step.status === 'succeeded') return 'border-l-green-500';
+    if (step.status === 'failed') return 'border-l-red-500';
+    return 'border-l-gray-300 dark:border-l-gray-700';
+  };
+
   return (
-    <div className={cn('relative', depth > 0 && 'ml-6')}>
+    <div className={cn('relative flex gap-2', depth > 0 && 'ml-4')}>
       {depth > 0 && (
-        <div className="bg-border absolute top-0 -left-3 h-4 w-3 rounded-bl border-b border-l" />
+        <>
+          <div className="absolute -left-4 top-0 flex h-full w-4 flex-col items-center">
+            <div className="bg-border mt-5 w-px flex-1" style={{ display: isLast ? 'none' : 'block' }} />
+          </div>
+          <div className="bg-border absolute -left-4 top-5 h-px w-4" />
+        </>
       )}
 
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="flex-1">
         <div
           className={cn(
-            'hover:bg-muted/50 flex items-center gap-2 rounded-md p-2 transition-colors',
-            step.status === 'running' && 'bg-blue-500/5',
-            step.status === 'failed' && 'bg-red-500/5',
+            'hover:bg-muted/50 group relative flex items-center gap-2 rounded-lg border border-l-2 bg-card p-2.5 shadow-sm transition-all',
+            getBorderColor(),
+            step.status === 'running' && 'bg-blue-50/50 dark:bg-blue-950/20',
+            step.status === 'failed' && 'bg-red-50/50 dark:bg-red-950/20',
           )}>
-          {hasChildren ? (
-            <CollapsibleTrigger className="hover:bg-muted rounded p-0.5">
-              {isOpen ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-            </CollapsibleTrigger>
-          ) : hasDetail ? (
+          {hasDetail ? (
             <button
               onClick={() => setShowDetail(!showDetail)}
-              className="hover:bg-muted rounded p-0.5">
+              className="hover:bg-muted -m-1 rounded p-1 transition-colors"
+              aria-label={showDetail ? 'Hide details' : 'Show details'}>
               {showDetail ? (
-                <ChevronDown className="h-4 w-4" />
+                <ChevronDown className="text-muted-foreground h-4 w-4" />
               ) : (
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="text-muted-foreground h-4 w-4" />
               )}
             </button>
           ) : (
-            <div className="w-5" />
+            <div className="w-4" />
           )}
 
-          {getStatusIcon(step.status)}
-          <div className="text-muted-foreground">
-            {getWorkflowTypeIcon(step.type)}
+          <div className="flex flex-1 items-center gap-2 overflow-hidden">
+            {getStatusIcon(step.status)}
+            <div className="text-muted-foreground shrink-0">
+              {getWorkflowTypeIcon(step.type)}
+            </div>
+            <span className="truncate font-medium">{step.displayName}</span>
+            {step.name !== step.displayName && (
+              <span className="text-muted-foreground truncate text-xs">
+                ({step.name})
+              </span>
+            )}
           </div>
-          <span className="font-medium">{step.displayName}</span>
-          <span className="text-muted-foreground text-xs">({step.name})</span>
-          <div className="flex-1" />
 
-          {step.duration && (
-            <span className="text-muted-foreground flex items-center gap-1 text-xs">
-              <Clock className="h-3 w-3" />
-              {step.duration}
-            </span>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            {step.duration && (
+              <span className="text-muted-foreground flex items-center gap-1 text-xs">
+                <Clock className="h-3 w-3" />
+                {step.duration}
+              </span>
+            )}
 
-          <Badge
-            variant={getStatusBadgeVariant(step.status)}
-            className="text-xs">
-            {step.status}
-          </Badge>
+            <Badge
+              variant={getStatusBadgeVariant(step.status)}
+              className="text-xs">
+              {step.status}
+            </Badge>
+          </div>
         </div>
 
-        {hasChildren && (
-          <CollapsibleContent>
-            <div className="relative mt-1 space-y-1">
-              {depth > 0 && (
-                <div className="bg-border absolute top-0 -left-3 h-full w-px" />
-              )}
-              {step.children!.map(child => (
-                <WorkflowStepNode
-                  key={child.id}
-                  step={child}
-                  depth={depth + 1}
-                />
-              ))}
-            </div>
-          </CollapsibleContent>
+        {hasDetail && showDetail && (
+          <div className="ml-6 mt-2">
+            <WorkflowStepDetail detail={step.detail!} />
+          </div>
         )}
 
-        {!hasChildren && hasDetail && showDetail && (
-          <WorkflowStepDetail detail={step.detail!} />
+        {hasChildren && (
+          <div className="mt-2 space-y-2">
+            {step.children!.map((child, index) => (
+              <WorkflowStepNode
+                key={child.id}
+                step={child}
+                depth={depth + 1}
+                isLast={index === step.children!.length - 1}
+              />
+            ))}
+          </div>
         )}
-      </Collapsible>
+      </div>
     </div>
   );
 }
 
-function TeamStepNode({ step, depth = 0 }: { step: TeamStep; depth?: number }) {
-  const [isOpen, setIsOpen] = useState(
-    step.status === 'running' || step.status === 'failed',
-  );
+function TeamStepNode({ 
+  step, 
+  depth = 0,
+  isLast = false,
+}: { 
+  step: TeamStep; 
+  depth?: number;
+  isLast?: boolean;
+}) {
   const [showDetail, setShowDetail] = useState(false);
   const hasChildren = step.children && step.children.length > 0;
   const hasDetail = step.detail && Object.keys(step.detail).length > 0;
 
+  const getBorderColor = () => {
+    if (step.status === 'running') return 'border-l-blue-500';
+    if (step.status === 'succeeded') return 'border-l-green-500';
+    if (step.status === 'failed') return 'border-l-red-500';
+    return 'border-l-gray-300 dark:border-l-gray-700';
+  };
+
   return (
-    <div className={cn('relative', depth > 0 && 'ml-6')}>
+    <div className={cn('relative flex gap-2', depth > 0 && 'ml-4')}>
       {depth > 0 && (
-        <div className="bg-border absolute top-0 -left-3 h-4 w-3 rounded-bl border-b border-l" />
+        <>
+          <div className="absolute -left-4 top-0 flex h-full w-4 flex-col items-center">
+            <div className="bg-border mt-5 w-px flex-1" style={{ display: isLast ? 'none' : 'block' }} />
+          </div>
+          <div className="bg-border absolute -left-4 top-5 h-px w-4" />
+        </>
       )}
 
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="flex-1">
         <div
           className={cn(
-            'hover:bg-muted/50 flex items-center gap-2 rounded-md p-2 transition-colors',
-            step.status === 'running' && 'bg-blue-500/5',
-            step.status === 'failed' && 'bg-red-500/5',
+            'hover:bg-muted/50 group relative flex items-center gap-2 rounded-lg border border-l-2 bg-card p-2.5 shadow-sm transition-all',
+            getBorderColor(),
+            step.status === 'running' && 'bg-blue-50/50 dark:bg-blue-950/20',
+            step.status === 'failed' && 'bg-red-50/50 dark:bg-red-950/20',
           )}>
-          {hasChildren ? (
-            <CollapsibleTrigger className="hover:bg-muted rounded p-0.5">
-              {isOpen ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-            </CollapsibleTrigger>
-          ) : hasDetail ? (
+          {hasDetail ? (
             <button
               onClick={() => setShowDetail(!showDetail)}
-              className="hover:bg-muted rounded p-0.5">
+              className="hover:bg-muted -m-1 rounded p-1 transition-colors"
+              aria-label={showDetail ? 'Hide details' : 'Show details'}>
               {showDetail ? (
-                <ChevronDown className="h-4 w-4" />
+                <ChevronDown className="text-muted-foreground h-4 w-4" />
               ) : (
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="text-muted-foreground h-4 w-4" />
               )}
             </button>
           ) : (
-            <div className="w-5" />
+            <div className="w-4" />
           )}
 
-          {getStatusIcon(step.status)}
-          <div className="text-muted-foreground">
-            {getTeamTypeIcon(step.type)}
+          <div className="flex flex-1 items-center gap-2 overflow-hidden">
+            {getStatusIcon(step.status)}
+            <div className="text-muted-foreground shrink-0">
+              {getTeamTypeIcon(step.type)}
+            </div>
+            <span className="truncate font-medium">{step.displayName}</span>
+            <span className="text-muted-foreground truncate text-xs">
+              ({step.agentName})
+            </span>
           </div>
-          <span className="font-medium">{step.displayName}</span>
-          <span className="text-muted-foreground text-xs">
-            ({step.agentName})
-          </span>
-          <div className="flex-1" />
 
-          {step.message && (
-            <span className="text-muted-foreground max-w-[200px] truncate text-xs">
-              {step.message}
-            </span>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            {step.message && (
+              <span className="text-muted-foreground max-w-[200px] truncate text-xs">
+                {step.message}
+              </span>
+            )}
 
-          {step.duration && (
-            <span className="text-muted-foreground flex items-center gap-1 text-xs">
-              <Clock className="h-3 w-3" />
-              {step.duration}
-            </span>
-          )}
+            {step.duration && (
+              <span className="text-muted-foreground flex items-center gap-1 text-xs">
+                <Clock className="h-3 w-3" />
+                {step.duration}
+              </span>
+            )}
 
-          <Badge
-            variant={getStatusBadgeVariant(step.status)}
-            className="text-xs">
-            {step.status}
-          </Badge>
+            <Badge
+              variant={getStatusBadgeVariant(step.status)}
+              className="text-xs">
+              {step.status}
+            </Badge>
+          </div>
         </div>
 
-        {hasChildren && (
-          <CollapsibleContent>
-            <div className="relative mt-1 space-y-1">
-              {depth > 0 && (
-                <div className="bg-border absolute top-0 -left-3 h-full w-px" />
-              )}
-              {step.children!.map(child => (
-                <TeamStepNode key={child.id} step={child} depth={depth + 1} />
-              ))}
-            </div>
-          </CollapsibleContent>
+        {hasDetail && showDetail && (
+          <div className="ml-6 mt-2">
+            <TeamStepDetail detail={step.detail!} />
+          </div>
         )}
 
-        {!hasChildren && hasDetail && showDetail && (
-          <TeamStepDetail detail={step.detail!} />
+        {hasChildren && (
+          <div className="mt-2 space-y-2">
+            {step.children!.map((child, index) => (
+              <TeamStepNode 
+                key={child.id} 
+                step={child} 
+                depth={depth + 1}
+                isLast={index === step.children!.length - 1}
+              />
+            ))}
+          </div>
         )}
-      </Collapsible>
+      </div>
     </div>
   );
 }
 
-function SessionDetailView({ session }: { session: Session }) {
+function SessionDetailView({ 
+  session, 
+  isLoading = false 
+}: { 
+  session: Session;
+  isLoading?: boolean;
+}) {
   return (
     <Card className="min-h-0 flex-1 overflow-auto">
       <CardHeader>
@@ -2393,6 +2429,12 @@ function SessionDetailView({ session }: { session: Session }) {
             <Badge variant="outline" className="text-xs">
               {session.type}
             </Badge>
+            {isLoading && (
+              <span className="text-muted-foreground flex items-center gap-2 text-xs">
+                <RefreshCw className="h-3 w-3 animate-spin" />
+                Updating...
+              </span>
+            )}
           </div>
           <div className="text-muted-foreground flex items-center gap-4 text-sm">
             <span className="flex items-center gap-1">
@@ -2462,10 +2504,16 @@ function SessionListItem({
 export function SessionsSection() {
   const [sourceFilter, setSourceFilter] = useState<SessionSourceFilter>('all');
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
-    MOCK_SESSIONS[0]?.id || null,
+    null,
   );
+  const [useRealData, setUseRealData] = useState(true);
 
-  const filteredSessions = MOCK_SESSIONS.filter(session => {
+  const { workflows, loading, error, refetch: refetchWorkflows } = useWorkflows('default', useRealData);
+
+  const realSessions = useRealData ? mapArgoWorkflowsToSessions(workflows) : [];
+  const allSessions = useRealData ? realSessions : MOCK_SESSIONS;
+
+  const filteredSessions = allSessions.filter(session => {
     if (sourceFilter === 'all') return true;
     if (sourceFilter === 'workflows') return session.type === 'workflow';
     if (sourceFilter === 'teams') return session.type === 'team';
@@ -2473,7 +2521,48 @@ export function SessionsSection() {
     return true;
   });
 
-  const selectedSession = MOCK_SESSIONS.find(s => s.id === selectedSessionId);
+  useEffect(() => {
+    if (
+      filteredSessions.length > 0 &&
+      !filteredSessions.find(s => s.id === selectedSessionId)
+    ) {
+      setSelectedSessionId(filteredSessions[0].id);
+    }
+  }, [filteredSessions, selectedSessionId]);
+
+  const selectedSessionFromList = filteredSessions.find(s => s.id === selectedSessionId);
+  
+  const { workflow: selectedWorkflowDetail, loading: loadingDetail } = useWorkflow(
+    useRealData && selectedSessionFromList?.type === 'workflow' ? selectedSessionId || '' : '',
+    'default',
+  );
+
+  const selectedSession = 
+    useRealData && selectedWorkflowDetail
+      ? mapArgoWorkflowToSession(selectedWorkflowDetail)
+      : selectedSessionFromList;
+
+  const previousStatusRef = useRef<string | undefined>(undefined);
+  
+  useEffect(() => {
+    if (selectedWorkflowDetail && useRealData) {
+      const currentStatus = selectedWorkflowDetail.status.phase;
+      const previousStatus = previousStatusRef.current;
+      
+      const isTerminalState = 
+        currentStatus === 'Succeeded' || 
+        currentStatus === 'Failed' || 
+        currentStatus === 'Error';
+      
+      const wasRunning = previousStatus === 'Running' || previousStatus === 'Pending';
+      
+      if (isTerminalState && wasRunning) {
+        void refetchWorkflows();
+      }
+      
+      previousStatusRef.current = currentStatus;
+    }
+  }, [selectedWorkflowDetail, useRealData, refetchWorkflows]);
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4">
@@ -2494,13 +2583,39 @@ export function SessionsSection() {
             ))}
           </SelectContent>
         </Select>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setUseRealData(!useRealData)}>
+          {useRealData ? (
+            <>
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+              Live Data
+            </>
+          ) : (
+            'Mock Data'
+          )}
+        </Button>
+        {loading && useRealData && (
+          <span className="text-muted-foreground text-sm">Loading...</span>
+        )}
+        {error && useRealData && (
+          <span className="text-sm text-red-500">
+            Error: {error.message}
+          </span>
+        )}
         <span className="text-muted-foreground text-sm">
           {filteredSessions.length} session
           {filteredSessions.length !== 1 ? 's' : ''}
         </span>
       </div>
 
-      {filteredSessions.length > 0 ? (
+      {loading && useRealData ? (
+        <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center gap-3">
+          <RefreshCw className="h-8 w-8 animate-spin" />
+          <span>Loading sessions...</span>
+        </div>
+      ) : filteredSessions.length > 0 ? (
         <div className="flex flex-1 gap-4 overflow-hidden">
           <div className="flex w-80 flex-col gap-2 overflow-auto">
             {filteredSessions.map(session => (
@@ -2514,7 +2629,10 @@ export function SessionsSection() {
           </div>
           <div className="flex flex-1 overflow-hidden">
             {selectedSession ? (
-              <SessionDetailView session={selectedSession} />
+              <SessionDetailView 
+                session={selectedSession} 
+                isLoading={loadingDetail && useRealData}
+              />
             ) : (
               <div className="text-muted-foreground flex flex-1 items-center justify-center">
                 Select a session to view details
