@@ -1143,41 +1143,105 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        get?: never;
+        put?: never;
+        post?: never;
         /**
-         * Proxy Request Get
-         * @description Proxy GET requests to other services in the cluster.
+         * Proxy Services
+         * @description Proxy DELETE, PATCH, HEAD requests to other services in the cluster.
          */
-        get: operations["proxy_request_get_v1_proxy_services__service_name___api_path__get"];
+        delete: operations["proxy_services_v1_proxy_services__service_name___api_path__delete"];
+        options?: never;
         /**
-         * Proxy Request Put
-         * @description Proxy PUT requests to other services in the cluster.
+         * Proxy Services
+         * @description Proxy DELETE, PATCH, HEAD requests to other services in the cluster.
          */
-        put: operations["proxy_request_put_v1_proxy_services__service_name___api_path__put"];
+        head: operations["proxy_services_v1_proxy_services__service_name___api_path__head"];
         /**
-         * Proxy Request Post
-         * @description Proxy POST requests to other services in the cluster.
+         * Proxy Services
+         * @description Proxy DELETE, PATCH, HEAD requests to other services in the cluster.
          */
-        post: operations["proxy_request_post_v1_proxy_services__service_name___api_path__post"];
+        patch: operations["proxy_services_v1_proxy_services__service_name___api_path__patch"];
+        trace?: never;
+    };
+    "/v1/proxy/{resource}/{server_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         /**
-         * Proxy Request Delete
-         * @description Proxy DELETE requests to other services in the cluster.
+         * Proxy Server
+         * @description Proxy requests to a specific resource inside your agentic cluster.
+         *     The goal is to expose over public internet your agentic resources in
+         *     order to perform testing of the resource itself.
+         *
+         *     Args:
+         *         server_name: Name of the agentic resource. Supported only a2a and mcp.
+         *         path: Remaining path after the server name (will be forwarded as-is)
+         *         request: The incoming FastAPI request
+         *         namespace: The namespace containing the agentic resource
+         *
+         *     Returns:
+         *         Response: Proxied response from the agentic resource
          */
-        delete: operations["proxy_request_delete_v1_proxy_services__service_name___api_path__delete"];
+        get: operations["proxy_server_v1_proxy__resource___server_name__get"];
+        put?: never;
         /**
-         * Proxy Request Options
-         * @description Proxy OPTIONS requests to other services in the cluster.
+         * Proxy Server
+         * @description Proxy requests to a specific resource inside your agentic cluster.
+         *     The goal is to expose over public internet your agentic resources in
+         *     order to perform testing of the resource itself.
+         *
+         *     Args:
+         *         server_name: Name of the agentic resource. Supported only a2a and mcp.
+         *         path: Remaining path after the server name (will be forwarded as-is)
+         *         request: The incoming FastAPI request
+         *         namespace: The namespace containing the agentic resource
+         *
+         *     Returns:
+         *         Response: Proxied response from the agentic resource
          */
-        options: operations["proxy_request_options_v1_proxy_services__service_name___api_path__options"];
+        post: operations["proxy_server_v1_proxy__resource___server_name__post"];
+        delete?: never;
         /**
-         * Proxy Request Head
-         * @description Proxy HEAD requests to other services in the cluster.
+         * Proxy Server
+         * @description Proxy requests to a specific resource inside your agentic cluster.
+         *     The goal is to expose over public internet your agentic resources in
+         *     order to perform testing of the resource itself.
+         *
+         *     Args:
+         *         server_name: Name of the agentic resource. Supported only a2a and mcp.
+         *         path: Remaining path after the server name (will be forwarded as-is)
+         *         request: The incoming FastAPI request
+         *         namespace: The namespace containing the agentic resource
+         *
+         *     Returns:
+         *         Response: Proxied response from the agentic resource
          */
-        head: operations["proxy_request_head_v1_proxy_services__service_name___api_path__head"];
-        /**
-         * Proxy Request Patch
-         * @description Proxy PATCH requests to other services in the cluster.
-         */
-        patch: operations["proxy_request_patch_v1_proxy_services__service_name___api_path__patch"];
+        options: operations["proxy_server_v1_proxy__resource___server_name__options"];
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/proxy/{resource}/{server_name}/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Proxy Server Path */
+        get: operations["proxy_server_path_v1_proxy__resource___server_name___path__get"];
+        put?: never;
+        /** Proxy Server Path */
+        post: operations["proxy_server_path_v1_proxy__resource___server_name___path__post"];
+        delete?: never;
+        /** Proxy Server Path */
+        options: operations["proxy_server_path_v1_proxy__resource___server_name___path__options"];
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/queries": {
@@ -3734,14 +3798,8 @@ export interface components {
             value?: string | null;
             valueFrom?: components["schemas"]["MCPServerValueFrom"] | null;
         };
-        /**
-         * MCPServerValueSource
-         * @description ValueSource for configuration (supports direct value or valueFrom).
-         */
         "MCPServerValueSource-Output": {
-            /** Value */
-            value?: string | null;
-            valueFrom?: components["schemas"]["MCPServerValueFrom"] | null;
+            [key: string]: unknown;
         };
         /**
          * Memory
@@ -4329,6 +4387,11 @@ export interface components {
              */
             status: string;
         };
+        /**
+         * Resource
+         * @enum {string}
+         */
+        Resource: "a2a" | "mcp" | "services";
         /**
          * ResourceSelector
          * @description Selector for automatic evaluation of resources.
@@ -6938,7 +7001,10 @@ export interface operations {
     };
     list_services_v1_proxy_services_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6954,9 +7020,18 @@ export interface operations {
                     "application/json": components["schemas"]["ServiceListResponse"];
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
-    proxy_request_get_v1_proxy_services__service_name___api_path__get: {
+    proxy_services_v1_proxy_services__service_name___api_path__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -6988,7 +7063,7 @@ export interface operations {
             };
         };
     };
-    proxy_request_put_v1_proxy_services__service_name___api_path__put: {
+    proxy_services_v1_proxy_services__service_name___api_path__head: {
         parameters: {
             query?: never;
             header?: never;
@@ -7020,7 +7095,7 @@ export interface operations {
             };
         };
     };
-    proxy_request_post_v1_proxy_services__service_name___api_path__post: {
+    proxy_services_v1_proxy_services__service_name___api_path__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -7052,13 +7127,16 @@ export interface operations {
             };
         };
     };
-    proxy_request_delete_v1_proxy_services__service_name___api_path__delete: {
+    proxy_server_v1_proxy__resource___server_name__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
             header?: never;
             path: {
-                service_name: string;
-                api_path: string;
+                resource: components["schemas"]["Resource"];
+                server_name: string;
             };
             cookie?: never;
         };
@@ -7084,13 +7162,16 @@ export interface operations {
             };
         };
     };
-    proxy_request_options_v1_proxy_services__service_name___api_path__options: {
+    proxy_server_v1_proxy__resource___server_name__post: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
             header?: never;
             path: {
-                service_name: string;
-                api_path: string;
+                resource: components["schemas"]["Resource"];
+                server_name: string;
             };
             cookie?: never;
         };
@@ -7116,13 +7197,16 @@ export interface operations {
             };
         };
     };
-    proxy_request_head_v1_proxy_services__service_name___api_path__head: {
+    proxy_server_v1_proxy__resource___server_name__options: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
             header?: never;
             path: {
-                service_name: string;
-                api_path: string;
+                resource: components["schemas"]["Resource"];
+                server_name: string;
             };
             cookie?: never;
         };
@@ -7148,13 +7232,89 @@ export interface operations {
             };
         };
     };
-    proxy_request_patch_v1_proxy_services__service_name___api_path__patch: {
+    proxy_server_path_v1_proxy__resource___server_name___path__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
             header?: never;
             path: {
-                service_name: string;
-                api_path: string;
+                resource: components["schemas"]["Resource"];
+                server_name: string;
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_server_path_v1_proxy__resource___server_name___path__post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                resource: components["schemas"]["Resource"];
+                server_name: string;
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proxy_server_path_v1_proxy__resource___server_name___path__options: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                resource: components["schemas"]["Resource"];
+                server_name: string;
+                path: string;
             };
             cookie?: never;
         };

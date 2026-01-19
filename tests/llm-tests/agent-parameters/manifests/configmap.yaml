@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-config
+data:
+  response_style: "concise and professional"
+  agent_role: "technical assistant"
+  max_tokens: "500"

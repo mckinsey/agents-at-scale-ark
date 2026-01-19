@@ -43,6 +43,22 @@ deployments:
             cpu: 500m
             memory: 512Mi
             ephemeral-storage: 100Mi
+        # Override security context for dev mode to allow DevSpace sync
+        podSecurityContext:
+          runAsNonRoot: false
+          runAsUser: 0
+          fsGroup: 0
+        securityContext:
+          runAsUser: 0
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            add:
+              - SETUID
+              - SETGID
+              - CHOWN
+              - FOWNER
+              - DAC_OVERRIDE
 
 dev:
   ark-evaluator:

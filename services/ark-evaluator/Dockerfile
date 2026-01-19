@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
-RUN groupadd -r evaluator && useradd -r -g evaluator evaluator
+RUN groupadd -r evaluator && useradd -r --uid 1001 -g evaluator evaluator
 
 COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
