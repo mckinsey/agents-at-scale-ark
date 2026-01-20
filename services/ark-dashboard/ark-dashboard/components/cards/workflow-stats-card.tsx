@@ -47,7 +47,7 @@ export function WorkflowStatsCard({ templateName, stats, isLoading }: Props) {
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <Link
               href={`/sessions?template=${encodeURIComponent(templateName)}`}
-              className="flex flex-col space-y-1">
+              className="flex flex-col items-center space-y-1">
               <div className="text-muted-foreground flex items-start gap-1.5 text-xs">
                 <BarChart3 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                 <span className="flex items-start gap-0.5">
@@ -61,7 +61,7 @@ export function WorkflowStatsCard({ templateName, stats, isLoading }: Props) {
             </Link>
             <Link
               href={`/sessions?template=${encodeURIComponent(templateName)}&status=succeeded`}
-              className="flex flex-col space-y-1">
+              className="flex flex-col items-center space-y-1">
               <div className="flex items-start gap-1.5 text-xs text-green-600 dark:text-green-500">
                 <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                 <span className="flex items-start gap-0.5">
@@ -75,7 +75,7 @@ export function WorkflowStatsCard({ templateName, stats, isLoading }: Props) {
             </Link>
             <Link
               href={`/sessions?template=${encodeURIComponent(templateName)}&status=running`}
-              className="flex flex-col space-y-1">
+              className="flex flex-col items-center space-y-1">
               <div className="flex items-start gap-1.5 text-xs text-blue-600 dark:text-blue-500">
                 <Clock className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                 <span className="flex items-start gap-0.5">
@@ -89,7 +89,7 @@ export function WorkflowStatsCard({ templateName, stats, isLoading }: Props) {
             </Link>
             <Link
               href={`/sessions?template=${encodeURIComponent(templateName)}&status=failed`}
-              className="flex flex-col space-y-1">
+              className="flex flex-col items-center space-y-1">
               <div className="flex items-start gap-1.5 text-xs text-red-600 dark:text-red-500">
                 <XCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                 <span className="flex items-start gap-0.5">
