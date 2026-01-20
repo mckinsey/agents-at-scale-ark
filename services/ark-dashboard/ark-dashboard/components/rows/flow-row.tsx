@@ -1,7 +1,9 @@
 'use client';
 
-import { Sparkle, Workflow } from 'lucide-react';
+import { Play, Sparkle, Workflow } from 'lucide-react';
 import Link from 'next/link';
+
+import { Button } from '@/components/ui/button';
 
 export interface Flow {
   id: string;
@@ -13,10 +15,17 @@ export interface Flow {
 
 interface FlowRowProps {
   readonly flow: Flow;
+  readonly onRun?: (flowId: string) => void;
 }
 
-export function FlowRow({ flow }: FlowRowProps) {
+export function FlowRow({ flow, onRun }: FlowRowProps) {
   const isComposerFlow = !!(flow.title && flow.description);
+
+  const handleRunClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onRun?.(flow.id);
+  };
 
   return (
     <Link href={`/workflow-templates/${flow.id}`} className="block w-full">
@@ -57,6 +66,15 @@ export function FlowRow({ flow }: FlowRowProps) {
             <span className="font-medium">{flow.stages}</span>
             <span>{flow.stages === 1 ? 'stage' : 'stages'}</span>
           </div>
+          {onRun && (
+            <Button
+              variant="default"
+              size="sm"
+              className="cursor-pointer"
+              onClick={handleRunClick}>
+              <Play className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
     </Link>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 import { type Flow, FlowRow } from '@/components/rows/flow-row';
 import {
@@ -51,6 +52,21 @@ export function WorkflowTemplatesSection() {
     fetchFlows();
   }, []);
 
+  const handleRunWorkflow = async (flowId: string) => {
+    try {
+      const workflow = await workflowTemplatesService.run(flowId);
+      toast.success('Workflow started', {
+        description: `Created workflow: ${workflow.metadata.name}`,
+      });
+    } catch (error) {
+      console.error('Failed to start workflow:', error);
+      toast.error('Failed to start workflow', {
+        description:
+          error instanceof Error ? error.message : 'An unknown error occurred',
+      });
+    }
+  };
+
   if (showLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -83,7 +99,7 @@ export function WorkflowTemplatesSection() {
       <main className="flex-1 overflow-auto px-6 py-6">
         <div className="flex flex-col gap-3">
           {flows.map(flow => (
-            <FlowRow key={flow.id} flow={flow} />
+            <FlowRow key={flow.id} flow={flow} onRun={handleRunWorkflow} />
           ))}
         </div>
       </main>

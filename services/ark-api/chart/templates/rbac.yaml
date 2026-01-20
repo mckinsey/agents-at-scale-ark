@@ -43,7 +43,7 @@ rules:
   # Argo Workflows resources
   - apiGroups: ["argoproj.io"]
     resources: ["workflows", "workflowtemplates", "cronworkflows", "clusterworkflowtemplates"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1

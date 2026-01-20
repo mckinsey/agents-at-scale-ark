@@ -5,6 +5,7 @@ import {
   Download,
   FileCode,
   Network,
+  Play,
   Sparkle,
   Workflow,
 } from 'lucide-react';
@@ -128,6 +129,21 @@ export default function FlowDetailPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleRunWorkflow = async () => {
+    try {
+      const workflow = await workflowTemplatesService.run(flowId);
+      toast.success('Workflow started', {
+        description: `Created workflow: ${workflow.metadata.name}`,
+      });
+    } catch (err) {
+      console.error('Failed to start workflow:', err);
+      toast.error('Failed to start workflow', {
+        description:
+          err instanceof Error ? err.message : 'An unknown error occurred',
+      });
+    }
+  };
+
   const isComposerFlow = !!(flow.title && flow.description);
 
   return (
@@ -183,6 +199,14 @@ export default function FlowDetailPage() {
               <span className="font-medium">{flow.stages}</span>
               <span>{flow.stages === 1 ? 'stage' : 'stages'}</span>
             </div>
+            <Button
+              variant="default"
+              size="sm"
+              className="cursor-pointer"
+              onClick={handleRunWorkflow}>
+              <Play className="mr-2 h-4 w-4" />
+              Run
+            </Button>
           </div>
         </div>
 

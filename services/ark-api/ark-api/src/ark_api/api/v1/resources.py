@@ -195,3 +195,91 @@ async def list_grouped_resources(
         resources = await api_resource.get(namespace=namespace)
 
         return _create_resource_response(resources.to_dict(), request)
+
+
+@router.post("/api/{version}/{kind}")
+@handle_k8s_errors(operation="create", resource_type="resource")
+async def create_core_resource(
+    request: Request,
+    version: str,
+    kind: str,
+    body: dict,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+) -> Response:
+    """
+    Create a core Kubernetes resource.
+
+    Args:
+        version: API version (e.g., 'v1')
+        kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
+        body: The resource definition as JSON
+        namespace: The namespace (defaults to current context)
+
+    Returns:
+        Response: The created Kubernetes resource as JSON
+
+    Examples:
+        - POST /v1/resources/api/v1/Pod
+        - POST /v1/resources/api/v1/Service
+    """
+    if namespace is None:
+        namespace = get_context()["namespace"]
+
+    async with ApiClient() as api:
+        dynamic_client = await DynamicClient(api)
+
+        api_resource = await dynamic_client.resources.get(
+            api_version=version,
+            kind=kind
+        )
+
+        resource = await api_resource.create(body=body, namespace=namespace)
+
+        return _create_resource_response(resource.to_dict(), request)
+
+
+@router.post("/apis/{group}/{version}/{kind}")
+@handle_k8s_errors(operation="create", resource_type="resource")
+async def create_grouped_resource(
+    request: Request,
+    group: str,
+    version: str,
+    kind: str,
+    body: dict,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+) -> Response:
+    """
+    Create a grouped Kubernetes resource.
+
+    Args:
+        group: API group (e.g., 'apps', 'batch', 'argoproj.io')
+        version: API version (e.g., 'v1', 'v1alpha1')
+        kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'Workflow')
+        body: The resource definition as JSON
+        namespace: The namespace (defaults to current context)
+
+    Returns:
+        Response: The created Kubernetes resource as JSON
+
+    Examples:
+        - POST /v1/resources/apis/apps/v1/Deployment
+        - POST /v1/resources/apis/batch/v1/Job
+        - POST /v1/resources/apis/argoproj.io/v1alpha1/Workflow
+    """
+    if namespace is None:
+        namespace = get_context()["namespace"]
+
+    api_version = f"{group}/{version}"
+    logger.info(f"Creating resource: api_version={api_version}, kind={kind}, namespace={namespace}")
+
+    async with ApiClient() as api:
+        dynamic_client = await DynamicClient(api)
+
+        api_resource = await dynamic_client.resources.get(
+            api_version=api_version,
+            kind=kind
+        )
+
+        resource = await api_resource.create(body=body, namespace=namespace)
+
+        return _create_resource_response(resource.to_dict(), request)
