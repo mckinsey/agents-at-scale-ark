@@ -1,0 +1,97 @@
+{{- if .Values.queue.deployPostgres }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-postgres
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  serviceName: {{ .Release.Name }}-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "chart.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        {{- include "chart.labels" . | nindent 8 }}
+        app.kubernetes.io/component: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: {{ .Values.queue.postgres.image }}
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5432
+          name: postgres
+          protocol: TCP
+        env:
+        - name: POSTGRES_DB
+          value: {{ .Values.queue.postgres.database }}
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-postgres
+              key: username
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Release.Name }}-postgres
+              key: password
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - pg_isready -U $POSTGRES_USER
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 6
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - pg_isready -U $POSTGRES_USER
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          {{- toYaml .Values.queue.postgres.resources | nindent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        {{- include "chart.labels" . | nindent 8 }}
+        app.kubernetes.io/component: postgres
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      {{- if .Values.queue.postgres.storage.storageClass }}
+      storageClassName: {{ .Values.queue.postgres.storage.storageClass }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.queue.postgres.storage.size }}
+{{- end }}

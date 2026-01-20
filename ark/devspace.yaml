@@ -39,6 +39,10 @@ deployments:
             runAsNonRoot: false
         webhook:
           enable: true
+        queue:
+          enabled: true
+          postgres:
+            password: "devspace-postgres-password"
   ark-controller-replica:
     namespace: ark-system
     helm:
@@ -76,6 +80,10 @@ deployments:
           enabled: false
         rbac:
           enable: false
+        queue:
+          enabled: true
+          deployPostgres: false
+          postgresServiceName: "ark-controller-postgres"
 
 dev:
   ark-controller:

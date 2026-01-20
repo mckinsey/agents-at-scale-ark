@@ -25,10 +25,20 @@ require (
 )
 
 require (
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/pgx/v5 v5.7.3 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
+	github.com/riverqueue/river v0.17.0 // indirect
+	github.com/riverqueue/river/riverdriver v0.17.0 // indirect
+	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.17.0 // indirect
+	github.com/riverqueue/river/rivershared v0.17.0 // indirect
+	github.com/riverqueue/river/rivertype v0.17.0 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.38.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.38.0 // indirect
+	go.uber.org/goleak v1.3.0 // indirect
 )
 
 require (

@@ -24,6 +24,7 @@ import (
 	"mckinsey.com/ark/internal/annotations"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	"mckinsey.com/ark/internal/genai"
+	"mckinsey.com/ark/internal/queue"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 )
 
@@ -44,10 +45,11 @@ const (
 // - Never import OTEL packages directly - use the abstraction layer
 type QueryReconciler struct {
 	client.Client
-	Scheme     *runtime.Scheme
-	Telemetry  *telemetryconfig.Provider
-	Eventing   *eventingconfig.Provider
-	operations sync.Map
+	Scheme      *runtime.Scheme
+	Telemetry   *telemetryconfig.Provider
+	Eventing    *eventingconfig.Provider
+	QueueClient *queue.QueueClient
+	operations  sync.Map
 }
 
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=queries,verbs=get;list;watch;create;update;patch;delete
@@ -116,10 +118,18 @@ func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.
 }
 
 func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
 	expiry := obj.CreationTimestamp.Add(obj.Spec.TTL.Duration)
 
 	if obj.Spec.Cancel && obj.Status.Phase != statusCanceled {
-		r.cleanupExistingOperation(req.NamespacedName)
+		if r.QueueClient != nil {
+			if err := r.QueueClient.CancelQuery(ctx, string(obj.UID)); err != nil {
+				log.Error(err, "Failed to cancel query job")
+			}
+		} else {
+			r.cleanupExistingOperation(req.NamespacedName)
+		}
+
 		if err := r.updateStatus(ctx, &obj, statusCanceled); err != nil {
 			return ctrl.Result{
 				RequeueAfter: time.Until(expiry),
@@ -147,6 +157,25 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 
 func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
+
+	if r.QueueClient != nil {
+		exists, err := r.QueueClient.JobExists(ctx, string(obj.UID))
+		if err != nil {
+			log.Error(err, "Failed to check job existence")
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, err
+		}
+
+		if !exists {
+			jobID, err := r.QueueClient.EnqueueQuery(ctx, &obj)
+			if err != nil {
+				log.Error(err, "Failed to enqueue query")
+				return ctrl.Result{RequeueAfter: 5 * time.Second}, err
+			}
+			log.Info("Query enqueued to work queue", "jobID", jobID)
+		}
+
+		return ctrl.Result{}, nil
+	}
 
 	if _, exists := r.operations.Load(req.NamespacedName); exists {
 		log.Info("Exists")
@@ -967,6 +996,19 @@ func (r *QueryReconciler) executeModelWithStreaming(ctx context.Context, model *
 	responseMessages := []genai.Message{assistantMessage}
 
 	return responseMessages, nil
+}
+
+func (r *QueryReconciler) ExecuteQuery(ctx context.Context, query *arkv1alpha1.Query) error {
+	namespacedName := types.NamespacedName{
+		Name:      query.Name,
+		Namespace: query.Namespace,
+	}
+	r.executeQueryAsync(ctx, *query, namespacedName)
+	return nil
+}
+
+func (r *QueryReconciler) GetClient() client.Client {
+	return r.Client
 }
 
 func (r *QueryReconciler) SetupWithManager(mgr ctrl.Manager) error {

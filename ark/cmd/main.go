@@ -9,12 +9,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/tools/record"
 
+	"github.com/riverqueue/river"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -31,6 +34,7 @@ import (
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/controller"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
+	"mckinsey.com/ark/internal/queue"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 	webhookv1 "mckinsey.com/ark/internal/webhook/v1"
 	webhookv1prealpha1 "mckinsey.com/ark/internal/webhook/v1prealpha1"
@@ -96,7 +100,20 @@ func main() {
 	// Initialize eventing provider with direct client for broker discovery
 	eventingProvider := eventingconfig.NewProvider(mgr, directClient)
 
-	setupControllers(mgr, telemetryProvider, eventingProvider)
+	// Initialize queue infrastructure if enabled
+	queueClient := setupQueueInfrastructure(ctx, mgr, telemetryProvider, eventingProvider)
+	if queueClient != nil {
+		defer queueClient.Close()
+		defer func() {
+			stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := queueClient.Stop(stopCtx); err != nil {
+				setupLog.Error(err, "failed to stop queue client")
+			}
+		}()
+	}
+
+	setupControllers(mgr, telemetryProvider, eventingProvider, queueClient)
 	setupWebhooks(mgr)
 	startManager(mgr, metricsCertWatcher, webhookCertWatcher)
 }
@@ -239,7 +256,105 @@ func setupMetricsServer(cfg config, baseTLSOpts []func(*tls.Config)) (metricsser
 	return metricsServerOptions, metricsCertWatcher
 }
 
-func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provider, eventingProvider *eventingconfig.Provider) {
+func setupQueueInfrastructure(ctx context.Context, mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provider, eventingProvider *eventingconfig.Provider) *queue.QueueClient {
+	enabled := os.Getenv("QUEUE_ENABLE")
+	if enabled != "true" {
+		setupLog.Info("Queue infrastructure disabled")
+		return nil
+	}
+
+	host := os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		host = "ark-postgres"
+	}
+
+	port := os.Getenv("POSTGRES_PORT")
+	if port == "" {
+		port = "5432"
+	}
+
+	database := os.Getenv("POSTGRES_DB")
+	if database == "" {
+		database = "river"
+	}
+
+	user := os.Getenv("POSTGRES_USER")
+	if user == "" {
+		user = "river"
+	}
+
+	password := os.Getenv("POSTGRES_PASSWORD")
+	if password == "" {
+		passwordFile := os.Getenv("POSTGRES_PASSWORD_FILE")
+		if passwordFile != "" {
+			data, err := os.ReadFile(passwordFile)
+			if err != nil {
+				setupLog.Error(err, "failed to read postgres password file")
+				return nil
+			}
+			password = string(data)
+		}
+	}
+
+	if password == "" {
+		setupLog.Error(fmt.Errorf("no password provided"), "POSTGRES_PASSWORD or POSTGRES_PASSWORD_FILE must be set")
+		return nil
+	}
+
+	workerCount := 4
+	if workerCountStr := os.Getenv("QUEUE_WORKER_COUNT"); workerCountStr != "" {
+		if count, err := strconv.Atoi(workerCountStr); err == nil {
+			workerCount = count
+		}
+	}
+
+	pollInterval := time.Second
+	if pollIntervalStr := os.Getenv("QUEUE_WORKER_POLL_INTERVAL"); pollIntervalStr != "" {
+		if interval, err := time.ParseDuration(pollIntervalStr); err == nil {
+			pollInterval = interval
+		}
+	}
+
+	postgresURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		user, password, host, port, database)
+
+	queryReconciler := &controller.QueryReconciler{
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Telemetry: telemetryProvider,
+		Eventing:  eventingProvider,
+	}
+
+	workers := river.NewWorkers()
+	river.AddWorker(workers, queue.NewQueryExecutionWorker(queryReconciler))
+
+	queueConfig := queue.QueueConfig{
+		PostgresURL:  postgresURL,
+		WorkerCount:  workerCount,
+		PollInterval: pollInterval,
+	}
+
+	queueClient, err := queue.NewQueueClient(ctx, queueConfig, workers)
+	if err != nil {
+		setupLog.Error(err, "failed to create queue client")
+		return nil
+	}
+
+	if err := queueClient.Start(ctx); err != nil {
+		setupLog.Error(err, "failed to start queue client")
+		queueClient.Close()
+		return nil
+	}
+
+	setupLog.Info("Queue infrastructure initialized",
+		"workerCount", workerCount,
+		"pollInterval", pollInterval,
+		"postgresHost", host)
+
+	return queueClient
+}
+
+func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provider, eventingProvider *eventingconfig.Provider, queueClient *queue.QueueClient) {
 	controllers := []struct {
 		name       string
 		reconciler interface{ SetupWithManager(ctrl.Manager) error }
@@ -250,10 +365,11 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			Eventing: eventingProvider,
 		}},
 		{"Query", &controller.QueryReconciler{
-			Client:    mgr.GetClient(),
-			Scheme:    mgr.GetScheme(),
-			Telemetry: telemetryProvider,
-			Eventing:  eventingProvider,
+			Client:      mgr.GetClient(),
+			Scheme:      mgr.GetScheme(),
+			Telemetry:   telemetryProvider,
+			Eventing:    eventingProvider,
+			QueueClient: queueClient,
 		}},
 		{"Tool", &controller.ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
 		{"Team", &controller.TeamReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("team-controller")}},

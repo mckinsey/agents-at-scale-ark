@@ -41,6 +41,31 @@ spec:
           # HTTP timeout in seconds for connecting to memory services.
           - name: ARK_MEMORY_HTTP_TIMEOUT_SECONDS
             value: "30"
+          {{- if .Values.queue.enabled }}
+          - name: QUEUE_ENABLE
+            value: "true"
+          {{- end }}
+          {{- $postgresName := .Values.queue.postgresServiceName | default (printf "%s-postgres" .Release.Name) }}
+          - name: POSTGRES_HOST
+            value: "{{ $postgresName }}"
+          - name: POSTGRES_PORT
+            value: "5432"
+          - name: POSTGRES_DB
+            value: "{{ .Values.queue.postgres.database }}"
+          - name: POSTGRES_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ $postgresName }}
+                key: username
+          - name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ $postgresName }}
+                key: password
+          - name: QUEUE_WORKER_COUNT
+            value: "{{ .Values.queue.workers.count }}"
+          - name: QUEUE_WORKER_POLL_INTERVAL
+            value: "{{ .Values.queue.workers.pollInterval }}"
           {{- if .Values.customCACert.enabled }}
           - name: SSL_CERT_FILE
             value: "/etc/ssl/certs/custom-ca/{{ .Values.customCACert.key }}"
