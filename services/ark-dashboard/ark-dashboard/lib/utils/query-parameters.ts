@@ -31,7 +31,7 @@ export function extractTemplateParameters(text: string): string[] {
 }
 
 export function extractAgentRequiredParams(
-  agentParams: AgentParameterOutput[] | null | undefined
+  agentParams: AgentParameterOutput[] | null | undefined,
 ): string[] {
   if (!agentParams) return [];
 
@@ -41,7 +41,7 @@ export function extractAgentRequiredParams(
 }
 
 export function transformQueryParametersToApi(
-  params: QueryParameter[]
+  params: QueryParameter[],
 ): QueryParameterInput[] {
   return params
     .filter(p => p.name.trim() !== '')
@@ -52,7 +52,7 @@ export function transformQueryParametersToApi(
 }
 
 export function transformApiToQueryParameters(
-  params: QueryParameterOutput[] | null | undefined
+  params: QueryParameterOutput[] | null | undefined,
 ): QueryParameter[] {
   if (!params) return [];
 
@@ -65,7 +65,7 @@ export function transformApiToQueryParameters(
 export function mergeParameters(
   existingParams: QueryParameter[],
   inputParams: string[],
-  agentParams: string[]
+  agentParams: string[],
 ): QueryParameter[] {
   const result: QueryParameter[] = [...existingParams];
   const existingNames = new Set(existingParams.map(p => p.name));
@@ -92,4 +92,3 @@ export function mergeParameters(
 
   return result;
 }
-

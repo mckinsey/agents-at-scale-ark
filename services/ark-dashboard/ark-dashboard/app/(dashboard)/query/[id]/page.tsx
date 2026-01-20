@@ -16,6 +16,8 @@ import { QueryTargetsField } from '@/components/query-fields/query-targets-field
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { PromptEditor } from '@/components/ui/prompt-editor';
+import { QueryParameterEditor } from '@/components/ui/query-parameter-editor';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -24,8 +26,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { PromptEditor } from '@/components/ui/prompt-editor';
-import { QueryParameterEditor } from '@/components/ui/query-parameter-editor';
 import type { components } from '@/lib/api/generated/types';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { useMarkdownProcessor } from '@/lib/hooks/use-markdown-processor';
@@ -37,17 +37,17 @@ import {
   teamsService,
   toolsService,
 } from '@/lib/services';
+import type { Agent } from '@/lib/services/agents';
 import { queriesService } from '@/lib/services/queries';
 import type { ToolDetail } from '@/lib/services/tools';
-import { simplifyDuration } from '@/lib/utils/time';
 import { cn } from '@/lib/utils';
-import type { Agent } from '@/lib/services/agents';
 import {
   type QueryParameter,
   extractAgentRequiredParams,
-  transformQueryParametersToApi,
   transformApiToQueryParameters,
+  transformQueryParametersToApi,
 } from '@/lib/utils/query-parameters';
+import { simplifyDuration } from '@/lib/utils/time';
 
 const breadcrumbs: BreadcrumbElement[] = [
   { href: '/', label: 'ARK Dashboard' },
@@ -378,7 +378,8 @@ function QueryDetailContent() {
   const [toolSchema, setToolSchema] = useState<ToolDetail | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [queryParameters, setQueryParameters] = useState<QueryParameter[]>([]);
-  const [selectedAgentDetails, setSelectedAgentDetails] = useState<Agent | null>(null);
+  const [selectedAgentDetails, setSelectedAgentDetails] =
+    useState<Agent | null>(null);
 
   // Copy schema to clipboard
   const copySchemaToClipboard = async () => {
@@ -591,7 +592,9 @@ function QueryDetailContent() {
         // Load existing parameters
         const typedQueryData = queryData as TypedQueryDetailResponse;
         if (typedQueryData.parameters) {
-          setQueryParameters(transformApiToQueryParameters(typedQueryData.parameters));
+          setQueryParameters(
+            transformApiToQueryParameters(typedQueryData.parameters),
+          );
         }
 
         // Set streaming state based on annotation
@@ -654,7 +657,7 @@ function QueryDetailContent() {
   // Extract agent-required query parameters
   const agentRequiredParams = useMemo(
     () => extractAgentRequiredParams(selectedAgentDetails?.parameters),
-    [selectedAgentDetails]
+    [selectedAgentDetails],
   );
 
   if (loading) {
@@ -966,7 +969,7 @@ function QueryDetailContent() {
                     {/* Input Section */}
                     <div
                       className={cn(
-                        'flex-1 min-h-[260px]',
+                        'min-h-[260px] flex-1',
                         toolSchema && query.target?.type === 'tool'
                           ? 'border-r border-gray-200 dark:border-gray-700'
                           : '',
@@ -1029,7 +1032,9 @@ function QueryDetailContent() {
                     <QueryParameterEditor
                       parameters={queryParameters}
                       onChange={setQueryParameters}
-                      inputText={typeof query.input === 'string' ? query.input : ''}
+                      inputText={
+                        typeof query.input === 'string' ? query.input : ''
+                      }
                       agentRequiredParams={agentRequiredParams}
                     />
                   </div>
@@ -1046,15 +1051,19 @@ function QueryDetailContent() {
                       {queryParameters.map((param, index) => (
                         <div
                           key={index}
-                          className="flex items-center gap-4 rounded-md border bg-muted/30 px-3 py-2">
+                          className="bg-muted/30 flex items-center gap-4 rounded-md border px-3 py-2">
                           <div className="flex-1">
-                            <span className="font-mono text-xs text-muted-foreground">
+                            <span className="text-muted-foreground font-mono text-xs">
                               {param.name}
                             </span>
                           </div>
                           <div className="flex-1">
                             <span className="text-sm">
-                              {param.value || <span className="text-muted-foreground italic">empty</span>}
+                              {param.value || (
+                                <span className="text-muted-foreground italic">
+                                  empty
+                                </span>
+                              )}
                             </span>
                           </div>
                         </div>

@@ -16,37 +16,45 @@ import { AgentFormMode, type AgentFormValues } from '../types';
 interface BasicInfoSectionProps {
   form: UseFormReturn<AgentFormValues>;
   mode: AgentFormMode;
+  disabled?: boolean;
 }
 
-export function BasicInfoSection({ form, mode }: BasicInfoSectionProps) {
+export function BasicInfoSection({
+  form,
+  mode,
+  disabled = false,
+}: BasicInfoSectionProps) {
   const isEditing = mode === AgentFormMode.EDIT;
+  const isViewing = mode === AgentFormMode.VIEW;
 
   return (
-    <div className="space-y-4">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-        Basic Information
-      </h3>
-
-      <FormField
-        control={form.control}
-        name="name"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>
-              Name {!isEditing && <span className="text-destructive">*</span>}
-            </FormLabel>
-            <FormControl>
-              <Input
-                placeholder={isEditing ? undefined : 'e.g., customer-support-agent'}
-                disabled={isEditing || form.formState.isSubmitting}
-                className={isEditing ? 'bg-muted/50 font-mono text-sm' : undefined}
-                {...field}
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
+    <div className="space-y-2">
+      {!isViewing && (
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>
+                Name {!isEditing && <span className="text-destructive">*</span>}
+              </FormLabel>
+              <FormControl>
+                <Input
+                  placeholder={
+                    isEditing ? undefined : 'e.g., customer-support-agent'
+                  }
+                  disabled={disabled || isEditing}
+                  className={
+                    isEditing ? 'bg-muted/50 font-mono text-sm' : undefined
+                  }
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
 
       <FormField
         control={form.control}
@@ -57,7 +65,7 @@ export function BasicInfoSection({ form, mode }: BasicInfoSectionProps) {
             <FormControl>
               <Input
                 placeholder="Brief description of the agent's purpose"
-                disabled={form.formState.isSubmitting}
+                disabled={disabled}
                 {...field}
               />
             </FormControl>
@@ -68,4 +76,3 @@ export function BasicInfoSection({ form, mode }: BasicInfoSectionProps) {
     </div>
   );
 }
-

@@ -1,12 +1,19 @@
 'use client';
 
-import { AlertTriangle, Bot, FileText, Plus, Trash2, Variable } from 'lucide-react';
+import {
+  AlertTriangle,
+  Bot,
+  FileText,
+  Plus,
+  Trash2,
+  Variable,
+} from 'lucide-react';
 import { useMemo } from 'react';
 
 import { cn } from '@/lib/utils';
 import {
-  extractTemplateParameters,
   type QueryParameter,
+  extractTemplateParameters,
 } from '@/lib/utils/query-parameters';
 
 import { Button } from './button';
@@ -32,18 +39,18 @@ export function QueryParameterEditor({
 }: QueryParameterEditorProps) {
   const inputParams = useMemo(
     () => extractTemplateParameters(inputText),
-    [inputText]
+    [inputText],
   );
   const definedParamNames = new Set(
-    parameters.map(p => p.name).filter(Boolean)
+    parameters.map(p => p.name).filter(Boolean),
   );
 
   const undefinedInputParams = inputParams.filter(
-    p => !definedParamNames.has(p)
+    p => !definedParamNames.has(p),
   );
 
   const undefinedAgentParams = agentRequiredParams.filter(
-    p => !definedParamNames.has(p)
+    p => !definedParamNames.has(p),
   );
 
   const addParameter = (name = '') => {
@@ -54,10 +61,7 @@ export function QueryParameterEditor({
     onChange(parameters.filter((_, i) => i !== index));
   };
 
-  const updateParameter = (
-    index: number,
-    updates: Partial<QueryParameter>
-  ) => {
+  const updateParameter = (index: number, updates: Partial<QueryParameter>) => {
     const newParams = [...parameters];
     newParams[index] = { ...newParams[index], ...updates };
     onChange(newParams);
@@ -67,8 +71,8 @@ export function QueryParameterEditor({
     <div className={cn('space-y-4', className)}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Variable className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <Variable className="text-muted-foreground h-4 w-4" />
+          <h3 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
             Parameters
           </h3>
         </div>
@@ -142,9 +146,9 @@ export function QueryParameterEditor({
 
       {parameters.length === 0 ? (
         <div className="rounded-md border border-dashed p-4 text-center">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             No parameters defined. Use{' '}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">
+            <code className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">
               {'{{.name}}'}
             </code>{' '}
             syntax in your input for template variables.
@@ -166,13 +170,13 @@ export function QueryParameterEditor({
                 key={index}
                 className={cn(
                   'rounded-md border p-3',
-                  isDuplicate && 'border-destructive/50 bg-destructive/5'
+                  isDuplicate && 'border-destructive/50 bg-destructive/5',
                 )}>
                 <div className="flex items-start gap-2">
                   <div className="flex flex-1 flex-col gap-2">
                     <div className="flex gap-2">
                       <div className="flex-1">
-                        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <Label className="text-muted-foreground text-[10px] tracking-wide uppercase">
                           Name
                         </Label>
                         <Input
@@ -184,12 +188,12 @@ export function QueryParameterEditor({
                           disabled={disabled}
                           className={cn(
                             'h-8 font-mono text-sm',
-                            isDuplicate && 'border-destructive'
+                            isDuplicate && 'border-destructive',
                           )}
                         />
                       </div>
                       <div className="flex-1">
-                        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <Label className="text-muted-foreground text-[10px] tracking-wide uppercase">
                           Value
                         </Label>
                         <Input
@@ -228,7 +232,7 @@ export function QueryParameterEditor({
                       size="sm"
                       onClick={() => removeParameter(index)}
                       disabled={disabled}
-                      className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive">
+                      className="text-muted-foreground hover:text-destructive h-6 w-6 p-0">
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -239,8 +243,10 @@ export function QueryParameterEditor({
         </div>
       )}
 
-      {(parameters.length > 0 || inputParams.length > 0 || agentRequiredParams.length > 0) && (
-        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+      {(parameters.length > 0 ||
+        inputParams.length > 0 ||
+        agentRequiredParams.length > 0) && (
+        <div className="text-muted-foreground flex items-center gap-3 text-[10px]">
           <span>{parameters.filter(p => p.name).length} defined</span>
           {inputParams.length > 0 && (
             <>

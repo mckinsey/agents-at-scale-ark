@@ -75,13 +75,17 @@ export function transformAgentParametersToForm(
   });
 }
 
-export function transformFormParametersToApi(parameters: Parameter[]): AgentParameterOutput[] {
+export function transformFormParametersToApi(
+  parameters: Parameter[],
+): AgentParameterOutput[] {
   return parameters
     .filter(p => p.name)
     .map(p => {
       if (p.source === 'queryParameter') {
         const queryParamName =
-          p.overrideQueryName && p.queryParameterName ? p.queryParameterName : p.name;
+          p.overrideQueryName && p.queryParameterName
+            ? p.queryParameterName
+            : p.name;
         return {
           name: p.name,
           valueFrom: {
@@ -114,4 +118,3 @@ export function transformFormParametersToApi(parameters: Parameter[]): AgentPara
       return { name: p.name, value: p.value || undefined };
     });
 }
-

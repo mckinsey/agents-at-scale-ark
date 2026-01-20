@@ -18,7 +18,7 @@ import type {
 } from '@/lib/services';
 import { agentsService, modelsService, toolsService } from '@/lib/services';
 
-import { AgentFormMode, agentFormSchema, type AgentFormValues } from './types';
+import { AgentFormMode, type AgentFormValues, agentFormSchema } from './types';
 import {
   transformAgentParametersToForm,
   transformFormParametersToApi,
@@ -30,19 +30,27 @@ interface UseAgentFormOptions {
   onSuccess?: () => void;
 }
 
-export function useAgentForm({ mode, agentName, onSuccess }: UseAgentFormOptions) {
+export function useAgentForm({
+  mode,
+  agentName,
+  onSuccess,
+}: UseAgentFormOptions) {
   const onSuccessRef = useRef(onSuccess);
   onSuccessRef.current = onSuccess;
 
-  const [loading, setLoading] = useState(mode === AgentFormMode.EDIT);
+  const [loading, setLoading] = useState(
+    mode === AgentFormMode.EDIT || mode === AgentFormMode.VIEW,
+  );
   const [saving, setSaving] = useState(false);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [models, setModels] = useState<Model[]>([]);
   const [availableTools, setAvailableTools] = useState<Tool[]>([]);
   const [toolsLoading, setToolsLoading] = useState(true);
   const [selectedTools, setSelectedTools] = useState<AgentTool[]>([]);
+  const [initialTools, setInitialTools] = useState<AgentTool[]>([]);
   const [unavailableTools, setUnavailableTools] = useState<Tool[]>([]);
   const [parameters, setParameters] = useState<Parameter[]>([]);
+  const [initialParameters, setInitialParameters] = useState<Parameter[]>([]);
 
   const isExperimentalExecutionEngineEnabled = useAtomValue(
     isExperimentalExecutionEngineEnabledAtom,
@@ -63,7 +71,10 @@ export function useAgentForm({ mode, agentName, onSuccess }: UseAgentFormOptions
   useEffect(() => {
     const loadData = async () => {
       try {
-        if (mode === AgentFormMode.EDIT && agentName) {
+        if (
+          (mode === AgentFormMode.EDIT || mode === AgentFormMode.VIEW) &&
+          agentName
+        ) {
           const [agentData, modelsData, toolsData] = await Promise.all([
             agentsService.getByName(agentName),
             modelsService.getAll(),
@@ -85,7 +96,12 @@ export function useAgentForm({ mode, agentName, onSuccess }: UseAgentFormOptions
           ) as Tool[];
           setUnavailableTools(missingTools || []);
           setSelectedTools(agentData.tools || []);
-          setParameters(transformAgentParametersToForm(agentData.parameters));
+          setInitialTools(agentData.tools || []);
+          const transformedParams = transformAgentParametersToForm(
+            agentData.parameters,
+          );
+          setParameters(transformedParams);
+          setInitialParameters(transformedParams);
 
           form.reset({
             name: agentData.name,
@@ -104,11 +120,16 @@ export function useAgentForm({ mode, agentName, onSuccess }: UseAgentFormOptions
           setAvailableTools(toolsData);
         }
       } catch (error) {
-        toast.error(`Failed to load ${mode === AgentFormMode.EDIT ? 'agent' : 'data'}`, {
-          description:
-            error instanceof Error ? error.message : 'An unexpected error occurred',
-        });
-        if (mode === AgentFormMode.EDIT) {
+        toast.error(
+          `Failed to load ${mode === AgentFormMode.EDIT || mode === AgentFormMode.VIEW ? 'agent' : 'data'}`,
+          {
+            description:
+              error instanceof Error
+                ? error.message
+                : 'An unexpected error occurred',
+          },
+        );
+        if (mode === AgentFormMode.EDIT || mode === AgentFormMode.VIEW) {
           onSuccessRef.current?.();
         }
       } finally {
@@ -178,9 +199,12 @@ export function useAgentForm({ mode, agentName, onSuccess }: UseAgentFormOptions
         }
         onSuccessRef.current?.();
       } catch (error) {
-        toast.error(`Failed to ${mode} agent`, {
+        const action = mode === AgentFormMode.CREATE ? 'create' : 'update';
+        toast.error(`Failed to ${action} agent`, {
           description:
-            error instanceof Error ? error.message : 'An unexpected error occurred',
+            error instanceof Error
+              ? error.message
+              : 'An unexpected error occurred',
         });
       } finally {
         setSaving(false);
@@ -208,6 +232,24 @@ export function useAgentForm({ mode, agentName, onSuccess }: UseAgentFormOptions
     [selectedTools],
   );
 
+  const hasToolsChanged = useCallback(() => {
+    if (selectedTools.length !== initialTools.length) return true;
+    const selectedNames = selectedTools.map(t => t.name).sort();
+    const initialNames = initialTools.map(t => t.name).sort();
+    return selectedNames.some((name, i) => name !== initialNames[i]);
+  }, [selectedTools, initialTools]);
+
+  const hasParametersChanged = useCallback(() => {
+    if (parameters.length !== initialParameters.length) return true;
+    return parameters.some((param, i) => {
+      const initial = initialParameters[i];
+      return param.name !== initial?.name || param.value !== initial?.value;
+    });
+  }, [parameters, initialParameters]);
+
+  const hasChanges =
+    form.formState.isDirty || hasToolsChanged() || hasParametersChanged();
+
   return {
     form,
     state: {
@@ -222,6 +264,7 @@ export function useAgentForm({ mode, agentName, onSuccess }: UseAgentFormOptions
       unavailableTools,
       parameters,
       isExperimentalExecutionEngineEnabled,
+      hasChanges,
     },
     actions: {
       setParameters,
@@ -232,4 +275,3 @@ export function useAgentForm({ mode, agentName, onSuccess }: UseAgentFormOptions
     },
   };
 }
-

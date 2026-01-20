@@ -26,7 +26,11 @@ import {
   SelectValue,
 } from './select';
 
-export type ParameterSource = 'value' | 'queryParameter' | 'configMapKeyRef' | 'secretKeyRef';
+export type ParameterSource =
+  | 'value'
+  | 'queryParameter'
+  | 'configMapKeyRef'
+  | 'secretKeyRef';
 
 export interface Parameter {
   name: string;
@@ -65,17 +69,28 @@ export function ParameterEditor({
   className,
 }: ParameterEditorProps) {
   const promptParams = useMemo(() => extractPromptParameters(prompt), [prompt]);
-  const definedParamNames = new Set(parameters.map(p => p.name).filter(Boolean));
+  const definedParamNames = new Set(
+    parameters.map(p => p.name).filter(Boolean),
+  );
 
   const undefinedParams = promptParams.filter(p => !definedParamNames.has(p));
   const unusedParams = parameters.filter(
     p => p.name && !promptParams.includes(p.name),
   );
 
-  const addParameter = (name = '', source: ParameterSource = 'queryParameter') => {
+  const addParameter = (
+    name = '',
+    source: ParameterSource = 'queryParameter',
+  ) => {
     onChange([
       ...parameters,
-      { name, source, value: '', queryParameterName: '', overrideQueryName: false },
+      {
+        name,
+        source,
+        value: '',
+        queryParameterName: '',
+        overrideQueryName: false,
+      },
     ]);
   };
 
@@ -108,11 +123,11 @@ export function ParameterEditor({
   ).length;
 
   return (
-    <div className={cn('space-y-4', className)}>
+    <div className={cn('space-y-2', className)}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Variable className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <Variable className="text-muted-foreground h-4 w-4" />
+          <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
             Parameters
           </h3>
         </div>
@@ -160,9 +175,9 @@ export function ParameterEditor({
       {/* Parameter list */}
       {parameters.length === 0 ? (
         <div className="rounded-md border border-dashed p-4 text-center">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             No parameters defined. Use{' '}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">
+            <code className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">
               {'{{.name}}'}
             </code>{' '}
             syntax in your prompt.
@@ -195,7 +210,7 @@ export function ParameterEditor({
                     {/* Row 1: Name and Source */}
                     <div className="flex gap-2">
                       <div className="flex-1">
-                        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <Label className="text-muted-foreground text-[10px] tracking-wide uppercase">
                           Name
                         </Label>
                         <Input
@@ -212,7 +227,7 @@ export function ParameterEditor({
                         />
                       </div>
                       <div className="w-[140px]">
-                        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <Label className="text-muted-foreground text-[10px] tracking-wide uppercase">
                           Source
                         </Label>
                         <Select
@@ -260,7 +275,7 @@ export function ParameterEditor({
                       </div>
                     ) : param.source === 'value' ? (
                       <div>
-                        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <Label className="text-muted-foreground text-[10px] tracking-wide uppercase">
                           Value
                         </Label>
                         <Input
@@ -277,7 +292,7 @@ export function ParameterEditor({
                       /* Override mode: show editable query param name */
                       <div>
                         <div className="flex items-center justify-between">
-                          <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          <Label className="text-muted-foreground text-[10px] tracking-wide uppercase">
                             Query Parameter Name
                           </Label>
                           <Button
@@ -286,7 +301,7 @@ export function ParameterEditor({
                             size="sm"
                             onClick={() => resetOverride(index)}
                             disabled={disabled}
-                            className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground">
+                            className="text-muted-foreground hover:text-foreground h-5 px-1.5 text-[10px]">
                             <RotateCcw className="mr-1 h-3 w-3" />
                             Reset
                           </Button>
@@ -305,8 +320,8 @@ export function ParameterEditor({
                       </div>
                     ) : (
                       /* Default: show info text with override button */
-                      <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
-                        <p className="text-xs text-muted-foreground">
+                      <div className="bg-muted/50 flex items-center justify-between rounded-md px-3 py-2">
+                        <p className="text-muted-foreground text-xs">
                           Will use parameter name in query.spec.parameters
                         </p>
                         <Button
@@ -315,7 +330,7 @@ export function ParameterEditor({
                           size="sm"
                           onClick={() => enableOverride(index)}
                           disabled={disabled || !param.name}
-                          className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground">
+                          className="text-muted-foreground hover:text-foreground h-6 px-2 text-[10px]">
                           <Settings2 className="mr-1 h-3 w-3" />
                           Override
                         </Button>
@@ -327,7 +342,7 @@ export function ParameterEditor({
                   <div className="flex flex-col items-center gap-1 pt-4">
                     {!isUsed && param.name && (
                       <span
-                        className="text-[9px] text-muted-foreground"
+                        className="text-muted-foreground text-[9px]"
                         title="Not used in prompt">
                         unused
                       </span>
@@ -338,7 +353,7 @@ export function ParameterEditor({
                       size="sm"
                       onClick={() => removeParameter(index)}
                       disabled={disabled}
-                      className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive">
+                      className="text-muted-foreground hover:text-destructive h-6 w-6 p-0">
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -351,7 +366,7 @@ export function ParameterEditor({
 
       {/* Stats */}
       {(parameters.length > 0 || promptParams.length > 0) && (
-        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+        <div className="text-muted-foreground flex items-center gap-3 text-[10px]">
           <span>{parameters.filter(p => p.name).length} defined</span>
           <span>·</span>
           <span>{promptParams.length} used in prompt</span>

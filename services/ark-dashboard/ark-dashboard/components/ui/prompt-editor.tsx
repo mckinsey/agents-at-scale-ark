@@ -56,9 +56,7 @@ export const PromptEditor = forwardRef<PromptEditorRef, PromptEditorProps>(
 
     const renderHighlightedContent = () => {
       if (!value) {
-        return (
-          <span className="text-muted-foreground/50">{placeholder}</span>
-        );
+        return <span className="text-muted-foreground/50">{placeholder}</span>;
       }
 
       const parts = value.split(TEMPLATE_REGEX);
@@ -75,8 +73,8 @@ export const PromptEditor = forwardRef<PromptEditorRef, PromptEditorProps>(
               className={cn(
                 'rounded-sm',
                 isDefined
-                  ? 'bg-emerald-500/25 text-emerald-700 dark:text-emerald-400 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.3)]'
-                  : 'bg-amber-500/25 text-amber-700 dark:text-amber-400 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.4)]',
+                  ? 'bg-emerald-500/25 text-emerald-700 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.3)] dark:text-emerald-400'
+                  : 'bg-amber-500/25 text-amber-700 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.4)] dark:text-amber-400',
               )}
               title={
                 isDefined
@@ -92,19 +90,17 @@ export const PromptEditor = forwardRef<PromptEditorRef, PromptEditorProps>(
     };
 
     return (
-      <div
-        className={cn('relative w-full h-full min-h-[inherit]', className)}
-        style={{ minHeight: 'inherit' }}>
+      <div className={cn('relative w-full', className)}>
         {/* Highlighted background layer */}
         <div
           ref={highlightRef}
           aria-hidden="true"
           className={cn(
             'pointer-events-none absolute inset-0 overflow-hidden',
-            'whitespace-pre-wrap break-words',
+            'break-words whitespace-pre-wrap',
             'rounded-md border border-transparent bg-transparent',
             'p-3 font-mono text-sm leading-relaxed',
-            'h-full min-h-[inherit]',
+            'h-full',
             highlightClassName,
           )}
           style={{ wordBreak: 'break-word' }}>
@@ -121,10 +117,10 @@ export const PromptEditor = forwardRef<PromptEditorRef, PromptEditorProps>(
           placeholder=""
           disabled={disabled}
           className={cn(
-            'relative z-10 h-full min-h-[inherit] w-full resize-none',
+            'relative z-10 h-full w-full resize-none',
             'rounded-md border bg-transparent p-3',
             'font-mono text-sm leading-relaxed',
-            'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+            'focus:ring-ring focus:ring-2 focus:ring-offset-2 focus:outline-none',
             'disabled:cursor-not-allowed disabled:opacity-50',
             textareaClassName,
           )}
@@ -138,4 +134,3 @@ export const PromptEditor = forwardRef<PromptEditorRef, PromptEditorProps>(
     );
   },
 );
-

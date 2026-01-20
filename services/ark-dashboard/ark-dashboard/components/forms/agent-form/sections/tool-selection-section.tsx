@@ -1,11 +1,6 @@
 'use client';
 
-import {
-  ChevronRight,
-  CircleAlert,
-  Trash2,
-  Wrench,
-} from 'lucide-react';
+import { ChevronRight, CircleAlert, Trash2, Wrench } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -35,6 +30,7 @@ interface ToolItemProps {
   onToggle: (tool: Tool, checked: boolean) => void;
   isUnavailable?: boolean;
   onDeleteClick?: (tool: Tool) => void;
+  disabled?: boolean;
 }
 
 function ToolItem({
@@ -43,6 +39,7 @@ function ToolItem({
   onToggle,
   isUnavailable = false,
   onDeleteClick,
+  disabled = false,
 }: ToolItemProps) {
   return (
     <div className="flex flex-row items-start justify-between py-1">
@@ -51,7 +48,7 @@ function ToolItem({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger className="text-left" tabIndex={-1}>
-                <CircleAlert className="mt-0.5 h-4 w-4 text-destructive" />
+                <CircleAlert className="text-destructive mt-0.5 h-4 w-4" />
               </TooltipTrigger>
               <TooltipContent>
                 <p>This tool is unavailable in the system</p>
@@ -64,14 +61,17 @@ function ToolItem({
             checked={isSelected}
             onCheckedChange={checked => onToggle(tool, !!checked)}
             className="mt-0.5"
+            disabled={disabled}
           />
         )}
         <Label
           htmlFor={`tool-${tool.id || tool.name}`}
-          className="flex-1 cursor-pointer text-sm font-normal">
-          <div className="font-medium">{tool.name}</div>
+          className="flex flex-1 cursor-pointer flex-col items-start gap-0.5 text-sm font-normal">
+          <span className="font-medium">{tool.name}</span>
           {tool.description && (
-            <div className="text-xs text-muted-foreground">{tool.description}</div>
+            <span className="text-muted-foreground text-xs">
+              {tool.description}
+            </span>
           )}
         </Label>
       </div>
@@ -80,7 +80,7 @@ function ToolItem({
           type="button"
           variant="ghost"
           size="sm"
-          className="h-6 w-6 p-0 hover:text-destructive"
+          className="hover:text-destructive h-6 w-6 p-0"
           onClick={() => onDeleteClick(tool)}>
           <Trash2 className="h-3 w-3" />
         </Button>
@@ -95,6 +95,7 @@ interface ToolGroupProps {
   isToolSelected: (name: string) => boolean;
   unavailableTools?: Tool[];
   onDeleteClick?: (tool: Tool) => void;
+  disabled?: boolean;
 }
 
 function ToolGroup({
@@ -103,6 +104,7 @@ function ToolGroup({
   isToolSelected,
   unavailableTools = [],
   onDeleteClick,
+  disabled = false,
 }: ToolGroupProps) {
   return (
     <Collapsible defaultOpen className="group/collapsible">
@@ -120,6 +122,7 @@ function ToolGroup({
               onToggle={onToggle}
               isUnavailable={unavailableTools.some(t => t.name === tool.name)}
               onDeleteClick={onDeleteClick}
+              disabled={disabled}
             />
           ))}
         </div>
@@ -135,6 +138,7 @@ export function ToolSelectionSection({
   isToolSelected,
   unavailableTools = [],
   onDeleteClick,
+  disabled = false,
 }: ToolSelectionSectionProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -150,24 +154,29 @@ export function ToolSelectionSection({
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <Wrench className="h-4 w-4 text-muted-foreground" />
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        <Wrench className="text-muted-foreground h-4 w-4" />
+        <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
           Tools
         </h3>
-        <span className="ml-auto text-xs text-muted-foreground">
-          {[...availableTools, ...unavailableTools].filter(t => isToolSelected(t.name)).length} selected
+        <span className="text-muted-foreground ml-auto text-xs">
+          {
+            [...availableTools, ...unavailableTools].filter(t =>
+              isToolSelected(t.name),
+            ).length
+          }{' '}
+          selected
         </span>
       </div>
 
       {toolsLoading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="text-muted-foreground flex items-center gap-2 text-sm">
           <Spinner className="h-4 w-4" />
           Loading tools...
         </div>
       ) : availableTools.length === 0 && unavailableTools.length === 0 ? (
-        <div className="text-sm text-muted-foreground">
+        <div className="text-muted-foreground text-sm">
           No tools available in this namespace
         </div>
       ) : (
@@ -177,19 +186,24 @@ export function ToolSelectionSection({
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="text-sm"
+            disabled={disabled}
           />
           <div className="max-h-[300px] space-y-1 overflow-y-auto rounded-md border p-3">
             {unavailableTools.length > 0 && onDeleteClick && (
               <ToolGroup
-                toolGroup={{ groupName: 'Unavailable Tools', tools: unavailableTools }}
+                toolGroup={{
+                  groupName: 'Unavailable Tools',
+                  tools: unavailableTools,
+                }}
                 onToggle={onToolToggle}
                 isToolSelected={isToolSelected}
                 unavailableTools={unavailableTools}
                 onDeleteClick={onDeleteClick}
+                disabled={disabled}
               />
             )}
             {filteredTools.length === 0 && searchQuery ? (
-              <div className="py-4 text-center text-sm text-muted-foreground">
+              <div className="text-muted-foreground py-4 text-center text-sm">
                 No tools found matching &quot;{searchQuery}&quot;
               </div>
             ) : (
@@ -201,6 +215,7 @@ export function ToolSelectionSection({
                   isToolSelected={isToolSelected}
                   unavailableTools={unavailableTools}
                   onDeleteClick={onDeleteClick}
+                  disabled={disabled}
                 />
               ))
             )}
@@ -210,4 +225,3 @@ export function ToolSelectionSection({
     </div>
   );
 }
-

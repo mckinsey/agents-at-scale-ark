@@ -25,19 +25,17 @@ interface ModelConfigSectionProps {
   form: UseFormReturn<AgentFormValues>;
   models: Model[];
   showExecutionEngine?: boolean;
+  disabled?: boolean;
 }
 
 export function ModelConfigSection({
   form,
   models,
   showExecutionEngine = false,
+  disabled = false,
 }: ModelConfigSectionProps) {
   return (
-    <div className="space-y-4">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-        Model Configuration
-      </h3>
-
+    <div className="space-y-2">
       <FormField
         control={form.control}
         name="selectedModelName"
@@ -47,7 +45,7 @@ export function ModelConfigSection({
             <Select
               onValueChange={field.onChange}
               value={field.value}
-              disabled={form.formState.isSubmitting}>
+              disabled={disabled}>
               <FormControl>
                 <SelectTrigger>
                   <SelectValue placeholder="Select a model" />
@@ -79,7 +77,7 @@ export function ModelConfigSection({
               <FormControl>
                 <Input
                   placeholder="e.g., langchain-executor"
-                  disabled={form.formState.isSubmitting}
+                  disabled={disabled}
                   {...field}
                 />
               </FormControl>
@@ -91,4 +89,3 @@ export function ModelConfigSection({
     </div>
   );
 }
-

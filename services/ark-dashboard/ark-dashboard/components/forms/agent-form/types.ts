@@ -19,6 +19,7 @@ export type AgentFormValues = z.infer<typeof agentFormSchema>;
 export const AgentFormMode = {
   CREATE: 'create',
   EDIT: 'edit',
+  VIEW: 'view',
 } as const;
 
 export type AgentFormMode = (typeof AgentFormMode)[keyof typeof AgentFormMode];
@@ -35,6 +36,7 @@ export interface AgentFormState {
   unavailableTools: Tool[];
   parameters: Parameter[];
   isExperimentalExecutionEngineEnabled: boolean;
+  hasChanges: boolean;
 }
 
 export interface AgentFormActions {
@@ -65,9 +67,9 @@ export interface ToolSelectionSectionProps {
   isToolSelected: (toolName: string) => boolean;
   unavailableTools?: Tool[];
   onDeleteClick?: (tool: Tool) => void;
+  disabled?: boolean;
 }
 
 export interface SkillsDisplaySectionProps {
   skills: Skill[];
 }
-

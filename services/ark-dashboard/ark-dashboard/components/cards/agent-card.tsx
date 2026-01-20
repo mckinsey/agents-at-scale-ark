@@ -64,6 +64,7 @@ export function AgentCard({ agent, onDelete }: AgentCardProps) {
         description={agent.description}
         icon={<IconComponent className="h-5 w-5" />}
         actions={actions}
+        onClick={() => router.push(`/agents/${agent.name}`)}
         footer={
           <div className="flex w-full flex-row items-end justify-between">
             <div className="text-muted-foreground flex items-center gap-2 text-sm">

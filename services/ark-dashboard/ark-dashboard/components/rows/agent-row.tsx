@@ -41,7 +41,9 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
 
   return (
     <>
-      <div className="bg-card hover:bg-accent/5 flex w-full flex-wrap items-center gap-4 rounded-md border px-4 py-3 transition-colors">
+      <div
+        className="bg-card hover:bg-accent/5 flex w-full cursor-pointer flex-wrap items-center gap-4 rounded-md border px-4 py-3 transition-colors"
+        onClick={() => router.push(`/agents/${agent.name}`)}>
         <div className="flex flex-grow items-center gap-3 overflow-hidden">
           <IconComponent className="text-muted-foreground h-5 w-5 flex-shrink-0" />
 
@@ -75,7 +77,10 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
                   variant="ghost"
                   size="sm"
                   className="h-8 w-8 p-0"
-                  onClick={() => router.push(`/agents/${agent.name}/edit`)}>
+                  onClick={e => {
+                    e.stopPropagation();
+                    router.push(`/agents/${agent.name}/edit`);
+                  }}>
                   <Pencil className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
@@ -94,7 +99,10 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
                       'h-8 w-8 p-0',
                       isChatOpen && 'cursor-not-allowed opacity-50',
                     )}
-                    onClick={() => !isChatOpen && setDeleteConfirmOpen(true)}
+                    onClick={e => {
+                      e.stopPropagation();
+                      if (!isChatOpen) setDeleteConfirmOpen(true);
+                    }}
                     disabled={isChatOpen}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -113,7 +121,10 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
                   variant="ghost"
                   size="sm"
                   className={cn('h-8 w-8 p-0', isChatOpen && 'text-primary')}
-                  onClick={() => toggleFloatingChat(agent.name, 'agent')}>
+                  onClick={e => {
+                    e.stopPropagation();
+                    toggleFloatingChat(agent.name, 'agent');
+                  }}>
                   <MessageCircle
                     className={cn('h-4 w-4', isChatOpen && 'fill-primary')}
                   />

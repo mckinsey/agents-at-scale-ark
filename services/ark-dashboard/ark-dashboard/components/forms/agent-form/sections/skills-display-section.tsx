@@ -5,11 +5,11 @@ import type { SkillsDisplaySectionProps } from '../types';
 export function SkillsDisplaySection({ skills }: SkillsDisplaySectionProps) {
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+      <h3 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
         Skills
       </h3>
       {skills.length === 0 ? (
-        <div className="text-sm text-muted-foreground">
+        <div className="text-muted-foreground text-sm">
           No skills available for this agent
         </div>
       ) : (
@@ -20,7 +20,7 @@ export function SkillsDisplaySection({ skills }: SkillsDisplaySectionProps) {
               className="space-y-1 rounded border-l-2 border-blue-500/50 bg-blue-500/5 p-3">
               <div className="text-sm font-medium">{skill.name}</div>
               {skill.description && (
-                <div className="text-xs text-muted-foreground">
+                <div className="text-muted-foreground text-xs">
                   {skill.description}
                 </div>
               )}
@@ -42,4 +42,3 @@ export function SkillsDisplaySection({ skills }: SkillsDisplaySectionProps) {
     </div>
   );
 }
-
