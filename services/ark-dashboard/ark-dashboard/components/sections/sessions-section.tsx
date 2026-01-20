@@ -1983,6 +1983,34 @@ function getStatusBadgeVariant(
 }
 
 function WorkflowStepDetail({ detail }: { detail: WorkflowStepDetail }) {
+  const [logs, setLogs] = useState<string>('');
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [logsError, setLogsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (detail.workflowName && detail.nodeId && detail.namespace) {
+      const fetchLogs = async () => {
+        setLoadingLogs(true);
+        setLogsError(null);
+        try {
+          const { workflowsService } = await import('@/lib/services/workflows');
+          const logData = await workflowsService.getWorkflowLogs(
+            detail.workflowName,
+            detail.nodeId,
+            detail.namespace,
+          );
+          setLogs(logData);
+        } catch (error) {
+          console.error('Failed to fetch logs:', error);
+          setLogsError('Failed to load logs');
+        } finally {
+          setLoadingLogs(false);
+        }
+      };
+      void fetchLogs();
+    }
+  }, [detail.workflowName, detail.nodeId, detail.namespace]);
+
   return (
     <div className="bg-muted/30 mt-2 space-y-3 rounded-md border p-3 text-sm">
       {detail.image && (
@@ -2062,24 +2090,26 @@ function WorkflowStepDetail({ detail }: { detail: WorkflowStepDetail }) {
         </div>
       )}
 
-      {detail.logs && detail.logs.length > 0 && (
+      {(logs || loadingLogs || logsError) && (
         <div className="flex items-start gap-2">
           <Terminal className="text-muted-foreground mt-0.5 h-4 w-4" />
           <div className="flex-1">
-            <span className="text-muted-foreground text-xs">Logs</span>
-            <div className="bg-background mt-1 max-h-32 overflow-auto rounded border p-2">
-              {detail.logs.map((log, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    'font-mono text-xs',
-                    log.includes('[ERROR]') && 'text-red-500',
-                    log.includes('[WARN]') && 'text-yellow-500',
-                    log.includes('[INFO]') && 'text-muted-foreground',
-                  )}>
-                  {log}
+            <span className="text-muted-foreground text-xs">Pod Logs</span>
+            <div className="bg-black mt-1 max-h-64 overflow-auto rounded border p-3">
+              {loadingLogs && (
+                <div className="flex items-center gap-2 text-gray-400">
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  <span className="font-mono text-xs">Loading logs...</span>
                 </div>
-              ))}
+              )}
+              {logsError && (
+                <div className="font-mono text-xs text-red-400">{logsError}</div>
+              )}
+              {logs && !loadingLogs && (
+                <pre className="font-mono text-xs text-green-400 whitespace-pre-wrap">
+                  {logs}
+                </pre>
+              )}
             </div>
           </div>
         </div>

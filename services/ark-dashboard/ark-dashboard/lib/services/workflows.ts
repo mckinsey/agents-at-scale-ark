@@ -34,6 +34,50 @@ export const workflowsService = {
     );
     return response;
   },
+
+  async getPodLogs(
+    podName: string,
+    namespace: string = 'default',
+    container?: string,
+  ): Promise<string> {
+    try {
+      const containerParam = container ? `&container=${container}` : '';
+      const response = await apiClient.get<string>(
+        `/api/v1/resources/api/v1/namespaces/${namespace}/pods/${podName}/log?tailLines=1000${containerParam}`,
+        {
+          headers: {
+            Accept: 'text/plain',
+          },
+        },
+      );
+      return response;
+    } catch (error) {
+      console.error(`Failed to fetch logs for pod ${podName}:`, error);
+      return '';
+    }
+  },
+
+  async getWorkflowLogs(
+    workflowName: string,
+    nodeId: string,
+    namespace: string = 'default',
+  ): Promise<string> {
+    try {
+      // Use Argo Workflows API which accesses archived logs from Minio
+      const response = await apiClient.get<string>(
+        `/api/v1/resources/apis/argoproj.io/v1alpha1/namespaces/${namespace}/workflows/${workflowName}/${nodeId}/log`,
+        {
+          headers: {
+            Accept: 'text/plain',
+          },
+        },
+      );
+      return response;
+    } catch (error) {
+      console.error(`Failed to fetch workflow logs for ${workflowName}/${nodeId}:`, error);
+      return '';
+    }
+  },
 };
 
 export function buildNodeHierarchy(

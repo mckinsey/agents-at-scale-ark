@@ -23,11 +23,8 @@ argo-workflows:
     # Workflow defaults - applied to all workflows
     workflowDefaults:
       spec:
-        # Reference the artifact repository ConfigMap when Minio is enabled
-        # This is populated by the artifact-repository.yaml template
-        artifactRepositoryRef:
-          configMap: artifact-repositories
-          key: default
+        # Note: artifactRepositoryRef is only included when Minio is enabled
+        # See the chart template for conditional inclusion
 
   # Server configuration
   server:
@@ -96,7 +93,7 @@ ark-tenant:
 # Workflows will be configured to use Minio as the default artifact repository.
 # Note: This requires the Minio Operator to be installed in the cluster.
 minio:
-  enabled: false
+  enabled: true
   tenant:
     certificate:
       requestAutoCert: false

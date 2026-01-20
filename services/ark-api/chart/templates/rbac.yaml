@@ -32,6 +32,10 @@ rules:
   - apiGroups: [""]
     resources: ["services"]
     verbs: ["get", "list"]
+  # Permission to read pods and pod logs for workflow debugging
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list"]
   # Gateway API resources
   - apiGroups: ["gateway.networking.k8s.io"]
     resources: ["httproutes", "gateways"]
