@@ -1,5 +1,4 @@
 import {
-  storedIsA2ATasksEnabledAtom,
   storedIsBrokerEnabledAtom,
   storedIsChatStreamingEnabledAtom,
   storedIsExperimentalDarkModeEnabledAtom,
@@ -33,16 +32,6 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
           </span>
         ),
         atom: storedIsExperimentalExecutionEngineEnabledAtom,
-      },
-      {
-        feature: 'A2A Tasks',
-        description: (
-          <span>
-            Enables the experimental{' '}
-            <span className="font-bold">A2A Tasks</span> functionality
-          </span>
-        ),
-        atom: storedIsA2ATasksEnabledAtom,
       },
       {
         feature: 'Broker',
