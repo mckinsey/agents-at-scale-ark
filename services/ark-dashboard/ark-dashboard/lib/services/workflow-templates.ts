@@ -27,12 +27,30 @@ export interface Workflow {
   metadata: {
     name: string;
     namespace?: string;
+    creationTimestamp?: string;
   };
   spec: {
     workflowTemplateRef: {
       name: string;
     };
   };
+  status?: {
+    phase?: string;
+    finishedAt?: string;
+    startedAt?: string;
+  };
+}
+
+export interface WorkflowList {
+  kind: string;
+  items: Workflow[];
+}
+
+export interface WorkflowStats {
+  total: number;
+  succeeded: number;
+  running: number;
+  failed: number;
 }
 
 export const workflowTemplatesService = {
@@ -81,7 +99,47 @@ export const workflowTemplatesService = {
       '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow',
       workflow,
     );
-    console.log('Workflow creation response:', response);
     return response;
+  },
+
+  async getStats(templateName: string): Promise<WorkflowStats> {
+    const response = await apiClient.get<WorkflowList>(
+      '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow',
+    );
+
+    const oneDayAgo = new Date();
+    oneDayAgo.setHours(oneDayAgo.getHours() - 24);
+
+    const recentWorkflows = response.items.filter(workflow => {
+      const matchesTemplate =
+        workflow.spec.workflowTemplateRef?.name === templateName;
+      const createdAt = workflow.metadata.creationTimestamp
+        ? new Date(workflow.metadata.creationTimestamp)
+        : null;
+      const isRecent = createdAt ? createdAt >= oneDayAgo : false;
+
+      return matchesTemplate && isRecent;
+    });
+
+    const stats: WorkflowStats = {
+      total: recentWorkflows.length,
+      succeeded: 0,
+      running: 0,
+      failed: 0,
+    };
+
+    recentWorkflows.forEach(workflow => {
+      const phase = workflow.status?.phase?.toLowerCase();
+
+      if (phase === 'succeeded') {
+        stats.succeeded++;
+      } else if (phase === 'running' || phase === 'pending') {
+        stats.running++;
+      } else if (phase === 'failed' || phase === 'error') {
+        stats.failed++;
+      }
+    });
+
+    return stats;
   },
 };

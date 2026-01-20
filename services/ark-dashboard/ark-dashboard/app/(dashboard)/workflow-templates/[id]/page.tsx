@@ -13,6 +13,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+import { WorkflowStatsCard } from '@/components/cards/workflow-stats-card';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import type { Flow } from '@/components/rows/flow-row';
@@ -20,7 +21,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { WorkflowDagViewer } from '@/components/workflow-dag-viewer';
-import { workflowTemplatesService } from '@/lib/services/workflow-templates';
+import {
+  type WorkflowStats,
+  workflowTemplatesService,
+} from '@/lib/services/workflow-templates';
 
 export default function FlowDetailPage() {
   const params = useParams();
@@ -28,6 +32,8 @@ export default function FlowDetailPage() {
   const [flow, setFlow] = useState<Flow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<WorkflowStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   useEffect(() => {
     async function fetchFlow() {
@@ -59,7 +65,21 @@ export default function FlowDetailPage() {
       }
     }
 
+    async function fetchStats() {
+      try {
+        setStatsLoading(true);
+        const workflowStats = await workflowTemplatesService.getStats(flowId);
+        setStats(workflowStats);
+      } catch (err) {
+        console.error('Failed to fetch workflow stats:', err);
+        setStats(null);
+      } finally {
+        setStatsLoading(false);
+      }
+    }
+
     fetchFlow();
+    fetchStats();
   }, [flowId]);
 
   const breadcrumbs: BreadcrumbElement[] = [
@@ -135,6 +155,9 @@ export default function FlowDetailPage() {
       toast.success('Workflow started', {
         description: `Created workflow: ${workflow.metadata.name}`,
       });
+
+      const workflowStats = await workflowTemplatesService.getStats(flowId);
+      setStats(workflowStats);
     } catch (err) {
       console.error('Failed to start workflow:', err);
       toast.error('Failed to start workflow', {
@@ -209,6 +232,12 @@ export default function FlowDetailPage() {
             </Button>
           </div>
         </div>
+
+        <WorkflowStatsCard
+          templateName={flowId}
+          stats={stats}
+          isLoading={statsLoading}
+        />
 
         {flow.manifest && (
           <Card>
