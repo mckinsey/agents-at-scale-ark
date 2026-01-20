@@ -3,10 +3,10 @@
 import {
   Copy,
   Download,
+  ExternalLink,
   FileCode,
   Network,
   Play,
-  Sparkle,
   Workflow,
 } from 'lucide-react';
 import { useParams } from 'next/navigation';
@@ -25,6 +25,7 @@ import {
   type WorkflowStats,
   workflowTemplatesService,
 } from '@/lib/services/workflow-templates';
+import { countWorkflowTasks } from '@/lib/utils/workflow';
 
 export default function FlowDetailPage() {
   const params = useParams();
@@ -47,11 +48,12 @@ export default function FlowDetailPage() {
         ]);
 
         const annotations = template.metadata.annotations || {};
+        const stages = countWorkflowTasks(template.spec);
         const flowData: Flow = {
           id: template.metadata.name,
           title: annotations['workflows.argoproj.io/title'],
           description: annotations['workflows.argoproj.io/description'],
-          stages: 0,
+          stages,
           manifest: yamlManifest,
         };
 
@@ -109,19 +111,6 @@ export default function FlowDetailPage() {
     );
   }
 
-  const handleCopyId = async () => {
-    try {
-      await navigator.clipboard.writeText(flow.id);
-      toast.success('Copied', {
-        description: 'Flow ID copied to clipboard',
-      });
-    } catch {
-      toast.error('Failed to copy', {
-        description: 'Could not copy flow ID to clipboard',
-      });
-    }
-  };
-
   const handleCopyManifest = async () => {
     if (!flow.manifest) return;
     try {
@@ -149,6 +138,19 @@ export default function FlowDetailPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleCopyWorkflowName = async () => {
+    try {
+      await navigator.clipboard.writeText(flowId);
+      toast.success('Copied', {
+        description: 'Workflow name copied to clipboard',
+      });
+    } catch {
+      toast.error('Failed to copy', {
+        description: 'Could not copy workflow name to clipboard',
+      });
+    }
+  };
+
   const handleRunWorkflow = async () => {
     try {
       const workflow = await workflowTemplatesService.run(flowId);
@@ -167,8 +169,6 @@ export default function FlowDetailPage() {
     }
   };
 
-  const isComposerFlow = !!(flow.title && flow.description);
-
   return (
     <>
       <PageHeader
@@ -178,11 +178,8 @@ export default function FlowDetailPage() {
       <div className="flex flex-col gap-6 p-6">
         <div className="bg-card flex w-full flex-wrap items-center gap-4 rounded-md border px-4 py-3">
           <div className="flex flex-grow items-center gap-3 overflow-hidden">
-            <div className="relative p-2">
+            <div className="p-2">
               <Workflow className="text-muted-foreground h-8 w-8 flex-shrink-0" />
-              {isComposerFlow && (
-                <Sparkle className="fill-primary text-primary absolute -top-0.5 -right-0.5 h-3.5 w-3.5 opacity-60" />
-              )}
             </div>
 
             <div className="flex min-w-0 flex-col gap-1">
@@ -196,7 +193,7 @@ export default function FlowDetailPage() {
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6 cursor-pointer"
-                  onClick={handleCopyId}>
+                  onClick={handleCopyWorkflowName}>
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
@@ -222,14 +219,27 @@ export default function FlowDetailPage() {
               <span className="font-medium">{flow.stages}</span>
               <span>{flow.stages === 1 ? 'stage' : 'stages'}</span>
             </div>
-            <Button
-              variant="default"
-              size="sm"
-              className="cursor-pointer"
-              onClick={handleRunWorkflow}>
-              <Play className="mr-2 h-4 w-4" />
-              Run
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 cursor-pointer p-0"
+                asChild>
+                <a
+                  href={`http://argo.127.0.0.1.nip.io:8080/workflow-templates/default/${flowId}`}
+                  target="_blank"
+                  rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 cursor-pointer p-0"
+                onClick={handleRunWorkflow}>
+                <Play className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
 

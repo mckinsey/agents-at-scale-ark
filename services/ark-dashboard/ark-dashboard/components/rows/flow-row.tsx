@@ -1,9 +1,15 @@
 'use client';
 
-import { Play, Sparkle, Workflow } from 'lucide-react';
+import { ExternalLink, Eye, Play, Workflow } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 export interface Flow {
   id: string;
@@ -19,64 +25,93 @@ interface FlowRowProps {
 }
 
 export function FlowRow({ flow, onRun }: FlowRowProps) {
-  const isComposerFlow = !!(flow.title && flow.description);
-
-  const handleRunClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleRunClick = () => {
     onRun?.(flow.id);
   };
 
   return (
-    <Link href={`/workflow-templates/${flow.id}`} className="block w-full">
-      <div className="bg-card hover:bg-accent/5 hover:border-primary/50 flex w-full cursor-pointer items-center gap-4 overflow-hidden rounded-md border px-4 py-3 transition-colors">
-        <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
-          <div className="relative flex-shrink-0">
-            <Workflow className="text-muted-foreground h-5 w-5 flex-shrink-0" />
-            {isComposerFlow && (
-              <Sparkle className="fill-primary text-primary absolute -top-1 -right-1 h-2.5 w-2.5 opacity-60" />
-            )}
-          </div>
-
-          <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden">
-            <p
-              className="truncate font-mono text-sm font-medium"
-              title={flow.id}>
-              {flow.id}
-            </p>
-            {flow.title && (
-              <p
-                className="text-muted-foreground truncate text-xs font-medium"
-                title={flow.title}>
-                {flow.title}
-              </p>
-            )}
-            {flow.description && (
-              <p
-                className="text-muted-foreground truncate text-xs"
-                title={flow.description}>
-                {flow.description}
-              </p>
-            )}
-          </div>
+    <div className="bg-card hover:bg-accent/5 flex w-full items-center gap-4 overflow-hidden rounded-md border px-4 py-3 transition-colors">
+      <div className="flex flex-grow items-center gap-3 overflow-hidden">
+        <div className="flex-shrink-0">
+          <Workflow className="text-muted-foreground h-5 w-5 flex-shrink-0" />
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="text-muted-foreground flex items-center gap-1 text-xs">
-            <span className="font-medium">{flow.stages}</span>
-            <span>{flow.stages === 1 ? 'stage' : 'stages'}</span>
-          </div>
-          {onRun && (
-            <Button
-              variant="default"
-              size="sm"
-              className="cursor-pointer"
-              onClick={handleRunClick}>
-              <Play className="h-4 w-4" />
-            </Button>
+        <div className="flex max-w-[400px] min-w-0 flex-col gap-1">
+          <p className="truncate text-sm font-medium" title={flow.id}>
+            {flow.id}
+          </p>
+          {flow.title && (
+            <p
+              className="text-muted-foreground truncate text-xs font-medium"
+              title={flow.title}>
+              {flow.title}
+            </p>
+          )}
+          {flow.description && (
+            <p
+              className="text-muted-foreground truncate text-xs"
+              title={flow.description}>
+              {flow.description}
+            </p>
           )}
         </div>
       </div>
-    </Link>
+
+      <div className="flex flex-shrink-0 items-center gap-1">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 cursor-pointer p-0"
+                asChild>
+                <Link href={`/workflow-templates/${flow.id}`}>
+                  <Eye className="h-4 w-4" />
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>View template</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 cursor-pointer p-0"
+                asChild>
+                <a
+                  href={`http://argo.127.0.0.1.nip.io:8080/workflow-templates/default/${flow.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Open in Argo</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        {onRun && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 cursor-pointer p-0"
+                  onClick={handleRunClick}>
+                  <Play className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Run workflow</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
+    </div>
   );
 }

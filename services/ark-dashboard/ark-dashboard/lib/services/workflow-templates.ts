@@ -8,11 +8,31 @@ export interface WorkflowTemplateMetadata {
   creationTimestamp?: string;
 }
 
+export interface WorkflowSpec {
+  entrypoint?: string;
+  templates?: Array<{
+    name?: string;
+    dag?: {
+      tasks: Array<{
+        name: string;
+        template: string;
+        dependencies?: string[];
+      }>;
+    };
+    steps?: Array<
+      Array<{
+        name: string;
+        template?: string;
+      }>
+    >;
+  }>;
+}
+
 export interface WorkflowTemplate {
   apiVersion: string;
   kind: string;
   metadata: WorkflowTemplateMetadata;
-  spec?: unknown;
+  spec?: WorkflowSpec;
 }
 
 export interface WorkflowTemplateList {

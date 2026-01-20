@@ -47,57 +47,57 @@ export function WorkflowStatsCard({ templateName, stats, isLoading }: Props) {
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <Link
               href={`/sessions?template=${encodeURIComponent(templateName)}`}
-              className="flex flex-col items-center space-y-1">
-              <div className="text-muted-foreground flex items-start gap-1.5 text-xs">
+              className="group flex flex-col items-center space-y-1 transition-all">
+              <div className="text-muted-foreground flex items-start gap-1.5 text-xs opacity-80 transition-opacity group-hover:opacity-100">
                 <BarChart3 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                 <span className="flex items-start gap-0.5">
                   Total
                   <ArrowUpRight className="h-2.5 w-2.5 opacity-40" />
                 </span>
               </div>
-              <div className="text-2xl font-bold hover:underline">
+              <div className="text-2xl font-bold opacity-80 transition-opacity group-hover:opacity-100">
                 {stats.total}
               </div>
             </Link>
             <Link
               href={`/sessions?template=${encodeURIComponent(templateName)}&status=succeeded`}
-              className="flex flex-col items-center space-y-1">
-              <div className="flex items-start gap-1.5 text-xs text-green-600 dark:text-green-500">
+              className="group flex flex-col items-center space-y-1 transition-all">
+              <div className="flex items-start gap-1.5 text-xs text-green-600 opacity-80 transition-opacity group-hover:opacity-100 dark:text-green-500">
                 <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                 <span className="flex items-start gap-0.5">
                   Succeeded
                   <ArrowUpRight className="h-2.5 w-2.5 opacity-40" />
                 </span>
               </div>
-              <div className="text-2xl font-bold hover:underline">
+              <div className="text-2xl font-bold text-green-600 opacity-80 transition-opacity group-hover:opacity-100 dark:text-green-500">
                 {stats.succeeded}
               </div>
             </Link>
             <Link
               href={`/sessions?template=${encodeURIComponent(templateName)}&status=running`}
-              className="flex flex-col items-center space-y-1">
-              <div className="flex items-start gap-1.5 text-xs text-blue-600 dark:text-blue-500">
+              className="group flex flex-col items-center space-y-1 transition-all">
+              <div className="flex items-start gap-1.5 text-xs text-blue-600 opacity-80 transition-opacity group-hover:opacity-100 dark:text-blue-500">
                 <Clock className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                 <span className="flex items-start gap-0.5">
                   Running
                   <ArrowUpRight className="h-2.5 w-2.5 opacity-40" />
                 </span>
               </div>
-              <div className="text-2xl font-bold hover:underline">
+              <div className="text-2xl font-bold text-blue-600 opacity-80 transition-opacity group-hover:opacity-100 dark:text-blue-500">
                 {stats.running}
               </div>
             </Link>
             <Link
               href={`/sessions?template=${encodeURIComponent(templateName)}&status=failed`}
-              className="flex flex-col items-center space-y-1">
-              <div className="flex items-start gap-1.5 text-xs text-red-600 dark:text-red-500">
+              className="group flex flex-col items-center space-y-1 transition-all">
+              <div className="flex items-start gap-1.5 text-xs text-red-600 opacity-80 transition-opacity group-hover:opacity-100 dark:text-red-500">
                 <XCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                 <span className="flex items-start gap-0.5">
                   Failed
                   <ArrowUpRight className="h-2.5 w-2.5 opacity-40" />
                 </span>
               </div>
-              <div className="text-2xl font-bold hover:underline">
+              <div className="text-2xl font-bold text-red-600 opacity-80 transition-opacity group-hover:opacity-100 dark:text-red-500">
                 {stats.failed}
               </div>
             </Link>

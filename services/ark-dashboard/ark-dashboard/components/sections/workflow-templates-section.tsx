@@ -18,14 +18,16 @@ import {
   type WorkflowTemplate,
   workflowTemplatesService,
 } from '@/lib/services/workflow-templates';
+import { countWorkflowTasks } from '@/lib/utils/workflow';
 
 function mapWorkflowTemplateToFlow(template: WorkflowTemplate): Flow {
   const annotations = template.metadata.annotations || {};
+  const stages = countWorkflowTasks(template.spec);
   return {
     id: template.metadata.name,
     title: annotations['workflows.argoproj.io/title'],
     description: annotations['workflows.argoproj.io/description'],
-    stages: 0,
+    stages,
   };
 }
 
