@@ -6,8 +6,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 
-	arkv1alpha1 "mckinsey.com/ark-apiserver/pkg/apis/ark/v1alpha1"
-	arkv1prealpha1 "mckinsey.com/ark-apiserver/pkg/apis/ark/v1prealpha1"
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 )
 
 type ArkTypeConverter struct{}

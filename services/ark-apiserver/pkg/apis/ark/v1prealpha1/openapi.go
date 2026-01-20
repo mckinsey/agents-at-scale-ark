@@ -7,14 +7,14 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"mckinsey.com/ark-apiserver/pkg/apis/ark/v1prealpha1.A2AServer":              schemaGenericResource("A2AServer", ref),
-		"mckinsey.com/ark-apiserver/pkg/apis/ark/v1prealpha1.A2AServerList":          schemaGenericResourceList("A2AServer", ref),
-		"mckinsey.com/ark-apiserver/pkg/apis/ark/v1prealpha1.A2AServerSpec":          schemaGenericSpec(ref),
-		"mckinsey.com/ark-apiserver/pkg/apis/ark/v1prealpha1.A2AServerStatus":        schemaGenericStatus(ref),
-		"mckinsey.com/ark-apiserver/pkg/apis/ark/v1prealpha1.ExecutionEngine":        schemaGenericResource("ExecutionEngine", ref),
-		"mckinsey.com/ark-apiserver/pkg/apis/ark/v1prealpha1.ExecutionEngineList":    schemaGenericResourceList("ExecutionEngine", ref),
-		"mckinsey.com/ark-apiserver/pkg/apis/ark/v1prealpha1.ExecutionEngineSpec":    schemaGenericSpec(ref),
-		"mckinsey.com/ark-apiserver/pkg/apis/ark/v1prealpha1.ExecutionEngineStatus":  schemaGenericStatus(ref),
+		"mckinsey.com/ark/api/v1prealpha1.A2AServer":              schemaGenericResource("A2AServer", ref),
+		"mckinsey.com/ark/api/v1prealpha1.A2AServerList":          schemaGenericResourceList("A2AServer", ref),
+		"mckinsey.com/ark/api/v1prealpha1.A2AServerSpec":          schemaGenericSpec(ref),
+		"mckinsey.com/ark/api/v1prealpha1.A2AServerStatus":        schemaGenericStatus(ref),
+		"mckinsey.com/ark/api/v1prealpha1.ExecutionEngine":        schemaGenericResource("ExecutionEngine", ref),
+		"mckinsey.com/ark/api/v1prealpha1.ExecutionEngineList":    schemaGenericResourceList("ExecutionEngine", ref),
+		"mckinsey.com/ark/api/v1prealpha1.ExecutionEngineSpec":    schemaGenericSpec(ref),
+		"mckinsey.com/ark/api/v1prealpha1.ExecutionEngineStatus":  schemaGenericStatus(ref),
 	}
 }
 

@@ -25,8 +25,10 @@ import (
 	"k8s.io/kube-openapi/pkg/spec3"
 	"k8s.io/kube-openapi/pkg/validation/spec"
 
-	arkv1alpha1 "mckinsey.com/ark-apiserver/pkg/apis/ark/v1alpha1"
-	arkv1prealpha1 "mckinsey.com/ark-apiserver/pkg/apis/ark/v1prealpha1"
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	apiserverv1alpha1 "mckinsey.com/ark-apiserver/pkg/apis/ark/v1alpha1"
+	apiserverv1prealpha1 "mckinsey.com/ark-apiserver/pkg/apis/ark/v1prealpha1"
 	_ "mckinsey.com/ark-apiserver/pkg/metrics"
 	genericregistry "mckinsey.com/ark-apiserver/pkg/registry/generic"
 	"mckinsey.com/ark-apiserver/pkg/storage"
@@ -48,8 +50,8 @@ func init() {
 }
 
 func GetCombinedOpenAPIDefinitions(ref openapicommon.ReferenceCallback) map[string]openapicommon.OpenAPIDefinition {
-	defs := arkv1alpha1.GetOpenAPIDefinitions(ref)
-	for k, v := range arkv1prealpha1.GetOpenAPIDefinitions(ref) {
+	defs := apiserverv1alpha1.GetOpenAPIDefinitions(ref)
+	for k, v := range apiserverv1prealpha1.GetOpenAPIDefinitions(ref) {
 		defs[k] = v
 	}
 	return defs
@@ -184,7 +186,7 @@ func (o *ArkServerOptions) RunArkServer(stopCh <-chan struct{}) error {
 		return err
 	}
 
-	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(arkv1alpha1.GroupName, Scheme, ParameterCodec, Codecs)
+	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(arkv1alpha1.GroupVersion.Group, Scheme, ParameterCodec, Codecs)
 
 	queryConfig := genericregistry.ResourceConfig{
 		Kind:         "Query",
@@ -257,7 +259,7 @@ func (o *ArkServerOptions) RunArkServer(stopCh <-chan struct{}) error {
 		NewListFunc:  func() runtime.Object { return &arkv1alpha1.A2ATaskList{} },
 	}
 
-	apiGroupInfo.VersionedResourcesStorageMap[arkv1alpha1.SchemeGroupVersion.Version] = map[string]rest.Storage{
+	apiGroupInfo.VersionedResourcesStorageMap[arkv1alpha1.GroupVersion.Version] = map[string]rest.Storage{
 		"queries":            genericregistry.NewGenericStorage(backend, converter, queryConfig),
 		"queries/status":     genericregistry.NewStatusStorage(backend, converter, queryConfig),
 		"agents":             genericregistry.NewGenericStorage(backend, converter, agentConfig),
@@ -295,7 +297,7 @@ func (o *ArkServerOptions) RunArkServer(stopCh <-chan struct{}) error {
 		NewListFunc:  func() runtime.Object { return &arkv1prealpha1.ExecutionEngineList{} },
 	}
 
-	apiGroupInfo.VersionedResourcesStorageMap[arkv1prealpha1.SchemeGroupVersion.Version] = map[string]rest.Storage{
+	apiGroupInfo.VersionedResourcesStorageMap[arkv1prealpha1.GroupVersion.Version] = map[string]rest.Storage{
 		"a2aservers":              genericregistry.NewGenericStorage(backend, converter, a2aserverConfig),
 		"a2aservers/status":       genericregistry.NewStatusStorage(backend, converter, a2aserverConfig),
 		"executionengines":        genericregistry.NewGenericStorage(backend, converter, executionengineConfig),

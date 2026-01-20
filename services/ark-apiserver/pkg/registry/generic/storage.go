@@ -17,8 +17,8 @@ import (
 	genericrequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
 
-	arkv1alpha1 "mckinsey.com/ark-apiserver/pkg/apis/ark/v1alpha1"
-	arkv1prealpha1 "mckinsey.com/ark-apiserver/pkg/apis/ark/v1prealpha1"
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark-apiserver/pkg/metrics"
 	arkstorage "mckinsey.com/ark-apiserver/pkg/storage"
 )
@@ -85,7 +85,7 @@ func (s *GenericStorage) Get(ctx context.Context, name string, options *metav1.G
 	if err != nil {
 		metrics.RecordStorageOperation("get", s.config.Kind, "error")
 		metrics.RecordStorageLatency("get", s.config.Kind, start)
-		return nil, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupName, Resource: s.config.Resource}, name)
+		return nil, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
 	}
 	metrics.RecordStorageOperation("get", s.config.Kind, "success")
 	metrics.RecordStorageLatency("get", s.config.Kind, start)
@@ -179,7 +179,7 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 			return created, true, err
 		}
 		metrics.RecordStorageOperation("update", s.config.Kind, "not_found")
-		return nil, false, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupName, Resource: s.config.Resource}, name)
+		return nil, false, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
 	}
 
 	updated, err := objInfo.UpdatedObject(ctx, existing)
@@ -214,7 +214,7 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 	existing, err := s.backend.Get(storageContext(ctx), s.config.Kind, namespace, name)
 	if err != nil {
 		metrics.RecordStorageOperation("delete", s.config.Kind, "not_found")
-		return nil, false, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupName, Resource: s.config.Resource}, name)
+		return nil, false, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
 	}
 
 	if deleteValidation != nil {
