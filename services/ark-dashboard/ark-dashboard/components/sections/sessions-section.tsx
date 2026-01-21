@@ -2,6 +2,7 @@
 
 import {
   AlertCircle,
+  ArrowUpDown,
   Bot,
   CheckCircle2,
   ChevronDown,
@@ -18,6 +19,7 @@ import {
   MessageSquare,
   Play,
   RefreshCw,
+  Search,
   Terminal,
   Users,
   Workflow,
@@ -29,6 +31,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -44,6 +47,7 @@ type SessionSourceFilter = 'all' | 'workflows' | 'teams' | 'agents';
 type SessionType = 'workflow' | 'team' | 'agent';
 type StepStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped';
 type WorkflowStepType = 'dag' | 'steps' | 'container' | 'script' | 'suspend';
+type SortOrder = 'newest' | 'oldest';
 type TeamStepType =
   | 'orchestrator'
   | 'agent'
@@ -2529,27 +2533,43 @@ export function SessionsSection() {
     null,
   );
   const [useRealData, setUseRealData] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
 
   const { workflows, loading, error, refetch: refetchWorkflows } = useWorkflows('default');
 
   const allSessions = mapArgoWorkflowsToSessions(workflows);
 
-  const filteredSessions = allSessions.filter(session => {
-    if (sourceFilter === 'all') return true;
-    if (sourceFilter === 'workflows') return session.type === 'workflow';
-    return true;
-  });
+  const filteredAndSortedSessions = allSessions
+    .filter(session => {
+      if (sourceFilter === 'all') return true;
+      if (sourceFilter === 'workflows') return session.type === 'workflow';
+      return true;
+    })
+    .filter(session => {
+      if (!searchQuery.trim()) return true;
+      const query = searchQuery.toLowerCase();
+      return (
+        session.name.toLowerCase().includes(query) ||
+        session.status.toLowerCase().includes(query)
+      );
+    })
+    .sort((a, b) => {
+      const timeA = new Date(a.startedAt).getTime();
+      const timeB = new Date(b.startedAt).getTime();
+      return sortOrder === 'newest' ? timeB - timeA : timeA - timeB;
+    });
 
   useEffect(() => {
     if (
-      filteredSessions.length > 0 &&
-      !filteredSessions.find(s => s.id === selectedSessionId)
+      filteredAndSortedSessions.length > 0 &&
+      !filteredAndSortedSessions.find(s => s.id === selectedSessionId)
     ) {
-      setSelectedSessionId(filteredSessions[0].id);
+      setSelectedSessionId(filteredAndSortedSessions[0].id);
     }
-  }, [filteredSessions, selectedSessionId]);
+  }, [filteredAndSortedSessions, selectedSessionId]);
 
-  const selectedSessionFromList = filteredSessions.find(s => s.id === selectedSessionId);
+  const selectedSessionFromList = filteredAndSortedSessions.find(s => s.id === selectedSessionId);
 
   const { workflow: selectedWorkflowDetail, loading: loadingDetail } = useWorkflow(
     useRealData && selectedSessionFromList?.type === 'workflow' ? selectedSessionId || '' : '',
@@ -2586,6 +2606,26 @@ export function SessionsSection() {
   return (
     <div className="flex flex-1 flex-col gap-4 p-4">
       <div className="flex items-center gap-4">
+        <div className="relative">
+          <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
+          <Input
+            type="text"
+            placeholder="Search by name or status..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Select value={sortOrder} onValueChange={value => setSortOrder(value as SortOrder)}>
+          <SelectTrigger className="w-40">
+            <ArrowUpDown className="mr-2 h-4 w-4" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="newest">Newest First</SelectItem>
+            <SelectItem value="oldest">Oldest First</SelectItem>
+          </SelectContent>
+        </Select>
         {loading && (
           <span className="text-muted-foreground text-sm">Loading...</span>
         )}
@@ -2595,8 +2635,8 @@ export function SessionsSection() {
           </span>
         )}
         <span className="text-muted-foreground text-sm">
-          {filteredSessions.length} session
-          {filteredSessions.length !== 1 ? 's' : ''}
+          {filteredAndSortedSessions.length} session
+          {filteredAndSortedSessions.length !== 1 ? 's' : ''}
         </span>
       </div>
 
@@ -2605,10 +2645,10 @@ export function SessionsSection() {
           <RefreshCw className="h-8 w-8 animate-spin" />
           <span>Loading sessions...</span>
         </div>
-      ) : filteredSessions.length > 0 ? (
+      ) : filteredAndSortedSessions.length > 0 ? (
         <div className="flex flex-1 gap-4 overflow-hidden">
           <div className="flex w-80 flex-col gap-2 overflow-auto">
-            {filteredSessions.map(session => (
+            {filteredAndSortedSessions.map(session => (
               <SessionListItem
                 key={session.id}
                 session={session}
@@ -2631,8 +2671,15 @@ export function SessionsSection() {
           </div>
         </div>
       ) : (
-        <div className="text-muted-foreground flex flex-1 items-center justify-center">
-          No {sourceFilter === 'all' ? '' : sourceFilter} sessions to display
+        <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center gap-2">
+          {searchQuery ? (
+            <>
+              <Search className="h-12 w-12 opacity-20" />
+              <span>No sessions found matching "{searchQuery}"</span>
+            </>
+          ) : (
+            <span>No {sourceFilter === 'all' ? '' : sourceFilter} sessions to display</span>
+          )}
         </div>
       )}
     </div>
