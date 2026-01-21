@@ -33,7 +33,7 @@
     "jsdom": "^25.0.1",
     "pagefind": "^1.3.0",
     "serve": "^14.2.5",
-    "vitest": "^2.1.8"
+    "vitest": "^4.0.17"
   },
   "optionalDependencies": {
     "@napi-rs/simple-git-linux-arm64-gnu": "^0.1.19",
