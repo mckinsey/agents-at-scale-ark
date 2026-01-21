@@ -8,8 +8,17 @@ export interface WorkflowTemplateMetadata {
   creationTimestamp?: string;
 }
 
+export interface WorkflowParameter {
+  name: string;
+  value?: string;
+  default?: string;
+}
+
 export interface WorkflowSpec {
   entrypoint?: string;
+  arguments?: {
+    parameters?: WorkflowParameter[];
+  };
   templates?: Array<{
     name?: string;
     dag?: {
@@ -52,6 +61,12 @@ export interface Workflow {
   spec: {
     workflowTemplateRef: {
       name: string;
+    };
+    arguments?: {
+      parameters?: Array<{
+        name: string;
+        value: string;
+      }>;
     };
   };
   status?: {
@@ -100,7 +115,10 @@ export const workflowTemplatesService = {
     return response;
   },
 
-  async run(templateName: string): Promise<Workflow> {
+  async run(
+    templateName: string,
+    parameters?: Record<string, string>,
+  ): Promise<Workflow> {
     const timestamp = Date.now();
     const workflow: Workflow = {
       apiVersion: 'argoproj.io/v1alpha1',
@@ -115,11 +133,26 @@ export const workflowTemplatesService = {
       },
     };
 
+    if (parameters && Object.keys(parameters).length > 0) {
+      workflow.spec.arguments = {
+        parameters: Object.entries(parameters).map(([name, value]) => ({
+          name,
+          value,
+        })),
+      };
+    }
+
     const response = await apiClient.post<Workflow>(
       '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow',
       workflow,
     );
     return response;
+  },
+
+  async delete(name: string): Promise<void> {
+    await apiClient.delete(
+      `/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/${name}`,
+    );
   },
 
   async getStats(templateName: string): Promise<WorkflowStats> {

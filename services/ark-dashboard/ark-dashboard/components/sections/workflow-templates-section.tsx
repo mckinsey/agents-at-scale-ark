@@ -32,37 +32,55 @@ function mapWorkflowTemplateToFlow(template: WorkflowTemplate): Flow {
 }
 
 export function WorkflowTemplatesSection() {
-  const [flows, setFlows] = useState<Flow[]>([]);
+  const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const showLoading = useDelayedLoading(loading);
 
-  useEffect(() => {
-    async function fetchFlows() {
-      try {
-        setLoading(true);
-        const templates = await workflowTemplatesService.list();
-        const mappedFlows = templates.map(mapWorkflowTemplateToFlow);
-        setFlows(mappedFlows);
-      } catch (error) {
-        console.error('Failed to fetch workflow templates:', error);
-        setFlows([]);
-      } finally {
-        setLoading(false);
-      }
+  const fetchFlows = async () => {
+    try {
+      setLoading(true);
+      const fetchedTemplates = await workflowTemplatesService.list();
+      setTemplates(fetchedTemplates);
+    } catch (error) {
+      console.error('Failed to fetch workflow templates:', error);
+      setTemplates([]);
+    } finally {
+      setLoading(false);
     }
+  };
 
+  useEffect(() => {
     fetchFlows();
   }, []);
 
-  const handleRunWorkflow = async (flowId: string) => {
+  const handleRunWorkflow = async (
+    flowId: string,
+    parameters?: Record<string, string>,
+  ) => {
     try {
-      const workflow = await workflowTemplatesService.run(flowId);
+      const workflow = await workflowTemplatesService.run(flowId, parameters);
       toast.success('Workflow started', {
         description: `Created workflow: ${workflow.metadata.name}`,
       });
     } catch (error) {
       console.error('Failed to start workflow:', error);
       toast.error('Failed to start workflow', {
+        description:
+          error instanceof Error ? error.message : 'An unknown error occurred',
+      });
+    }
+  };
+
+  const handleDeleteWorkflow = async (flowId: string) => {
+    try {
+      await workflowTemplatesService.delete(flowId);
+      toast.success('Workflow template deleted', {
+        description: `Deleted workflow template: ${flowId}`,
+      });
+      await fetchFlows();
+    } catch (error) {
+      console.error('Failed to delete workflow template:', error);
+      toast.error('Failed to delete workflow template', {
         description:
           error instanceof Error ? error.message : 'An unknown error occurred',
       });
@@ -77,7 +95,7 @@ export function WorkflowTemplatesSection() {
     );
   }
 
-  if (flows.length === 0 && !loading) {
+  if (templates.length === 0 && !loading) {
     const WorkflowIcon = DASHBOARD_SECTIONS['workflow-templates'].icon;
     return (
       <Empty>
@@ -100,9 +118,18 @@ export function WorkflowTemplatesSection() {
     <div className="flex h-full flex-col">
       <main className="flex-1 overflow-auto px-6 py-6">
         <div className="flex flex-col gap-3">
-          {flows.map(flow => (
-            <FlowRow key={flow.id} flow={flow} onRun={handleRunWorkflow} />
-          ))}
+          {templates.map(template => {
+            const flow = mapWorkflowTemplateToFlow(template);
+            return (
+              <FlowRow
+                key={flow.id}
+                flow={flow}
+                parameters={template.spec?.arguments?.parameters}
+                onRun={handleRunWorkflow}
+                onDelete={handleDeleteWorkflow}
+              />
+            );
+          })}
         </div>
       </main>
     </div>

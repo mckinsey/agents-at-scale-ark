@@ -1,8 +1,9 @@
 'use client';
 
-import { ExternalLink, Eye, Play, Workflow } from 'lucide-react';
+import { ExternalLink, Eye, Trash2, Workflow } from 'lucide-react';
 import Link from 'next/link';
 
+import { RunWorkflowDialog } from '@/components/dialogs/run-workflow-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -10,6 +11,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import type { WorkflowParameter } from '@/lib/services/workflow-templates';
 
 export interface Flow {
   id: string;
@@ -21,12 +23,32 @@ export interface Flow {
 
 interface FlowRowProps {
   readonly flow: Flow;
-  readonly onRun?: (flowId: string) => void;
+  readonly parameters?: WorkflowParameter[];
+  readonly onRun?: (
+    flowId: string,
+    parameters?: Record<string, string>,
+  ) => Promise<void>;
+  readonly onDelete?: (flowId: string) => Promise<void>;
 }
 
-export function FlowRow({ flow, onRun }: FlowRowProps) {
-  const handleRunClick = () => {
-    onRun?.(flow.id);
+export function FlowRow({ flow, parameters, onRun, onDelete }: FlowRowProps) {
+  const handleRunWorkflow = async (params?: Record<string, string>) => {
+    if (onRun) {
+      await onRun(flow.id, params);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (
+      !confirm(
+        `Are you sure you want to delete workflow template "${flow.id}"? This action cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    if (onDelete) {
+      await onDelete(flow.id);
+    }
   };
 
   return (
@@ -95,7 +117,7 @@ export function FlowRow({ flow, onRun }: FlowRowProps) {
           </Tooltip>
         </TooltipProvider>
 
-        {onRun && (
+        {onDelete && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -103,13 +125,21 @@ export function FlowRow({ flow, onRun }: FlowRowProps) {
                   variant="ghost"
                   size="sm"
                   className="h-8 w-8 cursor-pointer p-0"
-                  onClick={handleRunClick}>
-                  <Play className="h-4 w-4" />
+                  onClick={handleDelete}>
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Run workflow</TooltipContent>
+              <TooltipContent>Delete template</TooltipContent>
             </Tooltip>
           </TooltipProvider>
+        )}
+
+        {onRun && (
+          <RunWorkflowDialog
+            templateName={flow.id}
+            parameters={parameters}
+            onRun={handleRunWorkflow}
+          />
         )}
       </div>
     </div>

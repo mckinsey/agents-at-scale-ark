@@ -7,15 +7,17 @@ import {
   FileCode,
   Network,
   Play,
+  Trash2,
   Workflow,
 } from 'lucide-react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { WorkflowStatsCard } from '@/components/cards/workflow-stats-card';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
+import { RunWorkflowDialog } from '@/components/dialogs/run-workflow-dialog';
 import type { Flow } from '@/components/rows/flow-row';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,14 +25,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { WorkflowDagViewer } from '@/components/workflow-dag-viewer';
 import {
   type WorkflowStats,
+  type WorkflowTemplate,
   workflowTemplatesService,
 } from '@/lib/services/workflow-templates';
 import { countWorkflowTasks } from '@/lib/utils/workflow';
 
 export default function FlowDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const flowId = params.id as string;
   const [flow, setFlow] = useState<Flow | null>(null);
+  const [template, setTemplate] = useState<WorkflowTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<WorkflowStats | null>(null);
@@ -42,15 +47,17 @@ export default function FlowDetailPage() {
         setLoading(true);
         setError(null);
 
-        const [template, yamlManifest] = await Promise.all([
+        const [templateData, yamlManifest] = await Promise.all([
           workflowTemplatesService.get(flowId),
           workflowTemplatesService.getYaml(flowId),
         ]);
 
-        const annotations = template.metadata.annotations || {};
-        const stages = countWorkflowTasks(template.spec);
+        setTemplate(templateData);
+
+        const annotations = templateData.metadata.annotations || {};
+        const stages = countWorkflowTasks(templateData.spec);
         const flowData: Flow = {
-          id: template.metadata.name,
+          id: templateData.metadata.name,
           title: annotations['workflows.argoproj.io/title'],
           description: annotations['workflows.argoproj.io/description'],
           stages,
@@ -151,9 +158,9 @@ export default function FlowDetailPage() {
     }
   };
 
-  const handleRunWorkflow = async () => {
+  const handleRunWorkflow = async (parameters?: Record<string, string>) => {
     try {
-      const workflow = await workflowTemplatesService.run(flowId);
+      const workflow = await workflowTemplatesService.run(flowId, parameters);
       toast.success('Workflow started', {
         description: `Created workflow: ${workflow.metadata.name}`,
       });
@@ -163,6 +170,30 @@ export default function FlowDetailPage() {
     } catch (err) {
       console.error('Failed to start workflow:', err);
       toast.error('Failed to start workflow', {
+        description:
+          err instanceof Error ? err.message : 'An unknown error occurred',
+      });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (
+      !confirm(
+        `Are you sure you want to delete workflow template "${flowId}"? This action cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await workflowTemplatesService.delete(flowId);
+      toast.success('Workflow template deleted', {
+        description: `Deleted workflow template: ${flowId}`,
+      });
+      router.push('/workflow-templates');
+    } catch (err) {
+      console.error('Failed to delete workflow template:', err);
+      toast.error('Failed to delete workflow template', {
         description:
           err instanceof Error ? err.message : 'An unknown error occurred',
       });
@@ -236,9 +267,24 @@ export default function FlowDetailPage() {
                 variant="ghost"
                 size="sm"
                 className="h-8 w-8 cursor-pointer p-0"
-                onClick={handleRunWorkflow}>
-                <Play className="h-4 w-4" />
+                onClick={handleDelete}>
+                <Trash2 className="h-4 w-4" />
               </Button>
+              {template && (
+                <RunWorkflowDialog
+                  templateName={flowId}
+                  parameters={template.spec?.arguments?.parameters}
+                  onRun={handleRunWorkflow}
+                  trigger={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 cursor-pointer p-0">
+                      <Play className="h-4 w-4" />
+                    </Button>
+                  }
+                />
+              )}
             </div>
           </div>
         </div>
