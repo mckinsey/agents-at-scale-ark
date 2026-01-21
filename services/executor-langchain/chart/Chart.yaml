@@ -4,8 +4,8 @@ description: >-
   LangChain Executor for Ark - Web server that executes agents using LangChain
   with RAG support
 type: application
-version: 0.1.49
-appVersion: 0.1.49
+version: 0.1.50
+appVersion: 0.1.50
 keywords:
   - langchain
   - ai

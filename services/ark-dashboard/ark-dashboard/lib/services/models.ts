@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
@@ -61,19 +62,26 @@ export const modelsService = {
     return modelsService.getByName(name);
   },
 
-  // Create a new model
   async create(model: ModelCreateRequest): Promise<Model> {
     const response = await apiClient.post<ModelDetailResponse>(
       `/api/v1/models`,
       model,
     );
+
+    trackEvent({
+      name: 'model_created',
+      properties: {
+        modelName: response.name,
+        modelProvider: model.provider,
+      },
+    });
+
     return {
       ...response,
       id: response.name,
     };
   },
 
-  // Update an existing model
   async update(
     name: string,
     updates: ModelUpdateRequest,
@@ -83,6 +91,14 @@ export const modelsService = {
         `/api/v1/models/${name}`,
         updates,
       );
+
+      trackEvent({
+        name: 'model_updated',
+        properties: {
+          modelName: response.name,
+        },
+      });
+
       return {
         ...response,
         id: response.name,
@@ -104,10 +120,17 @@ export const modelsService = {
     return modelsService.update(name, updates);
   },
 
-  // Delete a model
   async delete(name: string): Promise<boolean> {
     try {
       await apiClient.delete(`/api/v1/models/${name}`);
+
+      trackEvent({
+        name: 'model_deleted',
+        properties: {
+          modelName: name,
+        },
+      });
+
       return true;
     } catch (error) {
       if ((error as AxiosError).response?.status === 404) {

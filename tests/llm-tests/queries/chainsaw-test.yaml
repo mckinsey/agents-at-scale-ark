@@ -1,0 +1,60 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: queries
+  labels:
+    llm: "true"
+spec:
+  timeouts:
+    apply: 60s
+    assert: 300s
+    exec: 120s
+  steps:
+    - name: setup-model
+      try:
+        - script:
+            content: bash ../setup/setup-${MODEL}.sh $NAMESPACE
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Model
+              metadata:
+                name: test-model
+              status:
+                conditions:
+                  - type: ModelAvailable
+                    status: "True"
+
+    - name: create-agent-and-query
+      try:
+        - apply:
+            file: manifests/agent.yaml
+        - apply:
+            file: manifests/query.yaml
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Query
+              metadata:
+                name: test-query
+              status:
+                phase: done
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Query
+              metadata:
+                name: test-query
+              status:
+                (response != null): true
+                (length(response.content) > `10`): true
+      catch:
+        - events: {}
+        - describe:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            name: test-query
+

@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 
-import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { TrackedButton } from '@/components/ui/tracked-button';
 import { useCreateModel } from '@/lib/services/models-hooks';
 
 import { ModelConfiguratorForm } from './model-configuration-form';
@@ -81,11 +81,13 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
         </section>
         <section>
           <ModelConfiguratorForm />
-          <Button
+          <TrackedButton
             type="submit"
             form={formId}
             disabled={isPending}
-            className="mt-8 w-full">
+            className="mt-8 w-full"
+            trackingEvent="create_model_clicked"
+            trackingProperties={{ modelType: provider }}>
             {isPending ? (
               <>
                 <Spinner size="sm" />
@@ -94,7 +96,7 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
             ) : (
               <span>Create Model</span>
             )}
-          </Button>
+          </TrackedButton>
         </section>
       </div>
     </ModelConfigurationFormContext.Provider>

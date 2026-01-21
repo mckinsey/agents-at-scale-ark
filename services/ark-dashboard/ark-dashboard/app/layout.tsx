@@ -34,6 +34,11 @@ export const metadata: Metadata = {
   description: 'Basic Configuration and Monitoring for ARK',
 };
 
+const analyticsProvider = process.env.NEXT_PUBLIC_ANALYTICS_PROVIDER || 'noop';
+const dynatraceRumUrl = process.env.NEXT_PUBLIC_DYNATRACE_RUM_URL;
+const shouldLoadDynatraceRum =
+  analyticsProvider === 'dynatrace' && !!dynatraceRumUrl;
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -41,6 +46,16 @@ export default async function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {shouldLoadDynatraceRum ? (
+          <script
+            src={dynatraceRumUrl}
+            async
+            crossOrigin="anonymous"
+            data-testid="dynatrace-rum"
+          />
+        ) : null}
+      </head>
       <body className={`${inter.variable} ${geistMono.variable} antialiased`}>
         <GlobalProviders>{children}</GlobalProviders>
       </body>

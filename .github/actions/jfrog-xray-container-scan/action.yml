@@ -1,0 +1,147 @@
+name: 'JFrog Xray Container Scan'
+description: 'Pulls and scans a container image using JFrog Xray'
+inputs:
+  image:
+    description: 'Full image reference (e.g., ghcr.io/org/repo/ark-controller:sha)'
+    required: true
+  image_name:
+    description: 'Short image name for artifact naming (e.g., ark-controller)'
+    required: true
+  jfrog_user:
+    description: 'JFrog username'
+    required: true
+  jfrog_password:
+    description: 'JFrog password'
+    required: true
+  jfrog_url:
+    description: 'JFrog URL'
+    required: true
+outputs:
+  scan_file:
+    description: 'Path to the scan results JSON file'
+    value: ${{ steps.scan.outputs.scan_file }}
+  violations_count:
+    description: 'Number of violations found'
+    value: ${{ steps.parse-scan.outputs.violations_count }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Pull container image
+      shell: bash
+      run: |
+        echo "Pulling container image: ${{ inputs.image }}"
+        docker pull ${{ inputs.image }}
+
+    - name: Setup JFrog CLI
+      uses: jfrog/setup-jfrog-cli@v4
+      env:
+        JF_USER: ${{ inputs.jfrog_user }}
+        JF_PASSWORD: ${{ inputs.jfrog_password }}
+        JF_URL: ${{ inputs.jfrog_url }}
+
+    - name: Scan container image
+      id: scan
+      continue-on-error: true
+      shell: bash
+      run: |
+        SCAN_FILE="xray-container-scan-${{ inputs.image_name }}.json"
+        echo "scan_file=$SCAN_FILE" >> $GITHUB_OUTPUT
+
+        echo "Scanning container image: ${{ inputs.image }}"
+        jf docker scan ${{ inputs.image }} --format json > "$SCAN_FILE"
+
+    - name: Parse scan results
+      id: parse-scan
+      if: always()
+      shell: bash
+      run: |
+        SCAN_FILE="xray-container-scan-${{ inputs.image_name }}.json"
+
+        VULN_COUNT=$(jq '[.[] | select(.vulnerabilities != null) | .vulnerabilities | length] | add // 0' "$SCAN_FILE" 2>/dev/null || echo "0")
+
+        echo "Vulnerabilities found in ${{ inputs.image_name }}: $VULN_COUNT"
+        echo "violations_count=$VULN_COUNT" >> $GITHUB_OUTPUT
+
+        TABLE=$(jq -r '
+          .[]
+          | select(.vulnerabilities != null) | .vulnerabilities[]?
+          | {
+              issue_id: (.issue_id // "N/A"),
+              component_ids: (
+                if (.components and (.components | length > 0))
+                then (.components | keys)
+                else []
+                end
+              ),
+              severity: (.severity // "Unknown"),
+              severity_order: (
+                if .severity == "Critical" then 1
+                elif .severity == "High" then 2
+                elif .severity == "Medium" then 3
+                elif .severity == "Low" then 4
+                else 0
+                end
+              ),
+              cves: (
+                if (.cves and (.cves | type == "array" and length > 0))
+                then (.cves | map(.cve))
+                else []
+                end
+              )
+            }
+        ' "$SCAN_FILE" 2>/dev/null | jq -r -s '
+          group_by(.issue_id)
+          | map({
+              issue_id: .[0].issue_id,
+              components: (map(.component_ids[]) | unique | join(",")),
+              severity: (map(.severity) | unique | join(",")),
+              severity_order: .[0].severity_order,
+              cves: (map(.cves[]) | unique | join(","))
+            })
+          | sort_by(.severity_order)
+          | .[]
+          | [.issue_id, .components, .severity, .cves]
+          | @tsv
+        ' 2>/dev/null || echo "")
+
+        CRITICAL=$(jq '[.[].vulnerabilities[]? | select(.severity == "Critical")] | length' "$SCAN_FILE" 2>/dev/null || echo "0")
+        HIGH=$(jq '[.[].vulnerabilities[]? | select(.severity == "High")] | length' "$SCAN_FILE" 2>/dev/null || echo "0")
+        MEDIUM=$(jq '[.[].vulnerabilities[]? | select(.severity == "Medium")] | length' "$SCAN_FILE" 2>/dev/null || echo "0")
+        LOW=$(jq '[.[].vulnerabilities[]? | select(.severity == "Low")] | length' "$SCAN_FILE" 2>/dev/null || echo "0")
+        UNKNOWN=$(jq '[.[].vulnerabilities[]? | select(.severity == null or .severity == "" or (.severity != "Critical" and .severity != "High" and .severity != "Medium" and .severity != "Low"))] | length' "$SCAN_FILE" 2>/dev/null || echo "0")
+
+        echo "### Container Scan: ${{ inputs.image_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "#### Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Total | 🔴 Critical | 🟠 High | 🟡 Medium | 🟢 Low | ⚪ Unknown |" >> $GITHUB_STEP_SUMMARY
+        echo "|-------|-------------|---------|-----------|--------|----------|" >> $GITHUB_STEP_SUMMARY
+        echo "| $VULN_COUNT | $CRITICAL | $HIGH | $MEDIUM | $LOW | $UNKNOWN |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "<details>" >> $GITHUB_STEP_SUMMARY
+        echo "<summary>Details</summary>" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| ID | Affected Component | Severity | CVEs |" >> $GITHUB_STEP_SUMMARY
+        echo "|----|-------------------|----------|------|" >> $GITHUB_STEP_SUMMARY
+
+        if [ -n "$TABLE" ]; then
+          echo "$TABLE" | awk '{print "| " $1 " | " $2 " | " $3 " | " $4 " |"}' >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| No vulnerabilities found | - | - | - |" >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "</details>" >> $GITHUB_STEP_SUMMARY
+
+    - name: Upload scan results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: xray-container-scan-${{ inputs.image_name }}
+        path: xray-container-scan-${{ inputs.image_name }}.json
+        retention-days: 30
+
+    - name: Cleanup local image
+      if: always()
+      shell: bash
+      run: |
+        docker rmi ${{ inputs.image }} 2>/dev/null || true

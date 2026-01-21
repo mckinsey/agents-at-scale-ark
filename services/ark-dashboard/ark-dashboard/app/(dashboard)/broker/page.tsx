@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { trackEvent } from '@/lib/analytics/singleton';
 import { type Memory, memoriesService } from '@/lib/services/memories';
 
 const breadcrumbs: BreadcrumbElement[] = [
@@ -220,6 +221,13 @@ function useSSEStream(endpoint: string, memory: string) {
       setFetchedEntries([]);
       nextCursorRef.current = undefined;
       setHasMore(false);
+      trackEvent({
+        name: 'broker_data_purged',
+        properties: {
+          streamType: endpoint.split('/').pop(),
+          memoryName: memory,
+        },
+      });
     } catch (e) {
       toast.error('Failed to purge data', {
         description: (e as Error).message,
@@ -411,13 +419,27 @@ export default function BrokerPage() {
     <>
       <PageHeader breadcrumbs={breadcrumbs} currentPage="Broker" />
       <div className="flex flex-1 flex-col gap-4 p-4">
-        <Tabs defaultValue="traces" className="flex-1">
+        <Tabs
+          defaultValue="traces"
+          className="flex-1"
+          onValueChange={tab => {
+            trackEvent({
+              name: 'broker_tab_changed',
+              properties: { tabName: tab },
+            });
+          }}>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground text-sm">Memory:</span>
               <Select
                 value={selectedMemory}
-                onValueChange={setSelectedMemory}
+                onValueChange={value => {
+                  setSelectedMemory(value);
+                  trackEvent({
+                    name: 'broker_memory_changed',
+                    properties: { memoryName: value },
+                  });
+                }}
                 disabled={loading}>
                 <SelectTrigger className="w-[180px]">
                   <SelectValue

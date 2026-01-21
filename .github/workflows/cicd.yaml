@@ -110,7 +110,7 @@ jobs:
         shell: bash
         run: |
           GITHUB_REPOSITORY="${{ github.repository }}"
-          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&status=completed&per_page=50" | jq -c '.workflow_runs[] | select(.name == "CI/CD" and .conclusion == "success") | .id' | head -n 1)
+          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&status=success&per_page=100" | jq -c '.workflow_runs[] | select(.name == "CI/CD") | .id' | head -n 1)
           
           echo "Downloading artifacts from run ID: $LAST_RUN_ID"
           gh run download "$LAST_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern "xray-scan-results-agents-at-scale-*" --dir ./artifacts
@@ -310,6 +310,43 @@ jobs:
           push: true
           prebuild: ${{ matrix.prebuild }}
 
+  xray-container-scan:
+    needs: [setup-container-cache-registry, build-containers]
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - ark-controller
+          - ark-api
+          - ark-dashboard
+          - ark-evaluator
+          - executor-langchain
+          - ark-broker
+          - langchain-weather-agent
+          - ark-mcp
+          - ark-cli
+          - ark-tools
+          - filesystem-mcp-server
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Docker Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry-hostname }}
+          username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
+          password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - uses: ./.github/actions/jfrog-xray-container-scan
+        with:
+          image: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/${{ matrix.image }}:${{ github.sha }}
+          image_name: ${{ matrix.image }}
+          jfrog_user: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME }}
+          jfrog_password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD }}
+          jfrog_url: ${{ vars.JFROG_PLATFORM_URL }}
+
   build-libs:
     runs-on: ubuntu-24.04
     steps:
@@ -439,6 +476,14 @@ jobs:
           echo "ARK_QUICKSTART_BASE_URL=$ARK_QUICKSTART_BASE_URL"
           echo "ARK_QUICKSTART_API_KEY=***"
           make quickstart-force
+      - name: Wait for ARK components to be ready
+        run: |
+          echo "Waiting for ARK controller to be ready..."
+          kubectl -n ark-system wait --for=condition=available --timeout=300s deployment/ark-controller
+          echo "Waiting for webhook service to be ready..."
+          kubectl -n ark-system wait --for=condition=ready pod -l control-plane=ark-controller --timeout=120s
+          echo "Giving webhook service additional time to initialize..."
+          sleep 10
       - name: Test end-to-end query
         run: |
           kubectl describe agent sample-agent
@@ -603,7 +648,7 @@ jobs:
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
-          chainsaw test --config .chainsaw.yaml --selector '!evaluated'
+          chainsaw test --config .chainsaw.yaml --selector '!evaluated,!llm'
 
       - uses: ./.github/actions/collect-coverage-e2e
         with:
@@ -662,6 +707,52 @@ jobs:
       - uses: ./.github/actions/collect-coverage-e2e
         with:
           artifact-name: coverage-reports-evaluated
+    
+  e2e-tests-llm:
+    needs: [setup-container-cache-registry, build-containers]
+    runs-on: ubuntu-24.04
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-e2e
+        with:
+          ark-image-tag: ${{ github.sha }}
+          install-coverage: "true"
+          install-evaluator: "false"
+          ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
+          ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
+          ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - name: Install chainsaw and jq
+        run: |
+          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/v0.2.12/chainsaw_linux_amd64.tar.gz" | \
+            tar xz -C /tmp
+          sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
+          sudo chmod +x /usr/local/bin/chainsaw
+          sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Run multi-provider LLM tests
+        env:
+          E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
+          E2E_TEST_AZURE_OPENAI_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
+          E2E_TEST_AZURE_OPENAI_API_VERSION: ${{ secrets.CICD_AZURE_OPENAI_API_VERSION || '2024-12-01-preview' }}
+          E2E_TEST_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
+          E2E_TEST_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
+          FILESYS_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/filesystem-mcp-server
+          FILESYS_IMAGE_TAG: ${{ github.sha }}
+          LANGCHAIN_WEATHER_AGENT_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/langchain-weather-agent
+          LANGCHAIN_WEATHER_AGENT_IMAGE_TAG: ${{ github.sha }}
+          ARK_CLUSTER_MEMORY_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-cluster-memory
+          ARK_CLUSTER_MEMORY_IMAGE_TAG: ${{ github.sha }}
+        run: |
+          cd tests
+          chmod +x llm-tests/run-multi-provider.sh
+          ./llm-tests/run-multi-provider.sh
+
+      - uses: ./.github/actions/collect-coverage-e2e
+        with:
+          artifact-name: coverage-reports-llm
 
   e2e-ui-tests:
     needs: [setup-container-cache-registry, build-containers]
@@ -859,6 +950,7 @@ jobs:
           slug: ${{ github.repository }}
           directory: tools/ark-cli/artifacts/coverage
           name: ark-cli
+          flags: ark-cli
 
       - name: Create NPM package tarball
         run: |
@@ -952,6 +1044,7 @@ jobs:
           directory: ./coverage-artifacts
           fail_ci_if_error: false
           verbose: true
+          flags: combined-coverage
 
   check-release:
     needs:

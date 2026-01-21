@@ -18,7 +18,7 @@ export function simplifyDuration(duration: string | null | undefined): string {
  * Formats a timestamp to a Kubernetes-style age format
  * Examples: "12m", "3h5m", "2d1h", "5d"
  */
-export function formatAge(timestamp: string | null | undefined): string {
+export function formatAge(timestamp: Date | string | null | undefined): string {
   if (!timestamp) return '-';
 
   try {

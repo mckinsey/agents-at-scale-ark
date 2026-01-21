@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: test-agent
+spec:
+  modelRef:
+    name: test-model
+  prompt: |
+    You are a test agent used for end-to-end testing.
+    You should respond helpfully to test queries and validate that the agent system is working correctly.
+    Keep responses concise and indicate that you are a test agent.

@@ -1,5 +1,7 @@
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 
+import { trackEvent } from '@/lib/analytics/singleton';
+import { hashPromptSync } from '@/lib/analytics/utils';
 import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
@@ -106,6 +108,23 @@ export const chatService = {
       `/api/v1/queries/`,
       normalizedQuery,
     );
+
+    const inputContent =
+      typeof query.input === 'string'
+        ? query.input
+        : JSON.stringify(query.input);
+
+    trackEvent({
+      name: 'query_executed',
+      properties: {
+        queryName: response.name,
+        inputType: query.type,
+        targetName: query.target?.name ?? '',
+        targetType: query.target?.type ?? '',
+        promptHash: hashPromptSync(inputContent),
+      },
+    });
+
     return response;
   },
 
@@ -163,6 +182,7 @@ export const chatService = {
     targetName: string,
     sessionId?: string,
     enableStreaming?: boolean,
+    timeout?: string,
   ): Promise<QueryDetailResponse> {
     const queryRequest: QueryCreateRequest = {
       name: `chat-query-${generateUUID()}`,
@@ -174,6 +194,7 @@ export const chatService = {
         name: targetName,
       },
       sessionId,
+      timeout,
     };
 
     // Add streaming annotation if enabled
@@ -336,6 +357,7 @@ export const chatService = {
     targetType: string,
     targetName: string,
     sessionId?: string,
+    timeout?: string,
   ): AsyncGenerator<Record<string, unknown>, void, unknown> {
     const model = `${targetType}/${targetName}`;
     const response = await fetch('/api/openai/v1/chat/completions', {
@@ -347,7 +369,10 @@ export const chatService = {
         model,
         messages,
         stream: true,
-        metadata: sessionId ? { sessionId } : undefined,
+        metadata: {
+          ...(sessionId ? { sessionId } : {}),
+          ...(timeout ? { timeout } : {}),
+        },
       }),
     });
 

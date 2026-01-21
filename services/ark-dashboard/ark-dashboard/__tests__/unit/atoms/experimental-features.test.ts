@@ -2,68 +2,20 @@ import { createStore } from 'jotai';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
-  A2A_TASKS_FEATURE_KEY,
   CHAT_STREAMING_FEATURE_KEY,
-  isA2ATasksEnabledAtom,
-  storedIsA2ATasksEnabledAtom,
+  QUERY_TIMEOUT_SETTING_KEY,
+  isChatStreamingEnabledAtom,
+  queryTimeoutSettingAtom,
   storedIsChatStreamingEnabledAtom,
+  storedQueryTimeoutSettingAtom,
 } from '@/atoms/experimental-features';
 
-describe('A2A Tasks Feature Flag Atoms', () => {
+describe('Experimental Features', () => {
   let store: ReturnType<typeof createStore>;
 
   beforeEach(() => {
     store = createStore();
     localStorage.clear();
-  });
-
-  describe('storedIsA2ATasksEnabledAtom', () => {
-    it('should default to false when not set', () => {
-      const value = store.get(storedIsA2ATasksEnabledAtom);
-      expect(value).toBe(false);
-    });
-
-    it('should persist value to localStorage', () => {
-      store.set(storedIsA2ATasksEnabledAtom, true);
-      expect(localStorage.getItem(A2A_TASKS_FEATURE_KEY)).toBe('true');
-    });
-
-    it('should read value from localStorage on set', () => {
-      store.set(storedIsA2ATasksEnabledAtom, true);
-      expect(localStorage.getItem(A2A_TASKS_FEATURE_KEY)).toBe('true');
-
-      const value = store.get(storedIsA2ATasksEnabledAtom);
-      expect(value).toBe(true);
-    });
-
-    it('should update value when set', () => {
-      store.set(storedIsA2ATasksEnabledAtom, true);
-      expect(store.get(storedIsA2ATasksEnabledAtom)).toBe(true);
-
-      store.set(storedIsA2ATasksEnabledAtom, false);
-      expect(store.get(storedIsA2ATasksEnabledAtom)).toBe(false);
-    });
-  });
-
-  describe('isA2ATasksEnabledAtom', () => {
-    it('should return false when storedIsA2ATasksEnabledAtom is false', () => {
-      store.set(storedIsA2ATasksEnabledAtom, false);
-      const value = store.get(isA2ATasksEnabledAtom);
-      expect(value).toBe(false);
-    });
-
-    it('should return true when storedIsA2ATasksEnabledAtom is true', () => {
-      store.set(storedIsA2ATasksEnabledAtom, true);
-      const value = store.get(isA2ATasksEnabledAtom);
-      expect(value).toBe(true);
-    });
-
-    it('should be read-only (derived atom)', () => {
-      expect(() => {
-        // @ts-expect-error derived atoms are read-only
-        store.set(isA2ATasksEnabledAtom, true);
-      }).toThrow();
-    });
   });
 
   describe('experimental-chat-streaming', () => {
@@ -72,7 +24,7 @@ describe('A2A Tasks Feature Flag Atoms', () => {
       expect(store.get(storedIsChatStreamingEnabledAtom)).toBe(true);
     });
 
-    it('should return true when storedIsChatStreamingEnabledAtom is false', () => {
+    it('should return false when storedIsChatStreamingEnabledAtom is false', () => {
       store.set(storedIsChatStreamingEnabledAtom, false);
       const value = store.get(storedIsChatStreamingEnabledAtom);
       expect(value).toBe(false);
@@ -83,6 +35,72 @@ describe('A2A Tasks Feature Flag Atoms', () => {
         // @ts-expect-error derived atoms are read-only
         store.set(isChatStreamingEnabledAtom, true);
       }).toThrow();
+    });
+  });
+
+  describe('query-timeout-setting', () => {
+    it('should have correct key', () => {
+      expect(QUERY_TIMEOUT_SETTING_KEY).toBe('query-timeout-setting');
+    });
+
+    it('should default to 5m', () => {
+      const value = store.get(storedQueryTimeoutSettingAtom);
+      expect(value).toBe('5m');
+    });
+
+    it('should allow setting to 10m', () => {
+      store.set(storedQueryTimeoutSettingAtom, '10m');
+      const value = store.get(storedQueryTimeoutSettingAtom);
+      expect(value).toBe('10m');
+    });
+
+    it('should allow setting to 15m', () => {
+      store.set(storedQueryTimeoutSettingAtom, '15m');
+      const value = store.get(storedQueryTimeoutSettingAtom);
+      expect(value).toBe('15m');
+    });
+
+    it('should persist value in localStorage', () => {
+      store.set(storedQueryTimeoutSettingAtom, '10m');
+      expect(localStorage.getItem(QUERY_TIMEOUT_SETTING_KEY)).toBe('"10m"');
+    });
+
+    it('should persist and restore value from localStorage', () => {
+      // Set value in one store
+      store.set(storedQueryTimeoutSettingAtom, '15m');
+      expect(localStorage.getItem(QUERY_TIMEOUT_SETTING_KEY)).toBe('"15m"');
+      
+      // Verify it was stored
+      const storedValue = localStorage.getItem(QUERY_TIMEOUT_SETTING_KEY);
+      expect(storedValue).toBe('"15m"');
+      expect(JSON.parse(storedValue!)).toBe('15m');
+    });
+
+    it('should be readable through queryTimeoutSettingAtom', () => {
+      store.set(storedQueryTimeoutSettingAtom, '10m');
+      const value = store.get(queryTimeoutSettingAtom);
+      expect(value).toBe('10m');
+    });
+
+    it('queryTimeoutSettingAtom should be read-only (derived atom)', () => {
+      expect(() => {
+        // @ts-expect-error derived atoms are read-only
+        store.set(queryTimeoutSettingAtom, '15m');
+      }).toThrow();
+    });
+
+    it('should handle empty localStorage gracefully', () => {
+      localStorage.clear();
+      const newStore = createStore();
+      const value = newStore.get(storedQueryTimeoutSettingAtom);
+      expect(value).toBe('5m');
+    });
+
+    it('should handle invalid localStorage value gracefully', () => {
+      localStorage.setItem(QUERY_TIMEOUT_SETTING_KEY, 'invalid-json');
+      const newStore = createStore();
+      const value = newStore.get(storedQueryTimeoutSettingAtom);
+      expect(value).toBe('5m');
     });
   });
 });
