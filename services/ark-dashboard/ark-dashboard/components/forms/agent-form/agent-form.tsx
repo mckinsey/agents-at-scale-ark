@@ -2,8 +2,11 @@
 
 import {
   ArrowLeft,
+  Check,
   CircleAlert,
   Code,
+  Copy,
+  Download,
   FileText,
   PanelLeftClose,
   PanelLeftOpen,
@@ -62,6 +65,7 @@ export function AgentForm({
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [showYaml, setShowYaml] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const isViewing = mode === AgentFormMode.VIEW;
 
@@ -177,6 +181,38 @@ export function AgentForm({
     state.selectedTools,
   ]);
 
+  const handleCopyYaml = () => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(agentYaml).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    } else {
+      const textArea = document.createElement('textarea');
+      textArea.value = agentYaml;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-9999px';
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleDownloadYaml = () => {
+    const blob = new Blob([agentYaml], { type: 'text/yaml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${agent?.name || 'agent'}.yaml`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -272,7 +308,7 @@ export function AgentForm({
                   <Select
                     value={agentName}
                     onValueChange={value => router.push(`/agents/${value}`)}>
-                    <SelectTrigger className="h-8 w-[180px] border-0 bg-transparent px-1 text-sm font-medium shadow-none focus:ring-0">
+                    <SelectTrigger className="border-border h-8 w-[180px] bg-transparent px-2 text-sm font-medium">
                       <SelectValue placeholder="Select agent" />
                     </SelectTrigger>
                     <SelectContent>
@@ -293,16 +329,40 @@ export function AgentForm({
                     variant={showYaml ? 'secondary' : 'ghost'}
                     size="sm"
                     onClick={() => setShowYaml(!showYaml)}
-                    className="ml-auto h-7 gap-1 px-2 text-xs">
+                    className="h-7 gap-1 px-2 text-xs">
                     <Code className="h-3 w-3" />
                     YAML
                   </Button>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto">
                   {showYaml ? (
-                    <pre className="bg-muted/30 h-full overflow-auto p-4 font-mono text-xs">
-                      {agentYaml}
-                    </pre>
+                    <div className="relative h-full">
+                      <div className="absolute top-2 right-4 z-10 flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleCopyYaml}
+                          className="h-7 gap-1 px-2 text-xs">
+                          {copied ? (
+                            <Check className="h-3 w-3" />
+                          ) : (
+                            <Copy className="h-3 w-3" />
+                          )}
+                          {copied ? 'Copied' : 'Copy'}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleDownloadYaml}
+                          className="h-7 gap-1 px-2 text-xs">
+                          <Download className="h-3 w-3" />
+                          Download
+                        </Button>
+                      </div>
+                      <pre className="bg-muted/30 h-full overflow-auto p-4 pt-10 font-mono text-xs">
+                        {agentYaml}
+                      </pre>
+                    </div>
                   ) : (
                     <div className="space-y-4 p-4">
                       <Form {...form}>

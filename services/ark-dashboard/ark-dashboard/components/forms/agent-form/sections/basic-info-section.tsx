@@ -66,6 +66,7 @@ export function BasicInfoSection({
               <Input
                 placeholder="Brief description of the agent's purpose"
                 disabled={disabled}
+                className="border-border"
                 {...field}
               />
             </FormControl>

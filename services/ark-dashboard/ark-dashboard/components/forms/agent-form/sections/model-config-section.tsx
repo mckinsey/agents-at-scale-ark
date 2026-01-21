@@ -47,7 +47,7 @@ export function ModelConfigSection({
               value={field.value}
               disabled={disabled}>
               <FormControl>
-                <SelectTrigger>
+                <SelectTrigger className="border-border">
                   <SelectValue placeholder="Select a model" />
                 </SelectTrigger>
               </FormControl>

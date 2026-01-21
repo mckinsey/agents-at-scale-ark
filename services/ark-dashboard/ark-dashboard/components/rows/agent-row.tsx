@@ -79,7 +79,7 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
                   className="h-8 w-8 p-0"
                   onClick={e => {
                     e.stopPropagation();
-                    router.push(`/agents/${agent.name}/edit`);
+                    router.push(`/agents/${agent.name}`);
                   }}>
                   <Pencil className="h-4 w-4" />
                 </Button>

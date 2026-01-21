@@ -1,20 +1,22 @@
 'use client';
 
-import { useAtomValue } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import {
   AlertCircle,
   Bug,
   ChevronDown,
   ChevronRight,
   MessageCircle,
+  RotateCcw,
   Send,
 } from 'lucide-react';
 import type {
   ChatCompletionChunk,
   ChatCompletionMessageParam,
 } from 'openai/resources/chat/completions';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { chatHistoryAtom, createNewSessionId } from '@/atoms/chat-history';
 import { isChatStreamingEnabledAtom } from '@/atoms/experimental-features';
 import { ChatMessage } from '@/components/chat/chat-message';
 import { Button } from '@/components/ui/button';
@@ -28,7 +30,7 @@ import { chatService } from '@/lib/services';
 
 type ChatType = 'model' | 'team' | 'agent';
 type TabType = 'chat' | 'debug';
-type DebugStreamType = 'traces' | 'messages' | 'chunks' | 'events';
+type DebugStreamType = 'traces' | 'events';
 
 interface StreamEntry {
   id: string;
@@ -385,9 +387,65 @@ interface EmbeddedChatPanelProps {
 }
 
 export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
-  const [chatMessages, setChatMessages] = useState<
-    ChatCompletionMessageParam[]
-  >([]);
+  const [chatHistory, setChatHistory] = useAtom(chatHistoryAtom);
+  const chatKey = `${type}-${name}`;
+
+  const initSessionIdRef = useRef<string>(createNewSessionId());
+
+  const chatSession = useMemo(() => {
+    const existing = chatHistory?.[chatKey];
+    if (existing?.messages !== undefined && existing?.sessionId) {
+      return existing;
+    }
+    return { messages: [], sessionId: initSessionIdRef.current };
+  }, [chatHistory, chatKey]);
+
+  const chatMessages = chatSession.messages;
+  const sessionId = chatSession.sessionId;
+
+  useEffect(() => {
+    if (!chatHistory?.[chatKey]) {
+      setChatHistory(prev => ({
+        ...(prev || {}),
+        [chatKey]: { messages: [], sessionId: initSessionIdRef.current },
+      }));
+    }
+  }, [chatKey, chatHistory, setChatHistory]);
+
+  const setChatMessages = useCallback(
+    (
+      updater:
+        | ChatCompletionMessageParam[]
+        | ((
+            prev: ChatCompletionMessageParam[],
+          ) => ChatCompletionMessageParam[]),
+    ) => {
+      setChatHistory(prev => {
+        const safePrev = prev || {};
+        const currentSession = safePrev[chatKey];
+        if (!currentSession) return safePrev;
+        const currentMessages = currentSession.messages || [];
+        const newMessages =
+          typeof updater === 'function' ? updater(currentMessages) : updater;
+        return {
+          ...safePrev,
+          [chatKey]: { ...currentSession, messages: newMessages },
+        };
+      });
+    },
+    [chatKey, setChatHistory],
+  );
+
+  const handleNewChat = useCallback(() => {
+    const newSessionId = createNewSessionId();
+    initSessionIdRef.current = newSessionId;
+    setChatHistory(prev => ({
+      ...(prev || {}),
+      [chatKey]: { messages: [], sessionId: newSessionId },
+    }));
+    setError(null);
+  }, [chatKey, setChatHistory]);
+
   const [currentMessage, setCurrentMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -395,11 +453,8 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
   const [debugStreamType, setDebugStreamType] =
     useState<DebugStreamType>('traces');
   const [debugMode, setDebugMode] = useState(true);
-  const [sessionId] = useState(() => `session-${Date.now()}`);
 
   const traces = useSSEStream('/v1/broker/traces', 'default', name);
-  const messages = useSSEStream('/v1/broker/messages', 'default', name);
-  const chunks = useSSEStream('/v1/broker/chunks', 'default', name);
   const events = useSSEStream('/v1/broker/events', 'default', name);
   const inputRef = useRef<HTMLInputElement>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
@@ -783,6 +838,15 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                   className="text-muted-foreground cursor-pointer text-sm">
                   Show tool calls
                 </label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleNewChat}
+                  className="ml-auto h-7 gap-1 px-2 text-xs"
+                  disabled={isProcessing || chatMessages.length === 0}>
+                  <RotateCcw className="h-3 w-3" />
+                  New Chat
+                </Button>
               </div>
             </div>
           </div>
@@ -795,18 +859,12 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
             value={debugStreamType}
             onValueChange={v => setDebugStreamType(v as DebugStreamType)}
             className="flex h-full flex-col">
-            <TabsList className="mx-2 mt-2 grid w-auto grid-cols-4">
+            <TabsList className="mx-2 mt-2 grid w-auto grid-cols-2">
               <TabsTrigger value="traces" className="text-xs">
                 Traces
               </TabsTrigger>
-              <TabsTrigger value="messages" className="text-xs">
-                Messages
-              </TabsTrigger>
-              <TabsTrigger value="chunks" className="text-xs">
-                Chunks
-              </TabsTrigger>
               <TabsTrigger value="events" className="text-xs">
-                Events
+                Cluster Events
               </TabsTrigger>
             </TabsList>
             <TabsContent value="traces" className="mt-0 flex-1 overflow-hidden">
@@ -817,28 +875,6 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                 hasMore={traces.hasMore}
                 error={traces.error}
                 onLoadMore={traces.loadMore}
-              />
-            </TabsContent>
-            <TabsContent
-              value="messages"
-              className="mt-0 flex-1 overflow-hidden">
-              <DebugStreamView
-                entries={messages.entries}
-                isConnected={messages.isConnected}
-                isLoading={messages.isLoading}
-                hasMore={messages.hasMore}
-                error={messages.error}
-                onLoadMore={messages.loadMore}
-              />
-            </TabsContent>
-            <TabsContent value="chunks" className="mt-0 flex-1 overflow-hidden">
-              <DebugStreamView
-                entries={chunks.entries}
-                isConnected={chunks.isConnected}
-                isLoading={chunks.isLoading}
-                hasMore={chunks.hasMore}
-                error={chunks.error}
-                onLoadMore={chunks.loadMore}
               />
             </TabsContent>
             <TabsContent value="events" className="mt-0 flex-1 overflow-hidden">

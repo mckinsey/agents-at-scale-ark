@@ -1,7 +1,8 @@
 'use client';
 
-import { ArrowUpRightIcon, Plus } from 'lucide-react';
+import { ArrowUpRightIcon, Bot, MessageCircle, Plus } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -27,11 +28,34 @@ export function AgentsSection() {
   const [loading, setLoading] = useState(true);
   const showLoading = useDelayedLoading(loading);
   const [showCompactView, setShowCompactView] = useState(false);
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
   const viewOptions: ToggleOption[] = [
     { id: 'compact', label: 'compact view', active: !showCompactView },
     { id: 'card', label: 'card view', active: showCompactView },
   ];
+
+  useEffect(() => {
+    if (searchParams.get('created') === 'true') {
+      toast.success('Agent Created', {
+        description: (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <Bot className="h-4 w-4" />
+              <span>Click on an agent to open Agent Studio</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <MessageCircle className="h-4 w-4" />
+              <span>Use the chat bubble for a quick conversation</span>
+            </div>
+          </div>
+        ),
+        duration: 8000,
+      });
+      router.replace('/agents', { scroll: false });
+    }
+  }, [searchParams, router]);
 
   useEffect(() => {
     const loadData = async () => {

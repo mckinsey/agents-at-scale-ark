@@ -10,7 +10,7 @@ export default function AgentNewPage() {
   return (
     <AgentForm
       mode={AgentFormMode.CREATE}
-      onSuccess={() => router.push('/agents')}
+      onSuccess={() => router.push('/agents?created=true')}
     />
   );
 }

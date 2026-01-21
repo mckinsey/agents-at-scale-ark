@@ -37,7 +37,7 @@ export function AgentCard({ agent, onDelete }: AgentCardProps) {
     {
       icon: Pencil,
       label: 'Edit agent',
-      onClick: () => router.push(`/agents/${agent.name}/edit`),
+      onClick: () => router.push(`/agents/${agent.name}`),
     },
   ];
 
