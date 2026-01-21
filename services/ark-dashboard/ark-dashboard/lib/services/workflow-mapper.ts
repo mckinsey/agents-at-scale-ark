@@ -13,16 +13,14 @@ export interface MappedWorkflowStepDetail {
   args?: string[];
   inputs?: Record<string, string>;
   outputs?: Record<string, string>;
-  logs?: string[];
   exitCode?: number;
   resources?: {
     cpu?: string;
     memory?: string;
   };
-  podName?: string;
-  namespace?: string;
   workflowName?: string;
   nodeId?: string;
+  namespace?: string;
 }
 
 export interface MappedWorkflowStep {

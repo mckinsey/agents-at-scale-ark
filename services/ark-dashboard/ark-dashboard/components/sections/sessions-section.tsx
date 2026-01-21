@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  AlertCircle,
   Bot,
   CheckCircle2,
   ChevronDown,
@@ -28,11 +29,6 @@ import { useEffect, useState, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 import {
   Select,
   SelectContent,
@@ -67,6 +63,9 @@ interface WorkflowStepDetail {
     cpu?: string;
     memory?: string;
   };
+  workflowName?: string;
+  nodeId?: string;
+  namespace?: string;
 }
 
 interface TeamStepDetail {
@@ -1982,7 +1981,7 @@ function getStatusBadgeVariant(
   }
 }
 
-function WorkflowStepDetail({ detail }: { detail: WorkflowStepDetail }) {
+function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; message?: string }) {
   const [logs, setLogs] = useState<string>('');
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [logsError, setLogsError] = useState<string | null>(null);
@@ -1995,9 +1994,9 @@ function WorkflowStepDetail({ detail }: { detail: WorkflowStepDetail }) {
         try {
           const { workflowsService } = await import('@/lib/services/workflows');
           const logData = await workflowsService.getWorkflowLogs(
-            detail.workflowName,
-            detail.nodeId,
-            detail.namespace,
+            detail.workflowName!,
+            detail.nodeId!,
+            detail.namespace!,
           );
           setLogs(logData);
         } catch (error) {
@@ -2010,7 +2009,6 @@ function WorkflowStepDetail({ detail }: { detail: WorkflowStepDetail }) {
       void fetchLogs();
     }
   }, [detail.workflowName, detail.nodeId, detail.namespace]);
-
   return (
     <div className="bg-muted/30 mt-2 space-y-3 rounded-md border p-3 text-sm">
       {detail.image && (
@@ -2061,11 +2059,49 @@ function WorkflowStepDetail({ detail }: { detail: WorkflowStepDetail }) {
               {Object.entries(detail.outputs).map(([key, value]) => (
                 <div key={key} className="flex gap-2 font-mono text-xs">
                   <span className="text-muted-foreground">{key}:</span>
-                  <span className="text-green-600 dark:text-green-400">
+                  <span>
                     {value}
                   </span>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {message && (
+        <div className="flex items-start gap-2">
+          <AlertCircle className="text-muted-foreground mt-0.5 h-4 w-4" />
+          <div className="flex-1">
+            <span className="text-muted-foreground text-xs">Message</span>
+            <div className="bg-background mt-1 rounded border p-2">
+              <div className="flex gap-2 font-mono text-xs">
+                <span>{message}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(logs || loadingLogs || logsError) && (
+        <div className="flex items-start gap-2">
+          <Terminal className="text-muted-foreground mt-0.5 h-4 w-4" />
+          <div className="flex-1">
+            <span className="text-muted-foreground text-xs">Logs</span>
+            <div className="bg-black mt-1 max-h-64 overflow-auto rounded border p-3">
+              {loadingLogs && (
+                <div className="flex items-center gap-2 text-gray-400">
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  <span className="font-mono text-xs">Loading logs...</span>
+                </div>
+              )}
+              {logsError && (
+                <div className="font-mono text-xs text-red-400">{logsError}</div>
+              )}
+              {logs && !loadingLogs && (
+                <pre className="font-mono text-xs whitespace-pre-wrap">
+                  {logs}
+                </pre>
+              )}
             </div>
           </div>
         </div>
@@ -2090,41 +2126,6 @@ function WorkflowStepDetail({ detail }: { detail: WorkflowStepDetail }) {
         </div>
       )}
 
-      {(logs || loadingLogs || logsError) && (
-        <div className="flex items-start gap-2">
-          <Terminal className="text-muted-foreground mt-0.5 h-4 w-4" />
-          <div className="flex-1">
-            <span className="text-muted-foreground text-xs">Pod Logs</span>
-            <div className="bg-black mt-1 max-h-64 overflow-auto rounded border p-3">
-              {loadingLogs && (
-                <div className="flex items-center gap-2 text-gray-400">
-                  <RefreshCw className="h-3 w-3 animate-spin" />
-                  <span className="font-mono text-xs">Loading logs...</span>
-                </div>
-              )}
-              {logsError && (
-                <div className="font-mono text-xs text-red-400">{logsError}</div>
-              )}
-              {logs && !loadingLogs && (
-                <pre className="font-mono text-xs text-green-400 whitespace-pre-wrap">
-                  {logs}
-                </pre>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {detail.exitCode !== undefined && (
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground text-xs">Exit Code:</span>
-          <Badge
-            variant={detail.exitCode === 0 ? 'default' : 'destructive'}
-            className="text-xs">
-            {detail.exitCode}
-          </Badge>
-        </div>
-      )}
     </div>
   );
 }
@@ -2306,7 +2307,7 @@ function WorkflowStepNode({
 
         {hasDetail && showDetail && (
           <div className="ml-6 mt-2">
-            <WorkflowStepDetail detail={step.detail!} />
+            <WorkflowStepDetail detail={step.detail!} message={step.message} />
           </div>
         )}
 
@@ -2327,12 +2328,12 @@ function WorkflowStepNode({
   );
 }
 
-function TeamStepNode({ 
-  step, 
+function TeamStepNode({
+  step,
   depth = 0,
   isLast = false,
-}: { 
-  step: TeamStep; 
+}: {
+  step: TeamStep;
   depth?: number;
   isLast?: boolean;
 }) {
@@ -2423,9 +2424,9 @@ function TeamStepNode({
         {hasChildren && (
           <div className="mt-2 space-y-2">
             {step.children!.map((child, index) => (
-              <TeamStepNode 
-                key={child.id} 
-                step={child} 
+              <TeamStepNode
+                key={child.id}
+                step={child}
                 depth={depth + 1}
                 isLast={index === step.children!.length - 1}
               />
@@ -2437,10 +2438,10 @@ function TeamStepNode({
   );
 }
 
-function SessionDetailView({ 
-  session, 
-  isLoading = false 
-}: { 
+function SessionDetailView({
+  session,
+  isLoading = false
+}: {
   session: Session;
   isLoading?: boolean;
 }) {
@@ -2479,11 +2480,11 @@ function SessionDetailView({
         <div className="space-y-1">
           {session.type === 'workflow'
             ? session.steps.map(step => (
-                <WorkflowStepNode key={step.id} step={step} />
-              ))
+              <WorkflowStepNode key={step.id} step={step} />
+            ))
             : session.steps.map(step => (
-                <TeamStepNode key={step.id} step={step} />
-              ))}
+              <TeamStepNode key={step.id} step={step} />
+            ))}
         </div>
       </CardContent>
     </Card>
@@ -2561,35 +2562,35 @@ export function SessionsSection() {
   }, [filteredSessions, selectedSessionId]);
 
   const selectedSessionFromList = filteredSessions.find(s => s.id === selectedSessionId);
-  
+
   const { workflow: selectedWorkflowDetail, loading: loadingDetail } = useWorkflow(
     useRealData && selectedSessionFromList?.type === 'workflow' ? selectedSessionId || '' : '',
     'default',
   );
 
-  const selectedSession = 
+  const selectedSession =
     useRealData && selectedWorkflowDetail
       ? mapArgoWorkflowToSession(selectedWorkflowDetail)
       : selectedSessionFromList;
 
   const previousStatusRef = useRef<string | undefined>(undefined);
-  
+
   useEffect(() => {
     if (selectedWorkflowDetail && useRealData) {
       const currentStatus = selectedWorkflowDetail.status.phase;
       const previousStatus = previousStatusRef.current;
-      
-      const isTerminalState = 
-        currentStatus === 'Succeeded' || 
-        currentStatus === 'Failed' || 
+
+      const isTerminalState =
+        currentStatus === 'Succeeded' ||
+        currentStatus === 'Failed' ||
         currentStatus === 'Error';
-      
+
       const wasRunning = previousStatus === 'Running' || previousStatus === 'Pending';
-      
+
       if (isTerminalState && wasRunning) {
         void refetchWorkflows();
       }
-      
+
       previousStatusRef.current = currentStatus;
     }
   }, [selectedWorkflowDetail, useRealData, refetchWorkflows]);
@@ -2659,8 +2660,8 @@ export function SessionsSection() {
           </div>
           <div className="flex flex-1 overflow-hidden">
             {selectedSession ? (
-              <SessionDetailView 
-                session={selectedSession} 
+              <SessionDetailView
+                session={selectedSession}
                 isLoading={loadingDetail && useRealData}
               />
             ) : (
