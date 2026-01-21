@@ -1898,17 +1898,6 @@ const MOCK_TEAM_SESSIONS: TeamSession[] = [
   },
 ];
 
-const MOCK_SESSIONS: Session[] = [
-  ...MOCK_WORKFLOW_SESSIONS,
-  ...MOCK_TEAM_SESSIONS,
-];
-
-const SOURCE_OPTIONS: { value: SessionSourceFilter; label: string }[] = [
-  { value: 'all', label: 'All Sources' },
-  { value: 'workflows', label: 'Workflows' },
-  { value: 'teams', label: 'Teams' },
-  { value: 'agents', label: 'Agents' },
-];
 
 function getStatusIcon(status: StepStatus) {
   switch (status) {
@@ -1985,9 +1974,11 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
   const [logs, setLogs] = useState<string>('');
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [logsError, setLogsError] = useState<string | null>(null);
+  
+  const shouldFetchLogs = detail.workflowName && detail.nodeId && detail.namespace;
 
   useEffect(() => {
-    if (detail.workflowName && detail.nodeId && detail.namespace) {
+    if (shouldFetchLogs) {
       const fetchLogs = async () => {
         setLoadingLogs(true);
         setLogsError(null);
@@ -2008,7 +1999,7 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
       };
       void fetchLogs();
     }
-  }, [detail.workflowName, detail.nodeId, detail.namespace]);
+  }, [detail.workflowName, detail.nodeId, detail.namespace, shouldFetchLogs]);
   return (
     <div className="bg-muted/30 mt-2 space-y-3 rounded-md border p-3 text-sm">
       {detail.image && (
@@ -2082,14 +2073,14 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
         </div>
       )}
 
-      {(logs || loadingLogs || logsError) && (
+      {shouldFetchLogs && (
         <div className="flex items-start gap-2">
           <Terminal className="text-muted-foreground mt-0.5 h-4 w-4" />
           <div className="flex-1">
             <span className="text-muted-foreground text-xs">Logs</span>
             <div className="bg-black mt-1 max-h-64 overflow-auto rounded border p-3">
               {loadingLogs && (
-                <div className="flex items-center gap-2 text-gray-400">
+                <div className="flex items-center gap-2">
                   <RefreshCw className="h-3 w-3 animate-spin" />
                   <span className="font-mono text-xs">Loading logs...</span>
                 </div>
@@ -2539,16 +2530,13 @@ export function SessionsSection() {
   );
   const [useRealData, setUseRealData] = useState(true);
 
-  const { workflows, loading, error, refetch: refetchWorkflows } = useWorkflows('default', useRealData);
+  const { workflows, loading, error, refetch: refetchWorkflows } = useWorkflows('default');
 
-  const realSessions = useRealData ? mapArgoWorkflowsToSessions(workflows) : [];
-  const allSessions = useRealData ? realSessions : MOCK_SESSIONS;
+  const allSessions = mapArgoWorkflowsToSessions(workflows);
 
   const filteredSessions = allSessions.filter(session => {
     if (sourceFilter === 'all') return true;
     if (sourceFilter === 'workflows') return session.type === 'workflow';
-    if (sourceFilter === 'teams') return session.type === 'team';
-    if (sourceFilter === 'agents') return false;
     return true;
   });
 
@@ -2598,39 +2586,10 @@ export function SessionsSection() {
   return (
     <div className="flex flex-1 flex-col gap-4 p-4">
       <div className="flex items-center gap-4">
-        <Select
-          value={sourceFilter}
-          onValueChange={value =>
-            setSourceFilter(value as SessionSourceFilter)
-          }>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Filter by source" />
-          </SelectTrigger>
-          <SelectContent>
-            {SOURCE_OPTIONS.map(option => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setUseRealData(!useRealData)}>
-          {useRealData ? (
-            <>
-              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-              Live Data
-            </>
-          ) : (
-            'Mock Data'
-          )}
-        </Button>
-        {loading && useRealData && (
+        {loading && (
           <span className="text-muted-foreground text-sm">Loading...</span>
         )}
-        {error && useRealData && (
+        {error && (
           <span className="text-sm text-red-500">
             Error: {error.message}
           </span>
@@ -2641,7 +2600,7 @@ export function SessionsSection() {
         </span>
       </div>
 
-      {loading && useRealData ? (
+      {loading ? (
         <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center gap-3">
           <RefreshCw className="h-8 w-8 animate-spin" />
           <span>Loading sessions...</span>

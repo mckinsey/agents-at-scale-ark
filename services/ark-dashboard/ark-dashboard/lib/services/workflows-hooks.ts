@@ -4,14 +4,12 @@ import type { ArgoWorkflow } from '@/lib/types/argo-workflow';
 
 export function useWorkflows(
   namespace: string = 'default',
-  enabled: boolean = true,
 ) {
   const [workflows, setWorkflows] = useState<ArgoWorkflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchWorkflows = useCallback(async () => {
-    if (!enabled) return;
     
     try {
       setLoading(true);
@@ -23,7 +21,7 @@ export function useWorkflows(
     } finally {
       setLoading(false);
     }
-  }, [namespace, enabled]);
+  }, [namespace]);
 
   useEffect(() => {
     fetchWorkflows();
