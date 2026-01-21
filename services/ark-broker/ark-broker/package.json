@@ -23,7 +23,7 @@
     "protobufjs": "^8.0.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
-    "uuid": "^11.0.3"
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
