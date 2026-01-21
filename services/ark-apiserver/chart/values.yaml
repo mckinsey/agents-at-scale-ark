@@ -1,9 +1,19 @@
 replicaCount: 1
 
-image:
-  repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-apiserver
-  pullPolicy: IfNotPresent
-  tag: "latest"
+app:
+  name: ark-apiserver
+  image:
+    repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-apiserver
+    pullPolicy: IfNotPresent
+    tag: "latest"
+
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 512Mi
+      cpu: 500m
 
 imagePullSecrets: []
 nameOverride: ""
@@ -26,7 +36,7 @@ storage:
     username: ark
     existingSecret: ""
     secretPasswordKey: password
-    sslMode: disable  # disable, require, verify-ca, verify-full
+    sslMode: disable
 
 serviceAccount:
   create: true
@@ -49,8 +59,8 @@ service:
   port: 443
 
 apiService:
-  insecureSkipTLSVerify: true  # Set to false and provide caBundle for production
-  caBundle: ""  # Base64-encoded CA certificate for verifying the API server
+  insecureSkipTLSVerify: true
+  caBundle: ""
 
 metrics:
   enabled: true
@@ -60,22 +70,13 @@ metrics:
     interval: 30s
     labels: {}
 
-resources:
-  requests:
-    memory: 256Mi
-    cpu: 250m
-  limits:
-    memory: 512Mi
-    cpu: 500m
-
 podDisruptionBudget:
   enabled: true
   minAvailable: 1
-  # maxUnavailable: 1
 
 podAntiAffinity:
   enabled: true
-  type: soft  # soft or hard
+  type: soft
   topologyKey: kubernetes.io/hostname
 
 nodeSelector: {}

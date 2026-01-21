@@ -25,7 +25,13 @@ dependencies:
 #    path: ./services/ark-evaluator
 #  executor-langchain:
 #    path: ./services/executor-langchain
-  
+
+  # Aggregated API server - offloads Ark resources from etcd to PostgreSQL/SQLite.
+  # WARNING: Do not run alongside ark controller with CRDs - they conflict.
+  # Use standalone: cd services/ark-apiserver && devspace dev
+#  ark-apiserver:
+#    path: ./services/ark-apiserver
+
   # Observability services. Uncomment to enable locally. Only phoenix or langfuse is needed
   # phoenix service for observability. phoenix has a hook to restart ark-controller to pick up its url
   # phoenix:

@@ -1,0 +1,73 @@
+# DevSpace configuration for ark-apiserver service
+version: v2beta1
+
+images:
+  ark-apiserver:
+    image: ark-apiserver
+    dockerfile: ./Dockerfile
+    # Context is monorepo root because Dockerfile needs ark/ for shared types
+    context: ../..
+    rebuildStrategy: ignoreContextChanges
+
+pipelines:
+  deploy: |-
+    build_images --all
+    create_deployments --all
+  dev: |-
+    build_images --all
+    create_deployments --all
+    start_dev --all
+
+deployments:
+  ark-apiserver:
+    namespace: ark-system
+    helm:
+      chart:
+        path: ./chart
+      values:
+        app:
+          image:
+            repository: ${runtime.images.ark-apiserver.image}
+            tag: ${runtime.images.ark-apiserver.tag}
+          resources:
+            limits:
+              memory: "4096Mi"
+              cpu: "2000m"
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+        storage:
+          driver: sqlite
+          sqlite:
+            persistence:
+              enabled: false
+        securityContext:
+          runAsNonRoot: false
+          runAsUser: 0
+
+dev:
+  ark-apiserver:
+    imageSelector: ark-apiserver
+    devImage: golang:1.24-bookworm
+    command:
+      - sh
+      - -c
+      - |
+        apt-get update && apt-get install -y libsqlite3-dev
+        cd /go/src/services/ark-apiserver && CGO_ENABLED=1 go run ./cmd/apiserver --secure-port=8443 --cert-dir=/tmp/certs
+    namespace: ark-system
+    logs:
+      lastLines: 50
+    sync:
+      - path: ./:/go/src/services/ark-apiserver
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+        onUpload:
+          restartContainer: true
+      - path: ../../ark:/go/src/ark
+        disableDownload: true
+        onUpload:
+          restartContainer: true
+    ssh:
+      enabled: true
