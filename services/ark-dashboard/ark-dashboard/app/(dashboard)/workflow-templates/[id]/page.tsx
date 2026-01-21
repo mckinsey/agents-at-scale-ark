@@ -22,6 +22,12 @@ import type { Flow } from '@/components/rows/flow-row';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { WorkflowDagViewer } from '@/components/workflow-dag-viewer';
 import {
   type WorkflowStats,
@@ -251,25 +257,39 @@ export default function FlowDetailPage() {
               <span>{flow.stages === 1 ? 'stage' : 'stages'}</span>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 cursor-pointer p-0"
-                asChild>
-                <a
-                  href={`http://argo.127.0.0.1.nip.io:8080/workflow-templates/default/${flowId}`}
-                  target="_blank"
-                  rel="noopener noreferrer">
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 cursor-pointer p-0"
-                onClick={handleDelete}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 cursor-pointer p-0"
+                      asChild>
+                      <a
+                        href={`http://argo.127.0.0.1.nip.io:8080/workflow-templates/default/${flowId}`}
+                        target="_blank"
+                        rel="noopener noreferrer">
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Open in Argo</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 cursor-pointer p-0"
+                      onClick={handleDelete}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete template</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               {template && (
                 <RunWorkflowDialog
                   templateName={flowId}
@@ -319,24 +339,24 @@ export default function FlowDetailPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="yaml">
+              <Tabs defaultValue="tree">
                 <TabsList>
-                  <TabsTrigger value="yaml">
-                    <FileCode className="mr-2 h-4 w-4" />
-                    YAML
-                  </TabsTrigger>
                   <TabsTrigger value="tree">
                     <Network className="mr-2 h-4 w-4" />
                     Tree
                   </TabsTrigger>
+                  <TabsTrigger value="yaml">
+                    <FileCode className="mr-2 h-4 w-4" />
+                    YAML
+                  </TabsTrigger>
                 </TabsList>
+                <TabsContent value="tree">
+                  <WorkflowDagViewer manifest={flow.manifest} />
+                </TabsContent>
                 <TabsContent value="yaml">
                   <pre className="bg-muted overflow-x-auto rounded-lg p-4 font-mono text-xs">
                     <code>{flow.manifest}</code>
                   </pre>
-                </TabsContent>
-                <TabsContent value="tree">
-                  <WorkflowDagViewer manifest={flow.manifest} />
                 </TabsContent>
               </Tabs>
             </CardContent>
