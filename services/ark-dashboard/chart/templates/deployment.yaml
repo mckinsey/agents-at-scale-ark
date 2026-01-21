@@ -27,10 +27,18 @@ spec:
       serviceAccountName: {{ default "default" .Values.serviceAccount.name }}
       {{- end }}
       automountServiceAccountToken: false
+      {{- if .Values.app.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.app.podSecurityContext | nindent 8 }}
+      {{- end }}
       containers:
       - name: {{ .Values.app.name }}
         image: "{{ .Values.app.image.repository }}:{{ .Values.app.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+        {{- if .Values.app.securityContext }}
+        securityContext:
+          {{- toYaml .Values.app.securityContext | nindent 10 }}
+        {{- end }}
         ports:
         - containerPort: {{ .Values.service.targetPort }}
         env:

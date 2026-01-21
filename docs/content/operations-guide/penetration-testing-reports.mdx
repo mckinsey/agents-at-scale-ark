@@ -68,6 +68,68 @@ Low impact due to local deployment model. However, service mesh with cert-manage
 
 Dashboard lacks protective HTTP headers.
 
-**Status - Open**
+**Status - Remediated** (see Pentest #2 L3)
 
-Content-Security-Policy and security headers needed. Fix in progress.
+---
+
+### Pentest #2
+
+- **Assessment Period:** December 2025
+- **Assessor:** DataArt
+- **Remediation Status:** January 2026
+- **Overall Risk Level:** Medium-Low, remediated to Low
+
+| Risk Level | Count | Status |
+|------------|--------|---------|
+| Critical | 0 | - |
+| High | 0 | - |
+| Medium | 1 | Remediated |
+| Low | 5 | Remediated |
+
+##### M1. Clickjacking Protection
+
+Dashboard and API lacked X-Frame-Options and Content-Security-Policy frame-ancestors headers.
+
+**Resolution - Remediated**
+
+Added security headers to all Ingress configurations including X-Frame-Options: DENY and Content-Security-Policy: frame-ancestors 'none'.
+
+##### L1. Overly Permissive RBAC Roles
+
+The ark-deployer ClusterRole had cluster-wide delete permissions.
+
+**Resolution - Remediated**
+
+Removed delete permissions from ark-deployer. Deployment automation limited to create, update, and patch operations.
+
+##### L2. Container Security Hardening
+
+Services missing comprehensive security contexts.
+
+**Resolution - Remediated**
+
+Added pod and container security contexts: runAsNonRoot, runAsUser, fsGroup, seccompProfile, privilege escalation prevention, and capability dropping.
+
+##### L3. Missing Security Headers
+
+Ingress configurations lacked protective HTTP headers.
+
+**Resolution - Remediated**
+
+Added X-Content-Type-Options, X-XSS-Protection, Strict-Transport-Security, and Referrer-Policy headers to all Ingress configurations.
+
+##### L4. TLS Version Control
+
+Gateway accepted outdated TLS versions.
+
+**Resolution - Remediated**
+
+Configured Gateway resources to enforce TLS 1.2 and TLS 1.3 only.
+
+##### L5. Weak Cipher Suites
+
+Gateway accepted weak cipher suites.
+
+**Resolution - Remediated**
+
+Configured strong cipher suites with forward secrecy (ECDHE-based ciphers).
