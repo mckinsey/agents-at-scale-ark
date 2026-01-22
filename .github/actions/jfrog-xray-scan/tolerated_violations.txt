@@ -4,3 +4,6 @@ XRAY-97724 - CVE-2018-20225
 XRAY-913110 - CVE-2026-0621
 - The npm package modelcontextprotocol/sdk has a vulnerability in versions 0 >= 1.25.1, however, 1.25.1 is the most up-to-date version. We will have to ignore this violation until a newer version is released.
 - Used in ark-cli and filesystem-mcp
+XRAY-934751 - CVE-2024-58340
+- LangChain versions up to and including 0.3.1 contain a regular expression denial-of-service (ReDoS) vulnerability in the MRKLOutputParser.parse() method (libs/langchain/langchain/agents/mrkl/output_parser.py). The parser applies a backtracking-prone regular expression when extracting tool actions from model output. An attacker who can supply or influence the parsed text (for example via prompt injection in downstream applications that pass LLM output directly into MRKLOutputParser.parse()) can trigger excessive CPU consumption by providing a crafted payload, causing significant parsing delays and a denial-of-service condition.
+- We appear to be using newer LangChain versions than the vulnerable oens and we aren't using the vulnerable method.
