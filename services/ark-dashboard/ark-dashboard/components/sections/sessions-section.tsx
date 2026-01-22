@@ -11,6 +11,7 @@ import {
   Clock,
   Container,
   Cpu,
+  ExternalLink,
   FileCode,
   FileText,
   GitBranch,
@@ -120,6 +121,8 @@ interface BaseSession {
   startedAt: string;
   finishedAt?: string;
   duration: string;
+  namespace?: string;
+  uid?: string;
 }
 
 interface WorkflowSession extends BaseSession {
@@ -2468,6 +2471,23 @@ function SessionDetailView({
               {session.duration}
             </span>
             <span>Started: {new Date(session.startedAt).toLocaleString()}</span>
+            {session.type === 'workflow' && session.namespace && session.uid && (
+              <Button
+                variant="ghost"
+                size="icon"
+                asChild
+                className="h-8 w-8"
+              >
+                <a
+                  href={`http://argo.127.0.0.1.nip.io:8080/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="View in Argo Workflows"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              </Button>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -2610,7 +2630,7 @@ export function SessionsSection() {
           <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
           <Input
             type="text"
-            placeholder="Search by name or status..."
+            placeholder="Search"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="pl-9"

@@ -46,6 +46,8 @@ export interface MappedWorkflowSession {
   finishedAt?: string;
   duration: string;
   steps: MappedWorkflowStep[];
+  namespace?: string;
+  uid?: string;
 }
 
 function mapArgoPhaseToStatus(phase: string): MappedStepStatus {
@@ -197,6 +199,8 @@ export function mapArgoWorkflowToSession(
       workflow.status.finishedAt,
     ),
     steps,
+    namespace: workflow.metadata.namespace,
+    uid: workflow.metadata.uid,
   };
 }
 
