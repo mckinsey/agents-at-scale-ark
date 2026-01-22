@@ -229,13 +229,6 @@ export function McpEditor({
     setHeaderErrors(errors);
 
     if (hasErrors) {
-      // Focus on the first field with an error
-      const firstErrorKey = Object.keys(errors)[0];
-      if (firstErrorKey) {
-        const firstError = errors[firstErrorKey];
-        const _fieldType = firstError.nameError ? 'name' : 'value';
-        // You could add focus logic here if needed
-      }
       return;
     }
 
