@@ -12,20 +12,29 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 
 import { experimentalFeatureGroups } from './experimental-features';
-import type { ExperimentalFeature } from './types';
+import type {
+  BooleanSetting,
+  ExperimentalFeature,
+  SelectSetting,
+} from './types';
 
 const EXPERIMENTAL_MODAL_KEYBOARD_SHORTCUT = 'e';
 
-type ExperimentalFeatureToggleProps = {
-  feature: ExperimentalFeature;
+type BooleanFeatureToggleProps = {
+  feature: BooleanSetting;
 };
 
-function ExperimentalFeatureToggle({
-  feature,
-}: ExperimentalFeatureToggleProps) {
+function BooleanFeatureToggle({ feature }: BooleanFeatureToggleProps) {
   const [atomValue, setAtom] = useAtom(feature.atom);
 
   const toggleAtomValue = useCallback(
@@ -48,6 +57,52 @@ function ExperimentalFeatureToggle({
       <Switch checked={atomValue} onCheckedChange={toggleAtomValue} />
     </div>
   );
+}
+
+type SelectFeatureProps = {
+  feature: SelectSetting;
+};
+
+function SelectFeature({ feature }: SelectFeatureProps) {
+  const [atomValue, setAtom] = useAtom(feature.atom);
+
+  return (
+    <div className="flex flex-row items-center justify-between">
+      <div className="flex-1 space-y-0.5">
+        <Label>{feature.feature}</Label>
+        {feature.description && (
+          <div className="text-muted-foreground text-sm">
+            {feature.description}
+          </div>
+        )}
+      </div>
+      <Select value={atomValue} onValueChange={setAtom}>
+        <SelectTrigger className="w-[180px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {feature.options.map(option => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+type ExperimentalFeatureToggleProps = {
+  feature: ExperimentalFeature;
+};
+
+function ExperimentalFeatureToggle({
+  feature,
+}: ExperimentalFeatureToggleProps) {
+  if (feature.type === 'boolean') {
+    return <BooleanFeatureToggle feature={feature} />;
+  }
+  return <SelectFeature feature={feature} />;
 }
 
 export function ExperimentalFeaturesDialog() {
@@ -80,8 +135,8 @@ export function ExperimentalFeaturesDialog() {
         className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
         onOpenAutoFocus={e => e.preventDefault()}>
         <DialogHeader>
-          <DialogTitle>Experimental features</DialogTitle>
-          <DialogDescription>Enable experimental features</DialogDescription>
+          <DialogTitle>Settings</DialogTitle>
+          <DialogDescription>Configure application settings</DialogDescription>
         </DialogHeader>
         <div className="space-y-6 px-2 py-4">
           {experimentalFeatureGroups.map(

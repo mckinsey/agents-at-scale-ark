@@ -7,10 +7,10 @@ import {
   ChevronRight,
   ChevronsUpDown,
   ChevronsUpDownIcon,
-  FlaskConical,
   Home,
   LogOut,
   Plus,
+  Settings,
 } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
@@ -235,8 +235,8 @@ export function AppSidebar() {
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onSelect={() => setExperimentalFeaturesDialogOpen(true)}>
-                    <FlaskConical className="mr-2 h-4 w-4" />
-                    Experimental Features
+                    <Settings className="mr-2 h-4 w-4" />
+                    Settings
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
