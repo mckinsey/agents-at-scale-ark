@@ -68,7 +68,7 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SA_EMAIL }}
       - id: 'get-credentials'
-        uses: 'google-github-actions/get-gke-credentials@v2'
+        uses: 'google-github-actions/get-gke-credentials@v3'
         with:
           cluster_name: '${{ vars.GCP_GKE_CLUSTER_NAME }}'
           location: '${{ vars.GCP_REGION }}'
