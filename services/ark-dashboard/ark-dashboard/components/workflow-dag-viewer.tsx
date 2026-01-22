@@ -218,7 +218,7 @@ export function WorkflowDagViewer({ manifest }: WorkflowDagViewerProps) {
   }
 
   return (
-    <div className="h-[500px] w-full rounded-lg bg-muted">
+    <div className="h-[500px] w-full rounded-lg border bg-muted">
       <style jsx global>{`
         .react-flow__controls {
           background: hsl(var(--card)) !important;

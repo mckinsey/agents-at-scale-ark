@@ -46,6 +46,7 @@ export default function FlowDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<WorkflowStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('tree');
 
   useEffect(() => {
     async function fetchFlow() {
@@ -381,7 +382,8 @@ export default function FlowDetailPage() {
                   variant="outline"
                   size="sm"
                   className="cursor-pointer"
-                  onClick={handleCopyManifest}>
+                  onClick={handleCopyManifest}
+                  style={{ visibility: activeTab === 'yaml' ? 'visible' : 'hidden' }}>
                   <Copy className="mr-2 h-4 w-4" />
                   Copy
                 </Button>
@@ -389,20 +391,21 @@ export default function FlowDetailPage() {
                   variant="outline"
                   size="sm"
                   className="cursor-pointer"
-                  onClick={handleDownloadManifest}>
+                  onClick={handleDownloadManifest}
+                  style={{ visibility: activeTab === 'yaml' ? 'visible' : 'hidden' }}>
                   <Download className="mr-2 h-4 w-4" />
                   Download
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="tree">
+              <Tabs defaultValue="tree" onValueChange={setActiveTab}>
                 <TabsList>
-                  <TabsTrigger value="tree">
+                  <TabsTrigger value="tree" className="cursor-pointer">
                     <Network className="mr-2 h-4 w-4" />
                     Tree
                   </TabsTrigger>
-                  <TabsTrigger value="yaml">
+                  <TabsTrigger value="yaml" className="cursor-pointer">
                     <FileCode className="mr-2 h-4 w-4" />
                     YAML
                   </TabsTrigger>
