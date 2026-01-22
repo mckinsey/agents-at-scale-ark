@@ -36,35 +36,30 @@ spec:
             conditions:
             - type: ModelAvailable
               status: "True"
-        timeout: 30s
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Agent
           metadata:
             name: brainstormer
-        timeout: 10s
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Agent
           metadata:
             name: critic
-        timeout: 10s
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Agent
           metadata:
             name: coordinator
-        timeout: 10s
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Team
           metadata:
             name: round-robin-brainstorm-team
-        timeout: 10s
 
   - name: wait-for-query-completion
     try:

@@ -1,8 +1,10 @@
 'use client';
 
+import { ArrowUpRightIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { type Flow, FlowRow } from '@/components/rows/flow-row';
+import { Button } from '@/components/ui/button';
 import {
   Empty,
   EmptyContent,
@@ -69,11 +71,23 @@ export function WorkflowTemplatesSection() {
           </EmptyMedia>
           <EmptyTitle>No Workflow Templates Yet</EmptyTitle>
           <EmptyDescription>
-            You haven&apos;t created any workflow templates yet. Get started by
-            creating your first workflow template.
+            You haven&apos;t created any workflow templates yet. Argo Workflows
+            must be installed as a prerequisite. Get started by creating your
+            first workflow template.
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent></EmptyContent>
+        <Button
+          variant="link"
+          asChild
+          className="text-muted-foreground"
+          size="sm">
+          <a
+            href="https://mckinsey.github.io/agents-at-scale-ark/developer-guide/workflows/"
+            target="_blank">
+            Learn how to create Workflow Templates <ArrowUpRightIcon />
+          </a>
+        </Button>
       </Empty>
     );
   }

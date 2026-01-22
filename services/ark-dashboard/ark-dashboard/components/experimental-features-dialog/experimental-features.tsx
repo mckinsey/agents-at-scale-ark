@@ -3,6 +3,7 @@ import {
   storedIsChatStreamingEnabledAtom,
   storedIsExperimentalDarkModeEnabledAtom,
   storedIsExperimentalExecutionEngineEnabledAtom,
+  storedQueryTimeoutSettingAtom,
 } from '@/atoms/experimental-features';
 
 import type { ExperimentalFeatureGroup } from './types';
@@ -13,6 +14,7 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
     groupLabel: 'UI/UX',
     features: [
       {
+        type: 'boolean',
         feature: 'Experimental Dark Mode',
         description: 'Enables experimental Dark Mode',
         atom: storedIsExperimentalDarkModeEnabledAtom,
@@ -24,6 +26,7 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
     groupLabel: 'Agents',
     features: [
       {
+        type: 'boolean',
         feature: 'Experimental Execution Engine Field',
         description: (
           <span>
@@ -34,6 +37,7 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
         atom: storedIsExperimentalExecutionEngineEnabledAtom,
       },
       {
+        type: 'boolean',
         feature: 'Broker',
         description: (
           <span>
@@ -51,9 +55,27 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
     groupLabel: 'Chat',
     features: [
       {
+        type: 'boolean',
         feature: 'Chat Streaming',
         description: 'Enables streaming responses in the chat',
         atom: storedIsChatStreamingEnabledAtom,
+      },
+    ],
+  },
+  {
+    groupKey: 'queries',
+    groupLabel: 'Queries',
+    features: [
+      {
+        type: 'select',
+        feature: 'Query Timeout',
+        description: 'Default timeout for query execution',
+        atom: storedQueryTimeoutSettingAtom,
+        options: [
+          { value: '5m', label: '5m (default)' },
+          { value: '10m', label: '10m' },
+          { value: '15m', label: '15m' },
+        ],
       },
     ],
   },
