@@ -48,56 +48,56 @@ export function WorkflowStatsCard({ templateName, stats, isLoading }: Props) {
             <Link
               href={`/sessions?template=${encodeURIComponent(templateName)}`}
               className="group flex flex-col items-center space-y-1 transition-all">
-              <div className="text-muted-foreground flex items-start gap-1.5 text-xs opacity-80 transition-opacity group-hover:opacity-100">
+              <div className="text-muted-foreground flex items-start gap-1.5 text-xs">
                 <BarChart3 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                 <span className="flex items-start gap-0.5">
                   Total
                   <ArrowUpRight className="h-2.5 w-2.5 opacity-40" />
                 </span>
               </div>
-              <div className="text-2xl font-bold opacity-80 transition-opacity group-hover:opacity-100">
+              <div className="text-2xl font-bold">
                 {stats.total}
               </div>
             </Link>
             <Link
               href={`/sessions?template=${encodeURIComponent(templateName)}&status=succeeded`}
               className="group flex flex-col items-center space-y-1 transition-all">
-              <div className="flex items-start gap-1.5 text-xs text-green-600 opacity-80 transition-opacity group-hover:opacity-100 dark:text-green-500">
+              <div className="flex items-start gap-1.5 text-xs text-green-700 dark:text-green-500">
                 <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                 <span className="flex items-start gap-0.5">
                   Succeeded
                   <ArrowUpRight className="h-2.5 w-2.5 opacity-40" />
                 </span>
               </div>
-              <div className="text-2xl font-bold text-green-600 opacity-80 transition-opacity group-hover:opacity-100 dark:text-green-500">
+              <div className="text-2xl font-bold text-green-700 dark:text-green-500">
                 {stats.succeeded}
               </div>
             </Link>
             <Link
               href={`/sessions?template=${encodeURIComponent(templateName)}&status=running`}
               className="group flex flex-col items-center space-y-1 transition-all">
-              <div className="flex items-start gap-1.5 text-xs text-blue-600 opacity-80 transition-opacity group-hover:opacity-100 dark:text-blue-500">
+              <div className="flex items-start gap-1.5 text-xs text-blue-600 dark:text-blue-400">
                 <Clock className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                 <span className="flex items-start gap-0.5">
                   Running
                   <ArrowUpRight className="h-2.5 w-2.5 opacity-40" />
                 </span>
               </div>
-              <div className="text-2xl font-bold text-blue-600 opacity-80 transition-opacity group-hover:opacity-100 dark:text-blue-500">
+              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                 {stats.running}
               </div>
             </Link>
             <Link
               href={`/sessions?template=${encodeURIComponent(templateName)}&status=failed`}
               className="group flex flex-col items-center space-y-1 transition-all">
-              <div className="flex items-start gap-1.5 text-xs text-red-600 opacity-80 transition-opacity group-hover:opacity-100 dark:text-red-500">
+              <div className="flex items-start gap-1.5 text-xs text-red-600 dark:text-red-500">
                 <XCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                 <span className="flex items-start gap-0.5">
                   Failed
                   <ArrowUpRight className="h-2.5 w-2.5 opacity-40" />
                 </span>
               </div>
-              <div className="text-2xl font-bold text-red-600 opacity-80 transition-opacity group-hover:opacity-100 dark:text-red-500">
+              <div className="text-2xl font-bold text-red-600 dark:text-red-500">
                 {stats.failed}
               </div>
             </Link>

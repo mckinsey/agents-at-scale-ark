@@ -1,6 +1,6 @@
 'use client';
 
-import { ExternalLink, Eye, Trash2, Workflow } from 'lucide-react';
+import { ExternalLink, Eye, Play, Trash2, Workflow } from 'lucide-react';
 import Link from 'next/link';
 
 import { RunWorkflowDialog } from '@/components/dialogs/run-workflow-dialog';
@@ -135,11 +135,26 @@ export function FlowRow({ flow, parameters, onRun, onDelete }: FlowRowProps) {
         )}
 
         {onRun && (
-          <RunWorkflowDialog
-            templateName={flow.id}
-            parameters={parameters}
-            onRun={handleRunWorkflow}
-          />
+          <TooltipProvider>
+            <Tooltip>
+              <RunWorkflowDialog
+                templateName={flow.id}
+                parameters={parameters}
+                onRun={handleRunWorkflow}
+                trigger={
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 cursor-pointer p-0">
+                      <Play className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                }
+              />
+              <TooltipContent>Run workflow</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
       </div>
     </div>

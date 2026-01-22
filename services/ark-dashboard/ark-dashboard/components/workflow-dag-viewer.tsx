@@ -220,20 +220,23 @@ export function WorkflowDagViewer({ manifest }: WorkflowDagViewerProps) {
   return (
     <div className="h-[500px] w-full rounded-lg bg-muted">
       <style jsx global>{`
-        .dark .react-flow__controls {
-          background: hsl(var(--card));
-          border: 1px solid hsl(var(--border));
+        .react-flow__controls {
+          background: hsl(var(--card)) !important;
+          border: 1px solid hsl(var(--border)) !important;
         }
-        .dark .react-flow__controls button {
-          background: hsl(var(--card));
-          border-bottom: 1px solid hsl(var(--border));
-          color: hsl(var(--foreground));
+        .react-flow__controls button {
+          background: hsl(var(--card)) !important;
+          background-color: hsl(var(--card)) !important;
+          border-bottom: 1px solid hsl(var(--border)) !important;
+          color: hsl(var(--foreground)) !important;
         }
-        .dark .react-flow__controls button:hover {
-          background: hsl(var(--accent));
+        .react-flow__controls button:hover {
+          background: hsl(var(--accent)) !important;
+          background-color: hsl(var(--accent)) !important;
         }
-        .dark .react-flow__controls button path {
-          fill: hsl(var(--foreground));
+        .react-flow__controls button svg,
+        .react-flow__controls button path {
+          fill: currentColor !important;
         }
         .dark .react-flow__attribution {
           background: hsl(var(--card));
@@ -253,7 +256,7 @@ export function WorkflowDagViewer({ manifest }: WorkflowDagViewerProps) {
         fitView
         attributionPosition="bottom-right">
         <Background />
-        <Controls />
+        <Controls className="!bg-card" />
       </ReactFlow>
     </div>
   );

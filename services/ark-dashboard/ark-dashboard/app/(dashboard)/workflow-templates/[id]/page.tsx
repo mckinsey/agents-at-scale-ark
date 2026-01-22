@@ -139,7 +139,20 @@ export default function FlowDetailPage() {
   const handleCopyManifest = async () => {
     if (!flow.manifest) return;
     try {
-      await navigator.clipboard.writeText(flow.manifest);
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(flow.manifest);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = flow.manifest;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+      }
       toast.success('Copied', {
         description: 'Manifest copied to clipboard',
       });
@@ -328,19 +341,26 @@ export default function FlowDetailPage() {
                 </Tooltip>
               </TooltipProvider>
               {template && (
-                <RunWorkflowDialog
-                  templateName={flowId}
-                  parameters={template.spec?.arguments?.parameters}
-                  onRun={handleRunWorkflow}
-                  trigger={
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 w-8 cursor-pointer p-0">
-                      <Play className="h-4 w-4" />
-                    </Button>
-                  }
-                />
+                <TooltipProvider>
+                  <Tooltip>
+                    <RunWorkflowDialog
+                      templateName={flowId}
+                      parameters={template.spec?.arguments?.parameters}
+                      onRun={handleRunWorkflow}
+                      trigger={
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 cursor-pointer p-0">
+                            <Play className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                      }
+                    />
+                    <TooltipContent>Run workflow</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
             </div>
           </div>
