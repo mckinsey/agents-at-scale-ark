@@ -55,9 +55,7 @@ export function WorkflowStatsCard({ templateName, stats, isLoading }: Props) {
                   <ArrowUpRight className="h-2.5 w-2.5 opacity-40" />
                 </span>
               </div>
-              <div className="text-2xl font-bold">
-                {stats.total}
-              </div>
+              <div className="text-2xl font-bold">{stats.total}</div>
             </Link>
             <Link
               href={`/sessions?template=${encodeURIComponent(templateName)}&status=succeeded`}

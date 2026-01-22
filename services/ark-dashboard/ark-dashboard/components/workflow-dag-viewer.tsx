@@ -54,7 +54,7 @@ const nodeHeight = 40;
 function CustomNode({ data }: { data: { label: string } }) {
   return (
     <div
-      className="flex items-center justify-center rounded-md border-2 border-border bg-card px-2 py-2 text-xs font-medium text-card-foreground dark:border-border dark:bg-card dark:text-card-foreground"
+      className="border-border bg-card text-card-foreground dark:border-border dark:bg-card dark:text-card-foreground flex items-center justify-center rounded-md border-2 px-2 py-2 text-xs font-medium"
       style={{
         width: nodeWidth,
         height: nodeHeight,
@@ -218,7 +218,7 @@ export function WorkflowDagViewer({ manifest }: WorkflowDagViewerProps) {
   }
 
   return (
-    <div className="h-[500px] w-full rounded-lg border bg-muted">
+    <div className="bg-muted h-[500px] w-full rounded-lg border">
       <style jsx global>{`
         .react-flow__controls {
           background: hsl(var(--card)) !important;

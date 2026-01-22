@@ -10,8 +10,10 @@ import {
   Trash2,
   Workflow,
 } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { toast } from 'sonner';
 
 import { WorkflowStatsCard } from '@/components/cards/workflow-stats-card';
@@ -36,9 +38,88 @@ import {
 } from '@/lib/services/workflow-templates';
 import { countWorkflowTasks } from '@/lib/utils/workflow';
 
+const lightTheme = {
+  'code[class*="language-"]': {
+    color: 'var(--foreground)',
+    background: 'var(--muted)',
+  },
+  'pre[class*="language-"]': {
+    color: 'var(--foreground)',
+    background: 'var(--muted)',
+  },
+  comment: { color: 'var(--muted-foreground)' },
+  prolog: { color: 'var(--muted-foreground)' },
+  doctype: { color: 'var(--muted-foreground)' },
+  cdata: { color: 'var(--muted-foreground)' },
+  punctuation: { color: 'var(--foreground)' },
+  property: { color: '#0550ae' },
+  tag: { color: '#116329' },
+  boolean: { color: '#0550ae' },
+  number: { color: '#0550ae' },
+  constant: { color: '#0550ae' },
+  symbol: { color: '#0550ae' },
+  deleted: { color: '#cf222e' },
+  selector: { color: '#6639ba' },
+  'attr-name': { color: '#116329' },
+  string: { color: '#0a3069' },
+  char: { color: '#0a3069' },
+  builtin: { color: '#6639ba' },
+  inserted: { color: '#116329' },
+  operator: { color: 'var(--foreground)' },
+  entity: { color: '#6639ba' },
+  url: { color: '#0a3069' },
+  variable: { color: '#953800' },
+  atrule: { color: '#0550ae' },
+  'attr-value': { color: '#0a3069' },
+  function: { color: '#8250df' },
+  keyword: { color: '#cf222e' },
+  regex: { color: '#116329' },
+  important: { color: '#cf222e', fontWeight: 'bold' },
+};
+
+const darkTheme = {
+  'code[class*="language-"]': {
+    color: 'var(--foreground)',
+    background: 'var(--muted)',
+  },
+  'pre[class*="language-"]': {
+    color: 'var(--foreground)',
+    background: 'var(--muted)',
+  },
+  comment: { color: 'var(--muted-foreground)' },
+  prolog: { color: 'var(--muted-foreground)' },
+  doctype: { color: 'var(--muted-foreground)' },
+  cdata: { color: 'var(--muted-foreground)' },
+  punctuation: { color: 'var(--foreground)' },
+  property: { color: '#79c0ff' },
+  tag: { color: '#7ee787' },
+  boolean: { color: '#79c0ff' },
+  number: { color: '#79c0ff' },
+  constant: { color: '#79c0ff' },
+  symbol: { color: '#79c0ff' },
+  deleted: { color: '#ffa198' },
+  selector: { color: '#d2a8ff' },
+  'attr-name': { color: '#7ee787' },
+  string: { color: '#a5d6ff' },
+  char: { color: '#a5d6ff' },
+  builtin: { color: '#d2a8ff' },
+  inserted: { color: '#7ee787' },
+  operator: { color: 'var(--foreground)' },
+  entity: { color: '#d2a8ff' },
+  url: { color: '#a5d6ff' },
+  variable: { color: '#ffa657' },
+  atrule: { color: '#79c0ff' },
+  'attr-value': { color: '#a5d6ff' },
+  function: { color: '#d2a8ff' },
+  keyword: { color: '#ff7b72' },
+  regex: { color: '#7ee787' },
+  important: { color: '#ff7b72', fontWeight: 'bold' },
+};
+
 export default function FlowDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { resolvedTheme } = useTheme();
   const flowId = params.id as string;
   const [flow, setFlow] = useState<Flow | null>(null);
   const [template, setTemplate] = useState<WorkflowTemplate | null>(null);
@@ -383,7 +464,9 @@ export default function FlowDetailPage() {
                   size="sm"
                   className="cursor-pointer"
                   onClick={handleCopyManifest}
-                  style={{ visibility: activeTab === 'yaml' ? 'visible' : 'hidden' }}>
+                  style={{
+                    visibility: activeTab === 'yaml' ? 'visible' : 'hidden',
+                  }}>
                   <Copy className="mr-2 h-4 w-4" />
                   Copy
                 </Button>
@@ -392,7 +475,9 @@ export default function FlowDetailPage() {
                   size="sm"
                   className="cursor-pointer"
                   onClick={handleDownloadManifest}
-                  style={{ visibility: activeTab === 'yaml' ? 'visible' : 'hidden' }}>
+                  style={{
+                    visibility: activeTab === 'yaml' ? 'visible' : 'hidden',
+                  }}>
                   <Download className="mr-2 h-4 w-4" />
                   Download
                 </Button>
@@ -414,9 +499,20 @@ export default function FlowDetailPage() {
                   <WorkflowDagViewer manifest={flow.manifest} />
                 </TabsContent>
                 <TabsContent value="yaml">
-                  <pre className="bg-muted break-words whitespace-pre-wrap rounded-lg p-4 font-mono text-xs">
-                    <code>{flow.manifest}</code>
-                  </pre>
+                  <div className="overflow-hidden border">
+                    <SyntaxHighlighter
+                      language="yaml"
+                      style={resolvedTheme === 'dark' ? darkTheme : lightTheme}
+                      customStyle={{
+                        margin: 0,
+                        fontSize: '0.75rem',
+                        padding: '1rem',
+                      }}
+                      showLineNumbers
+                      wrapLongLines>
+                      {flow.manifest}
+                    </SyntaxHighlighter>
+                  </div>
                 </TabsContent>
               </Tabs>
             </CardContent>
