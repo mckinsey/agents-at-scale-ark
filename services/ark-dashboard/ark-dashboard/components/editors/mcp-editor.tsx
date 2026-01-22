@@ -397,7 +397,11 @@ export function McpEditor({
                     valueError={headerErrors[row.key]?.valueError}
                   />
                 ))}
-                <Button type="button" onClick={() => addRow()} variant="outline" size="icon">
+                <Button
+                  type="button"
+                  onClick={() => addRow()}
+                  variant="outline"
+                  size="icon">
                   <Plus className="h-2 w-2" />
                 </Button>
               </div>

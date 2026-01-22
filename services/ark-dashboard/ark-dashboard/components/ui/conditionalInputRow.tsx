@@ -110,7 +110,11 @@ export function ConditionalInputRow({
           </>
         )}
       </div>
-      <Button type="button" onClick={() => deleteRow(data.key)} variant="outline" size="icon">
+      <Button
+        type="button"
+        onClick={() => deleteRow(data.key)}
+        variant="outline"
+        size="icon">
         <Trash2 className="h-2 w-2" />
       </Button>
     </div>
