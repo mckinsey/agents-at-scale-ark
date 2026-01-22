@@ -80,21 +80,33 @@ export default function FlowDetailPage() {
       }
     }
 
-    async function fetchStats() {
+    async function fetchStats(showLoading = true) {
       try {
-        setStatsLoading(true);
+        if (showLoading) {
+          setStatsLoading(true);
+        }
         const workflowStats = await workflowTemplatesService.getStats(flowId);
         setStats(workflowStats);
       } catch (err) {
         console.error('Failed to fetch workflow stats:', err);
         setStats(null);
       } finally {
-        setStatsLoading(false);
+        if (showLoading) {
+          setStatsLoading(false);
+        }
       }
     }
 
     fetchFlow();
     fetchStats();
+
+    const statsInterval = setInterval(() => {
+      fetchStats(false);
+    }, 30000);
+
+    return () => {
+      clearInterval(statsInterval);
+    };
   }, [flowId]);
 
   const breadcrumbs: BreadcrumbElement[] = [
@@ -171,8 +183,19 @@ export default function FlowDetailPage() {
         description: `Created workflow: ${workflow.metadata.name}`,
       });
 
-      const workflowStats = await workflowTemplatesService.getStats(flowId);
-      setStats(workflowStats);
+      if (stats) {
+        setStats({
+          total: stats.total + 1,
+          succeeded: stats.succeeded,
+          running: stats.running + 1,
+          failed: stats.failed,
+        });
+      }
+
+      setTimeout(async () => {
+        const workflowStats = await workflowTemplatesService.getStats(flowId);
+        setStats(workflowStats);
+      }, 1000);
     } catch (err) {
       console.error('Failed to start workflow:', err);
       toast.error('Failed to start workflow', {
