@@ -1,0 +1,245 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: memories.ark.mckinsey.com
+spec:
+  group: ark.mckinsey.com
+  names:
+    kind: Memory
+    listKind: MemoryList
+    plural: memories
+    singular: memory
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Phase of the memory
+      jsonPath: .status.phase
+      name: Phase
+      type: string
+    - description: Last resolved address
+      jsonPath: .status.lastResolvedAddress
+      name: Address
+      type: string
+    - description: Age of the memory
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Memory is the Schema for the memories API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: MemorySpec defines the desired state of Memory.
+            properties:
+              address:
+                description: ValueSource represents a source for a configuration value
+                properties:
+                  value:
+                    type: string
+                  valueFrom:
+                    properties:
+                      configMapKeyRef:
+                        description: Selects a key from a ConfigMap.
+                        properties:
+                          key:
+                            description: The key to select.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the ConfigMap or its key
+                              must be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      queryParameterRef:
+                        properties:
+                          name:
+                            description: Name of the parameter from the Query resource
+                            minLength: 1
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      secretKeyRef:
+                        description: SecretKeySelector selects a key of a Secret.
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      serviceRef:
+                        properties:
+                          name:
+                            description: Name of the service
+                            type: string
+                          namespace:
+                            description: Namespace of the service. Defaults to the
+                              namespace as the resource.
+                            type: string
+                          path:
+                            description: Path component of the service URL. For anthropic
+                              models might be 'v1', for gemini might be 'v1beta/openai',
+                              for MCP servers often will be 'mcp' or 'sse'.
+                            type: string
+                          port:
+                            description: Port name to use. If not specified, uses
+                              the service's only port or first port.
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    type: object
+                type: object
+              headers:
+                description: Headers contains HTTP headers to include in memory API
+                  requests
+                items:
+                  properties:
+                    name:
+                      minLength: 1
+                      type: string
+                    value:
+                      properties:
+                        value:
+                          type: string
+                        valueFrom:
+                          properties:
+                            configMapKeyRef:
+                              description: Selects a key from a ConfigMap.
+                              properties:
+                                key:
+                                  description: The key to select.
+                                  type: string
+                                name:
+                                  default: ""
+                                  description: |-
+                                    Name of the referent.
+                                    This field is effectively required, but due to backwards compatibility is
+                                    allowed to be empty. Instances of this type with an empty value here are
+                                    almost certainly wrong.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                optional:
+                                  description: Specify whether the ConfigMap or its
+                                    key must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            queryParameterRef:
+                              properties:
+                                name:
+                                  description: Name of the parameter from the Query
+                                    resource
+                                  minLength: 1
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            secretKeyRef:
+                              description: SecretKeySelector selects a key of a Secret.
+                              properties:
+                                key:
+                                  description: The key of the secret to select from.  Must
+                                    be a valid secret key.
+                                  type: string
+                                name:
+                                  default: ""
+                                  description: |-
+                                    Name of the referent.
+                                    This field is effectively required, but due to backwards compatibility is
+                                    allowed to be empty. Instances of this type with an empty value here are
+                                    almost certainly wrong.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                optional:
+                                  description: Specify whether the Secret or its key
+                                    must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                          type: object
+                      type: object
+                  required:
+                  - name
+                  - value
+                  type: object
+                type: array
+            required:
+            - address
+            type: object
+          status:
+            description: MemoryStatus defines the observed state of Memory.
+            properties:
+              lastResolvedAddress:
+                description: LastResolvedAddress contains the last resolved address
+                  value for reference
+                type: string
+              message:
+                description: Message provides additional information about the current
+                  status
+                type: string
+              phase:
+                description: Phase represents the current state of the memory
+                enum:
+                - running
+                - ready
+                - error
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

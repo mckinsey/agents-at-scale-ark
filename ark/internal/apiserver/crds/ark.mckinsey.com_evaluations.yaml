@@ -1,0 +1,828 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: evaluations.ark.mckinsey.com
+spec:
+  group: ark.mckinsey.com
+  names:
+    kind: Evaluation
+    listKind: EvaluationList
+    plural: evaluations
+    singular: evaluation
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.score
+      name: Score
+      type: string
+    - jsonPath: .status.passed
+      name: Passed
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: EvaluationSpec defines the desired state of Evaluation
+            properties:
+              config:
+                description: EvaluationConfig holds type-specific configuration parameters
+                properties:
+                  concurrency:
+                    default: 10
+                    description: Maximum number of concurrent child evaluations
+                    format: int32
+                    type: integer
+                  continueOnFailure:
+                    default: false
+                    description: Whether to continue on child evaluation failures
+                    type: boolean
+                  evaluations:
+                    description: List of existing evaluations to aggregate (legacy
+                      support)
+                    items:
+                      description: EvaluationRef references an evaluation to aggregate
+                        in batch type
+                      properties:
+                        name:
+                          minLength: 1
+                          type: string
+                        namespace:
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                  input:
+                    type: string
+                  items:
+                    description: List of specific evaluations to create (explicit
+                      definitions)
+                    items:
+                      description: BatchEvaluationItem defines individual evaluation
+                        to create in batch mode
+                      properties:
+                        config:
+                          description: Configuration for this specific evaluation
+                          type: object
+                        evaluator:
+                          description: Evaluator reference for this evaluation
+                          properties:
+                            name:
+                              minLength: 1
+                              type: string
+                            namespace:
+                              type: string
+                            parameters:
+                              items:
+                                properties:
+                                  name:
+                                    description: Name of the parameter (used as template
+                                      variable)
+                                    minLength: 1
+                                    type: string
+                                  value:
+                                    description: Direct value (mutually exclusive
+                                      with valueFrom)
+                                    type: string
+                                  valueFrom:
+                                    description: Reference to external sources (mutually
+                                      exclusive with value)
+                                    properties:
+                                      configMapKeyRef:
+                                        description: Selects a key from a ConfigMap.
+                                        properties:
+                                          key:
+                                            description: The key to select.
+                                            type: string
+                                          name:
+                                            default: ""
+                                            description: |-
+                                              Name of the referent.
+                                              This field is effectively required, but due to backwards compatibility is
+                                              allowed to be empty. Instances of this type with an empty value here are
+                                              almost certainly wrong.
+                                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                            type: string
+                                          optional:
+                                            description: Specify whether the ConfigMap
+                                              or its key must be defined
+                                            type: boolean
+                                        required:
+                                        - key
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                      queryParameterRef:
+                                        properties:
+                                          name:
+                                            description: Name of the parameter from
+                                              the Query resource
+                                            minLength: 1
+                                            type: string
+                                        required:
+                                        - name
+                                        type: object
+                                      secretKeyRef:
+                                        description: SecretKeySelector selects a key
+                                          of a Secret.
+                                        properties:
+                                          key:
+                                            description: The key of the secret to
+                                              select from.  Must be a valid secret
+                                              key.
+                                            type: string
+                                          name:
+                                            default: ""
+                                            description: |-
+                                              Name of the referent.
+                                              This field is effectively required, but due to backwards compatibility is
+                                              allowed to be empty. Instances of this type with an empty value here are
+                                              almost certainly wrong.
+                                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                            type: string
+                                          optional:
+                                            description: Specify whether the Secret
+                                              or its key must be defined
+                                            type: boolean
+                                        required:
+                                        - key
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                      serviceRef:
+                                        properties:
+                                          name:
+                                            description: Name of the service
+                                            type: string
+                                          namespace:
+                                            description: Namespace of the service.
+                                              Defaults to the namespace as the resource.
+                                            type: string
+                                          path:
+                                            description: Path component of the service
+                                              URL. For anthropic models might be 'v1',
+                                              for gemini might be 'v1beta/openai',
+                                              for MCP servers often will be 'mcp'
+                                              or 'sse'.
+                                            type: string
+                                          port:
+                                            description: Port name to use. If not
+                                              specified, uses the service's only port
+                                              or first port.
+                                            type: string
+                                        required:
+                                        - name
+                                        type: object
+                                    type: object
+                                required:
+                                - name
+                                type: object
+                              type: array
+                          required:
+                          - name
+                          type: object
+                        name:
+                          description: Name for the child evaluation (auto-generated
+                            if empty)
+                          type: string
+                        timeout:
+                          description: Timeout override for this evaluation
+                          type: string
+                        ttl:
+                          description: TTL override for this evaluation
+                          type: string
+                        type:
+                          enum:
+                          - direct
+                          - query
+                          - baseline
+                          - event
+                          type: string
+                      required:
+                      - config
+                      - evaluator
+                      - type
+                      type: object
+                    type: array
+                  output:
+                    type: string
+                  queryRef:
+                    description: QueryRef references a query for post-hoc evaluation
+                    properties:
+                      name:
+                        minLength: 1
+                        type: string
+                      namespace:
+                        type: string
+                      responseTarget:
+                        description: Target name to match against query responses
+                          (e.g., "weather-agent", "summary-team")
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  querySelector:
+                    description: Query selector for dynamic evaluation creation (requires
+                      template)
+                    properties:
+                      matchExpressions:
+                        description: Field selector expressions
+                        items:
+                          description: |-
+                            A label selector requirement is a selector that contains values, a key, and an operator that
+                            relates the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: |-
+                                operator represents a key's relationship to a set of values.
+                                Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: |-
+                                values is an array of string values. If the operator is In or NotIn,
+                                the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced during a strategic
+                                merge patch.
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: Label selector
+                        type: object
+                    type: object
+                  rules:
+                    items:
+                      properties:
+                        description:
+                          description: Description explains what the rule validates
+                          type: string
+                        expression:
+                          description: Expression is a CEL expression that returns
+                            a boolean
+                          type: string
+                        name:
+                          description: Name identifies the rule
+                          minLength: 1
+                          type: string
+                        weight:
+                          description: 'Weight determines the rule''s impact on the
+                            overall score (default: 1)'
+                          format: int32
+                          minimum: 0
+                          type: integer
+                      required:
+                      - expression
+                      - name
+                      type: object
+                    type: array
+                  template:
+                    description: Template for dynamically creating evaluations from
+                      query selectors
+                    properties:
+                      config:
+                        description: Default configuration for template-generated
+                          evaluations
+                        type: object
+                      evaluator:
+                        description: Default evaluator reference for template-generated
+                          evaluations
+                        properties:
+                          name:
+                            minLength: 1
+                            type: string
+                          namespace:
+                            type: string
+                          parameters:
+                            items:
+                              properties:
+                                name:
+                                  description: Name of the parameter (used as template
+                                    variable)
+                                  minLength: 1
+                                  type: string
+                                value:
+                                  description: Direct value (mutually exclusive with
+                                    valueFrom)
+                                  type: string
+                                valueFrom:
+                                  description: Reference to external sources (mutually
+                                    exclusive with value)
+                                  properties:
+                                    configMapKeyRef:
+                                      description: Selects a key from a ConfigMap.
+                                      properties:
+                                        key:
+                                          description: The key to select.
+                                          type: string
+                                        name:
+                                          default: ""
+                                          description: |-
+                                            Name of the referent.
+                                            This field is effectively required, but due to backwards compatibility is
+                                            allowed to be empty. Instances of this type with an empty value here are
+                                            almost certainly wrong.
+                                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                          type: string
+                                        optional:
+                                          description: Specify whether the ConfigMap
+                                            or its key must be defined
+                                          type: boolean
+                                      required:
+                                      - key
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                    queryParameterRef:
+                                      properties:
+                                        name:
+                                          description: Name of the parameter from
+                                            the Query resource
+                                          minLength: 1
+                                          type: string
+                                      required:
+                                      - name
+                                      type: object
+                                    secretKeyRef:
+                                      description: SecretKeySelector selects a key
+                                        of a Secret.
+                                      properties:
+                                        key:
+                                          description: The key of the secret to select
+                                            from.  Must be a valid secret key.
+                                          type: string
+                                        name:
+                                          default: ""
+                                          description: |-
+                                            Name of the referent.
+                                            This field is effectively required, but due to backwards compatibility is
+                                            allowed to be empty. Instances of this type with an empty value here are
+                                            almost certainly wrong.
+                                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                          type: string
+                                        optional:
+                                          description: Specify whether the Secret
+                                            or its key must be defined
+                                          type: boolean
+                                      required:
+                                      - key
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                    serviceRef:
+                                      properties:
+                                        name:
+                                          description: Name of the service
+                                          type: string
+                                        namespace:
+                                          description: Namespace of the service. Defaults
+                                            to the namespace as the resource.
+                                          type: string
+                                        path:
+                                          description: Path component of the service
+                                            URL. For anthropic models might be 'v1',
+                                            for gemini might be 'v1beta/openai', for
+                                            MCP servers often will be 'mcp' or 'sse'.
+                                          type: string
+                                        port:
+                                          description: Port name to use. If not specified,
+                                            uses the service's only port or first
+                                            port.
+                                          type: string
+                                      required:
+                                      - name
+                                      type: object
+                                  type: object
+                              required:
+                              - name
+                              type: object
+                            type: array
+                        required:
+                        - name
+                        type: object
+                      namePrefix:
+                        description: Name prefix for generated child evaluations (defaults
+                          to parent name)
+                        type: string
+                      parameters:
+                        description: Default parameters for template-generated evaluations
+                        items:
+                          properties:
+                            name:
+                              description: Name of the parameter (used as template
+                                variable)
+                              minLength: 1
+                              type: string
+                            value:
+                              description: Direct value (mutually exclusive with valueFrom)
+                              type: string
+                            valueFrom:
+                              description: Reference to external sources (mutually
+                                exclusive with value)
+                              properties:
+                                configMapKeyRef:
+                                  description: Selects a key from a ConfigMap.
+                                  properties:
+                                    key:
+                                      description: The key to select.
+                                      type: string
+                                    name:
+                                      default: ""
+                                      description: |-
+                                        Name of the referent.
+                                        This field is effectively required, but due to backwards compatibility is
+                                        allowed to be empty. Instances of this type with an empty value here are
+                                        almost certainly wrong.
+                                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                      type: string
+                                    optional:
+                                      description: Specify whether the ConfigMap or
+                                        its key must be defined
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                                queryParameterRef:
+                                  properties:
+                                    name:
+                                      description: Name of the parameter from the
+                                        Query resource
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                                secretKeyRef:
+                                  description: SecretKeySelector selects a key of
+                                    a Secret.
+                                  properties:
+                                    key:
+                                      description: The key of the secret to select
+                                        from.  Must be a valid secret key.
+                                      type: string
+                                    name:
+                                      default: ""
+                                      description: |-
+                                        Name of the referent.
+                                        This field is effectively required, but due to backwards compatibility is
+                                        allowed to be empty. Instances of this type with an empty value here are
+                                        almost certainly wrong.
+                                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                      type: string
+                                    optional:
+                                      description: Specify whether the Secret or its
+                                        key must be defined
+                                      type: boolean
+                                  required:
+                                  - key
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                                serviceRef:
+                                  properties:
+                                    name:
+                                      description: Name of the service
+                                      type: string
+                                    namespace:
+                                      description: Namespace of the service. Defaults
+                                        to the namespace as the resource.
+                                      type: string
+                                    path:
+                                      description: Path component of the service URL.
+                                        For anthropic models might be 'v1', for gemini
+                                        might be 'v1beta/openai', for MCP servers
+                                        often will be 'mcp' or 'sse'.
+                                      type: string
+                                    port:
+                                      description: Port name to use. If not specified,
+                                        uses the service's only port or first port.
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                              type: object
+                          required:
+                          - name
+                          type: object
+                        type: array
+                      type:
+                        enum:
+                        - direct
+                        - query
+                        - baseline
+                        - event
+                        type: string
+                    required:
+                    - config
+                    - evaluator
+                    - type
+                    type: object
+                type: object
+              evaluator:
+                description: EvaluationEvaluatorRef references an evaluator resource
+                  for evaluation with parameters
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                  namespace:
+                    type: string
+                  parameters:
+                    items:
+                      properties:
+                        name:
+                          description: Name of the parameter (used as template variable)
+                          minLength: 1
+                          type: string
+                        value:
+                          description: Direct value (mutually exclusive with valueFrom)
+                          type: string
+                        valueFrom:
+                          description: Reference to external sources (mutually exclusive
+                            with value)
+                          properties:
+                            configMapKeyRef:
+                              description: Selects a key from a ConfigMap.
+                              properties:
+                                key:
+                                  description: The key to select.
+                                  type: string
+                                name:
+                                  default: ""
+                                  description: |-
+                                    Name of the referent.
+                                    This field is effectively required, but due to backwards compatibility is
+                                    allowed to be empty. Instances of this type with an empty value here are
+                                    almost certainly wrong.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                optional:
+                                  description: Specify whether the ConfigMap or its
+                                    key must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            queryParameterRef:
+                              properties:
+                                name:
+                                  description: Name of the parameter from the Query
+                                    resource
+                                  minLength: 1
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            secretKeyRef:
+                              description: SecretKeySelector selects a key of a Secret.
+                              properties:
+                                key:
+                                  description: The key of the secret to select from.  Must
+                                    be a valid secret key.
+                                  type: string
+                                name:
+                                  default: ""
+                                  description: |-
+                                    Name of the referent.
+                                    This field is effectively required, but due to backwards compatibility is
+                                    allowed to be empty. Instances of this type with an empty value here are
+                                    almost certainly wrong.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                optional:
+                                  description: Specify whether the Secret or its key
+                                    must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            serviceRef:
+                              properties:
+                                name:
+                                  description: Name of the service
+                                  type: string
+                                namespace:
+                                  description: Namespace of the service. Defaults
+                                    to the namespace as the resource.
+                                  type: string
+                                path:
+                                  description: Path component of the service URL.
+                                    For anthropic models might be 'v1', for gemini
+                                    might be 'v1beta/openai', for MCP servers often
+                                    will be 'mcp' or 'sse'.
+                                  type: string
+                                port:
+                                  description: Port name to use. If not specified,
+                                    uses the service's only port or first port.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                          type: object
+                      required:
+                      - name
+                      type: object
+                    type: array
+                required:
+                - name
+                type: object
+              timeout:
+                default: 5m
+                description: Timeout for query execution (e.g., "30s", "5m", "1h")
+                type: string
+              ttl:
+                default: 720h
+                type: string
+              type:
+                default: direct
+                enum:
+                - direct
+                - baseline
+                - query
+                - batch
+                - event
+                type: string
+            required:
+            - config
+            type: object
+          status:
+            description: EvaluationStatus defines the observed state of Evaluation
+            properties:
+              batchProgress:
+                description: Batch evaluation progress (only set for batch type evaluations)
+                properties:
+                  childEvaluations:
+                    description: List of child evaluation names and their status
+                    items:
+                      description: ChildEvaluationStatus represents the status of
+                        a child evaluation
+                      properties:
+                        message:
+                          type: string
+                        name:
+                          type: string
+                        passed:
+                          type: boolean
+                        phase:
+                          enum:
+                          - pending
+                          - running
+                          - error
+                          - done
+                          - canceled
+                          type: string
+                        score:
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                  completed:
+                    description: Number of child evaluations completed
+                    format: int32
+                    type: integer
+                  failed:
+                    description: Number of child evaluations that failed
+                    format: int32
+                    type: integer
+                  running:
+                    description: Number of child evaluations currently running
+                    format: int32
+                    type: integer
+                  total:
+                    description: Total number of child evaluations created
+                    format: int32
+                    type: integer
+                type: object
+              conditions:
+                description: Conditions represent the latest available observations
+                  of an evaluation's state
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              duration:
+                type: string
+              message:
+                type: string
+              passed:
+                type: boolean
+              phase:
+                enum:
+                - pending
+                - running
+                - error
+                - done
+                - canceled
+                type: string
+              score:
+                pattern: ^(0(\.[0-9]+)?|1(\.0+)?)$
+                type: string
+              tokenUsage:
+                properties:
+                  completionTokens:
+                    format: int64
+                    type: integer
+                  promptTokens:
+                    format: int64
+                    type: integer
+                  totalTokens:
+                    format: int64
+                    type: integer
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
