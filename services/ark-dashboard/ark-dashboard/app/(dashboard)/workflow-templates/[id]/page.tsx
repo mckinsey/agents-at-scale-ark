@@ -165,7 +165,20 @@ export default function FlowDetailPage() {
 
   const handleCopyWorkflowName = async () => {
     try {
-      await navigator.clipboard.writeText(flowId);
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(flowId);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = flowId;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+      }
       toast.success('Copied', {
         description: 'Workflow name copied to clipboard',
       });
@@ -250,9 +263,10 @@ export default function FlowDetailPage() {
                   {flow.id}
                 </p>
                 <Button
+                  type="button"
                   variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 cursor-pointer"
+                  size="sm"
+                  className="h-6 w-6 cursor-pointer p-0"
                   onClick={handleCopyWorkflowName}>
                   <Copy className="h-4 w-4" />
                 </Button>
