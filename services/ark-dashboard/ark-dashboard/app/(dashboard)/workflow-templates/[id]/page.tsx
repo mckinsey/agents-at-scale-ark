@@ -287,8 +287,20 @@ export default function FlowDetailPage() {
   const handleRunWorkflow = async (parameters?: Record<string, string>) => {
     try {
       const workflow = await workflowTemplatesService.run(flowId, parameters);
+      const sessionsUrl = `/sessions?workflowName=${encodeURIComponent(workflow.metadata.name)}`;
       toast.success('Workflow started', {
-        description: `Created workflow: ${workflow.metadata.name}`,
+        description: (
+          <a
+            href={sessionsUrl}
+            className="inline-flex items-center gap-1 underline"
+            onClick={(e) => {
+              e.preventDefault();
+              router.push(sessionsUrl);
+            }}>
+            {workflow.metadata.name}
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        ),
       });
 
       if (stats) {
