@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { WorkflowStatsCard } from '@/components/cards/workflow-stats-card';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
+import { DeleteWorkflowTemplateDialog } from '@/components/dialogs/delete-workflow-template-dialog';
 import { RunWorkflowDialog } from '@/components/dialogs/run-workflow-dialog';
 import type { Flow } from '@/components/rows/flow-row';
 import { Button } from '@/components/ui/button';
@@ -128,6 +129,7 @@ export default function FlowDetailPage() {
   const [stats, setStats] = useState<WorkflowStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('tree');
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   useEffect(() => {
     async function fetchFlow() {
@@ -325,15 +327,11 @@ export default function FlowDetailPage() {
     }
   };
 
-  const handleDelete = async () => {
-    if (
-      !confirm(
-        `Are you sure you want to delete workflow template "${flowId}"? This action cannot be undone.`,
-      )
-    ) {
-      return;
-    }
+  const handleDeleteClick = () => {
+    setShowDeleteDialog(true);
+  };
 
+  const handleConfirmDelete = async () => {
     try {
       await workflowTemplatesService.delete(flowId);
       toast.success('Workflow template deleted', {
@@ -427,7 +425,7 @@ export default function FlowDetailPage() {
                       variant="ghost"
                       size="sm"
                       className="h-8 w-8 cursor-pointer p-0"
-                      onClick={handleDelete}>
+                      onClick={handleDeleteClick}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
@@ -533,6 +531,13 @@ export default function FlowDetailPage() {
           </Card>
         )}
       </div>
+
+      <DeleteWorkflowTemplateDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        templateName={flowId}
+        onConfirm={handleConfirmDelete}
+      />
     </>
   );
 }

@@ -2,7 +2,9 @@
 
 import { ExternalLink, Play, Trash2, Workflow } from 'lucide-react';
 import Link from 'next/link';
+import { useState } from 'react';
 
+import { DeleteWorkflowTemplateDialog } from '@/components/dialogs/delete-workflow-template-dialog';
 import { RunWorkflowDialog } from '@/components/dialogs/run-workflow-dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -32,20 +34,19 @@ interface FlowRowProps {
 }
 
 export function FlowRow({ flow, parameters, onRun, onDelete }: FlowRowProps) {
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
   const handleRunWorkflow = async (params?: Record<string, string>) => {
     if (onRun) {
       await onRun(flow.id, params);
     }
   };
 
-  const handleDelete = async () => {
-    if (
-      !confirm(
-        `Are you sure you want to delete workflow template "${flow.id}"? This action cannot be undone.`,
-      )
-    ) {
-      return;
-    }
+  const handleDeleteClick = () => {
+    setShowDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = async () => {
     if (onDelete) {
       await onDelete(flow.id);
     }
@@ -113,7 +114,7 @@ export function FlowRow({ flow, parameters, onRun, onDelete }: FlowRowProps) {
                   variant="ghost"
                   size="sm"
                   className="pointer-events-auto h-8 w-8 cursor-pointer p-0"
-                  onClick={handleDelete}>
+                  onClick={handleDeleteClick}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
@@ -145,6 +146,13 @@ export function FlowRow({ flow, parameters, onRun, onDelete }: FlowRowProps) {
           </TooltipProvider>
         )}
       </div>
+
+      <DeleteWorkflowTemplateDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        templateName={flow.id}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 }

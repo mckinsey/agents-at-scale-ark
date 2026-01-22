@@ -51,11 +51,11 @@ export function ConfirmationDialog({
         <DialogHeader>
           <div className="flex items-center gap-3">
             {variant === 'destructive' && (
-              <div className="bg-destructive/10 flex h-10 w-10 items-center justify-center rounded-full">
+              <div className="bg-destructive/10 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full">
                 <AlertTriangle className="text-destructive h-5 w-5" />
               </div>
             )}
-            <div>
+            <div className="min-w-0 flex-1">
               <DialogTitle>{title}</DialogTitle>
               <DialogDescription className="mt-1">
                 {description}
