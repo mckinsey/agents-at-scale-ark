@@ -54,18 +54,10 @@ const nodeHeight = 40;
 function CustomNode({ data }: { data: { label: string } }) {
   return (
     <div
+      className="flex items-center justify-center rounded-md border-2 border-border bg-card px-2 py-2 text-xs font-medium text-card-foreground dark:border-border dark:bg-card dark:text-card-foreground"
       style={{
         width: nodeWidth,
         height: nodeHeight,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        border: '2px solid #d1d5db',
-        borderRadius: '6px',
-        background: 'white',
-        fontSize: '12px',
-        fontWeight: 500,
-        padding: '8px',
       }}>
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
       {data.label}
@@ -101,12 +93,12 @@ function getLayoutedElements(tasks: DagTask[]) {
           type: 'smoothstep',
           animated: true,
           style: {
-            stroke: '#000000',
+            stroke: '#6b7280',
             strokeWidth: 2,
           },
           markerEnd: {
             type: MarkerType.Arrow,
-            color: '#000000',
+            color: '#6b7280',
             width: 15,
             height: 15,
           },
@@ -226,13 +218,40 @@ export function WorkflowDagViewer({ manifest }: WorkflowDagViewerProps) {
   }
 
   return (
-    <div style={{ width: '100%', height: '500px' }}>
+    <div className="h-[500px] w-full rounded-lg bg-muted">
+      <style jsx global>{`
+        .dark .react-flow__controls {
+          background: hsl(var(--card));
+          border: 1px solid hsl(var(--border));
+        }
+        .dark .react-flow__controls button {
+          background: hsl(var(--card));
+          border-bottom: 1px solid hsl(var(--border));
+          color: hsl(var(--foreground));
+        }
+        .dark .react-flow__controls button:hover {
+          background: hsl(var(--accent));
+        }
+        .dark .react-flow__controls button path {
+          fill: hsl(var(--foreground));
+        }
+        .dark .react-flow__attribution {
+          background: hsl(var(--card));
+          color: hsl(var(--muted-foreground));
+          border: 1px solid hsl(var(--border));
+          padding: 2px 6px;
+          border-radius: 4px;
+        }
+        .dark .react-flow__attribution a {
+          color: hsl(var(--foreground));
+        }
+      `}</style>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         fitView
-        attributionPosition="bottom-left">
+        attributionPosition="bottom-right">
         <Background />
         <Controls />
       </ReactFlow>
