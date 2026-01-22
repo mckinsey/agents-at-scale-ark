@@ -78,6 +78,9 @@ export function McpEditor({
     { key: 'row-1', name: '', type: 'direct', value: '' },
   ]);
   const [secrets, setSecrets] = useState<Secret[]>([]);
+  const [headerErrors, setHeaderErrors] = useState<
+    Record<string, { nameError?: string; valueError?: string }>
+  >({});
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -116,6 +119,10 @@ export function McpEditor({
   const deleteRow = (key: string) => {
     const updatedHeaders = headers.filter(header => header.key !== key);
     setHeaders(updatedHeaders);
+    // Clear errors for the deleted row
+    const newErrors = { ...headerErrors };
+    delete newErrors[key];
+    setHeaderErrors(newErrors);
   };
 
   const getMpcServerDetails = useCallback(async () => {
@@ -191,19 +198,44 @@ export function McpEditor({
   };
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
-    // Validate headers
-    const allFieldsFilled = headers.every(
-      row => row.name.trim() !== '' && row.value.trim() !== '',
+    // Validate headers individually
+    const errors: Record<string, { nameError?: string; valueError?: string }> =
+      {};
+    let hasErrors = false;
+
+    // Filter out completely empty rows
+    const nonEmptyHeaders = headers.filter(
+      row => row.name.trim() !== '' || row.value.trim() !== '',
     );
 
-    if (!allFieldsFilled) {
-      form.setError('name', {
-        message: 'All header fields must be filled in',
-      });
+    nonEmptyHeaders.forEach(header => {
+      const headerError: { nameError?: string; valueError?: string } = {};
+
+      if (header.name.trim() === '') {
+        headerError.nameError = 'Header name is required';
+        hasErrors = true;
+      }
+
+      if (header.value.trim() === '') {
+        headerError.valueError = 'Header value is required';
+        hasErrors = true;
+      }
+
+      if (headerError.nameError || headerError.valueError) {
+        errors[header.key] = headerError;
+      }
+    });
+
+    setHeaderErrors(errors);
+
+    if (hasErrors) {
       return;
     }
 
-    const modifiedHeaders: MCPHeader[] = headers.map(header => {
+    // Clear any existing header errors if validation passes
+    setHeaderErrors({});
+
+    const modifiedHeaders: MCPHeader[] = nonEmptyHeaders.map(header => {
       return returnHeaderObj(header);
     });
     const createData: MCPServerCreateRequest = {
@@ -333,12 +365,43 @@ export function McpEditor({
                   <ConditionalInputRow
                     key={row.key}
                     data={row}
-                    onChange={updated => updateRow(index, updated)}
+                    onChange={updated => {
+                      updateRow(index, updated);
+                      // Clear errors for this field when user types
+                      if (headerErrors[row.key]) {
+                        const newErrors = { ...headerErrors };
+                        if (
+                          updated.name !== undefined &&
+                          headerErrors[row.key].nameError
+                        ) {
+                          delete newErrors[row.key].nameError;
+                          if (!newErrors[row.key].valueError) {
+                            delete newErrors[row.key];
+                          }
+                        }
+                        if (
+                          updated.value !== undefined &&
+                          headerErrors[row.key].valueError
+                        ) {
+                          delete newErrors[row.key].valueError;
+                          if (!newErrors[row.key].nameError) {
+                            delete newErrors[row.key];
+                          }
+                        }
+                        setHeaderErrors(newErrors);
+                      }
+                    }}
                     secrets={secrets}
                     deleteRow={deleteRow}
+                    nameError={headerErrors[row.key]?.nameError}
+                    valueError={headerErrors[row.key]?.valueError}
                   />
                 ))}
-                <Button onClick={() => addRow()} variant="outline" size="icon">
+                <Button
+                  type="button"
+                  onClick={() => addRow()}
+                  variant="outline"
+                  size="icon">
                   <Plus className="h-2 w-2" />
                 </Button>
               </div>
