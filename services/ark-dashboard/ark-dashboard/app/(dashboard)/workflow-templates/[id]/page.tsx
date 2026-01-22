@@ -466,6 +466,7 @@ export default function FlowDetailPage() {
                   onClick={handleCopyManifest}
                   style={{
                     visibility: activeTab === 'yaml' ? 'visible' : 'hidden',
+                    transitionProperty: 'background-color, border-color, color',
                   }}>
                   <Copy className="mr-2 h-4 w-4" />
                   Copy
@@ -477,6 +478,7 @@ export default function FlowDetailPage() {
                   onClick={handleDownloadManifest}
                   style={{
                     visibility: activeTab === 'yaml' ? 'visible' : 'hidden',
+                    transitionProperty: 'background-color, border-color, color',
                   }}>
                   <Download className="mr-2 h-4 w-4" />
                   Download
