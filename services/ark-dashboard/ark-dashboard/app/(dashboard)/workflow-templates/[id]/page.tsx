@@ -391,7 +391,7 @@ export default function FlowDetailPage() {
                   <WorkflowDagViewer manifest={flow.manifest} />
                 </TabsContent>
                 <TabsContent value="yaml">
-                  <pre className="bg-muted overflow-x-auto rounded-lg p-4 font-mono text-xs">
+                  <pre className="bg-muted break-words whitespace-pre-wrap rounded-lg p-4 font-mono text-xs">
                     <code>{flow.manifest}</code>
                   </pre>
                 </TabsContent>
