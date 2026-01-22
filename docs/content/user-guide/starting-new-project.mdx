@@ -55,6 +55,19 @@ ark generate project my-agents
 cd my-agents
 ```
 
+Now you can find a defalut model configuration in the `models/` directory. Alternatively, you can copy a model configuration template from the `samples/models/` directory of the ARK repository.
+
+Then, edit the `.env` file to add your API keys and other model related variables and make sure to source it.
+
+You can finalize you initial setup through one of the following ways:
+
+```bash
+# Just apply model config with environment variable substitution
+make models-apply
+
+# Apply model configurations and also deploy to ARK
+make quickstart
+
 ### Interactive Prompts
 
 The generator will ask you several questions to customize your project:
@@ -175,13 +188,7 @@ The agent generator will ask:
 **1. Agent Name:**
 - Name for your agent (e.g., `customer-support`)
 
-**2. Description:**
-- Brief description of the agent's purpose
-
-**3. Model Selection:**
-- Choose from available models in your project
-
-**4. Generate Test Query:**
+**2. Generate Test Query:**
 - Option to create a sample query for testing
 
 ### Non-Interactive Mode
@@ -191,13 +198,15 @@ The agent generator will ask:
 ark generate agent customer-support --no-interactive
 ```
 
-This creates `agents/customer-support.yaml`. Edit the generated agent configuration:
+This creates `agents/customer-support-agent.yaml` with dummy description and prompt, and the reference to default model. Edit the generated agent configuration:
+Remember to set the `namespace` field to match the namespace of the project.
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
-  name: customer-support
+  name: customer-support-agent
+  namespace: my-agents
 spec:
   description: Handles customer inquiries and support tickets
   modelRef:
@@ -210,16 +219,16 @@ spec:
 Apply the agent to your cluster:
 
 ```bash
-kubectl apply -f agents/customer-support.yaml
+kubectl apply -f agents/customer-support-agent.yaml
 ```
 
 Verify the agent is ready:
 
 ```bash
-kubectl get agents customer-support
+kubectl get agents customer-support-agent
 
 # Expected output shows Ready status
-kubectl get agents customer-support -o jsonpath='{.status.phase}'
+kubectl get agents customer-support-agent -o jsonpath='{.status.phase}'
 # Should output: ready
 ```
 
@@ -231,35 +240,37 @@ Tools extend agent capabilities but there's no generator for them. Create tools 
 
 ```bash
 # Create a tool definition
-cat > tools/weather-api.yaml <<EOF
+cat > tools/get-forecast.yaml <<EOF
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Tool
 metadata:
-  name: weather-api
+  name: get-forecast
 spec:
-  description: Fetch current weather information
-  endpoint: http://weather-service/api
-  schema:
-    type: function
-    function:
-      name: get_weather
-      description: Get current weather for a location
-      parameters:
-        type: object
-        properties:
-          location:
-            type: string
-            description: City name
-        required:
-          - location
+  type: http
+  inputSchema:
+    type: object
+    properties:
+      office:
+        type: string
+        description: "Weather office identifier (e.g., TOP)"
+      gridX:
+        type: integer
+        description: "Grid X coordinate"
+      gridY:
+        type: integer
+        description: "Grid Y coordinate"
+    required: ["office", "gridX", "gridY"]
+  description: "Get weather forecast for a specific location and time period"
+  http:
+    url: https://api.weather.gov/gridpoints/{office}/{gridX},{gridY}/forecast
 EOF
 ```
 
 Apply and verify:
 
 ```bash
-kubectl apply -f tools/weather-api.yaml
-kubectl get tools weather-api
+kubectl apply -f tools/get-forecast.yaml
+kubectl get tools get-forecast
 ```
 
 For more details on creating tools, see the [Tools guide](/user-guide/tools).
@@ -274,10 +285,14 @@ ark generate team support-team
 
 **Prompts:**
 - Team name
-- Description
-- Strategy (round-robin, sequential, etc.)
+- Strategy, choose from:
+  - Round-robin, members take turns
+  - Sequential, members execute in order
+  - Graph, custom workflow defined by graph edges.
+  Max turns and graph edges are mandatory.
+  - Selector, AI-powered member selection (can be combined with graph constraints). 
+  Selector agent specification is mandatory.
 - Select member agents from your project
-- Maximum turns
 
 Edit `teams/support-team.yaml`:
 
@@ -286,13 +301,37 @@ apiVersion: ark.mckinsey.com/v1alpha1
 kind: Team
 metadata:
   name: support-team
-spec:
+spec: 
   description: Customer support team
-  strategy: round-robin
-  maxTurns: 5
   members:
     - kind: Agent
       name: customer-support
+    - kind: Agent
+      name: order-tracker
+    - kind: Agent
+      name: escalation-handler
+  # Strategy-related specs:
+  strategy: sequential
+  [...]
+  strategy: round-robin
+  maxTurns: 5
+  [...]
+  strategy: graph
+  maxTurns: 5
+  [...]
+  strategy: selector
+  selector:
+    agent: planner-agent
+    selectorPrompt: "Choose the best agent for: {{.Input}}"
+  [...]
+  strategy: graph
+  maxTurns: 5
+  graph:
+    edges:
+      - from: customer-support
+        to: order-tracker
+      - from: order-tracker
+        to: escalation-handler
 ```
 
 Apply and verify:
@@ -693,10 +732,10 @@ kubectl get events --field-selector involvedObject.name=test-support-query
 
 ```bash
 # Verify tool is ready
-kubectl get tool weather-api
+kubectl get tool get-forecast
 
 # Check tool configuration
-kubectl describe tool weather-api
+kubectl describe tool get-forecast
 
 # Test tool endpoint
 kubectl run curl-test --image=curlimages/curl:latest --rm -it -- \
