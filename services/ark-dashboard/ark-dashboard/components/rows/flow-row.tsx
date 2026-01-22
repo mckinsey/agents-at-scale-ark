@@ -1,6 +1,6 @@
 'use client';
 
-import { ExternalLink, Eye, Play, Trash2, Workflow } from 'lucide-react';
+import { ExternalLink, Play, Trash2, Workflow } from 'lucide-react';
 import Link from 'next/link';
 
 import { RunWorkflowDialog } from '@/components/dialogs/run-workflow-dialog';
@@ -52,8 +52,13 @@ export function FlowRow({ flow, parameters, onRun, onDelete }: FlowRowProps) {
   };
 
   return (
-    <div className="bg-card hover:bg-accent/5 flex w-full items-center gap-4 overflow-hidden rounded-md border px-4 py-3 transition-colors">
-      <div className="flex flex-grow items-center gap-3 overflow-hidden">
+    <div className="bg-card hover:bg-accent/5 relative flex w-full items-center gap-4 overflow-hidden rounded-md border px-4 py-3 transition-colors">
+      <Link
+        href={`/workflow-templates/${flow.id}`}
+        className="absolute inset-0 z-0"
+      />
+
+      <div className="pointer-events-none relative z-10 flex flex-grow items-center gap-3 overflow-hidden">
         <div className="flex-shrink-0">
           <Workflow className="text-muted-foreground h-5 w-5 flex-shrink-0" />
         </div>
@@ -79,31 +84,14 @@ export function FlowRow({ flow, parameters, onRun, onDelete }: FlowRowProps) {
         </div>
       </div>
 
-      <div className="flex flex-shrink-0 items-center gap-1">
+      <div className="relative z-10 flex flex-shrink-0 items-center gap-1">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 w-8 cursor-pointer p-0"
-                asChild>
-                <Link href={`/workflow-templates/${flow.id}`}>
-                  <Eye className="h-4 w-4" />
-                </Link>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>View template</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 cursor-pointer p-0"
+                className="pointer-events-auto h-8 w-8 cursor-pointer p-0"
                 asChild>
                 <a
                   href={`http://argo.127.0.0.1.nip.io:8080/workflow-templates/default/${flow.id}`}
@@ -124,7 +112,7 @@ export function FlowRow({ flow, parameters, onRun, onDelete }: FlowRowProps) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 cursor-pointer p-0"
+                  className="pointer-events-auto h-8 w-8 cursor-pointer p-0"
                   onClick={handleDelete}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -146,7 +134,7 @@ export function FlowRow({ flow, parameters, onRun, onDelete }: FlowRowProps) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-8 w-8 cursor-pointer p-0">
+                      className="pointer-events-auto h-8 w-8 cursor-pointer p-0">
                       <Play className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
