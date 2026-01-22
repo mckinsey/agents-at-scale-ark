@@ -12,6 +12,7 @@ export default {
   evaluations: 'Evaluations',
 
   '---behaviour': { type: 'separator', title: 'System behaviour' },
+  'core-architecture': 'Core Architecture',
   'query-execution': 'Query Execution Flow',
   relationships: 'Resource Relationships',
 
