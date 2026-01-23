@@ -415,6 +415,136 @@ class TestResourcesEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 500)
 
+    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_delete_core_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
+        """Test successful deletion of a core Kubernetes resource."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_api_resource = AsyncMock()
+        mock_api_resource.delete = AsyncMock(return_value=None)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        response = self.client.delete("/v1/resources/api/v1/Pod/test-pod")
+
+        self.assertEqual(response.status_code, 204)
+        mock_api_resource.delete.assert_called_once_with(name="test-pod", namespace="default")
+
+    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_delete_grouped_resource_success(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
+        """Test successful deletion of a grouped Kubernetes resource."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_api_resource = AsyncMock()
+        mock_api_resource.delete = AsyncMock(return_value=None)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        response = self.client.delete("/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/test-workflow")
+
+        self.assertEqual(response.status_code, 204)
+        mock_api_resource.delete.assert_called_once_with(name="test-workflow", namespace="default")
+
+    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_delete_core_resource_with_namespace(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
+        """Test deletion of a core resource with explicit namespace parameter."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_api_resource = AsyncMock()
+        mock_api_resource.delete = AsyncMock(return_value=None)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        response = self.client.delete("/v1/resources/api/v1/Pod/test-pod?namespace=custom-namespace")
+
+        self.assertEqual(response.status_code, 204)
+        mock_api_resource.delete.assert_called_once_with(name="test-pod", namespace="custom-namespace")
+
+    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_delete_grouped_resource_with_namespace(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
+        """Test deletion of a grouped resource with explicit namespace parameter."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_api_resource = AsyncMock()
+        mock_api_resource.delete = AsyncMock(return_value=None)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        response = self.client.delete("/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/test-workflow?namespace=custom-namespace")
+
+        self.assertEqual(response.status_code, 204)
+        mock_api_resource.delete.assert_called_once_with(name="test-workflow", namespace="custom-namespace")
+
+    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_delete_core_resource_failure(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
+        """Test core resource deletion returns error when operation fails."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_api_resource = AsyncMock()
+        mock_api_resource.delete = AsyncMock(side_effect=Exception("Resource not found"))
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        response = self.client.delete("/v1/resources/api/v1/Pod/nonexistent")
+
+        self.assertEqual(response.status_code, 500)
+
+    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_delete_grouped_resource_failure(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
+        """Test grouped resource deletion returns error when operation fails."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_api_resource = AsyncMock()
+        mock_api_resource.delete = AsyncMock(side_effect=Exception("Resource not found"))
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        response = self.client.delete("/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/nonexistent")
+
+        self.assertEqual(response.status_code, 500)
+
 
 if __name__ == "__main__":
     unittest.main()
