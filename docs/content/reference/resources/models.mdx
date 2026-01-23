@@ -11,11 +11,12 @@ kind: Model
 metadata:
   name: default
 spec:
-  # The 'openai' type is any openai specification compatible model. This
-  # includes OpenAI, Google Gemini (in OpenAI compability mode), Anthropic
+  # The 'completion' type is for text completion models.
+  # The 'openai' provider supports any OpenAI specification compatible model,
+  # including OpenAI, Google Gemini (in OpenAI compatibility mode), Anthropic
   # Claude and so on.
   provider: openai
-  type: openai
+  type: completion
   model:
     # The specific model type.
     value: gpt-4o
@@ -62,8 +63,9 @@ kind: Model
 metadata:
   name: gpt-4o-mini
 spec:
-  # The Azure OpenAI model type.
-  type: azure
+  # The Azure OpenAI provider with completion model type.
+  provider: azure
+  type: completion
   model:
     value: gpt-4o-mini
   config:
@@ -94,8 +96,9 @@ kind: Model
 metadata:
   name: claude-haiku
 spec:
-  # The AWS Bedrock model type.
-  type: bedrock
+  # The AWS Bedrock provider with completion model type.
+  provider: bedrock
+  type: completion
   model:
     value: "us.anthropic.claude-3-5-haiku-20241022-v1:0"
   config:
@@ -135,7 +138,7 @@ spec:
 
 ### Google Gemini and Anthropic Models
 
-Both Google Gemini and Anthropic provide OpenAI-compatible endpoints, allowing you to use their models with the `openai` type. The base URls are:
+Both Google Gemini and Anthropic provide OpenAI-compatible endpoints, allowing you to use their models with the `openai` provider and `completion` type. The base URLs are:
 
 - `https://generativelanguage.googleapis.com/v1beta/openai` for Google Gemini
 - `https://api.anthropic.com/v1` for Anthropic Claude
@@ -154,7 +157,8 @@ kind: Model
 metadata:
   name: gpt-4-custom
 spec:
-  type: openai
+  provider: openai
+  type: completion
   model:
     value: gpt-4o
   config:
@@ -191,7 +195,8 @@ kind: Model
 metadata:
   name: default
 spec:
-  type: azure
+  provider: azure
+  type: completion
   model:
     value: gpt-4o
   config:
@@ -240,7 +245,8 @@ kind: Model
 metadata:
   name: default
 spec:
-  type: azure
+  provider: azure
+  type: completion
   model:
     value: gpt-4o
   config:
@@ -285,7 +291,8 @@ kind: Model
 metadata:
   name: openai-with-headers
 spec:
-  type: openai
+  provider: openai
+  type: completion
   model:
     value: gpt-4o
   config:
