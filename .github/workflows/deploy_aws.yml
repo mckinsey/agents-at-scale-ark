@@ -58,7 +58,7 @@ jobs:
           version: '3.14.0'
 
       - name: Set up Kubectl
-        uses: azure/setup-kubectl@v3
+        uses: azure/setup-kubectl@v4
         with:
           version: "v1.33.0"
 
