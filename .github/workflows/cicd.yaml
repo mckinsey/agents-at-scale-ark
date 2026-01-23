@@ -917,6 +917,7 @@ jobs:
       - name: Run File Gateway CLI tests
         env:
           KUBECONFIG: ~/.kube/config
+          PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
         run: |
           cd tests/pytest/cli-tests/tests
           echo "Running File Gateway tests..."
@@ -930,6 +931,7 @@ jobs:
       - name: Run complete ARK workflow tests
         env:
           KUBECONFIG: ~/.kube/config
+          PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
         run: |
           cd tests/pytest/cli-tests/tests
           echo "Running complete ARK workflow tests..."
