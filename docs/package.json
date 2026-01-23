@@ -21,8 +21,8 @@
     "next": "16.1.4",
     "nextra": "^4.2.17",
     "nextra-theme-docs": "^4.2.17",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
     "sharp": "^0.34.2"
   },
   "devDependencies": {
