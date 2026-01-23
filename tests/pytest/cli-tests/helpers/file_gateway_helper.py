@@ -374,7 +374,8 @@ class FileGatewayHelper:
             check=False
         )
         
-        if success and stdout:
+        if success:
+            # Empty files have empty stdout, which is valid
             print(f"File downloaded successfully, content length: {len(stdout)} bytes")
             return True, stdout
         else:
