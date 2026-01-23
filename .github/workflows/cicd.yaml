@@ -923,7 +923,7 @@ jobs:
           cd tests/pytest/cli-tests/tests
           
           # Run the test up to File Gateway installation
-          python test_file_gateway.py || {
+          python test_file_gateway.py -v|| {
             echo "File Gateway tests in progress..."
             
             # Wait for File Gateway MCP server to be reconciled by ark-mcp
@@ -938,13 +938,13 @@ jobs:
             done
             
             # Retry the test
-            python test_file_gateway.py
+            python test_file_gateway.py -v
           }
 
       - name: Run complete ARK workflow tests
         run: |
           cd tests/pytest
-          python test_complete_ark_workflow.py
+          python test_complete_ark_workflow.py -v
 
       - name: Upload CLI test logs
         if: always()
