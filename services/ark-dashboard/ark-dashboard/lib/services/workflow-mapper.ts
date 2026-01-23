@@ -132,6 +132,10 @@ function buildNodeDetail(
   return Object.keys(detail).length > 0 ? detail : undefined;
 }
 
+function isStepGroupNode(node: ArgoNodeStatus): boolean {
+  return node.type === 'StepGroup' || /^\[\d+\]$/.test(node.displayName || node.name);
+}
+
 function mapArgoNodeToStep(
   node: ArgoNodeStatus,
   allNodes: Record<string, ArgoNodeStatus>,
@@ -155,8 +159,23 @@ function mapArgoNodeToStep(
     step.children = node.children
       .map(childId => {
         const childNode = allNodes[childId];
-        return childNode ? mapArgoNodeToStep(childNode, allNodes, workflowName, workflowNamespace) : null;
+        if (!childNode) return null;
+        
+        if (isStepGroupNode(childNode)) {
+          if (childNode.children && childNode.children.length > 0) {
+            return childNode.children
+              .map(grandchildId => {
+                const grandchildNode = allNodes[grandchildId];
+                return grandchildNode ? mapArgoNodeToStep(grandchildNode, allNodes, workflowName, workflowNamespace) : null;
+              })
+              .filter((grandchild): grandchild is MappedWorkflowStep => grandchild !== null);
+          }
+          return null;
+        }
+        
+        return mapArgoNodeToStep(childNode, allNodes, workflowName, workflowNamespace);
       })
+      .flat()
       .filter((child): child is MappedWorkflowStep => child !== null);
   }
 

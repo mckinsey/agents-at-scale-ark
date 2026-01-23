@@ -217,6 +217,7 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
   const [logs, setLogs] = useState<string>('');
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [logsError, setLogsError] = useState<string | null>(null);
+  const [showLogs, setShowLogs] = useState(true);
   
   const shouldFetchLogs = detail.workflowName && detail.nodeId && detail.namespace;
 
@@ -233,9 +234,13 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
             detail.namespace!,
           );
           setLogs(logData);
-        } catch (error) {
-          console.error('Failed to fetch logs:', error);
-          setLogsError('Failed to load logs');
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (errorMessage.includes('404')) {
+            setShowLogs(false);
+          } else {
+            setLogsError('Failed to load logs');
+          }
         } finally {
           setLoadingLogs(false);
         }
@@ -316,7 +321,7 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
         </div>
       )}
 
-      {shouldFetchLogs && (
+      {shouldFetchLogs && showLogs && (
         <div className="flex items-start gap-2">
           <Terminal className="text-muted-foreground mt-0.5 h-4 w-4" />
           <div className="flex-1">

@@ -83,21 +83,15 @@ export const workflowsService = {
     nodeId: string,
     namespace: string = 'default',
   ): Promise<string> {
-    try {
-      // Use Argo Workflows API which accesses archived logs from Minio
-      const response = await apiClient.get<string>(
-        `/api/v1/resources/apis/argoproj.io/v1alpha1/namespaces/${namespace}/workflows/${workflowName}/${nodeId}/log`,
-        {
-          headers: {
-            Accept: 'text/plain',
-          },
+    const response = await apiClient.get<string>(
+      `/api/v1/resources/apis/argoproj.io/v1alpha1/namespaces/${namespace}/workflows/${workflowName}/${nodeId}/log`,
+      {
+        headers: {
+          Accept: 'text/plain',
         },
-      );
-      return response;
-    } catch (error) {
-      console.error(`Failed to fetch workflow logs for ${workflowName}/${nodeId}:`, error);
-      return '';
-    }
+      },
+    );
+    return response;
   },
 };
 
