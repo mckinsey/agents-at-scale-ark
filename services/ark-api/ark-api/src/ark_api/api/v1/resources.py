@@ -161,16 +161,22 @@ async def list_grouped_resources(
     group: str,
     version: str,
     kind: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    workflowName: Optional[str] = Query(None, description="Filter by workflow name (partial match, case insensitive)"),
+    workflowTemplateName: Optional[str] = Query(None, description="Filter by workflow template name (partial match, case insensitive)"),
+    status: Optional[str] = Query(None, description="Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending")
 ) -> Response:
     """
-    List grouped Kubernetes resources.
+    List grouped Kubernetes resources with optional filtering.
 
     Args:
         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
         version: API version (e.g., 'v1', 'v1alpha1')
         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
         namespace: The namespace (defaults to current context)
+        workflowName: Filter by workflow name (partial match, case insensitive)
+        workflowTemplateName: Filter by workflow template name (partial match, case insensitive)
+        status: Filter by workflow status
 
     Returns:
         Response: List of raw Kubernetes resources as JSON
@@ -179,6 +185,7 @@ async def list_grouped_resources(
         - GET /v1/resources/apis/apps/v1/Deployment
         - GET /v1/resources/apis/batch/v1/Job
         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
+        - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?workflowName=my-workflow&status=running
     """
     if namespace is None:
         namespace = get_context()["namespace"]
@@ -194,8 +201,43 @@ async def list_grouped_resources(
         )
 
         resources = await api_resource.get(namespace=namespace)
+        resources_dict = resources.to_dict()
 
-        return _create_resource_response(resources.to_dict(), request)
+        # Apply filters for Workflow resources
+        if kind == "Workflow" and "items" in resources_dict:
+            items = resources_dict["items"]
+            filtered_items = []
+
+            for item in items:
+                # Filter by workflow name
+                if workflowName:
+                    item_name = item.get("metadata", {}).get("name", "")
+                    if workflowName.lower() not in item_name.lower():
+                        continue
+
+                # Filter by workflow template name
+                if workflowTemplateName:
+                    template_ref = item.get("spec", {}).get("workflowTemplateRef", {}).get("name", "")
+                    if workflowTemplateName.lower() not in template_ref.lower():
+                        continue
+
+                # Filter by status
+                # Note: "failed" filter matches both "Failed" and "Error" statuses
+                if status:
+                    item_status = item.get("status", {}).get("phase", "")
+                    if status.lower() == "failed":
+                        if item_status.lower() not in ["failed", "error"]:
+                            continue
+                    else:
+                        # Exact match for other statuses
+                        if status.lower() != item_status.lower():
+                            continue
+
+                filtered_items.append(item)
+
+            resources_dict["items"] = filtered_items
+
+        return _create_resource_response(resources_dict, request)
 
 
 @router.get("/api/v1/namespaces/{namespace}/pods/{pod_name}/log")

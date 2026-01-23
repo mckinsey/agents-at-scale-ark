@@ -5,10 +5,31 @@ import type {
   ArgoNodeStatus,
 } from '@/lib/types/argo-workflow';
 
+export interface WorkflowFilters {
+  workflowName?: string;
+  workflowTemplateName?: string;
+  status?: string;
+}
+
 export const workflowsService = {
-  async list(namespace: string = 'default'): Promise<ArgoWorkflow[]> {
+  async list(
+    namespace: string = 'default',
+    filters?: WorkflowFilters
+  ): Promise<ArgoWorkflow[]> {
+    const params = new URLSearchParams({ namespace });
+    
+    if (filters?.workflowName) {
+      params.append('workflowName', filters.workflowName);
+    }
+    if (filters?.workflowTemplateName) {
+      params.append('workflowTemplateName', filters.workflowTemplateName);
+    }
+    if (filters?.status) {
+      params.append('status', filters.status);
+    }
+
     const response = await apiClient.get<ArgoWorkflowList>(
-      `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=${namespace}`,
+      `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?${params.toString()}`,
     );
     return response.items;
   },
