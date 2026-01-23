@@ -1,4 +1,4 @@
-FROM node:24.13.0-alpine AS base
+FROM node:25.4.0-alpine AS base
 
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
