@@ -38,6 +38,7 @@ import {
   workflowTemplatesService,
 } from '@/lib/services/workflow-templates';
 import { countWorkflowTasks } from '@/lib/utils/workflow';
+import { showWorkflowStartedToast } from '@/lib/utils/workflow-toast';
 
 export default function FlowDetailPage() {
   const params = useParams();
@@ -211,21 +212,7 @@ export default function FlowDetailPage() {
   const handleRunWorkflow = async (parameters?: Record<string, string>) => {
     try {
       const workflow = await workflowTemplatesService.run(flowId, parameters);
-      const sessionsUrl = `/sessions?workflowName=${encodeURIComponent(workflow.metadata.name)}`;
-      toast.success('Workflow started', {
-        description: (
-          <a
-            href={sessionsUrl}
-            className="inline-flex items-center gap-1 underline"
-            onClick={(e) => {
-              e.preventDefault();
-              router.push(sessionsUrl);
-            }}>
-            {workflow.metadata.name}
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        ),
-      });
+      showWorkflowStartedToast(workflow.metadata.name);
 
       if (stats) {
         setStats({
