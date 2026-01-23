@@ -55,3 +55,15 @@ export const isBrokerEnabledAtom = atom(get => {
 
 export const FILES_BROWSER_FEATURE_KEY = 'files-browser-available';
 export const isFilesBrowserAvailableAtom = atom<boolean>(false);
+
+export const QUERY_TIMEOUT_SETTING_KEY = 'query-timeout-setting';
+export const storedQueryTimeoutSettingAtom = atomWithStorage<string>(
+  QUERY_TIMEOUT_SETTING_KEY,
+  '5m',
+  undefined,
+  { getOnInit: true },
+);
+
+export const queryTimeoutSettingAtom = atom(get => {
+  return get(storedQueryTimeoutSettingAtom);
+});
