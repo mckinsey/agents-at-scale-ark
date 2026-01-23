@@ -34,12 +34,25 @@ hooks:
       else
         echo "Minio disabled, skipping operator installation"
       fi
+  
+  - name: configure-artifact-repository
+    events: ["after:deploy"]
+    command: |-
+      if [ "${ENABLE_MINIO}" == "true" ]; then
+        echo "Configuring workflow defaults to use artifact repository..."
+        # The artifact-repositories ConfigMap will be created by the chart
+        # We just need to ensure Minio is ready before workflows start
+        echo "Waiting for Minio to be ready..."
+        kubectl wait --for=condition=ready pod -l v1.min.io/tenant=myminio -n default --timeout=120s || echo "Minio pods not ready yet"
+      fi
 
 deployments:
   argo-workflows:
     helm:
       chart:
         path: ./chart
+      valuesFiles:
+        - ./chart/values.yaml
       values:
         minio:
           enabled: ${ENABLE_MINIO}

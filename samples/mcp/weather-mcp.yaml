@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: MCPServer
+metadata:
+  name: weather-mcp
+spec:
+  address:
+    value: "https://server.smithery.ai/@isdaniel/mcp_weather_server"
+  timeout: "30s"
+  transport: http
+  description: "Public weather MCP server hosted on Smithery using Open-Meteo API (no API key required)"

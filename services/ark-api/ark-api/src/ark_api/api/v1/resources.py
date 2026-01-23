@@ -3,9 +3,10 @@ import logging
 import yaml
 
 from fastapi import APIRouter, Query, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from typing import Optional
 from kubernetes_asyncio.client.api_client import ApiClient
+from kubernetes_asyncio.client import CoreV1Api
 from kubernetes_asyncio.dynamic import DynamicClient
 from ark_sdk.k8s import get_context
 
@@ -283,3 +284,154 @@ async def create_grouped_resource(
         resource = await api_resource.create(body=body, namespace=namespace)
 
         return _create_resource_response(resource.to_dict(), request)
+@router.get("/api/v1/namespaces/{namespace}/pods/{pod_name}/log")
+@handle_k8s_errors(operation="get", resource_type="pod logs")
+async def get_pod_logs(
+    pod_name: str,
+    namespace: str,
+    container: Optional[str] = Query(None, description="Container name (defaults to first container)"),
+    tail_lines: Optional[int] = Query(1000, alias="tailLines", description="Number of lines to tail"),
+    follow: Optional[bool] = Query(False, description="Follow log stream"),
+) -> PlainTextResponse:
+    """
+    Get logs from a pod.
+
+    Args:
+        pod_name: Name of the pod
+        namespace: Namespace of the pod
+        container: Optional container name
+        tail_lines: Number of lines to return from the end of the logs
+        follow: Whether to follow the log stream
+
+    Returns:
+        PlainTextResponse: Pod logs as plain text
+
+    Examples:
+        - GET /v1/resources/api/v1/namespaces/default/pods/my-pod/log
+        - GET /v1/resources/api/v1/namespaces/default/pods/my-pod/log?container=main&tailLines=100
+    """
+    async with ApiClient() as api:
+        core_v1 = CoreV1Api(api)
+        
+        try:
+            logs = await core_v1.read_namespaced_pod_log(
+                name=pod_name,
+                namespace=namespace,
+                container=container,
+                tail_lines=tail_lines,
+                follow=follow,
+            )
+            return PlainTextResponse(content=logs)
+        except Exception as e:
+            logger.error(f"Failed to fetch logs for pod {pod_name}: {e}")
+            return PlainTextResponse(content=f"Error fetching logs: {str(e)}", status_code=500)
+
+
+@router.get("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/{node_id}/log")
+async def get_workflow_logs(
+    workflow_name: str,
+    node_id: str,
+    namespace: str,
+    container: Optional[str] = Query("main", description="Container name"),
+    tail_lines: Optional[int] = Query(1000, description="Number of lines to tail"),
+) -> PlainTextResponse:
+    """
+    Get logs for a workflow node by fetching directly from the pod.
+    The node_id corresponds to the pod name in most cases.
+
+    Args:
+        workflow_name: Name of the workflow
+        node_id: Node ID within the workflow (typically the pod name)
+        namespace: Namespace of the workflow
+        container: Container name (defaults to 'main')
+        tail_lines: Number of lines to tail from the end
+
+    Returns:
+        PlainTextResponse: Workflow node logs as plain text
+
+    Examples:
+        - GET /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/my-node-id/log
+    """
+    async with ApiClient() as api:
+        core_v1 = CoreV1Api(api)
+        
+        try:
+            # First, try the node ID directly as the pod name
+            try:
+                logs = await core_v1.read_namespaced_pod_log(
+                    name=node_id,
+                    namespace=namespace,
+                    container=container,
+                    tail_lines=tail_lines,
+                )
+                return PlainTextResponse(content=logs if logs else "No logs available.")
+            except Exception:
+                pass  # Try alternative lookup method
+            
+            # If direct lookup fails, search for pods by workflow label and node ID suffix
+            # The node ID might not be the exact pod name - Argo sometimes inserts the template name
+            node_id_suffix = node_id.split('-')[-1]
+            
+            pods = await core_v1.list_namespaced_pod(
+                namespace=namespace,
+                label_selector=f"workflows.argoproj.io/workflow={workflow_name}"
+            )
+            
+            # Find pod whose name ends with the node ID suffix
+            matching_pod = None
+            for pod in pods.items:
+                if pod.metadata.name.endswith(node_id_suffix):
+                    matching_pod = pod.metadata.name
+                    break
+            
+            if not matching_pod:
+                logger.error(f"No pod found matching node ID {node_id} (suffix: {node_id_suffix})")
+                raise Exception(f"No pod found for node {node_id}")
+            
+            logs = await core_v1.read_namespaced_pod_log(
+                name=matching_pod,
+                namespace=namespace,
+                container=container,
+                tail_lines=tail_lines,
+            )
+            return PlainTextResponse(content=logs if logs else "No logs available.")
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch logs for node {node_id}: {e}")
+            
+            # Try to determine if the pod was deleted
+            try:
+                dynamic_client = await DynamicClient(api)
+                workflow_resource = await dynamic_client.resources.get(
+                    api_version="argoproj.io/v1alpha1",
+                    kind="Workflow"
+                )
+                workflow = await workflow_resource.get(name=workflow_name, namespace=namespace)
+                workflow_dict = workflow.to_dict()
+                
+                nodes = workflow_dict.get("status", {}).get("nodes", {})
+                node = nodes.get(node_id)
+                
+                if not node:
+                    return PlainTextResponse(
+                        content=f"Node {node_id} not found in workflow {workflow_name}",
+                        status_code=404
+                    )
+                
+                if node.get("type") == "Pod" and node.get("phase") in ["Succeeded", "Failed", "Error"]:
+                    return PlainTextResponse(
+                        content="Pod has been deleted. Logs are no longer available.\n\nTo preserve logs, enable 'archiveLogs: true' in your workflow spec with artifact storage configured.",
+                        status_code=404
+                    )
+                
+                return PlainTextResponse(
+                    content=f"Failed to fetch logs: {str(e)}",
+                    status_code=500
+                )
+                
+            except Exception as inner_e:
+                logger.error(f"Failed to query workflow for node info: {inner_e}")
+                return PlainTextResponse(
+                    content=f"Failed to fetch logs: {str(e)}",
+                    status_code=500
+                )
