@@ -918,7 +918,7 @@ jobs:
         env:
           KUBECONFIG: ~/.kube/config
         run: |
-          cd tests/pytest/cli-tests
+          cd tests/pytest/cli-tests/tests
           echo "Running File Gateway tests..."
           python test_file_gateway.py || {
             echo "File Gateway tests failed"
@@ -931,7 +931,7 @@ jobs:
         env:
           KUBECONFIG: ~/.kube/config
         run: |
-          cd tests/pytest/cli-tests
+          cd tests/pytest/cli-tests/tests
           echo "Running complete ARK workflow tests..."
           python test_complete_ark_workflow.py || {
             echo "ARK workflow tests failed"
@@ -944,7 +944,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cli-test-logs-${{ github.sha }}
-          path: tests/pytest/cli-tests/*.log
+          path: tests/pytest/cli-tests/tests/*.log
           retention-days: 7
 
   build-charts:
