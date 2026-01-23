@@ -284,6 +284,94 @@ async def create_grouped_resource(
         resource = await api_resource.create(body=body, namespace=namespace)
 
         return _create_resource_response(resource.to_dict(), request)
+
+
+@router.delete("/api/{version}/{kind}/{resource_name}")
+@handle_k8s_errors(operation="delete", resource_type="resource")
+async def delete_core_resource(
+    version: str,
+    kind: str,
+    resource_name: str,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+) -> Response:
+    """
+    Delete a core Kubernetes resource by name.
+
+    Args:
+        version: API version (e.g., 'v1')
+        kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
+        resource_name: The name of the resource
+        namespace: The namespace (defaults to current context)
+
+    Returns:
+        Response: HTTP 204 No Content on success
+
+    Examples:
+        - DELETE /v1/resources/api/v1/Pod/my-pod
+        - DELETE /v1/resources/api/v1/Service/my-service
+    """
+    if namespace is None:
+        namespace = get_context()["namespace"]
+
+    async with ApiClient() as api:
+        dynamic_client = await DynamicClient(api)
+
+        api_resource = await dynamic_client.resources.get(
+            api_version=version,
+            kind=kind
+        )
+
+        await api_resource.delete(name=resource_name, namespace=namespace)
+
+        return Response(status_code=204)
+
+
+@router.delete("/apis/{group}/{version}/{kind}/{resource_name}")
+@handle_k8s_errors(operation="delete", resource_type="resource")
+async def delete_grouped_resource(
+    group: str,
+    version: str,
+    kind: str,
+    resource_name: str,
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+) -> Response:
+    """
+    Delete a grouped Kubernetes resource by name.
+
+    Args:
+        group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
+        version: API version (e.g., 'v1', 'v1alpha1')
+        kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+        resource_name: The name of the resource
+        namespace: The namespace (defaults to current context)
+
+    Returns:
+        Response: HTTP 204 No Content on success
+
+    Examples:
+        - DELETE /v1/resources/apis/apps/v1/Deployment/my-deployment
+        - DELETE /v1/resources/apis/batch/v1/Job/my-job
+        - DELETE /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
+    """
+    if namespace is None:
+        namespace = get_context()["namespace"]
+
+    api_version = f"{group}/{version}"
+    logger.info(f"Deleting resource: api_version={api_version}, kind={kind}, name={resource_name}, namespace={namespace}")
+
+    async with ApiClient() as api:
+        dynamic_client = await DynamicClient(api)
+
+        api_resource = await dynamic_client.resources.get(
+            api_version=api_version,
+            kind=kind
+        )
+
+        await api_resource.delete(name=resource_name, namespace=namespace)
+
+        return Response(status_code=204)
+
+
 @router.get("/api/v1/namespaces/{namespace}/pods/{pod_name}/log")
 @handle_k8s_errors(operation="get", resource_type="pod logs")
 async def get_pod_logs(

@@ -21,6 +21,7 @@ import {
   workflowTemplatesService,
 } from '@/lib/services/workflow-templates';
 import { countWorkflowTasks } from '@/lib/utils/workflow';
+import { showWorkflowStartedToast } from '@/lib/utils/workflow-toast';
 
 function mapWorkflowTemplateToFlow(template: WorkflowTemplate): Flow {
   const annotations = template.metadata.annotations || {};
@@ -61,9 +62,7 @@ export function WorkflowTemplatesSection() {
   ) => {
     try {
       const workflow = await workflowTemplatesService.run(flowId, parameters);
-      toast.success('Workflow started', {
-        description: `Created workflow: ${workflow.metadata.name}`,
-      });
+      showWorkflowStartedToast(workflow.metadata.name);
     } catch (error) {
       console.error('Failed to start workflow:', error);
       toast.error('Failed to start workflow', {

@@ -7,6 +7,7 @@ import {
   Clock,
   XCircle,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,6 +18,43 @@ interface Props {
   templateName: string;
   stats: WorkflowStats | null;
   isLoading: boolean;
+}
+
+interface StatLinkProps {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  value: number;
+  colorClass?: string;
+}
+
+function getSessionsUrl(templateName: string, status?: string) {
+  const params = new URLSearchParams({
+    workflowTemplateName: templateName,
+  });
+  if (status) {
+    params.set('status', status);
+  }
+  return `/sessions?${params}`;
+}
+
+function StatLink({ href, icon: Icon, label, value, colorClass = 'text-muted-foreground' }: StatLinkProps) {
+  return (
+    <Link
+      href={href}
+      className="group flex flex-col items-center space-y-1 transition-all">
+      <div className={`flex items-center gap-1.5 text-xs ${colorClass}`}>
+        <Icon className="h-3.5 w-3.5 flex-shrink-0" />
+        <span className="flex items-center gap-0.5">
+          {label}
+          <ArrowUpRight className="h-2.5 w-2.5 opacity-40" />
+        </span>
+      </div>
+      <div className={`text-2xl font-bold ${colorClass}`}>
+        {value}
+      </div>
+    </Link>
+  );
 }
 
 function LoadingState() {
@@ -45,60 +83,33 @@ export function WorkflowStatsCard({ templateName, stats, isLoading }: Props) {
           <LoadingState />
         ) : stats ? (
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <Link
-              href={`/sessions?template=${encodeURIComponent(templateName)}`}
-              className="group flex flex-col items-center space-y-1 transition-all">
-              <div className="text-muted-foreground flex items-start gap-1.5 text-xs">
-                <BarChart3 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-                <span className="flex items-start gap-0.5">
-                  Total
-                  <ArrowUpRight className="h-2.5 w-2.5 opacity-40" />
-                </span>
-              </div>
-              <div className="text-2xl font-bold">{stats.total}</div>
-            </Link>
-            <Link
-              href={`/sessions?template=${encodeURIComponent(templateName)}&status=succeeded`}
-              className="group flex flex-col items-center space-y-1 transition-all">
-              <div className="flex items-start gap-1.5 text-xs text-green-700 dark:text-green-500">
-                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-                <span className="flex items-start gap-0.5">
-                  Succeeded
-                  <ArrowUpRight className="h-2.5 w-2.5 opacity-40" />
-                </span>
-              </div>
-              <div className="text-2xl font-bold text-green-700 dark:text-green-500">
-                {stats.succeeded}
-              </div>
-            </Link>
-            <Link
-              href={`/sessions?template=${encodeURIComponent(templateName)}&status=running`}
-              className="group flex flex-col items-center space-y-1 transition-all">
-              <div className="flex items-start gap-1.5 text-xs text-blue-600 dark:text-blue-400">
-                <Clock className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-                <span className="flex items-start gap-0.5">
-                  Running
-                  <ArrowUpRight className="h-2.5 w-2.5 opacity-40" />
-                </span>
-              </div>
-              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                {stats.running}
-              </div>
-            </Link>
-            <Link
-              href={`/sessions?template=${encodeURIComponent(templateName)}&status=failed`}
-              className="group flex flex-col items-center space-y-1 transition-all">
-              <div className="flex items-start gap-1.5 text-xs text-red-600 dark:text-red-500">
-                <XCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-                <span className="flex items-start gap-0.5">
-                  Failed
-                  <ArrowUpRight className="h-2.5 w-2.5 opacity-40" />
-                </span>
-              </div>
-              <div className="text-2xl font-bold text-red-600 dark:text-red-500">
-                {stats.failed}
-              </div>
-            </Link>
+            <StatLink
+              href={getSessionsUrl(templateName)}
+              icon={BarChart3}
+              label="Total"
+              value={stats.total}
+            />
+            <StatLink
+              href={getSessionsUrl(templateName, 'succeeded')}
+              icon={CheckCircle2}
+              label="Succeeded"
+              value={stats.succeeded}
+              colorClass="text-green-700 dark:text-green-500"
+            />
+            <StatLink
+              href={getSessionsUrl(templateName, 'running')}
+              icon={Clock}
+              label="Running"
+              value={stats.running}
+              colorClass="text-blue-600 dark:text-blue-400"
+            />
+            <StatLink
+              href={getSessionsUrl(templateName, 'failed')}
+              icon={XCircle}
+              label="Failed"
+              value={stats.failed}
+              colorClass="text-red-600 dark:text-red-500"
+            />
           </div>
         ) : (
           <p className="text-muted-foreground text-sm">No data available</p>
