@@ -916,35 +916,33 @@ jobs:
         run: |
           pip install -r tests/pytest/ui-tests/requirements.txt
 
+      - name: Wait for MCP server to be ready
+        run: |
+          # Wait for File Gateway MCP server to be reconciled by ark-mcp
+          echo "Waiting for MCPServer resource to be ready..."
+          for i in {1..60}; do
+            if kubectl get mcpserver file-gateway-mcpserver -o jsonpath='{.status.toolCount}' 2>/dev/null | grep -q '[0-9]'; then
+              echo "MCP server ready!"
+              exit 0
+            fi
+            echo "Waiting for ark-mcp reconciliation... (attempt $i/60)"
+            sleep 5
+          done
+          echo "Warning: MCP server not ready after 5 minutes, tests may fail"
+
       - name: Run File Gateway CLI tests
         env:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
         run: |
           cd tests/pytest/cli-tests/tests
-          
-          # Run the test up to File Gateway installation
-          pytest test_file_gateway.py -v|| {
-            echo "File Gateway tests in progress..."
-            
-            # Wait for File Gateway MCP server to be reconciled by ark-mcp
-            echo "Waiting for MCPServer resource to be ready..."
-            for i in {1..24}; do
-              if kubectl get mcpserver file-gateway-mcpserver -o jsonpath='{.status.toolCount}' 2>/dev/null | grep -q '[0-9]'; then
-                echo "MCP server ready!"
-                break
-              fi
-              echo "Waiting for ark-mcp reconciliation... (attempt $i/24)"
-              sleep 5
-            done
-            
-            # Retry the test
-            pytest test_file_gateway.py -v
-          }
+          pytest test_file_gateway.py -v --tb=short
 
       - name: Run complete ARK workflow tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/tests/pytest
         run: |
           cd tests/pytest
-          python test_complete_ark_workflow.py -v
+          pytest test_complete_ark_workflow.py -v --tb=short
 
       - name: Upload CLI test logs
         if: always()
