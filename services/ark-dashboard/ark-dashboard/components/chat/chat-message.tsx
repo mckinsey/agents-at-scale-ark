@@ -47,37 +47,40 @@ export function ChatMessage({
       if (!contentRef.current) return;
 
       const container = contentRef.current;
-      
+
       const findScrollableElements = (element: Element): Element[] => {
         const scrollable: Element[] = [];
         const style = window.getComputedStyle(element);
-        
+
         if (style.overflowX === 'auto' || style.overflowX === 'scroll') {
           scrollable.push(element);
         }
-        
+
         for (const child of Array.from(element.children)) {
           scrollable.push(...findScrollableElements(child));
         }
-        
+
         return scrollable;
       };
 
       const scrollableElements = findScrollableElements(container);
-      
+
       const viewportWidth = window.innerWidth;
       const containerScrollWidth = container.scrollWidth;
       const containerClientWidth = container.clientWidth;
-      
-      const maxScrollWidth = scrollableElements.length > 0
-        ? Math.max(
-            ...scrollableElements.map(el => el.scrollWidth),
-            containerScrollWidth
-          )
-        : containerScrollWidth;
-      
-      const hasHorizontalScroll = containerScrollWidth > containerClientWidth || scrollableElements.length > 0;
-      
+
+      const maxScrollWidth =
+        scrollableElements.length > 0
+          ? Math.max(
+              ...scrollableElements.map(el => el.scrollWidth),
+              containerScrollWidth,
+            )
+          : containerScrollWidth;
+
+      const hasHorizontalScroll =
+        containerScrollWidth > containerClientWidth ||
+        scrollableElements.length > 0;
+
       if (!hasHorizontalScroll && maxScrollWidth <= viewportWidth * 0.8) {
         setNeedsExpansion(false);
         setExpandedWidth(null);
@@ -87,9 +90,9 @@ export function ChatMessage({
       const bubblePadding = 24;
       const requiredWidth = maxScrollWidth + bubblePadding;
       const needsExpansionValue = requiredWidth > viewportWidth * 0.8;
-      
+
       setNeedsExpansion(needsExpansionValue);
-      
+
       if (needsExpansionValue) {
         setExpandedWidth(requiredWidth);
       } else {
@@ -156,9 +159,13 @@ export function ChatMessage({
                 ? 'bg-destructive/10 text-destructive'
                 : 'bg-muted'
           }`}
-          style={needsExpansion && expandedWidth ? { minWidth: `${expandedWidth}px` } : undefined}>
+          style={
+            needsExpansion && expandedWidth
+              ? { minWidth: `${expandedWidth}px` }
+              : undefined
+          }>
           <div className="flex items-center gap-2">
-            <div ref={contentRef} className="flex-1 min-w-0 overflow-x-auto">
+            <div ref={contentRef} className="min-w-0 flex-1 overflow-x-auto">
               {viewMode === 'markdown' ? (
                 <div className="text-sm break-words">{markdownContent}</div>
               ) : (
