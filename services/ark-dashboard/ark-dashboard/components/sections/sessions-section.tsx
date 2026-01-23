@@ -955,58 +955,43 @@ export function SessionsSection() {
   };
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4">
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-3">
+    <div className="flex flex-1 flex-col gap-3 p-4">
+      <div className="flex flex-col gap-1.5 rounded-md bg-muted/20 px-3 py-2">
+        <div className="flex items-center gap-2">
           <div className="relative flex-1">
-            <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
+            <Search className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
             <Input
               type="text"
-              placeholder="Search by workflow name..."
+              placeholder="Search workflow..."
               value={workflowNameInput}
               onChange={e => setWorkflowNameInput(e.target.value)}
-              className="pl-9 h-10"
+              className="pl-8 h-8 bg-background text-sm border-0 shadow-sm"
             />
           </div>
           <div className="relative flex-1">
-            <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
+            <Search className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
             <Input
               type="text"
-              placeholder="Search by template name..."
+              placeholder="Search template..."
               value={workflowTemplateNameInput}
               onChange={e => setWorkflowTemplateNameInput(e.target.value)}
-              className="pl-9 h-10"
+              className="pl-8 h-8 bg-background text-sm border-0 shadow-sm"
             />
           </div>
-          <Select value={statusFilter || 'all'} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-48 h-10">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="Running">Running</SelectItem>
-              <SelectItem value="Succeeded">Succeeded</SelectItem>
-              <SelectItem value="Failed">Failed</SelectItem>
-            </SelectContent>
-          </Select>
-          {hasActiveFilters && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={clearFilters}
-              title="Clear all filters"
-              className="h-10"
-            >
-              <X className="h-4 w-4 mr-2" />
-              Clear
-            </Button>
-          )}
-        </div>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 ml-auto shrink-0">
+            <Select value={statusFilter || 'all'} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-32 h-8 bg-background text-sm border-0 shadow-sm">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="Running">Running</SelectItem>
+                <SelectItem value="Succeeded">Succeeded</SelectItem>
+                <SelectItem value="Failed">Failed</SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={sortOrder} onValueChange={value => setSortOrder(value as SortOrder)}>
-              <SelectTrigger className="w-40">
-                <ArrowUpDown className="mr-2 h-4 w-4" />
+              <SelectTrigger className="w-32 h-8 bg-background text-sm border-0 shadow-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1014,18 +999,31 @@ export function SessionsSection() {
                 <SelectItem value="oldest">Oldest First</SelectItem>
               </SelectContent>
             </Select>
-            <span className="text-muted-foreground text-sm font-medium">
-              {filteredAndSortedSessions.length} session{filteredAndSortedSessions.length !== 1 ? 's' : ''}
-            </span>
+            {hasActiveFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                title="Clear all filters"
+                className="h-8 px-2"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            )}
           </div>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground font-medium">
+            {filteredAndSortedSessions.length} session{filteredAndSortedSessions.length !== 1 ? 's' : ''}
+          </span>
           {loading && (
-            <span className="text-muted-foreground flex items-center gap-2 text-sm">
-              <RefreshCw className="h-4 w-4 animate-spin" />
+            <span className="text-muted-foreground flex items-center gap-1.5">
+              <RefreshCw className="h-3 w-3 animate-spin" />
               Loading...
             </span>
           )}
           {error && (
-            <span className="text-sm text-red-500 font-medium">
+            <span className="text-red-500 font-medium">
               Error: {error.message}
             </span>
           )}
