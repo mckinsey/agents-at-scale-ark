@@ -79,7 +79,7 @@ describe('AgentsPage', () => {
 
     const apiButton = screen.getByRole('button', { name: /Use via API/i });
     expect(apiButton).toBeInTheDocument();
-    
+
     await user.click(apiButton);
     expect(mockOpenApiDialog).toHaveBeenCalled();
   });
@@ -90,9 +90,8 @@ describe('AgentsPage', () => {
 
     const createButton = screen.getByRole('button', { name: /Create Agent/i });
     expect(createButton).toBeInTheDocument();
-    
+
     await user.click(createButton);
     expect(mockOpenAddEditor).toHaveBeenCalled();
   });
 });
-
