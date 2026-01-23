@@ -859,6 +859,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
       - uses: ./.github/actions/setup-e2e
         with:
           ark-image-tag: ${{ github.sha }}
@@ -914,13 +919,30 @@ jobs:
           cp ~/.kube/config ~/.kube/config.bak || true
           kubectl config view --raw > ~/.kube/config
 
+      - name: Verify ark CLI is available
+        run: |
+          which ark || echo "ark not in PATH"
+          npm config get prefix
+          export PATH="$(npm config get prefix)/bin:$PATH"
+          which ark || {
+            echo "ERROR: ark CLI not found after npm link"
+            echo "npm global bin: $(npm config get prefix)/bin"
+            ls -la $(npm config get prefix)/bin/ || true
+            exit 1
+          }
+          ark --version
+
       - name: Run File Gateway CLI tests
         env:
-          KUBECONFIG: ~/.kube/config
+          KUBECONFIG: /home/runner/.kube/config
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
         run: |
+          export PATH="$(npm config get prefix)/bin:$PATH"
           cd tests/pytest/cli-tests/tests
           echo "Running File Gateway tests..."
+          echo "ark location: $(which ark)"
+          echo "KUBECONFIG: $KUBECONFIG"
+          kubectl get nodes || echo "kubectl not working"
           python test_file_gateway.py || {
             echo "File Gateway tests failed"
             kubectl get pods -n default
@@ -930,11 +952,13 @@ jobs:
 
       - name: Run complete ARK workflow tests
         env:
-          KUBECONFIG: ~/.kube/config
-          PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
+          KUBECONFIG: /home/runner/.kube/config
         run: |
-          cd tests/pytest/cli-tests/tests
+          export PATH="$(npm config get prefix)/bin:$PATH"
+          cd tests/pytest
           echo "Running complete ARK workflow tests..."
+          echo "ark location: $(which ark)"
+          echo "KUBECONFIG: $KUBECONFIG"
           python test_complete_ark_workflow.py || {
             echo "ARK workflow tests failed"
             kubectl get all -n default
