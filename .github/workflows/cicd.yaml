@@ -921,7 +921,25 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
         run: |
           cd tests/pytest/cli-tests/tests
-          python test_file_gateway.py
+          
+          # Run the test up to File Gateway installation
+          python test_file_gateway.py || {
+            echo "File Gateway tests in progress..."
+            
+            # Wait for File Gateway MCP server to be reconciled by ark-mcp
+            echo "Waiting for MCPServer resource to be ready..."
+            for i in {1..24}; do
+              if kubectl get mcpserver file-gateway-mcpserver -o jsonpath='{.status.toolCount}' 2>/dev/null | grep -q '[0-9]'; then
+                echo "MCP server ready!"
+                break
+              fi
+              echo "Waiting for ark-mcp reconciliation... (attempt $i/24)"
+              sleep 5
+            done
+            
+            # Retry the test
+            python test_file_gateway.py
+          }
 
       - name: Run complete ARK workflow tests
         run: |
