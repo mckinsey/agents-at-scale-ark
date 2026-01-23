@@ -48,7 +48,7 @@ export function CodeViewer({
   const isDarkMode = useAtomValue(isExperimentalDarkModeEnabledAtom);
 
   return (
-    <div className="overflow-hidden border">
+    <div className="border">
       <SyntaxHighlighter
         language={language}
         customStyle={{
@@ -58,7 +58,9 @@ export function CodeViewer({
         }}
         style={isDarkMode ? customDarkTheme : customLightTheme}
         showLineNumbers={showLineNumbers}
-        wrapLongLines={wrapLongLines}>
+        lineProps={{style: {wordBreak: 'break-all', whiteSpace: 'pre-wrap'}}}
+        wrapLines={true}
+      >
         {code}
       </SyntaxHighlighter>
     </div>

@@ -23,6 +23,7 @@ import { RunWorkflowDialog } from '@/components/dialogs/run-workflow-dialog';
 import type { Flow } from '@/components/rows/flow-row';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useSidebar } from '@/components/ui/sidebar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Tooltip,
@@ -41,6 +42,7 @@ import { countWorkflowTasks } from '@/lib/utils/workflow';
 export default function FlowDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { state: sidebarState, isMobile } = useSidebar();
   const flowId = params.id as string;
   const [flow, setFlow] = useState<Flow | null>(null);
   const [template, setTemplate] = useState<WorkflowTemplate | null>(null);
@@ -273,7 +275,13 @@ export default function FlowDetailPage() {
         breadcrumbs={breadcrumbs}
         currentPage={flow.title || flow.id}
       />
-      <div className="flex flex-col gap-6 p-6">
+      <div
+        className="flex flex-col gap-6 p-6"
+        style={
+          !isMobile && sidebarState === 'expanded'
+            ? { maxWidth: 'calc(100vw - 16rem)' }
+            : undefined
+        }>
         <div className="bg-card flex w-full flex-wrap items-center gap-4 rounded-md border px-4 py-3">
           <div className="flex flex-grow items-center gap-3 overflow-hidden">
             <div className="p-2">
