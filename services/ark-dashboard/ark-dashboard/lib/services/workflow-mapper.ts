@@ -157,9 +157,9 @@ function mapArgoNodeToStep(
 
   if (node.children && node.children.length > 0) {
     step.children = node.children
-      .map(childId => {
+      .flatMap(childId => {
         const childNode = allNodes[childId];
-        if (!childNode) return null;
+        if (!childNode) return [];
         
         if (isStepGroupNode(childNode)) {
           if (childNode.children && childNode.children.length > 0) {
@@ -170,13 +170,11 @@ function mapArgoNodeToStep(
               })
               .filter((grandchild): grandchild is MappedWorkflowStep => grandchild !== null);
           }
-          return null;
+          return [];
         }
         
-        return mapArgoNodeToStep(childNode, allNodes, workflowName, workflowNamespace);
-      })
-      .flat()
-      .filter((child): child is MappedWorkflowStep => child !== null);
+        return [mapArgoNodeToStep(childNode, allNodes, workflowName, workflowNamespace)];
+      });
   }
 
   return step;

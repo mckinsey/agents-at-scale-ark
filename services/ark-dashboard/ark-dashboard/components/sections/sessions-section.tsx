@@ -46,6 +46,7 @@ import { cn } from '@/lib/utils';
 import { useWorkflows, useWorkflow } from '@/lib/services/workflows-hooks';
 import { mapArgoWorkflowToSession, mapArgoWorkflowsToSessions } from '@/lib/services/workflow-mapper';
 import { useDebounce } from '@/lib/hooks/use-debounce';
+import { ErrorBoundary } from '@/components/common/error-boundary';
 
 type SessionSourceFilter = 'all' | 'workflows' | 'teams' | 'agents';
 type SessionType = 'workflow' | 'team' | 'agent';
@@ -222,31 +223,44 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
   const shouldFetchLogs = detail.workflowName && detail.nodeId && detail.namespace;
 
   useEffect(() => {
-    if (shouldFetchLogs) {
-      const fetchLogs = async () => {
-        setLoadingLogs(true);
-        setLogsError(null);
-        try {
-          const { workflowsService } = await import('@/lib/services/workflows');
-          const logData = await workflowsService.getWorkflowLogs(
-            detail.workflowName!,
-            detail.nodeId!,
-            detail.namespace!,
-          );
+    if (!shouldFetchLogs) return;
+
+    let cancelled = false;
+
+    const fetchLogs = async () => {
+      setLoadingLogs(true);
+      setLogsError(null);
+      try {
+        const { workflowsService } = await import('@/lib/services/workflows');
+        const logData = await workflowsService.getWorkflowLogs(
+          detail.workflowName!,
+          detail.nodeId!,
+          detail.namespace!,
+        );
+        if (!cancelled) {
           setLogs(logData);
-        } catch (error: unknown) {
+        }
+      } catch (error: unknown) {
+        if (!cancelled) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           if (errorMessage.includes('404')) {
             setShowLogs(false);
           } else {
             setLogsError('Failed to load logs');
           }
-        } finally {
+        }
+      } finally {
+        if (!cancelled) {
           setLoadingLogs(false);
         }
-      };
-      void fetchLogs();
-    }
+      }
+    };
+    
+    void fetchLogs();
+
+    return () => {
+      cancelled = true;
+    };
   }, [detail.workflowName, detail.nodeId, detail.namespace, shouldFetchLogs]);
   return (
     <div className="bg-muted/30 mt-2 space-y-3 rounded-md border p-3 text-sm">
@@ -836,7 +850,9 @@ export function SessionsSection() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  const [sourceFilter, setSourceFilter] = useState<SessionSourceFilter>('all');
+  // Note: sourceFilter is currently unused but reserved for future support of Team sessions
+  // Currently only workflow sessions are implemented
+  const [sourceFilter] = useState<SessionSourceFilter>('all');
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null,
   );
@@ -955,8 +971,9 @@ export function SessionsSection() {
   };
 
   return (
-    <div className="flex flex-1 flex-col gap-3 p-4">
-      <div className="flex flex-col gap-1.5 rounded-md bg-muted/20 px-3 py-2">
+    <ErrorBoundary>
+      <div className="flex flex-1 flex-col gap-3 p-4">
+        <div className="flex flex-col gap-1.5 rounded-md bg-muted/20 px-3 py-2">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
@@ -1085,6 +1102,7 @@ export function SessionsSection() {
           </div>
         </Card>
       )}
-    </div>
+      </div>
+    </ErrorBoundary>
   );
 }

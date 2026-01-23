@@ -71,14 +71,13 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     icon: Workflow,
     group: 'configurations',
   },
+
   sessions: {
     key: 'sessions',
     title: 'Sessions',
     icon: Play,
-    group: 'configurations',
+    group: 'operations',
   },
-
-  // Operations
   queries: {
     key: 'queries',
     title: 'Queries',
