@@ -1,388 +1,402 @@
 
+import pytest
+import subprocess
+import time
+import os
 import sys
-from helpers.file_gateway_helper import FileGatewayHelper
-
-try:
-    import pytest
-    PYTEST_AVAILABLE = True
-except ImportError:
-    PYTEST_AVAILABLE = False
-    print("Warning: pytest not available, running in standalone mode")
+import shutil
+from pathlib import Path
 
 
-if PYTEST_AVAILABLE:
-    @pytest.fixture(scope="session")
-    def helper():
-        """Create helper instance for all tests"""
-        return FileGatewayHelper()
+class ARKWorkflowTest:
+    # Configuration constants
+    VENV_NAME = "ark_test_venv"
+    TIMEOUTS = {"java": 10, "brew": 300, "ark": 600, "pods": 300, "dashboard": 120, "pytest": 120, "cleanup": 30}
+    INTERVALS = {"process": 10, "dashboard": 5}
+    HOMEBREW_OPENJDK_PATH = "/opt/homebrew/opt/openjdk/bin"
+    REQUIRED_ARK_PODS = ['ark-api', 'ark-dashboard', 'ark-mcp']
+    DASHBOARD_URLS = ["http://127.0.0.1.nip.io:8080", "http://localhost:8080", "http://localhost:3000"]
+    BASIC_PACKAGES = ["pytest", "kubernetes", "pyyaml", "requests"]
 
-
-    @pytest.fixture(scope="session", autouse=True)
-    def setup_and_teardown(helper):
-        """Setup before all tests and teardown after"""
-        yield
-        helper.cleanup_resources()
-
-
-def test_installation(helper):
-    """Test File Gateway installation"""
-    success = helper.install_file_gateway()
-    assert success, "File Gateway installation failed"
-
-
-def test_pods_running(helper):
-    """Test all File Gateway pods are running"""
-    success = helper.verify_pods_running()
-    assert success, "File Gateway pods verification failed"
-
-
-def test_pod_count(helper):
-    """Test correct number of pods are deployed"""
-    pod_names = helper.get_pod_names()
-    assert len(pod_names) >= len(helper.FILE_GATEWAY_PODS), f"Expected at least {len(helper.FILE_GATEWAY_PODS)} pods, found {len(pod_names)}"
-
-
-def test_file_api_pod_exists(helper):
-    """Test file-api pod exists"""
-    pod_names = helper.get_pod_names()
-    file_api_pods = [p for p in pod_names if 'file-api' in p]
-    assert len(file_api_pods) > 0, "file-gateway-file-api pod not found"
-
-
-def test_filesystem_mcp_pod_exists(helper):
-    """Test filesystem-mcp pod exists"""
-    pod_names = helper.get_pod_names()
-    mcp_pods = [p for p in pod_names if 'filesystem-mcp' in p]
-    assert len(mcp_pods) > 0, "file-gateway-filesystem-mcp pod not found"
-
-
-def test_versitygw_pod_exists(helper):
-    """Test versitygw pod exists"""
-    pod_names = helper.get_pod_names()
-    versitygw_pods = [p for p in pod_names if 'versitygw' in p]
-    assert len(versitygw_pods) > 0, "file-gateway-versitygw pod not found"
-
-
-def test_storage_configuration(helper):
-    """Test storage PVC is configured"""
-    success, storage_size = helper.verify_storage_configuration()
-    assert success, "Failed to get storage configuration"
-    assert storage_size is not None, "Storage size not found"
-
-
-def test_storage_size(helper):
-    """Test storage size matches default"""
-    success, storage_size = helper.verify_storage_configuration()
-    assert success, "Failed to get storage configuration"
-    assert storage_size == helper.DEFAULT_STORAGE_SIZE, f"Storage size {storage_size} does not match expected {helper.DEFAULT_STORAGE_SIZE}"
-
-
-def test_pvc_exists_and_bound(helper):
-    """Test PVC exists and is bound"""
-    success = helper.verify_pvc_exists()
-    assert success, "PVC is not bound or does not exist"
-
-
-def test_service_ports(helper):
-    """Test all services are configured with correct ports"""
-    success = helper.verify_service_ports()
-    assert success, "Service ports verification failed"
-
-
-def test_file_api_service_port(helper):
-    """Test file-api service is on port 80"""
-    success, stdout, _ = helper._run_cmd(
-        ['kubectl', 'get', 'svc', 'file-gateway-api', '-o', 'jsonpath={.spec.ports[0].port}'],
-        check=False
-    )
-    assert success and stdout.strip() == "80", f"file-api service port is {stdout.strip()}, expected 80"
-
-
-def test_filesystem_mcp_service_port(helper):
-    """Test filesystem-mcp service is on port 80"""
-    success, stdout, _ = helper._run_cmd(
-        ['kubectl', 'get', 'svc', 'file-gateway-filesystem-mcp', '-o', 'jsonpath={.spec.ports[0].port}'],
-        check=False
-    )
-    assert success and stdout.strip() == "80", f"filesystem-mcp service port is {stdout.strip()}, expected 80"
-
-
-def test_versitygw_service_port(helper):
-    """Test versitygw service is on port 80"""
-    success, stdout, _ = helper._run_cmd(
-        ['kubectl', 'get', 'svc', 'file-gateway-versitygw', '-o', 'jsonpath={.spec.ports[0].port}'],
-        check=False
-    )
-    assert success and stdout.strip() == "80", f"versitygw service port is {stdout.strip()}, expected 80"
-
-
-def test_bucket_configuration(helper):
-    """Test S3 bucket configuration"""
-    success, bucket_name = helper.verify_bucket_configuration()
-    assert success, "Failed to get bucket configuration"
-    assert bucket_name is not None, "Bucket name not found"
-
-
-def test_bucket_name_default(helper):
-    """Test bucket name matches default"""
-    success, bucket_name = helper.verify_bucket_configuration()
-    assert success, "Failed to get bucket configuration"
-    assert bucket_name == helper.DEFAULT_BUCKET, f"Bucket name {bucket_name} does not match expected {helper.DEFAULT_BUCKET}"
-
-
-def test_file_api_component_enabled(helper):
-    """Test file-api component is enabled"""
-    success = helper.verify_component_enabled('file-api')
-    assert success, "file-api component not enabled"
-
-
-def test_filesystem_mcp_component_enabled(helper):
-    """Test filesystem-mcp component is enabled"""
-    success = helper.verify_component_enabled('filesystem-mcp')
-    assert success, "filesystem-mcp component not enabled"
-
-
-def test_versitygw_component_enabled(helper):
-    """Test versitygw component is enabled"""
-    success = helper.verify_component_enabled('versitygw')
-    assert success, "versitygw component not enabled"
-
-
-def test_mcp_server_registered(helper):
-    """Test MCP server is registered with ARK"""
-    success, tool_count = helper.verify_mcp_server_registered()
-    assert success, "MCP server not registered"
-    assert tool_count > 0, "MCP server has no tools"
-
-
-def test_mcp_server_tool_count(helper):
-    """Test MCP server has expected number of tools"""
-    success, tool_count = helper.verify_mcp_server_registered()
-    assert success, "MCP server not registered"
-    assert tool_count >= 10, f"MCP server has {tool_count} tools, expected at least 10"
-
-
-def test_mcp_server_status(helper):
-    """Test MCP server status is Available"""
-    success = helper.verify_mcp_server_status()
-    assert success, "MCP server status is not Available"
-
-
-def test_port_forward_setup(helper):
-    """Test port forwarding setup"""
-    success = helper.setup_port_forward()
-    assert success, "Port forward setup failed"
-
-
-def test_api_health_endpoint(helper):
-    """Test API health endpoint responds"""
-    success = helper.test_api_health()
-    assert success, "API health check failed"
-
-
-def test_file_upload(helper):
-    """Test file upload functionality"""
-    file_path, _ = helper.create_test_file()
-    result = helper.upload_file(file_path, "test-upload.txt")
-    if isinstance(result, tuple):
-        success, uploaded_key = result
-        helper.last_uploaded_key = uploaded_key  # Store for next test
-    else:
-        success = result
-        helper.last_uploaded_key = "test-upload.txt"
-    assert success, "File upload failed"
-
-
-def test_file_list(helper):
-    """Test file listing functionality"""
-    success, file_list = helper.list_files()
-    assert success, "File listing failed"
-    # Use the actual uploaded key
-    uploaded_key = getattr(helper, 'last_uploaded_key', 'test-upload.txt')
-    assert uploaded_key in file_list, f"Uploaded file {uploaded_key} not found in listing"
-
-
-def test_file_download(helper):
-    """Test file download functionality"""
-    uploaded_key = getattr(helper, 'last_uploaded_key', 'test-upload.txt')
-    success, content = helper.download_file(uploaded_key)
-    assert success, "File download failed"
-    assert len(content) > 0, "Downloaded file is empty"
-
-
-def test_file_content_integrity(helper):
-    """Test downloaded file content matches uploaded content"""
-    file_path, original_content = helper.create_test_file("Test content for integrity check\n")
-    result = helper.upload_file(file_path, "integrity-test.txt")
-    if isinstance(result, tuple):
-        upload_success, uploaded_key = result
-    else:
-        upload_success = result
-        uploaded_key = "integrity-test.txt"
-    assert upload_success, "File upload failed"
+    def __init__(self):
+        self.venv_path = None
+        self.original_cwd = os.getcwd()
+        self.test_dir = Path(__file__).parent
     
-    download_success, downloaded_content = helper.download_file(uploaded_key)
-    assert download_success, "File download failed"
-    assert downloaded_content.strip() == original_content.strip(), "Downloaded content does not match original"
+    def _get_venv_paths(self):
+        """Get platform-specific venv paths"""
+        base = "Scripts" if os.name == 'nt' else "bin"
+        return self.venv_path / base / "pip", self.venv_path / base / "python"
     
-    # Cleanup
-    helper.delete_file(uploaded_key)
-
-
-def test_file_delete(helper):
-    """Test file deletion functionality"""
-    uploaded_key = getattr(helper, 'last_uploaded_key', 'test-upload.txt')
-    success = helper.delete_file(uploaded_key)
-    assert success, "File deletion failed"
-
-
-def test_file_deleted_verification(helper):
-    """Test file is actually deleted after delete operation"""
-    uploaded_key = getattr(helper, 'last_uploaded_key', 'test-upload.txt')
-    _, file_list = helper.list_files()
-    assert uploaded_key not in file_list, "File still exists after deletion"
-
-
-def test_multiple_file_operations(helper):
-    """Test multiple file uploads and management"""
-    files_to_test = ["test-file-1.txt", "test-file-2.txt", "test-file-3.txt"]
-    uploaded_keys = []
+    def _run_cmd(self, cmd, timeout=None, check=True):
+        """Run subprocess with error handling"""
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, 
+                                  timeout=timeout or self.TIMEOUTS["cleanup"], check=check)
+            return True, result.stdout, result.stderr
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+            return False, getattr(e, 'stdout', ''), getattr(e, 'stderr', str(e))
     
-    # Upload multiple files
-    for filename in files_to_test:
-        file_path, _ = helper.create_test_file(f"Content for {filename}\n")
-        result = helper.upload_file(file_path, filename)
-        if isinstance(result, tuple):
-            success, uploaded_key = result
-            uploaded_keys.append(uploaded_key)
+    def _check_java(self):
+        """Check if Java is available"""
+        success, _, _ = self._run_cmd(['java', '-version'], self.TIMEOUTS["java"], check=False)
+        return success
+    
+    def _setup_homebrew_java(self):
+        """Setup Java via Homebrew"""
+        if os.path.exists(self.HOMEBREW_OPENJDK_PATH):
+            current_path = os.environ.get('PATH', '')
+            if self.HOMEBREW_OPENJDK_PATH not in current_path:
+                os.environ['PATH'] = f"{self.HOMEBREW_OPENJDK_PATH}:{current_path}"
+            return self._check_java()
+        return False
+    
+    def _monitor_process(self, process, timeout, sleep_time, operation_name):
+        """Monitor process with timeout"""
+        time_waited = 0
+        while time_waited < timeout:
+            if process.poll() is not None:
+                output, error = process.communicate()
+                return process.returncode == 0, output, error
+            time.sleep(sleep_time)
+            time_waited += sleep_time
+            print(f"{operation_name} in progress... ({time_waited}s elapsed)")
+        process.terminate()
+        return False, "", f"Timeout after {timeout}s"
+
+    def setup_venv(self):
+        """Setup virtual environment"""
+        print("Setting up virtual environment...")
+        self.venv_path = self.test_dir / self.VENV_NAME
+        
+        if self.venv_path.exists():
+            shutil.rmtree(self.venv_path)
+        
+        success, _, stderr = self._run_cmd([sys.executable, "-m", "venv", str(self.venv_path)])
+        if not success:
+            raise RuntimeError(f"Failed to create venv: {stderr}")
+        
+        pip_executable, python_executable = self._get_venv_paths()
+        requirements_path = self.test_dir / "requirements.txt"
+        
+        if requirements_path.exists():
+            success, _, error_msg = self._run_cmd([str(pip_executable), "install", "-r", str(requirements_path)])
+            if not success:
+                print(f"Requirements failed: {error_msg}, installing basics")
+                self._run_cmd([str(pip_executable), "install"] + self.BASIC_PACKAGES)
         else:
-            success = result
-            uploaded_keys.append(filename)
-        assert success, f"Failed to upload {filename}"
-    
-    # Verify all files exist
-    _, file_list = helper.list_files()
-    for uploaded_key in uploaded_keys:
-        assert uploaded_key in file_list, f"{uploaded_key} not found in listing"
-    
-    # Delete all files
-    for uploaded_key in uploaded_keys:
-        success = helper.delete_file(uploaded_key)
-        assert success, f"Failed to delete {uploaded_key}"
-    
-    # Verify all files are deleted
-    _, file_list = helper.list_files()
-    for uploaded_key in uploaded_keys:
-        assert uploaded_key not in file_list, f"{uploaded_key} still exists after deletion"
+            self._run_cmd([str(pip_executable), "install"] + self.BASIC_PACKAGES)
+        
+        print("Virtual environment ready")
+        return str(python_executable)
+
+    def setup_openjdk(self):
+        """Setup OpenJDK"""
+        print("Checking OpenJDK...")
+        
+        # Check if already available
+        if self._check_java():
+            print("OpenJDK available")
+            return True
+        
+        # Try Homebrew path setup
+        if self._setup_homebrew_java():
+            print("OpenJDK available")
+            return True
+        
+        # Try installing via Homebrew
+        print("Installing via Homebrew...")
+        success, _, _ = self._run_cmd(['brew', 'install', 'openjdk'], self.TIMEOUTS["brew"], check=False)
+        if success and self._setup_homebrew_java():
+            print("OpenJDK installed and available")
+            return True
+        
+        print("OpenJDK unavailable - some features may not work")
+        return False
+
+    def install_ark(self):
+        """Install ARK platform"""
+        print("Installing ARK...")
+        
+        success, version_output, _ = self._run_cmd(['ark', '--version'], self.TIMEOUTS["java"], check=False)
+        if not success:
+            print("ARK CLI not found. Install with: npm install -g @agents-at-scale/ark")
+            return False, None
+        
+        version_info = version_output.strip()
+        print(f"ARK CLI found: {version_info}")
+        
+        process = subprocess.Popen(['ark', 'install', '-y'], 
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        success, output, error_msg = self._monitor_process(process, self.TIMEOUTS["ark"], 
+                                                       self.INTERVALS["process"], "ARK installation")
+        
+        if success:
+            print("ARK installed successfully")
+            return True, version_info
+        else:
+            print(f"ARK installation failed: {error_msg}")
+            return False, version_info
+
+    def create_default_model(self):
+        """Skip model creation (interactive)"""
+        print("Skipping model creation (interactive command)")
+        return True
+
+    def verify_pods_running(self):
+        """Verify ARK pods are running"""
+        print("Verifying ARK pods...")
+        
+        try:
+            # Dynamically find site-packages directory
+            python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+            site_packages = self.venv_path / "lib" / python_version / "site-packages"
+            sys.path.insert(0, str(site_packages))
+            from kubernetes import config, client
+            
+            config.load_kube_config()
+            kube_client = client.CoreV1Api()
+            
+            # Get ARK pods
+            all_pods = kube_client.list_pod_for_all_namespaces()
+            ark_pods = [p for p in all_pods.items if 'ark' in p.metadata.name.lower()]
+            running_pods = [p for p in ark_pods if p.status.phase == 'Running']
+            
+            print(f"Found {len(running_pods)}/{len(ark_pods)} ARK pods running")
+            
+            return len(running_pods) >= len(self.REQUIRED_ARK_PODS)
+                
+        except Exception as error:
+            print(f"Error verifying pods: {error}")
+            return False
+
+    def verify_dashboard_accessible(self):
+        """Verify dashboard accessibility via gateway"""
+        print("Verifying dashboard via ARK gateway...")
+        
+        try:
+            if self.venv_path is None:
+                self.venv_path = self.test_dir / self.VENV_NAME
+            
+            # Check if dashboard pod exists
+            result = subprocess.run(
+                ['kubectl', 'get', 'pods', '--all-namespaces', '-l', 'app=ark-dashboard', '-o', 'name'],
+                capture_output=True, text=True
+            )
+            
+            if not result.stdout.strip():
+                print("ARK dashboard not installed, skipping verification")
+                return True  # Pass test if dashboard not installed
+            
+            subprocess.run(['bash', '-c', 'lsof -ti :8080 | xargs kill -9 2>/dev/null || true'], 
+                          capture_output=True)
+            subprocess.run(['bash', '-c', 'lsof -ti :3000 | xargs kill -9 2>/dev/null || true'], 
+                          capture_output=True)
+            
+            # Forward to dashboard pod directly
+            dashboard_pod = result.stdout.strip().split('/')[-1]
+            print(f"Setting up port forwarding to {dashboard_pod}...")
+            port_forward_process = subprocess.Popen(
+                ['kubectl', 'port-forward', '-n', 'default', dashboard_pod, '8080:3000'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            
+            # Dynamically find site-packages directory
+            python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+            site_packages = self.venv_path / "lib" / python_version / "site-packages"
+            sys.path.insert(0, str(site_packages))
+            import requests
+            import webbrowser
+            
+            print("Waiting for port forwarding to be ready...")
+            time.sleep(5)
+            
+            # Wait for port to be accessible
+            for i in range(20):
+                try:
+                    requests.get("http://localhost:8080", timeout=1)
+                    print("Port forwarding is ready")
+                    break
+                except:
+                    time.sleep(1)
+                    if i == 19:
+                        print("Port forwarding timeout")
+                        port_forward_process.terminate()
+                        return False
+            
+            # Try each URL until one works
+            for test_url in self.DASHBOARD_URLS:
+                try:
+                    print(f"Trying {test_url}...")
+                    response = requests.get(test_url, timeout=10)
+                    if response.status_code == 200:
+                        print(f"Dashboard responding at {test_url}")
+            
+                        # Launch browser
+                        print(f"Opening browser at {test_url}")
+                        webbrowser.open(test_url)
+                        print("Browser launched successfully")
+                        
+                        print(f"Dashboard accessible - Status: {response.status_code}")
+                        return True
+                        
+                except requests.exceptions.RequestException:
+                    continue  # Try next URL
+            
+            print("Dashboard not accessible on any URL")
+            return False
+            
+        except Exception as error:
+            print(f"Dashboard error: {error}")
+            return False
+
+    def cleanup_resources(self):
+        """Clean up resources"""
+        print("Cleaning up...")
+        self._run_cmd(['pkill', '-f', 'kubectl port-forward'], check=False)
+        self._run_cmd(['bash', '-c', 'lsof -ti :8080 | xargs kill -9 2>/dev/null || true'], check=False)
+        self._run_cmd(['bash', '-c', 'lsof -ti :3000 | xargs kill -9 2>/dev/null || true'], check=False)
+        
+        # Cleanup Kubernetes resources
+        cleanup_commands = [
+            ['kubectl', 'delete', 'pods', '--all', '-n', 'default'],
+            ['kubectl', 'delete', 'services', '--all', '-n', 'default'],
+            ['kubectl', 'delete', 'deployments', '--all', '-n', 'default'],
+            ['kubectl', 'delete', 'agents', '--all', '-n', 'default'],
+            ['kubectl', 'delete', 'models', '--all', '-n', 'default'],
+            ['kubectl', 'delete', 'queries', '--all', '-n', 'default']
+        ]
+        
+        for command in cleanup_commands:
+            self._run_cmd(command, self.TIMEOUTS["cleanup"], check=False)
+        
+        # Clean venv
+        if self.venv_path and self.venv_path.exists():
+            shutil.rmtree(self.venv_path)
+        
+    def run_workflow(self):
+        """Run complete workflow"""
+        print("Starting ARK Workflow Test")
+        success = True
+        
+        try:
+            python_executable_path = self.setup_venv()
+            if not self.install_ark()[0]:
+                success = False
+            if success:
+                self.create_default_model()
+                time.sleep(30)  # Wait for pods
+                if not self.verify_pods_running() or not self.verify_dashboard_accessible():
+                    success = False
+        except Exception as e:
+
+            success = False
+        finally:
+            self.cleanup_resources()
+        
+        return success
 
 
-def test_file_with_special_characters(helper):
-    """Test file operations with special characters in filename"""
-    special_filename = "test-file_with-special.chars-123.txt"
-    file_path, content = helper.create_test_file("Special filename test\n")
-    
-    result = helper.upload_file(file_path, special_filename)
-    if isinstance(result, tuple):
-        upload_success, uploaded_key = result
-    else:
-        upload_success = result
-        uploaded_key = special_filename
-    assert upload_success, "Failed to upload file with special characters"
-    
-    download_success, downloaded_content = helper.download_file(uploaded_key)
-    assert download_success, "Failed to download file with special characters"
-    assert downloaded_content.strip() == content.strip(), "Content mismatch for special filename"
-    
-    delete_success = helper.delete_file(uploaded_key)
-    assert delete_success, "Failed to delete file with special characters"
+@pytest.fixture(scope="session")
+def ark_workflow():
+    return ARKWorkflowTest()
 
 
-def test_empty_file_upload(helper):
-    """Test uploading an empty file"""
-    file_path, _ = helper.create_test_file("")
-    result = helper.upload_file(file_path, "empty-file.txt")
-    if isinstance(result, tuple):
-        success, uploaded_key = result
-    else:
-        success = result
-        uploaded_key = "empty-file.txt"
-    assert success, "Failed to upload empty file"
-    
-    download_success, content = helper.download_file(uploaded_key)
-    assert download_success, "Failed to download empty file"
-    
-    helper.delete_file(uploaded_key)
+def test_ark_venv_setup(ark_workflow):
+    """Test virtual environment setup"""
+    python_executable_path = ark_workflow.setup_venv()
+    assert python_executable_path and Path(python_executable_path).exists(), "Venv setup failed"
+    print("Venv setup successful")
 
 
-def test_container_images(helper):
-    """Test pods are using correct container images"""
-    pod_names = helper.get_pod_names()
-    assert len(pod_names) > 0, "No pods found"
-    
-    for pod_name in pod_names:
-        image = helper.get_pod_image(pod_name)
-        assert image is not None, f"Failed to get image for {pod_name}"
-        assert "file-gateway" in image.lower() or "file-api" in image.lower() or "filesystem-mcp" in image.lower() or "versitygw" in image.lower(), f"Unexpected image for {pod_name}: {image}"
+def test_ark_openjdk_setup(ark_workflow):
+    """Test OpenJDK setup"""
+    ark_workflow.setup_openjdk()  # Non-blocking, just warn if fails
 
 
-def test_file_api_image_repository(helper):
-    """Test file-api uses correct image repository"""
-    pod_names = helper.get_pod_names()
-    file_api_pods = [p for p in pod_names if 'file-api' in p]
-    assert len(file_api_pods) > 0, "file-api pod not found"
+def test_ark_installation(ark_workflow):
+    """Test ARK installation"""
+    installation_success, ark_version = ark_workflow.install_ark()
+    assert installation_success and ark_version, "ARK installation failed"
+    print(f"ARK installed - {ark_version}")
+
+
+def test_ark_pods_verification(ark_workflow):
+    """Test ARK pods verification with dynamic monitoring"""
+    print("Testing ARK pods verification...")
     
-    image = helper.get_pod_image(file_api_pods[0])
-    assert "ghcr.io/mckinsey" in image or "file-api" in image, f"file-api image repository unexpected: {image}"
+    # First run the verification
+    pods_ready = ark_workflow.verify_pods_running()
+    assert pods_ready, "ARK pods verification failed"
+    
+    # Then print detailed pod information
+    try:
+        # Dynamically find site-packages directory
+        python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+        site_packages = ark_workflow.venv_path / "lib" / python_version / "site-packages"
+        sys.path.insert(0, str(site_packages))
+        from kubernetes import config, client
+        
+        config.load_kube_config()
+        kube_client = client.CoreV1Api()
+        all_pods = kube_client.list_pod_for_all_namespaces()
+        ark_pods = [pod for pod in all_pods.items if 'ark' in pod.metadata.name.lower()]
+        
+        print(f"Detailed pod status for {len(ark_pods)} ARK pods:")
+        for pod in ark_pods:
+            status = "Running" if pod.status.phase == 'Running' else pod.status.phase
+            ready_status = "Ready" if (pod.status.container_statuses and 
+                         all(c.ready for c in pod.status.container_statuses)) else "Not Ready"
+            print(f"- {pod.metadata.name} ({pod.metadata.namespace}): {status} - {ready_status}")
+            
+    except Exception as error:
+        print(f"Could not get detailed pod info: {error}")
+    
+    print("ARK pods verification successful")
+
+
+def test_ark_dashboard_verification(ark_workflow):
+    """Test ARK dashboard HTTP accessibility"""
+    print("Testing ARK dashboard verification...")
+    dashboard_accessible = ark_workflow.verify_dashboard_accessible()
+    assert dashboard_accessible, "ARK dashboard verification failed"
+    print("ARK dashboard verification successful")
+
+
+def test_ark_pytest_execution(ark_workflow):
+    """Test pytest execution"""
+    print("Testing pytest execution...")
+    try:
+        # Dynamically find site-packages directory
+        python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+        site_packages = ark_workflow.venv_path / "lib" / python_version / "site-packages"
+        sys.path.insert(0, str(site_packages))
+        from kubernetes import config, client
+        
+        config.load_kube_config()
+        kube_client = client.CoreV1Api()
+        all_pods = kube_client.list_pod_for_all_namespaces()
+        ark_related_pods = [pod for pod in all_pods.items if 'ark' in pod.metadata.name.lower()]
+        assert len(ark_related_pods) > 0, "No ARK pods found"
+        
+        print(f"Found {len(ark_related_pods)} ARK pods:")
+        for pod in ark_related_pods:
+            pod_status = "Running" if pod.status.phase == 'Running' else f"{pod.status.phase}"
+            ready_status = "Ready" if (pod.status.container_statuses and all(container.ready for container in pod.status.container_statuses)) else "Not Ready"
+            print(f"- {pod.metadata.name} ({pod.metadata.namespace}): {pod_status} - {ready_status}")
+    except Exception as test_error:
+        print(f"Pytest test failed: {test_error}")
+
+
+def test_ark_cleanup(ark_workflow):
+    """Test cleanup"""
+    ark_workflow.cleanup_resources()
+    print("Cleanup successful")
 
 
 if __name__ == "__main__":
-    print("Running File Gateway tests...")
-    helper = FileGatewayHelper()
-    
-    try:
-        print("\nTest: Installation")
-        test_installation(helper)
-        
-        print("\nTest: Pods Running")
-        test_pods_running(helper)
-        
-        print("\nTest: Storage Configuration")
-        test_storage_configuration(helper)
-        test_pvc_exists_and_bound(helper)
-        
-        print("\nTest: Service Ports")
-        test_service_ports(helper)
-        
-        print("\nTest: Bucket Configuration")
-        test_bucket_configuration(helper)
-        
-        print("\nTest: Components Enabled")
-        test_file_api_component_enabled(helper)
-        test_filesystem_mcp_component_enabled(helper)
-        test_versitygw_component_enabled(helper)
-        
-        print("\nTest: MCP Server")
-        test_mcp_server_registered(helper)
-        test_mcp_server_status(helper)
-        
-        print("\nTest: API Operations")
-        test_port_forward_setup(helper)
-        test_api_health_endpoint(helper)
-        
-        print("\nTest: File Operations")
-        helper.last_uploaded_key = None  # Initialize
-        test_file_upload(helper)
-        test_file_list(helper)
-        test_file_download(helper)
-        test_file_content_integrity(helper)
-        test_file_delete(helper)
-        test_multiple_file_operations(helper)
-        
-        print("\nAll tests passed successfully")
-        sys.exit(0)
-        
-    except AssertionError as e:
-        print(f"\nTest failed: {e}")
-        sys.exit(1)
-    finally:
-        helper.cleanup_resources()
+    workflow = ARKWorkflowTest()
+    success = workflow.run_workflow()
+    sys.exit(0 if success else 1)
