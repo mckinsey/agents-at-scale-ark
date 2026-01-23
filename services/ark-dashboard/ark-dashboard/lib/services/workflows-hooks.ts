@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
-import { workflowsService } from './workflows';
+import { workflowsService, type WorkflowFilters } from './workflows';
 import type { ArgoWorkflow } from '@/lib/types/argo-workflow';
 
 export function useWorkflows(
   namespace: string = 'default',
+  filters?: WorkflowFilters,
 ) {
   const [workflows, setWorkflows] = useState<ArgoWorkflow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -13,7 +14,7 @@ export function useWorkflows(
     
     try {
       setLoading(true);
-      const data = await workflowsService.list(namespace);
+      const data = await workflowsService.list(namespace, filters);
       setWorkflows(data);
       setError(null);
     } catch (err) {
@@ -21,7 +22,7 @@ export function useWorkflows(
     } finally {
       setLoading(false);
     }
-  }, [namespace]);
+  }, [namespace, filters?.workflowName, filters?.workflowTemplateName, filters?.status]);
 
   useEffect(() => {
     fetchWorkflows();

@@ -46,6 +46,8 @@ export interface MappedWorkflowSession {
   finishedAt?: string;
   duration: string;
   steps: MappedWorkflowStep[];
+  namespace?: string;
+  uid?: string;
 }
 
 function mapArgoPhaseToStatus(phase: string): MappedStepStatus {
@@ -130,6 +132,10 @@ function buildNodeDetail(
   return Object.keys(detail).length > 0 ? detail : undefined;
 }
 
+function isStepGroupNode(node: ArgoNodeStatus): boolean {
+  return node.type === 'StepGroup' || /^\[\d+\]$/.test(node.displayName || node.name);
+}
+
 function mapArgoNodeToStep(
   node: ArgoNodeStatus,
   allNodes: Record<string, ArgoNodeStatus>,
@@ -151,11 +157,24 @@ function mapArgoNodeToStep(
 
   if (node.children && node.children.length > 0) {
     step.children = node.children
-      .map(childId => {
+      .flatMap(childId => {
         const childNode = allNodes[childId];
-        return childNode ? mapArgoNodeToStep(childNode, allNodes, workflowName, workflowNamespace) : null;
-      })
-      .filter((child): child is MappedWorkflowStep => child !== null);
+        if (!childNode) return [];
+        
+        if (isStepGroupNode(childNode)) {
+          if (childNode.children && childNode.children.length > 0) {
+            return childNode.children
+              .map(grandchildId => {
+                const grandchildNode = allNodes[grandchildId];
+                return grandchildNode ? mapArgoNodeToStep(grandchildNode, allNodes, workflowName, workflowNamespace) : null;
+              })
+              .filter((grandchild): grandchild is MappedWorkflowStep => grandchild !== null);
+          }
+          return [];
+        }
+        
+        return [mapArgoNodeToStep(childNode, allNodes, workflowName, workflowNamespace)];
+      });
   }
 
   return step;
@@ -197,6 +216,8 @@ export function mapArgoWorkflowToSession(
       workflow.status.finishedAt,
     ),
     steps,
+    namespace: workflow.metadata.namespace,
+    uid: workflow.metadata.uid,
   };
 }
 
