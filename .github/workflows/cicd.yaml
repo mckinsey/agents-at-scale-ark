@@ -863,6 +863,7 @@ jobs:
           - { name: ark-dashboard, path: services/ark-dashboard/chart }
           - { name: ark-mcp, path: services/ark-mcp/chart }
           - { name: ark-broker, path: services/ark-broker/chart }
+          - { name: ark-evaluator, path: services/ark-evaluator/chart }
           - { name: mcp-filesystem, path: mcp/filesystem-mcp/chart }
           - { name: localhost-gateway, path: services/localhost-gateway/chart }
           - { name: ark-tenant, path: charts/ark-tenant }
@@ -1141,6 +1142,7 @@ jobs:
           - ark-dashboard
           - ark-mcp
           - ark-broker
+          - ark-evaluator
           - mcp-filesystem
           - localhost-gateway
           - ark-tenant

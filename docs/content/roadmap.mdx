@@ -1,0 +1,77 @@
+# ARK Platform Roadmap
+
+This document outlines the planned capabilities and features for the ARK (Agentic Runtime for Kubernetes) platform. These items represent our vision for building a comprehensive, enterprise-grade agentic AI platform.
+
+## Core Platform Capabilities
+
+### Practitioner Workbench
+A user interface designed for non-technical colleagues to review agent outputs. This workbench provides an accessible way for business users, subject matter experts, and reviewers to interact with and validate agent-generated content without requiring technical expertise.
+
+### Factory Builder
+A capability to generate new agent factories from a project brief using marketplace components. This enables rapid bootstrapping of agentic solutions by composing pre-built, validated components into cohesive workflows tailored to specific project requirements.
+
+### Agent Marketplace
+A controlled marketplace for the re-use of agents, MCP servers, and workflows. This provides a curated catalog of components that teams can discover, evaluate, and deploy, promoting standardisation and reducing duplication of effort across the organisation.
+
+## Security & Governance
+
+### Agent Identity Management
+A comprehensive identity management capability for agents that is compliant with enterprise security controls. This ensures that agents operate with proper authentication, can be audited, and adhere to organisational security policies.
+
+### Agent Access Management
+A robust access management model for Agents, MCP servers, containers, and K8s namespaces. This provides fine-grained control over what resources agents can access, ensuring principle of least privilege and enabling multi-tenant deployments.
+
+## Workflow & Orchestration
+
+### Deterministic Workflow Engine
+A workflow engine providing orchestration for both agentic and non-agentic steps. This enables the composition of reliable, repeatable workflows that can combine AI-driven decision making with deterministic business logic and integrations.
+
+### Templatised Filesystem Conventions
+Standardised filesystem and folder conventions for declarative agent factories. This provides a consistent structure for organising agent definitions, configurations, and resources, enabling better tooling support and easier onboarding.
+
+## Platform Integration
+
+### Group AI Platform Integration
+Integration with the Group AI platform, supporting both LLM calls and MCP calls. This ensures ARK can leverage centralised AI services while providing the flexibility to use Model Context Protocol for tool integration.
+
+### Custom MCP Server Deployment
+The ability for teams to easily deploy custom MCP servers and containers. This empowers teams to extend the platform with their own tools and integrations while maintaining governance and operational standards.
+
+## Quality & Evaluation
+
+### Independent Evaluation Solution
+A standalone evaluation solution to assure the quality of agent outputs. This provides automated assessment of agent performance, enabling continuous quality monitoring and regression detection across deployments.
+
+## Runtime & Execution
+
+### Scalable Agent Runtime
+A scalable, centrally deployable agent execution and runtime environment. This provides the infrastructure for running agents at scale with proper resource management, monitoring, and operational controls.
+
+## Knowledge Management
+
+### Knowledge Management Agent
+A knowledge management agent that is fully customisable by teams and can ingest modular knowledge sources. This enables agents to access and reason over team-specific knowledge bases, documents, and data sources with fine-grained control over what information is available.
+
+---
+
+## Roadmap Status
+
+| Capability | Status | Priority |
+|------------|--------|----------|
+| Practitioner Workbench | Planned | High |
+| Factory Builder | Planned | High |
+| Agent Marketplace | Planned | High |
+| Agent Identity Management | Planned | Critical |
+| Agent Access Management | Planned | Critical |
+| Deterministic Workflow Engine | Planned | High |
+| Templatised Filesystem Conventions | Planned | Medium |
+| Group AI Platform Integration | Planned | High |
+| Custom MCP Server Deployment | Planned | Medium |
+| Independent Evaluation Solution | Planned | High |
+| Scalable Agent Runtime | Planned | Critical |
+| Knowledge Management Agent | Planned | Medium |
+
+---
+
+*This roadmap is subject to change based on organisational priorities and community feedback.*
+

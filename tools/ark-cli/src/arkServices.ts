@@ -161,6 +161,18 @@ const defaultArkServices: ServiceCollection = {
     k8sDevDeploymentName: 'ark-broker-devspace',
   },
 
+  'ark-evaluator': {
+    name: 'ark-evaluator',
+    helmReleaseName: 'ark-evaluator',
+    description: 'AI-powered evaluation service with LLM-as-a-Judge',
+    enabled: false, // Optional service - enable explicitly
+    category: 'service',
+    chartPath: `${REGISTRY_BASE}/ark-evaluator`,
+    installArgs: [],
+    k8sDeploymentName: 'ark-evaluator',
+    k8sDevDeploymentName: 'ark-evaluator-devspace',
+  },
+
   'mcp-filesystem': {
     name: 'mcp-filesystem',
     helmReleaseName: 'mcp-filesystem',

@@ -213,6 +213,7 @@ jobs:
           - ark-dashboard
           - ark-mcp
           - ark-broker
+          - ark-evaluator
           - mcp-filesystem
           - localhost-gateway
           - ark-tenant
