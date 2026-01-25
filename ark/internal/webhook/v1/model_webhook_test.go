@@ -104,6 +104,24 @@ var _ = Describe("Model Webhook", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(warnings).To(BeEmpty())
 		})
+
+		It("Should allow valid Bedrock model with API key authentication", func() {
+			model.Spec.Provider = genai.ProviderBedrock
+			model.Spec.Config = arkv1alpha1.ModelConfig{
+				Bedrock: &arkv1alpha1.BedrockModelConfig{
+					Region: &arkv1alpha1.ValueSource{
+						Value: "us-east-1",
+					},
+					APIKey: &arkv1alpha1.ValueSource{
+						Value: "bedrock-api-key-value",
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, model)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
 	})
 
 	Context("When validating models with Secret references", func() {
@@ -264,6 +282,71 @@ var _ = Describe("Model Webhook", func() {
 
 			warnings, err := validator.ValidateCreate(ctx, model)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+	})
+
+	Context("When validating Bedrock models with API key from Secret", func() {
+		It("Should validate Bedrock API key from Secret reference", func() {
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "bedrock-api-key-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"api-key": []byte("bedrock-api-key-value"),
+				},
+			}
+			Expect(validator.Client.Create(ctx, secret)).To(Succeed())
+
+			model.Spec.Provider = genai.ProviderBedrock
+			model.Spec.Config = arkv1alpha1.ModelConfig{
+				Bedrock: &arkv1alpha1.BedrockModelConfig{
+					Region: &arkv1alpha1.ValueSource{
+						Value: "us-east-1",
+					},
+					APIKey: &arkv1alpha1.ValueSource{
+						ValueFrom: &arkv1alpha1.ValueFromSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "bedrock-api-key-secret",
+								},
+								Key: "api-key",
+							},
+						},
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, model)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should fail when Bedrock API key Secret does not exist", func() {
+			model.Spec.Provider = genai.ProviderBedrock
+			model.Spec.Config = arkv1alpha1.ModelConfig{
+				Bedrock: &arkv1alpha1.BedrockModelConfig{
+					Region: &arkv1alpha1.ValueSource{
+						Value: "us-east-1",
+					},
+					APIKey: &arkv1alpha1.ValueSource{
+						ValueFrom: &arkv1alpha1.ValueFromSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "nonexistent-api-key-secret",
+								},
+								Key: "api-key",
+							},
+						},
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, model)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.config.bedrock.apiKey"))
+			Expect(err.Error()).To(ContainSubstring("secret 'nonexistent-api-key-secret' does not exist"))
 			Expect(warnings).To(BeEmpty())
 		})
 	})

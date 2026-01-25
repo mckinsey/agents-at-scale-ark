@@ -231,6 +231,11 @@ func (v *ModelValidator) validateBedrockConfig(ctx context.Context, model *arkv1
 			return err
 		}
 	}
+	if model.Spec.Config.Bedrock.APIKey != nil {
+		if err := v.validateValueSource(ctx, model.Spec.Config.Bedrock.APIKey, model.GetNamespace(), "spec.config.bedrock.apiKey"); err != nil {
+			return err
+		}
+	}
 	if model.Spec.Config.Bedrock.AccessKeyID != nil {
 		if err := v.validateValueSource(ctx, model.Spec.Config.Bedrock.AccessKeyID, model.GetNamespace(), "spec.config.bedrock.accessKeyId"); err != nil {
 			return err

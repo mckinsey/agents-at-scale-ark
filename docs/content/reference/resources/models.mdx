@@ -90,6 +90,58 @@ spec:
 
 ### AWS Bedrock
 
+AWS Bedrock supports two authentication methods:
+
+1. **API Key (Bearer Token)** - Simpler authentication using an Amazon Bedrock API key
+2. **Access Key / Secret Access Key** - Traditional AWS credentials
+
+#### API Key Authentication (Recommended)
+
+API key authentication is the simplest way to authenticate with AWS Bedrock. Generate an API key from the AWS Console and store it in a Kubernetes Secret.
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: claude-haiku
+spec:
+  provider: bedrock
+  type: completion
+  model:
+    value: "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+  config:
+    bedrock:
+      # AWS region
+      region:
+        value: "us-east-1"
+      # Amazon Bedrock API key for bearer token authentication
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: bedrock-api-key
+            key: token
+      properties:
+        temperature:
+          value: "0.7"
+        max_tokens:
+          value: "4096"
+---
+# Create the API key secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bedrock-api-key
+type: Opaque
+stringData:
+  token: "your-bedrock-api-key-here"
+```
+
+For more information on generating Bedrock API keys, see the [AWS documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html).
+
+#### Access Key / Secret Access Key Authentication
+
+For traditional AWS credential authentication:
+
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Model

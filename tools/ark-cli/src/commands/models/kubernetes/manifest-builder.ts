@@ -79,41 +79,52 @@ export class KubernetesModelManifestBuilder implements ModelManifestBuilder {
   }
 
   private buildBedrockConfig(config: BedrockConfig): Record<string, unknown> {
-    const bedrockConfig: Record<string, unknown> = {
-      bedrock: {
-        region: {
-          value: config.region,
-        },
-        accessKeyId: {
-          valueFrom: {
-            secretKeyRef: {
-              name: config.secretName,
-              key: 'access-key-id',
-            },
-          },
-        },
-        secretAccessKey: {
-          valueFrom: {
-            secretKeyRef: {
-              name: config.secretName,
-              key: 'secret-access-key',
-            },
-          },
-        },
+    const bedrock: Record<string, unknown> = {
+      region: {
+        value: config.region,
       },
     };
 
-    const bedrock = bedrockConfig.bedrock as Record<string, unknown>;
-
-    if (config.sessionToken) {
-      bedrock.sessionToken = {
+    // Handle authentication based on mode
+    if (config.authMode === 'apiKey') {
+      // API Key authentication (bearer token)
+      bedrock.apiKey = {
         valueFrom: {
           secretKeyRef: {
             name: config.secretName,
-            key: 'session-token',
+            key: 'api-key',
           },
         },
       };
+    } else {
+      // Access Key / Secret Access Key authentication
+      bedrock.accessKeyId = {
+        valueFrom: {
+          secretKeyRef: {
+            name: config.secretName,
+            key: 'access-key-id',
+          },
+        },
+      };
+      bedrock.secretAccessKey = {
+        valueFrom: {
+          secretKeyRef: {
+            name: config.secretName,
+            key: 'secret-access-key',
+          },
+        },
+      };
+
+      if (config.sessionToken) {
+        bedrock.sessionToken = {
+          valueFrom: {
+            secretKeyRef: {
+              name: config.secretName,
+              key: 'session-token',
+            },
+          },
+        };
+      }
     }
 
     if (config.modelArn) {
@@ -122,6 +133,6 @@ export class KubernetesModelManifestBuilder implements ModelManifestBuilder {
       };
     }
 
-    return bedrockConfig;
+    return { bedrock };
   }
 }

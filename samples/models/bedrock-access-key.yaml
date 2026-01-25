@@ -1,0 +1,34 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: bedrock-claude-access-key
+spec:
+  provider: bedrock
+  model:
+    value: us.anthropic.claude-3-5-haiku-20241022-v1:0
+  config:
+    bedrock:
+      region:
+        value: "us-east-1"
+      # Access Key / Secret Access Key authentication (traditional AWS credentials)
+      accessKeyId:
+        valueFrom:
+          secretKeyRef:
+            name: aws-credentials
+            key: access-key-id
+      secretAccessKey:
+        valueFrom:
+          secretKeyRef:
+            name: aws-credentials
+            key: secret-access-key
+      # Optional: session token for temporary credentials
+      # sessionToken:
+      #   valueFrom:
+      #     secretKeyRef:
+      #       name: aws-credentials
+      #       key: session-token
+---
+# Example: Create the AWS credentials secret
+# kubectl create secret generic aws-credentials \
+#   --from-literal=access-key-id="AKIAIOSFODNN7EXAMPLE" \
+#   --from-literal=secret-access-key="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"

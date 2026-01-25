@@ -1,9 +1,13 @@
 package genai
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -14,10 +18,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+
 type BedrockModel struct {
 	Model           string
 	Region          string
 	BaseURL         string
+	APIKey          string // Amazon Bedrock API key for bearer token authentication
 	AccessKeyID     string
 	SecretAccessKey string
 	SessionToken    string
@@ -67,11 +73,12 @@ type bedrockContent struct {
 	Input map[string]interface{} `json:"input,omitempty"`
 }
 
-func NewBedrockModel(model, region, baseURL, accessKeyID, secretAccessKey, sessionToken, modelArn string, properties map[string]string) *BedrockModel {
+func NewBedrockModel(model, region, baseURL, apiKey, accessKeyID, secretAccessKey, sessionToken, modelArn string, properties map[string]string) *BedrockModel {
 	return &BedrockModel{
 		Model:           model,
 		Region:          region,
 		BaseURL:         baseURL,
+		APIKey:          apiKey,
 		AccessKeyID:     accessKeyID,
 		SecretAccessKey: secretAccessKey,
 		SessionToken:    sessionToken,
@@ -81,6 +88,12 @@ func NewBedrockModel(model, region, baseURL, accessKeyID, secretAccessKey, sessi
 }
 
 func (bm *BedrockModel) initClient(ctx context.Context) error {
+	// When using API key, we use direct HTTP requests instead of the SDK
+	// The Go SDK doesn't support AWS_BEARER_TOKEN_BEDROCK like Python boto3
+	if bm.APIKey != "" {
+		return nil // No SDK client needed for API key auth
+	}
+
 	if bm.client != nil {
 		return nil
 	}
@@ -106,6 +119,52 @@ func (bm *BedrockModel) initClient(ctx context.Context) error {
 
 	bm.client = bedrockruntime.NewFromConfig(cfg)
 	return nil
+}
+
+// invokeModelWithBearerToken makes a direct HTTP request to Bedrock API using bearer token auth
+// See: https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys-use.html
+func (bm *BedrockModel) invokeModelWithBearerToken(ctx context.Context, requestBody []byte) ([]byte, error) {
+	modelID := bm.Model
+	if bm.ModelArn != "" {
+		modelID = bm.ModelArn
+	}
+
+	// Build the Bedrock API URL
+	baseURL := bm.BaseURL
+	if baseURL == "" {
+		baseURL = fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com", bm.Region)
+	}
+	// URL-encode the model ID as it may contain special characters like colons
+	encodedModelID := url.PathEscape(modelID)
+	apiURL := fmt.Sprintf("%s/model/%s/invoke", baseURL, encodedModelID)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(requestBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+
+	// Set headers for bearer token auth
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+bm.APIKey)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to invoke Bedrock model: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Bedrock API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return body, nil
 }
 
 func (bm *BedrockModel) SetOutputSchema(schema *runtime.RawExtension, schemaName string) {
@@ -136,25 +195,37 @@ func (bm *BedrockModel) ChatCompletion(ctx context.Context, messages []Message, 
 		return nil, err
 	}
 
-	modelID := bm.Model
-	if bm.ModelArn != "" {
-		modelID = bm.ModelArn
-	}
+	var responseBody []byte
 
-	input := &bedrockruntime.InvokeModelInput{
-		ModelId:     aws.String(modelID),
-		Body:        requestBody,
-		ContentType: aws.String("application/json"),
-		Accept:      aws.String("application/json"),
-	}
+	// Use direct HTTP with bearer token when API key is configured
+	// Otherwise use the AWS SDK with SigV4 signing
+	if bm.APIKey != "" {
+		responseBody, err = bm.invokeModelWithBearerToken(ctx, requestBody)
+		if err != nil {
+			return nil, fmt.Errorf("failed to invoke Bedrock model: %w", err)
+		}
+	} else {
+		modelID := bm.Model
+		if bm.ModelArn != "" {
+			modelID = bm.ModelArn
+		}
 
-	result, err := bm.client.InvokeModel(ctx, input)
-	if err != nil {
-		return nil, fmt.Errorf("failed to invoke Bedrock model: %w", err)
+		input := &bedrockruntime.InvokeModelInput{
+			ModelId:     aws.String(modelID),
+			Body:        requestBody,
+			ContentType: aws.String("application/json"),
+			Accept:      aws.String("application/json"),
+		}
+
+		result, err := bm.client.InvokeModel(ctx, input)
+		if err != nil {
+			return nil, fmt.Errorf("failed to invoke Bedrock model: %w", err)
+		}
+		responseBody = result.Body
 	}
 
 	var response bedrockResponse
-	if err := json.Unmarshal(result.Body, &response); err != nil {
+	if err := json.Unmarshal(responseBody, &response); err != nil {
 		return nil, err
 	}
 
@@ -374,6 +445,9 @@ func (bm *BedrockModel) BuildConfig() map[string]any {
 	}
 	if bm.BaseURL != "" {
 		cfg["baseUrl"] = bm.BaseURL
+	}
+	if bm.APIKey != "" {
+		cfg["apiKey"] = bm.APIKey
 	}
 	if bm.AccessKeyID != "" {
 		cfg["accessKeyId"] = bm.AccessKeyID

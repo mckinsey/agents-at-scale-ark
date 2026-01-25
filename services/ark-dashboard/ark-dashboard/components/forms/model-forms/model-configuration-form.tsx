@@ -361,74 +361,150 @@ function AWSBedrockSpecificFields({
   isSecretsPending,
   secrets,
 }: AWSBedrockSpecificFieldsProps) {
+  const authMode = control._formValues?.bedrockAuthMode ?? 'apiKey';
+
   return (
     <>
       <FormField
         control={control}
-        name="bedrockAccessKeyIdSecretName"
+        name="bedrockAuthMode"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Access Key ID Secret</FormLabel>
+            <FormLabel>Authentication Mode</FormLabel>
             <Select onValueChange={field.onChange} value={field.value}>
               <FormControl>
-                <div className="flex gap-4">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a secret for Access Key ID" />
-                  </SelectTrigger>
-                  <CreateNewSecretButton fieldName="bedrockAccessKeyIdSecretName" />
-                </div>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select authentication mode" />
+                </SelectTrigger>
               </FormControl>
               <SelectContent>
-                {isSecretsPending ? (
-                  <Spinner size="sm" className="mx-auto my-2" />
-                ) : (
-                  <>
-                    {secrets?.map(secret => (
-                      <SelectItem key={secret.name} value={secret.name}>
-                        {secret.name}
-                      </SelectItem>
-                    ))}
-                  </>
-                )}
+                <SelectItem value="apiKey">API Key (Bearer Token)</SelectItem>
+                <SelectItem value="accessKey">
+                  Access Key / Secret Access Key
+                </SelectItem>
               </SelectContent>
             </Select>
+            <FormDescription>
+              API Key authentication is simpler and recommended for most use
+              cases.
+            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
       />
-      <FormField
-        control={control}
-        name="bedrockSecretAccessKeySecretName"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Secret Access Key Secret</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value}>
-              <FormControl>
-                <div className="flex gap-4">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a secret for Secret Access Key" />
-                  </SelectTrigger>
-                  <CreateNewSecretButton fieldName="bedrockSecretAccessKeySecretName" />
-                </div>
-              </FormControl>
-              <SelectContent>
-                {isSecretsPending ? (
-                  <Spinner size="sm" className="mx-auto my-2" />
-                ) : (
-                  <>
-                    {secrets?.map(secret => (
-                      <SelectItem key={secret.name} value={secret.name}>
-                        {secret.name}
-                      </SelectItem>
-                    ))}
-                  </>
-                )}
-              </SelectContent>
-            </Select>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
+      {authMode === 'apiKey' ? (
+        <FormField
+          control={control}
+          name="bedrockApiKeySecretName"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>API Key Secret</FormLabel>
+              <Select
+                onValueChange={field.onChange}
+                value={field.value ?? undefined}>
+                <FormControl>
+                  <div className="flex gap-4">
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a secret for API Key" />
+                    </SelectTrigger>
+                    <CreateNewSecretButton fieldName="bedrockApiKeySecretName" />
+                  </div>
+                </FormControl>
+                <SelectContent>
+                  {isSecretsPending ? (
+                    <Spinner size="sm" className="mx-auto my-2" />
+                  ) : (
+                    <>
+                      {secrets?.map(secret => (
+                        <SelectItem key={secret.name} value={secret.name}>
+                          {secret.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Amazon Bedrock API key for bearer token authentication.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      ) : (
+        <>
+          <FormField
+            control={control}
+            name="bedrockAccessKeyIdSecretName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Access Key ID Secret</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value ?? undefined}>
+                  <FormControl>
+                    <div className="flex gap-4">
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a secret for Access Key ID" />
+                      </SelectTrigger>
+                      <CreateNewSecretButton fieldName="bedrockAccessKeyIdSecretName" />
+                    </div>
+                  </FormControl>
+                  <SelectContent>
+                    {isSecretsPending ? (
+                      <Spinner size="sm" className="mx-auto my-2" />
+                    ) : (
+                      <>
+                        {secrets?.map(secret => (
+                          <SelectItem key={secret.name} value={secret.name}>
+                            {secret.name}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={control}
+            name="bedrockSecretAccessKeySecretName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Secret Access Key Secret</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value ?? undefined}>
+                  <FormControl>
+                    <div className="flex gap-4">
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a secret for Secret Access Key" />
+                      </SelectTrigger>
+                      <CreateNewSecretButton fieldName="bedrockSecretAccessKeySecretName" />
+                    </div>
+                  </FormControl>
+                  <SelectContent>
+                    {isSecretsPending ? (
+                      <Spinner size="sm" className="mx-auto my-2" />
+                    ) : (
+                      <>
+                        {secrets?.map(secret => (
+                          <SelectItem key={secret.name} value={secret.name}>
+                            {secret.name}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </>
+      )}
       <FormField
         control={control}
         name="region"

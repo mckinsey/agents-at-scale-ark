@@ -48,6 +48,11 @@ type BedrockModelConfig struct {
 	Region *ValueSource `json:"region,omitempty"`
 	// +kubebuilder:validation:Optional
 	BaseURL *ValueSource `json:"baseUrl,omitempty"`
+	// APIKey is the Amazon Bedrock API key for bearer token authentication.
+	// This is an alternative to using AccessKeyID/SecretAccessKey credentials.
+	// When set, the API key is used as a bearer token in the Authorization header.
+	// +kubebuilder:validation:Optional
+	APIKey *ValueSource `json:"apiKey,omitempty"`
 	// +kubebuilder:validation:Optional
 	AccessKeyID *ValueSource `json:"accessKeyId,omitempty"`
 	// +kubebuilder:validation:Optional

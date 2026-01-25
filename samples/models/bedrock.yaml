@@ -1,0 +1,22 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: bedrock-claude
+spec:
+  provider: bedrock
+  model:
+    value: us.anthropic.claude-3-5-haiku-20241022-v1:0
+  config:
+    bedrock:
+      region:
+        value: "us-east-1"
+      # API Key authentication (recommended)
+      # See: https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: bedrock-api-key
+            key: token
+---
+# Example: Create the API key secret
+# kubectl create secret generic bedrock-api-key --from-literal=token="your-bedrock-api-key"

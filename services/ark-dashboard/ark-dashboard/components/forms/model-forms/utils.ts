@@ -41,26 +41,41 @@ export function createConfig(
       };
       return config;
     case 'bedrock':
-      config.bedrock = {
-        accessKeyId: {
-          valueFrom: {
-            secretKeyRef: {
-              name: formValues.bedrockAccessKeyIdSecretName,
-              key: 'token',
+      if (formValues.bedrockAuthMode === 'apiKey') {
+        config.bedrock = {
+          apiKey: {
+            valueFrom: {
+              secretKeyRef: {
+                name: formValues.bedrockApiKeySecretName!,
+                key: 'token',
+              },
             },
           },
-        },
-        secretAccessKey: {
-          valueFrom: {
-            secretKeyRef: {
-              name: formValues.bedrockSecretAccessKeySecretName,
-              key: 'token',
+          ...(formValues.region && { region: formValues.region }),
+          ...(formValues.modelARN && { modelArn: formValues.modelARN }),
+        };
+      } else {
+        config.bedrock = {
+          accessKeyId: {
+            valueFrom: {
+              secretKeyRef: {
+                name: formValues.bedrockAccessKeyIdSecretName!,
+                key: 'token',
+              },
             },
           },
-        },
-        ...(formValues.region && { region: formValues.region }),
-        ...(formValues.modelARN && { modelArn: formValues.modelARN }),
-      };
+          secretAccessKey: {
+            valueFrom: {
+              secretKeyRef: {
+                name: formValues.bedrockSecretAccessKeySecretName!,
+                key: 'token',
+              },
+            },
+          },
+          ...(formValues.region && { region: formValues.region }),
+          ...(formValues.modelARN && { modelArn: formValues.modelARN }),
+        };
+      }
       return config;
   }
 }
@@ -95,6 +110,8 @@ export function getResetValues(currentFormValues: FormValues): FormValues {
         name: currentFormValues.name,
         provider: currentFormValues.provider,
         model: currentFormValues.model,
+        bedrockAuthMode: currentFormValues.bedrockAuthMode ?? 'apiKey',
+        bedrockApiKeySecretName: '',
         bedrockAccessKeyIdSecretName: '',
         bedrockSecretAccessKeySecretName: '',
         region: '',
@@ -171,11 +188,21 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
           getConfigValue<string>(model.config, ['azure', 'baseUrl', 'value']) ||
           '',
       };
-    case 'bedrock':
+    case 'bedrock': {
+      const apiKeySecret = getConfigValue<string>(model.config, [
+        'bedrock',
+        'apiKey',
+        'valueFrom',
+        'secretKeyRef',
+        'name',
+      ]);
+      const hasApiKey = !!apiKeySecret;
       return {
         name: model.name,
         provider: model.provider,
         model: model.model,
+        bedrockAuthMode: hasApiKey ? 'apiKey' : 'accessKey',
+        bedrockApiKeySecretName: apiKeySecret || '',
         bedrockAccessKeyIdSecretName:
           getConfigValue<string>(model.config, [
             'bedrock',
@@ -205,5 +232,6 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'value',
           ]) || '',
       };
+    }
   }
 }
