@@ -1,0 +1,119 @@
+# Default values for executor-claude-sdk
+replicaCount: 2
+
+image:
+  repository: ghcr.io/mckinsey/agents-at-scale-ark/executor-claude-sdk
+  tag: ""  # Defaults to chart appVersion
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 8000
+
+# Claude SDK authentication
+# The SDK uses environment variables to select provider:
+# - ANTHROPIC_API_KEY (default)
+# - CLAUDE_CODE_USE_BEDROCK=1 (AWS Bedrock)
+# - CLAUDE_CODE_USE_VERTEX=1 (Google Vertex AI)
+# - CLAUDE_CODE_USE_FOUNDRY=1 (Azure Foundry)
+claude:
+  # Provider: anthropic, bedrock, vertex, foundry
+  provider: anthropic
+
+  # For Anthropic direct API
+  anthropic:
+    # For local dev, use API key directly. For production, use secret reference.
+    apiKey: ""
+    apiKeySecret: ""
+    apiKeySecretKey: "api-key"
+
+  # For AWS Bedrock (uses pod's IAM role via IRSA by default)
+  bedrock:
+    region: "us-east-1"
+
+  # For Google Vertex AI (uses workload identity by default)
+  vertex:
+    project: ""
+    region: "us-central1"
+
+  # For Azure Foundry (uses managed identity by default)
+  foundry:
+    endpoint: ""
+
+# Git credentials for repository operations
+git:
+  sshKeySecret: git-ssh-key
+  sshKeySecretKey: ssh-privatekey
+
+# GitHub credentials for PR operations
+github:
+  tokenSecret: github-token
+  tokenSecretKey: token
+
+# Jira credentials (optional)
+jira:
+  enabled: false
+  url: ""
+  emailSecret: ""
+  apiTokenSecret: ""
+
+# Workspace storage configuration
+workspace:
+  sizeLimit: 10Gi
+  # Use emptyDir by default, can be changed to PVC for persistence
+  storageType: emptyDir
+
+# ExecutionEngine CRD configuration
+executionEngine:
+  # Create the ExecutionEngine CRD pointing to this service
+  create: true
+  name: claude-sdk-executor
+  type: claude-sdk
+
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "500m"
+  limits:
+    memory: "2Gi"
+    cpu: "2000m"
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Service account configuration
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1001
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  capabilities:
+    drop:
+      - ALL
+
+# Readiness and liveness probes
+probes:
+  readiness:
+    path: /health
+    port: 8000
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  liveness:
+    path: /health
+    port: 8000
+    initialDelaySeconds: 15
+    periodSeconds: 20

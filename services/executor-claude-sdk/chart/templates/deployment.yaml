@@ -1,0 +1,134 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "executor-claude-sdk.fullname" . }}
+  labels:
+    {{- include "executor-claude-sdk.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "executor-claude-sdk.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "executor-claude-sdk.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "executor-claude-sdk.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "{{ .Values.service.port }}"
+            # Claude provider configuration
+            {{- if eq .Values.claude.provider "bedrock" }}
+            - name: CLAUDE_CODE_USE_BEDROCK
+              value: "1"
+            - name: AWS_REGION
+              value: {{ .Values.claude.bedrock.region | quote }}
+            {{- else if eq .Values.claude.provider "vertex" }}
+            - name: CLAUDE_CODE_USE_VERTEX
+              value: "1"
+            - name: GOOGLE_PROJECT
+              value: {{ .Values.claude.vertex.project | quote }}
+            - name: GOOGLE_REGION
+              value: {{ .Values.claude.vertex.region | quote }}
+            {{- else if eq .Values.claude.provider "foundry" }}
+            - name: CLAUDE_CODE_USE_FOUNDRY
+              value: "1"
+            - name: AZURE_FOUNDRY_ENDPOINT
+              value: {{ .Values.claude.foundry.endpoint | quote }}
+            {{- else if eq .Values.claude.provider "anthropic" }}
+            {{- if .Values.claude.anthropic.apiKeySecret }}
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.claude.anthropic.apiKeySecret }}
+                  key: {{ .Values.claude.anthropic.apiKeySecretKey }}
+            {{- else if .Values.claude.anthropic.apiKey }}
+            - name: ANTHROPIC_API_KEY
+              value: {{ .Values.claude.anthropic.apiKey | quote }}
+            {{- end }}
+            {{- end }}
+            # GitHub token for PR operations
+            {{- if .Values.github.tokenSecret }}
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.github.tokenSecret }}
+                  key: {{ .Values.github.tokenSecretKey }}
+            {{- end }}
+            # Jira credentials
+            {{- if .Values.jira.enabled }}
+            - name: JIRA_URL
+              value: {{ .Values.jira.url | quote }}
+            - name: JIRA_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.jira.emailSecret }}
+                  key: email
+            - name: JIRA_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.jira.apiTokenSecret }}
+                  key: token
+            {{- end }}
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            {{- if .Values.git.sshKeySecret }}
+            - name: git-ssh
+              mountPath: /home/executor/.ssh
+              readOnly: true
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: {{ .Values.probes.readiness.port }}
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: {{ .Values.probes.liveness.port }}
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: workspace
+          {{- if eq .Values.workspace.storageType "emptyDir" }}
+          emptyDir:
+            sizeLimit: {{ .Values.workspace.sizeLimit }}
+          {{- else }}
+          persistentVolumeClaim:
+            claimName: {{ include "executor-claude-sdk.fullname" . }}-workspace
+          {{- end }}
+        {{- if .Values.git.sshKeySecret }}
+        - name: git-ssh
+          secret:
+            secretName: {{ .Values.git.sshKeySecret }}
+            defaultMode: 0400
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

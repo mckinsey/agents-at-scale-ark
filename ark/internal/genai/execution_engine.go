@@ -25,8 +25,25 @@ type ExecutionEngineMessage struct {
 	Name    string `json:"name,omitempty"`
 }
 
+// ExecutionProfileConfig contains the resolved execution profile passed to executors
+type ExecutionProfileConfig struct {
+	Name        string                   `json:"name"`
+	Namespace   string                   `json:"namespace"`
+	Workspace   map[string]interface{}   `json:"workspace,omitempty"`
+	PreExecute  []map[string]interface{} `json:"preExecute,omitempty"`
+	Execution   map[string]interface{}   `json:"execution,omitempty"`
+	Critic      map[string]interface{}   `json:"critic,omitempty"`
+	PostExecute []map[string]interface{} `json:"postExecute,omitempty"`
+	OnFailure   []map[string]interface{} `json:"onFailure,omitempty"`
+	SDKConfig   map[string]interface{}   `json:"sdkConfig,omitempty"`
+}
+
 // ExecutionEngineRequest represents the data sent to an external execution engine
 type ExecutionEngineRequest struct {
+	// Query ID (from Query CRD UID) - useful for unique branch names, correlation
+	QueryID string `json:"queryId,omitempty"`
+	// Query name (from Query CRD metadata.name)
+	QueryName string `json:"queryName,omitempty"`
 	// Agent configuration
 	Agent AgentConfig `json:"agent"`
 	// Current message to process
@@ -35,6 +52,8 @@ type ExecutionEngineRequest struct {
 	History []ExecutionEngineMessage `json:"history"`
 	// Available tools
 	Tools []ToolDefinition `json:"tools,omitempty"`
+	// Resolved execution profile (includes sdkConfig with tool/MCP settings)
+	Profile *ExecutionProfileConfig `json:"profile,omitempty"`
 }
 
 // AgentConfig contains agent configuration for the execution engine
@@ -177,6 +196,16 @@ func (c *ExecutionEngineClient) Execute(ctx context.Context, engineRef *arkv1alp
 		return nil, fmt.Errorf("failed to resolve execution engine address: %w", err)
 	}
 
+	// Resolve execution profile if specified
+	var profile *ExecutionProfileConfig
+	if engineRef.ProfileRef != nil {
+		profile, err = c.resolveExecutionProfile(ctx, engineRef.ProfileRef, agentConfig.Namespace)
+		if err != nil {
+			c.eventingRecorder.Fail(ctx, "ExecutionEngine", fmt.Sprintf("Failed to resolve execution profile: %v", err), err, operationData)
+			return nil, fmt.Errorf("failed to resolve execution profile: %w", err)
+		}
+	}
+
 	// Convert messages to execution engine format
 	convertedUserInput := convertToExecutionEngineMessage(userInput)
 	convertedHistory := make([]ExecutionEngineMessage, len(history))
@@ -184,11 +213,18 @@ func (c *ExecutionEngineClient) Execute(ctx context.Context, engineRef *arkv1alp
 		convertedHistory[i] = convertToExecutionEngineMessage(msg)
 	}
 
+	// Extract query context for unique identification (branch names, correlation)
+	queryID := GetQueryID(ctx)
+	queryName := GetQueryName(ctx)
+
 	request := ExecutionEngineRequest{
+		QueryID:   queryID,
+		QueryName: queryName,
 		Agent:     agentConfig,
 		UserInput: convertedUserInput,
 		History:   convertedHistory,
 		Tools:     tools,
+		Profile:   profile,
 	}
 
 	requestBody, err := json.Marshal(request)
@@ -268,6 +304,114 @@ func (c *ExecutionEngineClient) resolveExecutionEngineAddress(ctx context.Contex
 	}
 
 	return engineCRD.Status.LastResolvedAddress, nil
+}
+
+// resolveExecutionProfile resolves an ExecutionProfile CRD and converts it to ExecutionProfileConfig
+func (c *ExecutionEngineClient) resolveExecutionProfile(ctx context.Context, profileRef *arkv1alpha1.ProfileReference, defaultNamespace string) (*ExecutionProfileConfig, error) {
+	profileName := profileRef.Name
+	namespace := profileRef.Namespace
+	if namespace == "" {
+		namespace = defaultNamespace
+	}
+
+	// Get ExecutionProfile CRD
+	var profileCRD arkv1prealpha1.ExecutionProfile
+	profileKey := types.NamespacedName{Name: profileName, Namespace: namespace}
+	if err := c.client.Get(ctx, profileKey, &profileCRD); err != nil {
+		return nil, fmt.Errorf("execution profile %s not found in namespace %s: %w", profileName, namespace, err)
+	}
+
+	// Convert CRD spec to ExecutionProfileConfig
+	config := &ExecutionProfileConfig{
+		Name:      profileCRD.Name,
+		Namespace: profileCRD.Namespace,
+	}
+
+	// Convert workspace config
+	if profileCRD.Spec.Workspace != nil {
+		config.Workspace = map[string]interface{}{
+			"type": profileCRD.Spec.Workspace.Type,
+		}
+		if profileCRD.Spec.Workspace.Git != nil {
+			config.Workspace["git"] = map[string]interface{}{
+				"defaultBranch":         profileCRD.Spec.Workspace.Git.DefaultBranch,
+				"branchPrefix":          profileCRD.Spec.Workspace.Git.BranchPrefix,
+				"commitMessageTemplate": profileCRD.Spec.Workspace.Git.CommitMessageTemplate,
+				"targetPath":            profileCRD.Spec.Workspace.Git.TargetPath,
+			}
+		}
+	}
+
+	// Convert hooks
+	config.PreExecute = convertHooks(profileCRD.Spec.PreExecute)
+	config.PostExecute = convertHooks(profileCRD.Spec.PostExecute)
+	config.OnFailure = convertHooks(profileCRD.Spec.OnFailure)
+
+	// Convert execution constraints
+	if profileCRD.Spec.Execution != nil {
+		config.Execution = map[string]interface{}{
+			"maxIterations": profileCRD.Spec.Execution.MaxIterations,
+			"timeout":       profileCRD.Spec.Execution.Timeout,
+			"maxBudgetUsd":  profileCRD.Spec.Execution.MaxBudgetUsd,
+		}
+	}
+
+	// Convert critic config
+	if profileCRD.Spec.Critic != nil {
+		config.Critic = map[string]interface{}{
+			"enabled":    profileCRD.Spec.Critic.Enabled,
+			"mode":       profileCRD.Spec.Critic.Mode,
+			"maxRetries": profileCRD.Spec.Critic.MaxRetries,
+		}
+		if profileCRD.Spec.Critic.Inline != nil {
+			config.Critic["inline"] = map[string]interface{}{
+				"prompt":        profileCRD.Spec.Critic.Inline.Prompt,
+				"passCondition": profileCRD.Spec.Critic.Inline.PassCondition,
+				"runTests":      profileCRD.Spec.Critic.Inline.RunTests,
+				"testCommand":   profileCRD.Spec.Critic.Inline.TestCommand,
+				"testTimeout":   profileCRD.Spec.Critic.Inline.TestTimeout,
+			}
+		}
+		if profileCRD.Spec.Critic.Subagent != nil {
+			config.Critic["subagent"] = map[string]interface{}{
+				"agentRef": map[string]interface{}{
+					"name":      profileCRD.Spec.Critic.Subagent.AgentRef.Name,
+					"namespace": profileCRD.Spec.Critic.Subagent.AgentRef.Namespace,
+				},
+				"inputTemplate": profileCRD.Spec.Critic.Subagent.InputTemplate,
+				"passCondition": profileCRD.Spec.Critic.Subagent.PassCondition,
+			}
+		}
+	}
+
+	// Convert SDK config (raw extension)
+	if profileCRD.Spec.SDKConfig != nil && profileCRD.Spec.SDKConfig.Raw != nil {
+		var sdkConfig map[string]interface{}
+		if err := json.Unmarshal(profileCRD.Spec.SDKConfig.Raw, &sdkConfig); err == nil {
+			config.SDKConfig = sdkConfig
+		}
+	}
+
+	return config, nil
+}
+
+// convertHooks converts CRD hooks to map format
+func convertHooks(hooks []arkv1prealpha1.Hook) []map[string]interface{} {
+	result := make([]map[string]interface{}, len(hooks))
+	for i, hook := range hooks {
+		hookMap := map[string]interface{}{
+			"name":   hook.Name,
+			"action": hook.Action,
+		}
+		if hook.Condition != "" {
+			hookMap["condition"] = hook.Condition
+		}
+		if len(hook.Params) > 0 {
+			hookMap["params"] = hook.Params
+		}
+		result[i] = hookMap
+	}
+	return result
 }
 
 // buildAgentConfig creates an AgentConfig from the agent and model data

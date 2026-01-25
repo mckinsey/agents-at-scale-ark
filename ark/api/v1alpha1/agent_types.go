@@ -75,6 +75,17 @@ type ExecutionEngineRef struct {
 	// +kubebuilder:validation:Optional
 	// Namespace of the ExecutionEngine resource. Defaults to the agent's namespace if not specified
 	Namespace string `json:"namespace,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Reference to an ExecutionProfile for lifecycle hooks and SDK config
+	ProfileRef *ProfileReference `json:"profileRef,omitempty"`
+}
+
+// ProfileReference points to an ExecutionProfile CRD (v1prealpha1)
+type ProfileReference struct {
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// +kubebuilder:validation:Optional
+	Namespace string `json:"namespace,omitempty"`
 }
 type AgentSpec struct {
 	Prompt      string `json:"prompt,omitempty"`

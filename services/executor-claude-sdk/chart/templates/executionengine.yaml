@@ -1,0 +1,16 @@
+{{- if .Values.executionEngine.create -}}
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: {{ .Values.executionEngine.name }}
+  labels:
+    {{- include "executor-claude-sdk.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.executionEngine.type }}
+  description: Claude Agent SDK executor with lifecycle hooks and critic validation
+  address:
+    valueFrom:
+      serviceRef:
+        name: {{ include "executor-claude-sdk.fullname" . }}
+        port: http
+{{- end }}

@@ -1,0 +1,33 @@
+# Example Query for PR Reviewer
+# Edit the parameters below for your specific PR
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: review-pr-123
+  labels:
+    sample: "true"
+spec:
+  agentRef:
+    name: pr-reviewer
+  
+  # The task for the agent
+  prompt: |
+    Review PR #{{.PrNumber}} in the repository.
+    
+    This PR is from branch `{{.PrBranch}}` targeting `{{.BaseBranch}}`.
+    
+    Please provide a thorough code review following your guidelines.
+  
+  # Parameters passed to the agent and profile templates
+  parameters:
+    - name: RepoUrl
+      value: "git@github.com:example-org/example-repo.git"  # CHANGE THIS
+    
+    - name: PrNumber
+      value: "123"  # CHANGE THIS
+    
+    - name: PrBranch
+      value: "feature/new-feature"  # CHANGE THIS
+    
+    - name: BaseBranch
+      value: "main"

@@ -29,13 +29,19 @@ func WithQueryContext(ctx context.Context, queryID, sessionID, queryName string)
 	return ctx
 }
 
-func getQueryID(ctx context.Context) string {
+// GetQueryID retrieves the query ID from context
+func GetQueryID(ctx context.Context) string {
 	if val := ctx.Value(queryIDKey); val != nil {
 		if queryID, ok := val.(string); ok {
 			return queryID
 		}
 	}
 	return ""
+}
+
+// getQueryID is a lowercase alias for backwards compatibility
+func getQueryID(ctx context.Context) string {
+	return GetQueryID(ctx)
 }
 
 func getSessionID(ctx context.Context) string {
@@ -47,13 +53,19 @@ func getSessionID(ctx context.Context) string {
 	return ""
 }
 
-func getQueryName(ctx context.Context) string {
+// GetQueryName retrieves the query name from context
+func GetQueryName(ctx context.Context) string {
 	if val := ctx.Value(queryNameKey); val != nil {
 		if queryName, ok := val.(string); ok {
 			return queryName
 		}
 	}
 	return ""
+}
+
+// getQueryName is a lowercase alias for backwards compatibility
+func getQueryName(ctx context.Context) string {
+	return GetQueryName(ctx)
 }
 
 // WithExecutionMetadata adds execution metadata to context for streaming

@@ -1,0 +1,81 @@
+# DevSpace configuration for executor-claude-sdk service
+version: v2beta1
+
+images:
+  executor-claude-sdk:
+    image: executor-claude-sdk
+    dockerfile: Dockerfile
+    context: .
+
+dependencies:
+  ark-sdk:
+    path: ../../lib/ark-sdk
+
+pipelines:
+  deploy: |-
+    run_dependency_pipelines --all --pipeline=deploy
+    mkdir -p build-context
+    cp ../../out/ark-sdk/py-sdk/dist/ark_sdk-*.whl build-context/
+    build_images --all
+    create_deployments --all
+  dev: |-
+    run_dependency_pipelines --all --pipeline=dev
+    mkdir -p build-context
+    cp ../../out/ark-sdk/py-sdk/dist/ark_sdk-*.whl build-context/
+    create_deployments --all
+    start_dev --all
+
+deployments:
+  executor-claude-sdk:
+    namespace: default
+    helm:
+      chart:
+        path: ./chart
+      values:
+        # Single replica for local dev
+        replicaCount: 1
+        image:
+          repository: ${runtime.images.executor-claude-sdk.image}
+          tag: ${runtime.images.executor-claude-sdk.tag}
+        # Override resources for local development
+        resources:
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+            ephemeral-storage: 1Gi
+          requests:
+            cpu: 500m
+            memory: 512Mi
+            ephemeral-storage: 100Mi
+        # Keep non-root security context (default from chart)
+        # Claude provider settings
+        claude:
+          provider: anthropic
+          anthropic:
+            apiKeySecret: ""
+        # Disable git/github secrets for local dev (credentials set directly via kubectl)
+        git:
+          sshKeySecret: ""
+        github:
+          tokenSecret: ""
+
+dev:
+  executor-claude-sdk:
+    imageSelector: executor-claude-sdk
+    devImage: python:3.12-slim
+    command:
+      [
+        "sh",
+        "-c",
+        "apt-get update && apt-get install -y curl git ssh gnupg && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs && npm install -g @anthropic-ai/claude-code && cd /app && pip install uv && uv remove ark-sdk || true && uv add file://$(ls /app/build-context/ark_sdk-*.whl) && uv sync && uv run python -m claude_sdk_executor",
+      ]
+    namespace: default
+    logs:
+      lastLines: 50
+    sync:
+      - path: .:/app
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+    ssh:
+      enabled: true

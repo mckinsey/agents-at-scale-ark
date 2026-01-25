@@ -1,0 +1,13 @@
+apiVersion: v2
+name: executor-claude-sdk
+description: Claude Agent SDK executor for Ark with lifecycle hooks and critic validation
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - ark
+  - claude
+  - executor
+  - agent
+maintainers:
+  - name: McKinsey Agent Platform Team

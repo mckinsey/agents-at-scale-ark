@@ -1,0 +1,45 @@
+# Example Query for Feature Developer
+# Edit the parameters below for your specific feature
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: develop-user-auth
+  labels:
+    sample: "true"
+spec:
+  agentRef:
+    name: feature-developer
+  
+  # The task for the agent
+  prompt: |
+    Implement the following feature:
+    
+    ## Feature: {{.FeatureName}}
+    
+    {{.FeatureDescription}}
+    
+    ## Requirements
+    
+    - Work in the `{{.TargetPath}}` directory
+    - Follow existing code patterns in the repository
+    - Include appropriate tests
+    - Update any relevant documentation
+  
+  # Parameters passed to the agent and profile templates
+  parameters:
+    - name: RepoUrl
+      value: "git@github.com:example-org/example-repo.git"  # CHANGE THIS
+    
+    - name: FeatureName
+      value: "user-auth"  # CHANGE THIS
+    
+    - name: FeatureDescription
+      value: |
+        Add a simple user authentication module with:
+        - Login endpoint that accepts email/password
+        - JWT token generation and validation
+        - Password hashing with bcrypt
+        - Basic rate limiting on login attempts
+    
+    - name: TargetPath
+      value: "src/auth"  # CHANGE THIS

@@ -68,6 +68,17 @@ spec:
                     description: Namespace of the ExecutionEngine resource. Defaults
                       to the agent's namespace if not specified
                     type: string
+                  profileRef:
+                    description: Reference to an ExecutionProfile for lifecycle hooks
+                      and SDK config
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
                 required:
                 - name
                 type: object

@@ -50,29 +50,29 @@ spec:
 				spec := sm["spec"].(map[string]interface{})
 				endpoints := spec["endpoints"].([]interface{})
 				require.Len(t, endpoints, 1, "should have one endpoint")
-				
+
 				endpoint := endpoints[0].(map[string]interface{})
 				assert.Equal(t, "/metrics", endpoint["path"], "path should be /metrics")
 				assert.Equal(t, "https", endpoint["port"], "port should be https")
 				assert.Equal(t, "https", endpoint["scheme"], "scheme should be https")
-				
+
 				tlsConfig := endpoint["tlsConfig"].(map[string]interface{})
 				require.NotNil(t, tlsConfig, "TLS config should be present")
 				assert.Equal(t, "ark.ark-system.svc", tlsConfig["serverName"], "serverName should match certificate DNS")
 				assert.False(t, tlsConfig["insecureSkipVerify"].(bool), "insecureSkipVerify must be false for security")
-				
+
 				ca := tlsConfig["ca"].(map[string]interface{})
 				require.NotNil(t, ca, "CA should be configured")
 				caSecret := ca["secret"].(map[string]interface{})
 				assert.Equal(t, "metrics-server-cert", caSecret["name"], "CA secret name should match")
 				assert.Equal(t, "ca.crt", caSecret["key"], "CA secret key should be ca.crt")
-				
+
 				cert := tlsConfig["cert"].(map[string]interface{})
 				require.NotNil(t, cert, "cert should be configured")
 				certSecret := cert["secret"].(map[string]interface{})
 				assert.Equal(t, "metrics-server-cert", certSecret["name"], "cert secret name should match")
 				assert.Equal(t, "tls.crt", certSecret["key"], "cert secret key should be tls.crt")
-				
+
 				keySecret := tlsConfig["keySecret"].(map[string]interface{})
 				require.NotNil(t, keySecret, "keySecret should be configured")
 				assert.Equal(t, "metrics-server-cert", keySecret["name"], "keySecret name should match")
@@ -109,7 +109,7 @@ spec:
 			var sm map[string]interface{}
 			err := yaml.Unmarshal([]byte(tt.yamlContent), &sm)
 			require.NoError(t, err, "YAML should parse correctly")
-			
+
 			tt.validateSecure(t, sm)
 		})
 	}
@@ -138,15 +138,15 @@ spec:
 		var sm map[string]interface{}
 		err := yaml.Unmarshal([]byte(yamlContent), &sm)
 		require.NoError(t, err)
-		
+
 		spec := sm["spec"].(map[string]interface{})
 		endpoints := spec["endpoints"].([]interface{})
 		endpoint := endpoints[0].(map[string]interface{})
 		tlsConfig := endpoint["tlsConfig"].(map[string]interface{})
-		assert.False(t, tlsConfig["insecureSkipVerify"].(bool), 
+		assert.False(t, tlsConfig["insecureSkipVerify"].(bool),
 			"insecureSkipVerify must be false for secure TLS configuration")
 	})
-	
+
 	t.Run("certificate references must be present", func(t *testing.T) {
 		yamlContent := `
 apiVersion: monitoring.coreos.com/v1
@@ -175,20 +175,20 @@ spec:
 		var sm map[string]interface{}
 		err := yaml.Unmarshal([]byte(yamlContent), &sm)
 		require.NoError(t, err)
-		
+
 		spec := sm["spec"].(map[string]interface{})
 		endpoints := spec["endpoints"].([]interface{})
 		endpoint := endpoints[0].(map[string]interface{})
 		tlsConfig := endpoint["tlsConfig"].(map[string]interface{})
-		
+
 		require.NotNil(t, tlsConfig["ca"], "CA certificate reference must be present")
 		require.NotNil(t, tlsConfig["cert"], "TLS certificate reference must be present")
 		require.NotNil(t, tlsConfig["keySecret"], "Private key reference must be present")
-		
+
 		caSecret := tlsConfig["ca"].(map[string]interface{})["secret"].(map[string]interface{})
 		certSecret := tlsConfig["cert"].(map[string]interface{})["secret"].(map[string]interface{})
 		keySecret := tlsConfig["keySecret"].(map[string]interface{})
-		
+
 		assert.Equal(t, "metrics-server-cert", caSecret["name"])
 		assert.Equal(t, "metrics-server-cert", certSecret["name"])
 		assert.Equal(t, "metrics-server-cert", keySecret["name"])
@@ -231,15 +231,15 @@ spec:
       control-plane: ark-controller
       app.kubernetes.io/name: ark
 `
-	
+
 	var sm map[string]interface{}
 	err := yaml.Unmarshal([]byte(yamlContent), &sm)
 	require.NoError(t, err, "YAML should be valid")
-	
+
 	metadata := sm["metadata"].(map[string]interface{})
 	assert.Equal(t, "ark-controller-metrics-monitor", metadata["name"])
 	assert.Equal(t, "system", metadata["namespace"])
-	
+
 	spec := sm["spec"].(map[string]interface{})
 	selector := spec["selector"].(map[string]interface{})
 	matchLabels := selector["matchLabels"].(map[string]interface{})
@@ -250,12 +250,12 @@ spec:
 func TestServiceMonitorTLSConfigMatchesCertificate(t *testing.T) {
 	t.Run("serverName matches certificate DNS pattern", func(t *testing.T) {
 		serverName := "ark.ark-system.svc"
-		
+
 		validDNSPatterns := []string{
 			"ark.ark-system.svc",
 			"ark.ark-system.svc.cluster.local",
 		}
-		
+
 		matches := false
 		for _, pattern := range validDNSPatterns {
 			if serverName == pattern {
@@ -263,7 +263,7 @@ func TestServiceMonitorTLSConfigMatchesCertificate(t *testing.T) {
 				break
 			}
 		}
-		
+
 		assert.True(t, matches, "serverName should match one of the certificate DNS names")
 	})
 }
@@ -290,4 +290,3 @@ spec:
 		assert.Equal(t, "monitoring.coreos.com/v1", sm["apiVersion"])
 	})
 }
-

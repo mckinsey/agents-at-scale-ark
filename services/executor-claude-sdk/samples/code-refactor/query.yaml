@@ -1,0 +1,41 @@
+# Example Query for Code Refactor
+# Edit the parameters below for your specific refactoring task
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: refactor-utils
+  labels:
+    sample: "true"
+spec:
+  agentRef:
+    name: code-refactor
+  
+  # The task for the agent
+  prompt: |
+    Refactor the code in `{{.RefactorScope}}` with the following goal:
+    
+    {{.RefactorGoal}}
+    
+    ## Guidelines
+    
+    - Preserve all existing functionality
+    - Ensure all tests continue to pass
+    - Focus only on the specified scope
+    - Make incremental changes
+  
+  # Parameters passed to the agent and profile templates
+  parameters:
+    - name: RepoUrl
+      value: "git@github.com:example-org/example-repo.git"  # CHANGE THIS
+    
+    - name: RefactorScope
+      value: "src/utils/"  # CHANGE THIS
+    
+    - name: RefactorGoal
+      value: |
+        Extract duplicated validation logic into reusable functions.
+        Currently, email and phone validation is duplicated across 
+        multiple files. Create a shared validation module.
+    
+    - name: TestCommand
+      value: "npm test"  # CHANGE THIS to match your project

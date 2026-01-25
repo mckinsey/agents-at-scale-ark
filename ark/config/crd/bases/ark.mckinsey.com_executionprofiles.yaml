@@ -1,0 +1,283 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: executionprofiles.ark.mckinsey.com
+spec:
+  group: ark.mckinsey.com
+  names:
+    kind: ExecutionProfile
+    listKind: ExecutionProfileList
+    plural: executionprofiles
+    singular: executionprofile
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.workspace.type
+      name: Workspace
+      type: string
+    - jsonPath: .spec.critic.enabled
+      name: Critic
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1prealpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ExecutionProfile defines a reusable, SDK-agnostic execution workflow
+          Any executor (Claude SDK, OpenAI, LangGraph, etc.) can use these profiles
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ExecutionProfileSpec defines a reusable, SDK-agnostic execution
+              workflow
+            properties:
+              critic:
+                description: Critic configuration for output validation
+                properties:
+                  enabled:
+                    default: false
+                    description: Whether critic validation is enabled
+                    type: boolean
+                  inline:
+                    description: Inline critic configuration
+                    properties:
+                      passCondition:
+                        description: |-
+                          Template condition that evaluates to true/false using critic result variables.
+                          e.g., "{{.CriticApproved}}", "{{.TestsPassed}}", "{{.Score}} >= 0.8"
+                          SDK-specific pass logic (regex pattern, JSON field, score threshold) goes in sdkConfig.
+                        type: string
+                      prompt:
+                        description: Prompt template for the critic
+                        type: string
+                      runTests:
+                        default: false
+                        description: Whether to run tests as part of validation
+                        type: boolean
+                      testCommand:
+                        description: |-
+                          Custom test command to run (e.g., "pytest -v tests/", "npm run test:ci")
+                          If not specified, tries common test commands (pytest, npm test, go test, make test)
+                        type: string
+                      testTimeout:
+                        default: 300
+                        description: Timeout for test execution in seconds
+                        maximum: 3600
+                        minimum: 10
+                        type: integer
+                    required:
+                    - prompt
+                    type: object
+                  maxRetries:
+                    default: 2
+                    description: Maximum retries if critic rejects output
+                    maximum: 5
+                    minimum: 0
+                    type: integer
+                  mode:
+                    default: inline
+                    description: 'Critic mode: inline (same session) or subagent (separate
+                      agent)'
+                    enum:
+                    - inline
+                    - subagent
+                    type: string
+                  subagent:
+                    description: Subagent critic configuration
+                    properties:
+                      agentRef:
+                        description: Reference to the critic agent
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      inputTemplate:
+                        description: Template for input to the critic agent
+                        type: string
+                      passCondition:
+                        description: Condition template for passing (e.g., "{{.CriticScore}}
+                          >= 0.8")
+                        type: string
+                    required:
+                    - agentRef
+                    type: object
+                required:
+                - enabled
+                type: object
+              execution:
+                description: 'Execution constraints (SDK-agnostic: timeouts, iterations)'
+                properties:
+                  maxBudgetUsd:
+                    description: |-
+                      Maximum budget in USD as a string (SDK-agnostic, executor maps to SDK-specific param)
+                      Example: "10.00" for $10 USD
+                    pattern: ^\d+(\.\d{1,2})?$
+                    type: string
+                  maxIterations:
+                    default: 25
+                    description: |-
+                      Maximum agent iterations/turns (interpreted by executor).
+                      For Claude SDK: maps to max_turns parameter.
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  timeout:
+                    default: 30m
+                    description: Timeout for agent execution
+                    type: string
+                type: object
+              onFailure:
+                description: OnFailure hooks run if agent execution fails
+                items:
+                  description: Hook defines a lifecycle action
+                  properties:
+                    action:
+                      description: Action to execute (e.g., git_clone, pr_create)
+                      type: string
+                    condition:
+                      description: Condition template - hook runs only if this evaluates
+                        to true
+                      type: string
+                    name:
+                      description: Name of this hook instance (for logging/debugging)
+                      type: string
+                    params:
+                      additionalProperties:
+                        type: string
+                      description: Parameters for the action
+                      type: object
+                  required:
+                  - action
+                  - name
+                  type: object
+                type: array
+              postExecute:
+                description: PostExecute hooks run after successful agent execution
+                items:
+                  description: Hook defines a lifecycle action
+                  properties:
+                    action:
+                      description: Action to execute (e.g., git_clone, pr_create)
+                      type: string
+                    condition:
+                      description: Condition template - hook runs only if this evaluates
+                        to true
+                      type: string
+                    name:
+                      description: Name of this hook instance (for logging/debugging)
+                      type: string
+                    params:
+                      additionalProperties:
+                        type: string
+                      description: Parameters for the action
+                      type: object
+                  required:
+                  - action
+                  - name
+                  type: object
+                type: array
+              preExecute:
+                description: PreExecute hooks run before the agent executes
+                items:
+                  description: Hook defines a lifecycle action
+                  properties:
+                    action:
+                      description: Action to execute (e.g., git_clone, pr_create)
+                      type: string
+                    condition:
+                      description: Condition template - hook runs only if this evaluates
+                        to true
+                      type: string
+                    name:
+                      description: Name of this hook instance (for logging/debugging)
+                      type: string
+                    params:
+                      additionalProperties:
+                        type: string
+                      description: Parameters for the action
+                      type: object
+                  required:
+                  - action
+                  - name
+                  type: object
+                type: array
+              sdkConfig:
+                description: |-
+                  SDKConfig contains SDK-specific configuration (opaque to profile, interpreted by executor)
+                  For Claude SDK: allowedTools, permissionMode, settingSources, etc.
+                  For LangGraph: graph config, etc.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              workspace:
+                description: Workspace configuration for the execution environment
+                properties:
+                  git:
+                    description: Git-specific configuration
+                    properties:
+                      branchPrefix:
+                        description: Prefix for created branches (e.g., "agent/feature/")
+                        type: string
+                      commitMessageTemplate:
+                        description: Go template for commit messages
+                        type: string
+                      defaultBranch:
+                        default: main
+                        description: Default branch to clone from
+                        type: string
+                      targetPath:
+                        description: Target path within repo for file operations
+                        type: string
+                    type: object
+                  type:
+                    default: none
+                    description: 'Type of workspace: git, filesystem, or none'
+                    enum:
+                    - git
+                    - filesystem
+                    - none
+                    type: string
+                required:
+                - type
+                type: object
+            type: object
+          status:
+            description: ExecutionProfileStatus defines observed state
+            properties:
+              lastValidated:
+                description: Last validation timestamp
+                format: date-time
+                type: string
+              referenceCount:
+                description: Number of agents referencing this profile
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

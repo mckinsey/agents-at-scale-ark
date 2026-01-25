@@ -1,0 +1,90 @@
+[project]
+name = "executor-claude-sdk"
+# Version is managed via Release Please
+version = "0.1.0"
+description = "Claude Agent SDK executor service for Ark with lifecycle hooks and critic validation"
+authors = [
+    {name = "McKinsey Agent Platform Team"}
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.0.0",
+    "claude-agent-sdk>=0.1.0",
+    "gitpython>=3.1.0",
+    "pygithub>=2.0.0",
+    "httpx>=0.25.0",
+    "ark-sdk",
+    "jinja2>=3.1.0",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.urls]
+Repository = "https://github.com/mckinsey/agents-at-scale-ark"
+Documentation = "https://mckinsey.github.io/agents-at-scale-ark/developer-guide/claude-sdk-executor/"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.optional-dependencies]
+dev = [
+    "pyright>=1.1.402",
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[project.scripts]
+executor-claude-sdk = "claude_sdk_executor.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/claude_sdk_executor"]
+
+# Black configuration - follow AI developer guide for 120 char line length
+[tool.black]
+line-length = 120
+target-version = ['py311']
+include = '\.pyi?$'
+
+# Flake8 configuration - allow 120 character lines per AI developer guide
+[tool.flake8]
+max-line-length = 120
+extend-ignore = ["E203", "W503"]
+
+# isort configuration
+[tool.isort]
+profile = "black"
+line_length = 120
+multi_line_output = 3
+include_trailing_comma = true
+
+# MyPy configuration
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+# Pytest configuration
+[tool.pytest.ini_options]
+pythonpath = [
+    "."
+]
+testpaths = [
+    "tests"
+]
+asyncio_mode = "auto"
+
+[tool.uv.sources]
+ark-sdk = { path = "../../lib/ark-sdk/gen_sdk/overlay/python/dist/ark_sdk-0.1.52-py3-none-any.whl" }

@@ -50,12 +50,38 @@ class Message(BaseModel):
         extra = "allow"
 
 
+class ExecutionProfileConfig(BaseModel):
+    """Resolved execution profile passed to executor.
+    
+    This contains the profile configuration from the ExecutionProfile CRD,
+    resolved by the Ark controller and passed to the executor.
+    """
+    name: str
+    namespace: str
+    workspace: Dict[str, Any] = None
+    preExecute: List[Dict[str, Any]] = []
+    execution: Dict[str, Any] = None
+    critic: Dict[str, Any] = None
+    postExecute: List[Dict[str, Any]] = []
+    onFailure: List[Dict[str, Any]] = []
+    sdkConfig: Dict[str, Any] = None
+
+    class Config:
+        extra = "allow"
+
+
 class ExecutionEngineRequest(BaseModel):
     """Request to execute an agent."""
+    # Query ID (from Query CRD UID) - useful for unique branch names, correlation
+    queryId: str = ""
+    # Query name (from Query CRD metadata.name)
+    queryName: str = ""
     agent: AgentConfig
     userInput: Message
     history: List[Message]
     tools: List[ToolDefinition] = []
+    # Profile configuration (includes sdkConfig with tool/MCP settings)
+    profile: ExecutionProfileConfig = None
 
 
 class ExecutionEngineResponse(BaseModel):
