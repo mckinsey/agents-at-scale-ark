@@ -6,6 +6,7 @@ from typing import Optional, Tuple, Dict, Any, Type
 
 from ..types.claude_config import ClaudeSdkConfig
 from ..types.telemetry import ExecutionTelemetry
+from ..telemetry import TraceContext, TelemetrySpanManager
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +143,10 @@ class ClaudeSdkRunner:
         max_turns: int,
         system_prompt: Optional[str] = None,
         model_name: Optional[str] = None,
+        trace_context: Optional[TraceContext] = None,
+        telemetry_hooks: Optional[Dict[str, Any]] = None,
+        query_id: Optional[str] = None,
+        agent_name: Optional[str] = None,
     ) -> Tuple[str, ExecutionTelemetry]:
         """
         Execute Claude Agent SDK with configured tools.
@@ -156,6 +161,10 @@ class ClaudeSdkRunner:
             max_turns: Maximum agent iterations
             system_prompt: Optional system prompt (from Agent.spec.prompt)
             model_name: Model name from Agent CRD (e.g., 'claude-3-5-haiku-latest')
+            trace_context: Optional trace context for distributed tracing
+            telemetry_hooks: Optional hooks for tool call tracing
+            query_id: Optional query ID for trace correlation
+            agent_name: Optional agent name for trace attributes
 
         Returns:
             Tuple of (agent_output, telemetry)
@@ -176,33 +185,46 @@ class ClaudeSdkRunner:
 
         # Use provided model or default
         model = claude_config.model or model_name or DEFAULT_MODEL
-        options = self._build_options(claude_config, working_dir, max_turns, system_prompt, model)
+        options = self._build_options(
+            claude_config, working_dir, max_turns, system_prompt, model, telemetry_hooks
+        )
 
         result_text = ""
 
-        try:
-            # Use ClaudeSDKClient as context manager for proper lifecycle
-            async with ClaudeSDKClient(options=options) as client:
-                # Send the main prompt
-                await client.query(prompt)
+        # Wrap execution in telemetry span manager for trace hierarchy
+        with TelemetrySpanManager(trace_context, query_id, agent_name) as span_manager:
+            try:
+                # Use ClaudeSDKClient as context manager for proper lifecycle
+                async with ClaudeSDKClient(options=options) as client:
+                    # Send the main prompt
+                    await client.query(prompt)
 
-                # Process response and capture telemetry
-                async for message in client.receive_response():
-                    if isinstance(message, ResultMessage):
-                        telemetry.total_cost_usd = getattr(message, 'total_cost_usd', None)
-                        telemetry.duration_ms = getattr(message, 'duration_ms', None)
-                        telemetry.duration_api_ms = getattr(message, 'duration_api_ms', None)
-                        telemetry.num_turns = getattr(message, 'num_turns', None)
-                        telemetry.session_id = message.session_id
-                        telemetry.usage = getattr(message, 'usage', None)
+                    # Process response and capture telemetry
+                    async for message in client.receive_response():
+                        if isinstance(message, ResultMessage):
+                            telemetry.total_cost_usd = getattr(message, 'total_cost_usd', None)
+                            telemetry.duration_ms = getattr(message, 'duration_ms', None)
+                            telemetry.duration_api_ms = getattr(message, 'duration_api_ms', None)
+                            telemetry.num_turns = getattr(message, 'num_turns', None)
+                            telemetry.session_id = message.session_id
+                            telemetry.usage = getattr(message, 'usage', None)
 
-                        if message.subtype == "success":
-                            result_text = message.result or ""
-                        elif message.subtype == "error_during_execution":
-                            raise RuntimeError("Claude SDK execution error")
+                            if message.subtype == "success":
+                                result_text = message.result or ""
+                            elif message.subtype == "error_during_execution":
+                                raise RuntimeError("Claude SDK execution error")
 
-        except Exception as e:
-            self._handle_sdk_exception(e)
+                # Record aggregate telemetry on the span (including input/output for Langfuse UI)
+                span_manager.record_telemetry(
+                    duration_ms=telemetry.duration_ms,
+                    num_turns=telemetry.num_turns,
+                    total_cost_usd=telemetry.total_cost_usd,
+                    input_value=prompt,
+                    output_value=result_text,
+                )
+
+            except Exception as e:
+                self._handle_sdk_exception(e)
 
         return result_text, telemetry
 
@@ -213,6 +235,7 @@ class ClaudeSdkRunner:
         max_turns: int,
         system_prompt: Optional[str],
         model_name: Optional[str] = None,
+        telemetry_hooks: Optional[Dict[str, Any]] = None,
     ) -> "ClaudeAgentOptions":
         """Build ClaudeAgentOptions from config."""
         # Build MCP servers config from sdkConfig.claude.mcpServers
@@ -222,6 +245,9 @@ class ClaudeSdkRunner:
         allowed_tools = list(claude_config.allowed_tools)
         for server_name in claude_config.mcp_servers.keys():
             allowed_tools.append(f"mcp__{server_name}__*")
+
+        # Merge telemetry hooks with any profile hooks
+        hooks = self._merge_hooks(claude_config.hooks, telemetry_hooks)
 
         return ClaudeAgentOptions(
             allowed_tools=allowed_tools,
@@ -233,7 +259,45 @@ class ClaudeSdkRunner:
             max_budget_usd=claude_config.max_budget_usd,
             mcp_servers=mcp_servers,
             system_prompt=system_prompt,
+            hooks=hooks if hooks else None,
         )
+
+    def _merge_hooks(
+        self,
+        profile_hooks: Optional[Dict[str, Any]],
+        telemetry_hooks: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        """Merge profile hooks with telemetry hooks.
+        
+        Both hook dicts have the same structure: {event_name: [HookMatcher, ...]}
+        Telemetry hooks are added after profile hooks so both run.
+        
+        Args:
+            profile_hooks: Hooks from ExecutionProfile
+            telemetry_hooks: Hooks for telemetry tracing
+            
+        Returns:
+            Merged hooks dict, or None if no hooks
+        """
+        if not profile_hooks and not telemetry_hooks:
+            return None
+        
+        if not profile_hooks:
+            return telemetry_hooks
+        
+        if not telemetry_hooks:
+            return profile_hooks
+        
+        # Merge: for each event, concatenate the hook matchers
+        merged = dict(profile_hooks)
+        for event_name, matchers in telemetry_hooks.items():
+            if event_name in merged:
+                # Append telemetry hooks after profile hooks
+                merged[event_name] = merged[event_name] + matchers
+            else:
+                merged[event_name] = matchers
+        
+        return merged
 
     async def execute_with_critic(
         self,
@@ -244,6 +308,10 @@ class ClaudeSdkRunner:
         max_turns: int,
         system_prompt: Optional[str] = None,
         model_name: Optional[str] = None,
+        trace_context: Optional[TraceContext] = None,
+        telemetry_hooks: Optional[Dict[str, Any]] = None,
+        query_id: Optional[str] = None,
+        agent_name: Optional[str] = None,
     ) -> Tuple[str, str, ExecutionTelemetry]:
         """
         Execute Claude Agent SDK and then continue the conversation for inline critic.
@@ -267,6 +335,10 @@ class ClaudeSdkRunner:
             max_turns: Maximum agent iterations
             system_prompt: Optional system prompt
             model_name: Model name from Agent CRD (e.g., 'claude-3-5-haiku-latest')
+            trace_context: Optional trace context for distributed tracing
+            telemetry_hooks: Optional hooks for tool call tracing
+            query_id: Optional query ID for trace correlation
+            agent_name: Optional agent name for trace attributes
 
         Returns:
             Tuple of (agent_output, critic_response, telemetry)
@@ -287,46 +359,59 @@ class ClaudeSdkRunner:
 
         # Build options for main task execution
         model = claude_config.model or model_name or DEFAULT_MODEL
-        options = self._build_options(claude_config, working_dir, max_turns, system_prompt, model)
+        options = self._build_options(
+            claude_config, working_dir, max_turns, system_prompt, model, telemetry_hooks
+        )
 
         agent_output = ""
         critic_response = ""
 
-        try:
-            # ClaudeSDKClient maintains session across multiple query() calls
-            async with ClaudeSDKClient(options=options) as client:
-                # Phase 1: Execute main task
-                logger.info("Executing main task")
-                await client.query(prompt)
+        # Wrap execution in telemetry span manager for trace hierarchy
+        with TelemetrySpanManager(trace_context, query_id, agent_name) as span_manager:
+            try:
+                # ClaudeSDKClient maintains session across multiple query() calls
+                async with ClaudeSDKClient(options=options) as client:
+                    # Phase 1: Execute main task
+                    logger.info("Executing main task")
+                    await client.query(prompt)
 
-                async for message in client.receive_response():
-                    if isinstance(message, ResultMessage):
-                        telemetry.session_id = message.session_id
-                        if message.subtype == "success":
-                            agent_output = message.result or ""
-                        elif message.subtype == "error_during_execution":
-                            raise RuntimeError("Claude SDK execution error during main task")
+                    async for message in client.receive_response():
+                        if isinstance(message, ResultMessage):
+                            telemetry.session_id = message.session_id
+                            if message.subtype == "success":
+                                agent_output = message.result or ""
+                            elif message.subtype == "error_during_execution":
+                                raise RuntimeError("Claude SDK execution error during main task")
 
-                # Phase 2: Inline critic validation (SAME session - Claude remembers context)
-                logger.info("Executing inline critic validation")
-                await client.query(critic_prompt)
+                    # Phase 2: Inline critic validation (SAME session - Claude remembers context)
+                    logger.info("Executing inline critic validation")
+                    await client.query(critic_prompt)
 
-                async for message in client.receive_response():
-                    if isinstance(message, ResultMessage):
-                        # Capture final telemetry (includes both phases)
-                        telemetry.total_cost_usd = getattr(message, 'total_cost_usd', None)
-                        telemetry.duration_ms = getattr(message, 'duration_ms', None)
-                        telemetry.duration_api_ms = getattr(message, 'duration_api_ms', None)
-                        telemetry.num_turns = getattr(message, 'num_turns', None)
-                        telemetry.usage = getattr(message, 'usage', None)
+                    async for message in client.receive_response():
+                        if isinstance(message, ResultMessage):
+                            # Capture final telemetry (includes both phases)
+                            telemetry.total_cost_usd = getattr(message, 'total_cost_usd', None)
+                            telemetry.duration_ms = getattr(message, 'duration_ms', None)
+                            telemetry.duration_api_ms = getattr(message, 'duration_api_ms', None)
+                            telemetry.num_turns = getattr(message, 'num_turns', None)
+                            telemetry.usage = getattr(message, 'usage', None)
 
-                        if message.subtype == "success":
-                            critic_response = message.result or ""
-                        elif message.subtype == "error_during_execution":
-                            raise RuntimeError("Claude SDK execution error during critic")
+                            if message.subtype == "success":
+                                critic_response = message.result or ""
+                            elif message.subtype == "error_during_execution":
+                                raise RuntimeError("Claude SDK execution error during critic")
 
-        except Exception as e:
-            self._handle_sdk_exception(e)
+                # Record aggregate telemetry on the span (including input/output for Langfuse UI)
+                span_manager.record_telemetry(
+                    duration_ms=telemetry.duration_ms,
+                    num_turns=telemetry.num_turns,
+                    total_cost_usd=telemetry.total_cost_usd,
+                    input_value=prompt,
+                    output_value=agent_output,
+                )
+
+            except Exception as e:
+                self._handle_sdk_exception(e)
 
         return agent_output, critic_response, telemetry
 

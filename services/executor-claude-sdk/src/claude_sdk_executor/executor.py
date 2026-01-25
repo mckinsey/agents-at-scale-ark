@@ -16,6 +16,7 @@ from .hooks.runner import HookRunner
 from .critic.inline import run_tests, evaluate_critic_response
 from .critic.subagent import SubagentCritic
 from .sdk.runner import ClaudeSdkRunner
+from .telemetry import TraceContext, TelemetrySpanManager, create_telemetry_hooks
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,11 @@ class ClaudeSdkExecutor(BaseExecutor):
         self.hook_runner = HookRunner()
         self.sdk_runner = ClaudeSdkRunner()
 
-    async def execute_agent(self, request: ExecutionEngineRequest) -> List[Message]:
+    async def execute_agent(
+        self,
+        request: ExecutionEngineRequest,
+        trace_context: Optional[TraceContext] = None,
+    ) -> List[Message]:
         """Execute an agent with the configured profile workflow.
 
         The profile is passed by the Ark controller in request.profile (already resolved).
@@ -82,6 +87,7 @@ class ClaudeSdkExecutor(BaseExecutor):
         
         Args:
             request: ExecutionEngineRequest from Ark controller
+            trace_context: Optional trace context from HTTP headers for distributed tracing
             
         Returns:
             List of response Messages
@@ -89,6 +95,9 @@ class ClaudeSdkExecutor(BaseExecutor):
         state = ExecutionState()
         profile: Optional[ResolvedProfile] = None
         context: Optional[TemplateContext] = None
+
+        # Store trace context for use in _execute_with_critic
+        self._trace_context = trace_context
 
         try:
             # Step 1: Get profile from request (resolved by Ark controller)
@@ -227,6 +236,10 @@ class ClaudeSdkExecutor(BaseExecutor):
         if profile.execution:
             max_turns = profile.execution.get("maxIterations", 25)
 
+        # Create telemetry hooks for tool call tracing
+        trace_context = getattr(self, '_trace_context', None)
+        telemetry_hooks = create_telemetry_hooks(trace_context)
+
         for attempt in range(max_attempts):
             logger.info(f"Agent execution attempt {attempt + 1}/{max_attempts}")
 
@@ -248,6 +261,10 @@ class ClaudeSdkExecutor(BaseExecutor):
                     max_turns=max_turns,
                     system_prompt=request.agent.prompt,
                     model_name=request.agent.model.name,
+                    trace_context=trace_context,
+                    telemetry_hooks=telemetry_hooks,
+                    query_id=request.queryId,
+                    agent_name=request.agent.name,
                 )
 
                 state.telemetry.merge(run_telemetry)
@@ -295,6 +312,10 @@ class ClaudeSdkExecutor(BaseExecutor):
                     max_turns=max_turns,
                     system_prompt=request.agent.prompt,
                     model_name=request.agent.model.name,
+                    trace_context=trace_context,
+                    telemetry_hooks=telemetry_hooks,
+                    query_id=request.queryId,
+                    agent_name=request.agent.name,
                 )
 
                 state.telemetry.merge(run_telemetry)

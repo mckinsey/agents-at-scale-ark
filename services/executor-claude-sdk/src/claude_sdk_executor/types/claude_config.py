@@ -61,6 +61,9 @@ class ClaudeSdkConfig:
     # Claude-specific critic config (regex pattern, critic tools)
     critic: Optional[ClaudeCriticConfig] = None
 
+    # Hooks configuration (typically set programmatically, not from sdkConfig)
+    hooks: Optional[Dict[str, Any]] = None
+
     @classmethod
     def from_sdk_config(cls, sdk_config: Optional[Dict[str, Any]]) -> "ClaudeSdkConfig":
         """Parse ClaudeSdkConfig from profile.sdkConfig.

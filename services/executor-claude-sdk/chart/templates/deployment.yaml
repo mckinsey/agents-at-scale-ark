@@ -27,7 +27,17 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          envFrom:
+            # OpenTelemetry configuration - automatically picks up OTEL endpoint if configured
+            - configMapRef:
+                name: otel-environment-variables
+                optional: true
+            - secretRef:
+                name: otel-environment-variables
+                optional: true
           env:
+            - name: OTEL_SERVICE_NAME
+              value: "executor-claude-sdk"
             - name: PORT
               value: "{{ .Values.service.port }}"
             # Claude provider configuration

@@ -16,6 +16,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/eventing"
+	"mckinsey.com/ark/internal/telemetry"
 )
 
 // ExecutionEngineMessage represents a chat message in the format expected by execution engines
@@ -242,6 +243,13 @@ func (c *ExecutionEngineClient) Execute(ctx context.Context, engineRef *arkv1alp
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+
+	// Inject OTEL trace context headers for distributed tracing
+	headerMap := make(map[string]string)
+	telemetry.InjectOTELHeaders(ctx, headerMap)
+	for name, value := range headerMap {
+		req.Header.Set(name, value)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
