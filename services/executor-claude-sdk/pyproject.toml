@@ -87,4 +87,9 @@ testpaths = [
 asyncio_mode = "auto"
 
 [tool.uv.sources]
-ark-sdk = { path = "../../lib/ark-sdk/gen_sdk/overlay/python/dist/ark_sdk-0.1.52-py3-none-any.whl" }
+ark-sdk = { path = "../../lib/ark-sdk/gen_sdk/overlay/python", editable = true }
+
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=1.3.0",
+]

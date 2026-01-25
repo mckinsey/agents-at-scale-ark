@@ -98,4 +98,9 @@ def _register_all_hooks(registry: HookRegistry) -> None:
 
     registry.register(JiraCommentHook)
 
+    # Import and register utility hooks
+    from .log import LogHook
+
+    registry.register(LogHook)
+
     logger.info(f"Registered {len(registry.list_actions())} hooks")

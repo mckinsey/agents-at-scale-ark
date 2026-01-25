@@ -57,6 +57,19 @@ PROVIDER_ENV_VARS = {
 }
 
 
+def validate_sdk_available() -> None:
+    """Validate Claude SDK is available. Call at startup in production.
+    
+    Raises:
+        RuntimeError: If Claude Agent SDK is not installed
+    """
+    if not CLAUDE_SDK_AVAILABLE:
+        raise RuntimeError(
+            "Claude Agent SDK is not installed. "
+            "Install with: pip install claude-agent-sdk"
+        )
+
+
 class ClaudeSdkRunner:
     """
     Wraps Claude Agent SDK execution using ClaudeSDKClient.

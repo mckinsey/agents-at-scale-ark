@@ -105,6 +105,8 @@ class ClaudeSdkExecutor(BaseExecutor):
             claude_config = ClaudeSdkConfig.from_sdk_config(profile.sdk_config)
             
             # Get model name from Agent CRD (resolved by Ark controller)
+            if not request.agent or not request.agent.model:
+                raise ValueError("Agent model configuration is required")
             model_name = request.agent.model.name
             
             logger.info(f"Using profile {profile.name} for agent {request.agent.name}")

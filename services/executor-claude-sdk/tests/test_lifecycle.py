@@ -112,7 +112,8 @@ def mock_request():
     
     @dataclass
     class MockRequest:
-        query_id: str = "test-query-123"
+        queryId: str = "test-query-123"
+        queryName: str = "test-query"
         agent: MockAgent = None
         userInput: MockMessage = None
         history: List[Any] = None

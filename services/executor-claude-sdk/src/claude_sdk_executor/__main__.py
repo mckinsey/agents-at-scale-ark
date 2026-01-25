@@ -10,6 +10,7 @@ import logging
 import os
 
 from .app import app_instance
+from .sdk.runner import validate_sdk_available
 
 # Configure logging
 logging.basicConfig(
@@ -21,6 +22,12 @@ logger = logging.getLogger(__name__)
 
 def main() -> None:
     """Main entry point."""
+    # Validate SDK is available unless mock mode is explicitly enabled
+    if os.getenv("MOCK_MODE", "").lower() != "true":
+        validate_sdk_available()
+    else:
+        logger.warning("Running in MOCK_MODE - Claude SDK validation skipped")
+
     # Get host and port from environment variables
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8000"))

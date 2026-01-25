@@ -33,6 +33,42 @@ class TemplateContext:
     def __init__(self) -> None:
         self._variables: Dict[str, Any] = {}
         self._env = Environment(undefined=StrictUndefined)
+        # Register custom filters
+        self._env.filters["truncate"] = self._truncate
+        self._env.filters["slugify"] = self._slugify
+
+    @staticmethod
+    def _truncate(value: Any, length: int = 50) -> str:
+        """Truncate string to specified length.
+        
+        Args:
+            value: Value to truncate (will be converted to string)
+            length: Maximum length (default 50)
+            
+        Returns:
+            Truncated string
+        """
+        if not value:
+            return ""
+        value = str(value)
+        if len(value) <= length:
+            return value
+        return value[:length]
+
+    @staticmethod
+    def _slugify(value: Any) -> str:
+        """Convert string to URL-safe slug.
+        
+        Args:
+            value: Value to slugify (will be converted to string)
+            
+        Returns:
+            URL-safe slug
+        """
+        value = str(value).lower()
+        value = re.sub(r'[^\w\s-]', '', value)
+        value = re.sub(r'[-\s]+', '-', value).strip('-')
+        return value
 
     @classmethod
     def from_request(cls, request: "ExecutionEngineRequest") -> "TemplateContext":
@@ -160,6 +196,7 @@ class TemplateContext:
         """Resolve template variables in a string.
         
         Supports both Go-style {{.VarName}} and Jinja2-style {{ VarName }}.
+        Also supports Go-style filters: {{.VarName | filter arg}}
         
         Args:
             template_str: String with template variables
@@ -170,8 +207,20 @@ class TemplateContext:
         if not template_str:
             return template_str
         
+        # Convert Go-style {{.VarName | filter arg}} to Jinja2 {{ VarName | filter(arg) }}
+        jinja_template = re.sub(
+            r'\{\{\.(\w+)\s*\|\s*(\w+)\s+(\d+)\}\}',
+            r'{{ \1 | \2(\3) }}',
+            template_str
+        )
+        # Convert Go-style {{.VarName | filter}} (no arg) to Jinja2 {{ VarName | filter }}
+        jinja_template = re.sub(
+            r'\{\{\.(\w+)\s*\|\s*(\w+)\}\}',
+            r'{{ \1 | \2 }}',
+            jinja_template
+        )
         # Convert Go-style {{.VarName}} to Jinja2 {{ VarName }}
-        jinja_template = re.sub(r'\{\{\.(\w+)\}\}', r'{{ \1 }}', template_str)
+        jinja_template = re.sub(r'\{\{\.(\w+)\}\}', r'{{ \1 }}', jinja_template)
         
         try:
             template = self._env.from_string(jinja_template)
