@@ -82,6 +82,138 @@ function formatBytes(bytes: number): string {
   return `${size.toFixed(2)} ${units[unitIndex]}`;
 }
 
+function getLanguageFromExtension(
+  extension: string | undefined,
+): string | null {
+  if (!extension) return null;
+
+  const languageMap: Record<string, string> = {
+    // JavaScript/TypeScript
+    js: 'javascript',
+    jsx: 'jsx',
+    ts: 'typescript',
+    tsx: 'tsx',
+    mjs: 'javascript',
+    cjs: 'javascript',
+
+    // Web
+    html: 'html',
+    htm: 'html',
+    css: 'css',
+    scss: 'scss',
+    sass: 'sass',
+    less: 'less',
+
+    // Python
+    py: 'python',
+    pyw: 'python',
+
+    // Java/Kotlin
+    java: 'java',
+    kt: 'kotlin',
+    kts: 'kotlin',
+
+    // C/C++/C#
+    c: 'c',
+    h: 'c',
+    cpp: 'cpp',
+    cc: 'cpp',
+    cxx: 'cpp',
+    hpp: 'cpp',
+    cs: 'csharp',
+
+    // Go
+    go: 'go',
+
+    // Rust
+    rs: 'rust',
+
+    // Ruby
+    rb: 'ruby',
+
+    // PHP
+    php: 'php',
+
+    // Shell
+    sh: 'bash',
+    bash: 'bash',
+    zsh: 'bash',
+    fish: 'bash',
+
+    // Configuration
+    json: 'json',
+    yaml: 'yaml',
+    yml: 'yaml',
+    toml: 'toml',
+    ini: 'ini',
+    xml: 'xml',
+
+    // SQL
+    sql: 'sql',
+
+    // Markdown
+    md: 'markdown',
+    mdx: 'markdown',
+
+    // Docker
+    dockerfile: 'dockerfile',
+
+    // Make
+    makefile: 'makefile',
+    mk: 'makefile',
+
+    // Swift
+    swift: 'swift',
+
+    // Objective-C
+    m: 'objectivec',
+    mm: 'objectivec',
+
+    // Lua
+    lua: 'lua',
+
+    // Perl
+    pl: 'perl',
+    pm: 'perl',
+
+    // R
+    r: 'r',
+
+    // Scala
+    scala: 'scala',
+    sc: 'scala',
+
+    // Clojure
+    clj: 'clojure',
+    cljs: 'clojure',
+
+    // Haskell
+    hs: 'haskell',
+
+    // Elixir
+    ex: 'elixir',
+    exs: 'elixir',
+
+    // Dart
+    dart: 'dart',
+
+    // Julia
+    jl: 'julia',
+
+    // Vim
+    vim: 'vim',
+
+    // GraphQL
+    graphql: 'graphql',
+    gql: 'graphql',
+
+    // Protobuf
+    proto: 'protobuf',
+  };
+
+  return languageMap[extension.toLowerCase()] || null;
+}
+
 function parseBreadcrumbs(prefix: string): string[] {
   if (!prefix) return [];
   return prefix.split('/').filter(Boolean);
@@ -273,7 +405,7 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
     const [previewContent, setPreviewContent] = useState<string>('');
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
     const [previewIsImage, setPreviewIsImage] = useState(false);
-    const [previewIsPython, setPreviewIsPython] = useState(false);
+    const [previewLanguage, setPreviewLanguage] = useState<string | null>(null);
     const [previewJsonData, setPreviewJsonData] = useState<unknown>(null);
     const [previewIsJson, setPreviewIsJson] = useState(false);
     const [previewLoading, setPreviewLoading] = useState(false);
@@ -524,7 +656,7 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
       setPreviewContent('');
       setPreviewImageUrl(null);
       setPreviewIsImage(false);
-      setPreviewIsPython(false);
+      setPreviewLanguage(null);
       setPreviewJsonData(null);
       setPreviewIsJson(false);
       setExpandedPaths(new Set());
@@ -543,8 +675,8 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
           fileExtension || '',
         );
         const isSvg = fileExtension === 'svg';
-        const isPython = fileExtension === 'py';
         const isJson = fileExtension === 'json';
+        const language = getLanguageFromExtension(fileExtension);
 
         if (isImage || isSvg) {
           // For SVG files, we need to handle them specially since they're text-based
@@ -564,7 +696,7 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
           const text = await blob.text();
           setPreviewContent(text);
           setPreviewIsImage(false);
-          setPreviewIsPython(isPython);
+          setPreviewLanguage(language);
 
           if (isJson) {
             try {
@@ -975,10 +1107,10 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
                     }}
                   />
                 </div>
-              ) : previewIsPython ? (
+              ) : previewLanguage ? (
                 <div className="overflow-hidden rounded-md">
                   <SyntaxHighlighter
-                    language="python"
+                    language={previewLanguage}
                     style={vscDarkPlus}
                     customStyle={{
                       margin: 0,
