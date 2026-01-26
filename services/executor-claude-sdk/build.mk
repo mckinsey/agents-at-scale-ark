@@ -42,7 +42,7 @@ $(EXECUTOR_CLAUDE_SDK_STAMP_DEPS): $(EXECUTOR_CLAUDE_SDK_SERVICE_DIR)/pyproject.
 	sed -i.bak 's|path = "../../lib/ark-sdk/gen_sdk/overlay/python"|path = "./ark_sdk-$(shell cat $(BUILD_ROOT)/version.txt)-py3-none-any.whl"|' pyproject.toml && \
 	sed -i.bak 's|editable = true||' pyproject.toml && \
 	rm -f pyproject.toml.bak && \
-	uv remove ark-sdk || true && \
+	uv remove ark_sdk || true && \
 	uv add ./ark_sdk-$(shell cat $(BUILD_ROOT)/version.txt)-py3-none-any.whl && \
 	rm -f uv.lock && uv sync
 	@touch $@
@@ -69,7 +69,7 @@ $(EXECUTOR_CLAUDE_SDK_STAMP_INSTALL): $(EXECUTOR_CLAUDE_SDK_STAMP_BUILD)
 # Dev target dependencies - prepare local environment  
 $(EXECUTOR_CLAUDE_SDK_SERVICE_NAME)-dev-deps: $(ARK_SDK_WHL)
 	cd $(EXECUTOR_CLAUDE_SDK_SERVICE_DIR) && \
-	uv remove ark-sdk || true && \
+	uv remove ark_sdk || true && \
 	uv add $(ARK_SDK_WHL) && \
 	uv sync
 
