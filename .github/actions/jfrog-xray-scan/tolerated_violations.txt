@@ -7,3 +7,9 @@ XRAY-913110 - CVE-2026-0621
 XRAY-934751 - CVE-2024-58340
 - LangChain versions up to and including 0.3.1 contain a regular expression denial-of-service (ReDoS) vulnerability in the MRKLOutputParser.parse() method (libs/langchain/langchain/agents/mrkl/output_parser.py). The parser applies a backtracking-prone regular expression when extracting tool actions from model output. An attacker who can supply or influence the parsed text (for example via prompt injection in downstream applications that pass LLM output directly into MRKLOutputParser.parse()) can trigger excessive CPU consumption by providing a crafted payload, causing significant parsing delays and a denial-of-service condition.
 - We appear to be using newer LangChain versions than the vulnerable oens and we aren't using the vulnerable method.
+XRAY-935637 - CVE-2026-0994
+- A denial-of-service vulnerability exists in google.protobuf (Python) versions up to 6.33.4 where json_format.ParseDict() allows max_recursion_depth bypass via nested google.protobuf.Any messages, causing Python recursion stack exhaustion. Severity: High (CVSS 8.2).
+- No patched version is available yet. The fix is merged to protobuf master (PR #25239) but not released to PyPI. Latest available version is 6.33.4 (still vulnerable).
+- Mitigations applied: (1) Pinned protobuf>=6.33.4 in ark-api and langchain-weather-agent, (2) Updated langchain-weather-agent from 6.33.0 to 6.33.4, (3) Documented vulnerability and upgrade path in CVE-2026-0994.md.
+- Used in services/ark-api/ark-api and samples/a2a/langchain-weather-agent via a2a-sdk dependency.
+- Will upgrade immediately when patched version is released to PyPI.
