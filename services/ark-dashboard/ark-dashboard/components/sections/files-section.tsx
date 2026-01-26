@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   Copy,
   Download,
+  Eye,
   FileIcon,
   FolderIcon,
   MoreVertical,
@@ -39,6 +40,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import {
   Empty,
   EmptyContent,
   EmptyDescription,
@@ -50,6 +57,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import { FILES_API_BASE_URL } from '@/lib/api/files-client';
 import { filesService } from '@/lib/services/files';
 import {
   useDeleteDirectory,
@@ -94,6 +102,10 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
     const [filename, setFilename] = useState('');
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [previewKey, setPreviewKey] = useState<string | null>(null);
+    const [previewContent, setPreviewContent] = useState<string>('');
+    const [previewLoading, setPreviewLoading] = useState(false);
 
     const {
       data: listFilesData,
@@ -333,6 +345,36 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
       });
     };
 
+    const handlePreview = async (key: string) => {
+      setPreviewKey(key);
+      setPreviewOpen(true);
+      setPreviewLoading(true);
+      setPreviewContent('');
+
+      try {
+        const url = `${FILES_API_BASE_URL}/files/${encodeURIComponent(key)}/download`;
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch file: ${response.statusText}`);
+        }
+
+        const blob = await response.blob();
+        const text = await blob.text();
+        setPreviewContent(text);
+      } catch (error) {
+        toast.error('Failed to Preview File', {
+          description:
+            error instanceof Error
+              ? error.message
+              : 'An unexpected error occurred',
+        });
+        setPreviewOpen(false);
+      } finally {
+        setPreviewLoading(false);
+      }
+    };
+
     const handleLoadMore = async () => {
       if (!nextToken) return;
 
@@ -514,6 +556,12 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
                             onClick={() => handleDownload(file.key)}>
                             <Download className="h-4 w-4" />
                           </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handlePreview(file.key)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button
@@ -658,6 +706,27 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
           }
           variant="destructive"
         />
+
+        <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>
+          <SheetContent side="right" className="flex w-full flex-col sm:max-w-2xl">
+            <SheetHeader>
+              <SheetTitle>
+                {previewKey ? previewKey.split('/').pop() : 'Preview'}
+              </SheetTitle>
+            </SheetHeader>
+            <div className="mt-4 flex-1 overflow-y-auto">
+              {previewLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <p className="text-muted-foreground">Loading file content...</p>
+                </div>
+              ) : (
+                <pre className="whitespace-pre-wrap break-words font-mono text-sm">
+                  {previewContent}
+                </pre>
+              )}
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     );
   },
