@@ -5,7 +5,9 @@ import { useAtom } from 'jotai';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import {
+  ChevronDown,
   ChevronLeft,
+  ChevronRight,
   Copy,
   Download,
   Eye,
@@ -85,6 +87,146 @@ function parseBreadcrumbs(prefix: string): string[] {
   return prefix.split('/').filter(Boolean);
 }
 
+interface JsonTreeNodeProps {
+  data: unknown;
+  path: string;
+  keyName?: string;
+  level: number;
+  expandedPaths: Set<string>;
+  onToggle: (path: string) => void;
+}
+
+function JsonTreeNode({
+  data,
+  path,
+  keyName,
+  level,
+  expandedPaths,
+  onToggle,
+}: JsonTreeNodeProps) {
+  const isExpanded = expandedPaths.has(path);
+  const indent = level * 16;
+
+  const toggle = () => {
+    onToggle(path);
+  };
+
+  if (data === null) {
+    return (
+      <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
+        {keyName && <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>}
+        <span className="text-gray-500 dark:text-gray-400">null</span>
+      </div>
+    );
+  }
+
+  if (typeof data === 'string') {
+    return (
+      <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
+        {keyName && <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>}
+        <span className="text-green-600 dark:text-green-400">&quot;{data}&quot;</span>
+      </div>
+    );
+  }
+
+  if (typeof data === 'number') {
+    return (
+      <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
+        {keyName && <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>}
+        <span className="text-purple-600 dark:text-purple-400">{data}</span>
+      </div>
+    );
+  }
+
+  if (typeof data === 'boolean') {
+    return (
+      <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
+        {keyName && <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>}
+        <span className="text-orange-600 dark:text-orange-400">{String(data)}</span>
+      </div>
+    );
+  }
+
+  if (Array.isArray(data)) {
+    return (
+      <div>
+        <div
+          style={{ paddingLeft: `${indent}px` }}
+          className="flex cursor-pointer items-center gap-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-800"
+          onClick={toggle}>
+          {isExpanded ? (
+            <ChevronDown className="h-3 w-3" />
+          ) : (
+            <ChevronRight className="h-3 w-3" />
+          )}
+          {keyName && <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>}
+          <span className="text-gray-600 dark:text-gray-400">
+            [{data.length}]
+          </span>
+        </div>
+        {isExpanded && (
+          <div>
+            {data.map((item, index) => (
+              <JsonTreeNode
+                key={index}
+                data={item}
+                path={`${path}[${index}]`}
+                level={level + 1}
+                expandedPaths={expandedPaths}
+                onToggle={onToggle}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (typeof data === 'object') {
+    const entries = Object.entries(data);
+    return (
+      <div>
+        <div
+          style={{ paddingLeft: `${indent}px` }}
+          className="flex cursor-pointer items-center gap-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-800"
+          onClick={toggle}>
+          {isExpanded ? (
+            <ChevronDown className="h-3 w-3" />
+          ) : (
+            <ChevronRight className="h-3 w-3" />
+          )}
+          {keyName && <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>}
+          <span className="text-gray-600 dark:text-gray-400">
+            {'{'} {entries.length} {entries.length === 1 ? 'key' : 'keys'} {'}'}
+          </span>
+        </div>
+        {isExpanded && (
+          <div>
+            {entries.map(([key, value]) => (
+              <JsonTreeNode
+                key={key}
+                data={value}
+                path={`${path}.${key}`}
+                keyName={key}
+                level={level + 1}
+                expandedPaths={expandedPaths}
+                onToggle={onToggle}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
+      {keyName && <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>}
+      <span>{String(data)}</span>
+    </div>
+  );
+}
+
 export const FilesSection = forwardRef<{ refresh: () => void }>(
   function FilesSection(_, ref) {
     const [prefix, setPrefix] = useAtom(filesBrowserPrefixAtom);
@@ -110,7 +252,10 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
     const [previewIsImage, setPreviewIsImage] = useState(false);
     const [previewIsPython, setPreviewIsPython] = useState(false);
+    const [previewJsonData, setPreviewJsonData] = useState<unknown>(null);
+    const [previewIsJson, setPreviewIsJson] = useState(false);
     const [previewLoading, setPreviewLoading] = useState(false);
+    const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
 
     const {
       data: listFilesData,
@@ -358,6 +503,9 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
       setPreviewImageUrl(null);
       setPreviewIsImage(false);
       setPreviewIsPython(false);
+      setPreviewJsonData(null);
+      setPreviewIsJson(false);
+      setExpandedPaths(new Set());
 
       try {
         const url = `${FILES_API_BASE_URL}/files/${encodeURIComponent(key)}/download`;
@@ -371,6 +519,7 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
         const fileExtension = key.split('.').pop()?.toLowerCase();
         const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(fileExtension || '');
         const isPython = fileExtension === 'py';
+        const isJson = fileExtension === 'json';
 
         if (isImage) {
           const imageUrl = URL.createObjectURL(blob);
@@ -381,6 +530,18 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
           setPreviewContent(text);
           setPreviewIsImage(false);
           setPreviewIsPython(isPython);
+          
+          if (isJson) {
+            try {
+              const jsonData = JSON.parse(text);
+              setPreviewJsonData(jsonData);
+              setPreviewIsJson(true);
+            } catch {
+              setPreviewIsJson(false);
+            }
+          } else {
+            setPreviewIsJson(false);
+          }
         }
       } catch (error) {
         toast.error('Failed to Preview File', {
@@ -753,6 +914,26 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
                     src={previewImageUrl}
                     alt={previewKey ? previewKey.split('/').pop() : 'Preview'}
                     className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+              ) : previewIsJson && previewJsonData !== null ? (
+                <div className="rounded-md border border-gray-200 bg-white p-4 font-mono text-sm dark:border-gray-800 dark:bg-gray-900">
+                  <JsonTreeNode
+                    data={previewJsonData}
+                    path="root"
+                    level={0}
+                    expandedPaths={expandedPaths}
+                    onToggle={path => {
+                      setExpandedPaths(prev => {
+                        const next = new Set(prev);
+                        if (next.has(path)) {
+                          next.delete(path);
+                        } else {
+                          next.add(path);
+                        }
+                        return next;
+                      });
+                    }}
                   />
                 </div>
               ) : previewIsPython ? (
