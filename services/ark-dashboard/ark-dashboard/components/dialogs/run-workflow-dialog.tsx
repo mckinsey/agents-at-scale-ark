@@ -39,7 +39,7 @@ export function RunWorkflowDialog({
   const [paramValues, setParamValues] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     parameters.forEach(param => {
-      initial[param.name] = param.value || param.default || '';
+      initial[param.name] = '';
     });
     return initial;
   });
@@ -79,8 +79,11 @@ export function RunWorkflowDialog({
 
     setIsSubmitting(true);
     try {
+      const nonEmptyParams = Object.fromEntries(
+        Object.entries(paramValues).filter(([_, value]) => value.trim() !== ''),
+      );
       await onRun(
-        parameters.length > 0 ? paramValues : undefined,
+        Object.keys(nonEmptyParams).length > 0 ? nonEmptyParams : undefined,
         workflowName || undefined,
       );
       setOpen(false);
@@ -99,7 +102,7 @@ export function RunWorkflowDialog({
         setWorkflowNameError('');
         const initial: Record<string, string> = {};
         parameters.forEach(param => {
-          initial[param.name] = param.value || param.default || '';
+          initial[param.name] = '';
         });
         setParamValues(initial);
       }
@@ -161,7 +164,7 @@ export function RunWorkflowDialog({
                         [param.name]: e.target.value,
                       }))
                     }
-                    placeholder={param.default || ''}
+                    placeholder={param.value || ''}
                     disabled={isSubmitting}
                   />
                 </div>
