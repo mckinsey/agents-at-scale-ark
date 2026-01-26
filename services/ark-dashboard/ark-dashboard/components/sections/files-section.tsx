@@ -2,6 +2,8 @@
 
 import copy from 'copy-to-clipboard';
 import { useAtom } from 'jotai';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import {
   ChevronLeft,
   Copy,
@@ -107,6 +109,7 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
     const [previewContent, setPreviewContent] = useState<string>('');
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
     const [previewIsImage, setPreviewIsImage] = useState(false);
+    const [previewIsPython, setPreviewIsPython] = useState(false);
     const [previewLoading, setPreviewLoading] = useState(false);
 
     const {
@@ -354,6 +357,7 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
       setPreviewContent('');
       setPreviewImageUrl(null);
       setPreviewIsImage(false);
+      setPreviewIsPython(false);
 
       try {
         const url = `${FILES_API_BASE_URL}/files/${encodeURIComponent(key)}/download`;
@@ -366,6 +370,7 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
         const blob = await response.blob();
         const fileExtension = key.split('.').pop()?.toLowerCase();
         const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(fileExtension || '');
+        const isPython = fileExtension === 'py';
 
         if (isImage) {
           const imageUrl = URL.createObjectURL(blob);
@@ -375,6 +380,7 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
           const text = await blob.text();
           setPreviewContent(text);
           setPreviewIsImage(false);
+          setPreviewIsPython(isPython);
         }
       } catch (error) {
         toast.error('Failed to Preview File', {
@@ -748,6 +754,18 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
                     alt={previewKey ? previewKey.split('/').pop() : 'Preview'}
                     className="max-h-full max-w-full object-contain"
                   />
+                </div>
+              ) : previewIsPython ? (
+                <div className="overflow-hidden rounded-md">
+                  <SyntaxHighlighter
+                    language="python"
+                    style={vscDarkPlus}
+                    customStyle={{
+                      margin: 0,
+                      borderRadius: '0.375rem',
+                    }}>
+                    {previewContent}
+                  </SyntaxHighlighter>
                 </div>
               ) : (
                 <pre className="whitespace-pre-wrap break-words font-mono text-sm">
