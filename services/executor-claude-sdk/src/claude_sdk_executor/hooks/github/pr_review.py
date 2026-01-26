@@ -52,7 +52,7 @@ class PRSubmitReviewHook(Hook):
                 error="GITHUB_TOKEN environment variable not set"
             )
 
-        repo_url = context.get("Repo")
+        repo_url = params.resolved_params.get("repo") or context.get("Repo")
         if not repo_url:
             return HookResult(
                 success=False,
@@ -82,6 +82,9 @@ class PRSubmitReviewHook(Hook):
         body = params.resolved_params.get("bodyTemplate", "")
         event = params.resolved_params.get("event", "COMMENT").upper()
         
+        logger.info(f"PR Review - event: {event}, body length: {len(body)}")
+        logger.debug(f"PR Review body (first 500 chars): {body[:500]}")
+        
         # Validate event type
         valid_events = ["APPROVE", "REQUEST_CHANGES", "COMMENT"]
         if event not in valid_events:
@@ -95,20 +98,32 @@ class PRSubmitReviewHook(Hook):
             repo = gh.get_repo(f"{owner}/{repo_name}")
             pr = repo.get_pull(pr_number)
             
-            review = pr.create_review(body=body, event=event)
+            actual_event = event
+            try:
+                review = pr.create_review(body=body, event=event)
+            except GithubException as e:
+                # Handle "can't request changes on your own PR" by falling back to COMMENT
+                if e.status == 422 and "your own pull request" in str(e.data).lower():
+                    logger.warning(f"Can't {event} on own PR, falling back to COMMENT")
+                    actual_event = "COMMENT"
+                    body_with_note = f"**Note:** Verdict was {event} but GitHub doesn't allow that on your own PR.\n\n{body}"
+                    review = pr.create_review(body=body_with_note, event="COMMENT")
+                else:
+                    raise
             
             return HookResult(
                 success=True,
-                output=f"Submitted {event} review on PR #{pr_number}",
+                output=f"Submitted {actual_event} review on PR #{pr_number}",
                 metadata={
                     "pr_number": pr_number,
                     "review_id": review.id,
-                    "event": event,
+                    "event": actual_event,
+                    "original_event": event,
                 }
             )
             
         except GithubException as e:
-            logger.error(f"GitHub API error: {e}")
+            logger.error(f"GitHub API error: {e.status}: {e.data}")
             return HookResult(
                 success=False,
                 error=f"GitHub API error: {e.data.get('message', str(e))}"

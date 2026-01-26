@@ -16,7 +16,7 @@ from .hooks.runner import HookRunner
 from .critic.inline import run_tests, evaluate_critic_response
 from .critic.subagent import SubagentCritic
 from .sdk.runner import ClaudeSdkRunner
-from .telemetry import TraceContext, TelemetrySpanManager, create_telemetry_hooks
+from .telemetry import TraceContext, TelemetrySpanManager, LifecycleSpanManager, create_telemetry_hooks
 
 logger = logging.getLogger(__name__)
 
@@ -136,11 +136,19 @@ class ClaudeSdkExecutor(BaseExecutor):
 
             # Step 4: Run pre-execute hooks (DETERMINISTIC)
             logger.info("Running pre-execute hooks")
-            await self.hook_runner.run(
-                profile.pre_execute,
-                context,
-                state
-            )
+            with LifecycleSpanManager(
+                trace_context=trace_context,
+                phase_name="pre-execute",
+                query_id=request.queryId,
+                agent_name=request.agent.name,
+            ) as pre_span_manager:
+                pre_results = await self.hook_runner.run(
+                    profile.pre_execute,
+                    context,
+                    state,
+                    phase_name="pre-execute",
+                )
+                pre_span_manager.record_hook_count(len(pre_results))
 
             # Step 5: Execute agent with critic loop (NON-DETERMINISTIC)
             logger.info("Executing agent with Claude SDK")
@@ -161,11 +169,19 @@ class ClaudeSdkExecutor(BaseExecutor):
 
             # Step 7: Run post-execute hooks (DETERMINISTIC)
             logger.info("Running post-execute hooks")
-            await self.hook_runner.run(
-                profile.post_execute,
-                context,
-                state
-            )
+            with LifecycleSpanManager(
+                trace_context=trace_context,
+                phase_name="post-execute",
+                query_id=request.queryId,
+                agent_name=request.agent.name,
+            ) as post_span_manager:
+                post_results = await self.hook_runner.run(
+                    profile.post_execute,
+                    context,
+                    state,
+                    phase_name="post-execute",
+                )
+                post_span_manager.record_hook_count(len(post_results))
 
             logger.info(f"Execution completed successfully for agent {request.agent.name}")
 
@@ -184,7 +200,19 @@ class ClaudeSdkExecutor(BaseExecutor):
             if profile and context:
                 try:
                     context.update_error(state.error)
-                    await self.hook_runner.run(profile.on_failure, context, state)
+                    with LifecycleSpanManager(
+                        trace_context=trace_context,
+                        phase_name="on-failure",
+                        query_id=request.queryId,
+                        agent_name=request.agent.name if request.agent else None,
+                    ) as failure_span_manager:
+                        failure_results = await self.hook_runner.run(
+                            profile.on_failure,
+                            context,
+                            state,
+                            phase_name="on-failure",
+                        )
+                        failure_span_manager.record_hook_count(len(failure_results))
                 except Exception as hook_err:
                     logger.error(f"Failure hook error: {hook_err}")
 

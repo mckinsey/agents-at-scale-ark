@@ -7,11 +7,12 @@ metadata:
   labels:
     sample: "true"
 spec:
-  agentRef:
+  target:
     name: feature-developer
+    type: agent
   
   # The task for the agent
-  prompt: |
+  input: |
     Implement the following feature:
     
     ## Feature: {{.FeatureName}}
@@ -43,3 +44,5 @@ spec:
     
     - name: TargetPath
       value: "src/auth"  # CHANGE THIS
+  
+  timeout: 10m

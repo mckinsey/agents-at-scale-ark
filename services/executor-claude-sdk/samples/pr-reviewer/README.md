@@ -1,72 +1,94 @@
 # PR Reviewer Sample
 
-An agent that reviews pull requests and submits structured feedback.
+An agent that reviews pull requests by analysing local git diffs. No GitHub API access is required during the review - the PR branch is checked out locally by the execution profile.
 
-## What It Does
+## How It Works
 
-1. Clones the repository
-2. Checks out the PR branch
-3. Reviews the code changes
-4. Submits a GitHub review with approval or requested changes
+```
+┌─────────────────────────────────────────┐
+│  preExecute (deterministic)             │
+│  1. Clone repository                    │
+│  2. Fetch PR branch                     │
+│  3. Checkout PR branch                  │
+└─────────────────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────┐
+│  Agent execution (non-deterministic)    │
+│  - git diff to see changes              │
+│  - Read files for context               │
+│  - Analyse and review                   │
+└─────────────────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────┐
+│  postExecute (deterministic)            │
+│  - Submit review to GitHub              │
+└─────────────────────────────────────────┘
+```
+
+The agent uses **local git commands** (`git diff`, `git log`) to analyse changes. This is more reliable than GitHub API calls and works in any git repository.
 
 ## Files
 
-- `agent.yaml` - The PR reviewer agent with code review expertise
-- `execution-profile.yaml` - Workflow for cloning, reviewing, and submitting feedback
-- `query.yaml` - Example query to review a specific PR
+| File | Description |
+|------|-------------|
+| `agent.yaml` | Agent definition with review guidelines |
+| `execution-profile.yaml` | Workspace setup and GitHub integration |
+| `query.yaml` | Example query (edit for your PR) |
 
 ## Usage
 
+1. Edit `query.yaml` with your repository and PR details:
+   ```yaml
+   parameters:
+     - name: RepoUrl
+       value: "git@github.com:your-org/your-repo.git"
+     - name: PrNumber
+       value: "42"
+     - name: PrBranch
+       value: "feature/your-feature"
+     - name: BaseBranch
+       value: "main"
+   ```
+
+2. Apply the resources:
 ```bash
-# Apply the resources
-kubectl apply -f . -n your-namespace
+   kubectl apply -f agent.yaml
+   kubectl apply -f execution-profile.yaml
+   kubectl apply -f query.yaml
+   ```
 
-# Edit query.yaml with your PR details, then apply
-kubectl apply -f query.yaml -n your-namespace
+3. The agent will:
+   - Clone your repo and checkout the PR branch
+   - Run `git diff` to see the changes
+   - Analyse the code and provide feedback
+   - Submit the review to GitHub (APPROVE or REQUEST_CHANGES)
 
-# Watch the result
-kubectl get queries -n your-namespace -w
-```
+## Tools Used
 
-## Configuration
+The agent has access to read-only tools:
 
-### Required Secrets
+| Tool | Purpose |
+|------|---------|
+| `Bash` | Run git commands (`git diff`, `git log`, etc.) |
+| `Read` | Read file contents for additional context |
+| `Glob` | Find related files (tests, configs) |
+| `Grep` | Search for patterns in the codebase |
 
-```bash
-# GitHub token with repo scope
-kubectl create secret generic github-creds \
-  --from-literal=token=$GITHUB_TOKEN
+## Customisation
 
-# SSH key for git clone
-kubectl create secret generic git-ssh \
-  --from-file=ssh-privatekey=$HOME/.ssh/id_ed25519
-```
+### Adjust Review Guidelines
 
-### Query Parameters
+Edit the `prompt` in `agent.yaml` to focus on specific concerns:
+- Security-focused reviews
+- Performance reviews
+- Style/convention reviews
 
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `repo_url` | Repository SSH URL | `git@github.com:org/repo.git` |
-| `pr_number` | Pull request number | `123` |
-| `pr_branch` | PR branch name | `feature/new-feature` |
-| `base_branch` | Target branch | `main` |
+### Skip GitHub Posting
 
-## Customization
+Remove the `postExecute` section from `execution-profile.yaml` if you just want the review output without posting to GitHub.
 
-### Review Focus
+### Add Custom Checks
 
-Edit the agent prompt in `agent.yaml` to focus on specific aspects:
-- Security vulnerabilities
-- Performance issues
-- Code style
-- Test coverage
-
-### Review Strictness
-
-Adjust the prompt to be more or less strict:
-```yaml
-prompt: |
-  You are a senior code reviewer. Be thorough but constructive.
-  Focus on: security, performance, maintainability.
-  Approve if the code is production-ready with minor suggestions.
-```
+Enable `Skill` in `allowedTools` to let the agent use `.claude/skills/` from the repository for project-specific review scripts.

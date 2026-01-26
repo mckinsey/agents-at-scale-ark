@@ -53,7 +53,7 @@ class PRCommentHook(Hook):
                 error="GITHUB_TOKEN environment variable not set"
             )
 
-        repo_url = context.get("Repo")
+        repo_url = params.resolved_params.get("repo") or context.get("Repo")
         if not repo_url:
             return HookResult(
                 success=False,

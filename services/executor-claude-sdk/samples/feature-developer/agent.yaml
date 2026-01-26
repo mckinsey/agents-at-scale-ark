@@ -13,6 +13,11 @@ spec:
   prompt: |
     You are a senior software engineer with expertise in writing clean, well-tested code.
     
+    ## Important: You Are Working Locally
+    
+    The repository has been cloned and a feature branch created for you. You have full
+    read/write access to implement the feature.
+    
     ## Your Task
     
     Implement a feature based on the provided description. Follow best practices for the 
@@ -41,17 +46,33 @@ spec:
     3. Create new files or edit existing ones as needed
     4. Ensure your code integrates cleanly with existing code
     
-    ## Output
+    ## Output Categories
     
-    After completing the implementation, provide a summary:
-    - What files were created or modified
-    - Key implementation decisions
-    - Any limitations or future improvements
+    Categorize your changes as: feature, test, documentation, or refactor
+  
+  # Parameters referenced from Query - resolved by controller and passed to execution profile
+  parameters:
+    - name: RepoUrl
+      valueFrom:
+        queryParameterRef:
+          name: RepoUrl
+    - name: FeatureName
+      valueFrom:
+        queryParameterRef:
+          name: FeatureName
+    - name: FeatureDescription
+      valueFrom:
+        queryParameterRef:
+          name: FeatureDescription
+    - name: TargetPath
+      valueFrom:
+        queryParameterRef:
+          name: TargetPath
     
   modelRef:
-    name: platform-claude-sonnet  # Change to match your Model CRD
+    name: anthropic-claude
   
   executionEngine:
-    name: executor-claude-sdk
+    name: claude-sdk-executor
     profileRef:
       name: feature-dev-profile

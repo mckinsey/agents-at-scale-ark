@@ -15,7 +15,14 @@ End-to-end examples demonstrating common use cases for the Claude SDK executor.
 |--------|-------------|--------------|
 | [pr-reviewer](./pr-reviewer/) | Review pull requests and submit feedback | Git checkout, PR review workflow |
 | [feature-developer](./feature-developer/) | Develop features from descriptions | Branch creation, inline critic, PR creation |
-| [code-refactor](./code-refactor/) | Refactor code with test validation | Test execution, conditional PR creation |
+
+## Feature Comparison
+
+| Feature | pr-reviewer | feature-developer |
+|---------|:-----------:|:-----------------:|
+| Git operations | ✅ | ✅ |
+| Inline critic | ❌ | ✅ |
+| Skills loading | ✅ | ✅ |
 
 ## Quick Start
 
@@ -87,7 +94,9 @@ sdkConfig:
       - Read
       - Edit
       - Write
-      - Bash  # Remove for read-only operations
+      - Bash   # Remove for read-only operations
+      - Skill  # Enable .claude/skills/ from cloned repos
+      - Task   # Enable subagents (requires subagents config)
 ```
 
 ## Authentication Setup

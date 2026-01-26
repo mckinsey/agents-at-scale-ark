@@ -8,7 +8,13 @@ traces are automatically exported to the same backend as the Ark controller
 
 from .setup import init_telemetry, get_tracer, shutdown_telemetry
 from .context import extract_trace_context, TraceContext
-from .hooks import create_telemetry_hooks, TelemetrySpanManager
+from .hooks import (
+    create_telemetry_hooks,
+    TelemetrySpanManager,
+    LifecycleSpanManager,
+    create_hook_span,
+    end_hook_span,
+)
 
 __all__ = [
     "init_telemetry",
@@ -18,4 +24,7 @@ __all__ = [
     "TraceContext",
     "create_telemetry_hooks",
     "TelemetrySpanManager",
+    "LifecycleSpanManager",
+    "create_hook_span",
+    "end_hook_span",
 ]

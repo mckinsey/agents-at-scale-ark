@@ -5,7 +5,7 @@ import operator
 import re
 from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
 
-from jinja2 import Template, Environment, StrictUndefined
+from jinja2 import Template, Environment, Undefined
 
 if TYPE_CHECKING:
     from ark_sdk import ExecutionEngineRequest
@@ -32,10 +32,11 @@ class TemplateContext:
 
     def __init__(self) -> None:
         self._variables: Dict[str, Any] = {}
-        self._env = Environment(undefined=StrictUndefined)
+        self._env = Environment(undefined=Undefined)
         # Register custom filters
         self._env.filters["truncate"] = self._truncate
         self._env.filters["slugify"] = self._slugify
+        self._env.filters["printf"] = self._printf
 
     @staticmethod
     def _truncate(value: Any, length: int = 50) -> str:
@@ -69,6 +70,29 @@ class TemplateContext:
         value = re.sub(r'[^\w\s-]', '', value)
         value = re.sub(r'[-\s]+', '-', value).strip('-')
         return value
+
+    @staticmethod
+    def _printf(value: Any, fmt: str) -> str:
+        """Format value using printf-style format string.
+        
+        Args:
+            value: Value to format
+            fmt: Printf-style format string (e.g., "%.0f%%")
+            
+        Returns:
+            Formatted string
+        """
+        try:
+            # Handle percentage format specially
+            if fmt.endswith("%%"):
+                # Convert 0.92 to 92%
+                fmt_clean = fmt[:-2]  # Remove trailing %%
+                if isinstance(value, (int, float)):
+                    result = fmt_clean % (value * 100)
+                    return f"{result}%"
+            return fmt % value
+        except Exception:
+            return str(value)
 
     @classmethod
     def from_request(cls, request: "ExecutionEngineRequest") -> "TemplateContext":
@@ -175,7 +199,10 @@ class TemplateContext:
         Args:
             state: ExecutionState with agent output and diff info
         """
-        self._variables["AgentOutput"] = getattr(state, "agent_output", "")
+        import json
+        
+        agent_output = getattr(state, "agent_output", "")
+        self._variables["AgentOutput"] = agent_output
         self._variables["Diff"] = getattr(state, "diff", "")
         self._variables["DiffSummary"] = getattr(state, "diff_summary", "")
         self._variables["HasChanges"] = getattr(state, "has_changes", False)
@@ -183,6 +210,54 @@ class TemplateContext:
         self._variables["CriticScore"] = getattr(state, "critic_score", 0.0)
         self._variables["CriticFeedback"] = getattr(state, "critic_feedback", "")
         self._variables["CriticApproved"] = getattr(state, "critic_score", 0.0) >= 1.0
+        
+        # Parse structured output - check telemetry first (preferred source)
+        structured_output = None
+        telemetry = getattr(state, "telemetry", None)
+        logger.info(f"update_results: telemetry={telemetry is not None}, telemetry.structured_output={getattr(telemetry, 'structured_output', None) if telemetry else None}")
+        if telemetry:
+            structured_output = getattr(telemetry, "structured_output", None)
+        if not structured_output:
+            structured_output = getattr(state, "structured_output", None)
+        
+        logger.info(f"update_results: structured_output={structured_output is not None}")
+        if structured_output:
+            self._variables["StructuredOutput"] = structured_output
+            logger.info(f"StructuredOutput set from telemetry: {list(structured_output.keys()) if isinstance(structured_output, dict) else type(structured_output)}")
+        elif agent_output:
+            # Try to parse agent output as JSON for structured output access
+            logger.info(f"Attempting to parse agent_output as JSON (len={len(agent_output)})")
+            logger.info(f"Agent output first 200 chars: {agent_output[:200]}")
+            
+            # Try to extract JSON from the output (it might be wrapped in markdown or text)
+            json_str = agent_output.strip()
+            
+            # Check if wrapped in markdown code block
+            if json_str.startswith("```"):
+                # Extract content between first ``` and last ```
+                lines = json_str.split('\n')
+                if len(lines) > 2:
+                    # Skip first line (```json) and last line (```)
+                    start_idx = 1
+                    end_idx = len(lines) - 1
+                    # Find the closing ```
+                    for i in range(len(lines) - 1, 0, -1):
+                        if lines[i].strip().startswith("```"):
+                            end_idx = i
+                            break
+                    json_str = '\n'.join(lines[start_idx:end_idx])
+                    logger.info(f"Extracted JSON from markdown code block")
+            
+            try:
+                parsed = json.loads(json_str)
+                if isinstance(parsed, dict):
+                    self._variables["StructuredOutput"] = parsed
+                    logger.info(f"Parsed structured output with keys: {list(parsed.keys())}")
+                else:
+                    logger.warning(f"Agent output is JSON but not a dict: {type(parsed)}")
+            except json.JSONDecodeError as e:
+                logger.warning(f"Agent output is not valid JSON: {e}")
+                logger.info(f"Agent output (first 500 chars): {agent_output[:500]}")
 
     def update_error(self, error: str) -> None:
         """Update context with error information.
@@ -197,6 +272,8 @@ class TemplateContext:
         
         Supports both Go-style {{.VarName}} and Jinja2-style {{ VarName }}.
         Also supports Go-style filters: {{.VarName | filter arg}}
+        Also supports nested access: {{.StructuredOutput.verdict}}
+        Also supports Go-style control structures: {{range}}, {{if}}, {{end}}
         
         Args:
             template_str: String with template variables
@@ -207,27 +284,161 @@ class TemplateContext:
         if not template_str:
             return template_str
         
-        # Convert Go-style {{.VarName | filter arg}} to Jinja2 {{ VarName | filter(arg) }}
+        jinja_template = template_str
+        
+        # IMPORTANT: Convert {{end}} tags FIRST before other conversions
+        # This tracks the context (range vs if) to use correct closing tag
+        jinja_template = self._convert_go_end_tags(jinja_template)
+        
+        # Convert Go-style control structures to Jinja2
+        # {{range .Items}} -> {% for item in Items %}
         jinja_template = re.sub(
-            r'\{\{\.(\w+)\s*\|\s*(\w+)\s+(\d+)\}\}',
-            r'{{ \1 | \2(\3) }}',
-            template_str
+            r'\{\{range\s+\.(\w+(?:\.\w+)*)\}\}',
+            r'{% for item in \1 %}',
+            jinja_template
         )
-        # Convert Go-style {{.VarName | filter}} (no arg) to Jinja2 {{ VarName | filter }}
+        
+        # {{if .Condition}} -> {% if Condition %} or {% if item.Condition %} inside loops
+        def convert_if_var(match):
+            var = match.group(1)
+            if '.' not in var and '{% for item in' in jinja_template[:match.start()]:
+                return f'{{% if item.{var} %}}'
+            return f'{{% if {var} %}}'
+        
         jinja_template = re.sub(
-            r'\{\{\.(\w+)\s*\|\s*(\w+)\}\}',
+            r'\{\{if\s+\.(\w+(?:\.\w+)*)\}\}',
+            convert_if_var,
+            jinja_template
+        )
+        # {{if not .Condition}} -> {% if not Condition %}
+        jinja_template = re.sub(
+            r'\{\{if\s+not\s+\.(\w+(?:\.\w+)*)\}\}',
+            r'{% if not \1 %}',
+            jinja_template
+        )
+        # {{if eq .var "value"}} -> {% if var == "value" %} or {% if item.var == "value" %} inside loops
+        # We'll add item. prefix for single-word vars when inside a for loop
+        def convert_if_eq(match):
+            var = match.group(1)
+            value = match.group(2)
+            # Single word var inside a loop should use item. prefix
+            if '.' not in var and '{% for item in' in jinja_template[:match.start()]:
+                return f'{{% if item.{var} == "{value}" %}}'
+            return f'{{% if {var} == "{value}" %}}'
+        
+        jinja_template = re.sub(
+            r'\{\{if\s+eq\s+\.(\w+(?:\.\w+)*)\s+"([^"]+)"\}\}',
+            convert_if_eq,
+            jinja_template
+        )
+        # {{else if eq .var "value"}} -> {% elif var == "value" %} or {% elif item.var == "value" %}
+        def convert_elif_eq(match):
+            var = match.group(1)
+            value = match.group(2)
+            if '.' not in var and '{% for item in' in jinja_template[:match.start()]:
+                return f'{{% elif item.{var} == "{value}" %}}'
+            return f'{{% elif {var} == "{value}" %}}'
+        
+        jinja_template = re.sub(
+            r'\{\{else\s+if\s+eq\s+\.(\w+(?:\.\w+)*)\s+"([^"]+)"\}\}',
+            convert_elif_eq,
+            jinja_template
+        )
+        # {{else}} -> {% else %}
+        jinja_template = re.sub(r'\{\{else\}\}', r'{% else %}', jinja_template)
+        
+        # {{ne .var "value"}} function for conditions
+        jinja_template = re.sub(
+            r'\{\{ne\s+\.(\w+(?:\.\w+)*)\s+"([^"]+)"\}\}',
+            r'{{ \1 != "\2" }}',
+            jinja_template
+        )
+        
+        # Inside range loops, {{.}} refers to the current item
+        jinja_template = re.sub(r'\{\{\.\}\}', r'{{ item }}', jinja_template)
+        # Inside range loops, {{.field}} refers to item.field
+        jinja_template = re.sub(
+            r'\{\{\.(\w+)\}\}(?=.*\{% endfor %\})',
+            r'{{ item.\1 }}',
+            jinja_template,
+            flags=re.DOTALL
+        )
+        
+        # Convert Go-style {{.VarName.nested | filter arg}} to Jinja2 {{ VarName.nested | filter(arg) }}
+        jinja_template = re.sub(
+            r'\{\{\.(\w+(?:\.\w+)*)\s*\|\s*(\w+)\s+([^}]+)\}\}',
+            r'{{ \1 | \2(\3) }}',
+            jinja_template
+        )
+        # Convert Go-style {{.VarName.nested | filter}} (no arg) to Jinja2 {{ VarName.nested | filter }}
+        jinja_template = re.sub(
+            r'\{\{\.(\w+(?:\.\w+)*)\s*\|\s*(\w+)\}\}',
             r'{{ \1 | \2 }}',
             jinja_template
         )
-        # Convert Go-style {{.VarName}} to Jinja2 {{ VarName }}
-        jinja_template = re.sub(r'\{\{\.(\w+)\}\}', r'{{ \1 }}', jinja_template)
+        # Convert Go-style {{.VarName.nested}} to Jinja2 {{ VarName.nested }}
+        jinja_template = re.sub(r'\{\{\.(\w+(?:\.\w+)*)\}\}', r'{{ \1 }}', jinja_template)
+        
+        # Debug logging
+        if 'StructuredOutput' in template_str and len(template_str) < 100:
+            logger.info(f"Template conversion: {template_str!r} -> {jinja_template!r}")
+            logger.info(f"Available variables: {list(self._variables.keys())}")
         
         try:
             template = self._env.from_string(jinja_template)
-            return template.render(**self._variables)
+            result = template.render(**self._variables)
+            if 'StructuredOutput' in template_str and len(template_str) < 100:
+                logger.info(f"Template result: {result!r}")
+            return result
         except Exception as e:
             logger.warning(f"Template resolution failed: {e}")
+            logger.warning(f"Template was: {jinja_template!r}")
             return template_str
+    
+    def _convert_go_end_tags(self, template: str) -> str:
+        """Convert Go-style {{end}} tags to appropriate Jinja2 closing tags.
+        
+        Tracks the context (range vs if) to use correct closing tag.
+        """
+        result = []
+        end_stack = []
+        
+        i = 0
+        while i < len(template):
+            # Check for range start
+            if template[i:].startswith('{{range'):
+                end_stack.append('for')
+                # Find end of tag
+                end_idx = template.find('}}', i)
+                if end_idx != -1:
+                    result.append(template[i:end_idx + 2])
+                    i = end_idx + 2
+                    continue
+            # Check for if start
+            elif template[i:].startswith('{{if'):
+                end_stack.append('if')
+                end_idx = template.find('}}', i)
+                if end_idx != -1:
+                    result.append(template[i:end_idx + 2])
+                    i = end_idx + 2
+                    continue
+            # Check for end tag
+            elif template[i:].startswith('{{end}}'):
+                if end_stack:
+                    tag_type = end_stack.pop()
+                    if tag_type == 'for':
+                        result.append('{% endfor %}')
+                    else:
+                        result.append('{% endif %}')
+                else:
+                    result.append('{% endif %}')  # Default
+                i += 7
+                continue
+            
+            result.append(template[i])
+            i += 1
+        
+        return ''.join(result)
 
     def evaluate_condition(self, condition: str) -> bool:
         """Evaluate a condition template safely.

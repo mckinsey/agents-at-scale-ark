@@ -261,3 +261,153 @@ class TelemetrySpanManager:
                 self._span.set_attribute("input.value", input_value)
             if output_value is not None:
                 self._span.set_attribute("output.value", output_value)
+
+
+class LifecycleSpanManager:
+    """Context manager for lifecycle phase spans (pre-execute, post-execute, on-failure).
+    
+    Creates a parent span for a lifecycle phase that contains all hook spans as children.
+    This ensures lifecycle hooks appear in the same Langfuse trace as Claude SDK execution.
+    
+    Usage:
+        with LifecycleSpanManager(trace_context, "pre-execute") as manager:
+            # Run hooks - each hook creates a child span
+            pass
+    """
+    
+    def __init__(
+        self,
+        trace_context: Optional[TraceContext] = None,
+        phase_name: str = "lifecycle",
+        query_id: Optional[str] = None,
+        agent_name: Optional[str] = None,
+    ):
+        self.trace_context = trace_context
+        self.phase_name = phase_name
+        self.query_id = query_id
+        self.agent_name = agent_name
+        self._span: Optional[Span] = None
+        self._token: Optional[Any] = None
+        self._span_token: Optional[Any] = None
+    
+    def __enter__(self) -> "LifecycleSpanManager":
+        tracer = get_tracer()
+        
+        # Build attributes
+        attributes = {
+            "lifecycle.phase": self.phase_name,
+        }
+        if self.query_id:
+            attributes["query.id"] = self.query_id
+        if self.agent_name:
+            attributes["agent.name"] = self.agent_name
+        if self.trace_context and self.trace_context.session_id:
+            attributes["session.id"] = self.trace_context.session_id
+        
+        # Attach to parent context if available
+        parent_context = self.trace_context.context if self.trace_context else None
+        
+        if parent_context:
+            self._token = otel_context.attach(parent_context)
+        
+        self._span = tracer.start_span(
+            name=f"lifecycle.{self.phase_name}",
+            attributes=attributes,
+        )
+        
+        # Make this span the current span so hook spans are children
+        self._span_token = otel_context.attach(
+            trace.set_span_in_context(self._span)
+        )
+        
+        return self
+    
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        if self._span:
+            if exc_type:
+                self._span.set_status(Status(StatusCode.ERROR, str(exc_val)))
+                self._span.record_exception(exc_val)
+            else:
+                self._span.set_status(Status(StatusCode.OK))
+            self._span.end()
+        
+        # Detach contexts in reverse order
+        if self._span_token:
+            otel_context.detach(self._span_token)
+        if self._token:
+            otel_context.detach(self._token)
+    
+    def record_hook_count(self, count: int) -> None:
+        """Record the number of hooks that were executed.
+        
+        Args:
+            count: Number of hooks executed in this phase
+        """
+        if self._span:
+            self._span.set_attribute("lifecycle.hook_count", count)
+
+
+def create_hook_span(
+    hook_name: str,
+    action: str,
+    phase: str,
+    params: Optional[Dict[str, Any]] = None,
+) -> Span:
+    """Create a span for an individual lifecycle hook.
+    
+    The span should be ended by the caller after the hook completes.
+    
+    Args:
+        hook_name: The hook name from profile (e.g., "clone-repo")
+        action: The action type (e.g., "git_clone")
+        phase: Which lifecycle phase ("pre-execute", "post-execute", "on-failure")
+        params: Resolved parameters (will be truncated)
+        
+    Returns:
+        The created span (caller must call span.end())
+    """
+    tracer = get_tracer()
+    
+    attributes = {
+        "hook.name": hook_name,
+        "hook.action": action,
+        "hook.phase": phase,
+    }
+    
+    if params:
+        attributes["hook.params"] = _truncate_for_attribute(str(params))
+    
+    span = tracer.start_span(
+        name=f"hook.{action}",
+        attributes=attributes,
+    )
+    
+    return span
+
+
+def end_hook_span(
+    span: Span,
+    success: bool,
+    error: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    """End a hook span and record its result.
+    
+    Args:
+        span: The span to end
+        success: Whether the hook succeeded
+        error: Error message if failed
+        metadata: Additional metadata from hook result
+    """
+    span.set_attribute("hook.success", success)
+    
+    if error:
+        span.set_attribute("hook.error", _truncate_for_attribute(error))
+        span.set_status(Status(StatusCode.ERROR, error))
+    else:
+        span.set_status(Status(StatusCode.OK))
+    
+    if metadata:
+        span.set_attribute("hook.metadata", _truncate_for_attribute(str(metadata)))
+    
+    span.end()

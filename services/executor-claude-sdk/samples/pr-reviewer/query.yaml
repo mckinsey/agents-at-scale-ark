@@ -3,31 +3,35 @@
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: review-pr-123
+  name: review-my-pr
   labels:
     sample: "true"
 spec:
-  agentRef:
+  # Target agent
+  target:
     name: pr-reviewer
+    type: agent
   
   # The task for the agent
-  prompt: |
-    Review PR #{{.PrNumber}} in the repository.
+  input: |
+    Review the changes in this PR.
     
-    This PR is from branch `{{.PrBranch}}` targeting `{{.BaseBranch}}`.
+    The PR branch `{{.PrBranch}}` has been checked out locally, targeting `{{.BaseBranch}}`.
     
-    Please provide a thorough code review following your guidelines.
+    Use git diff commands to see the changes, then provide a thorough code review.
   
   # Parameters passed to the agent and profile templates
   parameters:
     - name: RepoUrl
-      value: "git@github.com:example-org/example-repo.git"  # CHANGE THIS
+      value: "git@github.com:your-org/your-repo.git"  # CHANGE THIS
     
     - name: PrNumber
-      value: "123"  # CHANGE THIS
+      value: "42"  # CHANGE THIS (used for posting review, set to "0" for local-only)
     
     - name: PrBranch
-      value: "feature/new-feature"  # CHANGE THIS
+      value: "feature/your-feature"  # CHANGE THIS
     
     - name: BaseBranch
       value: "main"
+  
+  timeout: 10m

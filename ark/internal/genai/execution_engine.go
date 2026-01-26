@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -457,6 +458,21 @@ func buildParameters(agentParams []arkv1alpha1.Parameter) []Parameter {
 		}
 	}
 	return parameters
+}
+
+// convertResolvedParameters converts a map of resolved parameter values to the Parameter slice
+// format expected by execution engines. This includes all parameters after valueFrom resolution.
+// Parameters are sorted by name for deterministic ordering.
+func convertResolvedParameters(resolved map[string]string) []Parameter {
+	if len(resolved) == 0 {
+		return nil
+	}
+	params := make([]Parameter, 0, len(resolved))
+	for name, value := range resolved {
+		params = append(params, Parameter{Name: name, Value: value})
+	}
+	sort.Slice(params, func(i, j int) bool { return params[i].Name < params[j].Name })
+	return params
 }
 
 func buildModelConfig(model *Model) map[string]any {

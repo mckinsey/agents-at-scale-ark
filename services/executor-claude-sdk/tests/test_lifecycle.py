@@ -519,13 +519,13 @@ class TestExecutorLifecycle:
         states_captured = []
         
         original_run = executor.hook_runner.run
-        async def capture_state(hooks, context, state):
+        async def capture_state(hooks, context, state, **kwargs):
             states_captured.append({
                 "workspace": state.workspace_path,
                 "has_output": bool(state.agent_output),
                 "hook_count": len(hooks)
             })
-            return await original_run(hooks, context, state)
+            return await original_run(hooks, context, state, **kwargs)
         
         executor.hook_runner.run = capture_state
         
@@ -613,7 +613,7 @@ class TestExecutorLifecycle:
         
         # Patch hook runner to capture resolved params
         original_run = executor.hook_runner.run
-        async def capture_params(hooks, context, state):
+        async def capture_params(hooks, context, state, **kwargs):
             for hook in hooks:
                 resolved = {}
                 for key, value in hook.params.items():
@@ -667,7 +667,7 @@ class TestErrorHandling:
         
         # Track failure hooks
         original_run = executor.hook_runner.run
-        async def track_failure(hooks, context, state):
+        async def track_failure(hooks, context, state, **kwargs):
             if hooks and state.error:
                 failure_hook_called.append(True)
             return []

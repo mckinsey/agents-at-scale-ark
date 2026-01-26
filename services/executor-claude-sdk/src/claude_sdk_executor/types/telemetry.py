@@ -23,6 +23,9 @@ class ExecutionTelemetry:
     total_cost_usd: Optional[float] = None # Total cost in USD
     usage: Optional[Dict[str, Any]] = None # Token usage breakdown
 
+    # Structured output from JSON Schema validation
+    structured_output: Optional[Dict[str, Any]] = None
+
     # Error tracking
     is_error: bool = False
     error_message: Optional[str] = None
@@ -51,6 +54,8 @@ class ExecutionTelemetry:
             self.total_cost_usd = (self.total_cost_usd or 0) + other.total_cost_usd
         if other.usage:
             self.usage = other.usage  # Take latest usage (includes totals)
+        if other.structured_output:
+            self.structured_output = other.structured_output
         if other.is_error:
             self.is_error = True
             self.error_message = other.error_message
@@ -66,6 +71,7 @@ class ExecutionTelemetry:
             "num_turns": self.num_turns,
             "total_cost_usd": self.total_cost_usd,
             "usage": self.usage,
+            "structured_output": self.structured_output,
             "is_error": self.is_error,
             "error_message": self.error_message,
             "metadata": self.metadata,
