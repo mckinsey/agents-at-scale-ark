@@ -3,9 +3,7 @@
 import copy from 'copy-to-clipboard';
 import { useAtom } from 'jotai';
 import {
-  ChevronDown,
   ChevronLeft,
-  ChevronRight,
   Copy,
   Download,
   Eye,
@@ -22,12 +20,11 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { toast } from 'sonner';
 
 import { filesBrowserPrefixAtom } from '@/atoms/internal-states';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
+import { FilePreviewDialog } from '@/components/file-preview/file-preview-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -54,13 +51,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
-import { FILES_API_BASE_URL } from '@/lib/api/files-client';
+import { useFilePreview } from '@/hooks/use-file-preview';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { filesService } from '@/lib/services/files';
 import {
@@ -82,303 +73,9 @@ function formatBytes(bytes: number): string {
   return `${size.toFixed(2)} ${units[unitIndex]}`;
 }
 
-function getLanguageFromExtension(
-  extension: string | undefined,
-): string | null {
-  if (!extension) return null;
-
-  const languageMap: Record<string, string> = {
-    // JavaScript/TypeScript
-    js: 'javascript',
-    jsx: 'jsx',
-    ts: 'typescript',
-    tsx: 'tsx',
-    mjs: 'javascript',
-    cjs: 'javascript',
-
-    // Web
-    html: 'html',
-    htm: 'html',
-    css: 'css',
-    scss: 'scss',
-    sass: 'sass',
-    less: 'less',
-
-    // Python
-    py: 'python',
-    pyw: 'python',
-
-    // Java/Kotlin
-    java: 'java',
-    kt: 'kotlin',
-    kts: 'kotlin',
-
-    // C/C++/C#
-    c: 'c',
-    h: 'c',
-    cpp: 'cpp',
-    cc: 'cpp',
-    cxx: 'cpp',
-    hpp: 'cpp',
-    cs: 'csharp',
-
-    // Go
-    go: 'go',
-
-    // Rust
-    rs: 'rust',
-
-    // Ruby
-    rb: 'ruby',
-
-    // PHP
-    php: 'php',
-
-    // Shell
-    sh: 'bash',
-    bash: 'bash',
-    zsh: 'bash',
-    fish: 'bash',
-
-    // Configuration
-    json: 'json',
-    yaml: 'yaml',
-    yml: 'yaml',
-    toml: 'toml',
-    ini: 'ini',
-    xml: 'xml',
-
-    // SQL
-    sql: 'sql',
-
-    // Markdown
-    md: 'markdown',
-    mdx: 'markdown',
-
-    // Docker
-    dockerfile: 'dockerfile',
-
-    // Make
-    makefile: 'makefile',
-    mk: 'makefile',
-
-    // Swift
-    swift: 'swift',
-
-    // Objective-C
-    m: 'objectivec',
-    mm: 'objectivec',
-
-    // Lua
-    lua: 'lua',
-
-    // Perl
-    pl: 'perl',
-    pm: 'perl',
-
-    // R
-    r: 'r',
-
-    // Scala
-    scala: 'scala',
-    sc: 'scala',
-
-    // Clojure
-    clj: 'clojure',
-    cljs: 'clojure',
-
-    // Haskell
-    hs: 'haskell',
-
-    // Elixir
-    ex: 'elixir',
-    exs: 'elixir',
-
-    // Dart
-    dart: 'dart',
-
-    // Julia
-    jl: 'julia',
-
-    // Vim
-    vim: 'vim',
-
-    // GraphQL
-    graphql: 'graphql',
-    gql: 'graphql',
-
-    // Protobuf
-    proto: 'protobuf',
-  };
-
-  return languageMap[extension.toLowerCase()] || null;
-}
-
 function parseBreadcrumbs(prefix: string): string[] {
   if (!prefix) return [];
   return prefix.split('/').filter(Boolean);
-}
-
-interface JsonTreeNodeProps {
-  data: unknown;
-  path: string;
-  keyName?: string;
-  level: number;
-  expandedPaths: Set<string>;
-  onToggle: (path: string) => void;
-}
-
-function JsonTreeNode({
-  data,
-  path,
-  keyName,
-  level,
-  expandedPaths,
-  onToggle,
-}: JsonTreeNodeProps) {
-  const isExpanded = expandedPaths.has(path);
-  const indent = level * 16;
-
-  const toggle = () => {
-    onToggle(path);
-  };
-
-  if (data === null) {
-    return (
-      <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
-        {keyName && (
-          <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>
-        )}
-        <span className="text-gray-500 dark:text-gray-400">null</span>
-      </div>
-    );
-  }
-
-  if (typeof data === 'string') {
-    return (
-      <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
-        {keyName && (
-          <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>
-        )}
-        <span className="text-green-600 dark:text-green-400">
-          &quot;{data}&quot;
-        </span>
-      </div>
-    );
-  }
-
-  if (typeof data === 'number') {
-    return (
-      <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
-        {keyName && (
-          <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>
-        )}
-        <span className="text-purple-600 dark:text-purple-400">{data}</span>
-      </div>
-    );
-  }
-
-  if (typeof data === 'boolean') {
-    return (
-      <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
-        {keyName && (
-          <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>
-        )}
-        <span className="text-orange-600 dark:text-orange-400">
-          {String(data)}
-        </span>
-      </div>
-    );
-  }
-
-  if (Array.isArray(data)) {
-    return (
-      <div>
-        <div
-          style={{ paddingLeft: `${indent}px` }}
-          className="flex cursor-pointer items-center gap-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-800"
-          onClick={toggle}>
-          {isExpanded ? (
-            <ChevronDown className="h-3 w-3" />
-          ) : (
-            <ChevronRight className="h-3 w-3" />
-          )}
-          {keyName && (
-            <span className="text-blue-600 dark:text-blue-400">
-              {keyName}:{' '}
-            </span>
-          )}
-          <span className="text-gray-600 dark:text-gray-400">
-            [{data.length}]
-          </span>
-        </div>
-        {isExpanded && (
-          <div>
-            {data.map((item, index) => (
-              <JsonTreeNode
-                key={index}
-                data={item}
-                path={`${path}[${index}]`}
-                level={level + 1}
-                expandedPaths={expandedPaths}
-                onToggle={onToggle}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (typeof data === 'object') {
-    const entries = Object.entries(data);
-    return (
-      <div>
-        <div
-          style={{ paddingLeft: `${indent}px` }}
-          className="flex cursor-pointer items-center gap-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-800"
-          onClick={toggle}>
-          {isExpanded ? (
-            <ChevronDown className="h-3 w-3" />
-          ) : (
-            <ChevronRight className="h-3 w-3" />
-          )}
-          {keyName && (
-            <span className="text-blue-600 dark:text-blue-400">
-              {keyName}:{' '}
-            </span>
-          )}
-          <span className="text-gray-600 dark:text-gray-400">
-            {'{'} {entries.length} {entries.length === 1 ? 'key' : 'keys'} {'}'}
-          </span>
-        </div>
-        {isExpanded && (
-          <div>
-            {entries.map(([key, value]) => (
-              <JsonTreeNode
-                key={key}
-                data={value}
-                path={`${path}.${key}`}
-                keyName={key}
-                level={level + 1}
-                expandedPaths={expandedPaths}
-                onToggle={onToggle}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
-      {keyName && (
-        <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>
-      )}
-      <span>{String(data)}</span>
-    </div>
-  );
 }
 
 export const FilesSection = forwardRef<{ refresh: () => void }>(
@@ -400,16 +97,21 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
     const [filename, setFilename] = useState('');
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [previewOpen, setPreviewOpen] = useState(false);
-    const [previewKey, setPreviewKey] = useState<string | null>(null);
-    const [previewContent, setPreviewContent] = useState<string>('');
-    const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
-    const [previewIsImage, setPreviewIsImage] = useState(false);
-    const [previewLanguage, setPreviewLanguage] = useState<string | null>(null);
-    const [previewJsonData, setPreviewJsonData] = useState<unknown>(null);
-    const [previewIsJson, setPreviewIsJson] = useState(false);
-    const [previewLoading, setPreviewLoading] = useState(false);
-    const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+
+    // Use the file preview hook
+    const {
+      previewOpen,
+      previewKey,
+      previewContent,
+      previewImageUrl,
+      previewIsImage,
+      previewLanguage,
+      previewJsonData,
+      previewIsJson,
+      previewLoading,
+      handlePreview,
+      setPreviewOpen,
+    } = useFilePreview();
 
     const {
       data: listFilesData,
@@ -647,80 +349,6 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
       toast.success('Path Copied', {
         description: `Copied "${path}" to clipboard`,
       });
-    };
-
-    const handlePreview = async (key: string) => {
-      setPreviewKey(key);
-      setPreviewOpen(true);
-      setPreviewLoading(true);
-      setPreviewContent('');
-      setPreviewImageUrl(null);
-      setPreviewIsImage(false);
-      setPreviewLanguage(null);
-      setPreviewJsonData(null);
-      setPreviewIsJson(false);
-      setExpandedPaths(new Set());
-
-      try {
-        const url = `${FILES_API_BASE_URL}/files/${encodeURIComponent(key)}/download`;
-        const response = await fetch(url);
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch file: ${response.statusText}`);
-        }
-
-        const blob = await response.blob();
-        const fileExtension = key.split('.').pop()?.toLowerCase();
-        const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(
-          fileExtension || '',
-        );
-        const isSvg = fileExtension === 'svg';
-        const isJson = fileExtension === 'json';
-        const language = getLanguageFromExtension(fileExtension);
-
-        if (isImage || isSvg) {
-          // For SVG files, we need to handle them specially since they're text-based
-          if (isSvg) {
-            const text = await blob.text();
-            // Create a blob with the correct MIME type for SVG
-            const svgBlob = new Blob([text], { type: 'image/svg+xml' });
-            const imageUrl = URL.createObjectURL(svgBlob);
-            setPreviewImageUrl(imageUrl);
-            setPreviewIsImage(true);
-          } else {
-            const imageUrl = URL.createObjectURL(blob);
-            setPreviewImageUrl(imageUrl);
-            setPreviewIsImage(true);
-          }
-        } else {
-          const text = await blob.text();
-          setPreviewContent(text);
-          setPreviewIsImage(false);
-          setPreviewLanguage(language);
-
-          if (isJson) {
-            try {
-              const jsonData = JSON.parse(text);
-              setPreviewJsonData(jsonData);
-              setPreviewIsJson(true);
-            } catch {
-              setPreviewIsJson(false);
-            }
-          } else {
-            setPreviewIsJson(false);
-          }
-        }
-      } catch (error) {
-        toast.error('Failed to Preview File', {
-          description:
-            error instanceof Error
-              ? error.message
-              : 'An unexpected error occurred',
-        });
-        setPreviewOpen(false);
-      } finally {
-        setPreviewLoading(false);
-      }
     };
 
     const handleLoadMore = async () => {
@@ -1055,78 +683,18 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
           variant="destructive"
         />
 
-        <Sheet
+        <FilePreviewDialog
           open={previewOpen}
-          onOpenChange={open => {
-            setPreviewOpen(open);
-            if (!open && previewImageUrl) {
-              URL.revokeObjectURL(previewImageUrl);
-              setPreviewImageUrl(null);
-            }
-          }}>
-          <SheetContent
-            side="right"
-            className="flex w-full flex-col sm:max-w-2xl">
-            <SheetHeader>
-              <SheetTitle>
-                {previewKey ? previewKey.split('/').pop() : 'Preview'}
-              </SheetTitle>
-            </SheetHeader>
-            <div className="mt-4 flex-1 overflow-y-auto">
-              {previewLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <p className="text-muted-foreground">
-                    Loading file content...
-                  </p>
-                </div>
-              ) : previewIsImage && previewImageUrl ? (
-                <div className="flex items-center justify-center">
-                  <img
-                    src={previewImageUrl}
-                    alt={previewKey ? previewKey.split('/').pop() : 'Preview'}
-                    className="max-h-full max-w-full object-contain"
-                  />
-                </div>
-              ) : previewIsJson && previewJsonData !== null ? (
-                <div className="rounded-md border border-gray-200 bg-white p-4 font-mono text-sm dark:border-gray-800 dark:bg-gray-900">
-                  <JsonTreeNode
-                    data={previewJsonData}
-                    path="root"
-                    level={0}
-                    expandedPaths={expandedPaths}
-                    onToggle={path => {
-                      setExpandedPaths(prev => {
-                        const next = new Set(prev);
-                        if (next.has(path)) {
-                          next.delete(path);
-                        } else {
-                          next.add(path);
-                        }
-                        return next;
-                      });
-                    }}
-                  />
-                </div>
-              ) : previewLanguage ? (
-                <div className="overflow-hidden rounded-md">
-                  <SyntaxHighlighter
-                    language={previewLanguage}
-                    style={vscDarkPlus}
-                    customStyle={{
-                      margin: 0,
-                      borderRadius: '0.375rem',
-                    }}>
-                    {previewContent}
-                  </SyntaxHighlighter>
-                </div>
-              ) : (
-                <pre className="font-mono text-sm break-words whitespace-pre-wrap">
-                  {previewContent}
-                </pre>
-              )}
-            </div>
-          </SheetContent>
-        </Sheet>
+          onOpenChange={setPreviewOpen}
+          fileName={previewKey ? previewKey.split('/').pop() : null}
+          loading={previewLoading}
+          isImage={previewIsImage}
+          imageUrl={previewImageUrl}
+          isJson={previewIsJson}
+          jsonData={previewJsonData}
+          language={previewLanguage}
+          content={previewContent}
+        />
       </div>
     );
   },
