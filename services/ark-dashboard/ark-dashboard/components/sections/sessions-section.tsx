@@ -75,6 +75,7 @@ interface WorkflowStepDetail {
   workflowName?: string;
   nodeId?: string;
   namespace?: string;
+  podName?: string;
 }
 
 interface TeamStepDetail {
@@ -218,7 +219,6 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
   const [logs, setLogs] = useState<string>('');
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [logsError, setLogsError] = useState<string | null>(null);
-  const [showLogs, setShowLogs] = useState(true);
   
   const shouldFetchLogs = detail.workflowName && detail.nodeId && detail.namespace;
 
@@ -232,11 +232,30 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
       setLogsError(null);
       try {
         const { workflowsService } = await import('@/lib/services/workflows');
-        const logData = await workflowsService.getWorkflowLogs(
-          detail.workflowName!,
-          detail.nodeId!,
-          detail.namespace!,
-        );
+        let logData = '';
+        
+        // Try to get logs from pod first (more reliable for recent workflows)
+        if (detail.podName) {
+          try {
+            logData = await workflowsService.getPodLogs(
+              detail.podName,
+              detail.namespace!,
+            );
+          } catch (podError) {
+            // If pod logs fail, try archived workflow logs
+            console.debug('Pod logs not available, trying archived logs');
+          }
+        }
+        
+        // If pod logs didn't work or no podName, try archived workflow logs
+        if (!logData) {
+          logData = await workflowsService.getWorkflowLogs(
+            detail.workflowName!,
+            detail.nodeId!,
+            detail.namespace!,
+          );
+        }
+        
         if (!cancelled) {
           setLogs(logData);
         }
@@ -244,7 +263,7 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
         if (!cancelled) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           if (errorMessage.includes('404')) {
-            setShowLogs(false);
+            setLogsError('Logs not available (pod terminated and logs not archived)');
           } else {
             setLogsError('Failed to load logs');
           }
@@ -261,7 +280,7 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
     return () => {
       cancelled = true;
     };
-  }, [detail.workflowName, detail.nodeId, detail.namespace, shouldFetchLogs]);
+  }, [detail.workflowName, detail.nodeId, detail.namespace, detail.podName, shouldFetchLogs]);
   return (
     <div className="bg-muted/30 mt-2 space-y-3 rounded-md border p-3 text-sm">
       {detail.image && (
@@ -335,7 +354,7 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
         </div>
       )}
 
-      {shouldFetchLogs && showLogs && (
+      {shouldFetchLogs && (
         <div className="flex items-start gap-2">
           <Terminal className="text-muted-foreground mt-0.5 h-4 w-4" />
           <div className="flex-1">
@@ -343,17 +362,33 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
             <div className="bg-black mt-1 max-h-64 overflow-auto rounded border p-3">
               {loadingLogs && (
                 <div className="flex items-center gap-2">
-                  <RefreshCw className="h-3 w-3 animate-spin" />
-                  <span className="font-mono text-xs">Loading logs...</span>
+                  <RefreshCw className="h-3 w-3 animate-spin text-gray-400" />
+                  <span className="font-mono text-xs text-gray-400">Loading logs...</span>
                 </div>
               )}
               {logsError && (
-                <div className="font-mono text-xs text-red-400">{logsError}</div>
+                <div className="flex flex-col gap-2">
+                  <div className="font-mono text-xs text-yellow-400">{logsError}</div>
+                  {detail.workflowName && detail.nodeId && detail.namespace && (
+                    <a
+                      href={`http://argo.127.0.0.1.nip.io:8080/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-400 hover:text-blue-300 text-xs underline inline-flex items-center gap-1"
+                    >
+                      View logs in Argo UI
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
               )}
-              {logs && !loadingLogs && (
-                <pre className="font-mono text-xs whitespace-pre-wrap">
+              {logs && !loadingLogs && !logsError && (
+                <pre className="font-mono text-xs text-gray-100 whitespace-pre-wrap">
                   {logs}
                 </pre>
+              )}
+              {!logs && !loadingLogs && !logsError && (
+                <div className="font-mono text-xs text-gray-500">No logs available</div>
               )}
             </div>
           </div>

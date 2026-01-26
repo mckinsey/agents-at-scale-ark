@@ -21,6 +21,7 @@ export interface MappedWorkflowStepDetail {
   workflowName?: string;
   nodeId?: string;
   namespace?: string;
+  podName?: string;
 }
 
 export interface MappedWorkflowStep {
@@ -127,6 +128,14 @@ function buildNodeDetail(
     detail.workflowName = workflowName;
     detail.nodeId = node.id;
     detail.namespace = workflowNamespace || 'default';
+    
+    if (node.podName) {
+      detail.podName = node.podName;
+    } else if (node.templateName && node.id) {
+      const nodeIdParts = node.id.split('-');
+      const suffix = nodeIdParts[nodeIdParts.length - 1];
+      detail.podName = `${workflowName}-${node.templateName}-${suffix}`;
+    }
   }
 
   return Object.keys(detail).length > 0 ? detail : undefined;

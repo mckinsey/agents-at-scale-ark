@@ -61,21 +61,16 @@ export const workflowsService = {
     namespace: string = 'default',
     container?: string,
   ): Promise<string> {
-    try {
-      const containerParam = container ? `&container=${container}` : '';
-      const response = await apiClient.get<string>(
-        `/api/v1/resources/api/v1/namespaces/${namespace}/pods/${podName}/log?tailLines=1000${containerParam}`,
-        {
-          headers: {
-            Accept: 'text/plain',
-          },
+    const containerParam = container ? `&container=${container}` : '';
+    const response = await apiClient.get<string>(
+      `/api/v1/resources/api/v1/namespaces/${namespace}/pods/${podName}/log?tailLines=1000${containerParam}`,
+      {
+        headers: {
+          Accept: 'text/plain',
         },
-      );
-      return response;
-    } catch (error) {
-      console.error(`Failed to fetch logs for pod ${podName}:`, error);
-      return '';
-    }
+      },
+    );
+    return response;
   },
 
   async getWorkflowLogs(
