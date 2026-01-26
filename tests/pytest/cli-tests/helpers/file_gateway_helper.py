@@ -216,38 +216,49 @@ class FileGatewayHelper:
             print(f"{component} component not found")
             return False
     
-    def verify_mcp_server_registered(self):
+    def verify_mcp_server_registered(self, max_retries=24, retry_delay=5):
         """Verify MCP server is registered with ARK"""
         print("Verifying MCP server registration...")
         
-        success, stdout, _ = self._run_cmd(
-            ['kubectl', 'get', 'mcpserver', 'file-gateway-mcpserver', '-o', 'jsonpath={.status.toolCount}'],
-            check=False
-        )
+        for attempt in range(max_retries):
+            success, stdout, _ = self._run_cmd(
+                ['kubectl', 'get', 'mcpserver', 'file-gateway-mcpserver', '-o', 'jsonpath={.status.toolCount}'],
+                check=False
+            )
+            
+            if success and stdout.strip().isdigit():
+                tool_count = int(stdout.strip())
+                print(f"MCP server registered with {tool_count} tools")
+                return True, tool_count
+            
+            if attempt < max_retries - 1:
+                print(f"MCP server not ready yet, waiting... (attempt {attempt + 1}/{max_retries})")
+                time.sleep(retry_delay)
         
-        if success and stdout.strip().isdigit():
-            tool_count = int(stdout.strip())
-            print(f"MCP server registered with {tool_count} tools")
-            return True, tool_count
-        else:
-            print("MCP server not found or not ready")
-            return False, 0
+        print("MCP server not found or not ready after all retries")
+        return False, 0
     
-    def verify_mcp_server_status(self):
+    def verify_mcp_server_status(self, max_retries=24, retry_delay=5):
         """Verify MCP server status is Available"""
         print("Verifying MCP server status...")
         
-        success, stdout, _ = self._run_cmd(
-            ['kubectl', 'get', 'mcpserver', 'file-gateway-mcpserver', '-o', 'jsonpath={.status.conditions[?(@.type=="Available")].status}'],
-            check=False
-        )
+        for attempt in range(max_retries):
+            success, stdout, _ = self._run_cmd(
+                ['kubectl', 'get', 'mcpserver', 'file-gateway-mcpserver', '-o', 'jsonpath={.status.conditions[?(@.type=="Available")].status}'],
+                check=False
+            )
+            
+            if success and stdout.strip() == "True":
+                print("MCP server status: Available")
+                return True
+            
+            if attempt < max_retries - 1:
+                status = stdout.strip() if stdout else "Unknown"
+                print(f"MCP server status: {status}, waiting... (attempt {attempt + 1}/{max_retries})")
+                time.sleep(retry_delay)
         
-        if success and stdout.strip() == "True":
-            print("MCP server status: Available")
-            return True
-        else:
-            print(f"MCP server status: {stdout.strip()}")
-            return False
+        print(f"MCP server status not Available after all retries: {stdout.strip()}")
+        return False
     
     def setup_port_forward(self):
         """Setup port forwarding to File Gateway API"""
