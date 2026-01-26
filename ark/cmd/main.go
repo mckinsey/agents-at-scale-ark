@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -63,6 +64,7 @@ type config struct {
 	probeAddr                                        string
 	secureMetrics                                    bool
 	enableHTTP2                                      bool
+	modelProbeTimeout                                time.Duration
 }
 
 func main() {
@@ -96,7 +98,7 @@ func main() {
 	// Initialize eventing provider with direct client for broker discovery
 	eventingProvider := eventingconfig.NewProvider(mgr, directClient)
 
-	setupControllers(mgr, telemetryProvider, eventingProvider)
+	setupControllers(mgr, result.config, telemetryProvider, eventingProvider)
 	setupWebhooks(mgr)
 	startManager(mgr, metricsCertWatcher, webhookCertWatcher)
 }
@@ -125,6 +127,8 @@ func parseFlags() struct {
 	flag.StringVar(&cfg.metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&cfg.enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.DurationVar(&cfg.modelProbeTimeout, "model-probe-timeout", 60*time.Second,
+		"Timeout for model health check probes")
 	flag.BoolVar(&showVersion, "version", false, "Show version information and exit")
 
 	zapOpts := zap.Options{Development: false}
@@ -239,7 +243,7 @@ func setupMetricsServer(cfg config, baseTLSOpts []func(*tls.Config)) (metricsser
 	return metricsServerOptions, metricsCertWatcher
 }
 
-func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provider, eventingProvider *eventingconfig.Provider) {
+func setupControllers(mgr ctrl.Manager, cfg config, telemetryProvider *telemetryconfig.Provider, eventingProvider *eventingconfig.Provider) {
 	controllers := []struct {
 		name       string
 		reconciler interface{ SetupWithManager(ctrl.Manager) error }
@@ -268,10 +272,11 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			Eventing: eventingProvider,
 		}},
 		{"Model", &controller.ModelReconciler{
-			Client:    mgr.GetClient(),
-			Scheme:    mgr.GetScheme(),
-			Telemetry: telemetryProvider,
-			Eventing:  eventingProvider,
+			Client:            mgr.GetClient(),
+			Scheme:            mgr.GetScheme(),
+			Telemetry:         telemetryProvider,
+			Eventing:          eventingProvider,
+			ModelProbeTimeout: cfg.modelProbeTimeout,
 		}},
 		{"Memory", &controller.MemoryReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
 		{"ExecutionEngine", &controller.ExecutionEngineReconciler{

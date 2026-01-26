@@ -32,8 +32,7 @@ type ProbeResult struct {
 }
 
 // ProbeModel tests if a model is available using a lightweight health check
-func ProbeModel(ctx context.Context, model *Model) ProbeResult {
-	timeout := 30 * time.Second
+func ProbeModel(ctx context.Context, model *Model, timeout time.Duration) ProbeResult {
 	probeCtx := contextWithProbeMode(context.Background())
 	probeCtx, cancel := context.WithTimeout(probeCtx, timeout)
 	defer cancel()

@@ -29,9 +29,10 @@ const (
 
 type ModelReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	Telemetry telemetry.Provider
-	Eventing  eventing.Provider
+	Scheme            *runtime.Scheme
+	Telemetry         telemetry.Provider
+	Eventing          eventing.Provider
+	ModelProbeTimeout time.Duration
 }
 
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=models,verbs=get;list;watch;create;update;patch;delete
@@ -108,7 +109,12 @@ func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Mode
 		}
 	}
 
-	result := genai.ProbeModel(ctx, resolvedModel)
+	timeout := r.ModelProbeTimeout
+	if timeout == 0 {
+		timeout = 60 * time.Second
+	}
+
+	result := genai.ProbeModel(ctx, resolvedModel, timeout)
 	return result
 }
 
