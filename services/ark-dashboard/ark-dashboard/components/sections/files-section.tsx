@@ -2,8 +2,6 @@
 
 import copy from 'copy-to-clipboard';
 import { useAtom } from 'jotai';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import {
   ChevronDown,
   ChevronLeft,
@@ -24,6 +22,8 @@ import {
   useRef,
   useState,
 } from 'react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { toast } from 'sonner';
 
 import { filesBrowserPrefixAtom } from '@/atoms/internal-states';
@@ -44,12 +44,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
-import {
   Empty,
   EmptyContent,
   EmptyDescription,
@@ -60,8 +54,14 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { FILES_API_BASE_URL } from '@/lib/api/files-client';
+import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { filesService } from '@/lib/services/files';
 import {
   useDeleteDirectory,
@@ -114,7 +114,9 @@ function JsonTreeNode({
   if (data === null) {
     return (
       <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
-        {keyName && <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>}
+        {keyName && (
+          <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>
+        )}
         <span className="text-gray-500 dark:text-gray-400">null</span>
       </div>
     );
@@ -123,8 +125,12 @@ function JsonTreeNode({
   if (typeof data === 'string') {
     return (
       <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
-        {keyName && <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>}
-        <span className="text-green-600 dark:text-green-400">&quot;{data}&quot;</span>
+        {keyName && (
+          <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>
+        )}
+        <span className="text-green-600 dark:text-green-400">
+          &quot;{data}&quot;
+        </span>
       </div>
     );
   }
@@ -132,7 +138,9 @@ function JsonTreeNode({
   if (typeof data === 'number') {
     return (
       <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
-        {keyName && <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>}
+        {keyName && (
+          <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>
+        )}
         <span className="text-purple-600 dark:text-purple-400">{data}</span>
       </div>
     );
@@ -141,8 +149,12 @@ function JsonTreeNode({
   if (typeof data === 'boolean') {
     return (
       <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
-        {keyName && <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>}
-        <span className="text-orange-600 dark:text-orange-400">{String(data)}</span>
+        {keyName && (
+          <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>
+        )}
+        <span className="text-orange-600 dark:text-orange-400">
+          {String(data)}
+        </span>
       </div>
     );
   }
@@ -159,7 +171,11 @@ function JsonTreeNode({
           ) : (
             <ChevronRight className="h-3 w-3" />
           )}
-          {keyName && <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>}
+          {keyName && (
+            <span className="text-blue-600 dark:text-blue-400">
+              {keyName}:{' '}
+            </span>
+          )}
           <span className="text-gray-600 dark:text-gray-400">
             [{data.length}]
           </span>
@@ -195,7 +211,11 @@ function JsonTreeNode({
           ) : (
             <ChevronRight className="h-3 w-3" />
           )}
-          {keyName && <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>}
+          {keyName && (
+            <span className="text-blue-600 dark:text-blue-400">
+              {keyName}:{' '}
+            </span>
+          )}
           <span className="text-gray-600 dark:text-gray-400">
             {'{'} {entries.length} {entries.length === 1 ? 'key' : 'keys'} {'}'}
           </span>
@@ -221,7 +241,9 @@ function JsonTreeNode({
 
   return (
     <div style={{ paddingLeft: `${indent}px` }} className="py-0.5">
-      {keyName && <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>}
+      {keyName && (
+        <span className="text-blue-600 dark:text-blue-400">{keyName}: </span>
+      )}
       <span>{String(data)}</span>
     </div>
   );
@@ -510,27 +532,40 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
       try {
         const url = `${FILES_API_BASE_URL}/files/${encodeURIComponent(key)}/download`;
         const response = await fetch(url);
-        
+
         if (!response.ok) {
           throw new Error(`Failed to fetch file: ${response.statusText}`);
         }
 
         const blob = await response.blob();
         const fileExtension = key.split('.').pop()?.toLowerCase();
-        const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(fileExtension || '');
+        const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(
+          fileExtension || '',
+        );
+        const isSvg = fileExtension === 'svg';
         const isPython = fileExtension === 'py';
         const isJson = fileExtension === 'json';
 
-        if (isImage) {
-          const imageUrl = URL.createObjectURL(blob);
-          setPreviewImageUrl(imageUrl);
-          setPreviewIsImage(true);
+        if (isImage || isSvg) {
+          // For SVG files, we need to handle them specially since they're text-based
+          if (isSvg) {
+            const text = await blob.text();
+            // Create a blob with the correct MIME type for SVG
+            const svgBlob = new Blob([text], { type: 'image/svg+xml' });
+            const imageUrl = URL.createObjectURL(svgBlob);
+            setPreviewImageUrl(imageUrl);
+            setPreviewIsImage(true);
+          } else {
+            const imageUrl = URL.createObjectURL(blob);
+            setPreviewImageUrl(imageUrl);
+            setPreviewIsImage(true);
+          }
         } else {
           const text = await blob.text();
           setPreviewContent(text);
           setPreviewIsImage(false);
           setPreviewIsPython(isPython);
-          
+
           if (isJson) {
             try {
               const jsonData = JSON.parse(text);
@@ -897,7 +932,9 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
               setPreviewImageUrl(null);
             }
           }}>
-          <SheetContent side="right" className="flex w-full flex-col sm:max-w-2xl">
+          <SheetContent
+            side="right"
+            className="flex w-full flex-col sm:max-w-2xl">
             <SheetHeader>
               <SheetTitle>
                 {previewKey ? previewKey.split('/').pop() : 'Preview'}
@@ -906,7 +943,9 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
             <div className="mt-4 flex-1 overflow-y-auto">
               {previewLoading ? (
                 <div className="flex items-center justify-center py-8">
-                  <p className="text-muted-foreground">Loading file content...</p>
+                  <p className="text-muted-foreground">
+                    Loading file content...
+                  </p>
                 </div>
               ) : previewIsImage && previewImageUrl ? (
                 <div className="flex items-center justify-center">
@@ -949,7 +988,7 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
                   </SyntaxHighlighter>
                 </div>
               ) : (
-                <pre className="whitespace-pre-wrap break-words font-mono text-sm">
+                <pre className="font-mono text-sm break-words whitespace-pre-wrap">
                   {previewContent}
                 </pre>
               )}
