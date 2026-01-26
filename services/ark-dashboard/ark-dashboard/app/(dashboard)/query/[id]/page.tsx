@@ -1,11 +1,13 @@
 'use client';
 
+import { useAtomValue } from 'jotai';
 import { Copy } from 'lucide-react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { queryTimeoutSettingAtom } from '@/atoms/experimental-features';
 import { ErrorResponseContent } from '@/components/ErrorResponseContent';
 import JsonDisplay from '@/components/JsonDisplay';
 import type { BreadcrumbElement } from '@/components/common/page-header';
@@ -150,6 +152,7 @@ interface TypedQueryDetailResponse
   status?: QueryStatus | null;
   metadata?: Record<string, string>;
   target?: { name: string; type: string };
+  timeout?: string | null;
 }
 
 // Reusable styles for table field headings
@@ -377,6 +380,7 @@ function QueryDetailContent() {
   const nameFieldRef = useRef<HTMLInputElement>(null);
   const [toolSchema, setToolSchema] = useState<ToolDetail | null>(null);
   const [streaming, setStreaming] = useState(false);
+  const defaultQueryTimeout = useAtomValue(queryTimeoutSettingAtom);
   const [queryParameters, setQueryParameters] = useState<QueryParameter[]>([]);
   const [selectedAgentDetails, setSelectedAgentDetails] =
     useState<Agent | null>(null);
@@ -532,6 +536,7 @@ function QueryDetailContent() {
         type: 'user',
         input: '',
         target: undefined,
+        timeout: defaultQueryTimeout,
         status: null,
       } as TypedQueryDetailResponse);
       setLoading(false);
@@ -626,7 +631,7 @@ function QueryDetailContent() {
     };
 
     loadQuery();
-  }, [queryId, isNew, targetTool]);
+  }, [queryId, isNew, targetTool, defaultQueryTimeout]);
 
   // Fetch tool schema when target is a tool
   useEffect(() => {

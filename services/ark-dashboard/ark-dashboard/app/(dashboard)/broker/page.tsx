@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { BreadcrumbElement } from '@/components/common/page-header';
@@ -18,6 +18,10 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { trackEvent } from '@/lib/analytics/singleton';
+import {
+  groupEntriesBySession,
+  sortEntriesByTimestampAndSequence,
+} from '@/lib/broker/session-utils';
 import { type Memory, memoriesService } from '@/lib/services/memories';
 
 const breadcrumbs: BreadcrumbElement[] = [
@@ -36,8 +40,6 @@ interface PaginatedResponse<T> {
   hasMore: boolean;
   nextCursor?: number;
 }
-
-const PAGE_SIZE = 100;
 
 function extractItemTimestamp(item: unknown): string {
   if (!item) {
@@ -140,7 +142,7 @@ function useSSEStream(endpoint: string, memory: string) {
 
       setIsLoading(true);
       try {
-        let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=${PAGE_SIZE}`;
+        let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=1000`;
         if (cursor !== undefined && cursor !== null) {
           url += `&cursor=${cursor}`;
         }
@@ -241,9 +243,23 @@ function useSSEStream(endpoint: string, memory: string) {
     mountedRef.current = true;
 
     async function init() {
-      const result = await fetchPage();
+      let cursor: number | undefined;
+
+      while (mountedRef.current) {
+        const result = await fetchPage(cursor);
+        if (!result || !mountedRef.current) {
+          break;
+        }
+
+        if (result.hasMore && result.nextCursor !== undefined) {
+          cursor = result.nextCursor;
+        } else {
+          break;
+        }
+      }
+
       if (mountedRef.current) {
-        connect(result?.nextCursor);
+        connect(cursor);
       }
     }
     init();
@@ -270,6 +286,23 @@ interface StreamViewProps {
   error: string | null;
   onPurge: () => void;
   onLoadMore?: () => void;
+}
+
+interface SessionsViewProps {
+  title: string;
+  eventEntries: StreamEntry[];
+  chunkEntries: StreamEntry[];
+  traceEntries: StreamEntry[];
+  messageEntries: StreamEntry[];
+  eventsConnected: boolean;
+  chunksConnected: boolean;
+  tracesConnected: boolean;
+  messagesConnected: boolean;
+  error: string | null;
+  onPurgeEvents: () => void;
+  onPurgeChunks: () => void;
+  onPurgeTraces: () => void;
+  onPurgeMessages: () => void;
 }
 
 function StreamView({
@@ -388,6 +421,206 @@ function StreamView({
   );
 }
 
+function SessionsView({
+  title,
+  eventEntries,
+  chunkEntries,
+  traceEntries,
+  messageEntries,
+  eventsConnected,
+  chunksConnected,
+  tracesConnected,
+  messagesConnected,
+  error,
+  onPurgeEvents,
+  onPurgeChunks,
+  onPurgeTraces,
+  onPurgeMessages,
+}: SessionsViewProps) {
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(
+    new Set(),
+  );
+  const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const allEntries = useMemo(() => {
+    const combined = [
+      ...eventEntries,
+      ...chunkEntries,
+      ...traceEntries,
+      ...messageEntries,
+    ];
+    return sortEntriesByTimestampAndSequence(combined);
+  }, [eventEntries, chunkEntries, traceEntries, messageEntries]);
+
+  useEffect(() => {
+    if (autoScroll && containerRef.current) {
+      containerRef.current.scrollTop = 0;
+    }
+  }, [allEntries, autoScroll]);
+
+  const queryToSessionMapRef = useRef<Record<string, string>>({});
+
+  const queryToSessionMap = queryToSessionMapRef.current;
+
+  const groupedBySession = groupEntriesBySession(allEntries, queryToSessionMap);
+
+  const sortedSessions = Object.entries(groupedBySession).sort((a, b) => {
+    const aLatest = a[1][0]?.timestamp || '';
+    const bLatest = b[1][0]?.timestamp || '';
+    return aLatest.localeCompare(bLatest);
+  });
+
+  const toggleSession = (sessionId: string) => {
+    setExpandedSessions(prev => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+  };
+
+  const toggleEvent = (eventId: string) => {
+    setExpandedEvents(prev => {
+      const next = new Set(prev);
+      if (next.has(eventId)) {
+        next.delete(eventId);
+      } else {
+        next.add(eventId);
+      }
+      return next;
+    });
+  };
+
+  const handlePurgeAll = async () => {
+    await Promise.all([
+      onPurgeEvents(),
+      onPurgeChunks(),
+      onPurgeTraces(),
+      onPurgeMessages(),
+    ]);
+  };
+
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <div className="flex items-center gap-2">
+          <CardTitle className="text-base font-medium">{title}</CardTitle>
+          <div className="flex items-center gap-1">
+            <span
+              className={`h-2 w-2 rounded-full ${eventsConnected ? 'bg-green-500' : 'bg-gray-300'}`}
+              title="Events"
+            />
+            <span
+              className={`h-2 w-2 rounded-full ${chunksConnected ? 'bg-green-500' : 'bg-gray-300'}`}
+              title="Chunks"
+            />
+            <span
+              className={`h-2 w-2 rounded-full ${tracesConnected ? 'bg-green-500' : 'bg-gray-300'}`}
+              title="Traces"
+            />
+            <span
+              className={`h-2 w-2 rounded-full ${messagesConnected ? 'bg-green-500' : 'bg-gray-300'}`}
+              title="Messages"
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handlePurgeAll}>
+            Purge All
+          </Button>
+          <label className="flex items-center gap-1.5 text-sm">
+            <Switch checked={autoScroll} onCheckedChange={setAutoScroll} />
+            Auto-scroll
+          </label>
+        </div>
+      </CardHeader>
+      <CardContent className="flex-1 overflow-hidden">
+        {error && (
+          <div className="mb-2 rounded bg-red-100 p-2 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+        <div
+          ref={containerRef}
+          className="bg-muted h-[calc(100vh-280px)] overflow-x-hidden overflow-y-auto rounded-md p-2 font-mono text-xs">
+          {allEntries.length === 0 ? (
+            <div className="text-muted-foreground flex h-full items-center justify-center">
+              Waiting for data...
+            </div>
+          ) : (
+            <>
+              {sortedSessions.map(([sessionId, sessionEntries]) => {
+                const isSessionExpanded = expandedSessions.has(sessionId);
+                return (
+                  <div
+                    key={sessionId}
+                    className="border-border mb-2 rounded border p-2">
+                    <div
+                      className="flex cursor-pointer items-center gap-2"
+                      onClick={() => toggleSession(sessionId)}>
+                      {isSessionExpanded ? (
+                        <ChevronDown className="text-muted-foreground h-4 w-4 shrink-0" />
+                      ) : (
+                        <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
+                      )}
+                      <span className="font-semibold">
+                        Session: {sessionId}
+                      </span>
+                      <span className="text-muted-foreground ml-auto">
+                        ({sessionEntries.length} events)
+                      </span>
+                    </div>
+                    {isSessionExpanded && (
+                      <div className="mt-2 ml-6 space-y-1">
+                        {sessionEntries.map(entry => {
+                          const isEventExpanded = expandedEvents.has(entry.id);
+                          return (
+                            <div
+                              key={entry.id}
+                              className="border-border overflow-hidden border-b pb-1 last:border-b-0">
+                              <div className="flex min-w-0 items-center gap-1">
+                                <span
+                                  className="flex shrink-0 cursor-pointer items-center gap-1"
+                                  onClick={() => toggleEvent(entry.id)}>
+                                  {isEventExpanded ? (
+                                    <ChevronDown className="text-muted-foreground h-3 w-3 shrink-0" />
+                                  ) : (
+                                    <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
+                                  )}
+                                  <span>{entry.timestamp}</span>
+                                </span>
+                                {!isEventExpanded && (
+                                  <span className="text-muted-foreground w-0 flex-1 truncate">
+                                    {JSON.stringify(entry.data)}
+                                  </span>
+                                )}
+                              </div>
+                              {isEventExpanded && (
+                                <pre className="mt-1 break-all whitespace-pre-wrap">
+                                  {JSON.stringify(entry.data, null, 2)}
+                                </pre>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function BrokerPage() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [selectedMemory, setSelectedMemory] = useState<string>('default');
@@ -460,6 +693,7 @@ export default function BrokerPage() {
               <TabsTrigger value="messages">Messages</TabsTrigger>
               <TabsTrigger value="chunks">LLM Chunks</TabsTrigger>
               <TabsTrigger value="events">Events</TabsTrigger>
+              <TabsTrigger value="sessions">Sessions</TabsTrigger>
             </TabsList>
           </div>
           <TabsContent value="traces" className="mt-4 flex-1">
@@ -508,6 +742,26 @@ export default function BrokerPage() {
               error={events.error}
               onPurge={events.purge}
               onLoadMore={events.loadMore}
+            />
+          </TabsContent>
+          <TabsContent value="sessions" className="mt-4 flex-1">
+            <SessionsView
+              title="Sessions"
+              eventEntries={events.entries}
+              chunkEntries={chunks.entries}
+              traceEntries={traces.entries}
+              messageEntries={messages.entries}
+              eventsConnected={events.isConnected}
+              chunksConnected={chunks.isConnected}
+              tracesConnected={traces.isConnected}
+              messagesConnected={messages.isConnected}
+              error={
+                events.error || chunks.error || traces.error || messages.error
+              }
+              onPurgeEvents={events.purge}
+              onPurgeChunks={chunks.purge}
+              onPurgeTraces={traces.purge}
+              onPurgeMessages={messages.purge}
             />
           </TabsContent>
         </Tabs>

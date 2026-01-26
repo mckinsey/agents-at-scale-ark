@@ -38,6 +38,13 @@ global.IntersectionObserver = class IntersectionObserver {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any;
 
+// Mock ResizeObserver
+global.ResizeObserver = vi.fn().mockImplementation(() => ({
+  observe: vi.fn(),
+  unobserve: vi.fn(),
+  disconnect: vi.fn(),
+}));
+
 // Mock localStorage
 const localStorageMock: Storage = {
   getItem: vi.fn((key: string) => {
