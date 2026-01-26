@@ -35,6 +35,16 @@ CLEAN_TARGETS += $(EXECUTOR_CLAUDE_SDK_SERVICE_DIR)/build-context
 $(EXECUTOR_CLAUDE_SDK_SERVICE_NAME)-deps: $(EXECUTOR_CLAUDE_SDK_STAMP_DEPS)
 $(EXECUTOR_CLAUDE_SDK_STAMP_DEPS): $(EXECUTOR_CLAUDE_SDK_SERVICE_DIR)/pyproject.toml $(ARK_SDK_WHL) | $(OUT)
 	@mkdir -p $(dir $@)
+	# Copy wheel to service directory for Docker build
+	cp $(ARK_SDK_WHL) $(EXECUTOR_CLAUDE_SDK_SERVICE_DIR)/
+	# Update pyproject.toml to use local wheel file
+	cd $(EXECUTOR_CLAUDE_SDK_SERVICE_DIR) && \
+	sed -i.bak 's|path = "../../lib/ark-sdk/gen_sdk/overlay/python"|path = "./ark_sdk-$(shell cat $(BUILD_ROOT)/version.txt)-py3-none-any.whl"|' pyproject.toml && \
+	sed -i.bak 's|editable = true||' pyproject.toml && \
+	rm -f pyproject.toml.bak && \
+	uv remove ark-sdk || true && \
+	uv add ./ark_sdk-$(shell cat $(BUILD_ROOT)/version.txt)-py3-none-any.whl && \
+	rm -f uv.lock && uv sync
 	@touch $@
 
 # Build target
