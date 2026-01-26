@@ -17,6 +17,8 @@ dependencies = [
     "langchain-community>=0.3.2", # community integrations (FAISS)
     "faiss-cpu>=1.7.4", # vector search
     "tiktoken>=0.5.0",
+    "protobuf>=5.28.0,<6.0",  # Mitigate CVE-2026-0994
+    "cryptography>=42.0.0",  # Replace ecdsa (CVE-2024-23342)
     "ark-sdk",
     "urllib3>=2.6.0",
 ]
