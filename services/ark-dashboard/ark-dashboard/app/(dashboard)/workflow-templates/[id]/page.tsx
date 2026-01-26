@@ -240,6 +240,7 @@ export default function FlowDetailPage() {
         description:
           err instanceof Error ? err.message : 'An unknown error occurred',
       });
+      throw err;
     }
   };
 

@@ -74,6 +74,7 @@ export function WorkflowTemplatesSection() {
         description:
           error instanceof Error ? error.message : 'An unknown error occurred',
       });
+      throw error;
     }
   };
 

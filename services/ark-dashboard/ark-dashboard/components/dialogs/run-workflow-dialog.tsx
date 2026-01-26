@@ -35,6 +35,7 @@ export function RunWorkflowDialog({
 }: RunWorkflowDialogProps) {
   const [open, setOpen] = useState(false);
   const [workflowName, setWorkflowName] = useState('');
+  const [workflowNameError, setWorkflowNameError] = useState<string>('');
   const [paramValues, setParamValues] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     parameters.forEach(param => {
@@ -44,8 +45,38 @@ export function RunWorkflowDialog({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const validateWorkflowName = (name: string): string => {
+    if (!name) {
+      return '';
+    }
+
+    if (name.length > 253) {
+      return 'Name must be 253 characters or less';
+    }
+
+    const k8sNameRegex = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/;
+    if (!k8sNameRegex.test(name)) {
+      return 'Name must be lowercase alphanumeric characters, "-" or ".", and must start and end with an alphanumeric character';
+    }
+
+    return '';
+  };
+
+  const handleWorkflowNameChange = (value: string) => {
+    setWorkflowName(value);
+    const error = validateWorkflowName(value);
+    setWorkflowNameError(error);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const nameError = validateWorkflowName(workflowName);
+    if (nameError) {
+      setWorkflowNameError(nameError);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await onRun(
@@ -53,6 +84,8 @@ export function RunWorkflowDialog({
         workflowName || undefined,
       );
       setOpen(false);
+    } catch (error) {
+      console.error('Error in dialog, keeping dialog open:', error);
     } finally {
       setIsSubmitting(false);
     }
@@ -63,6 +96,7 @@ export function RunWorkflowDialog({
       setOpen(newOpen);
       if (newOpen) {
         setWorkflowName('');
+        setWorkflowNameError('');
         const initial: Record<string, string> = {};
         parameters.forEach(param => {
           initial[param.name] = param.value || param.default || '';
@@ -105,9 +139,14 @@ export function RunWorkflowDialog({
               <Input
                 id="workflow-name"
                 value={workflowName}
-                onChange={e => setWorkflowName(e.target.value)}
+                onChange={e => handleWorkflowNameChange(e.target.value)}
                 placeholder="Auto-generated if not specified"
+                className={workflowNameError ? 'border-destructive' : ''}
+                disabled={isSubmitting}
               />
+              {workflowNameError && (
+                <p className="text-destructive text-xs">{workflowNameError}</p>
+              )}
             </div>
             {parameters.length > 0 &&
               parameters.map(param => (
@@ -123,6 +162,7 @@ export function RunWorkflowDialog({
                       }))
                     }
                     placeholder={param.default || ''}
+                    disabled={isSubmitting}
                   />
                 </div>
               ))}
@@ -135,8 +175,11 @@ export function RunWorkflowDialog({
               disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Running...' : 'Run'}
+            <Button
+              type="submit"
+              disabled={isSubmitting || !!workflowNameError}
+              className="min-w-[80px]">
+              Run
             </Button>
           </DialogFooter>
         </form>
