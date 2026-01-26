@@ -23,6 +23,8 @@ dependencies = [
     "nest-asyncio>=1.5.0",
     "Pillow>=10.0.0",
     "urllib3>=2.6.0",
+    "protobuf>=5.28.0,<6.0",  # Mitigate CVE-2026-0994
+    "cryptography>=42.0.0",  # Replace ecdsa (CVE-2024-23342)
     "ark-sdk",
 ]
 

@@ -21,7 +21,7 @@ This CVE refers to a "dependency confusion" attack when using `pip` with the `--
 
 The following vulnerabilities have been addressed in this commit:
 
-1. **CVE-2024-58340** (langchain ReDoS) - Already fixed, langchain>=0.3.2
+1. **CVE-2024-58340** (langchain:1.2.7 ReDoS) - **No fix available yet**. MRKLOutputParser ReDoS vulnerability awaiting vendor patch.
 2. **CVE-2026-0994** (protobuf DoS) - Mitigated by upgrading to protobuf>=5.28.0,<6.0 (compatibility constraints prevent full fix to 6.34.0)
 3. **CVE-2025-45768** (pyjwt:2.10.1 weak encryption) - **No fix available yet**. Latest version 2.10.1 is vulnerable. Monitor for updates.
 4. **CVE-2024-23342** (ecdsa vulnerability) - Mitigated by adding cryptography>=42.0.0 as replacement
