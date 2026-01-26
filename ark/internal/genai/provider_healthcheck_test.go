@@ -41,6 +41,8 @@ func TestOpenAIProvider_HealthCheck_Success(t *testing.T) {
 
 func TestOpenAIProvider_HealthCheck_Unauthorized(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/models", r.URL.Path)
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -67,6 +69,8 @@ func TestOpenAIProvider_HealthCheck_Unauthorized(t *testing.T) {
 
 func TestOpenAIProvider_HealthCheck_ServerError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/models", r.URL.Path)
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -92,9 +96,13 @@ func TestOpenAIProvider_HealthCheck_ServerError(t *testing.T) {
 }
 
 func TestOpenAIProvider_HealthCheck_NetworkError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	serverURL := server.URL
+	server.Close()
+
 	provider := &OpenAIProvider{
 		Model:   "gpt-4",
-		BaseURL: "http://invalid-host-that-does-not-exist.local/v1",
+		BaseURL: serverURL + "/v1",
 		APIKey:  "test-key",
 	}
 
@@ -106,7 +114,6 @@ func TestOpenAIProvider_HealthCheck_NetworkError(t *testing.T) {
 
 func TestAzureProvider_HealthCheck_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Azure uses path like /openai/deployments/{model}/models
 		assert.Contains(t, r.URL.Path, "/models")
 		assert.Equal(t, "GET", r.Method)
 		assert.Equal(t, "test-key", r.Header.Get("api-key"))
@@ -135,6 +142,8 @@ func TestAzureProvider_HealthCheck_Success(t *testing.T) {
 
 func TestAzureProvider_HealthCheck_Unauthorized(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Contains(t, r.URL.Path, "/models")
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -160,9 +169,13 @@ func TestAzureProvider_HealthCheck_Unauthorized(t *testing.T) {
 }
 
 func TestAzureProvider_HealthCheck_NetworkError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	serverURL := server.URL
+	server.Close()
+
 	provider := &AzureProvider{
 		Model:   "gpt-4",
-		BaseURL: "http://invalid-host-that-does-not-exist.local/openai",
+		BaseURL: serverURL + "/openai",
 		APIKey:  "test-key",
 	}
 
@@ -174,6 +187,8 @@ func TestAzureProvider_HealthCheck_NetworkError(t *testing.T) {
 
 func TestModel_HealthCheck_OpenAIProvider(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/models", r.URL.Path)
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -204,6 +219,8 @@ func TestModel_HealthCheck_OpenAIProvider(t *testing.T) {
 
 func TestModel_HealthCheck_AzureProvider(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Contains(t, r.URL.Path, "/models")
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -261,13 +278,9 @@ func TestBedrockModel_HealthCheck_InitializesClient(t *testing.T) {
 	ctx := context.Background()
 	err := bm.HealthCheck(ctx)
 
-	// We expect an error because credentials are invalid, but the function should not panic
-	// and should attempt to initialize the client
 	if err == nil {
-		// If no error, the client was successfully initialized (e.g., with default credentials)
 		assert.NotNil(t, bm.client)
 	} else {
-		// If error, it should be a meaningful AWS error, not a panic
 		assert.NotNil(t, err)
 	}
 }
@@ -286,15 +299,12 @@ func TestBedrockModel_HealthCheck_ReusesCachedClient(t *testing.T) {
 
 	ctx := context.Background()
 
-	// First call - initializes client
 	_ = bm.HealthCheck(ctx)
 	firstClient := bm.client
 
-	// Second call - should reuse client
 	_ = bm.HealthCheck(ctx)
 	secondClient := bm.client
 
-	// Verify client is reused (same pointer)
 	if firstClient != nil && secondClient != nil {
 		assert.Equal(t, firstClient, secondClient, "Client should be reused across health checks")
 	}
@@ -321,13 +331,200 @@ func TestModel_HealthCheck_BedrockProvider(t *testing.T) {
 	ctx := context.Background()
 	err := model.HealthCheck(ctx)
 
-	// We expect an error because credentials are invalid, but the function should route correctly
-	// The important part is that it doesn't panic and calls the Bedrock HealthCheck method
 	if err == nil {
-		// Success case - credentials worked (e.g., default AWS credentials available)
 		require.NoError(t, err)
 	} else {
-		// Error case - credentials invalid, which is expected in test environment
 		assert.NotNil(t, err)
 	}
+}
+
+func TestOpenAIProvider_HealthCheck_ModelAvailable(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		assert.Equal(t, "/v1/models", r.URL.Path)
+		assert.Equal(t, "GET", r.Method)
+		assert.Contains(t, r.Header.Get("Authorization"), "Bearer test-key")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": []map[string]string{
+				{"id": "gpt-4", "object": "model"},
+				{"id": "gpt-3.5-turbo", "object": "model"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &OpenAIProvider{
+		Model:   "gpt-4",
+		BaseURL: server.URL + "/v1",
+		APIKey:  "test-key",
+	}
+
+	ctx := context.Background()
+	err := provider.HealthCheck(ctx)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, callCount, "HealthCheck should make exactly one API call")
+}
+
+func TestAzureProvider_HealthCheck_ModelAvailable(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		assert.Contains(t, r.URL.Path, "/models")
+		assert.Equal(t, "GET", r.Method)
+		assert.Equal(t, "test-key", r.Header.Get("api-key"))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": []map[string]string{
+				{"id": "gpt-4-deployment", "object": "model"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &AzureProvider{
+		Model:   "gpt-4",
+		BaseURL: server.URL + "/openai",
+		APIKey:  "test-key",
+	}
+
+	ctx := context.Background()
+	err := provider.HealthCheck(ctx)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, callCount, "HealthCheck should make exactly one API call")
+}
+
+func TestModel_HealthCheck_DelegatesToOpenAIProvider(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/models", r.URL.Path, "Should call models endpoint")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": []map[string]string{
+				{"id": "gpt-4", "object": "model"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &OpenAIProvider{
+		Model:   "gpt-4",
+		BaseURL: server.URL + "/v1",
+		APIKey:  "test-key",
+	}
+
+	model := &Model{
+		Model:    "gpt-4",
+		Type:     "openai",
+		Provider: provider,
+	}
+
+	ctx := context.Background()
+	err := model.HealthCheck(ctx)
+
+	require.NoError(t, err)
+}
+
+func TestModel_HealthCheck_DelegatesToAzureProvider(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Contains(t, r.URL.Path, "/models", "Should call models endpoint")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": []map[string]string{
+				{"id": "gpt-4", "object": "model"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &AzureProvider{
+		Model:   "gpt-4",
+		BaseURL: server.URL + "/openai",
+		APIKey:  "test-key",
+	}
+
+	model := &Model{
+		Model:    "gpt-4",
+		Type:     "azure",
+		Provider: provider,
+	}
+
+	ctx := context.Background()
+	err := model.HealthCheck(ctx)
+
+	require.NoError(t, err)
+}
+
+func TestModel_HealthCheck_OpenAIProviderError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": map[string]interface{}{
+				"message": "Service unavailable",
+				"type":    "server_error",
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &OpenAIProvider{
+		Model:   "gpt-4",
+		BaseURL: server.URL + "/v1",
+		APIKey:  "test-key",
+	}
+
+	model := &Model{
+		Model:    "gpt-4",
+		Type:     "openai",
+		Provider: provider,
+	}
+
+	ctx := context.Background()
+	err := model.HealthCheck(ctx)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "503")
+}
+
+func TestModel_HealthCheck_AzureProviderError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": map[string]interface{}{
+				"message": "Unauthorized",
+				"type":    "auth_error",
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &AzureProvider{
+		Model:   "gpt-4",
+		BaseURL: server.URL + "/openai",
+		APIKey:  "invalid-key",
+	}
+
+	model := &Model{
+		Model:    "gpt-4",
+		Type:     "azure",
+		Provider: provider,
+	}
+
+	ctx := context.Background()
+	err := model.HealthCheck(ctx)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "401")
 }
