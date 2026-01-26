@@ -159,6 +159,12 @@ func (ap *AzureProvider) createClient(ctx context.Context) openai.Client {
 	return openai.NewClient(options...)
 }
 
+func (ap *AzureProvider) HealthCheck(ctx context.Context) error {
+	client := ap.createClient(ctx)
+	_, err := client.Models.List(ctx)
+	return err
+}
+
 func (ap *AzureProvider) BuildConfig() map[string]any {
 	config := map[string]any{
 		"baseUrl": ap.BaseURL,

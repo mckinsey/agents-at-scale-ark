@@ -4,6 +4,8 @@ package controller
 
 import (
 	"context"
+	"math/rand"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -73,7 +75,7 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 				"status", result.Message,
 				"details", result.DetailedError)
 		}
-		return ctrl.Result{RequeueAfter: model.Spec.PollInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: addJitter(model.Spec.PollInterval.Duration)}, nil
 	}
 
 	// Success case - model is available
@@ -81,8 +83,14 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, err
 	}
 
-	// Continue polling at regular interval
-	return ctrl.Result{RequeueAfter: model.Spec.PollInterval.Duration}, nil
+	// Continue polling at regular interval with jitter to prevent thundering herd
+	return ctrl.Result{RequeueAfter: addJitter(model.Spec.PollInterval.Duration)}, nil
+}
+
+// addJitter adds ±10% random jitter to a duration to prevent thundering herd
+func addJitter(d time.Duration) time.Duration {
+	jitter := float64(d) * 0.1 * (2*rand.Float64() - 1)
+	return d + time.Duration(jitter)
 }
 
 func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Model) genai.ProbeResult {
