@@ -105,6 +105,8 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
     const [previewOpen, setPreviewOpen] = useState(false);
     const [previewKey, setPreviewKey] = useState<string | null>(null);
     const [previewContent, setPreviewContent] = useState<string>('');
+    const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+    const [previewIsImage, setPreviewIsImage] = useState(false);
     const [previewLoading, setPreviewLoading] = useState(false);
 
     const {
@@ -350,6 +352,8 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
       setPreviewOpen(true);
       setPreviewLoading(true);
       setPreviewContent('');
+      setPreviewImageUrl(null);
+      setPreviewIsImage(false);
 
       try {
         const url = `${FILES_API_BASE_URL}/files/${encodeURIComponent(key)}/download`;
@@ -360,8 +364,18 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
         }
 
         const blob = await response.blob();
-        const text = await blob.text();
-        setPreviewContent(text);
+        const fileExtension = key.split('.').pop()?.toLowerCase();
+        const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(fileExtension || '');
+
+        if (isImage) {
+          const imageUrl = URL.createObjectURL(blob);
+          setPreviewImageUrl(imageUrl);
+          setPreviewIsImage(true);
+        } else {
+          const text = await blob.text();
+          setPreviewContent(text);
+          setPreviewIsImage(false);
+        }
       } catch (error) {
         toast.error('Failed to Preview File', {
           description:
@@ -707,7 +721,15 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
           variant="destructive"
         />
 
-        <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>
+        <Sheet
+          open={previewOpen}
+          onOpenChange={open => {
+            setPreviewOpen(open);
+            if (!open && previewImageUrl) {
+              URL.revokeObjectURL(previewImageUrl);
+              setPreviewImageUrl(null);
+            }
+          }}>
           <SheetContent side="right" className="flex w-full flex-col sm:max-w-2xl">
             <SheetHeader>
               <SheetTitle>
@@ -718,6 +740,14 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
               {previewLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <p className="text-muted-foreground">Loading file content...</p>
+                </div>
+              ) : previewIsImage && previewImageUrl ? (
+                <div className="flex items-center justify-center">
+                  <img
+                    src={previewImageUrl}
+                    alt={previewKey ? previewKey.split('/').pop() : 'Preview'}
+                    className="max-h-full max-w-full object-contain"
+                  />
                 </div>
               ) : (
                 <pre className="whitespace-pre-wrap break-words font-mono text-sm">
