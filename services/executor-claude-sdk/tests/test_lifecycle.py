@@ -477,6 +477,14 @@ class TestHookRunner:
 # Phase 5: Full Executor Lifecycle Tests  
 # ============================================================================
 
+# Skip tests that require Claude credentials when running in CI
+_has_claude_credentials = bool(
+    os.environ.get("ANTHROPIC_API_KEY") or 
+    os.environ.get("AWS_ACCESS_KEY_ID") or
+    os.environ.get("CLAUDE_CODE_API_KEY")
+)
+
+@pytest.mark.skipif(not _has_claude_credentials, reason="Claude credentials not available in CI")
 class TestExecutorLifecycle:
     """Test the full executor lifecycle with mock SDK execution."""
 
