@@ -12,9 +12,9 @@ dependencies = [
     "fastapi>=0.104.0", # web framework
     "uvicorn[standard]>=0.24.0", # ASGI server
     "pydantic>=2.0.0", # data validation
-    "langchain>=0.1.0", # langchain framework
+    "langchain>=0.3.2", # langchain framework (patched for CVE-2024-58340)
     "langchain-openai>=0.1.0", # openai integration
-    "langchain-community>=0.0.20", # community integrations (FAISS)
+    "langchain-community>=0.3.2", # community integrations (FAISS)
     "faiss-cpu>=1.7.4", # vector search
     "tiktoken>=0.5.0",
     "ark-sdk",
