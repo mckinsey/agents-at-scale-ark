@@ -304,12 +304,28 @@ class LifecycleSpanManager:
         if self.trace_context and self.trace_context.session_id:
             attributes["session.id"] = self.trace_context.session_id
         
-        # Attach to parent context if available
+        # Attach to parent context if available - this ensures we're in the same trace
         parent_context = self.trace_context.context if self.trace_context else None
+        
+        # Also check if there's an active span in the current context (from Ark controller)
+        # This ensures lifecycle spans are children of the agent span even if trace_context
+        # doesn't have the full context
+        current_context = otel_context.get_current()
+        current_span_in_context = trace.get_current_span(current_context)
         
         if parent_context:
             self._token = otel_context.attach(parent_context)
+            # Get current span from context to ensure we're creating a child span
+            current_span = trace.get_current_span(parent_context)
+            if current_span and current_span.get_span_context().is_valid:
+                logger.debug(f"Creating lifecycle span {self.phase_name} as child of span from trace_context")
+        elif current_span_in_context and current_span_in_context.get_span_context().is_valid:
+            # No trace_context provided, but there's an active span in current context
+            # Use that as the parent
+            logger.debug(f"Creating lifecycle span {self.phase_name} as child of current active span")
         
+        # Create span - OpenTelemetry will automatically make it a child of the active span
+        # in the attached context, or a root span if no active span exists
         self._span = tracer.start_span(
             name=f"lifecycle.{self.phase_name}",
             attributes=attributes,
@@ -319,6 +335,14 @@ class LifecycleSpanManager:
         self._span_token = otel_context.attach(
             trace.set_span_in_context(self._span)
         )
+        
+        if self._span:
+            span_ctx = self._span.get_span_context()
+            logger.debug(
+                f"Created lifecycle span: {self.phase_name} "
+                f"(trace_id={format(span_ctx.trace_id, '032x') if span_ctx.is_valid else 'invalid'}, "
+                f"span_id={format(span_ctx.span_id, '016x') if span_ctx.is_valid else 'invalid'})"
+            )
         
         return self
     
