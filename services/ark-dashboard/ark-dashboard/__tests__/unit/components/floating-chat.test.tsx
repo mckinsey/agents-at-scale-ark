@@ -1,12 +1,13 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useAtomValue } from 'jotai';
+import { createStore, Provider as JotaiProvider, useAtomValue } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   isChatStreamingEnabledAtom,
   queryTimeoutSettingAtom,
 } from '@/atoms/experimental-features';
+import { lastConversationIdAtom } from '@/atoms/internal-states';
 import FloatingChat from '@/components/floating-chat';
 import type { QueryDetailResponse } from '@/lib/services';
 import { chatService } from '@/lib/services';
@@ -42,6 +43,30 @@ vi.mock('jotai', async importOriginal => {
   };
 });
 
+function renderFloatingChat(
+  props: {
+    id: string;
+    name: string;
+    type: 'agent' | 'model' | 'team';
+    position: number;
+    onClose: () => void;
+  },
+  store?: ReturnType<typeof createStore>,
+) {
+  if (store) {
+    return render(
+      <JotaiProvider store={store}>
+        <FloatingChat {...props} />
+      </JotaiProvider>,
+    );
+  }
+  return render(
+    <JotaiProvider>
+      <FloatingChat {...props} />
+    </JotaiProvider>,
+  );
+}
+
 describe('FloatingChat', () => {
   const defaultProps = {
     id: 'test-chat',
@@ -53,6 +78,8 @@ describe('FloatingChat', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
   });
 
   describe('streaming enabled', () => {
@@ -79,7 +106,7 @@ describe('FloatingChat', () => {
         },
       );
 
-      render(<FloatingChat {...defaultProps} />);
+      renderFloatingChat(defaultProps);
 
       const input = screen.getByPlaceholderText('Type your message...');
       await user.type(input, 'Hi there');
@@ -122,7 +149,7 @@ describe('FloatingChat', () => {
         },
       );
 
-      render(<FloatingChat {...defaultProps} />);
+      renderFloatingChat(defaultProps);
 
       const input = screen.getByPlaceholderText('Type your message...');
       await user.type(input, 'Test');
@@ -149,7 +176,7 @@ describe('FloatingChat', () => {
         },
       );
 
-      render(<FloatingChat {...defaultProps} />);
+      renderFloatingChat(defaultProps);
 
       const input = screen.getByPlaceholderText('Type your message...');
       await user.type(input, 'Test');
@@ -183,7 +210,7 @@ describe('FloatingChat', () => {
         },
       );
 
-      render(<FloatingChat {...defaultProps} />);
+      renderFloatingChat(defaultProps);
 
       const input = screen.getByPlaceholderText('Type your message...');
       await user.type(input, 'Test');
@@ -219,7 +246,7 @@ describe('FloatingChat', () => {
         },
       );
 
-      render(<FloatingChat {...defaultProps} />);
+      renderFloatingChat(defaultProps);
 
       const input = screen.getByPlaceholderText('Type your message...');
       await user.type(input, 'Test');
@@ -255,7 +282,7 @@ describe('FloatingChat', () => {
           yield { choices: [{ delta: { content: 'Second response' } }] };
         });
 
-      render(<FloatingChat {...defaultProps} />);
+      renderFloatingChat(defaultProps);
 
       const input = screen.getByPlaceholderText('Type your message...');
 
@@ -291,7 +318,7 @@ describe('FloatingChat', () => {
 
     describe('default state', () => {
       it('should start in default state with visible content', () => {
-        render(<FloatingChat {...defaultProps} />);
+        renderFloatingChat(defaultProps);
 
         expect(
           screen.getByPlaceholderText('Type your message...'),
@@ -302,7 +329,7 @@ describe('FloatingChat', () => {
       });
 
       it('should show minimize button in default state', () => {
-        render(<FloatingChat {...defaultProps} />);
+        renderFloatingChat(defaultProps);
 
         const minimizeButton = screen.getByRole('button', {
           name: /minimize chat/i,
@@ -311,7 +338,7 @@ describe('FloatingChat', () => {
       });
 
       it('should show maximize button in default state', () => {
-        render(<FloatingChat {...defaultProps} />);
+        renderFloatingChat(defaultProps);
 
         const maximizeButton = screen.getByRole('button', {
           name: /maximize chat/i,
@@ -323,7 +350,7 @@ describe('FloatingChat', () => {
     describe('minimized state', () => {
       it('should hide chat content when minimized', async () => {
         const user = userEvent.setup();
-        render(<FloatingChat {...defaultProps} />);
+        renderFloatingChat(defaultProps);
 
         const minimizeButton = screen.getByRole('button', {
           name: /minimize chat/i,
@@ -340,7 +367,7 @@ describe('FloatingChat', () => {
 
       it('should keep the chat name visible when minimized', async () => {
         const user = userEvent.setup();
-        render(<FloatingChat {...defaultProps} />);
+        renderFloatingChat(defaultProps);
 
         const minimizeButton = screen.getByRole('button', {
           name: /minimize chat/i,
@@ -352,7 +379,7 @@ describe('FloatingChat', () => {
 
       it('should keep close button visible when minimized', async () => {
         const user = userEvent.setup();
-        render(<FloatingChat {...defaultProps} />);
+        renderFloatingChat(defaultProps);
 
         const minimizeButton = screen.getByRole('button', {
           name: /minimize chat/i,
@@ -365,7 +392,7 @@ describe('FloatingChat', () => {
 
       it('should allow normalizing from minimized state', async () => {
         const user = userEvent.setup();
-        render(<FloatingChat {...defaultProps} />);
+        renderFloatingChat(defaultProps);
 
         const minimizeButton = screen.getByRole('button', {
           name: /minimize chat/i,
@@ -384,7 +411,7 @@ describe('FloatingChat', () => {
 
       it('should allow maximizing from minimized state', async () => {
         const user = userEvent.setup();
-        render(<FloatingChat {...defaultProps} />);
+        renderFloatingChat(defaultProps);
 
         const minimizeButton = screen.getByRole('button', {
           name: /minimize chat/i,
@@ -409,7 +436,7 @@ describe('FloatingChat', () => {
     describe('maximized state', () => {
       it('should show restore size button when maximized', async () => {
         const user = userEvent.setup();
-        render(<FloatingChat {...defaultProps} />);
+        renderFloatingChat(defaultProps);
 
         const maximizeButton = screen.getByRole('button', {
           name: /maximize chat/i,
@@ -424,7 +451,7 @@ describe('FloatingChat', () => {
 
       it('should allow normalizing from maximized state', async () => {
         const user = userEvent.setup();
-        render(<FloatingChat {...defaultProps} />);
+        renderFloatingChat(defaultProps);
 
         const maximizeButton = screen.getByRole('button', {
           name: /maximize chat/i,
@@ -444,7 +471,7 @@ describe('FloatingChat', () => {
 
       it('should allow minimizing from maximized state', async () => {
         const user = userEvent.setup();
-        render(<FloatingChat {...defaultProps} />);
+        renderFloatingChat(defaultProps);
 
         const maximizeButton = screen.getByRole('button', {
           name: /maximize chat/i,
@@ -467,7 +494,7 @@ describe('FloatingChat', () => {
 
       it('should keep close button visible when maximized', async () => {
         const user = userEvent.setup();
-        render(<FloatingChat {...defaultProps} />);
+        renderFloatingChat(defaultProps);
 
         const maximizeButton = screen.getByRole('button', {
           name: /maximize chat/i,
@@ -486,7 +513,7 @@ describe('FloatingChat', () => {
     });
 
     it('should render debug mode switch', () => {
-      render(<FloatingChat {...defaultProps} />);
+      renderFloatingChat(defaultProps);
 
       const debugSwitch = screen.getByRole('switch', {
         name: /show tool calls/i,
@@ -495,7 +522,7 @@ describe('FloatingChat', () => {
     });
 
     it('should have debug mode enabled by default', () => {
-      render(<FloatingChat {...defaultProps} />);
+      renderFloatingChat(defaultProps);
 
       const debugSwitch = screen.getByRole('switch', {
         name: /show tool calls/i,
@@ -505,7 +532,7 @@ describe('FloatingChat', () => {
 
     it('should toggle debug mode when switch is clicked', async () => {
       const user = userEvent.setup();
-      render(<FloatingChat {...defaultProps} />);
+      renderFloatingChat(defaultProps);
 
       const debugSwitch = screen.getByRole('switch', {
         name: /show tool calls/i,
@@ -521,7 +548,7 @@ describe('FloatingChat', () => {
 
     it('should toggle debug mode when label is clicked', async () => {
       const user = userEvent.setup();
-      render(<FloatingChat {...defaultProps} />);
+      renderFloatingChat(defaultProps);
 
       const debugSwitch = screen.getByRole('switch', {
         name: /show tool calls/i,
@@ -572,7 +599,7 @@ describe('FloatingChat', () => {
         },
       );
 
-      render(<FloatingChat {...defaultProps} />);
+      renderFloatingChat(defaultProps);
 
       const input = screen.getByPlaceholderText('Type your message...');
       await user.type(input, 'What is the weather?');
@@ -625,7 +652,7 @@ describe('FloatingChat', () => {
         },
       );
 
-      render(<FloatingChat {...defaultProps} />);
+      renderFloatingChat(defaultProps);
 
       const debugSwitch = screen.getByRole('switch', {
         name: /show tool calls/i,
@@ -683,7 +710,7 @@ describe('FloatingChat', () => {
         },
       );
 
-      render(<FloatingChat {...defaultProps} />);
+      renderFloatingChat(defaultProps);
 
       const debugSwitch = screen.getByRole('switch', {
         name: /show tool calls/i,
@@ -735,7 +762,7 @@ describe('FloatingChat', () => {
         response: 'Polled response',
       });
 
-      render(<FloatingChat {...defaultProps} />);
+      renderFloatingChat(defaultProps);
 
       const input = screen.getByPlaceholderText('Type your message...');
       await user.type(input, 'Test message');
@@ -772,6 +799,73 @@ describe('FloatingChat', () => {
       expect(chatService.streamChatResponse).not.toHaveBeenCalled();
     });
 
+    it('should persist conversation ID to sessionStorage', () => {
+      vi.mocked(useAtomValue).mockImplementation(atom => {
+        if (atom === isChatStreamingEnabledAtom) {
+          return false;
+        }
+        if (atom === queryTimeoutSettingAtom) {
+          return '5m';
+        }
+        if (atom === lastConversationIdAtom) {
+          return null;
+        }
+        return undefined;
+      });
+
+      renderFloatingChat(defaultProps);
+
+      const storedId = sessionStorage.getItem('last-conversation-id');
+      expect(storedId).not.toBe(null);
+    });
+
+    it('should persist messages to sessionStorage', async () => {
+      vi.mocked(useAtomValue).mockImplementation(atom => {
+        if (atom === isChatStreamingEnabledAtom) {
+          return true;
+        }
+        if (atom === queryTimeoutSettingAtom) {
+          return '5m';
+        }
+        return undefined;
+      });
+
+      const user = userEvent.setup();
+
+      vi.mocked(chatService.streamChatResponse).mockImplementation(
+        async function* () {
+          yield { choices: [{ delta: { content: 'Test response' } }] };
+        },
+      );
+
+      renderFloatingChat(defaultProps);
+
+      const input = screen.getByPlaceholderText('Type your message...');
+      await user.type(input, 'Test message');
+
+      const sendButton = screen.getByRole('button', { name: /send/i });
+      await user.click(sendButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Test message')).toBeInTheDocument();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Test response')).toBeInTheDocument();
+      });
+
+      // Verify messages are persisted in sessionStorage
+      const storedHistory = sessionStorage.getItem('agent-chat-history');
+      expect(storedHistory).not.toBe(null);
+
+      const parsedHistory = JSON.parse(storedHistory!);
+      const chatKey = 'agent-Test Agent';
+      expect(parsedHistory[chatKey]).toBeDefined();
+      expect(parsedHistory[chatKey].messages).toHaveLength(2);
+      expect(parsedHistory[chatKey].messages[0].content).toBe('Test message');
+      expect(parsedHistory[chatKey].messages[1].content).toBe('Test response');
+    });
+
     it('should handle polling errors', async () => {
       // Mock atoms
       vi.mocked(useAtomValue).mockImplementation(atom => {
@@ -796,7 +890,7 @@ describe('FloatingChat', () => {
         response: 'Something went wrong',
       });
 
-      render(<FloatingChat {...defaultProps} />);
+      renderFloatingChat(defaultProps);
 
       const input = screen.getByPlaceholderText('Type your message...');
       await user.type(input, 'Test message');

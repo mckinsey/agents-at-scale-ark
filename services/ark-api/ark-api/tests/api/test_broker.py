@@ -131,6 +131,26 @@ class TestBrokerAPI(unittest.TestCase):
         self.assertEqual(response.json(), {"trace_id": "123", "spans": []})
 
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
+    @patch('ark_api.api.v1.broker.httpx.AsyncClient')
+    def test_get_traces_with_session_id(self, mock_async_client, mock_get_broker_url):
+        mock_get_broker_url.return_value = "http://broker:8080"
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"traces": []}
+        mock_response.status_code = 200
+
+        mock_client_instance = AsyncMock()
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+
+        response = self.client.get("/v1/broker/traces?session_id=sess-456")
+
+        self.assertEqual(response.status_code, 200)
+        mock_client_instance.get.assert_called_once()
+        call_args = mock_client_instance.get.call_args[0][0]
+        self.assertIn("session_id=sess-456", call_args)
+
+    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.proxy_sse_stream')
     def test_get_trace_watch(self, mock_proxy_sse, mock_get_broker_url):
         mock_get_broker_url.return_value = "http://broker:8080"
@@ -371,6 +391,26 @@ class TestBrokerAPI(unittest.TestCase):
         data = response.json()
         self.assertIn("error", data)
         self.assertEqual(data["error"]["type"], "server_error")
+
+    @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
+    @patch('ark_api.api.v1.broker.httpx.AsyncClient')
+    def test_get_events_with_session_id(self, mock_async_client, mock_get_broker_url):
+        mock_get_broker_url.return_value = "http://broker:8080"
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"events": [{"id": "1"}]}
+        mock_response.status_code = 200
+
+        mock_client_instance = AsyncMock()
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+
+        response = self.client.get("/v1/broker/events?session_id=sess-123")
+
+        self.assertEqual(response.status_code, 200)
+        mock_client_instance.get.assert_called_once()
+        call_args = mock_client_instance.get.call_args[0][0]
+        self.assertIn("session_id=sess-123", call_args)
 
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.proxy_sse_stream')

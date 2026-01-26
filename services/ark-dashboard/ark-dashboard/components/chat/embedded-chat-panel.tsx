@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { chatHistoryAtom, createNewSessionId } from '@/atoms/chat-history';
 import { isChatStreamingEnabledAtom } from '@/atoms/experimental-features';
+import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { ChatMessage } from '@/components/chat/chat-message';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -69,7 +70,12 @@ function extractItemTimestamp(item: unknown): string {
   return new Date().toISOString();
 }
 
-function useSSEStream(endpoint: string, memory: string, agentName: string) {
+function useSSEStream(
+  endpoint: string,
+  memory: string,
+  agentName: string,
+  sessionId?: string,
+) {
   const [streamedEntries, setStreamedEntries] = useState<StreamEntry[]>([]);
   const [fetchedEntries, setFetchedEntries] = useState<StreamEntry[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -106,6 +112,9 @@ function useSSEStream(endpoint: string, memory: string, agentName: string) {
       let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&watch=true`;
       if (cursor !== undefined && cursor !== null) {
         url += `&cursor=${cursor}`;
+      }
+      if (sessionId) {
+        url += `&session_id=${encodeURIComponent(sessionId)}`;
       }
       const eventSource = new EventSource(url);
       eventSourceRef.current = eventSource;
@@ -147,7 +156,7 @@ function useSSEStream(endpoint: string, memory: string, agentName: string) {
         }, 3000);
       };
     },
-    [endpoint, memory, filterByAgent],
+    [endpoint, memory, filterByAgent, sessionId],
   );
 
   const fetchPage = useCallback(
@@ -160,6 +169,9 @@ function useSSEStream(endpoint: string, memory: string, agentName: string) {
         let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=${PAGE_SIZE}`;
         if (cursor !== undefined && cursor !== null) {
           url += `&cursor=${cursor}`;
+        }
+        if (sessionId) {
+          url += `&session_id=${encodeURIComponent(sessionId)}`;
         }
         const response = await fetch(url, {
           signal: abortControllerRef.current.signal,
@@ -199,7 +211,7 @@ function useSSEStream(endpoint: string, memory: string, agentName: string) {
         }
       }
     },
-    [endpoint, memory, filterByAgent],
+    [endpoint, memory, filterByAgent, sessionId],
   );
 
   const loadMore = useCallback(() => {
@@ -388,9 +400,14 @@ interface EmbeddedChatPanelProps {
 
 export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
   const [chatHistory, setChatHistory] = useAtom(chatHistoryAtom);
+  const [lastConversationId, setLastConversationId] = useAtom(
+    lastConversationIdAtom,
+  );
   const chatKey = `${type}-${name}`;
 
-  const initSessionIdRef = useRef<string>(createNewSessionId());
+  const initSessionIdRef = useRef<string>(
+    lastConversationId || createNewSessionId(),
+  );
 
   const chatSession = useMemo(() => {
     const existing = chatHistory?.[chatKey];
@@ -405,12 +422,14 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
 
   useEffect(() => {
     if (!chatHistory?.[chatKey]) {
+      const sessionIdToUse = initSessionIdRef.current;
+      setLastConversationId(sessionIdToUse);
       setChatHistory(prev => ({
         ...(prev || {}),
-        [chatKey]: { messages: [], sessionId: initSessionIdRef.current },
+        [chatKey]: { messages: [], sessionId: sessionIdToUse },
       }));
     }
-  }, [chatKey, chatHistory, setChatHistory]);
+  }, [chatKey, chatHistory, setChatHistory, setLastConversationId]);
 
   const setChatMessages = useCallback(
     (
@@ -439,12 +458,13 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
   const handleNewChat = useCallback(() => {
     const newSessionId = createNewSessionId();
     initSessionIdRef.current = newSessionId;
+    setLastConversationId(newSessionId);
     setChatHistory(prev => ({
       ...(prev || {}),
       [chatKey]: { messages: [], sessionId: newSessionId },
     }));
     setError(null);
-  }, [chatKey, setChatHistory]);
+  }, [chatKey, setChatHistory, setLastConversationId]);
 
   const [currentMessage, setCurrentMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -454,8 +474,8 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
     useState<DebugStreamType>('traces');
   const [debugMode, setDebugMode] = useState(true);
 
-  const traces = useSSEStream('/v1/broker/traces', 'default', name);
-  const events = useSSEStream('/v1/broker/events', 'default', name);
+  const traces = useSSEStream('/v1/broker/traces', 'default', name, sessionId);
+  const events = useSSEStream('/v1/broker/events', 'default', name, sessionId);
   const inputRef = useRef<HTMLInputElement>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const stopPollingRef = useRef<(() => void) | null>(null);
