@@ -209,9 +209,16 @@ export default function FlowDetailPage() {
     }
   };
 
-  const handleRunWorkflow = async (parameters?: Record<string, string>) => {
+  const handleRunWorkflow = async (
+    parameters?: Record<string, string>,
+    workflowName?: string,
+  ) => {
     try {
-      const workflow = await workflowTemplatesService.run(flowId, parameters);
+      const workflow = await workflowTemplatesService.run(
+        flowId,
+        parameters,
+        workflowName,
+      );
       showWorkflowStartedToast(workflow.metadata.name);
 
       if (stats) {

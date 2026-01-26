@@ -118,13 +118,14 @@ export const workflowTemplatesService = {
   async run(
     templateName: string,
     parameters?: Record<string, string>,
+    workflowName?: string,
   ): Promise<Workflow> {
     const timestamp = Date.now();
     const workflow: Workflow = {
       apiVersion: 'argoproj.io/v1alpha1',
       kind: 'Workflow',
       metadata: {
-        name: `${templateName}-${timestamp}`,
+        name: workflowName || `${templateName}-${timestamp}`,
       },
       spec: {
         workflowTemplateRef: {

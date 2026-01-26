@@ -29,6 +29,7 @@ interface FlowRowProps {
   readonly onRun?: (
     flowId: string,
     parameters?: Record<string, string>,
+    workflowName?: string,
   ) => Promise<void>;
   readonly onDelete?: (flowId: string) => Promise<void>;
 }
@@ -36,9 +37,12 @@ interface FlowRowProps {
 export function FlowRow({ flow, parameters, onRun, onDelete }: FlowRowProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  const handleRunWorkflow = async (params?: Record<string, string>) => {
+  const handleRunWorkflow = async (
+    params?: Record<string, string>,
+    workflowName?: string,
+  ) => {
     if (onRun) {
-      await onRun(flow.id, params);
+      await onRun(flow.id, params, workflowName);
     }
   };
 

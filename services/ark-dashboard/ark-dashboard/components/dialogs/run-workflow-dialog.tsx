@@ -20,7 +20,10 @@ import type { WorkflowParameter } from '@/lib/services/workflow-templates';
 interface RunWorkflowDialogProps {
   templateName: string;
   parameters?: WorkflowParameter[];
-  onRun: (parameters?: Record<string, string>) => Promise<void>;
+  onRun: (
+    parameters?: Record<string, string>,
+    workflowName?: string,
+  ) => Promise<void>;
   trigger?: React.ReactNode;
 }
 
@@ -31,6 +34,7 @@ export function RunWorkflowDialog({
   trigger,
 }: RunWorkflowDialogProps) {
   const [open, setOpen] = useState(false);
+  const [workflowName, setWorkflowName] = useState('');
   const [paramValues, setParamValues] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     parameters.forEach(param => {
@@ -44,7 +48,10 @@ export function RunWorkflowDialog({
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      await onRun(parameters.length > 0 ? paramValues : undefined);
+      await onRun(
+        parameters.length > 0 ? paramValues : undefined,
+        workflowName || undefined,
+      );
       setOpen(false);
     } finally {
       setIsSubmitting(false);
@@ -55,6 +62,7 @@ export function RunWorkflowDialog({
     if (!isSubmitting) {
       setOpen(newOpen);
       if (newOpen) {
+        setWorkflowName('');
         const initial: Record<string, string> = {};
         parameters.forEach(param => {
           initial[param.name] = param.value || param.default || '';
@@ -86,9 +94,23 @@ export function RunWorkflowDialog({
                 : `Run workflow ${templateName}?`}
             </DialogDescription>
           </DialogHeader>
-          {parameters.length > 0 && (
-            <div className="grid gap-4 py-4">
-              {parameters.map(param => (
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="workflow-name">
+                Workflow Name{' '}
+                <span className="text-muted-foreground text-xs font-normal">
+                  (optional)
+                </span>
+              </Label>
+              <Input
+                id="workflow-name"
+                value={workflowName}
+                onChange={e => setWorkflowName(e.target.value)}
+                placeholder="Auto-generated if not specified"
+              />
+            </div>
+            {parameters.length > 0 &&
+              parameters.map(param => (
                 <div key={param.name} className="grid gap-2">
                   <Label htmlFor={param.name}>{param.name}</Label>
                   <Input
@@ -104,8 +126,7 @@ export function RunWorkflowDialog({
                   />
                 </div>
               ))}
-            </div>
-          )}
+          </div>
           <DialogFooter>
             <Button
               type="button"
