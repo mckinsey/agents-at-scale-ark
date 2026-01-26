@@ -118,13 +118,14 @@ export const workflowTemplatesService = {
   async run(
     templateName: string,
     parameters?: Record<string, string>,
+    workflowName?: string,
   ): Promise<Workflow> {
     const timestamp = Date.now();
     const workflow: Workflow = {
       apiVersion: 'argoproj.io/v1alpha1',
       kind: 'Workflow',
       metadata: {
-        name: `${templateName}-${timestamp}`,
+        name: workflowName || `${templateName}-${timestamp}`,
       },
       spec: {
         workflowTemplateRef: {
@@ -142,11 +143,37 @@ export const workflowTemplatesService = {
       };
     }
 
-    const response = await apiClient.post<Workflow>(
-      '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow',
-      workflow,
-    );
-    return response;
+    try {
+      const response = await apiClient.post<Workflow>(
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow',
+        workflow,
+      );
+      return response;
+    } catch (error) {
+      console.error('Error creating workflow:', error);
+      if (error && typeof error === 'object' && 'status' in error) {
+        const apiError = error as { status?: number; data?: any };
+        console.error('API Error status:', apiError.status);
+        console.error('API Error data:', apiError.data);
+
+        if (apiError.status === 409) {
+          throw new Error(
+            `A workflow with the name "${workflow.metadata.name}" already exists`,
+          );
+        }
+        if (apiError.data && typeof apiError.data === 'object') {
+          if ('message' in apiError.data) {
+            throw new Error(String(apiError.data.message));
+          }
+          if ('reason' in apiError.data && 'message' in apiError.data) {
+            throw new Error(
+              `${apiError.data.reason}: ${apiError.data.message}`,
+            );
+          }
+        }
+      }
+      throw error;
+    }
   },
 
   async delete(name: string): Promise<void> {

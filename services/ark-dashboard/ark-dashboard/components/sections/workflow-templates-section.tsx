@@ -59,9 +59,14 @@ export function WorkflowTemplatesSection() {
   const handleRunWorkflow = async (
     flowId: string,
     parameters?: Record<string, string>,
+    workflowName?: string,
   ) => {
     try {
-      const workflow = await workflowTemplatesService.run(flowId, parameters);
+      const workflow = await workflowTemplatesService.run(
+        flowId,
+        parameters,
+        workflowName,
+      );
       showWorkflowStartedToast(workflow.metadata.name);
     } catch (error) {
       console.error('Failed to start workflow:', error);
@@ -69,6 +74,7 @@ export function WorkflowTemplatesSection() {
         description:
           error instanceof Error ? error.message : 'An unknown error occurred',
       });
+      throw error;
     }
   };
 
