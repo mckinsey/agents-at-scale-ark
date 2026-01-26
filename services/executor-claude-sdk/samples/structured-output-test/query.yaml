@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-structured-output
+  labels:
+    sample: "true"
+spec:
+  target:
+    name: structured-output-test
+    type: agent
+  input: |
+    What is 2 + 2? Respond with the answer and your confidence level.
+  timeout: 2m

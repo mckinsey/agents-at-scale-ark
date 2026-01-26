@@ -1,0 +1,17 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: structured-output-test
+  labels:
+    sample: "true"
+spec:
+  description: Simple agent to test structured output
+  prompt: |
+    You are a simple assistant that answers questions.
+    Always provide your response in the required JSON format.
+  modelRef:
+    name: anthropic-claude
+  executionEngine:
+    name: claude-sdk-executor
+    profileRef:
+      name: structured-output-test-profile

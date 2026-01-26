@@ -248,12 +248,14 @@ class ClaudeSdkRunner:
 
                             # Capture structured output if output_format was configured
                             structured_output = getattr(message, 'structured_output', None)
-                            logger.debug(f"ResultMessage structured_output: {structured_output is not None}")
+                            logger.info(f"ResultMessage: subtype={message.subtype}, structured_output={structured_output is not None}, result_len={len(message.result or '')}")
                             if structured_output:
                                 telemetry.structured_output = structured_output
                                 logger.info(f"Captured structured output with keys: {list(structured_output.keys()) if isinstance(structured_output, dict) else type(structured_output)}")
                             else:
-                                logger.debug(f"No structured_output in ResultMessage, result text (first 100): {(message.result or '')[:100]}")
+                                # Log the result to debug why structured output is missing
+                                result_preview = (message.result or '')[:500]
+                                logger.info(f"No structured_output in ResultMessage. Result preview: {result_preview}")
 
                             if message.subtype == "success":
                                 result_text = message.result or ""
