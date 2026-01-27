@@ -151,3 +151,10 @@ export function isZipFile(extension: string | undefined): boolean {
   if (!extension) return false;
   return ['zip', 'jar', 'war', 'ear'].includes(extension.toLowerCase());
 }
+
+export function isSpreadsheetFile(extension: string | undefined): boolean {
+  if (!extension) return false;
+  return ['xlsx', 'xls', 'xlsm', 'csv', 'tsv', 'tab'].includes(
+    extension.toLowerCase(),
+  );
+}

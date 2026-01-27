@@ -110,6 +110,8 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
       previewIsJson,
       previewZipEntries,
       previewIsZip,
+      previewSpreadsheetData,
+      previewIsSpreadsheet,
       previewLoading,
       handlePreview,
       setPreviewOpen,
@@ -696,6 +698,8 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
           jsonData={previewJsonData}
           isZip={previewIsZip}
           zipEntries={previewZipEntries}
+          isSpreadsheet={previewIsSpreadsheet}
+          spreadsheetData={previewSpreadsheetData}
           language={previewLanguage}
           content={previewContent}
         />

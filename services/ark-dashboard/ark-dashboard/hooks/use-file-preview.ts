@@ -10,8 +10,10 @@ import {
   isSvgFile,
   isJsonFile,
   isZipFile,
+  isSpreadsheetFile,
 } from '@/lib/utils/file-preview';
 import type { ZipEntry } from '@/components/file-preview/zip-tree';
+import type { SpreadsheetData } from '@/components/file-preview/spreadsheet-viewer';
 
 export function useFilePreview() {
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -25,6 +27,8 @@ export function useFilePreview() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewZipEntries, setPreviewZipEntries] = useState<ZipEntry[]>([]);
   const [previewIsZip, setPreviewIsZip] = useState(false);
+  const [previewSpreadsheetData, setPreviewSpreadsheetData] = useState<SpreadsheetData | null>(null);
+  const [previewIsSpreadsheet, setPreviewIsSpreadsheet] = useState(false);
 
   const handlePreview = useCallback(async (key: string) => {
     setPreviewKey(key);
@@ -38,6 +42,8 @@ export function useFilePreview() {
     setPreviewIsJson(false);
     setPreviewZipEntries([]);
     setPreviewIsZip(false);
+    setPreviewSpreadsheetData(null);
+    setPreviewIsSpreadsheet(false);
 
     try {
       const url = `${FILES_API_BASE_URL}/files/${encodeURIComponent(key)}/download`;
@@ -53,9 +59,53 @@ export function useFilePreview() {
       const isSvg = isSvgFile(fileExtension);
       const isJson = isJsonFile(fileExtension);
       const isZip = isZipFile(fileExtension);
+      const isSpreadsheet = isSpreadsheetFile(fileExtension);
       const language = getLanguageFromExtension(fileExtension);
 
-      if (isZip) {
+      if (isSpreadsheet) {
+        // Call the backend API to parse the spreadsheet
+        try {
+          // Convert blob to base64
+          const reader = new FileReader();
+          const base64Promise = new Promise<string>((resolve, reject) => {
+            reader.onload = () => {
+              const base64 = (reader.result as string).split(',')[1];
+              resolve(base64);
+            };
+            reader.onerror = reject;
+          });
+          reader.readAsDataURL(blob);
+          const base64Content = await base64Promise;
+
+          // Call the API endpoint
+          const apiResponse = await fetch('/api/v1/file-preview/spreadsheet', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              content: base64Content,
+              filename: key,
+              mimeType: blob.type,
+            }),
+          });
+
+          if (!apiResponse.ok) {
+            throw new Error(`Failed to parse spreadsheet: ${apiResponse.statusText}`);
+          }
+
+          const spreadsheetData = await apiResponse.json();
+          setPreviewSpreadsheetData(spreadsheetData);
+          setPreviewIsSpreadsheet(true);
+        } catch (error) {
+          console.error('Failed to parse spreadsheet:', error);
+          // Fallback to showing raw content
+          const text = await blob.text();
+          setPreviewContent(text);
+          setPreviewIsSpreadsheet(false);
+          setPreviewLanguage(null);
+        }
+      } else if (isZip) {
         // Parse ZIP file structure using JSZip
         try {
           const JSZip = (await import('jszip')).default;
@@ -154,6 +204,8 @@ export function useFilePreview() {
     previewIsJson,
     previewZipEntries,
     previewIsZip,
+    previewSpreadsheetData,
+    previewIsSpreadsheet,
     previewLoading,
     handlePreview,
     closePreview,
