@@ -9,7 +9,9 @@ import {
   isImageFile,
   isSvgFile,
   isJsonFile,
+  isZipFile,
 } from '@/lib/utils/file-preview';
+import type { ZipEntry } from '@/components/file-preview/zip-tree';
 
 export function useFilePreview() {
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -21,6 +23,8 @@ export function useFilePreview() {
   const [previewJsonData, setPreviewJsonData] = useState<unknown>(null);
   const [previewIsJson, setPreviewIsJson] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewZipEntries, setPreviewZipEntries] = useState<ZipEntry[]>([]);
+  const [previewIsZip, setPreviewIsZip] = useState(false);
 
   const handlePreview = useCallback(async (key: string) => {
     setPreviewKey(key);
@@ -32,6 +36,8 @@ export function useFilePreview() {
     setPreviewLanguage(null);
     setPreviewJsonData(null);
     setPreviewIsJson(false);
+    setPreviewZipEntries([]);
+    setPreviewIsZip(false);
 
     try {
       const url = `${FILES_API_BASE_URL}/files/${encodeURIComponent(key)}/download`;
@@ -46,9 +52,45 @@ export function useFilePreview() {
       const isImage = isImageFile(fileExtension);
       const isSvg = isSvgFile(fileExtension);
       const isJson = isJsonFile(fileExtension);
+      const isZip = isZipFile(fileExtension);
       const language = getLanguageFromExtension(fileExtension);
 
-      if (isImage || isSvg) {
+      if (isZip) {
+        // Parse ZIP file structure using JSZip
+        try {
+          const JSZip = (await import('jszip')).default;
+          const zip = await JSZip.loadAsync(blob);
+          const entries: ZipEntry[] = [];
+
+          zip.forEach((relativePath, zipEntry) => {
+            const name = zipEntry.name.split('/').filter(Boolean).pop() || zipEntry.name;
+            entries.push({
+              name: name,
+              path: zipEntry.name,
+              size: (zipEntry as any)._data?.uncompressedSize || 0,
+              compressedSize: (zipEntry as any)._data?.compressedSize || 0,
+              isDirectory: zipEntry.dir,
+              lastModified: zipEntry.date.toISOString(),
+            });
+          });
+
+          // Sort entries: directories first, then alphabetically
+          entries.sort((a, b) => {
+            if (a.isDirectory && !b.isDirectory) return -1;
+            if (!a.isDirectory && b.isDirectory) return 1;
+            return a.path.localeCompare(b.path);
+          });
+
+          setPreviewZipEntries(entries);
+          setPreviewIsZip(true);
+        } catch (error) {
+          // Fallback to showing error message if ZIP parsing fails
+          console.error('Failed to parse ZIP file:', error);
+          setPreviewContent('Unable to parse ZIP file structure. The file may be corrupted or not a valid ZIP archive.');
+          setPreviewIsZip(false);
+          setPreviewLanguage(null);
+        }
+      } else if (isImage || isSvg) {
         // For SVG files, we need to handle them specially since they're text-based
         if (isSvg) {
           const text = await blob.text();
@@ -110,6 +152,8 @@ export function useFilePreview() {
     previewLanguage,
     previewJsonData,
     previewIsJson,
+    previewZipEntries,
+    previewIsZip,
     previewLoading,
     handlePreview,
     closePreview,

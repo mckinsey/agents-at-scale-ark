@@ -146,3 +146,8 @@ export function isJsonFile(extension: string | undefined): boolean {
   if (!extension) return false;
   return extension.toLowerCase() === 'json';
 }
+
+export function isZipFile(extension: string | undefined): boolean {
+  if (!extension) return false;
+  return ['zip', 'jar', 'war', 'ear'].includes(extension.toLowerCase());
+}

@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/sheet';
 
 import { JsonTree } from './json-tree';
+import { ZipTree } from './zip-tree';
+import type { ZipEntry } from './zip-tree';
 
 interface FilePreviewDialogProps {
   open: boolean;
@@ -21,6 +23,8 @@ interface FilePreviewDialogProps {
   imageUrl?: string | null;
   isJson: boolean;
   jsonData?: unknown;
+  isZip?: boolean;
+  zipEntries?: ZipEntry[];
   language?: string | null;
   content: string;
 }
@@ -34,6 +38,8 @@ export function FilePreviewDialog({
   imageUrl,
   isJson,
   jsonData,
+  isZip,
+  zipEntries,
   language,
   content,
 }: FilePreviewDialogProps) {
@@ -63,6 +69,8 @@ export function FilePreviewDialog({
                 className="max-h-full max-w-full object-contain"
               />
             </div>
+          ) : isZip && zipEntries && zipEntries.length > 0 ? (
+            <ZipTree entries={zipEntries} />
           ) : isJson && jsonData !== null ? (
             <JsonTree data={jsonData} />
           ) : language ? (
