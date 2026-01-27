@@ -956,7 +956,7 @@ export function SessionsSection() {
   const filteredTemplateNames = useMemo(() => {
     if (!workflowTemplateNameInput) return uniqueWorkflowTemplateNames;
     const searchLower = workflowTemplateNameInput.toLowerCase();
-    return uniqueWorkflowTemplateNames.filter(name => 
+    return uniqueWorkflowTemplateNames.filter(name =>
       name.toLowerCase().includes(searchLower)
     );
   }, [uniqueWorkflowTemplateNames, workflowTemplateNameInput]);
@@ -1072,18 +1072,6 @@ export function SessionsSection() {
                 }}
                 className="pl-8 pr-8 h-8 bg-background text-sm border-0 shadow-sm"
               />
-              {workflowTemplateNameInput && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setWorkflowTemplateNameInput('');
-                    setTemplateDropdownOpen(false);
-                  }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground z-10"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
               {templateDropdownOpen && (
                 <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
                   {uniqueWorkflowTemplateNames.length === 0 ? (
@@ -1121,7 +1109,7 @@ export function SessionsSection() {
             </div>
             <div className="flex items-center gap-2 ml-auto shrink-0">
               <Select value={statusFilter || 'all'} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-32 h-8 bg-background text-sm border-0 shadow-sm">
+                <SelectTrigger className="w-32 h-8 text-sm border-2 shadow-sm">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1132,7 +1120,7 @@ export function SessionsSection() {
                 </SelectContent>
               </Select>
               <Select value={sortOrder} onValueChange={value => setSortOrder(value as SortOrder)}>
-                <SelectTrigger className="w-32 h-8 bg-background text-sm border-0 shadow-sm">
+                <SelectTrigger className="w-32 h-8 text-sm border-2 shadow-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1140,29 +1128,22 @@ export function SessionsSection() {
                   <SelectItem value="oldest">Oldest First</SelectItem>
                 </SelectContent>
               </Select>
-              {hasActiveFilters && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearFilters}
-                  title="Clear all filters"
-                  className="h-8 px-2"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearFilters}
+                title="Clear Filters"
+                className="h-8 px-2 border-2"
+                disabled={!hasActiveFilters}
+              >
+                <X className="h-3.5 w-3.5" />Clear Filters
+              </Button>
             </div>
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground font-medium">
               {filteredAndSortedSessions.length} session{filteredAndSortedSessions.length !== 1 ? 's' : ''}
             </span>
-            {loading && (
-              <span className="text-muted-foreground flex items-center gap-1.5">
-                <RefreshCw className="h-3 w-3 animate-spin" />
-                Loading...
-              </span>
-            )}
             {error && (
               <span className="text-red-500 font-medium">
                 Error: {error.message}
