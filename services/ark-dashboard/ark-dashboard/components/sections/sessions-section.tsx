@@ -2,7 +2,6 @@
 
 import {
   AlertCircle,
-  ArrowUpDown,
   Bot,
   CheckCircle2,
   ChevronDown,
@@ -219,7 +218,7 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
   const [logs, setLogs] = useState<string>('');
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [logsError, setLogsError] = useState<string | null>(null);
-  
+
   const shouldFetchLogs = detail.workflowName && detail.nodeId && detail.namespace;
 
   useEffect(() => {
@@ -233,7 +232,7 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
       try {
         const { workflowsService } = await import('@/lib/services/workflows');
         let logData = '';
-        
+
         // Try to get logs from pod first (more reliable for recent workflows)
         if (detail.podName) {
           try {
@@ -246,7 +245,7 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
             console.debug('Pod logs not available, trying archived logs');
           }
         }
-        
+
         // If pod logs didn't work or no podName, try archived workflow logs
         if (!logData) {
           logData = await workflowsService.getWorkflowLogs(
@@ -255,7 +254,7 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
             detail.namespace!,
           );
         }
-        
+
         if (!cancelled) {
           setLogs(logData);
         }
@@ -274,7 +273,7 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
         }
       }
     };
-    
+
     void fetchLogs();
 
     return () => {
@@ -869,7 +868,7 @@ function SessionListItem({
 
 const normalizeStatus = (status: string): string => {
   if (!status || status === 'all') return 'all';
-  
+
   const statusMap: Record<string, string> = {
     'running': 'Running',
     'succeeded': 'Succeeded',
@@ -877,14 +876,14 @@ const normalizeStatus = (status: string): string => {
     'error': 'Error',
     'pending': 'Pending',
   };
-  
+
   return statusMap[status.toLowerCase()] || status;
 };
 
 export function SessionsSection() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+
   // Note: sourceFilter is currently unused but reserved for future support of Team sessions
   // Currently only workflow sessions are implemented
   const [sourceFilter] = useState<SessionSourceFilter>('all');
@@ -905,6 +904,8 @@ export function SessionsSection() {
   const [sortOrder, setSortOrder] = useState<SortOrder>(
     (searchParams.get('sort') as SortOrder) || 'newest'
   );
+  const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
+  const templateInputRef = useRef<HTMLDivElement>(null);
 
   const debouncedWorkflowName = useDebounce(workflowNameInput, 500);
   const debouncedWorkflowTemplateName = useDebounce(workflowTemplateNameInput, 500);
@@ -918,7 +919,7 @@ export function SessionsSection() {
   // Update URL when filters or sort change
   useEffect(() => {
     const params = new URLSearchParams();
-    
+
     if (debouncedWorkflowName) {
       params.set('workflowName', debouncedWorkflowName);
     }
@@ -940,6 +941,25 @@ export function SessionsSection() {
   const { workflows, loading, error, refetch: refetchWorkflows } = useWorkflows('default', filters);
 
   const allSessions = mapArgoWorkflowsToSessions(workflows);
+
+  const uniqueWorkflowTemplateNames = useMemo(() => {
+    const templateNames = new Set<string>();
+    workflows.forEach(workflow => {
+      const templateName = workflow.spec.workflowTemplateRef?.name;
+      if (templateName) {
+        templateNames.add(templateName);
+      }
+    });
+    return Array.from(templateNames).sort();
+  }, [workflows]);
+
+  const filteredTemplateNames = useMemo(() => {
+    if (!workflowTemplateNameInput) return uniqueWorkflowTemplateNames;
+    const searchLower = workflowTemplateNameInput.toLowerCase();
+    return uniqueWorkflowTemplateNames.filter(name => 
+      name.toLowerCase().includes(searchLower)
+    );
+  }, [uniqueWorkflowTemplateNames, workflowTemplateNameInput]);
 
   const filteredAndSortedSessions = allSessions
     .filter(session => {
@@ -996,6 +1016,21 @@ export function SessionsSection() {
     }
   }, [selectedWorkflowDetail, useRealData, refetchWorkflows]);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (templateInputRef.current && !templateInputRef.current.contains(event.target as Node)) {
+        setTemplateDropdownOpen(false);
+      }
+    };
+
+    if (templateDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [templateDropdownOpen]);
+
   const hasActiveFilters = workflowNameInput || workflowTemplateNameInput || (statusFilter && statusFilter !== 'all') || sortOrder !== 'newest';
 
   const clearFilters = () => {
@@ -1009,134 +1044,188 @@ export function SessionsSection() {
     <ErrorBoundary>
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div className="flex flex-col gap-1.5 rounded-md bg-muted/20 px-3 py-2">
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
-            <Input
-              type="text"
-              placeholder="Search workflow..."
-              value={workflowNameInput}
-              onChange={e => setWorkflowNameInput(e.target.value)}
-              className="pl-8 h-8 bg-background text-sm border-0 shadow-sm"
-            />
-          </div>
-          <div className="relative flex-1">
-            <Search className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
-            <Input
-              type="text"
-              placeholder="Search template..."
-              value={workflowTemplateNameInput}
-              onChange={e => setWorkflowTemplateNameInput(e.target.value)}
-              className="pl-8 h-8 bg-background text-sm border-0 shadow-sm"
-            />
-          </div>
-          <div className="flex items-center gap-2 ml-auto shrink-0">
-            <Select value={statusFilter || 'all'} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-32 h-8 bg-background text-sm border-0 shadow-sm">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="Running">Running</SelectItem>
-                <SelectItem value="Succeeded">Succeeded</SelectItem>
-                <SelectItem value="Failed">Failed</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={sortOrder} onValueChange={value => setSortOrder(value as SortOrder)}>
-              <SelectTrigger className="w-32 h-8 bg-background text-sm border-0 shadow-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="newest">Newest First</SelectItem>
-                <SelectItem value="oldest">Oldest First</SelectItem>
-              </SelectContent>
-            </Select>
-            {hasActiveFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                title="Clear all filters"
-                className="h-8 px-2"
-              >
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-muted-foreground font-medium">
-            {filteredAndSortedSessions.length} session{filteredAndSortedSessions.length !== 1 ? 's' : ''}
-          </span>
-          {loading && (
-            <span className="text-muted-foreground flex items-center gap-1.5">
-              <RefreshCw className="h-3 w-3 animate-spin" />
-              Loading...
-            </span>
-          )}
-          {error && (
-            <span className="text-red-500 font-medium">
-              Error: {error.message}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center gap-4">
-          <RefreshCw className="h-10 w-10 animate-spin" />
-          <span className="text-base font-medium">Loading sessions...</span>
-        </div>
-      ) : filteredAndSortedSessions.length > 0 ? (
-        <div className="flex flex-1 gap-4 overflow-hidden">
-          <div className="flex w-80 flex-col gap-3 overflow-auto pr-2">
-            {filteredAndSortedSessions.map(session => (
-              <SessionListItem
-                key={session.id}
-                session={session}
-                isSelected={session.id === selectedSessionId}
-                onClick={() => setSelectedSessionId(session.id)}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
+              <Input
+                type="text"
+                placeholder="Search workflow..."
+                value={workflowNameInput}
+                onChange={e => setWorkflowNameInput(e.target.value)}
+                className="pl-8 h-8 bg-background text-sm border-0 shadow-sm"
               />
-            ))}
-          </div>
-          <div className="flex flex-1 overflow-hidden min-w-0">
-            {selectedSession ? (
-              <SessionDetailView
-                session={selectedSession}
-                isLoading={loadingDetail && useRealData}
+            </div>
+            <div className="relative flex-1" ref={templateInputRef}>
+              <Search className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 pointer-events-none z-10" />
+              <Input
+                type="text"
+                placeholder="Search templates..."
+                value={workflowTemplateNameInput}
+                onChange={e => {
+                  setWorkflowTemplateNameInput(e.target.value);
+                  if (!templateDropdownOpen) {
+                    setTemplateDropdownOpen(true);
+                  }
+                }}
+                onFocus={() => {
+                  setTemplateDropdownOpen(true);
+                }}
+                className="pl-8 pr-8 h-8 bg-background text-sm border-0 shadow-sm"
               />
-            ) : (
-              <Card className="flex flex-1 items-center justify-center">
-                <div className="text-muted-foreground flex flex-col items-center gap-3">
-                  <Workflow className="h-12 w-12 opacity-20" />
-                  <span className="text-base font-medium">Select a session to view details</span>
+              {workflowTemplateNameInput && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setWorkflowTemplateNameInput('');
+                    setTemplateDropdownOpen(false);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground z-10"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {templateDropdownOpen && (
+                <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
+                  {uniqueWorkflowTemplateNames.length === 0 ? (
+                    <div className="px-2 py-3 text-sm text-muted-foreground text-center">
+                      No workflow templates found yet.
+                      <br />
+                      Type to enter a custom value.
+                    </div>
+                  ) : filteredTemplateNames.length > 0 ? (
+                    <div className="max-h-[300px] overflow-y-auto py-1">
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                        Available Templates ({filteredTemplateNames.length})
+                      </div>
+                      <div className="border-t border-border my-1" />
+                      {filteredTemplateNames.map(templateName => (
+                        <button
+                          key={templateName}
+                          onClick={() => {
+                            setWorkflowTemplateNameInput(templateName);
+                            setTemplateDropdownOpen(false);
+                          }}
+                          className="w-full text-left px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer transition-colors"
+                        >
+                          {templateName}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="px-2 py-3 text-sm text-muted-foreground text-center">
+                      No templates match "{workflowTemplateNameInput}"
+                    </div>
+                  )}
                 </div>
-              </Card>
+              )}
+            </div>
+            <div className="flex items-center gap-2 ml-auto shrink-0">
+              <Select value={statusFilter || 'all'} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-32 h-8 bg-background text-sm border-0 shadow-sm">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="Running">Running</SelectItem>
+                  <SelectItem value="Succeeded">Succeeded</SelectItem>
+                  <SelectItem value="Failed">Failed</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sortOrder} onValueChange={value => setSortOrder(value as SortOrder)}>
+                <SelectTrigger className="w-32 h-8 bg-background text-sm border-0 shadow-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">Newest First</SelectItem>
+                  <SelectItem value="oldest">Oldest First</SelectItem>
+                </SelectContent>
+              </Select>
+              {hasActiveFilters && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearFilters}
+                  title="Clear all filters"
+                  className="h-8 px-2"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground font-medium">
+              {filteredAndSortedSessions.length} session{filteredAndSortedSessions.length !== 1 ? 's' : ''}
+            </span>
+            {loading && (
+              <span className="text-muted-foreground flex items-center gap-1.5">
+                <RefreshCw className="h-3 w-3 animate-spin" />
+                Loading...
+              </span>
+            )}
+            {error && (
+              <span className="text-red-500 font-medium">
+                Error: {error.message}
+              </span>
             )}
           </div>
         </div>
-      ) : (
-        <Card className="flex flex-1 items-center justify-center">
-          <div className="text-muted-foreground flex flex-col items-center gap-4 p-8">
-            {hasActiveFilters ? (
-              <>
-                <Search className="h-16 w-16 opacity-20" />
-                <span className="text-base font-medium">No sessions found matching your filters</span>
-                <Button variant="outline" onClick={clearFilters}>
-                  Clear filters
-                </Button>
-              </>
-            ) : (
-              <>
-                <Workflow className="h-16 w-16 opacity-20" />
-                <span className="text-base font-medium">
-                  No {sourceFilter === 'all' ? '' : sourceFilter} sessions to display
-                </span>
-              </>
-            )}
+
+        {loading ? (
+          <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center gap-4">
+            <RefreshCw className="h-10 w-10 animate-spin" />
+            <span className="text-base font-medium">Loading sessions...</span>
           </div>
-        </Card>
-      )}
+        ) : filteredAndSortedSessions.length > 0 ? (
+          <div className="flex flex-1 gap-4 overflow-hidden">
+            <div className="flex w-80 flex-col gap-3 overflow-auto pr-2">
+              {filteredAndSortedSessions.map(session => (
+                <SessionListItem
+                  key={session.id}
+                  session={session}
+                  isSelected={session.id === selectedSessionId}
+                  onClick={() => setSelectedSessionId(session.id)}
+                />
+              ))}
+            </div>
+            <div className="flex flex-1 overflow-hidden min-w-0">
+              {selectedSession ? (
+                <SessionDetailView
+                  session={selectedSession}
+                  isLoading={loadingDetail && useRealData}
+                />
+              ) : (
+                <Card className="flex flex-1 items-center justify-center">
+                  <div className="text-muted-foreground flex flex-col items-center gap-3">
+                    <Workflow className="h-12 w-12 opacity-20" />
+                    <span className="text-base font-medium">Select a session to view details</span>
+                  </div>
+                </Card>
+              )}
+            </div>
+          </div>
+        ) : (
+          <Card className="flex flex-1 items-center justify-center">
+            <div className="text-muted-foreground flex flex-col items-center gap-4 p-8">
+              {hasActiveFilters ? (
+                <>
+                  <Search className="h-16 w-16 opacity-20" />
+                  <span className="text-base font-medium">No sessions found matching your filters</span>
+                  <Button variant="outline" onClick={clearFilters}>
+                    Clear filters
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Workflow className="h-16 w-16 opacity-20" />
+                  <span className="text-base font-medium">
+                    No {sourceFilter === 'all' ? '' : sourceFilter} sessions to display
+                  </span>
+                </>
+              )}
+            </div>
+          </Card>
+        )}
       </div>
     </ErrorBoundary>
   );
