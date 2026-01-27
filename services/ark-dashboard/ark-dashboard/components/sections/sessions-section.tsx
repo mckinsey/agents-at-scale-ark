@@ -1133,7 +1133,7 @@ export function SessionsSection() {
                 size="sm"
                 onClick={clearFilters}
                 title="Clear Filters"
-                className="h-8 px-2 border-2"
+                className="h-8 px-2 border-2 hover:cursor-pointer"
                 disabled={!hasActiveFilters}
               >
                 <X className="h-3.5 w-3.5" />Clear Filters
