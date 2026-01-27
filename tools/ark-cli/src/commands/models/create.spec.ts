@@ -174,7 +174,8 @@ describe('createModel', () => {
   });
 
   it('handles secret creation failure', async () => {
-    mockExeca.mockRejectedValueOnce(new Error('not found')); // model doesn't exist
+    mockExeca
+      .mockRejectedValueOnce(new Error('not found')); // model doesn't exist
 
     mockInquirer.prompt
       .mockResolvedValueOnce({modelType: 'openai'})
@@ -182,6 +183,8 @@ describe('createModel', () => {
       .mockResolvedValueOnce({baseUrl: 'https://api.openai.com'})
       .mockResolvedValueOnce({apiKey: 'secret'});
 
+    mockExeca
+      .mockRejectedValueOnce(new Error('not found')); // secret doesn't exist check
     mockExeca.mockRejectedValueOnce(new Error('secret creation failed')); // create secret fails
 
     const result = await createModel('test-model');
