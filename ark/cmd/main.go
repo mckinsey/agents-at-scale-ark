@@ -96,7 +96,7 @@ func main() {
 	// Initialize eventing provider with direct client for broker discovery
 	eventingProvider := eventingconfig.NewProvider(mgr, directClient)
 
-	setupControllers(mgr, result.config, telemetryProvider, eventingProvider)
+	setupControllers(mgr, telemetryProvider, eventingProvider)
 	setupWebhooks(mgr)
 	startManager(mgr, metricsCertWatcher, webhookCertWatcher)
 }
@@ -239,7 +239,7 @@ func setupMetricsServer(cfg config, baseTLSOpts []func(*tls.Config)) (metricsser
 	return metricsServerOptions, metricsCertWatcher
 }
 
-func setupControllers(mgr ctrl.Manager, cfg config, telemetryProvider *telemetryconfig.Provider, eventingProvider *eventingconfig.Provider) {
+func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provider, eventingProvider *eventingconfig.Provider) {
 	controllers := []struct {
 		name       string
 		reconciler interface{ SetupWithManager(ctrl.Manager) error }
