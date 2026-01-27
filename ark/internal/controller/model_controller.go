@@ -69,13 +69,14 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		// Log the failure only when condition changes
+		// Log every probe failure for visibility
+		log.Info("model probe failed",
+			"model", model.Name,
+			"status", result.Message,
+			"details", result.DetailedError)
+		// Only emit event when condition changes to avoid spamming
 		if changed {
 			r.Eventing.ModelRecorder().ModelUnavailable(ctx, &model, result.Message)
-			log.Info("model probe failed",
-				"model", model.Name,
-				"status", result.Message,
-				"details", result.DetailedError)
 		}
 		return ctrl.Result{RequeueAfter: addJitter(model.Spec.PollInterval.Duration)}, nil
 	}

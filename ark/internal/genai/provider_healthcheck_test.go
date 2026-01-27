@@ -114,24 +114,41 @@ func TestOpenAIProvider_HealthCheck_NetworkError(t *testing.T) {
 
 func TestAzureProvider_HealthCheck_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Contains(t, r.URL.Path, "/models")
-		assert.Equal(t, "GET", r.Method)
+		assert.Contains(t, r.URL.Path, "/chat/completions")
+		assert.Equal(t, "POST", r.Method)
 		assert.Equal(t, "test-key", r.Header.Get("api-key"))
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"data": []map[string]string{
-				{"id": "gpt-4", "object": "model"},
+			"id":      "chatcmpl-test",
+			"object":  "chat.completion",
+			"created": 1234567890,
+			"model":   "gpt-4",
+			"choices": []map[string]interface{}{
+				{
+					"index": 0,
+					"message": map[string]interface{}{
+						"role":    "assistant",
+						"content": "test response",
+					},
+					"finish_reason": "stop",
+				},
+			},
+			"usage": map[string]interface{}{
+				"prompt_tokens":     10,
+				"completion_tokens": 5,
+				"total_tokens":      15,
 			},
 		})
 	}))
 	defer server.Close()
 
 	provider := &AzureProvider{
-		Model:   "gpt-4",
-		BaseURL: server.URL + "/openai",
-		APIKey:  "test-key",
+		Model:      "gpt-4",
+		BaseURL:    server.URL + "/openai",
+		APIKey:     "test-key",
+		APIVersion: "2024-02-15-preview",
 	}
 
 	ctx := context.Background()
@@ -142,7 +159,7 @@ func TestAzureProvider_HealthCheck_Success(t *testing.T) {
 
 func TestAzureProvider_HealthCheck_Unauthorized(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Contains(t, r.URL.Path, "/models")
+		assert.Contains(t, r.URL.Path, "/chat/completions")
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
@@ -156,9 +173,10 @@ func TestAzureProvider_HealthCheck_Unauthorized(t *testing.T) {
 	defer server.Close()
 
 	provider := &AzureProvider{
-		Model:   "gpt-4",
-		BaseURL: server.URL + "/openai",
-		APIKey:  "invalid-key",
+		Model:      "gpt-4",
+		BaseURL:    server.URL + "/openai",
+		APIKey:     "invalid-key",
+		APIVersion: "2024-02-15-preview",
 	}
 
 	ctx := context.Background()
@@ -219,22 +237,39 @@ func TestModel_HealthCheck_OpenAIProvider(t *testing.T) {
 
 func TestModel_HealthCheck_AzureProvider(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Contains(t, r.URL.Path, "/models")
+		assert.Contains(t, r.URL.Path, "/chat/completions")
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"data": []map[string]string{
-				{"id": "gpt-4", "object": "model"},
+			"id":      "chatcmpl-test",
+			"object":  "chat.completion",
+			"created": 1234567890,
+			"model":   "gpt-4",
+			"choices": []map[string]interface{}{
+				{
+					"index": 0,
+					"message": map[string]interface{}{
+						"role":    "assistant",
+						"content": "test response",
+					},
+					"finish_reason": "stop",
+				},
+			},
+			"usage": map[string]interface{}{
+				"prompt_tokens":     10,
+				"completion_tokens": 5,
+				"total_tokens":      15,
 			},
 		})
 	}))
 	defer server.Close()
 
 	provider := &AzureProvider{
-		Model:   "gpt-4",
-		BaseURL: server.URL + "/openai",
-		APIKey:  "test-key",
+		Model:      "gpt-4",
+		BaseURL:    server.URL + "/openai",
+		APIKey:     "test-key",
+		APIVersion: "2024-02-15-preview",
 	}
 
 	model := &Model{
@@ -374,24 +409,41 @@ func TestAzureProvider_HealthCheck_ModelAvailable(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
-		assert.Contains(t, r.URL.Path, "/models")
-		assert.Equal(t, "GET", r.Method)
+		assert.Contains(t, r.URL.Path, "/chat/completions")
+		assert.Equal(t, "POST", r.Method)
 		assert.Equal(t, "test-key", r.Header.Get("api-key"))
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"data": []map[string]string{
-				{"id": "gpt-4-deployment", "object": "model"},
+			"id":      "chatcmpl-test",
+			"object":  "chat.completion",
+			"created": 1234567890,
+			"model":   "gpt-4",
+			"choices": []map[string]interface{}{
+				{
+					"index": 0,
+					"message": map[string]interface{}{
+						"role":    "assistant",
+						"content": "test response",
+					},
+					"finish_reason": "stop",
+				},
+			},
+			"usage": map[string]interface{}{
+				"prompt_tokens":     10,
+				"completion_tokens": 5,
+				"total_tokens":      15,
 			},
 		})
 	}))
 	defer server.Close()
 
 	provider := &AzureProvider{
-		Model:   "gpt-4",
-		BaseURL: server.URL + "/openai",
-		APIKey:  "test-key",
+		Model:      "gpt-4",
+		BaseURL:    server.URL + "/openai",
+		APIKey:     "test-key",
+		APIVersion: "2024-02-15-preview",
 	}
 
 	ctx := context.Background()
@@ -435,22 +487,39 @@ func TestModel_HealthCheck_DelegatesToOpenAIProvider(t *testing.T) {
 
 func TestModel_HealthCheck_DelegatesToAzureProvider(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Contains(t, r.URL.Path, "/models", "Should call models endpoint")
+		assert.Contains(t, r.URL.Path, "/chat/completions", "Should call chat completions endpoint")
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"data": []map[string]string{
-				{"id": "gpt-4", "object": "model"},
+			"id":      "chatcmpl-test",
+			"object":  "chat.completion",
+			"created": 1234567890,
+			"model":   "gpt-4",
+			"choices": []map[string]interface{}{
+				{
+					"index": 0,
+					"message": map[string]interface{}{
+						"role":    "assistant",
+						"content": "test response",
+					},
+					"finish_reason": "stop",
+				},
+			},
+			"usage": map[string]interface{}{
+				"prompt_tokens":     10,
+				"completion_tokens": 5,
+				"total_tokens":      15,
 			},
 		})
 	}))
 	defer server.Close()
 
 	provider := &AzureProvider{
-		Model:   "gpt-4",
-		BaseURL: server.URL + "/openai",
-		APIKey:  "test-key",
+		Model:      "gpt-4",
+		BaseURL:    server.URL + "/openai",
+		APIKey:     "test-key",
+		APIVersion: "2024-02-15-preview",
 	}
 
 	model := &Model{

@@ -160,8 +160,10 @@ func (ap *AzureProvider) createClient(ctx context.Context) openai.Client {
 }
 
 func (ap *AzureProvider) HealthCheck(ctx context.Context) error {
-	client := ap.createClient(ctx)
-	_, err := client.Models.List(ctx)
+	// Azure OpenAI deployments don't support the /models endpoint
+	// Instead, make a minimal chat completion request to verify the deployment is accessible
+	testMessages := []Message{NewUserMessage("test")}
+	_, err := ap.ChatCompletion(ctx, testMessages, 1)
 	return err
 }
 
