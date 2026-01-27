@@ -48,7 +48,7 @@ spec:
           {{- if .Values.controllerManager.container.env }}
             {{- range $key, $value := .Values.controllerManager.container.env }}
           - name: {{ $key }}
-            value: {{ $value }}
+            value: {{ $value | quote }}
             {{- end }}
           {{- end }}
           envFrom:
