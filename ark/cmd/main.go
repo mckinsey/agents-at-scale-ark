@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -64,7 +63,6 @@ type config struct {
 	probeAddr                                        string
 	secureMetrics                                    bool
 	enableHTTP2                                      bool
-	modelProbeTimeout                                time.Duration
 }
 
 func main() {
@@ -127,8 +125,6 @@ func parseFlags() struct {
 	flag.StringVar(&cfg.metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&cfg.enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	flag.DurationVar(&cfg.modelProbeTimeout, "model-probe-timeout", 60*time.Second,
-		"Timeout for model health check probes")
 	flag.BoolVar(&showVersion, "version", false, "Show version information and exit")
 
 	zapOpts := zap.Options{Development: false}
@@ -272,11 +268,10 @@ func setupControllers(mgr ctrl.Manager, cfg config, telemetryProvider *telemetry
 			Eventing: eventingProvider,
 		}},
 		{"Model", &controller.ModelReconciler{
-			Client:            mgr.GetClient(),
-			Scheme:            mgr.GetScheme(),
-			Telemetry:         telemetryProvider,
-			Eventing:          eventingProvider,
-			ModelProbeTimeout: cfg.modelProbeTimeout,
+			Client:    mgr.GetClient(),
+			Scheme:    mgr.GetScheme(),
+			Telemetry: telemetryProvider,
+			Eventing:  eventingProvider,
 		}},
 		{"Memory", &controller.MemoryReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
 		{"ExecutionEngine", &controller.ExecutionEngineReconciler{
