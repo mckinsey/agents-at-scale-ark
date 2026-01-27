@@ -15,12 +15,12 @@ class DashboardPage(BasePage):
     MAIN_CONTENT = "main, [role='main'], body"
     SIDEBAR = "[data-testid='sidebar'], aside, nav"
     
-    ADD_AGENT_BUTTON = "button:has-text('Add Agent'), button:has-text('Create Agent'), a:has-text('Add Agent')"
-    ADD_MODEL_BUTTON = "button:has-text('Add Model'), button:has-text('Create Model'), a:has-text('Add Model')"
-    ADD_QUERY_BUTTON = "button:has-text('Add Query'), button:has-text('Create Query'), a:has-text('Add Query')"
-    ADD_TOOL_BUTTON = "button:has-text('Add Tool'), button:has-text('Create Tool'), a:has-text('Add Tool')"
-    ADD_TEAM_BUTTON = "button:has-text('Add Team'), button:has-text('Create Team'), a:has-text('Add Team')"
-    ADD_SECRET_BUTTON = "button:has-text('Add Secret'), button:has-text('Create Secret'), a:has-text('Add Secret')"
+    ADD_AGENT_BUTTON = "a[href='/agents/new']:has-text('Create Agent')"
+    ADD_MODEL_BUTTON = "a[href='/models/new']:has-text('Create Model')"
+    ADD_QUERY_BUTTON = "a[href='/queries/new']:has-text('Create Query')"
+    ADD_TOOL_BUTTON = "a[href='/tools/new']:has-text('Create Tool')"
+    ADD_TEAM_BUTTON = "a[href='/teams/new']:has-text('Create Team')"
+    ADD_SECRET_BUTTON = "a[href='/secrets/new']:has-text('Create Secret')"
     
     def __init__(self, page: Page):
         super().__init__(page)
