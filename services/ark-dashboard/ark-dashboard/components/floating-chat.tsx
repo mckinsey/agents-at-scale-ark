@@ -6,6 +6,7 @@ import {
   Expand,
   MessageCircle,
   Minus,
+  RotateCcw,
   Send,
   Shrink,
   Square,
@@ -360,6 +361,17 @@ export default function FloatingChat({
     }
   };
 
+  const handleClearChat = useCallback(() => {
+    const newSessionId = createNewSessionId();
+    initSessionIdRef.current = newSessionId;
+    setLastConversationId(newSessionId);
+    setChatHistory(prev => ({
+      ...(prev || {}),
+      [chatKey]: { messages: [], sessionId: newSessionId },
+    }));
+    setError(null);
+  }, [chatKey, setChatHistory, setLastConversationId]);
+
   // Calculate position - each window is 420px wide (400px + 20px gap)
   const rightPosition = 16 + position * 420;
 
@@ -629,6 +641,15 @@ export default function FloatingChat({
                     className="text-muted-foreground cursor-pointer text-sm">
                     Show tool calls
                   </label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearChat}
+                    className="ml-auto h-7 gap-1 px-2 text-xs"
+                    disabled={isProcessing || chatMessages.length === 0}>
+                    <RotateCcw className="h-3 w-3" />
+                    New Chat
+                  </Button>
                 </div>
               </div>
             </div>

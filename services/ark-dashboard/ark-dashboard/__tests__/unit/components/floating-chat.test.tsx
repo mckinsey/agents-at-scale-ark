@@ -917,4 +917,206 @@ describe('FloatingChat', () => {
       );
     });
   });
+
+  describe('clear chat button', () => {
+    beforeEach(() => {
+      vi.mocked(useAtomValue).mockReturnValue(true);
+    });
+
+    it('should render the New Chat button', () => {
+      renderFloatingChat(defaultProps);
+
+      const clearButton = screen.getByRole('button', { name: /new chat/i });
+      expect(clearButton).toBeInTheDocument();
+    });
+
+    it('should be disabled when no messages exist', () => {
+      renderFloatingChat(defaultProps);
+
+      const clearButton = screen.getByRole('button', { name: /new chat/i });
+      expect(clearButton).toBeDisabled();
+    });
+
+    it('should be disabled while processing', async () => {
+      const user = userEvent.setup();
+
+      let resolveStream: () => void;
+      const streamPromise = new Promise<void>(resolve => {
+        resolveStream = resolve;
+      });
+
+      vi.mocked(chatService.streamChatResponse).mockImplementation(
+        async function* () {
+          yield { choices: [{ delta: { content: 'Processing' } }] };
+          await streamPromise;
+        },
+      );
+
+      renderFloatingChat(defaultProps);
+
+      const input = screen.getByPlaceholderText('Type your message...');
+      await user.type(input, 'Test');
+
+      const sendButton = screen.getByRole('button', { name: /send/i });
+      await user.click(sendButton);
+
+      await waitFor(() => {
+        expect(input).toBeDisabled();
+      });
+
+      const clearButton = screen.getByRole('button', { name: /new chat/i });
+      expect(clearButton).toBeDisabled();
+
+      resolveStream!();
+    });
+
+    it('should be enabled when messages exist and not processing', async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(chatService.streamChatResponse).mockImplementation(
+        async function* () {
+          yield { choices: [{ delta: { content: 'Response' } }] };
+        },
+      );
+
+      renderFloatingChat(defaultProps);
+
+      const input = screen.getByPlaceholderText('Type your message...');
+      await user.type(input, 'Test message');
+
+      const sendButton = screen.getByRole('button', { name: /send/i });
+      await user.click(sendButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Response')).toBeInTheDocument();
+      });
+
+      const clearButton = screen.getByRole('button', { name: /new chat/i });
+      expect(clearButton).not.toBeDisabled();
+    });
+
+    it('should clear messages when clicked', async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(chatService.streamChatResponse).mockImplementation(
+        async function* () {
+          yield { choices: [{ delta: { content: 'First response' } }] };
+        },
+      );
+
+      renderFloatingChat(defaultProps);
+
+      const input = screen.getByPlaceholderText('Type your message...');
+      await user.type(input, 'First message');
+
+      const sendButton = screen.getByRole('button', { name: /send/i });
+      await user.click(sendButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('First response')).toBeInTheDocument();
+      });
+
+      expect(screen.getByText('First message')).toBeInTheDocument();
+
+      const clearButton = screen.getByRole('button', { name: /new chat/i });
+      await user.click(clearButton);
+
+      expect(screen.queryByText('First message')).not.toBeInTheDocument();
+      expect(screen.queryByText('First response')).not.toBeInTheDocument();
+      expect(
+        screen.getByText(/start a conversation with the agent/i),
+      ).toBeInTheDocument();
+    });
+
+    it('should create new session ID when clicked', async () => {
+      const user = userEvent.setup();
+      const store = createStore();
+
+      vi.mocked(chatService.streamChatResponse)
+        .mockImplementationOnce(async function* () {
+          yield { choices: [{ delta: { content: 'First response' } }] };
+        })
+        .mockImplementationOnce(async function* () {
+          yield { choices: [{ delta: { content: 'Second response' } }] };
+        });
+
+      renderFloatingChat(defaultProps, store);
+
+      const input = screen.getByPlaceholderText('Type your message...');
+      await user.type(input, 'First message');
+
+      const sendButton = screen.getByRole('button', { name: /send/i });
+      await user.click(sendButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('First response')).toBeInTheDocument();
+      });
+
+      const firstConversationId = store.get(lastConversationIdAtom);
+
+      const clearButton = screen.getByRole('button', { name: /new chat/i });
+      await user.click(clearButton);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/start a conversation with the agent/i),
+        ).toBeInTheDocument();
+      });
+
+      await user.type(input, 'Second message');
+      await user.click(sendButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Second response')).toBeInTheDocument();
+      });
+
+      const secondConversationId = store.get(lastConversationIdAtom);
+
+      expect(firstConversationId).not.toBe(secondConversationId);
+      expect(firstConversationId).toBeTruthy();
+      expect(secondConversationId).toBeTruthy();
+    });
+
+    it('should persist cleared state to sessionStorage', async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(chatService.streamChatResponse).mockImplementation(
+        async function* () {
+          yield { choices: [{ delta: { content: 'Response' } }] };
+        },
+      );
+
+      renderFloatingChat(defaultProps);
+
+      const input = screen.getByPlaceholderText('Type your message...');
+      await user.type(input, 'Test message');
+
+      const sendButton = screen.getByRole('button', { name: /send/i });
+      await user.click(sendButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Response')).toBeInTheDocument();
+      });
+
+      const storedHistoryBefore = sessionStorage.getItem('agent-chat-history');
+      expect(storedHistoryBefore).not.toBe(null);
+      const parsedHistoryBefore = JSON.parse(storedHistoryBefore!);
+      const chatKey = 'agent-Test Agent';
+      expect(parsedHistoryBefore[chatKey].messages).toHaveLength(2);
+
+      const clearButton = screen.getByRole('button', { name: /new chat/i });
+      await user.click(clearButton);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/start a conversation with the agent/i),
+        ).toBeInTheDocument();
+      });
+
+      const storedHistoryAfter = sessionStorage.getItem('agent-chat-history');
+      expect(storedHistoryAfter).not.toBe(null);
+      const parsedHistoryAfter = JSON.parse(storedHistoryAfter!);
+      expect(parsedHistoryAfter[chatKey].messages).toHaveLength(0);
+    });
+  });
 });
