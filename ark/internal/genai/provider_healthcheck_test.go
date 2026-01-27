@@ -19,7 +19,7 @@ func TestOpenAIProvider_HealthCheck_Success(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": []map[string]string{
 				{"id": "gpt-4", "object": "model"},
 			},
@@ -45,7 +45,7 @@ func TestOpenAIProvider_HealthCheck_Unauthorized(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"error": map[string]interface{}{
 				"message": "Invalid API key",
 				"type":    "invalid_request_error",
@@ -73,7 +73,7 @@ func TestOpenAIProvider_HealthCheck_ServerError(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"error": map[string]interface{}{
 				"message": "Service temporarily unavailable",
 				"type":    "server_error",
@@ -120,7 +120,7 @@ func TestAzureProvider_HealthCheck_Success(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": []map[string]string{
 				{"id": "gpt-4", "object": "model"},
 			},
@@ -146,7 +146,7 @@ func TestAzureProvider_HealthCheck_Unauthorized(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"error": map[string]interface{}{
 				"message": "Invalid API key",
 				"type":    "invalid_request_error",
@@ -191,7 +191,7 @@ func TestModel_HealthCheck_OpenAIProvider(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": []map[string]string{
 				{"id": "gpt-4", "object": "model"},
 			},
@@ -223,7 +223,7 @@ func TestModel_HealthCheck_AzureProvider(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": []map[string]string{
 				{"id": "gpt-4", "object": "model"},
 			},
@@ -348,7 +348,7 @@ func TestOpenAIProvider_HealthCheck_ModelAvailable(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": []map[string]string{
 				{"id": "gpt-4", "object": "model"},
 				{"id": "gpt-3.5-turbo", "object": "model"},
@@ -380,7 +380,7 @@ func TestAzureProvider_HealthCheck_ModelAvailable(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": []map[string]string{
 				{"id": "gpt-4-deployment", "object": "model"},
 			},
@@ -407,7 +407,7 @@ func TestModel_HealthCheck_DelegatesToOpenAIProvider(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": []map[string]string{
 				{"id": "gpt-4", "object": "model"},
 			},
@@ -439,7 +439,7 @@ func TestModel_HealthCheck_DelegatesToAzureProvider(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": []map[string]string{
 				{"id": "gpt-4", "object": "model"},
 			},
@@ -465,66 +465,81 @@ func TestModel_HealthCheck_DelegatesToAzureProvider(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestModel_HealthCheck_OpenAIProviderError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error": map[string]interface{}{
-				"message": "Service unavailable",
-				"type":    "server_error",
-			},
+func TestModel_HealthCheck_ProviderErrors(t *testing.T) {
+	tests := []struct {
+		name          string
+		providerType  string
+		statusCode    int
+		errorMessage  string
+		errorType     string
+		expectedInErr string
+		pathSuffix    string
+	}{
+		{
+			name:          "OpenAI provider service unavailable",
+			providerType:  "openai",
+			statusCode:    http.StatusServiceUnavailable,
+			errorMessage:  "Service unavailable",
+			errorType:     "server_error",
+			expectedInErr: "503",
+			pathSuffix:    "/v1",
+		},
+		{
+			name:          "Azure provider unauthorized",
+			providerType:  "azure",
+			statusCode:    http.StatusUnauthorized,
+			errorMessage:  "Unauthorized",
+			errorType:     "auth_error",
+			expectedInErr: "401",
+			pathSuffix:    "/openai",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.statusCode)
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"error": map[string]interface{}{
+						"message": tt.errorMessage,
+						"type":    tt.errorType,
+					},
+				})
+			}))
+			defer server.Close()
+
+			var model *Model
+
+			if tt.providerType == "openai" {
+				provider := &OpenAIProvider{
+					Model:   "gpt-4",
+					BaseURL: server.URL + tt.pathSuffix,
+					APIKey:  "test-key",
+				}
+				model = &Model{
+					Model:    "gpt-4",
+					Type:     tt.providerType,
+					Provider: provider,
+				}
+			} else {
+				provider := &AzureProvider{
+					Model:   "gpt-4",
+					BaseURL: server.URL + tt.pathSuffix,
+					APIKey:  "invalid-key",
+				}
+				model = &Model{
+					Model:    "gpt-4",
+					Type:     tt.providerType,
+					Provider: provider,
+				}
+			}
+
+			ctx := context.Background()
+			err := model.HealthCheck(ctx)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.expectedInErr)
 		})
-	}))
-	defer server.Close()
-
-	provider := &OpenAIProvider{
-		Model:   "gpt-4",
-		BaseURL: server.URL + "/v1",
-		APIKey:  "test-key",
 	}
-
-	model := &Model{
-		Model:    "gpt-4",
-		Type:     "openai",
-		Provider: provider,
-	}
-
-	ctx := context.Background()
-	err := model.HealthCheck(ctx)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "503")
-}
-
-func TestModel_HealthCheck_AzureProviderError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error": map[string]interface{}{
-				"message": "Unauthorized",
-				"type":    "auth_error",
-			},
-		})
-	}))
-	defer server.Close()
-
-	provider := &AzureProvider{
-		Model:   "gpt-4",
-		BaseURL: server.URL + "/openai",
-		APIKey:  "invalid-key",
-	}
-
-	model := &Model{
-		Model:    "gpt-4",
-		Type:     "azure",
-		Provider: provider,
-	}
-
-	ctx := context.Background()
-	err := model.HealthCheck(ctx)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "401")
 }
