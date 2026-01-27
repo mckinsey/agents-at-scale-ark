@@ -14,7 +14,7 @@ RUN cd tools/fark && GOTOOLCHAIN=auto go mod download
 COPY tools/fark/cmd ./tools/fark/cmd
 RUN cd tools/fark && CGO_ENABLED=0 GOOS=linux GOTOOLCHAIN=auto go build -o /build/fark ./cmd/fark
 
-FROM node:24-alpine AS ark-builder
+FROM node:24.13.0-alpine AS ark-builder
 
 WORKDIR /build
 

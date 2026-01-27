@@ -92,5 +92,8 @@
     "tw-animate-css": "^1.3.4",
     "typescript": "^5",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "tar": "^7.5.3"
   }
 }

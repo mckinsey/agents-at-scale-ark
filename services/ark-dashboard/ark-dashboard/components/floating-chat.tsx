@@ -17,7 +17,10 @@ import type {
 } from 'openai/resources/chat/completions';
 import { useEffect, useRef, useState } from 'react';
 
-import { isChatStreamingEnabledAtom } from '@/atoms/experimental-features';
+import {
+  isChatStreamingEnabledAtom,
+  queryTimeoutSettingAtom,
+} from '@/atoms/experimental-features';
 import { ChatMessage } from '@/components/chat/chat-message';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -63,6 +66,7 @@ export default function FloatingChat({
   const [sessionId] = useState(() => `session-${Date.now()}`);
   const inputRef = useRef<HTMLInputElement>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
+  const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
   const stopPollingRef = useRef<(() => void) | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -121,6 +125,7 @@ export default function FloatingChat({
       type,
       name,
       sessionId,
+      queryTimeout,
     )) {
       // Extract content from the chunk (OpenAI format)
       const typedChunk = chunk as unknown as ChatCompletionChunk;
@@ -193,6 +198,8 @@ export default function FloatingChat({
       type,
       name,
       sessionId,
+      undefined,
+      queryTimeout,
     );
 
     let pollingStopped = false;

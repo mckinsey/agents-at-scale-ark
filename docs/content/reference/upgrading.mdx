@@ -207,6 +207,48 @@ This is a **breaking** change. Existing Query manifests using `spec.targets[]` m
 
 To query multiple targets, create one Query per target and check the results individually.
 
+### Query Response Field Change
+
+Prior to `v0.1.50`, Query results used a plural `responses` field:
+
+```yaml
+status:
+  responses:
+    - content: "The answer is 4"
+      role: assistant
+```
+
+From `v0.1.50`, Query results use a singular `response` field to match the single target change:
+
+```yaml
+status:
+  response:
+    content: "The answer is 4"
+    role: assistant
+```
+
+This is a **breaking** change for integrations that read Query status.
+
+**Migration:**
+
+Update your code/scripts that read Query results:
+
+```python
+# Before v0.1.50
+result = query.status.responses[0].content
+
+# After v0.1.50
+result = query.status.response.content
+```
+
+```bash
+# Before v0.1.50
+kubectl get query my-query -o jsonpath='{.status.responses[0].content}'
+
+# After v0.1.50
+kubectl get query my-query -o jsonpath='{.status.response.content}'
+```
+
 ### Agent Tool Type Deprecation
 
 Prior to `v0.1.50`, agents referenced Tool resources using `type: custom`:
