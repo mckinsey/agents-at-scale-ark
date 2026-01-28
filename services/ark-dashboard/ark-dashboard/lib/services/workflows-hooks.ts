@@ -1,6 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
-import { workflowsService, type WorkflowFilters } from './workflows';
+import { useCallback, useEffect, useState } from 'react';
+
 import type { ArgoWorkflow } from '@/lib/types/argo-workflow';
+
+import { type WorkflowFilters, workflowsService } from './workflows';
 
 export function useWorkflows(
   namespace: string = 'default',
@@ -11,7 +13,6 @@ export function useWorkflows(
   const [error, setError] = useState<Error | null>(null);
 
   const fetchWorkflows = useCallback(async () => {
-    
     try {
       setLoading(true);
       const data = await workflowsService.list(namespace, filters);
@@ -22,7 +23,7 @@ export function useWorkflows(
     } finally {
       setLoading(false);
     }
-  }, [namespace, filters?.workflowName, filters?.workflowTemplateName, filters?.status]);
+  }, [namespace, filters]);
 
   useEffect(() => {
     fetchWorkflows();
@@ -81,7 +82,7 @@ export function useWorkflow(
 
     const init = async () => {
       const initialData = await fetchWorkflow();
-      
+
       if (mounted && initialData) {
         const isTerminalState =
           initialData.status.phase === 'Succeeded' ||

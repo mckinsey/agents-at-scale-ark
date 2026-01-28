@@ -54,7 +54,8 @@ export function RunWorkflowDialog({
       return 'Name must be 253 characters or less';
     }
 
-    const k8sNameRegex = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/;
+    const k8sNameRegex =
+      /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/;
     if (!k8sNameRegex.test(name)) {
       return 'Name must be lowercase alphanumeric characters, "-" or ".", and must start and end with an alphanumeric character';
     }
@@ -129,11 +130,9 @@ export function RunWorkflowDialog({
               Configure and run {templateName}
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-[60vh] overflow-y-auto grid gap-4 py-4">
+          <div className="grid max-h-[60vh] gap-4 overflow-y-auto py-4">
             <div className="grid gap-2">
-              <Label htmlFor="workflow-name">
-                Workflow Name{' '}
-              </Label>
+              <Label htmlFor="workflow-name">Workflow Name </Label>
               <Input
                 id="workflow-name"
                 value={workflowName}
@@ -148,7 +147,7 @@ export function RunWorkflowDialog({
             </div>
             {parameters.length > 0 && (
               <>
-                <div className="text-sm font-semibold mt-2">Parameters</div>
+                <div className="mt-2 text-sm font-semibold">Parameters</div>
                 {parameters.map(param => (
                   <div key={param.name} className="grid gap-2">
                     <Label htmlFor={param.name}>{param.name}</Label>

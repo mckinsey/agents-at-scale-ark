@@ -27,9 +27,10 @@ import {
   XCircle,
   Zap,
 } from 'lucide-react';
-import { useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { ErrorBoundary } from '@/components/common/error-boundary';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,11 +42,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
-import { useWorkflows, useWorkflow } from '@/lib/services/workflows-hooks';
-import { mapArgoWorkflowToSession, mapArgoWorkflowsToSessions } from '@/lib/services/workflow-mapper';
 import { useDebounce } from '@/lib/hooks/use-debounce';
-import { ErrorBoundary } from '@/components/common/error-boundary';
+import {
+  mapArgoWorkflowToSession,
+  mapArgoWorkflowsToSessions,
+} from '@/lib/services/workflow-mapper';
+import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
+import { cn } from '@/lib/utils';
 
 type SessionSourceFilter = 'all' | 'workflows' | 'teams' | 'agents';
 type SessionType = 'workflow' | 'team' | 'agent';
@@ -141,8 +144,6 @@ interface TeamSession extends BaseSession {
 
 type Session = WorkflowSession | TeamSession;
 
-
-
 function getStatusIcon(status: StepStatus) {
   switch (status) {
     case 'succeeded':
@@ -214,12 +215,19 @@ function getStatusBadgeVariant(
   }
 }
 
-function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; message?: string }) {
+function WorkflowStepDetail({
+  detail,
+  message,
+}: {
+  detail: WorkflowStepDetail;
+  message?: string;
+}) {
   const [logs, setLogs] = useState<string>('');
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [logsError, setLogsError] = useState<string | null>(null);
 
-  const shouldFetchLogs = detail.workflowName && detail.nodeId && detail.namespace;
+  const shouldFetchLogs =
+    detail.workflowName && detail.nodeId && detail.namespace;
 
   useEffect(() => {
     if (!shouldFetchLogs) return;
@@ -240,7 +248,7 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
               detail.podName,
               detail.namespace!,
             );
-          } catch (podError) {
+          } catch {
             // If pod logs fail, try archived workflow logs
             console.debug('Pod logs not available, trying archived logs');
           }
@@ -260,9 +268,12 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
         }
       } catch (error: unknown) {
         if (!cancelled) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
           if (errorMessage.includes('404')) {
-            setLogsError('Logs not available (pod terminated and logs not archived)');
+            setLogsError(
+              'Logs not available (pod terminated and logs not archived)',
+            );
           } else {
             setLogsError('Failed to load logs');
           }
@@ -279,7 +290,13 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
     return () => {
       cancelled = true;
     };
-  }, [detail.workflowName, detail.nodeId, detail.namespace, detail.podName, shouldFetchLogs]);
+  }, [
+    detail.workflowName,
+    detail.nodeId,
+    detail.namespace,
+    detail.podName,
+    shouldFetchLogs,
+  ]);
   return (
     <div className="bg-muted/30 mt-2 space-y-3 rounded-md border p-3 text-sm">
       {detail.image && (
@@ -330,9 +347,7 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
               {Object.entries(detail.outputs).map(([key, value]) => (
                 <div key={key} className="flex gap-2 font-mono text-xs">
                   <span className="text-muted-foreground">{key}:</span>
-                  <span>
-                    {value}
-                  </span>
+                  <span>{value}</span>
                 </div>
               ))}
             </div>
@@ -358,23 +373,26 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
           <Terminal className="text-muted-foreground mt-0.5 h-4 w-4" />
           <div className="flex-1">
             <span className="text-muted-foreground text-xs">Logs</span>
-            <div className="bg-black mt-1 max-h-64 overflow-auto rounded border p-3">
+            <div className="mt-1 max-h-64 overflow-auto rounded border bg-black p-3">
               {loadingLogs && (
                 <div className="flex items-center gap-2">
                   <RefreshCw className="h-3 w-3 animate-spin text-gray-400" />
-                  <span className="font-mono text-xs text-gray-400">Loading logs...</span>
+                  <span className="font-mono text-xs text-gray-400">
+                    Loading logs...
+                  </span>
                 </div>
               )}
               {logsError && (
                 <div className="flex flex-col gap-2">
-                  <div className="font-mono text-xs text-yellow-400">{logsError}</div>
+                  <div className="font-mono text-xs text-yellow-400">
+                    {logsError}
+                  </div>
                   {detail.workflowName && detail.nodeId && detail.namespace && (
                     <a
                       href={`http://argo.127.0.0.1.nip.io:8080/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-400 hover:text-blue-300 text-xs underline inline-flex items-center gap-1"
-                    >
+                      className="inline-flex items-center gap-1 text-xs text-blue-400 underline hover:text-blue-300">
                       View logs in Argo UI
                       <ExternalLink className="h-3 w-3" />
                     </a>
@@ -382,12 +400,14 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
                 </div>
               )}
               {logs && !loadingLogs && !logsError && (
-                <pre className="font-mono text-xs text-gray-100 whitespace-pre-wrap">
+                <pre className="font-mono text-xs whitespace-pre-wrap text-gray-100">
                   {logs}
                 </pre>
               )}
               {!logs && !loadingLogs && !logsError && (
-                <div className="font-mono text-xs text-gray-500">No logs available</div>
+                <div className="font-mono text-xs text-gray-500">
+                  No logs available
+                </div>
               )}
             </div>
           </div>
@@ -412,7 +432,6 @@ function WorkflowStepDetail({ detail, message }: { detail: WorkflowStepDetail; m
           )}
         </div>
       )}
-
     </div>
   );
 }
@@ -533,17 +552,20 @@ function WorkflowStepNode({
     <div className={cn('relative flex', depth > 0 && 'ml-5')}>
       {depth > 0 && (
         <>
-          <div className="absolute -left-5 top-0 h-full w-5">
-            <div className="absolute left-0 top-0 w-px bg-border" style={{ height: isLast ? '16px' : '100%' }} />
+          <div className="absolute top-0 -left-5 h-full w-5">
+            <div
+              className="bg-border absolute top-0 left-0 w-px"
+              style={{ height: isLast ? '16px' : '100%' }}
+            />
           </div>
-          <div className="absolute -left-5 top-4 h-px w-3 bg-border" />
+          <div className="bg-border absolute top-4 -left-5 h-px w-3" />
         </>
       )}
 
-      <div className="flex-1 pb-2.5 min-w-0">
+      <div className="min-w-0 flex-1 pb-2.5">
         <div
           className={cn(
-            'hover:bg-accent/50 group relative flex items-center gap-3 rounded-md border border-l-4 bg-card px-3 py-2.5 transition-all min-w-0',
+            'hover:bg-accent/50 group bg-card relative flex min-w-0 items-center gap-3 rounded-md border border-l-4 px-3 py-2.5 transition-all',
             getBorderColor(),
             step.status === 'running' && 'bg-blue-50/30 dark:bg-blue-950/10',
             step.status === 'failed' && 'bg-red-50/30 dark:bg-red-950/10',
@@ -551,7 +573,7 @@ function WorkflowStepNode({
           {hasDetail ? (
             <button
               onClick={() => setShowDetail(!showDetail)}
-              className="hover:bg-muted -m-1 rounded p-1 transition-colors shrink-0"
+              className="hover:bg-muted -m-1 shrink-0 rounded p-1 transition-colors"
               aria-label={showDetail ? 'Hide details' : 'Show details'}>
               {showDetail ? (
                 <ChevronDown className="text-muted-foreground h-4 w-4" />
@@ -563,19 +585,23 @@ function WorkflowStepNode({
             <div className="w-4 shrink-0" />
           )}
 
-          <div className="flex flex-1 items-center gap-3 overflow-hidden min-w-0">
-            <div className="flex items-center gap-2 shrink-0">
+          <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
+            <div className="flex shrink-0 items-center gap-2">
               {getStatusIcon(step.status)}
               <div className="text-muted-foreground">
                 {getWorkflowTypeIcon(step.type)}
               </div>
             </div>
-            <div className="flex flex-1 items-center gap-2 overflow-hidden min-w-0">
-              <span className="truncate font-medium text-sm" title={step.displayName}>
+            <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+              <span
+                className="truncate text-sm font-medium"
+                title={step.displayName}>
                 {step.displayName}
               </span>
               {step.name !== step.displayName && (
-                <span className="text-muted-foreground truncate text-xs font-mono" title={step.name}>
+                <span
+                  className="text-muted-foreground truncate font-mono text-xs"
+                  title={step.name}>
                   {step.name}
                 </span>
               )}
@@ -599,7 +625,7 @@ function WorkflowStepNode({
         </div>
 
         {hasDetail && showDetail && (
-          <div className="ml-6 mt-3">
+          <div className="mt-3 ml-6">
             <WorkflowStepDetail detail={step.detail!} message={step.message} />
           </div>
         )}
@@ -645,17 +671,20 @@ function TeamStepNode({
     <div className={cn('relative flex', depth > 0 && 'ml-5')}>
       {depth > 0 && (
         <>
-          <div className="absolute -left-5 top-0 h-full w-5">
-            <div className="absolute left-0 top-0 w-px bg-border" style={{ height: isLast ? '16px' : '100%' }} />
+          <div className="absolute top-0 -left-5 h-full w-5">
+            <div
+              className="bg-border absolute top-0 left-0 w-px"
+              style={{ height: isLast ? '16px' : '100%' }}
+            />
           </div>
-          <div className="absolute -left-5 top-4 h-px w-3 bg-border" />
+          <div className="bg-border absolute top-4 -left-5 h-px w-3" />
         </>
       )}
 
-      <div className="flex-1 pb-2.5 min-w-0">
+      <div className="min-w-0 flex-1 pb-2.5">
         <div
           className={cn(
-            'hover:bg-accent/50 group relative flex items-center gap-3 rounded-md border border-l-4 bg-card px-3 py-2.5 transition-all min-w-0',
+            'hover:bg-accent/50 group bg-card relative flex min-w-0 items-center gap-3 rounded-md border border-l-4 px-3 py-2.5 transition-all',
             getBorderColor(),
             step.status === 'running' && 'bg-blue-50/30 dark:bg-blue-950/10',
             step.status === 'failed' && 'bg-red-50/30 dark:bg-red-950/10',
@@ -663,7 +692,7 @@ function TeamStepNode({
           {hasDetail ? (
             <button
               onClick={() => setShowDetail(!showDetail)}
-              className="hover:bg-muted -m-1 rounded p-1 transition-colors shrink-0"
+              className="hover:bg-muted -m-1 shrink-0 rounded p-1 transition-colors"
               aria-label={showDetail ? 'Hide details' : 'Show details'}>
               {showDetail ? (
                 <ChevronDown className="text-muted-foreground h-4 w-4" />
@@ -675,18 +704,22 @@ function TeamStepNode({
             <div className="w-4 shrink-0" />
           )}
 
-          <div className="flex flex-1 items-center gap-3 overflow-hidden min-w-0">
-            <div className="flex items-center gap-2 shrink-0">
+          <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
+            <div className="flex shrink-0 items-center gap-2">
               {getStatusIcon(step.status)}
               <div className="text-muted-foreground">
                 {getTeamTypeIcon(step.type)}
               </div>
             </div>
-            <div className="flex flex-1 items-center gap-2 overflow-hidden min-w-0">
-              <span className="truncate font-medium text-sm" title={step.displayName}>
+            <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+              <span
+                className="truncate text-sm font-medium"
+                title={step.displayName}>
                 {step.displayName}
               </span>
-              <span className="text-muted-foreground truncate text-xs font-mono" title={step.agentName}>
+              <span
+                className="text-muted-foreground truncate font-mono text-xs"
+                title={step.agentName}>
                 {step.agentName}
               </span>
             </div>
@@ -694,7 +727,9 @@ function TeamStepNode({
 
           <div className="flex shrink-0 items-center gap-3">
             {step.message && (
-              <span className="text-muted-foreground max-w-[200px] truncate text-xs" title={step.message}>
+              <span
+                className="text-muted-foreground max-w-[200px] truncate text-xs"
+                title={step.message}>
                 {step.message}
               </span>
             )}
@@ -715,7 +750,7 @@ function TeamStepNode({
         </div>
 
         {hasDetail && showDetail && (
-          <div className="ml-6 mt-3">
+          <div className="mt-3 ml-6">
             <TeamStepDetail detail={step.detail!} />
           </div>
         )}
@@ -739,7 +774,7 @@ function TeamStepNode({
 
 function SessionDetailView({
   session,
-  isLoading = false
+  isLoading = false,
 }: {
   session: Session;
   isLoading?: boolean;
@@ -747,20 +782,24 @@ function SessionDetailView({
   return (
     <Card className="min-h-0 min-w-0 flex-1 overflow-auto">
       <CardHeader className="border-b">
-        <div className="flex items-start justify-between gap-4 min-w-0 mb-3">
-          <div className="flex flex-1 items-start gap-3 overflow-hidden min-w-0">
+        <div className="mb-3 flex min-w-0 items-start justify-between gap-4">
+          <div className="flex min-w-0 flex-1 items-start gap-3 overflow-hidden">
             <div className="text-muted-foreground mt-1 shrink-0">
               {getSessionTypeIcon(session.type)}
             </div>
-            <div className="flex-1 overflow-hidden min-w-0">
+            <div className="min-w-0 flex-1 overflow-hidden">
               <CardTitle className="truncate text-xl" title={session.name}>
                 {session.name}
               </CardTitle>
-              <div className="mt-2 flex items-center gap-2 flex-wrap">
-                <Badge variant={getStatusBadgeVariant(session.status)} className="font-medium">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Badge
+                  variant={getStatusBadgeVariant(session.status)}
+                  className="font-medium">
                   {session.status}
                 </Badge>
-                <Badge variant="outline" className="text-xs font-medium capitalize">
+                <Badge
+                  variant="outline"
+                  className="text-xs font-medium capitalize">
                   {session.type}
                 </Badge>
                 <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
@@ -776,40 +815,37 @@ function SessionDetailView({
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex shrink-0 items-center gap-2">
             <span className="text-muted-foreground text-sm whitespace-nowrap">
               {new Date(session.startedAt).toLocaleString()}
             </span>
-            {session.type === 'workflow' && session.namespace && session.uid && (
-              <Button
-                variant="outline"
-                size="sm"
-                asChild
-              >
-                <a
-                  href={`http://argo.127.0.0.1.nip.io:8080/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="View in Argo Workflows"
-                  className="gap-2"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  View in Argo
-                </a>
-              </Button>
-            )}
+            {session.type === 'workflow' &&
+              session.namespace &&
+              session.uid && (
+                <Button variant="outline" size="sm" asChild>
+                  <a
+                    href={`http://argo.127.0.0.1.nip.io:8080/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="View in Argo Workflows"
+                    className="gap-2">
+                    <ExternalLink className="h-4 w-4" />
+                    View in Argo
+                  </a>
+                </Button>
+              )}
           </div>
         </div>
       </CardHeader>
-      <CardContent className="pt-6 min-w-0">
+      <CardContent className="min-w-0 pt-6">
         <div className="min-w-0">
           {session.type === 'workflow'
             ? session.steps.map(step => (
-              <WorkflowStepNode key={step.id} step={step} />
-            ))
+                <WorkflowStepNode key={step.id} step={step} />
+              ))
             : session.steps.map(step => (
-              <TeamStepNode key={step.id} step={step} />
-            ))}
+                <TeamStepNode key={step.id} step={step} />
+              ))}
         </div>
       </CardContent>
     </Card>
@@ -837,18 +873,22 @@ function SessionListItem({
         {getSessionTypeIcon(session.type)}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-start gap-2 mb-1.5">
-          <span className="truncate font-medium text-sm leading-tight" title={session.name}>
+        <div className="mb-1.5 flex items-start gap-2">
+          <span
+            className="truncate text-sm leading-tight font-medium"
+            title={session.name}>
             {session.name}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex flex-wrap items-center gap-1.5">
           <Badge
             variant={getStatusBadgeVariant(session.status)}
-            className="text-xs h-5 font-medium">
+            className="h-5 text-xs font-medium">
             {session.status}
           </Badge>
-          <Badge variant="outline" className="text-xs h-5 font-medium capitalize">
+          <Badge
+            variant="outline"
+            className="h-5 text-xs font-medium capitalize">
             {session.type}
           </Badge>
         </div>
@@ -859,9 +899,7 @@ function SessionListItem({
           <span>{new Date(session.startedAt).toLocaleTimeString()}</span>
         </div>
       </div>
-      <div className="shrink-0 mt-0.5">
-        {getStatusIcon(session.status)}
-      </div>
+      <div className="mt-0.5 shrink-0">{getStatusIcon(session.status)}</div>
     </button>
   );
 }
@@ -870,11 +908,11 @@ const normalizeStatus = (status: string): string => {
   if (!status || status === 'all') return 'all';
 
   const statusMap: Record<string, string> = {
-    'running': 'Running',
-    'succeeded': 'Succeeded',
-    'failed': 'Failed',
-    'error': 'Error',
-    'pending': 'Pending',
+    running: 'Running',
+    succeeded: 'Succeeded',
+    failed: 'Failed',
+    error: 'Error',
+    pending: 'Pending',
   };
 
   return statusMap[status.toLowerCase()] || status;
@@ -890,31 +928,37 @@ export function SessionsSection() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null,
   );
-  const [useRealData, setUseRealData] = useState(true);
+  const [useRealData] = useState(true);
 
   const [workflowNameInput, setWorkflowNameInput] = useState(
-    searchParams.get('workflowName') || ''
+    searchParams.get('workflowName') || '',
   );
   const [workflowTemplateNameInput, setWorkflowTemplateNameInput] = useState(
-    searchParams.get('workflowTemplateName') || ''
+    searchParams.get('workflowTemplateName') || '',
   );
   const [statusFilter, setStatusFilter] = useState(
-    normalizeStatus(searchParams.get('status') || 'all')
+    normalizeStatus(searchParams.get('status') || 'all'),
   );
   const [sortOrder, setSortOrder] = useState<SortOrder>(
-    (searchParams.get('sort') as SortOrder) || 'newest'
+    (searchParams.get('sort') as SortOrder) || 'newest',
   );
   const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
   const templateInputRef = useRef<HTMLDivElement>(null);
 
   const debouncedWorkflowName = useDebounce(workflowNameInput, 500);
-  const debouncedWorkflowTemplateName = useDebounce(workflowTemplateNameInput, 500);
+  const debouncedWorkflowTemplateName = useDebounce(
+    workflowTemplateNameInput,
+    500,
+  );
 
-  const filters = useMemo(() => ({
-    workflowName: debouncedWorkflowName || undefined,
-    workflowTemplateName: debouncedWorkflowTemplateName || undefined,
-    status: statusFilter && statusFilter !== 'all' ? statusFilter : undefined,
-  }), [debouncedWorkflowName, debouncedWorkflowTemplateName, statusFilter]);
+  const filters = useMemo(
+    () => ({
+      workflowName: debouncedWorkflowName || undefined,
+      workflowTemplateName: debouncedWorkflowTemplateName || undefined,
+      status: statusFilter && statusFilter !== 'all' ? statusFilter : undefined,
+    }),
+    [debouncedWorkflowName, debouncedWorkflowTemplateName, statusFilter],
+  );
 
   // Update URL when filters or sort change
   useEffect(() => {
@@ -936,9 +980,20 @@ export function SessionsSection() {
     const queryString = params.toString();
     const newUrl = queryString ? `?${queryString}` : window.location.pathname;
     router.replace(newUrl, { scroll: false });
-  }, [debouncedWorkflowName, debouncedWorkflowTemplateName, statusFilter, sortOrder, router]);
+  }, [
+    debouncedWorkflowName,
+    debouncedWorkflowTemplateName,
+    statusFilter,
+    sortOrder,
+    router,
+  ]);
 
-  const { workflows, loading, error, refetch: refetchWorkflows } = useWorkflows('default', filters);
+  const {
+    workflows,
+    loading,
+    error,
+    refetch: refetchWorkflows,
+  } = useWorkflows('default', filters);
 
   const allSessions = mapArgoWorkflowsToSessions(workflows);
 
@@ -957,7 +1012,7 @@ export function SessionsSection() {
     if (!workflowTemplateNameInput) return uniqueWorkflowTemplateNames;
     const searchLower = workflowTemplateNameInput.toLowerCase();
     return uniqueWorkflowTemplateNames.filter(name =>
-      name.toLowerCase().includes(searchLower)
+      name.toLowerCase().includes(searchLower),
     );
   }, [uniqueWorkflowTemplateNames, workflowTemplateNameInput]);
 
@@ -982,12 +1037,17 @@ export function SessionsSection() {
     }
   }, [filteredAndSortedSessions, selectedSessionId]);
 
-  const selectedSessionFromList = filteredAndSortedSessions.find(s => s.id === selectedSessionId);
-
-  const { workflow: selectedWorkflowDetail, loading: loadingDetail } = useWorkflow(
-    useRealData && selectedSessionFromList?.type === 'workflow' ? selectedSessionId || '' : '',
-    'default',
+  const selectedSessionFromList = filteredAndSortedSessions.find(
+    s => s.id === selectedSessionId,
   );
+
+  const { workflow: selectedWorkflowDetail, loading: loadingDetail } =
+    useWorkflow(
+      useRealData && selectedSessionFromList?.type === 'workflow'
+        ? selectedSessionId || ''
+        : '',
+      'default',
+    );
 
   const selectedSession =
     useRealData && selectedWorkflowDetail
@@ -1006,7 +1066,8 @@ export function SessionsSection() {
         currentStatus === 'Failed' ||
         currentStatus === 'Error';
 
-      const wasRunning = previousStatus === 'Running' || previousStatus === 'Pending';
+      const wasRunning =
+        previousStatus === 'Running' || previousStatus === 'Pending';
 
       if (isTerminalState && wasRunning) {
         void refetchWorkflows();
@@ -1018,7 +1079,10 @@ export function SessionsSection() {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (templateInputRef.current && !templateInputRef.current.contains(event.target as Node)) {
+      if (
+        templateInputRef.current &&
+        !templateInputRef.current.contains(event.target as Node)
+      ) {
         setTemplateDropdownOpen(false);
       }
     };
@@ -1031,7 +1095,11 @@ export function SessionsSection() {
     }
   }, [templateDropdownOpen]);
 
-  const hasActiveFilters = workflowNameInput || workflowTemplateNameInput || (statusFilter && statusFilter !== 'all') || sortOrder !== 'newest';
+  const hasActiveFilters =
+    workflowNameInput ||
+    workflowTemplateNameInput ||
+    (statusFilter && statusFilter !== 'all') ||
+    sortOrder !== 'newest';
 
   const clearFilters = () => {
     setWorkflowNameInput('');
@@ -1043,20 +1111,20 @@ export function SessionsSection() {
   return (
     <ErrorBoundary>
       <div className="flex flex-1 flex-col gap-3 p-4">
-        <div className="flex flex-col gap-1.5 rounded-md bg-muted/20 px-3 py-2">
+        <div className="bg-muted/20 flex flex-col gap-1.5 rounded-md px-3 py-2">
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
-              <Search className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
+              <Search className="text-muted-foreground absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2" />
               <Input
                 type="text"
                 placeholder="Search workflow..."
                 value={workflowNameInput}
                 onChange={e => setWorkflowNameInput(e.target.value)}
-                className="pl-8 h-8 bg-background text-sm border-0 shadow-sm"
+                className="bg-background h-8 border-0 pl-8 text-sm shadow-sm"
               />
             </div>
             <div className="relative flex-1" ref={templateInputRef}>
-              <Search className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 pointer-events-none z-10" />
+              <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 h-3.5 w-3.5 -translate-y-1/2" />
               <Input
                 type="text"
                 placeholder="Search templates..."
@@ -1070,22 +1138,22 @@ export function SessionsSection() {
                 onFocus={() => {
                   setTemplateDropdownOpen(true);
                 }}
-                className="pl-8 pr-8 h-8 bg-background text-sm border-0 shadow-sm"
+                className="bg-background h-8 border-0 pr-8 pl-8 text-sm shadow-sm"
               />
               {templateDropdownOpen && (
-                <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
+                <div className="bg-popover text-popover-foreground animate-in fade-in-0 zoom-in-95 absolute z-50 mt-1 w-full rounded-md border shadow-md">
                   {uniqueWorkflowTemplateNames.length === 0 ? (
-                    <div className="px-2 py-3 text-sm text-muted-foreground text-center">
+                    <div className="text-muted-foreground px-2 py-3 text-center text-sm">
                       No workflow templates found yet.
                       <br />
                       Type to enter a custom value.
                     </div>
                   ) : filteredTemplateNames.length > 0 ? (
                     <div className="max-h-[300px] overflow-y-auto py-1">
-                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                      <div className="text-muted-foreground px-2 py-1.5 text-xs font-semibold">
                         Available Templates ({filteredTemplateNames.length})
                       </div>
-                      <div className="border-t border-border my-1" />
+                      <div className="border-border my-1 border-t" />
                       {filteredTemplateNames.map(templateName => (
                         <button
                           key={templateName}
@@ -1093,29 +1161,31 @@ export function SessionsSection() {
                             setWorkflowTemplateNameInput(templateName);
                             setTemplateDropdownOpen(false);
                           }}
-                          className="w-full text-left px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer transition-colors"
-                        >
+                          className="hover:bg-accent w-full cursor-pointer rounded-sm px-2 py-1.5 text-left text-sm transition-colors">
                           {templateName}
                         </button>
                       ))}
                     </div>
                   ) : (
-                    <div className="px-2 py-3 text-sm text-muted-foreground text-center">
-                      No templates match "{workflowTemplateNameInput}"
+                    <div className="text-muted-foreground px-2 py-3 text-center text-sm">
+                      No templates match &ldquo;{workflowTemplateNameInput}
+                      &rdquo;
                     </div>
                   )}
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2 ml-auto shrink-0">
-              <Select value={statusFilter || 'all'} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-40 h-8 text-sm border-2 shadow-sm">
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <Select
+                value={statusFilter || 'all'}
+                onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-8 w-40 border-2 text-sm shadow-sm">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">
                     <div className="flex items-center gap-2">
-                      <Circle className="h-4 w-4 text-muted-foreground" />
+                      <Circle className="text-muted-foreground h-4 w-4" />
                       <span>All Statuses</span>
                     </div>
                   </SelectItem>
@@ -1139,8 +1209,10 @@ export function SessionsSection() {
                   </SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={sortOrder} onValueChange={value => setSortOrder(value as SortOrder)}>
-                <SelectTrigger className="w-40 h-8 text-sm border-2 shadow-sm">
+              <Select
+                value={sortOrder}
+                onValueChange={value => setSortOrder(value as SortOrder)}>
+                <SelectTrigger className="h-8 w-40 border-2 text-sm shadow-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1153,19 +1225,20 @@ export function SessionsSection() {
                 size="sm"
                 onClick={clearFilters}
                 title="Clear Filters"
-                className="h-8 px-2 border-2 hover:cursor-pointer"
-                disabled={!hasActiveFilters}
-              >
-                <X className="h-3.5 w-3.5" />Clear Filters
+                className="h-8 border-2 px-2 hover:cursor-pointer"
+                disabled={!hasActiveFilters}>
+                <X className="h-3.5 w-3.5" />
+                Clear Filters
               </Button>
             </div>
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground font-medium">
-              {filteredAndSortedSessions.length} session{filteredAndSortedSessions.length !== 1 ? 's' : ''}
+              {filteredAndSortedSessions.length} session
+              {filteredAndSortedSessions.length !== 1 ? 's' : ''}
             </span>
             {error && (
-              <span className="text-red-500 font-medium">
+              <span className="font-medium text-red-500">
                 Error: {error.message}
               </span>
             )}
@@ -1189,7 +1262,7 @@ export function SessionsSection() {
                 />
               ))}
             </div>
-            <div className="flex flex-1 overflow-hidden min-w-0">
+            <div className="flex min-w-0 flex-1 overflow-hidden">
               {selectedSession ? (
                 <SessionDetailView
                   session={selectedSession}
@@ -1199,7 +1272,9 @@ export function SessionsSection() {
                 <Card className="flex flex-1 items-center justify-center">
                   <div className="text-muted-foreground flex flex-col items-center gap-3">
                     <Workflow className="h-12 w-12 opacity-20" />
-                    <span className="text-base font-medium">Select a session to view details</span>
+                    <span className="text-base font-medium">
+                      Select a session to view details
+                    </span>
                   </div>
                 </Card>
               )}
@@ -1211,7 +1286,9 @@ export function SessionsSection() {
               {hasActiveFilters ? (
                 <>
                   <Search className="h-16 w-16 opacity-20" />
-                  <span className="text-base font-medium">No sessions found matching your filters</span>
+                  <span className="text-base font-medium">
+                    No sessions found matching your filters
+                  </span>
                   <Button variant="outline" onClick={clearFilters}>
                     Clear filters
                   </Button>
@@ -1220,7 +1297,8 @@ export function SessionsSection() {
                 <>
                   <Workflow className="h-16 w-16 opacity-20" />
                   <span className="text-base font-medium">
-                    No {sourceFilter === 'all' ? '' : sourceFilter} sessions to display
+                    No {sourceFilter === 'all' ? '' : sourceFilter} sessions to
+                    display
                   </span>
                 </>
               )}

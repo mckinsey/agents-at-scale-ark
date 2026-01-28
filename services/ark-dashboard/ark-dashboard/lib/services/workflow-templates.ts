@@ -152,7 +152,13 @@ export const workflowTemplatesService = {
     } catch (error) {
       console.error('Error creating workflow:', error);
       if (error && typeof error === 'object' && 'status' in error) {
-        const apiError = error as { status?: number; data?: any };
+        const apiError = error as {
+          status?: number;
+          data?: {
+            message?: string;
+            reason?: string;
+          };
+        };
         console.error('API Error status:', apiError.status);
         console.error('API Error data:', apiError.data);
 
@@ -161,11 +167,11 @@ export const workflowTemplatesService = {
             `A workflow with the name "${workflow.metadata.name}" already exists`,
           );
         }
-        if (apiError.data && typeof apiError.data === 'object') {
-          if ('message' in apiError.data) {
+        if (apiError.data) {
+          if (apiError.data.message) {
             throw new Error(String(apiError.data.message));
           }
-          if ('reason' in apiError.data && 'message' in apiError.data) {
+          if (apiError.data.reason && apiError.data.message) {
             throw new Error(
               `${apiError.data.reason}: ${apiError.data.message}`,
             );

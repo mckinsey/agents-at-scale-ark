@@ -38,7 +38,13 @@ function getSessionsUrl(templateName: string, status?: string) {
   return `/sessions?${params}`;
 }
 
-function StatLink({ href, icon: Icon, label, value, colorClass = 'text-muted-foreground' }: StatLinkProps) {
+function StatLink({
+  href,
+  icon: Icon,
+  label,
+  value,
+  colorClass = 'text-muted-foreground',
+}: StatLinkProps) {
   return (
     <Link
       href={href}
@@ -50,9 +56,7 @@ function StatLink({ href, icon: Icon, label, value, colorClass = 'text-muted-for
           <ArrowUpRight className="h-2.5 w-2.5 opacity-40" />
         </span>
       </div>
-      <div className={`text-2xl font-bold ${colorClass}`}>
-        {value}
-      </div>
+      <div className={`text-2xl font-bold ${colorClass}`}>{value}</div>
     </Link>
   );
 }

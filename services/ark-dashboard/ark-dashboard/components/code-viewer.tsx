@@ -2,7 +2,10 @@
 
 import { useAtomValue } from 'jotai';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import {
+  oneDark,
+  oneLight,
+} from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { isExperimentalDarkModeEnabledAtom } from '@/atoms/experimental-features';
 
@@ -57,9 +60,10 @@ export function CodeViewer({
         }}
         style={isDarkMode ? customDarkTheme : customLightTheme}
         showLineNumbers={showLineNumbers}
-        lineProps={{style: {wordBreak: 'break-all', whiteSpace: 'pre-wrap'}}}
-        wrapLines={true}
-      >
+        lineProps={{
+          style: { wordBreak: 'break-all', whiteSpace: 'pre-wrap' },
+        }}
+        wrapLines={true}>
         {code}
       </SyntaxHighlighter>
     </div>

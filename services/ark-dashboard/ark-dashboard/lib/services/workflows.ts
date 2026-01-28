@@ -1,8 +1,8 @@
 import { apiClient } from '@/lib/api/client';
 import type {
+  ArgoNodeStatus,
   ArgoWorkflow,
   ArgoWorkflowList,
-  ArgoNodeStatus,
 } from '@/lib/types/argo-workflow';
 
 export interface WorkflowFilters {
@@ -14,10 +14,10 @@ export interface WorkflowFilters {
 export const workflowsService = {
   async list(
     namespace: string = 'default',
-    filters?: WorkflowFilters
+    filters?: WorkflowFilters,
   ): Promise<ArgoWorkflow[]> {
     const params = new URLSearchParams({ namespace });
-    
+
     if (filters?.workflowName) {
       params.append('workflowName', filters.workflowName);
     }
@@ -34,17 +34,17 @@ export const workflowsService = {
     return response.items;
   },
 
-  async get(name: string, namespace: string = 'default'): Promise<ArgoWorkflow> {
+  async get(
+    name: string,
+    namespace: string = 'default',
+  ): Promise<ArgoWorkflow> {
     const response = await apiClient.get<ArgoWorkflow>(
       `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/${name}?namespace=${namespace}`,
     );
     return response;
   },
 
-  async getYaml(
-    name: string,
-    namespace: string = 'default',
-  ): Promise<string> {
+  async getYaml(name: string, namespace: string = 'default'): Promise<string> {
     const response = await apiClient.get<string>(
       `/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/${name}?namespace=${namespace}`,
       {

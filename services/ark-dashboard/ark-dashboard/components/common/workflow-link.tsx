@@ -15,7 +15,7 @@ export function WorkflowLink({ workflowName }: WorkflowLinkProps) {
     <a
       href={sessionsUrl}
       className="inline-flex items-center gap-1 underline"
-      onClick={(e) => {
+      onClick={e => {
         e.preventDefault();
         router.push(sessionsUrl);
       }}>
