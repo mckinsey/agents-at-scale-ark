@@ -313,11 +313,8 @@ func TestBedrockModel_HealthCheck_InitializesClient(t *testing.T) {
 	ctx := context.Background()
 	err := bm.HealthCheck(ctx)
 
-	if err == nil {
-		assert.NotNil(t, bm.client)
-	} else {
-		assert.NotNil(t, err)
-	}
+	assert.NotNil(t, bm.client)
+	require.NoError(t, err)
 }
 
 func TestBedrockModel_HealthCheck_ReusesCachedClient(t *testing.T) {
@@ -366,11 +363,7 @@ func TestModel_HealthCheck_BedrockProvider(t *testing.T) {
 	ctx := context.Background()
 	err := model.HealthCheck(ctx)
 
-	if err == nil {
-		require.NoError(t, err)
-	} else {
-		assert.NotNil(t, err)
-	}
+	require.NoError(t, err)
 }
 
 func TestOpenAIProvider_HealthCheck_ModelAvailable(t *testing.T) {
