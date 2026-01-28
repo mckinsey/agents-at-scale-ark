@@ -455,17 +455,6 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
     [chatKey, setChatHistory],
   );
 
-  const handleNewChat = useCallback(() => {
-    const newSessionId = createNewSessionId();
-    initSessionIdRef.current = newSessionId;
-    setLastConversationId(newSessionId);
-    setChatHistory(prev => ({
-      ...(prev || {}),
-      [chatKey]: { messages: [], sessionId: newSessionId },
-    }));
-    setError(null);
-  }, [chatKey, setChatHistory, setLastConversationId]);
-
   const [currentMessage, setCurrentMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -476,6 +465,19 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
 
   const traces = useSSEStream('/v1/broker/traces', 'default', name, sessionId);
   const events = useSSEStream('/v1/broker/events', 'default', name, sessionId);
+
+  const handleNewChat = useCallback(() => {
+    const newSessionId = createNewSessionId();
+    initSessionIdRef.current = newSessionId;
+    setLastConversationId(newSessionId);
+    setChatHistory(prev => ({
+      ...(prev || {}),
+      [chatKey]: { messages: [], sessionId: newSessionId },
+    }));
+    setError(null);
+    traces.clear();
+    events.clear();
+  }, [chatKey, setChatHistory, setLastConversationId, traces, events]);
   const inputRef = useRef<HTMLInputElement>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const stopPollingRef = useRef<(() => void) | null>(null);
