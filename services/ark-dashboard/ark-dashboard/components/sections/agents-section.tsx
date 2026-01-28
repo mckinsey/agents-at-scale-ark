@@ -3,10 +3,11 @@
 import { ArrowUpRightIcon, Bot, MessageCircle, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { toast } from 'sonner';
 
 import { AgentCard } from '@/components/cards';
+import { AgentsAPIDialog } from '@/components/dialogs/agents-api-dialog';
 import { AgentRow } from '@/components/rows/agent-row';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,165 +24,184 @@ import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useDelayedLoading } from '@/lib/hooks';
 import { type Agent, agentsService } from '@/lib/services';
 
-export function AgentsSection() {
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const showLoading = useDelayedLoading(loading);
-  const [showCompactView, setShowCompactView] = useState(false);
-  const searchParams = useSearchParams();
-  const router = useRouter();
+interface AgentsSectionHandle {
+  openApiDialog: () => void;
+}
 
-  const viewOptions: ToggleOption[] = [
-    { id: 'compact', label: 'compact view', active: !showCompactView },
-    { id: 'card', label: 'card view', active: showCompactView },
-  ];
+export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
+  function AgentsSection({}, ref) {
+    const [agents, setAgents] = useState<Agent[]>([]);
+    const [apiDialogOpen, setApiDialogOpen] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const showLoading = useDelayedLoading(loading);
+    const [showCompactView, setShowCompactView] = useState(false);
+    const searchParams = useSearchParams();
+    const router = useRouter();
 
-  useEffect(() => {
-    if (searchParams.get('created') === 'true') {
-      toast.success('Agent Created', {
-        description: (
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <Bot className="h-4 w-4" />
-              <span>Click on an agent to open Agent Studio</span>
+    const viewOptions: ToggleOption[] = [
+      { id: 'compact', label: 'compact view', active: !showCompactView },
+      { id: 'card', label: 'card view', active: showCompactView },
+    ];
+
+    useEffect(() => {
+      if (searchParams.get('created') === 'true') {
+        toast.success('Agent Created', {
+          description: (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Bot className="h-4 w-4" />
+                <span>Click on an agent to open Agent Studio</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <MessageCircle className="h-4 w-4" />
+                <span>Use the chat bubble for a quick conversation</span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <MessageCircle className="h-4 w-4" />
-              <span>Use the chat bubble for a quick conversation</span>
-            </div>
-          </div>
-        ),
-        duration: 8000,
-      });
-      router.replace('/agents', { scroll: false });
-    }
-  }, [searchParams, router]);
+          ),
+          duration: 8000,
+        });
+        router.replace('/agents', { scroll: false });
+      }
+    }, [searchParams, router]);
 
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
+    useImperativeHandle(ref, () => ({
+      openApiDialog: () => setApiDialogOpen(true),
+    }));
+
+    useEffect(() => {
+      const loadData = async () => {
+        setLoading(true);
+        try {
+          const agentsData = await agentsService.getAll();
+          setAgents(agentsData);
+        } catch (error) {
+          console.error('Failed to load data:', error);
+          toast.error('Failed to Load Data', {
+            description:
+              error instanceof Error
+                ? error.message
+                : 'An unexpected error occurred',
+          });
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      loadData();
+    }, []);
+
+    const handleDeleteAgent = async (id: string) => {
       try {
-        const agentsData = await agentsService.getAll();
-        setAgents(agentsData);
+        const agent = agents.find(a => a.id === id);
+        if (!agent) {
+          throw new Error('Agent not found');
+        }
+        await agentsService.deleteById(id);
+        toast.success('Agent Deleted', {
+          description: `Successfully deleted ${agent.name}`,
+        });
+        const updatedAgents = await agentsService.getAll();
+        setAgents(updatedAgents);
       } catch (error) {
-        console.error('Failed to load data:', error);
-        toast.error('Failed to Load Data', {
+        toast.error('Failed to Delete Agent', {
           description:
             error instanceof Error
               ? error.message
               : 'An unexpected error occurred',
         });
-      } finally {
-        setLoading(false);
       }
     };
 
-    loadData();
-  }, []);
-
-  const handleDeleteAgent = async (id: string) => {
-    try {
-      const agent = agents.find(a => a.id === id);
-      if (!agent) {
-        throw new Error('Agent not found');
-      }
-      await agentsService.deleteById(id);
-      toast.success('Agent Deleted', {
-        description: `Successfully deleted ${agent.name}`,
-      });
-      const updatedAgents = await agentsService.getAll();
-      setAgents(updatedAgents);
-    } catch (error) {
-      toast.error('Failed to Delete Agent', {
-        description:
-          error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred',
-      });
+    if (showLoading) {
+      return (
+        <div className="flex h-full items-center justify-center">
+          <div className="py-8 text-center">Loading...</div>
+        </div>
+      );
     }
-  };
 
-  if (showLoading) {
+    if (agents.length === 0 && !loading) {
+      return (
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.agents.icon />
+            </EmptyMedia>
+            <EmptyTitle>No Agents Yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t created any agents yet. Get started by creating
+              your first agent.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <TrackedButton
+              trackingEvent="create_agent_clicked"
+              trackingProperties={{ source: 'empty_state' }}
+              asChild>
+              <Link href="/agents/new">
+                <Plus className="h-4 w-4" />
+                Create Agent
+              </Link>
+            </TrackedButton>
+          </EmptyContent>
+          <Button
+            variant="link"
+            asChild
+            className="text-muted-foreground"
+            size="sm">
+            <a
+              href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/agents/"
+              target="_blank">
+              Learn More <ArrowUpRightIcon />
+            </a>
+          </Button>
+        </Empty>
+      );
+    }
+
     return (
-      <div className="flex h-full items-center justify-center">
-        <div className="py-8 text-center">Loading...</div>
-      </div>
-    );
-  }
+      <>
+        <div className="flex h-full flex-col">
+          <div className="flex items-center justify-end px-6 py-3">
+            <ToggleSwitch
+              options={viewOptions}
+              onChange={id => setShowCompactView(id === 'card')}
+            />
+          </div>
 
-  if (agents.length === 0 && !loading) {
-    return (
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <DASHBOARD_SECTIONS.agents.icon />
-          </EmptyMedia>
-          <EmptyTitle>No Agents Yet</EmptyTitle>
-          <EmptyDescription>
-            You haven&apos;t created any agents yet. Get started by creating
-            your first agent.
-          </EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <TrackedButton
-            trackingEvent="create_agent_clicked"
-            trackingProperties={{ source: 'empty_state' }}
-            asChild>
-            <Link href="/agents/new">
-              <Plus className="h-4 w-4" />
-              Create Agent
-            </Link>
-          </TrackedButton>
-        </EmptyContent>
-        <Button
-          variant="link"
-          asChild
-          className="text-muted-foreground"
-          size="sm">
-          <a
-            href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/agents/"
-            target="_blank">
-            Learn More <ArrowUpRightIcon />
-          </a>
-        </Button>
-      </Empty>
-    );
-  }
+          <main className="flex-1 overflow-auto px-6 py-0">
+            {showCompactView && (
+              <div className="grid gap-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
+                {agents.map(agent => (
+                  <AgentCard
+                    key={agent.id}
+                    agent={agent}
+                    onDelete={handleDeleteAgent}
+                  />
+                ))}
+              </div>
+            )}
 
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-end px-6 py-3">
-        <ToggleSwitch
-          options={viewOptions}
-          onChange={id => setShowCompactView(id === 'card')}
+            {!showCompactView && (
+              <div className="flex flex-col gap-3">
+                {agents.map(agent => (
+                  <AgentRow
+                    key={agent.id}
+                    agent={agent}
+                    onDelete={handleDeleteAgent}
+                  />
+                ))}
+              </div>
+            )}
+          </main>
+        </div>
+
+        <AgentsAPIDialog
+          open={apiDialogOpen}
+          onOpenChange={setApiDialogOpen}
+          agents={agents}
         />
-      </div>
-
-      <main className="flex-1 overflow-auto px-6 py-0">
-        {showCompactView && (
-          <div className="grid gap-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
-            {agents.map(agent => (
-              <AgentCard
-                key={agent.id}
-                agent={agent}
-                onDelete={handleDeleteAgent}
-              />
-            ))}
-          </div>
-        )}
-
-        {!showCompactView && (
-          <div className="flex flex-col gap-3">
-            {agents.map(agent => (
-              <AgentRow
-                key={agent.id}
-                agent={agent}
-                onDelete={handleDeleteAgent}
-              />
-            ))}
-          </div>
-        )}
-      </main>
-    </div>
-  );
-}
+      </>
+    );
+  },
+);
