@@ -174,7 +174,8 @@ describe('createModel', () => {
   });
 
   it('handles secret creation failure', async () => {
-    mockExeca.mockRejectedValueOnce(new Error('not found')); // model doesn't exist
+    mockExeca
+      .mockRejectedValueOnce(new Error('not found')); // model doesn't exist
 
     mockInquirer.prompt
       .mockResolvedValueOnce({modelType: 'openai'})
@@ -182,11 +183,36 @@ describe('createModel', () => {
       .mockResolvedValueOnce({baseUrl: 'https://api.openai.com'})
       .mockResolvedValueOnce({apiKey: 'secret'});
 
+    mockExeca
+      .mockRejectedValueOnce(new Error('not found')); // secret doesn't exist check
     mockExeca.mockRejectedValueOnce(new Error('secret creation failed')); // create secret fails
 
     const result = await createModel('test-model');
 
     expect(result).toBe(false);
     expect(mockOutput.error).toHaveBeenCalledWith('failed to create secret');
+  });
+
+  it('updates existing secret when secret already exists', async () => {
+    mockExeca.mockRejectedValueOnce(new Error('not found')); // model doesn't exist
+
+    mockInquirer.prompt
+      .mockResolvedValueOnce({modelType: 'openai'})
+      .mockResolvedValueOnce({model: 'gpt-4'})
+      .mockResolvedValueOnce({baseUrl: 'https://api.openai.com'})
+      .mockResolvedValueOnce({apiKey: 'new-secret-key'});
+
+    mockExeca.mockResolvedValueOnce({}); // secret exists check
+    mockExeca.mockResolvedValueOnce({stdout: 'secret yaml'}); // dry-run output
+    mockExeca.mockResolvedValueOnce({}); // kubectl apply
+    mockExeca.mockResolvedValueOnce({}); // apply model
+
+    const result = await createModel('test-model');
+
+    expect(result).toBe(true);
+    expect(mockOutput.success).toHaveBeenCalledWith(
+      'updated secret test-model-model-secret'
+    );
+    expect(mockOutput.success).toHaveBeenCalledWith('model test-model created');
   });
 });

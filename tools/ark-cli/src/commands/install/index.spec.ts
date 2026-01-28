@@ -186,4 +186,210 @@ describe('install command', () => {
     ).rejects.toThrow('process.exit called');
     expect(mockExit).toHaveBeenCalledWith(1);
   });
+
+  describe('checkAndCleanFailedRelease', () => {
+    it('uninstalls release in pending-install state', async () => {
+      const mockService = {
+        name: 'ark-api',
+        helmReleaseName: 'ark-api',
+        chartPath: './charts/ark-api',
+        namespace: 'ark-system',
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': mockService,
+      });
+
+      mockExeca
+        .mockResolvedValueOnce({
+          stdout: 'NAME: ark-api\nSTATUS: pending-install\n',
+        })
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-api']);
+
+      expect(mockExeca).toHaveBeenCalledWith(
+        'helm',
+        ['status', 'ark-api', '--namespace', 'ark-system'],
+        {}
+      );
+      expect(mockExeca).toHaveBeenCalledWith(
+        'helm',
+        ['uninstall', 'ark-api', '--namespace', 'ark-system'],
+        {stdio: 'inherit'}
+      );
+      expect(mockExeca).toHaveBeenCalledWith(
+        'helm',
+        [
+          'upgrade',
+          '--install',
+          'ark-api',
+          './charts/ark-api',
+          '--namespace',
+          'ark-system',
+        ],
+        {stdio: 'inherit'}
+      );
+    });
+
+    it('uninstalls release in failed state', async () => {
+      const mockService = {
+        name: 'ark-api',
+        helmReleaseName: 'ark-api',
+        chartPath: './charts/ark-api',
+        namespace: 'ark-system',
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': mockService,
+      });
+
+      mockExeca
+        .mockResolvedValueOnce({
+          stdout: 'NAME: ark-api\nSTATUS: failed\n',
+        })
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-api']);
+
+      expect(mockExeca).toHaveBeenCalledWith(
+        'helm',
+        ['uninstall', 'ark-api', '--namespace', 'ark-system'],
+        {stdio: 'inherit'}
+      );
+    });
+
+    it('uninstalls release in uninstalling state', async () => {
+      const mockService = {
+        name: 'ark-dashboard',
+        helmReleaseName: 'ark-dashboard',
+        chartPath: './charts/ark-dashboard',
+        namespace: 'default',
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-dashboard': mockService,
+      });
+
+      mockExeca
+        .mockResolvedValueOnce({
+          stdout: 'NAME: ark-dashboard\nSTATUS: uninstalling\nREVISION: 2\n',
+        })
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-dashboard']);
+
+      expect(mockExeca).toHaveBeenCalledWith(
+        'helm',
+        ['uninstall', 'ark-dashboard', '--namespace', 'default'],
+        {stdio: 'inherit'}
+      );
+    });
+
+    it('does not uninstall release in deployed state', async () => {
+      const mockService = {
+        name: 'ark-api',
+        helmReleaseName: 'ark-api',
+        chartPath: './charts/ark-api',
+        namespace: 'ark-system',
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': mockService,
+      });
+
+      mockExeca
+        .mockResolvedValueOnce({
+          stdout: 'NAME: ark-api\nSTATUS: deployed\n',
+        })
+        .mockResolvedValueOnce({});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-api']);
+
+      const uninstallCalls = mockExeca.mock.calls.filter(
+        (call: any) => call[0] === 'helm' && call[1][0] === 'uninstall'
+      );
+      expect(uninstallCalls).toHaveLength(0);
+
+      expect(mockExeca).toHaveBeenCalledWith(
+        'helm',
+        [
+          'upgrade',
+          '--install',
+          'ark-api',
+          './charts/ark-api',
+          '--namespace',
+          'ark-system',
+        ],
+        {stdio: 'inherit'}
+      );
+    });
+
+    it('handles helm status errors gracefully', async () => {
+      const mockService = {
+        name: 'ark-api',
+        helmReleaseName: 'ark-api',
+        chartPath: './charts/ark-api',
+        namespace: 'ark-system',
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': mockService,
+      });
+
+      mockExeca
+        .mockRejectedValueOnce(new Error('release not found'))
+        .mockResolvedValueOnce({});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-api']);
+
+      expect(mockExeca).toHaveBeenCalledWith(
+        'helm',
+        [
+          'upgrade',
+          '--install',
+          'ark-api',
+          './charts/ark-api',
+          '--namespace',
+          'ark-system',
+        ],
+        {stdio: 'inherit'}
+      );
+    });
+
+    it('handles service without namespace', async () => {
+      const mockService = {
+        name: 'ark-dashboard',
+        helmReleaseName: 'ark-dashboard',
+        chartPath: './charts/ark-dashboard',
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-dashboard': mockService,
+      });
+
+      mockExeca
+        .mockResolvedValueOnce({
+          stdout: 'NAME: ark-dashboard\nSTATUS: failed\n',
+        })
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-dashboard']);
+
+      expect(mockExeca).toHaveBeenCalledWith(
+        'helm',
+        ['status', 'ark-dashboard'],
+        {}
+      );
+      expect(mockExeca).toHaveBeenCalledWith(
+        'helm',
+        ['uninstall', 'ark-dashboard'],
+        {stdio: 'inherit'}
+      );
+    });
+  });
 });
