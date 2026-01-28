@@ -1,6 +1,6 @@
 # PR Review Execution Profile
 # Clones repo, checks out PR branch, and submits review
-apiVersion: ark.mckinsey.com/v1prealpha1
+apiVersion: ark.mckinsey.com/v1alpha1
 kind: ExecutionProfile
 metadata:
   name: pr-review-profile

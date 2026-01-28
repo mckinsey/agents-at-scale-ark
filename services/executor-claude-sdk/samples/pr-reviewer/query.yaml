@@ -23,13 +23,13 @@ spec:
   # Parameters passed to the agent and profile templates
   parameters:
     - name: RepoUrl
-      value: "git@github.com:your-org/your-repo.git"  # CHANGE THIS
+      value: ""  # CHANGE THIS
     
     - name: PrNumber
-      value: "42"  # CHANGE THIS (used for posting review, set to "0" for local-only)
+      value: "1"  # CHANGE THIS (used for posting review, set to "0" for local-only)
     
     - name: PrBranch
-      value: "feature/your-feature"  # CHANGE THIS
+      value: "feat/expanded_readme"  # CHANGE THIS
     
     - name: BaseBranch
       value: "main"
