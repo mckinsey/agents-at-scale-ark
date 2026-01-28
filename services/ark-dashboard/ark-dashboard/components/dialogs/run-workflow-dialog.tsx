@@ -126,12 +126,10 @@ export function RunWorkflowDialog({
           <DialogHeader>
             <DialogTitle>Run Workflow</DialogTitle>
             <DialogDescription>
-              {parameters.length > 0
-                ? `Configure parameters for ${templateName}`
-                : `Run workflow ${templateName}?`}
+              Configure and run {templateName}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="max-h-[60vh] overflow-y-auto grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="workflow-name">
                 Workflow Name{' '}
@@ -148,24 +146,28 @@ export function RunWorkflowDialog({
                 <p className="text-destructive text-xs">{workflowNameError}</p>
               )}
             </div>
-            {parameters.length > 0 &&
-              parameters.map(param => (
-                <div key={param.name} className="grid gap-2">
-                  <Label htmlFor={param.name}>{param.name}</Label>
-                  <Input
-                    id={param.name}
-                    value={paramValues[param.name] || ''}
-                    onChange={e =>
-                      setParamValues(prev => ({
-                        ...prev,
-                        [param.name]: e.target.value,
-                      }))
-                    }
-                    placeholder={param.value || ''}
-                    disabled={isSubmitting}
-                  />
-                </div>
-              ))}
+            {parameters.length > 0 && (
+              <>
+                <div className="text-sm font-semibold mt-2">Parameters</div>
+                {parameters.map(param => (
+                  <div key={param.name} className="grid gap-2">
+                    <Label htmlFor={param.name}>{param.name}</Label>
+                    <Input
+                      id={param.name}
+                      value={paramValues[param.name] || ''}
+                      onChange={e =>
+                        setParamValues(prev => ({
+                          ...prev,
+                          [param.name]: e.target.value,
+                        }))
+                      }
+                      placeholder={param.value || ''}
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                ))}
+              </>
+            )}
           </div>
           <DialogFooter>
             <Button
