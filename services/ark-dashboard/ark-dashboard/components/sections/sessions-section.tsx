@@ -1109,18 +1109,38 @@ export function SessionsSection() {
             </div>
             <div className="flex items-center gap-2 ml-auto shrink-0">
               <Select value={statusFilter || 'all'} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-32 h-8 text-sm border-2 shadow-sm">
+                <SelectTrigger className="w-40 h-8 text-sm border-2 shadow-sm">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="Running">Running</SelectItem>
-                  <SelectItem value="Succeeded">Succeeded</SelectItem>
-                  <SelectItem value="Failed">Failed</SelectItem>
+                  <SelectItem value="all">
+                    <div className="flex items-center gap-2">
+                      <Circle className="h-4 w-4 text-muted-foreground" />
+                      <span>All Statuses</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="Running">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <span>Running</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="Succeeded">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      <span>Succeeded</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="Failed">
+                    <div className="flex items-center gap-2">
+                      <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                      <span>Failed</span>
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
               <Select value={sortOrder} onValueChange={value => setSortOrder(value as SortOrder)}>
-                <SelectTrigger className="w-32 h-8 text-sm border-2 shadow-sm">
+                <SelectTrigger className="w-40 h-8 text-sm border-2 shadow-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
