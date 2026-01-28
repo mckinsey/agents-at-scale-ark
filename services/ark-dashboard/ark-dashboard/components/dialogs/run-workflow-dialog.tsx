@@ -135,9 +135,6 @@ export function RunWorkflowDialog({
             <div className="grid gap-2">
               <Label htmlFor="workflow-name">
                 Workflow Name{' '}
-                <span className="text-muted-foreground text-xs font-normal">
-                  (optional)
-                </span>
               </Label>
               <Input
                 id="workflow-name"
