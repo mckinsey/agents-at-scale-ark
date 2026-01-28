@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class AgentsPage(BasePage):
     
-    ADD_AGENT_BUTTON = "button:has-text('Add Agent'), button:has-text('Create Agent'), button:has-text('New Agent'), a:has-text('Add Agent')"
+    ADD_AGENT_BUTTON = "a[href='/agents/new']:has-text('Create Agent'), button:has-text('Create Agent'), button:has-text('Add Agent'), button:has-text('New Agent'), a:has-text('Add Agent')"
     AGENT_NAME_INPUT = "input[name='name'], input[placeholder*='name' i]"
     AGENT_DESCRIPTION_INPUT = "textarea[name='description'], textarea[placeholder*='description' i], input[name='description']"
     MODEL_SELECT = "select, [role='combobox'], button:has-text('Select')"
