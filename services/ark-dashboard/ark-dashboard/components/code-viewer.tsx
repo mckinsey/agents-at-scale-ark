@@ -41,8 +41,7 @@ interface CodeViewerProps {
 export function CodeViewer({
   code,
   language = 'yaml',
-  showLineNumbers = true,
-  wrapLongLines = true,
+  showLineNumbers = false,
   fontSize = '0.75rem',
 }: CodeViewerProps) {
   const isDarkMode = useAtomValue(isExperimentalDarkModeEnabledAtom);
