@@ -14,10 +14,8 @@ export class KubernetesSecretManager implements SecretManager {
 
     if (secretExists) {
       await this.updateSecret(config);
-      output.success(`updated secret ${config.secretName}`);
     } else {
       await this.createNewSecret(config);
-      output.success(`created secret ${config.secretName}`);
     }
   }
 
@@ -47,52 +45,32 @@ export class KubernetesSecretManager implements SecretManager {
     }
 
     await execa('kubectl', secretArgs, {stdio: 'pipe'});
+    output.success(`created secret ${config.secretName}`);
   }
 
   private async updateSecret(config: ProviderConfig): Promise<void> {
+    const secretArgs = ['create', 'secret', 'generic', config.secretName];
+
     if (config.type === 'bedrock') {
-      const {stdout} = await execa(
-        'kubectl',
-        [
-          'create',
-          'secret',
-          'generic',
-          config.secretName,
-          `--from-literal=access-key-id=${config.accessKeyId}`,
-          `--from-literal=secret-access-key=${config.secretAccessKey}`,
-          ...(config.sessionToken
-            ? [`--from-literal=session-token=${config.sessionToken}`]
-            : []),
-          '--dry-run=client',
-          '-o',
-          'yaml',
-        ],
-        {stdio: 'pipe'}
+      secretArgs.push(`--from-literal=access-key-id=${config.accessKeyId}`);
+      secretArgs.push(
+        `--from-literal=secret-access-key=${config.secretAccessKey}`
       );
-      await execa('kubectl', ['apply', '-f', '-'], {
-        input: stdout,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
+      if (config.sessionToken) {
+        secretArgs.push(`--from-literal=session-token=${config.sessionToken}`);
+      }
     } else {
-      const {stdout} = await execa(
-        'kubectl',
-        [
-          'create',
-          'secret',
-          'generic',
-          config.secretName,
-          `--from-literal=api-key=${config.apiKey}`,
-          `--from-literal=token=${config.apiKey}`,
-          '--dry-run=client',
-          '-o',
-          'yaml',
-        ],
-        {stdio: 'pipe'}
-      );
-      await execa('kubectl', ['apply', '-f', '-'], {
-        input: stdout,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
+      secretArgs.push(`--from-literal=api-key=${config.apiKey}`);
+      secretArgs.push(`--from-literal=token=${config.apiKey}`);
     }
+
+    secretArgs.push('--dry-run=client', '-o', 'yaml');
+
+    const {stdout} = await execa('kubectl', secretArgs, {stdio: 'pipe'});
+    await execa('kubectl', ['apply', '-f', '-'], {
+      input: stdout,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    output.success(`updated secret ${config.secretName}`);
   }
 }
