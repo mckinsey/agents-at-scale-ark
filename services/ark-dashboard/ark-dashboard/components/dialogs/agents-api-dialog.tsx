@@ -41,9 +41,23 @@ export function AgentsAPIDialog({
 }: AgentsAPIDialogProps) {
   const [copiedEndpoint, setCopiedEndpoint] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState<string>(
-    agents[0]?.name || '',
+
+  // Track user's explicit selection separately from the displayed selection
+  const [userSelectedAgent, setUserSelectedAgent] = useState<string | null>(
+    null,
   );
+
+  // Derive the actual selected agent:
+  // 1. Use user's selection if it exists and is still valid
+  // 2. Otherwise use the first agent in the list
+  // 3. Fall back to empty string if no agents exist
+  const selectedAgent = (() => {
+    if (userSelectedAgent && agents.some(a => a.name === userSelectedAgent)) {
+      return userSelectedAgent;
+    }
+    return agents[0]?.name || '';
+  })();
+
   const [activeTab, setActiveTab] = useState('python');
   const [isInternalEndpoint, setIsInternalEndpoint] = useState(false);
 
@@ -90,7 +104,7 @@ export function AgentsAPIDialog({
         <div className="space-y-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">Select Agent</label>
-            <Select value={selectedAgent} onValueChange={setSelectedAgent}>
+            <Select value={selectedAgent} onValueChange={setUserSelectedAgent}>
               <SelectTrigger>
                 <SelectValue placeholder="Select an agent" />
               </SelectTrigger>
