@@ -70,12 +70,7 @@ function extractItemTimestamp(item: unknown): string {
   return new Date().toISOString();
 }
 
-function useSSEStream(
-  endpoint: string,
-  memory: string,
-  agentName: string,
-  sessionId?: string,
-) {
+function useSSEStream(endpoint: string, memory: string, agentName: string) {
   const [streamedEntries, setStreamedEntries] = useState<StreamEntry[]>([]);
   const [fetchedEntries, setFetchedEntries] = useState<StreamEntry[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -112,9 +107,6 @@ function useSSEStream(
       let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&watch=true`;
       if (cursor !== undefined && cursor !== null) {
         url += `&cursor=${cursor}`;
-      }
-      if (sessionId) {
-        url += `&session_id=${encodeURIComponent(sessionId)}`;
       }
       const eventSource = new EventSource(url);
       eventSourceRef.current = eventSource;
@@ -156,7 +148,7 @@ function useSSEStream(
         }, 3000);
       };
     },
-    [endpoint, memory, filterByAgent, sessionId],
+    [endpoint, memory, filterByAgent],
   );
 
   const fetchPage = useCallback(
@@ -169,9 +161,6 @@ function useSSEStream(
         let url = `/api${endpoint}?memory=${encodeURIComponent(memory)}&limit=${PAGE_SIZE}`;
         if (cursor !== undefined && cursor !== null) {
           url += `&cursor=${cursor}`;
-        }
-        if (sessionId) {
-          url += `&session_id=${encodeURIComponent(sessionId)}`;
         }
         const response = await fetch(url, {
           signal: abortControllerRef.current.signal,
@@ -211,7 +200,7 @@ function useSSEStream(
         }
       }
     },
-    [endpoint, memory, filterByAgent, sessionId],
+    [endpoint, memory, filterByAgent],
   );
 
   const loadMore = useCallback(() => {
@@ -287,6 +276,9 @@ function DebugStreamView({
 }: DebugStreamViewProps) {
   const [autoScroll, setAutoScroll] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(
+    new Set(),
+  );
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -306,6 +298,76 @@ function DebugStreamView({
       return next;
     });
   };
+
+  const toggleSessionExpanded = (sessionId: string) => {
+    setExpandedSessions(prev => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+  };
+
+  const extractSessionId = (data: unknown): string => {
+    const item = data as Record<string, unknown>;
+
+    // CASE: Trace - Try to extract session ID from spans
+    if (item.spans && Array.isArray(item.spans) && item.spans.length > 0) {
+      const span = item.spans[0] as Record<string, unknown>;
+      if (span.attributes && Array.isArray(span.attributes)) {
+        const sessionAttr = span.attributes.find(
+          (attr: unknown) =>
+            typeof attr === 'object' &&
+            attr !== null &&
+            'key' in attr &&
+            attr.key === 'session.id',
+        ) as { value?: string } | undefined;
+        if (sessionAttr?.value) {
+          return sessionAttr.value;
+        }
+      }
+    }
+
+    // CASE: Trace Span - Try to extract session ID from attributes
+    if (item.attributes && Array.isArray(item.attributes)) {
+      const sessionAttr = item.attributes.find(
+        (attr: unknown) =>
+          typeof attr === 'object' &&
+          attr !== null &&
+          'key' in attr &&
+          attr.key === 'session.id',
+      ) as { value?: string } | undefined;
+      if (sessionAttr?.value) {
+        return sessionAttr.value;
+      }
+    }
+
+    // CASE: Event - Try to extract session ID from event data
+    if (item.data && typeof item.data === 'object' && item.data !== null) {
+      const eventData = item.data as Record<string, unknown>;
+      if (eventData.sessionId && typeof eventData.sessionId === 'string') {
+        return eventData.sessionId;
+      }
+    }
+
+    console.log('No session ID found in data:', item);
+    return 'unknown';
+  };
+
+  const groupedEntries = useMemo(() => {
+    const groups = new Map<string, StreamEntry[]>();
+    entries.forEach(entry => {
+      const sessionId = extractSessionId(entry.data);
+      if (!groups.has(sessionId)) {
+        groups.set(sessionId, []);
+      }
+      groups.get(sessionId)!.push(entry);
+    });
+    return groups;
+  }, [entries]);
 
   return (
     <div className="flex h-full flex-col">
@@ -342,39 +404,66 @@ function DebugStreamView({
           </div>
         ) : (
           <>
-            {entries.map(entry => {
-              const isExpanded = expandedIds.has(entry.id);
-              return (
-                <div
-                  key={entry.id}
-                  className="border-border mb-1 overflow-hidden border-b pb-1 last:border-b-0">
-                  <div className="flex min-w-0 items-center gap-1">
-                    <span
-                      className="flex shrink-0 cursor-pointer items-center gap-1"
-                      onClick={() => toggleExpanded(entry.id)}>
-                      {isExpanded ? (
+            {Array.from(groupedEntries.entries()).map(
+              ([sessionId, sessionEntries]) => {
+                const isSessionExpanded = expandedSessions.has(sessionId);
+                return (
+                  <div key={sessionId} className="mb-2">
+                    <div
+                      className="bg-muted/80 mb-1 flex cursor-pointer items-center gap-1 rounded p-1 font-semibold"
+                      onClick={() => toggleSessionExpanded(sessionId)}>
+                      {isSessionExpanded ? (
                         <ChevronDown className="text-muted-foreground h-3 w-3 shrink-0" />
                       ) : (
                         <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
                       )}
-                      <span className="text-muted-foreground">
-                        {entry.timestamp}
+                      <span>Session: {sessionId}</span>
+                      <span className="text-muted-foreground ml-auto text-xs">
+                        {sessionEntries.length}{' '}
+                        {sessionEntries.length === 1 ? 'entry' : 'entries'}
                       </span>
-                    </span>
-                    {!isExpanded && (
-                      <span className="text-muted-foreground w-0 flex-1 truncate">
-                        {JSON.stringify(entry.data)}
-                      </span>
+                    </div>
+                    {isSessionExpanded && (
+                      <div className="ml-4">
+                        {sessionEntries.map(entry => {
+                          const isExpanded = expandedIds.has(entry.id);
+                          return (
+                            <div
+                              key={entry.id}
+                              className="border-border mb-1 overflow-hidden border-b pb-1 last:border-b-0">
+                              <div className="flex min-w-0 items-center gap-1">
+                                <span
+                                  className="flex shrink-0 cursor-pointer items-center gap-1"
+                                  onClick={() => toggleExpanded(entry.id)}>
+                                  {isExpanded ? (
+                                    <ChevronDown className="text-muted-foreground h-3 w-3 shrink-0" />
+                                  ) : (
+                                    <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
+                                  )}
+                                  <span className="text-muted-foreground">
+                                    {entry.timestamp}
+                                  </span>
+                                </span>
+                                {!isExpanded && (
+                                  <span className="text-muted-foreground w-0 flex-1 truncate">
+                                    {JSON.stringify(entry.data)}
+                                  </span>
+                                )}
+                              </div>
+                              {isExpanded && (
+                                <pre className="text-foreground mt-1 break-all whitespace-pre-wrap">
+                                  {JSON.stringify(entry.data, null, 2)}
+                                </pre>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
-                  {isExpanded && (
-                    <pre className="text-foreground mt-1 break-all whitespace-pre-wrap">
-                      {JSON.stringify(entry.data, null, 2)}
-                    </pre>
-                  )}
-                </div>
-              );
-            })}
+                );
+              },
+            )}
             {onLoadMore && hasMore && (
               <div className="flex justify-center py-2">
                 <Button
@@ -463,8 +552,8 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
     useState<DebugStreamType>('traces');
   const [debugMode, setDebugMode] = useState(true);
 
-  const traces = useSSEStream('/v1/broker/traces', 'default', name, sessionId);
-  const events = useSSEStream('/v1/broker/events', 'default', name, sessionId);
+  const traces = useSSEStream('/v1/broker/traces', 'default', name);
+  const events = useSSEStream('/v1/broker/events', 'default', name);
 
   const handleNewChat = useCallback(() => {
     const newSessionId = createNewSessionId();
@@ -475,9 +564,7 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
       [chatKey]: { messages: [], sessionId: newSessionId },
     }));
     setError(null);
-    traces.clear();
-    events.clear();
-  }, [chatKey, setChatHistory, setLastConversationId, traces, events]);
+  }, [chatKey, setChatHistory, setLastConversationId]);
   const inputRef = useRef<HTMLInputElement>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const stopPollingRef = useRef<(() => void) | null>(null);
