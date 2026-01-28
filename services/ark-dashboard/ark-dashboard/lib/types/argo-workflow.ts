@@ -26,7 +26,14 @@ export interface ArgoNodeStatus {
   id: string;
   name: string;
   displayName: string;
-  type: 'Pod' | 'Steps' | 'StepGroup' | 'DAG' | 'Container' | 'Script' | 'Suspend';
+  type:
+    | 'Pod'
+    | 'Steps'
+    | 'StepGroup'
+    | 'DAG'
+    | 'Container'
+    | 'Script'
+    | 'Suspend';
   phase: 'Pending' | 'Running' | 'Succeeded' | 'Failed' | 'Error' | 'Skipped';
   startedAt?: string;
   finishedAt?: string;

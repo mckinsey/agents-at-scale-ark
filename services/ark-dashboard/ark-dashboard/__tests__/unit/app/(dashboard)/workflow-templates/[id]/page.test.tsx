@@ -9,6 +9,11 @@ import { workflowTemplatesService } from '@/lib/services/workflow-templates';
 
 vi.mock('next/navigation', () => ({
   useParams: vi.fn(),
+  useRouter: vi.fn(() => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    refresh: vi.fn(),
+  })),
 }));
 
 vi.mock('@/lib/services/workflow-templates', () => ({
