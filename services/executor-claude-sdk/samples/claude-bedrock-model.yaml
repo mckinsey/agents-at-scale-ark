@@ -1,0 +1,32 @@
+# Model CRD for Claude Opus 4.5 via AWS Bedrock with Bearer Token Authentication
+# For enterprise gateways that use JWT authentication instead of AWS credentials
+#
+# Prerequisites:
+#   kubectl create secret generic anthropic-api-key \
+#     --from-literal=token='<your-jwt-token>'
+#
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: anthropic-claude
+  labels:
+    sample: "true"
+spec:
+  provider: bedrock
+  model:
+    value: us.anthropic.claude-opus-4-5-20251101-v1:0
+  config:
+    bedrock:
+      # Bearer token for enterprise gateway authentication
+      # (mutually exclusive with accessKeyId/secretAccessKey)
+      bearerToken:
+        valueFrom:
+          secretKeyRef:
+            name: anthropic-api-key # Ensure this secret is available
+            key: token
+      # Custom endpoint URL for enterprise gateway
+      baseUrl:
+        value: "" # UPDATE: insert valid url
+      # AWS region (required)
+      region:
+        value: us-east-1

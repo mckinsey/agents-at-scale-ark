@@ -26,27 +26,24 @@ End-to-end examples demonstrating common use cases for the Claude SDK executor.
 
 ## Quick Start
 
-```bash
-# 1. Create a namespace for testing
-kubectl create namespace claude-samples
+> **Important:** Samples must be deployed to the same namespace as the executor.
 
-# 2. Create required secrets
-kubectl create secret generic github-creds \
-  --namespace claude-samples \
+```bash
+# 1. Create required secrets (in same namespace as executor)
+kubectl create secret generic github-token \
   --from-literal=token=$GITHUB_TOKEN
 
-kubectl create secret generic git-ssh \
-  --namespace claude-samples \
+kubectl create secret generic git-ssh-key \
   --from-file=ssh-privatekey=$HOME/.ssh/id_ed25519
 
-# 3. Apply a sample
-kubectl apply -f samples/feature-developer/ -n claude-samples
+# 2. Apply a sample
+kubectl apply -f samples/pr-reviewer/
 
-# 4. Create a query to test
-kubectl apply -f samples/feature-developer/query.yaml -n claude-samples
+# 3. Create a query to test
+kubectl apply -f samples/pr-reviewer/query.yaml
 
-# 5. Watch the query status
-kubectl get queries -n claude-samples -w
+# 4. Watch the query status
+kubectl get queries -w
 ```
 
 ## Sample Structure
@@ -105,7 +102,6 @@ sdkConfig:
 
 ```bash
 kubectl create secret generic anthropic-api-key \
-  --namespace claude-samples \
   --from-literal=api-key=$ANTHROPIC_API_KEY
 ```
 
@@ -130,14 +126,14 @@ Use Workload Identity with your tenant's service account.
 
 Check executor logs:
 ```bash
-kubectl logs -l app=executor-claude-sdk -n ark-system -f
+kubectl logs -l app=executor-claude-sdk -f
 ```
 
 ### Git clone fails
 
 Verify SSH key is correctly mounted:
 ```bash
-kubectl exec -it deploy/executor-claude-sdk -n ark-system -- cat /root/.ssh/id_rsa
+kubectl exec -it deploy/executor-claude-sdk -- cat /root/.ssh/id_rsa
 ```
 
 ### PR creation fails

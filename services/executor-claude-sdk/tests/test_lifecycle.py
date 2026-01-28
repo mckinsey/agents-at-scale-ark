@@ -70,13 +70,13 @@ def mock_request():
     @dataclass
     class MockModel:
         name: str = "claude-sonnet-4"
-        type: str = "openai"
+        type: str = "anthropic"
         config: Dict[str, Any] = None
-        
+
         def __post_init__(self):
             if self.config is None:
                 self.config = {
-                    "openai": {
+                    "anthropic": {
                         "baseUrl": "https://api.test.com",
                         "apiKey": "test-key"
                     }
@@ -477,22 +477,42 @@ class TestHookRunner:
 # Phase 5: Full Executor Lifecycle Tests  
 # ============================================================================
 
-# Skip tests that require Claude credentials when running in CI
-_has_claude_credentials = bool(
-    os.environ.get("ANTHROPIC_API_KEY") or 
-    os.environ.get("AWS_ACCESS_KEY_ID") or
-    os.environ.get("CLAUDE_CODE_API_KEY")
-)
+def _mock_sdk_runner(executor):
+    """Mock the SDK runner methods to avoid needing real credentials."""
+    from claude_sdk_executor.types.telemetry import ExecutionTelemetry
 
-@pytest.mark.skipif(not _has_claude_credentials, reason="Claude credentials not available in CI")
+    async def mock_execute(prompt, claude_config, working_dir, max_turns,
+                          system_prompt=None, model=None, trace_context=None,
+                          telemetry_hooks=None, query_id=None, agent_name=None):
+        telemetry = ExecutionTelemetry()
+        telemetry.session_id = "mock-session"
+        telemetry.duration_ms = 100
+        telemetry.num_turns = 1
+        return f"Mock response to: {prompt[:50]}...", telemetry
+
+    async def mock_execute_with_critic(prompt, critic_prompt, claude_config, working_dir,
+                                       max_turns, system_prompt=None, model=None,
+                                       trace_context=None, telemetry_hooks=None,
+                                       query_id=None, agent_name=None):
+        telemetry = ExecutionTelemetry()
+        telemetry.session_id = "mock-session"
+        telemetry.duration_ms = 200
+        telemetry.num_turns = 2
+        return f"Mock response to: {prompt[:50]}...", "APPROVED", telemetry
+
+    executor.sdk_runner.execute = mock_execute
+    executor.sdk_runner.execute_with_critic = mock_execute_with_critic
+    return executor
+
+
 class TestExecutorLifecycle:
-    """Test the full executor lifecycle with mock SDK execution."""
+    """Test the full executor lifecycle with mocked SDK execution."""
 
     @pytest.mark.asyncio
     async def test_executor_creation(self):
         """Test that executor can be instantiated."""
         executor = ClaudeSdkExecutor()
-        
+
         assert executor is not None
         assert executor.profile_resolver is not None
         assert executor.workspace_manager is not None
@@ -502,17 +522,15 @@ class TestExecutorLifecycle:
     @pytest.mark.asyncio
     async def test_lifecycle_with_filesystem_workspace(self, mock_request, temp_workspace):
         """Test lifecycle with filesystem workspace (no git)."""
-        executor = ClaudeSdkExecutor()
+        executor = _mock_sdk_runner(ClaudeSdkExecutor())
         executor.workspace_manager = WorkspaceManager(base_dir=temp_workspace)
-        
-        # Update profile to use filesystem workspace
+
         mock_request.profile["workspace"] = {"type": "filesystem"}
         mock_request.profile["preExecute"] = []
         mock_request.profile["postExecute"] = []
-        
-        # Execute - will use mock mode since SDK isn't available
+
         messages = await executor.execute_agent(mock_request)
-        
+
         assert len(messages) == 1
         assert messages[0].role == "assistant"
         assert mock_request.agent.name in messages[0].name
@@ -520,12 +538,11 @@ class TestExecutorLifecycle:
     @pytest.mark.asyncio
     async def test_lifecycle_state_progression(self, mock_request, temp_workspace):
         """Test that state progresses correctly through lifecycle."""
-        executor = ClaudeSdkExecutor()
+        executor = _mock_sdk_runner(ClaudeSdkExecutor())
         executor.workspace_manager = WorkspaceManager(base_dir=temp_workspace)
-        
-        # Capture state at various points
+
         states_captured = []
-        
+
         original_run = executor.hook_runner.run
         async def capture_state(hooks, context, state, **kwargs):
             states_captured.append({
@@ -534,9 +551,9 @@ class TestExecutorLifecycle:
                 "hook_count": len(hooks)
             })
             return await original_run(hooks, context, state, **kwargs)
-        
+
         executor.hook_runner.run = capture_state
-        
+
         mock_request.profile["workspace"] = {"type": "filesystem"}
         mock_request.profile["preExecute"] = [
             {"name": "setup", "action": "unknown_action", "params": {}}
@@ -544,55 +561,50 @@ class TestExecutorLifecycle:
         mock_request.profile["postExecute"] = [
             {"name": "cleanup", "action": "unknown_action", "params": {}}
         ]
-        
+
         await executor.execute_agent(mock_request)
-        
-        # Should have captured state for pre and post hooks
+
         assert len(states_captured) == 2
-        
-        # Pre-execute: workspace set, no output yet
         assert states_captured[0]["workspace"] is not None
         assert states_captured[0]["has_output"] is False
-        
-        # Post-execute: workspace set, output present
         assert states_captured[1]["workspace"] is not None
         assert states_captured[1]["has_output"] is True
 
     @pytest.mark.asyncio
     async def test_lifecycle_with_no_workspace(self, mock_request):
         """Test lifecycle when no workspace is configured."""
-        executor = ClaudeSdkExecutor()
-        
+        executor = _mock_sdk_runner(ClaudeSdkExecutor())
+
         mock_request.profile["workspace"] = {"type": "none"}
         mock_request.profile["preExecute"] = []
         mock_request.profile["postExecute"] = []
-        
+
         messages = await executor.execute_agent(mock_request)
-        
+
         assert len(messages) == 1
-        assert messages[0].content  # Should have some output
+        assert messages[0].content
 
     @pytest.mark.asyncio
     async def test_lifecycle_with_critic_disabled(self, mock_request, temp_workspace):
         """Test lifecycle with critic disabled."""
-        executor = ClaudeSdkExecutor()
+        executor = _mock_sdk_runner(ClaudeSdkExecutor())
         executor.workspace_manager = WorkspaceManager(base_dir=temp_workspace)
-        
+
         mock_request.profile["workspace"] = {"type": "filesystem"}
         mock_request.profile["critic"] = {"enabled": False}
         mock_request.profile["preExecute"] = []
         mock_request.profile["postExecute"] = []
-        
+
         messages = await executor.execute_agent(mock_request)
-        
+
         assert len(messages) == 1
 
     @pytest.mark.asyncio
     async def test_lifecycle_with_inline_critic_mock(self, mock_request, temp_workspace):
         """Test lifecycle with inline critic (mocked execution)."""
-        executor = ClaudeSdkExecutor()
+        executor = _mock_sdk_runner(ClaudeSdkExecutor())
         executor.workspace_manager = WorkspaceManager(base_dir=temp_workspace)
-        
+
         mock_request.profile["workspace"] = {"type": "filesystem"}
         mock_request.profile["critic"] = {
             "enabled": True,
@@ -605,21 +617,19 @@ class TestExecutorLifecycle:
         }
         mock_request.profile["preExecute"] = []
         mock_request.profile["postExecute"] = []
-        
-        # Mock SDK returns "APPROVED" for critic response
+
         messages = await executor.execute_agent(mock_request)
-        
+
         assert len(messages) == 1
 
     @pytest.mark.asyncio
     async def test_template_resolution_in_hooks(self, mock_request, temp_workspace):
         """Test that templates are resolved in hook parameters."""
-        executor = ClaudeSdkExecutor()
+        executor = _mock_sdk_runner(ClaudeSdkExecutor())
         executor.workspace_manager = WorkspaceManager(base_dir=temp_workspace)
-        
+
         resolved_params = []
-        
-        # Patch hook runner to capture resolved params
+
         original_run = executor.hook_runner.run
         async def capture_params(hooks, context, state, **kwargs):
             for hook in hooks:
@@ -627,10 +637,10 @@ class TestExecutorLifecycle:
                 for key, value in hook.params.items():
                     resolved[key] = context.resolve(value)
                 resolved_params.append({"hook": hook.name, "params": resolved})
-            return []  # Skip actual execution
-        
+            return []
+
         executor.hook_runner.run = capture_params
-        
+
         mock_request.profile["workspace"] = {"type": "filesystem"}
         mock_request.profile["preExecute"] = [
             {
@@ -643,9 +653,9 @@ class TestExecutorLifecycle:
             }
         ]
         mock_request.profile["postExecute"] = []
-        
+
         await executor.execute_agent(mock_request)
-        
+
         assert len(resolved_params) == 1
         assert resolved_params[0]["params"]["nameTemplate"] == "feature/test-query-123"
         assert resolved_params[0]["params"]["baseBranch"] == "main"

@@ -83,15 +83,6 @@ except ImportError:
 # Default model to use when not specified
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
 
-# Supported provider environment variables
-PROVIDER_ENV_VARS = {
-    "azure-foundry": "CLAUDE_CODE_USE_FOUNDRY",
-    "aws-bedrock": "CLAUDE_CODE_USE_BEDROCK",
-    "gcp-vertex": "CLAUDE_CODE_USE_VERTEX",
-    "anthropic": "ANTHROPIC_API_KEY",
-}
-
-
 def validate_sdk_available() -> None:
     """Validate Claude SDK is available. Call at startup in production.
     
@@ -126,48 +117,98 @@ class ClaudeSdkRunner:
 
     Model Selection:
     The model name comes from the Ark Agent CRD (via Model CRD resolution).
-    The Model CRD's spec.config (API keys, base URLs) is NOT used by this executor.
-    Only the model name is extracted. Authentication is handled by the deployment.
+    The Model CRD's spec.config is used to configure the Claude SDK environment.
     """
 
-    def _detect_provider(self) -> str:
-        """Detect which authentication provider is configured from environment.
+    def _prepare_model_env(self, model: Any) -> dict:
+        """Validate Model and build environment dict for Claude CLI subprocess.
 
-        The Claude SDK reads credentials from environment variables.
-        This method detects which provider is configured for logging and validation.
+        This is the ONLY place that reads Model config and builds env vars.
+        Called once at the start of execute(). Downstream code trusts the result.
+
+        IMPORTANT: Starts with os.environ to inherit PATH, HOME, etc.
+        Then adds/overrides specific vars for Claude SDK.
+
+        Provider detection is based on config keys, not model.type.
+        model.type specifies API capability (completions, messages), not provider.
+
+        Args:
+            model: The Model object from request.agent.model
+                   Expected attributes: type, name, config
 
         Returns:
-            Provider name: 'azure-foundry', 'aws-bedrock', 'gcp-vertex', 'anthropic', or 'none'
-        """
-        if os.environ.get("CLAUDE_CODE_USE_FOUNDRY") == "1":
-            return "azure-foundry"
-        if os.environ.get("CLAUDE_CODE_USE_BEDROCK") == "1":
-            return "aws-bedrock"
-        if os.environ.get("CLAUDE_CODE_USE_VERTEX") == "1":
-            return "gcp-vertex"
-        if os.environ.get("ANTHROPIC_API_KEY"):
-            return "anthropic"
-        return "none"
-
-    def _validate_provider(self) -> str:
-        """Validate that an authentication provider is configured.
+            Complete env dict for ClaudeAgentOptions (inherits os.environ)
 
         Raises:
-            RuntimeError: If no provider is configured
-
-        Returns:
-            The detected provider name
+            ValueError: If model config is invalid or missing required fields
         """
-        provider = self._detect_provider()
-        if provider == "none":
-            raise RuntimeError(
-                "No Claude authentication configured. Set one of:\n"
-                "  - ANTHROPIC_API_KEY (direct Anthropic API)\n"
-                "  - CLAUDE_CODE_USE_BEDROCK=1 (AWS Bedrock)\n"
-                "  - CLAUDE_CODE_USE_VERTEX=1 (Google Vertex AI)\n"
-                "  - CLAUDE_CODE_USE_FOUNDRY=1 (Azure AI Foundry)"
-            )
-        return provider
+        if not model:
+            raise ValueError("Model is required")
+
+        if not model.name:
+            raise ValueError("Model name is required")
+
+        env = dict(os.environ)
+
+        env["DISABLE_TELEMETRY"] = "1"
+        env["DISABLE_ERROR_REPORTING"] = "1"
+
+        config = model.config or {}
+        logger.debug(f"Model config keys: {list(config.keys())}")
+
+        if "anthropic" in config:
+            anthropic_config = config["anthropic"]
+            api_key = anthropic_config.get("apiKey")
+            base_url = anthropic_config.get("baseUrl")
+
+            if not api_key:
+                raise ValueError("Model config.anthropic.apiKey is required")
+
+            env["ANTHROPIC_API_KEY"] = api_key
+            if base_url:
+                env["ANTHROPIC_BASE_URL"] = base_url
+
+        elif "bedrock" in config:
+            bedrock_config = config["bedrock"]
+            env["CLAUDE_CODE_USE_BEDROCK"] = "1"
+            logger.debug(f"Bedrock config: region={bedrock_config.get('region')}, "
+                         f"baseUrl={'set' if bedrock_config.get('baseUrl') else 'not set'}, "
+                         f"bearerToken={'set' if bedrock_config.get('bearerToken') else 'not set'}, "
+                         f"accessKeyId={'set' if bedrock_config.get('accessKeyId') else 'not set'}")
+
+            if bedrock_config.get("region"):
+                env["AWS_REGION"] = bedrock_config["region"]
+
+            if bedrock_config.get("bearerToken"):
+                env["AWS_BEARER_TOKEN_BEDROCK"] = bedrock_config["bearerToken"]
+            elif bedrock_config.get("accessKeyId") and bedrock_config.get("secretAccessKey"):
+                env["AWS_ACCESS_KEY_ID"] = bedrock_config["accessKeyId"]
+                env["AWS_SECRET_ACCESS_KEY"] = bedrock_config["secretAccessKey"]
+                if bedrock_config.get("sessionToken"):
+                    env["AWS_SESSION_TOKEN"] = bedrock_config["sessionToken"]
+
+            if bedrock_config.get("baseUrl"):
+                env["ANTHROPIC_BEDROCK_BASE_URL"] = bedrock_config["baseUrl"]
+
+        elif "vertex" in config:
+            vertex_config = config["vertex"]
+            env["CLAUDE_CODE_USE_VERTEX"] = "1"
+            if vertex_config.get("project"):
+                env["ANTHROPIC_VERTEX_PROJECT_ID"] = vertex_config["project"]
+            if vertex_config.get("region"):
+                env["CLOUD_ML_REGION"] = vertex_config["region"]
+
+        elif "azure-foundry" in config:
+            env["CLAUDE_CODE_USE_FOUNDRY"] = "1"
+
+        else:
+            raise ValueError(f"No recognized provider config found. Expected one of: anthropic, bedrock, vertex, azure-foundry. Got: {list(config.keys())}")
+
+        provider_vars = [k for k in env.keys() if any(x in k for x in
+            ['ANTHROPIC', 'AWS_', 'CLAUDE_CODE_USE_', 'CLOUD_ML'])]
+        logger.debug(f"Provider env vars set: {provider_vars}")
+
+        return env
 
     async def execute(
         self,
@@ -176,7 +217,7 @@ class ClaudeSdkRunner:
         working_dir: Optional[str],
         max_turns: int,
         system_prompt: Optional[str] = None,
-        model_name: Optional[str] = None,
+        model: Optional[Any] = None,
         trace_context: Optional[TraceContext] = None,
         telemetry_hooks: Optional[Dict[str, Any]] = None,
         query_id: Optional[str] = None,
@@ -185,8 +226,8 @@ class ClaudeSdkRunner:
         """
         Execute Claude Agent SDK with configured tools.
 
-        Authentication is determined by environment variables set at deployment time.
-        The model name comes from the Ark Agent CRD (via Model CRD resolution).
+        Authentication is configured via the Model CRD's spec.config.
+        The model object comes from the Ark Agent CRD (via Model CRD resolution).
 
         If output_format is configured with a JSON schema, the telemetry will include
         the structured_output field with the parsed JSON response.
@@ -197,7 +238,7 @@ class ClaudeSdkRunner:
             working_dir: Working directory for file operations
             max_turns: Maximum agent iterations
             system_prompt: Optional system prompt (from Agent.spec.prompt)
-            model_name: Model name from Agent CRD (e.g., 'claude-3-5-haiku-latest')
+            model: Full Model object from Agent CRD (includes type, name, config)
             trace_context: Optional trace context for distributed tracing
             telemetry_hooks: Optional hooks for tool call tracing
             query_id: Optional query ID for trace correlation
@@ -207,23 +248,28 @@ class ClaudeSdkRunner:
             Tuple of (agent_output, telemetry)
 
         Raises:
-            RuntimeError: If no auth provider configured or execution fails
+            RuntimeError: If Claude SDK not installed or execution fails
+            ValueError: If model config is invalid
         """
+        if not CLAUDE_SDK_AVAILABLE:
+            raise RuntimeError(
+                "Claude Agent SDK is not installed. "
+                "Install with: pip install claude-agent-sdk"
+            )
+
         telemetry = ExecutionTelemetry()
 
-        if not CLAUDE_SDK_AVAILABLE:
-            # Mock execution for testing
-            logger.warning("Using mock execution - Claude SDK not available")
-            return self._mock_execute(prompt, telemetry)
+        model_env = self._prepare_model_env(model)
+        logger.info(f"Using model {model.name} via {model.type}")
 
-        # Validate authentication provider is configured
-        provider = self._validate_provider()
-        logger.info(f"Using {provider} provider")
-
-        # Use provided model or default
-        model = claude_config.model or model_name or DEFAULT_MODEL
         options = self._build_options(
-            claude_config, working_dir, max_turns, system_prompt, model, telemetry_hooks
+            claude_config=claude_config,
+            working_dir=working_dir,
+            max_turns=max_turns,
+            system_prompt=system_prompt,
+            model_name=model.name,
+            model_env=model_env,
+            telemetry_hooks=telemetry_hooks,
         )
 
         result_text = ""
@@ -282,52 +328,58 @@ class ClaudeSdkRunner:
         working_dir: Optional[str],
         max_turns: int,
         system_prompt: Optional[str],
-        model_name: Optional[str] = None,
+        model_name: str,
+        model_env: Dict[str, str],
         telemetry_hooks: Optional[Dict[str, Any]] = None,
     ) -> "ClaudeAgentOptions":
-        """Build ClaudeAgentOptions from config."""
-        # Build MCP servers config from sdkConfig.claude.mcpServers
+        """Build ClaudeAgentOptions from config.
+
+        Args:
+            claude_config: Claude SDK configuration
+            working_dir: Working directory for file operations
+            max_turns: Maximum agent iterations
+            system_prompt: System prompt from Agent.spec.prompt
+            model_name: Validated model name from Model CRD
+            model_env: Pre-validated environment dict from _prepare_model_env()
+                       Already inherits os.environ, no need to merge again.
+            telemetry_hooks: Optional hooks for tool call tracing
+        """
+        env = dict(model_env)
+
+        if claude_config.file_checkpointing and claude_config.file_checkpointing.enabled:
+            env["CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"] = "1"
+
         mcp_servers = self._build_mcp_config(claude_config.mcp_servers)
 
-        # Build allowed tools list with MCP wildcards
         allowed_tools = list(claude_config.allowed_tools)
         for server_name in claude_config.mcp_servers.keys():
             allowed_tools.append(f"mcp__{server_name}__*")
 
-        # Build subagents configuration
         agents = self._build_subagents(claude_config.subagents)
-
-        # Build sandbox configuration
         sandbox = self._build_sandbox_config(claude_config.sandbox)
-
-        # Build output format configuration
         output_format = self._build_output_format(claude_config.output_format)
+
         if output_format:
             logger.info(f"Structured output configured: type={output_format.get('type')}, schema keys={list(output_format.get('schema', {}).get('properties', {}).keys())}")
         else:
             logger.debug("No structured output format configured")
 
-        # Build system prompt (preset or custom)
         final_system_prompt = self._build_system_prompt(
             system_prompt, claude_config.system_prompt_config, claude_config.system_prompt_suffix
         )
 
-        # Build declarative hooks and merge with telemetry hooks
         declarative_hooks = self._build_declarative_hooks(claude_config.declarative_hooks)
         all_hooks = self._merge_hooks(claude_config.hooks, declarative_hooks)
         hooks = self._merge_hooks(all_hooks, telemetry_hooks)
 
-        # Build extra args for file checkpointing
         extra_args = {}
-        env = None
         if claude_config.file_checkpointing and claude_config.file_checkpointing.enabled:
             extra_args["replay-user-messages"] = None
-            env = {**os.environ, "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING": "1"}
 
         options_kwargs: Dict[str, Any] = {
             "allowed_tools": allowed_tools,
             "permission_mode": claude_config.permission_mode,
-            "setting_sources": claude_config.setting_sources,  # Load CLAUDE.md and Skills
+            "setting_sources": claude_config.setting_sources,
             "cwd": working_dir,
             "max_turns": max_turns,
             "model": model_name,
@@ -335,9 +387,9 @@ class ClaudeSdkRunner:
             "mcp_servers": mcp_servers,
             "system_prompt": final_system_prompt,
             "hooks": hooks if hooks else None,
+            "env": env,
         }
 
-        # Add optional parameters only if they have values
         if claude_config.fallback_model:
             options_kwargs["fallback_model"] = claude_config.fallback_model
 
@@ -353,7 +405,6 @@ class ClaudeSdkRunner:
         if claude_config.file_checkpointing and claude_config.file_checkpointing.enabled:
             options_kwargs["enable_file_checkpointing"] = True
             options_kwargs["extra_args"] = extra_args
-            options_kwargs["env"] = env
 
         return ClaudeAgentOptions(**options_kwargs)
 
@@ -665,7 +716,7 @@ class ClaudeSdkRunner:
         working_dir: Optional[str],
         max_turns: int,
         system_prompt: Optional[str] = None,
-        model_name: Optional[str] = None,
+        model: Optional[Any] = None,
         trace_context: Optional[TraceContext] = None,
         telemetry_hooks: Optional[Dict[str, Any]] = None,
         query_id: Optional[str] = None,
@@ -685,8 +736,8 @@ class ClaudeSdkRunner:
         If file checkpointing is enabled with rollbackOnCriticFailure, file changes
         will be automatically reverted when the critic rejects the output.
 
-        Authentication is determined by environment variables set at deployment time.
-        The model name comes from the Ark Agent CRD (via Model CRD resolution).
+        Authentication is configured via the Model CRD's spec.config.
+        The model object comes from the Ark Agent CRD (via Model CRD resolution).
 
         Args:
             prompt: The user prompt to execute
@@ -695,7 +746,7 @@ class ClaudeSdkRunner:
             working_dir: Working directory for file operations
             max_turns: Maximum agent iterations
             system_prompt: Optional system prompt
-            model_name: Model name from Agent CRD (e.g., 'claude-3-5-haiku-latest')
+            model: Full Model object from Agent CRD (includes type, name, config)
             trace_context: Optional trace context for distributed tracing
             telemetry_hooks: Optional hooks for tool call tracing
             query_id: Optional query ID for trace correlation
@@ -705,23 +756,28 @@ class ClaudeSdkRunner:
             Tuple of (agent_output, critic_response, telemetry)
 
         Raises:
-            RuntimeError: If no auth provider configured or execution fails
+            RuntimeError: If Claude SDK not installed or execution fails
+            ValueError: If model config is invalid
         """
+        if not CLAUDE_SDK_AVAILABLE:
+            raise RuntimeError(
+                "Claude Agent SDK is not installed. "
+                "Install with: pip install claude-agent-sdk"
+            )
+
         telemetry = ExecutionTelemetry()
 
-        if not CLAUDE_SDK_AVAILABLE:
-            logger.warning("Using mock execution - Claude SDK not available")
-            output, _ = self._mock_execute(prompt, telemetry)
-            return output, "APPROVED", telemetry
+        model_env = self._prepare_model_env(model)
+        logger.info(f"Using model {model.name} via {model.type}")
 
-        # Validate authentication provider is configured
-        provider = self._validate_provider()
-        logger.info(f"Using {provider} provider")
-
-        # Build options for main task execution
-        model = claude_config.model or model_name or DEFAULT_MODEL
         options = self._build_options(
-            claude_config, working_dir, max_turns, system_prompt, model, telemetry_hooks
+            claude_config=claude_config,
+            working_dir=working_dir,
+            max_turns=max_turns,
+            system_prompt=system_prompt,
+            model_name=model.name,
+            model_env=model_env,
+            telemetry_hooks=telemetry_hooks,
         )
 
         agent_output = ""
@@ -890,10 +946,3 @@ class ClaudeSdkRunner:
             else:
                 resolved[key] = value
         return resolved
-
-    def _mock_execute(self, prompt: str, telemetry: ExecutionTelemetry) -> Tuple[str, ExecutionTelemetry]:
-        """Mock execution for testing when SDK is not available."""
-        telemetry.session_id = "mock-session"
-        telemetry.duration_ms = 100
-        telemetry.num_turns = 1
-        return f"[Mock response to: {prompt[:50]}...]", telemetry

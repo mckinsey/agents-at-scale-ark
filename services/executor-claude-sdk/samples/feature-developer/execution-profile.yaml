@@ -1,6 +1,6 @@
 # Feature Development Execution Profile
 # Full workflow: clone → branch → develop → validate → commit → push → PR
-apiVersion: ark.mckinsey.com/v1prealpha1
+apiVersion: ark.mckinsey.com/v1alpha1
 kind: ExecutionProfile
 metadata:
   name: feature-dev-profile

@@ -54,6 +54,9 @@ type BedrockModelConfig struct {
 	SecretAccessKey *ValueSource `json:"secretAccessKey,omitempty"`
 	// +kubebuilder:validation:Optional
 	SessionToken *ValueSource `json:"sessionToken,omitempty"`
+	// BearerToken for enterprise gateway authentication (mutually exclusive with AccessKeyID/SecretAccessKey)
+	// +kubebuilder:validation:Optional
+	BearerToken *ValueSource `json:"bearerToken,omitempty"`
 	// +kubebuilder:validation:Optional
 	ModelArn *ValueSource `json:"modelArn,omitempty"`
 	// +kubebuilder:validation:Optional

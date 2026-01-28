@@ -40,28 +40,44 @@ export function createConfig(
         }),
       };
       return config;
-    case 'bedrock':
-      config.bedrock = {
-        accessKeyId: {
-          valueFrom: {
-            secretKeyRef: {
-              name: formValues.bedrockAccessKeyIdSecretName,
-              key: 'token',
-            },
-          },
-        },
-        secretAccessKey: {
-          valueFrom: {
-            secretKeyRef: {
-              name: formValues.bedrockSecretAccessKeySecretName,
-              key: 'token',
-            },
-          },
-        },
+    case 'bedrock': {
+      const bedrockConfig: ModelCreateRequest['config']['bedrock'] = {
         ...(formValues.region && { region: formValues.region }),
+        ...(formValues.baseUrl && { baseUrl: formValues.baseUrl }),
         ...(formValues.modelARN && { modelArn: formValues.modelARN }),
       };
+
+      if (formValues.bedrockAuthMethod === 'bearer') {
+        bedrockConfig.bearerToken = {
+          valueFrom: {
+            secretKeyRef: {
+              name: formValues.bedrockBearerTokenSecretName ?? '',
+              key: 'token',
+            },
+          },
+        };
+      } else {
+        bedrockConfig.accessKeyId = {
+          valueFrom: {
+            secretKeyRef: {
+              name: formValues.bedrockAccessKeyIdSecretName ?? '',
+              key: 'token',
+            },
+          },
+        };
+        bedrockConfig.secretAccessKey = {
+          valueFrom: {
+            secretKeyRef: {
+              name: formValues.bedrockSecretAccessKeySecretName ?? '',
+              key: 'token',
+            },
+          },
+        };
+      }
+
+      config.bedrock = bedrockConfig;
       return config;
+    }
   }
 }
 
@@ -95,9 +111,12 @@ export function getResetValues(currentFormValues: FormValues): FormValues {
         name: currentFormValues.name,
         provider: currentFormValues.provider,
         model: currentFormValues.model,
+        bedrockAuthMethod: 'keys',
         bedrockAccessKeyIdSecretName: '',
         bedrockSecretAccessKeySecretName: '',
+        bedrockBearerTokenSecretName: '',
         region: '',
+        baseUrl: '',
         modelARN: '',
       };
   }
@@ -171,31 +190,57 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
           getConfigValue<string>(model.config, ['azure', 'baseUrl', 'value']) ||
           '',
       };
-    case 'bedrock':
+    case 'bedrock': {
+      const hasBearerToken = !!getConfigValue<string>(model.config, [
+        'bedrock',
+        'bearerToken',
+        'valueFrom',
+        'secretKeyRef',
+        'name',
+      ]);
+
       return {
         name: model.name,
         provider: model.provider,
         model: model.model,
-        bedrockAccessKeyIdSecretName:
-          getConfigValue<string>(model.config, [
-            'bedrock',
-            'accessKeyId',
-            'valueFrom',
-            'secretKeyRef',
-            'name',
-          ]) || '',
-        bedrockSecretAccessKeySecretName:
-          getConfigValue<string>(model.config, [
-            'bedrock',
-            'secretAccessKey',
-            'valueFrom',
-            'secretKeyRef',
-            'name',
-          ]) || '',
+        bedrockAuthMethod: hasBearerToken ? 'bearer' : 'keys',
+        bedrockAccessKeyIdSecretName: hasBearerToken
+          ? ''
+          : getConfigValue<string>(model.config, [
+              'bedrock',
+              'accessKeyId',
+              'valueFrom',
+              'secretKeyRef',
+              'name',
+            ]) || '',
+        bedrockSecretAccessKeySecretName: hasBearerToken
+          ? ''
+          : getConfigValue<string>(model.config, [
+              'bedrock',
+              'secretAccessKey',
+              'valueFrom',
+              'secretKeyRef',
+              'name',
+            ]) || '',
+        bedrockBearerTokenSecretName: hasBearerToken
+          ? getConfigValue<string>(model.config, [
+              'bedrock',
+              'bearerToken',
+              'valueFrom',
+              'secretKeyRef',
+              'name',
+            ]) || ''
+          : '',
         region:
           getConfigValue<string>(model.config, [
             'bedrock',
             'region',
+            'value',
+          ]) || '',
+        baseUrl:
+          getConfigValue<string>(model.config, [
+            'bedrock',
+            'baseUrl',
             'value',
           ]) || '',
         modelARN:
@@ -205,5 +250,6 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'value',
           ]) || '',
       };
+    }
   }
 }

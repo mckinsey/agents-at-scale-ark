@@ -10,7 +10,7 @@ spec:
     You are a simple assistant that answers questions.
     Always provide your response in the required JSON format.
   modelRef:
-    name: anthropic-claude
+    name: bedrock-claude-opus
   executionEngine:
     name: claude-sdk-executor
     profileRef:

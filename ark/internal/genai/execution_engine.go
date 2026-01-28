@@ -478,15 +478,18 @@ func convertResolvedParameters(resolved map[string]string) []Parameter {
 func buildModelConfig(model *Model) map[string]any {
 	modelConfig := make(map[string]any)
 
-	if configProvider, ok := model.Provider.(ConfigProvider); ok {
-		switch model.Type {
-		case ModelTypeAzure:
-			modelConfig["azure"] = configProvider.BuildConfig()
-		case ModelTypeOpenAI:
-			modelConfig["openai"] = configProvider.BuildConfig()
-		case ModelTypeBedrock:
-			modelConfig["bedrock"] = configProvider.BuildConfig()
-		}
+	configProvider, ok := model.Provider.(ConfigProvider)
+	if !ok {
+		return modelConfig
+	}
+
+	switch model.Provider.(type) {
+	case *AzureProvider:
+		modelConfig["azure"] = configProvider.BuildConfig()
+	case *OpenAIProvider:
+		modelConfig["openai"] = configProvider.BuildConfig()
+	case *BedrockModel:
+		modelConfig["bedrock"] = configProvider.BuildConfig()
 	}
 
 	return modelConfig

@@ -42,6 +42,7 @@ rules:
   - evaluations
   - evaluators
   - executionengines
+  - executionprofiles
   - mcpservers
   - memories
   - models
@@ -64,6 +65,7 @@ rules:
   - evaluations/finalizers
   - evaluators/finalizers
   - executionengines/finalizers
+  - executionprofiles/finalizers
   - mcpservers/finalizers
   - memories/finalizers
   - models/finalizers
@@ -81,6 +83,7 @@ rules:
   - evaluations/status
   - evaluators/status
   - executionengines/status
+  - executionprofiles/status
   - mcpservers/status
   - memories/status
   - models/status

@@ -18,6 +18,7 @@ func loadBedrockConfig(ctx context.Context, resolver *common.ValueSourceResolver
 	accessKeyID := resolveOptionalValue(ctx, resolver, config.AccessKeyID, namespace)
 	secretAccessKey := resolveOptionalValue(ctx, resolver, config.SecretAccessKey, namespace)
 	sessionToken := resolveOptionalValue(ctx, resolver, config.SessionToken, namespace)
+	bearerToken := resolveOptionalValue(ctx, resolver, config.BearerToken, namespace)
 	modelArn := resolveOptionalValue(ctx, resolver, config.ModelArn, namespace)
 
 	var properties map[string]string
@@ -46,7 +47,7 @@ func loadBedrockConfig(ctx context.Context, resolver *common.ValueSourceResolver
 		properties["temperature"] = *config.Temperature
 	}
 
-	bedrockModel := NewBedrockModel(modelName, region, baseURL, accessKeyID, secretAccessKey, sessionToken, modelArn, properties)
+	bedrockModel := NewBedrockModel(modelName, region, baseURL, accessKeyID, secretAccessKey, sessionToken, bearerToken, modelArn, properties)
 	model.Provider = bedrockModel
 	model.Properties = properties
 

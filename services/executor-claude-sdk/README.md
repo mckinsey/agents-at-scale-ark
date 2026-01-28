@@ -76,6 +76,7 @@ uv run executor-claude-sdk
 ```bash
 # Deploy with Helm
 helm install executor-claude-sdk ./chart \
+  --namespace default \
   --set claude.provider=bedrock \
   --set git.sshKeySecret=git-ssh-key
 ```
@@ -83,7 +84,7 @@ helm install executor-claude-sdk ./chart \
 ## ExecutionProfile Example
 
 ```yaml
-apiVersion: ark.mckinsey.com/v1prealpha1
+apiVersion: ark.mckinsey.com/v1alpha1
 kind: ExecutionProfile
 metadata:
   name: feature-builder
@@ -408,9 +409,7 @@ The executor uses the model name from the Ark Model CRD, but credentials come fr
 |---------------------|----------------------------|
 | Model name (`spec.model`) | Authentication credentials |
 
-**Important:** The Model CRD's `spec.config` section (API keys, base URLs) is **NOT** used by this executor. Only the model name is extracted. Credentials are configured at deployment time via environment variables.
-
-This design ensures credentials never transit HTTP requests and operators can use their preferred auth method (secrets, workload identity, IRSA).
+Credentials are configured at deployment time via environment variables or passed from the Model CRD's `spec.config` section by the controller.
 
 ### Authentication Providers
 
