@@ -24,6 +24,10 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Agent } from '@/lib/services';
 
+import { getBashSnippet } from './code-snippets/bash-snippet';
+import { getGoSnippet } from './code-snippets/go-snippet';
+import { getPythonSnippet } from './code-snippets/python-snippet';
+
 interface AgentsAPIDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -62,128 +66,9 @@ export function AgentsAPIDialog({
     }
   };
 
-  const pythonCode = `import requests
-from requests.auth import HTTPBasicAuth
-
-response = requests.post(
-    "${fullEndpoint}",
-  
-    # Uncomment to use auth with key pair
-    # auth=HTTPBasicAuth(PUBLIC_KEY, SECRET_KEY),
-    
-    headers={
-        "Content-Type": "application/json",
-        # Uncomment to use auth with bearer token
-        # "Authorization": "Bearer YOUR_TOKEN_HERE",
-    },
-    json={
-        # Required: The agent to use (format: "agent/<name>")
-        "model": "agent/${selectedAgent}",
-
-        # Required: List of messages in the conversation
-        "messages": [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Hello, how can you help me?"}
-        ],
-
-        # Optional: Enable streaming responses (default: false)
-        "stream": False,
-
-        # Optional: Sampling temperature 0-2, higher = more random (default: 1)
-        "temperature": 1.0,
-
-        # Optional: Maximum tokens to generate (default: model-dependent)
-        "max_tokens": 1024,
-
-        # Optional: Custom metadata to pass to the agent
-        "metadata": {
-            "sessionId": "my-session-id"
-        }
-    }
-)
-
-print(response.json())`;
-
-  const goCode = `package main
-
-import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-)
-
-func main() {
-	payload := map[string]interface{}{
-		// Required: The agent to use (format: "agent/<name>")
-		"model": "agent/${selectedAgent}",
-
-		// Required: List of messages in the conversation
-		"messages": []map[string]string{
-			{"role": "system", "content": "You are a helpful assistant."},
-			{"role": "user", "content": "Hello, how can you help me?"},
-		},
-
-		// Optional: Enable streaming responses (default: false)
-		"stream": false,
-
-		// Optional: Sampling temperature 0-2, higher = more random (default: 1)
-		"temperature": 1.0,
-
-		// Optional: Maximum tokens to generate (default: model-dependent)
-		"max_tokens": 1024,
-
-		// Optional: Custom metadata to pass to the agent
-		"metadata": map[string]string{
-			"sessionId": "my-session-id",
-		},
-	}
-
-	body, _ := json.Marshal(payload)
-	req, _ := http.NewRequest("POST", "${fullEndpoint}", bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
-	// Uncomment to use auth with key pair
-	// req.SetBasicAuth("PUBLIC_KEY", "SECRET_KEY")
-	// Uncomment to use auth with bearer token
-	// req.Header.Set("Authorization", "Bearer YOUR_TOKEN_HERE")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-
-	result, _ := io.ReadAll(resp.Body)
-	fmt.Println(string(result))
-}`;
-
-  const bashCode = `# Optional: Uncomment and move to the line after curl to use auth with key pair:
-#   -u PUBLIC_KEY:SECRET_KEY \\
-# Optional: Uncomment and move to the line after curl to use auth with bearer token:
-#   -H "Authorization: Bearer YOUR_TOKEN_HERE" \\
-curl -X POST "${fullEndpoint}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "model": "agent/${selectedAgent}",
-    "messages": [
-      {"role": "system", "content": "You are a helpful assistant."},
-      {"role": "user", "content": "Hello, how can you help me?"}
-    ],
-    "stream": false,
-    "temperature": 1.0,
-    "max_tokens": 1024,
-    "metadata": {
-      "sessionId": "my-session-id"
-    }
-  }'
-
-# Fields:
-# - model (required): The agent to use, format "agent/<name>"
-# - messages (required): List of messages with role (system/user/assistant) and content
-# - stream (optional): Enable streaming responses, default false
-# - temperature (optional): Sampling temperature 0-2, higher = more random, default 1
-# - max_tokens (optional): Maximum tokens to generate
-# - metadata (optional): Custom metadata to pass to the agent`;
+  const pythonCode = getPythonSnippet(fullEndpoint, selectedAgent);
+  const goCode = getGoSnippet(fullEndpoint, selectedAgent);
+  const bashCode = getBashSnippet(fullEndpoint, selectedAgent);
 
   const codeSnippets: Record<string, string> = {
     python: pythonCode,
