@@ -18,7 +18,7 @@
     "@napi-rs/simple-git": "^0.1.19",
     "@theguild/remark-mermaid": "^0.3.0",
     "cheerio": "^1.1.2",
-    "next": "16.1.4",
+    "next": "16.1.5",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
     "react": "^19.2.3",
