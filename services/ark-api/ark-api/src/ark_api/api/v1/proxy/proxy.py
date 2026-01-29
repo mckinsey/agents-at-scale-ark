@@ -1,5 +1,6 @@
 """A2A Proxy routes for making agent to agent comunication accesible from outside """
 import logging
+import os
 from multiprocessing import get_context
 from token import OP
 from ark_api.utils.ark_services import get_headers
@@ -22,6 +23,8 @@ from .proxy_resources import Resource
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/proxy", tags=["proxy"])
+
+PROXY_TIMEOUT = float(os.getenv('PROXY_TIMEOUT', '10.0'))
 
 # CRD configuration
 VERSION_A2A = "v1prealpha1"
@@ -131,7 +134,11 @@ async def _proxy_request(
     
     # Read request body if present
     body = await request.body()
-    timeout = httpx.Timeout(10.0, read=None)
+    timeout = httpx.Timeout(
+        timeout=PROXY_TIMEOUT,
+        read=None,
+        write=None,
+    )
     async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             response = await client.request(

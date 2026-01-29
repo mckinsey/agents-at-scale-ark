@@ -6,6 +6,7 @@ import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { toast } from 'sonner';
 
 import { AgentCard } from '@/components/cards';
+import { AgentsAPIDialog } from '@/components/dialogs/agents-api-dialog';
 import { AgentEditor } from '@/components/editors';
 import { AgentRow } from '@/components/rows/agent-row';
 import { Button } from '@/components/ui/button';
@@ -32,12 +33,18 @@ import {
   teamsService,
 } from '@/lib/services';
 
-export const AgentsSection = forwardRef<{ openAddEditor: () => void }, object>(
+interface AgentsSectionHandle {
+  openAddEditor: () => void;
+  openApiDialog: () => void;
+}
+
+export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
   function AgentsSection({}, ref) {
     const [agents, setAgents] = useState<Agent[]>([]);
     const [teams, setTeams] = useState<Team[]>([]);
     const [models, setModels] = useState<Model[]>([]);
     const [agentEditorOpen, setAgentEditorOpen] = useState(false);
+    const [apiDialogOpen, setApiDialogOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const showLoading = useDelayedLoading(loading);
     const [showCompactView, setShowCompactView] = useState(false);
@@ -49,6 +56,7 @@ export const AgentsSection = forwardRef<{ openAddEditor: () => void }, object>(
 
     useImperativeHandle(ref, () => ({
       openAddEditor: () => setAgentEditorOpen(true),
+      openApiDialog: () => setApiDialogOpen(true),
     }));
 
     useEffect(() => {
@@ -243,6 +251,12 @@ export const AgentsSection = forwardRef<{ openAddEditor: () => void }, object>(
           models={models}
           teams={teams}
           onSave={handleSaveAgent}
+        />
+
+        <AgentsAPIDialog
+          open={apiDialogOpen}
+          onOpenChange={setApiDialogOpen}
+          agents={agents}
         />
       </>
     );

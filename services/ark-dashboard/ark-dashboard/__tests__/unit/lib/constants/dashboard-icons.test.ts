@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   CONFIGURATION_SECTIONS,
   DASHBOARD_SECTIONS,
-  getDashboardIcon,
   OPERATION_SECTIONS,
   RUNTIME_SECTIONS,
   SERVICE_SECTIONS,
+  getDashboardIcon,
 } from '@/lib/constants/dashboard-icons';
 
 describe('dashboard-icons', () => {
@@ -55,9 +55,7 @@ describe('dashboard-icons', () => {
 
     it('should return icon for all section keys', () => {
       Object.keys(DASHBOARD_SECTIONS).forEach(key => {
-        const icon = getDashboardIcon(
-          key as keyof typeof DASHBOARD_SECTIONS,
-        );
+        const icon = getDashboardIcon(key as keyof typeof DASHBOARD_SECTIONS);
         expect(icon).toBeDefined();
       });
     });
@@ -70,7 +68,9 @@ describe('dashboard-icons', () => {
       expect(
         CONFIGURATION_SECTIONS.every(s => s.group === 'configurations'),
       ).toBe(true);
-      expect(CONFIGURATION_SECTIONS.find(s => s.key === 'agents')).toBeDefined();
+      expect(
+        CONFIGURATION_SECTIONS.find(s => s.key === 'agents'),
+      ).toBeDefined();
       expect(
         CONFIGURATION_SECTIONS.find(s => s.key === 'workflow-templates'),
       ).toBeDefined();
@@ -103,10 +103,6 @@ describe('dashboard-icons', () => {
   describe('enablerFeature', () => {
     it('should have enabler feature for files section', () => {
       expect(DASHBOARD_SECTIONS.files.enablerFeature).toBeDefined();
-    });
-
-    it('should have enabler feature for tasks section', () => {
-      expect(DASHBOARD_SECTIONS.tasks.enablerFeature).toBeDefined();
     });
 
     it('should have enabler feature for broker section', () => {

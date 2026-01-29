@@ -7,20 +7,18 @@ import {
   ChevronRight,
   ChevronsUpDown,
   ChevronsUpDownIcon,
-  FlaskConical,
   Home,
   LogOut,
   Plus,
+  Settings,
 } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import {
-  A2A_TASKS_FEATURE_KEY,
   BROKER_FEATURE_KEY,
   FILES_BROWSER_FEATURE_KEY,
-  isA2ATasksEnabledAtom,
   isBrokerEnabledAtom,
   isExperimentalDarkModeEnabledAtom,
   isFilesBrowserAvailableAtom,
@@ -73,7 +71,6 @@ export function AppSidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useUser();
-  const isA2ATasksEnabled = useAtomValue(isA2ATasksEnabledAtom);
   const isBrokerEnabled = useAtomValue(isBrokerEnabledAtom);
   const isExperimentalDarkModeEnabled = useAtomValue(
     isExperimentalDarkModeEnabledAtom,
@@ -151,8 +148,6 @@ export function AppSidebar() {
 
   const enabledOperationSections = OPERATION_SECTIONS.filter(item => {
     switch (item.enablerFeature) {
-      case A2A_TASKS_FEATURE_KEY:
-        return isA2ATasksEnabled;
       case BROKER_FEATURE_KEY:
         return isBrokerEnabled;
       case FILES_BROWSER_FEATURE_KEY:
@@ -240,8 +235,8 @@ export function AppSidebar() {
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onSelect={() => setExperimentalFeaturesDialogOpen(true)}>
-                    <FlaskConical className="mr-2 h-4 w-4" />
-                    Experimental Features
+                    <Settings className="mr-2 h-4 w-4" />
+                    Settings
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

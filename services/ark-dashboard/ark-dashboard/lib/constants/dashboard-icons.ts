@@ -20,7 +20,6 @@ import {
 } from 'lucide-react';
 
 import {
-  A2A_TASKS_FEATURE_KEY,
   BROKER_FEATURE_KEY,
   FILES_BROWSER_FEATURE_KEY,
 } from '@/atoms/experimental-features';
@@ -109,7 +108,6 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     title: 'A2A Tasks',
     icon: ClipboardList,
     group: 'operations',
-    enablerFeature: A2A_TASKS_FEATURE_KEY,
   },
   broker: {
     key: 'broker',
