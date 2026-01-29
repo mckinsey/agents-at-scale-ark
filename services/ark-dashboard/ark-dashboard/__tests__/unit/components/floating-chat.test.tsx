@@ -3,7 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { useAtomValue } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  isChatStreamingEnabledAtom,
+  queryTimeoutSettingAtom,
+} from '@/atoms/experimental-features';
 import FloatingChat from '@/components/floating-chat';
+import type { QueryDetailResponse } from '@/lib/services';
 import { chatService } from '@/lib/services';
 
 // Mock Next.js router - used by ChatMessage component
@@ -483,14 +488,18 @@ describe('FloatingChat', () => {
     it('should render debug mode switch', () => {
       render(<FloatingChat {...defaultProps} />);
 
-      const debugSwitch = screen.getByRole('switch', { name: /show tool calls/i });
+      const debugSwitch = screen.getByRole('switch', {
+        name: /show tool calls/i,
+      });
       expect(debugSwitch).toBeInTheDocument();
     });
 
     it('should have debug mode enabled by default', () => {
       render(<FloatingChat {...defaultProps} />);
 
-      const debugSwitch = screen.getByRole('switch', { name: /show tool calls/i });
+      const debugSwitch = screen.getByRole('switch', {
+        name: /show tool calls/i,
+      });
       expect(debugSwitch).toBeChecked();
     });
 
@@ -498,7 +507,9 @@ describe('FloatingChat', () => {
       const user = userEvent.setup();
       render(<FloatingChat {...defaultProps} />);
 
-      const debugSwitch = screen.getByRole('switch', { name: /show tool calls/i });
+      const debugSwitch = screen.getByRole('switch', {
+        name: /show tool calls/i,
+      });
       expect(debugSwitch).toBeChecked();
 
       await user.click(debugSwitch);
@@ -512,7 +523,9 @@ describe('FloatingChat', () => {
       const user = userEvent.setup();
       render(<FloatingChat {...defaultProps} />);
 
-      const debugSwitch = screen.getByRole('switch', { name: /show tool calls/i });
+      const debugSwitch = screen.getByRole('switch', {
+        name: /show tool calls/i,
+      });
       const label = screen.getByText('Show tool calls');
 
       expect(debugSwitch).toBeChecked();
@@ -568,9 +581,7 @@ describe('FloatingChat', () => {
       await user.click(sendButton);
 
       await waitFor(() => {
-        expect(
-          screen.getByText('The weather is sunny'),
-        ).toBeInTheDocument();
+        expect(screen.getByText('The weather is sunny')).toBeInTheDocument();
       });
 
       expect(screen.getByText('get_weather')).toBeInTheDocument();
@@ -616,7 +627,9 @@ describe('FloatingChat', () => {
 
       render(<FloatingChat {...defaultProps} />);
 
-      const debugSwitch = screen.getByRole('switch', { name: /show tool calls/i });
+      const debugSwitch = screen.getByRole('switch', {
+        name: /show tool calls/i,
+      });
       await user.click(debugSwitch);
 
       const input = screen.getByPlaceholderText('Type your message...');
@@ -626,9 +639,7 @@ describe('FloatingChat', () => {
       await user.click(sendButton);
 
       await waitFor(() => {
-        expect(
-          screen.getByText('The weather is sunny'),
-        ).toBeInTheDocument();
+        expect(screen.getByText('The weather is sunny')).toBeInTheDocument();
       });
 
       expect(screen.queryByText('get_weather')).not.toBeInTheDocument();
@@ -674,7 +685,9 @@ describe('FloatingChat', () => {
 
       render(<FloatingChat {...defaultProps} />);
 
-      const debugSwitch = screen.getByRole('switch', { name: /show tool calls/i });
+      const debugSwitch = screen.getByRole('switch', {
+        name: /show tool calls/i,
+      });
 
       const input = screen.getByPlaceholderText('Type your message...');
       await user.type(input, 'What is the weather?');
@@ -689,36 +702,38 @@ describe('FloatingChat', () => {
       await user.click(debugSwitch);
 
       expect(screen.queryByText('get_weather')).not.toBeInTheDocument();
-      expect(
-        screen.getByText('The weather is sunny'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('The weather is sunny')).toBeInTheDocument();
     });
   });
 
   describe('streaming disabled', () => {
     it('should poll for response when feature flag is disabled', async () => {
-      // Mock feature flag to false
-      vi.mocked(useAtomValue).mockReturnValue(false);
+      // Mock feature flag to false, timeout to '5m'
+      // useAtomValue is called twice in the component (isChatStreamingEnabled and queryTimeout)
+      // and then again when checking isChatStreamingEnabled in handleSendMessage
+      vi.mocked(useAtomValue).mockImplementation(atom => {
+        if (atom === isChatStreamingEnabledAtom) {
+          return false;
+        }
+        if (atom === queryTimeoutSettingAtom) {
+          return '5m';
+        }
+        return undefined;
+      });
 
       const user = userEvent.setup();
 
       // Mock submitChatQuery
       vi.mocked(chatService.submitChatQuery).mockResolvedValue({
         name: 'query-123',
-      } as any);
+      } as unknown as QueryDetailResponse);
 
-      // Mock getQueryResult to return pending then done
-      vi.mocked(chatService.getQueryResult)
-        .mockResolvedValueOnce({
-          terminal: false,
-          status: 'running',
-          response: undefined,
-        })
-        .mockResolvedValueOnce({
-          terminal: true,
-          status: 'done',
-          response: 'Polled response',
-        });
+      // Mock getQueryResult to return done immediately
+      vi.mocked(chatService.getQueryResult).mockResolvedValue({
+        terminal: true,
+        status: 'done',
+        response: 'Polled response',
+      });
 
       render(<FloatingChat {...defaultProps} />);
 
@@ -728,13 +743,15 @@ describe('FloatingChat', () => {
       const sendButton = screen.getByRole('button', { name: /send/i });
       await user.click(sendButton);
 
-      // Should call submitChatQuery
+      // Should call submitChatQuery with timeout parameter
       await waitFor(() => {
         expect(chatService.submitChatQuery).toHaveBeenCalledWith(
           expect.arrayContaining([{ role: 'user', content: 'Test message' }]),
           'agent',
           'Test Agent',
           expect.any(String),
+          undefined, // enableStreaming
+          '5m', // timeout
         );
       });
 
@@ -756,14 +773,22 @@ describe('FloatingChat', () => {
     });
 
     it('should handle polling errors', async () => {
-      // Mock feature flag to false
-      vi.mocked(useAtomValue).mockReturnValue(false);
+      // Mock atoms
+      vi.mocked(useAtomValue).mockImplementation(atom => {
+        if (atom === isChatStreamingEnabledAtom) {
+          return false;
+        }
+        if (atom === queryTimeoutSettingAtom) {
+          return '5m';
+        }
+        return undefined;
+      });
 
       const user = userEvent.setup();
 
       vi.mocked(chatService.submitChatQuery).mockResolvedValue({
         name: 'query-error',
-      } as any);
+      } as unknown as QueryDetailResponse);
 
       vi.mocked(chatService.getQueryResult).mockResolvedValue({
         terminal: true,
@@ -778,6 +803,17 @@ describe('FloatingChat', () => {
 
       const sendButton = screen.getByRole('button', { name: /send/i });
       await user.click(sendButton);
+
+      await waitFor(() => {
+        expect(chatService.submitChatQuery).toHaveBeenCalledWith(
+          expect.arrayContaining([{ role: 'user', content: 'Test message' }]),
+          'agent',
+          'Test Agent',
+          expect.any(String),
+          undefined,
+          '5m',
+        );
+      });
 
       await waitFor(
         () => {
