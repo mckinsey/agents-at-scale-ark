@@ -866,7 +866,7 @@ function SessionListItem({
       onClick={onClick}
       title={session.name}
       className={cn(
-        'hover:bg-accent/50 hover:cursor-pointer flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-all',
+        'hover:bg-accent/50 flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-all hover:cursor-pointer',
         isSelected && 'bg-accent border-primary shadow-sm',
       )}>
       <div className="text-muted-foreground mt-0.5 shrink-0">
