@@ -3,6 +3,7 @@ import type { ComponentProps } from 'react';
 
 import type { components } from '@/lib/api/generated/types';
 import { cn } from '@/lib/utils';
+import { Spinner } from '@/components/ui/spinner';
 
 export type AvailabilityStatus = components['schemas']['AvailabilityStatus'];
 
@@ -43,10 +44,11 @@ export function AvailabilityStatusBadge({
   const badgeContent = (
     <span
       className={cn(
-        'inline-flex rounded-full px-2 py-1 text-xs font-medium transition-colors',
+        'inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-colors',
         config.className,
         className,
       )}>
+      {statusValue === 'Unknown' && <Spinner size="sm" className="h-3 w-3" />}
       {config.text}
     </span>
   );
