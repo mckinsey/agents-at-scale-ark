@@ -1,11 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
+
 import {
   getLanguageFromExtension,
   isImageFile,
-  isSvgFile,
   isJsonFile,
-  isZipFile,
   isSpreadsheetFile,
+  isSvgFile,
+  isZipFile,
 } from './file-preview';
 
 describe('file-preview utils', () => {
@@ -52,11 +53,11 @@ describe('file-preview utils', () => {
   describe('isJsonFile', () => {
     it('should return true for json extension', () => {
       expect(isJsonFile('json')).toBe(true);
-      expect(isJsonFile('JSON')).toBe(true);  // Test case insensitive
+      expect(isJsonFile('JSON')).toBe(true); // Test case insensitive
     });
 
     it('should return false for non-json extensions', () => {
-      expect(isJsonFile('jsonc')).toBe(false);  // Only plain json is accepted
+      expect(isJsonFile('jsonc')).toBe(false); // Only plain json is accepted
       expect(isJsonFile('json5')).toBe(false);
       expect(isJsonFile('xml')).toBe(false);
       expect(isJsonFile(undefined)).toBe(false);
