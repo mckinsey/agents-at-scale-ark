@@ -130,11 +130,11 @@ async def list_models(namespace: Optional[str] = Query(None, description="Namesp
 async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> ModelDetailResponse:
     """
     Create a new Model CR.
-    
+
     Args:
         namespace: The namespace to create the model in
         body: The model creation request
-        
+
     Returns:
         ModelDetailResponse: The created model details
     """
@@ -165,15 +165,14 @@ async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Quer
 
         elif body.config.bedrock and body.provider == PROVIDER_BEDROCK:
             config_dict[PROVIDER_BEDROCK] = {}
-            for field, value in body.config.bedrock.model_dump(by_alias=True).items():
-                if value is not None:
-                    # Handle non-ValueSource fields (maxTokens, temperature)
-                    if field in ["maxTokens", "temperature"]:
-                        config_dict[PROVIDER_BEDROCK][field] = value
-                    elif isinstance(value, dict) and ("value" in value or "valueFrom" in value):
-                        config_dict[PROVIDER_BEDROCK][field] = value
-                    elif isinstance(value, str):
-                        config_dict[PROVIDER_BEDROCK][field] = {"value": value}
+            for field, value in body.config.bedrock.model_dump(by_alias=True, exclude_none=True).items():
+                # Handle non-ValueSource fields (maxTokens, temperature)
+                if field in ["maxTokens", "temperature"]:
+                    config_dict[PROVIDER_BEDROCK][field] = value
+                elif isinstance(value, dict) and ("value" in value or "valueFrom" in value):
+                    config_dict[PROVIDER_BEDROCK][field] = value
+                elif isinstance(value, str):
+                    config_dict[PROVIDER_BEDROCK][field] = {"value": value}
 
         # Build the model spec
         model_spec = {

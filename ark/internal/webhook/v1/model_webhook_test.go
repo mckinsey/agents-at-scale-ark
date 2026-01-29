@@ -104,6 +104,27 @@ var _ = Describe("Model Webhook", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(warnings).To(BeEmpty())
 		})
+
+		It("Should allow valid Bedrock model with AWS credential authentication", func() {
+			model.Spec.Provider = genai.ProviderBedrock
+			model.Spec.Config = arkv1alpha1.ModelConfig{
+				Bedrock: &arkv1alpha1.BedrockModelConfig{
+					Region: &arkv1alpha1.ValueSource{
+						Value: "us-east-1",
+					},
+					AccessKeyID: &arkv1alpha1.ValueSource{
+						Value: "AKIAIOSFODNN7EXAMPLE",
+					},
+					SecretAccessKey: &arkv1alpha1.ValueSource{
+						Value: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, model)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
 	})
 
 	Context("When validating models with Secret references", func() {
@@ -264,6 +285,82 @@ var _ = Describe("Model Webhook", func() {
 
 			warnings, err := validator.ValidateCreate(ctx, model)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+	})
+
+	Context("When validating Bedrock models with AWS credentials from Secret", func() {
+		It("Should validate Bedrock AWS credentials from Secret reference", func() {
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "bedrock-aws-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"access-key-id":     []byte("AKIAIOSFODNN7EXAMPLE"),
+					"secret-access-key": []byte("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+				},
+			}
+			Expect(validator.Client.Create(ctx, secret)).To(Succeed())
+
+			model.Spec.Provider = genai.ProviderBedrock
+			model.Spec.Config = arkv1alpha1.ModelConfig{
+				Bedrock: &arkv1alpha1.BedrockModelConfig{
+					Region: &arkv1alpha1.ValueSource{
+						Value: "us-east-1",
+					},
+					AccessKeyID: &arkv1alpha1.ValueSource{
+						ValueFrom: &arkv1alpha1.ValueFromSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "bedrock-aws-secret",
+								},
+								Key: "access-key-id",
+							},
+						},
+					},
+					SecretAccessKey: &arkv1alpha1.ValueSource{
+						ValueFrom: &arkv1alpha1.ValueFromSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "bedrock-aws-secret",
+								},
+								Key: "secret-access-key",
+							},
+						},
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, model)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should fail when Bedrock AWS credentials Secret does not exist", func() {
+			model.Spec.Provider = genai.ProviderBedrock
+			model.Spec.Config = arkv1alpha1.ModelConfig{
+				Bedrock: &arkv1alpha1.BedrockModelConfig{
+					Region: &arkv1alpha1.ValueSource{
+						Value: "us-east-1",
+					},
+					AccessKeyID: &arkv1alpha1.ValueSource{
+						ValueFrom: &arkv1alpha1.ValueFromSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "nonexistent-aws-secret",
+								},
+								Key: "access-key-id",
+							},
+						},
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, model)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.config.bedrock.accessKeyId"))
+			Expect(err.Error()).To(ContainSubstring("secret 'nonexistent-aws-secret' does not exist"))
 			Expect(warnings).To(BeEmpty())
 		})
 	})

@@ -45,11 +45,18 @@ class AzureConfig(BaseModel):
 
 
 class BedrockConfig(BaseModel):
-    """Bedrock model configuration."""
+    """Bedrock model configuration.
+
+    Supports two authentication methods:
+    - AWS API Keys: requires access_key_id and secret_access_key
+    - Bearer Token: requires bearer_token (for enterprise gateways)
+    """
     region: Optional[Union[str, ModelValueSource]] = None
+    base_url: Optional[Union[str, ModelValueSource]] = Field(None, alias="baseUrl")
     access_key_id: Optional[Union[str, ModelValueSource]] = Field(None, alias="accessKeyId")
     secret_access_key: Optional[Union[str, ModelValueSource]] = Field(None, alias="secretAccessKey")
     session_token: Optional[Union[str, ModelValueSource]] = Field(None, alias="sessionToken")
+    bearer_token: Optional[Union[str, ModelValueSource]] = Field(None, alias="bearerToken")
     model_arn: Optional[Union[str, ModelValueSource]] = Field(None, alias="modelArn")
     max_tokens: Optional[int] = Field(None, alias="maxTokens", ge=1, le=100000)
     temperature: Optional[str] = Field(None, pattern=r"^(0(\.\d+)?|1(\.0+)?)$")

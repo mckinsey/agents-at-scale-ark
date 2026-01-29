@@ -226,28 +226,41 @@ func (v *ModelValidator) validateBedrockConfig(ctx context.Context, model *arkv1
 		return fmt.Errorf("bedrock configuration is required for bedrock model type")
 	}
 
-	if model.Spec.Config.Bedrock.Region != nil {
-		if err := v.validateValueSource(ctx, model.Spec.Config.Bedrock.Region, model.GetNamespace(), "spec.config.bedrock.region"); err != nil {
+	bedrock := model.Spec.Config.Bedrock
+	hasKeyAuth := bedrock.AccessKeyID != nil || bedrock.SecretAccessKey != nil
+	hasBearerAuth := bedrock.BearerToken != nil
+
+	if hasKeyAuth && hasBearerAuth {
+		return fmt.Errorf("bedrock config: cannot specify both accessKeyId/secretAccessKey and bearerToken - choose one authentication method")
+	}
+
+	if bedrock.Region != nil {
+		if err := v.validateValueSource(ctx, bedrock.Region, model.GetNamespace(), "spec.config.bedrock.region"); err != nil {
 			return err
 		}
 	}
-	if model.Spec.Config.Bedrock.AccessKeyID != nil {
-		if err := v.validateValueSource(ctx, model.Spec.Config.Bedrock.AccessKeyID, model.GetNamespace(), "spec.config.bedrock.accessKeyId"); err != nil {
+	if bedrock.AccessKeyID != nil {
+		if err := v.validateValueSource(ctx, bedrock.AccessKeyID, model.GetNamespace(), "spec.config.bedrock.accessKeyId"); err != nil {
 			return err
 		}
 	}
-	if model.Spec.Config.Bedrock.SecretAccessKey != nil {
-		if err := v.validateValueSource(ctx, model.Spec.Config.Bedrock.SecretAccessKey, model.GetNamespace(), "spec.config.bedrock.secretAccessKey"); err != nil {
+	if bedrock.SecretAccessKey != nil {
+		if err := v.validateValueSource(ctx, bedrock.SecretAccessKey, model.GetNamespace(), "spec.config.bedrock.secretAccessKey"); err != nil {
 			return err
 		}
 	}
-	if model.Spec.Config.Bedrock.SessionToken != nil {
-		if err := v.validateValueSource(ctx, model.Spec.Config.Bedrock.SessionToken, model.GetNamespace(), "spec.config.bedrock.sessionToken"); err != nil {
+	if bedrock.SessionToken != nil {
+		if err := v.validateValueSource(ctx, bedrock.SessionToken, model.GetNamespace(), "spec.config.bedrock.sessionToken"); err != nil {
 			return err
 		}
 	}
-	if model.Spec.Config.Bedrock.ModelArn != nil {
-		if err := v.validateValueSource(ctx, model.Spec.Config.Bedrock.ModelArn, model.GetNamespace(), "spec.config.bedrock.modelArn"); err != nil {
+	if bedrock.BearerToken != nil {
+		if err := v.validateValueSource(ctx, bedrock.BearerToken, model.GetNamespace(), "spec.config.bedrock.bearerToken"); err != nil {
+			return err
+		}
+	}
+	if bedrock.ModelArn != nil {
+		if err := v.validateValueSource(ctx, bedrock.ModelArn, model.GetNamespace(), "spec.config.bedrock.modelArn"); err != nil {
 			return err
 		}
 	}

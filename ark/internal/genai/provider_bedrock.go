@@ -10,6 +10,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	"github.com/aws/smithy-go/middleware"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -21,6 +23,7 @@ type BedrockModel struct {
 	AccessKeyID     string
 	SecretAccessKey string
 	SessionToken    string
+	BearerToken     string
 	ModelArn        string
 	Properties      map[string]string
 	client          *bedrockruntime.Client
@@ -67,7 +70,7 @@ type bedrockContent struct {
 	Input map[string]interface{} `json:"input,omitempty"`
 }
 
-func NewBedrockModel(model, region, baseURL, accessKeyID, secretAccessKey, sessionToken, modelArn string, properties map[string]string) *BedrockModel {
+func NewBedrockModel(model, region, baseURL, accessKeyID, secretAccessKey, sessionToken, bearerToken, modelArn string, properties map[string]string) *BedrockModel {
 	return &BedrockModel{
 		Model:           model,
 		Region:          region,
@@ -75,6 +78,7 @@ func NewBedrockModel(model, region, baseURL, accessKeyID, secretAccessKey, sessi
 		AccessKeyID:     accessKeyID,
 		SecretAccessKey: secretAccessKey,
 		SessionToken:    sessionToken,
+		BearerToken:     bearerToken,
 		ModelArn:        modelArn,
 		Properties:      properties,
 	}
@@ -87,8 +91,21 @@ func (bm *BedrockModel) initClient(ctx context.Context) error {
 
 	var cfg aws.Config
 	var err error
+	var clientOpts []func(*bedrockruntime.Options)
 
-	if bm.AccessKeyID != "" && bm.SecretAccessKey != "" {
+	if bm.BearerToken != "" {
+		creds := credentials.NewStaticCredentialsProvider("x", "x", "")
+		cfg, err = config.LoadDefaultConfig(ctx,
+			config.WithRegion(bm.Region),
+			config.WithCredentialsProvider(creds),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to load AWS config: %w", err)
+		}
+		clientOpts = append(clientOpts, func(o *bedrockruntime.Options) {
+			o.APIOptions = append(o.APIOptions, addBearerTokenMiddleware(bm.BearerToken))
+		})
+	} else if bm.AccessKeyID != "" && bm.SecretAccessKey != "" {
 		creds := credentials.NewStaticCredentialsProvider(bm.AccessKeyID, bm.SecretAccessKey, bm.SessionToken)
 		cfg, err = config.LoadDefaultConfig(ctx, config.WithRegion(bm.Region), config.WithCredentialsProvider(creds))
 	} else {
@@ -99,13 +116,30 @@ func (bm *BedrockModel) initClient(ctx context.Context) error {
 		return fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
-	// If BaseURL is provided, use it as custom endpoint
 	if bm.BaseURL != "" {
 		cfg.BaseEndpoint = aws.String(bm.BaseURL)
 	}
 
-	bm.client = bedrockruntime.NewFromConfig(cfg)
+	bm.client = bedrockruntime.NewFromConfig(cfg, clientOpts...)
 	return nil
+}
+
+func addBearerTokenMiddleware(token string) func(*middleware.Stack) error {
+	return func(stack *middleware.Stack) error {
+		return stack.Finalize.Add(
+			middleware.FinalizeMiddlewareFunc(
+				"BearerTokenAuth",
+				func(ctx context.Context, in middleware.FinalizeInput, next middleware.FinalizeHandler) (middleware.FinalizeOutput, middleware.Metadata, error) {
+					req, ok := in.Request.(*smithyhttp.Request)
+					if ok {
+						req.Header.Set("Authorization", "Bearer "+token)
+					}
+					return next.HandleFinalize(ctx, in)
+				},
+			),
+			middleware.After,
+		)
+	}
 }
 
 func (bm *BedrockModel) SetOutputSchema(schema *runtime.RawExtension, schemaName string) {
@@ -383,6 +417,9 @@ func (bm *BedrockModel) BuildConfig() map[string]any {
 	}
 	if bm.SessionToken != "" {
 		cfg["sessionToken"] = bm.SessionToken
+	}
+	if bm.BearerToken != "" {
+		cfg["bearerToken"] = bm.BearerToken
 	}
 	if bm.ModelArn != "" {
 		cfg["modelArn"] = bm.ModelArn

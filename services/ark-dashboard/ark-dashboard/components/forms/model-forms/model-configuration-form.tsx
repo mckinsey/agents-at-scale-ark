@@ -10,7 +10,7 @@ import {
   useState,
 } from 'react';
 import type { Control, UseFormReturn, UseFormSetValue } from 'react-hook-form';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
@@ -361,70 +361,163 @@ function AWSBedrockSpecificFields({
   isSecretsPending,
   secrets,
 }: AWSBedrockSpecificFieldsProps) {
+  const authMethod = useWatch({ control, name: 'bedrockAuthMethod' });
+
   return (
     <>
       <FormField
         control={control}
-        name="bedrockAccessKeyIdSecretName"
+        name="bedrockAuthMethod"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Access Key ID Secret</FormLabel>
+            <FormLabel>Authentication Method</FormLabel>
+            <FormDescription>
+              Choose how to authenticate with AWS Bedrock
+            </FormDescription>
             <Select onValueChange={field.onChange} value={field.value}>
               <FormControl>
-                <div className="flex gap-4">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a secret for Access Key ID" />
-                  </SelectTrigger>
-                  <CreateNewSecretButton fieldName="bedrockAccessKeyIdSecretName" />
-                </div>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select authentication method" />
+                </SelectTrigger>
               </FormControl>
               <SelectContent>
-                {isSecretsPending ? (
-                  <Spinner size="sm" className="mx-auto my-2" />
-                ) : (
-                  <>
-                    {secrets?.map(secret => (
-                      <SelectItem key={secret.name} value={secret.name}>
-                        {secret.name}
-                      </SelectItem>
-                    ))}
-                  </>
-                )}
+                <SelectItem value="keys">AWS API Keys</SelectItem>
+                <SelectItem value="bearer">
+                  Bearer Token (Enterprise Gateway)
+                </SelectItem>
               </SelectContent>
             </Select>
             <FormMessage />
           </FormItem>
         )}
       />
+
+      {authMethod === 'keys' && (
+        <>
+          <FormField
+            control={control}
+            name="bedrockAccessKeyIdSecretName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Access Key ID Secret</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <div className="flex gap-4">
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a secret for Access Key ID" />
+                      </SelectTrigger>
+                      <CreateNewSecretButton fieldName="bedrockAccessKeyIdSecretName" />
+                    </div>
+                  </FormControl>
+                  <SelectContent>
+                    {isSecretsPending ? (
+                      <Spinner size="sm" className="mx-auto my-2" />
+                    ) : (
+                      <>
+                        {secrets?.map(secret => (
+                          <SelectItem key={secret.name} value={secret.name}>
+                            {secret.name}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={control}
+            name="bedrockSecretAccessKeySecretName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Secret Access Key Secret</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <div className="flex gap-4">
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a secret for Secret Access Key" />
+                      </SelectTrigger>
+                      <CreateNewSecretButton fieldName="bedrockSecretAccessKeySecretName" />
+                    </div>
+                  </FormControl>
+                  <SelectContent>
+                    {isSecretsPending ? (
+                      <Spinner size="sm" className="mx-auto my-2" />
+                    ) : (
+                      <>
+                        {secrets?.map(secret => (
+                          <SelectItem key={secret.name} value={secret.name}>
+                            {secret.name}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </>
+      )}
+
+      {authMethod === 'bearer' && (
+        <FormField
+          control={control}
+          name="bedrockBearerTokenSecretName"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Bearer Token Secret</FormLabel>
+              <FormDescription>
+                JWT token for enterprise AI gateway authentication
+              </FormDescription>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <div className="flex gap-4">
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a secret containing the bearer token" />
+                    </SelectTrigger>
+                    <CreateNewSecretButton fieldName="bedrockBearerTokenSecretName" />
+                  </div>
+                </FormControl>
+                <SelectContent>
+                  {isSecretsPending ? (
+                    <Spinner size="sm" className="mx-auto my-2" />
+                  ) : (
+                    <>
+                      {secrets?.map(secret => (
+                        <SelectItem key={secret.name} value={secret.name}>
+                          {secret.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
+
       <FormField
         control={control}
-        name="bedrockSecretAccessKeySecretName"
+        name="baseUrl"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Secret Access Key Secret</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value}>
-              <FormControl>
-                <div className="flex gap-4">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a secret for Secret Access Key" />
-                  </SelectTrigger>
-                  <CreateNewSecretButton fieldName="bedrockSecretAccessKeySecretName" />
-                </div>
-              </FormControl>
-              <SelectContent>
-                {isSecretsPending ? (
-                  <Spinner size="sm" className="mx-auto my-2" />
-                ) : (
-                  <>
-                    {secrets?.map(secret => (
-                      <SelectItem key={secret.name} value={secret.name}>
-                        {secret.name}
-                      </SelectItem>
-                    ))}
-                  </>
-                )}
-              </SelectContent>
-            </Select>
+            <FormLabel>Base URL (Optional)</FormLabel>
+            <FormDescription>
+              Custom endpoint URL for enterprise gateways
+            </FormDescription>
+            <FormControl>
+              <Input
+                {...field}
+                value={field.value ?? ''}
+                placeholder="https://aws-bedrock.your-gateway.com/..."
+              />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}

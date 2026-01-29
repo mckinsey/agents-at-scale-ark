@@ -1,4 +1,4 @@
-/* Copyright 2025. McKinsey & Company */
+git checkout feat/aws-bedrock-augmented-crd -- services/ark-api/ark-api/src/ark_api/api/v1/models.py/* Copyright 2025. McKinsey & Company */
 
 package v1alpha1
 
@@ -54,6 +54,9 @@ type BedrockModelConfig struct {
 	SecretAccessKey *ValueSource `json:"secretAccessKey,omitempty"`
 	// +kubebuilder:validation:Optional
 	SessionToken *ValueSource `json:"sessionToken,omitempty"`
+	// BearerToken for enterprise gateway authentication (mutually exclusive with AccessKeyID/SecretAccessKey)
+	// +kubebuilder:validation:Optional
+	BearerToken *ValueSource `json:"bearerToken,omitempty"`
 	// +kubebuilder:validation:Optional
 	ModelArn *ValueSource `json:"modelArn,omitempty"`
 	// +kubebuilder:validation:Optional
