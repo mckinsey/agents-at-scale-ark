@@ -111,7 +111,7 @@ func NewProvider(ctx context.Context, k8sClient client.Client) *Provider {
 	tp := trace.NewTracerProvider(opts...)
 
 	otelapi.SetTracerProvider(tp)
-	
+
 	// Configure W3C TraceContext propagator for distributed tracing
 	otelapi.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},

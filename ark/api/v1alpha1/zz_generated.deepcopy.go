@@ -668,6 +668,11 @@ func (in *BedrockModelConfig) DeepCopyInto(out *BedrockModelConfig) {
 		*out = new(ValueSource)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.BearerToken != nil {
+		in, out := &in.BearerToken, &out.BearerToken
+		*out = new(ValueSource)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.ModelArn != nil {
 		in, out := &in.ModelArn, &out.ModelArn
 		*out = new(ValueSource)
