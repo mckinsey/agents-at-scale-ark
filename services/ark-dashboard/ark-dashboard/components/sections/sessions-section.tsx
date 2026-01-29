@@ -573,7 +573,7 @@ function WorkflowStepNode({
           {hasDetail ? (
             <button
               onClick={() => setShowDetail(!showDetail)}
-              className="hover:bg-muted -m-1 shrink-0 rounded p-1 transition-colors"
+              className="hover:bg-muted -m-1 shrink-0 rounded p-1 transition-colors hover:cursor-pointer"
               aria-label={showDetail ? 'Hide details' : 'Show details'}>
               {showDetail ? (
                 <ChevronDown className="text-muted-foreground h-4 w-4" />
@@ -866,7 +866,7 @@ function SessionListItem({
       onClick={onClick}
       title={session.name}
       className={cn(
-        'hover:bg-accent/50 flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-all',
+        'hover:bg-accent/50 hover:cursor-pointer flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-all',
         isSelected && 'bg-accent border-primary shadow-sm',
       )}>
       <div className="text-muted-foreground mt-0.5 shrink-0">
