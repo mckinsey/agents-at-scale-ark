@@ -902,10 +902,20 @@ jobs:
             --wait \
             --timeout=5m
 
+      - name: Deploy File Gateway
+        run: |
+          helm upgrade --install file-gateway oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/file-gateway \
+            --namespace default \
+            --create-namespace \
+            --wait \
+            --timeout=5m
+
       - name: Wait for services to be ready
         run: |
+          kubectl wait --for=condition=available -n ark-system --timeout=300s deployment/ark-controller
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
+          kubectl wait --for=condition=ready pod -l app=file-gateway -n default --timeout=120s
 
       - name: Setup Python
         uses: actions/setup-python@v5
