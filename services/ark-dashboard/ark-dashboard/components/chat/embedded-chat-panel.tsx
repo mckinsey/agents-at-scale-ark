@@ -369,6 +369,30 @@ function DebugStreamView({
     return groups;
   }, [entries]);
 
+  useEffect(() => {
+    if (groupedEntries.size === 0) return;
+
+    const sessionIds = Array.from(groupedEntries.keys());
+    const latestSessionId = sessionIds.reduce((latest, current) => {
+      const latestEntries = groupedEntries.get(latest)!;
+      const currentEntries = groupedEntries.get(current)!;
+      const latestTime = Math.max(
+        ...latestEntries.map(e => new Date(e.timestamp).getTime()),
+      );
+      const currentTime = Math.max(
+        ...currentEntries.map(e => new Date(e.timestamp).getTime()),
+      );
+      return currentTime > latestTime ? current : latest;
+    }, sessionIds[0]);
+
+    setExpandedSessions(prev => {
+      if (prev.has(latestSessionId)) return prev;
+      const next = new Set(prev);
+      next.add(latestSessionId);
+      return next;
+    });
+  }, [groupedEntries]);
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between px-2 py-1">

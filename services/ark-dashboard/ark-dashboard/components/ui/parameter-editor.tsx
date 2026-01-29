@@ -2,7 +2,6 @@
 
 import {
   AlertTriangle,
-  Link2,
   Lock,
   Plus,
   RotateCcw,
@@ -240,12 +239,6 @@ export function ParameterEditor({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="queryParameter">
-                              <span className="flex items-center gap-1.5">
-                                <Link2 className="h-3 w-3" />
-                                Query Param
-                              </span>
-                            </SelectItem>
                             <SelectItem value="value">
                               <span className="flex items-center gap-1.5">
                                 <Type className="h-3 w-3" />

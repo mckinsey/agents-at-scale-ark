@@ -21,8 +21,7 @@ export function spanMatchesSessionId(
     const sessionAttr = span.attributes.find(
       (attr) => attr.key === "session.id",
     );
-    console.log("sessionAttr", sessionAttr);
-    console.log("sessionId", sessionId);
+
     if (sessionAttr?.value?.stringValue === sessionId) {
       return true;
     }
