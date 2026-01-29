@@ -22,6 +22,8 @@ deployments:
       chart:
         path: ./chart
       values:
+        restartController:
+          enabled: false
         app:
           image:
             repository: ${runtime.images.ark-broker.image}
