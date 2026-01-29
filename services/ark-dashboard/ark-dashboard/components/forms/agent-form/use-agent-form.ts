@@ -171,7 +171,6 @@ export function useAgentForm({
           };
 
           await agentsService.create(createData);
-          toast.success('Agent created successfully');
         } else if (agent) {
           const updateData: AgentUpdateRequest = {
             description: values.description || undefined,
@@ -197,6 +196,7 @@ export function useAgentForm({
           await agentsService.update(agent.name, updateData);
           toast.success('Agent updated successfully');
         }
+
         onSuccessRef.current?.();
       } catch (error) {
         const action = mode === AgentFormMode.CREATE ? 'create' : 'update';
