@@ -40,8 +40,34 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
+    - script:
+        content: |
+          MOCK_URL="http://mock-geocoding-api.$NAMESPACE.svc.cluster.local"
+
+          kubectl apply -f - <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: test-tool
+            namespace: $NAMESPACE
+          spec:
+            type: http
+            description: "Returns coordinates for the given city name for testing tool targets."
+            inputSchema:
+              type: object
+              properties:
+                city:
+                  type: string
+                  description: City name to get coordinates for
+              required: ["city"]
+            http:
+              url: $MOCK_URL/v1/search?name={city}&count=1
+          EOF
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - apply:
-        file: manifests/*.yaml
+        file: manifests/a02-query.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
